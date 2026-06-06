@@ -189,39 +189,20 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           )}
         </div>
 
-        {/* Examples — only when the field is empty, to teach the feature without nagging existing users. */}
+        {/* Empty state — offer the generic persona skeleton (name · voice · style · goal),
+            modeled on the structure high-converting merchants use. Business-agnostic, so it
+            fits any merchant; the old hardcoded retail examples were dropped as misleading
+            (e.g. "free shipping over 200 SAR" makes no sense for a travel or training page). */}
         {isEmpty && (
-          <div className="mb-2 space-y-2">
-            {/* Generic persona skeleton — modeled on the structure high-converting merchants
-                use (name · voice · style · goal, not a sample reply). Business-agnostic:
-                insert it, then fill in the [brackets]. */}
-            <div>
-              <button
-                type="button"
-                onClick={() => insertExample(t('replyStyle.exampleTemplate'))}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-500/10 text-brand-700 dark:text-brand-300 border border-brand-500/30 hover:bg-brand-500/20 transition-colors active:scale-[0.98] text-start"
-              >
-                {t('replyStyle.templateLabel')}
-              </button>
-              <p className="text-[11px] text-muted-foreground mt-1" dir="auto">{t('replyStyle.templateHint')}</p>
-            </div>
-
-            {/* Quick one-line add-ons. */}
-            <div className="flex flex-wrap gap-1.5">
-              {(['example1', 'example2', 'example3'] as const).map((key) => {
-                const example = t(`replyStyle.${key}`);
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => insertExample(example)}
-                    className="px-2.5 py-1 text-[11px] font-medium rounded-full bg-muted text-muted-foreground border border-theme-border hover:bg-muted/80 hover:text-foreground transition-colors active:scale-[0.98] text-start"
-                  >
-                    + {example}
-                  </button>
-                );
-              })}
-            </div>
+          <div className="mb-2">
+            <button
+              type="button"
+              onClick={() => insertExample(t('replyStyle.exampleTemplate'))}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-500/10 text-brand-700 dark:text-brand-300 border border-brand-500/30 hover:bg-brand-500/20 transition-colors active:scale-[0.98] text-start"
+            >
+              {t('replyStyle.templateLabel')}
+            </button>
+            <p className="text-[11px] text-muted-foreground mt-1" dir="auto">{t('replyStyle.templateHint')}</p>
           </div>
         )}
 
