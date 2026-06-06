@@ -25,6 +25,14 @@ import fastify, { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { createTestUser, testDb } from './setup';
 import * as schema from '../../src/db/schema';
+import {
+    handleCheckoutComplete,
+    handleSubscriptionCreated,
+    handleSubscriptionUpdated,
+    handleSubscriptionDeleted,
+    handlePaymentSucceeded,
+    handlePaymentFailed,
+} from '../../src/controllers/paymentWebhookHandlers';
 
 // Ensures DATABASE_URL points to the test database before any app module loads.
 import './setup';
@@ -253,8 +261,7 @@ describe('SCENARIO 1 — New customer completes first purchase (with trial)', ()
     });
 
     it('STEP 3 — checkout.session.completed creates a trialing subscription in DB', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, plan.id, 'sub_new_001'),
             mockReq(),
         );
@@ -292,8 +299,7 @@ describe('SCENARIO 1 — New customer completes first purchase (with trial)', ()
             externalSubscriptionId: 'sub_new_001',
         });
 
-        const { paymentController } = await import('../../src/controllers/payment');
-        await (paymentController as any).handlePaymentSucceeded(
+        await handlePaymentSucceeded(
             { id: 'in_first_001', subscription: 'sub_new_001' },
             mockReq(),
         );
@@ -376,10 +382,9 @@ describe('SCENARIO 2 — Customer upgrades from Basic to Pro', () => {
     });
 
     it('STEP 3 — checkout.session.completed cancels Basic sub and creates Pro sub', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
         const { stripeService } = await import('../../src/services/stripe');
 
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, proPlan.id, 'sub_pro_002'),
             mockReq(),
         );
@@ -404,8 +409,7 @@ describe('SCENARIO 2 — Customer upgrades from Basic to Pro', () => {
     });
 
     it('STEP 4 — only one active subscription exists after upgrade', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, proPlan.id, 'sub_pro_002'),
             mockReq(),
         );
@@ -416,8 +420,7 @@ describe('SCENARIO 2 — Customer upgrades from Basic to Pro', () => {
     });
 
     it('STEP 5 — status endpoint shows Pro plan and name after upgrade', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, proPlan.id, 'sub_pro_002'),
             mockReq(),
         );
@@ -494,10 +497,9 @@ describe('SCENARIO 3 — Customer downgrades from Pro to Basic', () => {
     });
 
     it('STEP 3 — checkout.session.completed cancels Pro immediately and creates Basic', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
         const { stripeService } = await import('../../src/services/stripe');
 
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, basicPlan.id, 'sub_basic_002'),
             mockReq(),
         );
@@ -515,8 +517,7 @@ describe('SCENARIO 3 — Customer downgrades from Pro to Basic', () => {
     });
 
     it('STEP 4 — only one active subscription exists after downgrade', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, basicPlan.id, 'sub_basic_002'),
             mockReq(),
         );
@@ -580,9 +581,8 @@ describe('SCENARIO 4 — Customer cancels subscription (at period end)', () => {
     });
 
     it('STEP 3 — customer.subscription.updated webhook syncs cancelAtPeriodEnd=true', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
 
-        await (paymentController as any).handleSubscriptionUpdated(
+        await handleSubscriptionUpdated(
             {
                 id: 'sub_cancel_001',
                 status: 'active',
@@ -599,9 +599,8 @@ describe('SCENARIO 4 — Customer cancels subscription (at period end)', () => {
     });
 
     it('STEP 4 — customer.subscription.deleted webhook marks subscription as canceled', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
 
-        await (paymentController as any).handleSubscriptionDeleted(
+        await handleSubscriptionDeleted(
             { id: 'sub_cancel_001' },
             mockReq(),
         );
@@ -690,9 +689,8 @@ describe('SCENARIO 5 — Customer cancels then resubscribes to a new plan', () =
     });
 
     it('STEP 3 — checkout.session.completed creates new active subscription', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
 
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, newPlan.id, 'sub_resub_001'),
             mockReq(),
         );
@@ -707,9 +705,8 @@ describe('SCENARIO 5 — Customer cancels then resubscribes to a new plan', () =
     });
 
     it('STEP 4 — old canceled subscription is preserved as a historical record', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
 
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, newPlan.id, 'sub_resub_001'),
             mockReq(),
         );
@@ -719,10 +716,9 @@ describe('SCENARIO 5 — Customer cancels then resubscribes to a new plan', () =
     });
 
     it('STEP 5 — cancelSubscriptionImmediately NOT called (canceled sub skipped in loop)', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
         const { stripeService } = await import('../../src/services/stripe');
 
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, newPlan.id, 'sub_resub_001'),
             mockReq(),
         );
@@ -757,9 +753,8 @@ describe('SCENARIO 6 — Payment failure and recovery', () => {
     });
 
     it('STEP 1 — invoice.payment_failed sets subscription status to past_due', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
 
-        await (paymentController as any).handlePaymentFailed(
+        await handlePaymentFailed(
             { id: 'in_fail_001', subscription: 'sub_pastdue_001' },
             mockReq(),
         );
@@ -769,10 +764,9 @@ describe('SCENARIO 6 — Payment failure and recovery', () => {
     });
 
     it('STEP 2 — payment failure sends exactly one push notification to the user', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
         const { notificationService } = await import('../../src/services/notifications');
 
-        await (paymentController as any).handlePaymentFailed(
+        await handlePaymentFailed(
             { id: 'in_fail_001', subscription: 'sub_pastdue_001' },
             mockReq(),
         );
@@ -792,9 +786,8 @@ describe('SCENARIO 6 — Payment failure and recovery', () => {
             .set({ status: 'past_due' })
             .where(eq(schema.subscriptions.id, sub.id));
 
-        const { paymentController } = await import('../../src/controllers/payment');
 
-        await (paymentController as any).handlePaymentSucceeded(
+        await handlePaymentSucceeded(
             { id: 'in_recovered_001', subscription: 'sub_pastdue_001' },
             mockReq(),
         );
@@ -810,11 +803,10 @@ describe('SCENARIO 6 — Payment failure and recovery', () => {
             .set({ status: 'past_due' })
             .where(eq(schema.subscriptions.id, sub.id));
 
-        const { paymentController } = await import('../../src/controllers/payment');
         const { notificationService } = await import('../../src/services/notifications');
         vi.mocked(notificationService.sendTemplateNotification).mockClear();
 
-        await (paymentController as any).handlePaymentFailed(
+        await handlePaymentFailed(
             { id: 'in_fail_002', subscription: 'sub_pastdue_001' },
             mockReq(),
         );
@@ -826,15 +818,14 @@ describe('SCENARIO 6 — Payment failure and recovery', () => {
     });
 
     it('FULL FLOW — active → past_due → active via two sequential webhooks', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
 
-        await (paymentController as any).handlePaymentFailed(
+        await handlePaymentFailed(
             { id: 'in_fail_full', subscription: 'sub_pastdue_001' },
             mockReq(),
         );
         expect((await getSub(sub.id)).status).toBe('past_due');
 
-        await (paymentController as any).handlePaymentSucceeded(
+        await handlePaymentSucceeded(
             { id: 'in_ok_full', subscription: 'sub_pastdue_001' },
             mockReq(),
         );
@@ -865,12 +856,11 @@ describe('SCENARIO 7 — Race condition: payment_succeeded before checkout.sessi
     });
 
     it('payment_succeeded for unknown subscription does not throw — logs error after retries', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
         const req = mockReq();
 
         // No subscription exists in DB yet
         await expect(
-            (paymentController as any).handlePaymentSucceeded(
+            handlePaymentSucceeded(
                 { id: 'in_race_premature', subscription: 'sub_race_001' },
                 req,
             ),
@@ -883,10 +873,9 @@ describe('SCENARIO 7 — Race condition: payment_succeeded before checkout.sessi
     }, 20_000); // allow for 3 × 500ms retry waits + slow DB/import
 
     it('correct order (checkout → payment) results in active subscription', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
 
         // Step 1: checkout webhook arrives first
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, plan.id, 'sub_race_001'),
             mockReq(),
         );
@@ -895,7 +884,7 @@ describe('SCENARIO 7 — Race condition: payment_succeeded before checkout.sessi
         expect(subs[0].status).toBe('trialing');
 
         // Step 2: payment webhook arrives (trial ended, first real charge)
-        await (paymentController as any).handlePaymentSucceeded(
+        await handlePaymentSucceeded(
             { id: 'in_race_ok', subscription: 'sub_race_001' },
             mockReq(),
         );
@@ -904,15 +893,14 @@ describe('SCENARIO 7 — Race condition: payment_succeeded before checkout.sessi
     });
 
     it('duplicate checkout handler call (isolation test, dedup enforced at handleWebhook level)', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
         const session = stripeSession(userId, plan.id, 'sub_race_001', 'cs_dup_001');
 
         // First delivery
-        await (paymentController as any).handleCheckoutComplete(session, mockReq());
+        await handleCheckoutComplete(session, mockReq());
         // Second direct call bypasses handleWebhook deduplication intentionally for isolation.
         // Real duplicate webhook protection is enforced at the handleWebhook dispatcher level
         // via stripe_webhook_events deduplication — see SCENARIO 12.
-        await (paymentController as any).handleCheckoutComplete(session, mockReq());
+        await handleCheckoutComplete(session, mockReq());
 
         const allSubs = await userSubs(userId);
         expect(allSubs.length).toBeGreaterThanOrEqual(1);
@@ -979,10 +967,9 @@ describe('SCENARIO 8 — Customer upgrades while on trial period', () => {
     });
 
     it('STEP 2 — checkout.session.completed cancels trial sub and creates Pro sub without trial', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
         const { stripeService } = await import('../../src/services/stripe');
 
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, proPlan.id, 'sub_pro_from_trial'),
             mockReq(),
         );
@@ -1003,8 +990,7 @@ describe('SCENARIO 8 — Customer upgrades while on trial period', () => {
     });
 
     it('STEP 3 — only one active subscription after trial upgrade', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             stripeSession(userId, proPlan.id, 'sub_pro_from_trial'),
             mockReq(),
         );
@@ -1212,10 +1198,9 @@ describe('SCENARIO 11 — customer.subscription.created backup handler', () => {
             externalSubscriptionId: 'sub_already_active',
         });
 
-        const { paymentController } = await import('../../src/controllers/payment');
         const req = mockReq();
 
-        await (paymentController as any).handleSubscriptionCreated(
+        await handleSubscriptionCreated(
             { id: 'sub_already_active', status: 'active' },
             req,
         );
@@ -1234,8 +1219,7 @@ describe('SCENARIO 11 — customer.subscription.created backup handler', () => {
             externalSubscriptionId: 'sub_trialing_fix',
         });
 
-        const { paymentController } = await import('../../src/controllers/payment');
-        await (paymentController as any).handleSubscriptionCreated(
+        await handleSubscriptionCreated(
             { id: 'sub_trialing_fix', status: 'active' },
             mockReq(),
         );
@@ -1250,8 +1234,7 @@ describe('SCENARIO 11 — customer.subscription.created backup handler', () => {
             externalSubscriptionId: 'sub_pastdue_fix',
         });
 
-        const { paymentController } = await import('../../src/controllers/payment');
-        await (paymentController as any).handleSubscriptionCreated(
+        await handleSubscriptionCreated(
             { id: 'sub_pastdue_fix', status: 'active' },
             mockReq(),
         );
@@ -1261,11 +1244,10 @@ describe('SCENARIO 11 — customer.subscription.created backup handler', () => {
     });
 
     it('subscription not found in DB at all — logs warning without throwing', async () => {
-        const { paymentController } = await import('../../src/controllers/payment');
         const req = mockReq();
 
         await expect(
-            (paymentController as any).handleSubscriptionCreated(
+            handleSubscriptionCreated(
                 { id: 'sub_ghost_not_in_db', status: 'active' },
                 req,
             ),
