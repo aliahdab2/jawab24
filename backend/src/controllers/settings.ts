@@ -1,5 +1,6 @@
 import { FastifyReply } from 'fastify';
 import { settingsService } from '../services/settings';
+import { smartTranslateMultiLang } from '../services/multiLangTranslation';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { UpdateSettingsSchema } from '@jawab24/shared';
 import { validateSchema } from '../utils/validation';
@@ -85,104 +86,22 @@ export class SettingsController {
             // --- Smart Auto-Translation Logic (JSONB) ---
             const supportedLanguages = currentSettings.supportedLanguages || ['ar', 'en'];
 
-            const handleSmartTranslation = async (
+            // Smart auto-translation lives in the shared multiLangTranslation module
+            // (used identically by every multilingual settings field). Here we just
+            // inject this request's translation call + logging and reuse it per field.
+            const handleSmartTranslation = (
                 updateMulti: Record<string, string> | undefined | null,
                 currentMulti: Record<string, string> | undefined | null,
                 fieldName: string
-            ): Promise<Record<string, string>> => {
-                if (!updateMulti) return currentMulti || {};
-
-                // Merge updates into result
-                // We start with current state, but we only apply UPDATES that are actually present
-                const current = currentMulti || {};
-                const result = { ...current, ...updateMulti };
-                
-                // Identify which content keys changed
-                const contentKeys = supportedLanguages;
-                const changedKeys = contentKeys.filter(lang => 
-                    updateMulti[lang] !== undefined && updateMulti[lang] !== current[lang]
-                );
-
-                if (changedKeys.length === 0) return result; // No content changes
-
-                // Logic:
-                // 1. If > 1 language changed simultaneously -> Manual (don't overwrite anything)
-                if (changedKeys.length > 1) {
-                    result.sourceLang = 'manual';
-                    return result;
-                }
-
-                // 2. If 1 language changed
-                const sourceLang = changedKeys[0];
-                const sourceText = result[sourceLang];
-
-                // --- Special Case: Field Cleared ---
-                // If the source language is cleared, reset ALL languages to defaults
-                // (the translations derived from it no longer make sense).
-                // If a non-source (translated) language is cleared, only clear that one.
-                if (!sourceText) {
-                    const currentSourceLang = current.sourceLang;
-                    if (currentSourceLang === sourceLang) {
-                        // Cleared language was the translation source → reset to defaults
-                        const defaults = DEFAULT_MESSAGES[fieldName];
-                        for (const lang of contentKeys) {
-                            result[lang] = defaults?.[lang] || '';
-                        }
-                        result.sourceLang = 'default';
-                    } else {
-                        // Non-source cleared → only that language emptied (already in result via merge).
-                        // Point sourceLang at the language that STILL has content, not the empty one we
-                        // just cleared. Without this, sourceLang flips to the cleared field and the
-                        // frontend renders the remaining (manually-written) language as "translated"
-                        // with placeholder styling instead of as a normal stored value.
-                        const remainingManual = contentKeys.find(l => l !== sourceLang && result[l]);
-                        result.sourceLang = remainingManual || currentSourceLang || sourceLang;
-                    }
-                    return result;
-                }
-                
-                result.sourceLang = sourceLang;
-
-                // Iterate over other languages and translate
-                for (const targetLang of supportedLanguages) {
-                    if (targetLang === sourceLang) continue;
-
-                    const isTargetEmpty = !result[targetLang];
-                    // If target is not in updateMulti at all, treat it as unchanged
-                    // (frontend forms typically only send the field the user edited).
-                    const isTargetUnchanged = updateMulti[targetLang] === undefined || updateMulti[targetLang] === current[targetLang];
-
-                    // Preserve previously hand-authored translations. The target was
-                    // manually written when:
-                    //   - it was the previous translation source (current.sourceLang === targetLang), OR
-                    //   - both languages have been manually edited (current.sourceLang === 'manual').
-                    // In either case, auto-translating from the new source would silently
-                    // destroy the merchant's hand-written content. Skip and mark the result
-                    // as 'manual' so future edits also preserve both languages.
-                    const wasPreviouslyManual =
-                        current.sourceLang === targetLang || current.sourceLang === 'manual';
-                    if (wasPreviouslyManual && !isTargetEmpty) {
-                        result.sourceLang = 'manual';
-                        continue;
-                    }
-
-                    if (isTargetEmpty || isTargetUnchanged) {
-                        try {
-                            const translation = await translateText({
-                                text: sourceText,
-                                sourceLanguage: sourceLang as 'ar' | 'en',
-                                targetLanguage: targetLang as 'ar' | 'en',
-                                userId,
-                            });
-                            result[targetLang] = translation.translatedText;
-                        } catch (e) {
-                            request.log.error({ error: String(e) }, `Translation failed for ${fieldName} (${sourceLang}->${targetLang})`);
-                        }
-                    }
-                }
-                
-                return result;
-            };
+            ): Promise<Record<string, string>> =>
+                smartTranslateMultiLang(updateMulti, currentMulti, fieldName, {
+                    supportedLanguages,
+                    defaults: DEFAULT_MESSAGES[fieldName],
+                    translate: async (text, sourceLanguage, targetLanguage) =>
+                        (await translateText({ text, sourceLanguage, targetLanguage, userId })).translatedText,
+                    onError: ({ fieldName, sourceLang, targetLang, error }) =>
+                        request.log.error({ error: String(error) }, `Translation failed for ${fieldName} (${sourceLang}->${targetLang})`),
+                });
 
             // Apply logic for Greeting Message
             if (updates.greetingMessageMulti) {

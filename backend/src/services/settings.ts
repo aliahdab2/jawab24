@@ -7,6 +7,7 @@ import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
 import { PIPELINE_FIELDS } from './pipelineFields';
+import { coerceMultiLang } from './multiLangTranslation';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
 const SETTINGS_CACHE_TTL = 300;
@@ -288,18 +289,18 @@ export class SettingsService {
             greetingMessage: record.greetingMessage ?? null,
             greetingMessageEnabled: record.greetingMessageEnabled ?? false,
             // Multilingual messages (JSONB)
-            awayMessageMulti: record.awayMessageMulti || {},
-            greetingMessageMulti: record.greetingMessageMulti || {},
+            awayMessageMulti: coerceMultiLang(record.awayMessageMulti),
+            greetingMessageMulti: coerceMultiLang(record.greetingMessageMulti),
             limitFallbackEnabled: record.limitFallbackEnabled ?? false,
-            limitFallbackMessageMulti: record.limitFallbackMessageMulti || {},
-            dualReplyNudgeMulti: record.dualReplyNudgeMulti || {},
+            limitFallbackMessageMulti: coerceMultiLang(record.limitFallbackMessageMulti),
+            dualReplyNudgeMulti: coerceMultiLang(record.dualReplyNudgeMulti),
             replyDelay: record.replyDelay ?? 0,
             commentEscalationMinutes: record.commentEscalationMinutes ?? 60,
             messageEscalationMinutes: record.messageEscalationMinutes ?? 30,
             handoffPauseDurationMinutes: record.handoffPauseDurationMinutes ?? DEFAULT_HANDOFF_PAUSE_MINUTES,
             replyStyle: (record.replyStyle as 'professional' | 'casual' | 'enthusiastic') || 'professional',
             brandVoiceNotes: record.brandVoiceNotes || '',
-            brandVoiceNotesMulti: record.brandVoiceNotesMulti || {},
+            brandVoiceNotesMulti: coerceMultiLang(record.brandVoiceNotesMulti),
             holdLowConfidence: record.holdLowConfidence ?? false,
             notificationsEnabled: record.notificationsEnabled ?? true,
             newLeadAlertsEnabled: record.newLeadAlertsEnabled ?? true,
