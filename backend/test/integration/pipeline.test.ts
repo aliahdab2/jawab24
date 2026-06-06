@@ -185,6 +185,12 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
     // 2. Debounce: newer message skips older
     // =========================================================
     it('skips older message when a newer unreplied message exists (debounce)', async () => {
+        // The debounce fast-path only runs when replyDelay === 0; with a non-zero
+        // delay the reply delay doubles as a consolidation window instead (see
+        // messageProcessor step 4). Pin it to 0 so this test exercises debounce
+        // regardless of the default.
+        await workspaceSettingsService.updateSettings(workspaceId, { replyDelay: 0 });
+
         // Pre-insert two messages: older (msg-1) and newer (msg-2)
         await insertMessage(pageId, senderId, {
             platformMessageId: 'fb-debounce-old',
