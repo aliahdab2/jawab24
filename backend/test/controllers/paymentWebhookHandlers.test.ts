@@ -57,9 +57,12 @@ import {
     handleTopupPaymentSucceeded,
     handleTopupPaymentFailed,
     handlePaymentFailed,
+    handlePaymentSucceeded,
+    handleChargeRefunded,
     reverseTopupForCharge,
 } from '../../src/controllers/paymentWebhookHandlers';
 import { db } from '../../src/db';
+import { stripeService } from '../../src/services/stripe';
 import { subscriptionsService } from '../../src/services/subscriptions';
 import { topupService } from '../../src/services/topup';
 import { notificationService } from '../../src/services/notifications';
@@ -235,5 +238,57 @@ describe('reverseTopupForCharge (claws back credits)', () => {
         const result = await reverseTopupForCharge(charge, mkReq(), 'dispute');
         expect(topupService.reverseStripeTopup).toHaveBeenCalledWith('pi_topup');
         expect(result).toBe(true);
+    });
+});
+
+describe('handlePaymentSucceeded (renewal activation)', () => {
+    beforeEach(() => {
+        vi.mocked(stripeService.getSubscription).mockResolvedValue({
+            current_period_start: 1700000000,
+            current_period_end: 1702000000,
+        } as never);
+    });
+
+    it('activates the subscription, resets the usage period, and invalidates the cache', async () => {
+        const chain = q([{ id: 's1', userId: 'u1' }]);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+        await handlePaymentSucceeded({ id: 'in_1', subscription: 'sub_1' } as unknown as Stripe.Invoice, mkReq());
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
+        expect(subscriptionsService.initializeUsagePeriod).toHaveBeenCalledWith('u1', expect.any(Date), expect.any(Date));
+        expect(subscriptionsService.invalidateStatusCache).toHaveBeenCalledWith('u1');
+    });
+
+    it('returns early (no Stripe call) when the invoice has no subscription', async () => {
+        await handlePaymentSucceeded({ id: 'in_2', subscription: null } as unknown as Stripe.Invoice, mkReq());
+        expect(stripeService.getSubscription).not.toHaveBeenCalled();
+        expect(db.update).not.toHaveBeenCalled();
+    });
+});
+
+describe('handleChargeRefunded (subscription refund path)', () => {
+    const refundCharge = { id: 'ch_1', payment_intent: 'pi_sub', customer: 'cus_1', amount_refunded: 4900, currency: 'usd' } as unknown as Stripe.Charge;
+
+    it('notifies the customer with the refunded amount when the charge is not a top-up', async () => {
+        vi.mocked(topupService.reverseStripeTopup).mockResolvedValue({ reversed: false, decremented: false });
+        vi.mocked(db.select).mockReturnValue(q([{ userId: 'u1' }]) as never);
+        await handleChargeRefunded(refundCharge, mkReq());
+        expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
+            'u1', 'refund_processed', { amount: '49.00', currency: 'USD' }, expect.anything(),
+        );
+    });
+
+    it('short-circuits with no subscription lookup or notice when the charge was a top-up', async () => {
+        vi.mocked(topupService.reverseStripeTopup).mockResolvedValue({ reversed: true, decremented: true });
+        await handleChargeRefunded(refundCharge, mkReq());
+        expect(db.select).not.toHaveBeenCalled();
+        expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+    });
+
+    it('warns and sends nothing when the refunded charge has no customer', async () => {
+        vi.mocked(topupService.reverseStripeTopup).mockResolvedValue({ reversed: false, decremented: false });
+        const req = mkReq();
+        await handleChargeRefunded({ id: 'ch_2', payment_intent: 'pi_x', customer: null, amount_refunded: 100, currency: 'usd' } as unknown as Stripe.Charge, req);
+        expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+        expect(req.log.warn).toHaveBeenCalled();
     });
 });

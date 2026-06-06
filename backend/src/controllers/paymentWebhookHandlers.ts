@@ -388,7 +388,7 @@ export async function handleSubscriptionDeleted(
 /**
  * Handle successful payment
  */
-async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: FastifyRequest) {
+export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: FastifyRequest) {
     const stripeSubscriptionId = invoice.subscription as string;
 
     if (!stripeSubscriptionId) {
@@ -578,7 +578,7 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice, request: Fast
  * Refund alone does NOT cancel the subscription — that comes through a
  * separate `customer.subscription.deleted` event if applicable.
  */
-async function handleChargeRefunded(charge: Stripe.Charge, request: FastifyRequest) {
+export async function handleChargeRefunded(charge: Stripe.Charge, request: FastifyRequest) {
     // A refunded charge may belong to a one-time top-up (not a subscription).
     // Reverse it FIRST — clawing back the reply credits — and stop here if it
     // matched a top-up row, so we don't also run the subscription path.
