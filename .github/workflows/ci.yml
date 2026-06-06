@@ -300,6 +300,8 @@ jobs:
             -e FACEBOOK_WEBHOOK_VERIFY_TOKEN=test_webhook_token \
             -e REDIS_HOST=localhost \
             -e REDIS_PORT=6379 \
+            -e REDIS_PASSWORD=ci_smoke_test_redis_password \
+            -e RESEND_API_KEY=re_ci_smoke_test_dummy_key \
             -e COOKIE_SECRET=test_cookie_secret_at_least_32_chars_long_for_ci_smoke_test \
             jawab24-backend:test
 
@@ -340,6 +342,8 @@ jobs:
             -e FACEBOOK_WEBHOOK_VERIFY_TOKEN=test_webhook_token \
             -e REDIS_HOST=localhost \
             -e REDIS_PORT=6379 \
+            -e REDIS_PASSWORD=ci_smoke_test_redis_password \
+            -e RESEND_API_KEY=re_ci_smoke_test_dummy_key \
             -e COOKIE_SECRET=test_cookie_secret_at_least_32_chars_long_for_ci_smoke_test \
             jawab24-backend:test
 
