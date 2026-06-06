@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { UpdateSettingsSchema } from '../settings';
+import { MAX_BRAND_VOICE_LENGTH } from '../../constants';
 
 describe('UpdateSettingsSchema', () => {
     describe('escalation minutes', () => {
@@ -99,10 +100,23 @@ describe('UpdateSettingsSchema', () => {
         it.each([
             ['awayMessage', 1001],
             ['greetingMessage', 1001],
-            ['brandVoiceNotes', 1001],
         ])('rejects %s longer than 1000 chars', (field, len) => {
             const result = UpdateSettingsSchema.safeParse({ [field]: 'a'.repeat(len) });
             expect(result.success).toBe(false);
+        });
+
+        it('rejects brandVoiceNotes longer than MAX_BRAND_VOICE_LENGTH', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                brandVoiceNotes: 'a'.repeat(MAX_BRAND_VOICE_LENGTH + 1),
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('accepts brandVoiceNotes of exactly MAX_BRAND_VOICE_LENGTH', () => {
+            const result = UpdateSettingsSchema.safeParse({
+                brandVoiceNotes: 'a'.repeat(MAX_BRAND_VOICE_LENGTH),
+            });
+            expect(result.success).toBe(true);
         });
     });
 
