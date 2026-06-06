@@ -1,4 +1,4 @@
-import { MessageCircle, LayoutDashboard, MessageSquare, MoreHorizontal, X, LogOut, Check } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, MessageSquare, MoreHorizontal, X, LogOut, Check, Shield } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -21,6 +21,16 @@ import { useIsEmbedded } from '@/hooks/useIsEmbedded';
 import { isNativePlatform } from '@/lib/capacitor';
 import { isCatalogVisible } from '@/lib/featureFlags';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';
+
+// Admin tooling is intentionally absent from the mobile nav for admins in general
+// (keeps admin surfaces out of the App/Play Store experience). These operator
+// accounts are the exception — they get an Admin entry in the mobile More menu so
+// they can reach /admin from the native app. Still gated by `isAdmin`, and the
+// /admin pages enforce isAdmin server-side + via AdminLayout regardless.
+const MOBILE_ADMIN_EMAILS = ['aliahdab@gmail.com'];
+function isMobileAdminEmail(email?: string | null): boolean {
+  return !!email && MOBILE_ADMIN_EMAILS.includes(email.toLowerCase());
+}
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -433,7 +443,9 @@ function MobileMenuOverlay({
 }) {
   const tNav = useTranslations('nav');
   const tPricing = useTranslations('pricing');
+  const tAdmin = useTranslations('admin');
   const isLandscape = useLandscape();
+  const user = useAuthStore((s) => s.user);
   // Workspace role gates the Team tile here (mirrors the desktop sidebar).
   const { isAdmin: canManageTeam } = useWorkspaceRole();
   useBodyScrollLock(isOpen);
@@ -452,13 +464,20 @@ function MobileMenuOverlay({
   };
 
   const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(overlayUser) });
-  const menuItems = navigationGroups.flatMap((group) =>
-    group.items.map((item) => ({
-      path: item.href,
-      icon: item.icon,
-      label: resolveNavKey(item.key, tNav, tPricing, isAdmin),
-    }))
-  );
+  const menuItems = [
+    ...navigationGroups.flatMap((group) =>
+      group.items.map((item) => ({
+        path: item.href,
+        icon: item.icon,
+        label: resolveNavKey(item.key, tNav, tPricing, isAdmin),
+      }))
+    ),
+    // Admin dashboard — mobile entry only for allow-listed operator accounts
+    // (desktop sidebar shows it for all admins). Page still enforces isAdmin.
+    ...(isAdmin && isMobileAdminEmail(user?.email)
+      ? [{ path: '/admin/customers', icon: Shield, label: tAdmin('title') }]
+      : []),
+  ];
 
   const handleNavigate = (path: string) => {
     router.push(path);
