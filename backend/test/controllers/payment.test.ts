@@ -135,6 +135,7 @@ vi.mock('drizzle-orm', () => ({
 
 // Import after mocking
 import { PaymentController } from '../../src/controllers/payment';
+import { handleCheckoutComplete } from '../../src/controllers/paymentWebhookHandlers';
 import { stripeService } from '../../src/services/stripe';
 import { topupService } from '../../src/services/topup';
 import { db } from '../../src/db';
@@ -1383,9 +1384,8 @@ describe('Payment Controller', () => {
                 metadata: { type: 'manual_payment', userId: 'user_1', paymentRequestId: 'pr_1' },
             } as unknown as Stripe.Checkout.Session;
 
-            // Private handler is the routing point under test.
-            await (paymentController as unknown as { handleCheckoutComplete(s: Stripe.Checkout.Session, r: FastifyRequest): Promise<void> })
-                .handleCheckoutComplete(session, request);
+            // Handler is the routing point under test.
+            await handleCheckoutComplete(session, request);
 
             expect(paymentRequestService.markPaid).toHaveBeenCalledWith('cs_manual_1', 'pi_manual_1');
             // Must NOT fall through to the subscription path.
@@ -1399,8 +1399,7 @@ describe('Payment Controller', () => {
                 metadata: { type: 'manual_payment', userId: 'user_1', paymentRequestId: 'pr_2' },
             } as unknown as Stripe.Checkout.Session;
 
-            await (paymentController as unknown as { handleCheckoutComplete(s: Stripe.Checkout.Session, r: FastifyRequest): Promise<void> })
-                .handleCheckoutComplete(session, request);
+            await handleCheckoutComplete(session, request);
 
             expect(paymentRequestService.markPaid).not.toHaveBeenCalled();
             expect(stripeService.getSubscription).not.toHaveBeenCalled();
