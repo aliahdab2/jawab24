@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
-import { MAX_TEMPLATE_MESSAGE_LENGTH, UpdateSettingsSchema } from '@jawab24/shared';
+import { MAX_TEMPLATE_MESSAGE_LENGTH, MAX_BRAND_VOICE_LENGTH, UpdateSettingsSchema } from '@jawab24/shared';
 import settingsRoutes from '../../src/routes/settings';
 
 // Mock database
@@ -739,7 +739,6 @@ describe('Settings Routes', () => {
         it.each([
             ['awayMessage'],
             ['greetingMessage'],
-            ['brandVoiceNotes'],
         ])('rejects %s longer than MAX_TEMPLATE_MESSAGE_LENGTH', async (field) => {
             const { authService } = await import('../../src/services/auth');
             vi.mocked(authService.verifyToken).mockReturnValue({
@@ -763,7 +762,6 @@ describe('Settings Routes', () => {
         it.each([
             ['awayMessage'],
             ['greetingMessage'],
-            ['brandVoiceNotes'],
         ])('accepts %s exactly at MAX_TEMPLATE_MESSAGE_LENGTH', async (field) => {
             const { authService } = await import('../../src/services/auth');
             const { settingsService } = await import('../../src/services/settings');
@@ -782,6 +780,55 @@ describe('Settings Routes', () => {
                 url: '/settings',
                 headers: { authorization: 'Bearer valid_token' },
                 payload: { [field]: atLimit },
+            });
+
+            expect(response.statusCode).toBe(200);
+        });
+
+        // brandVoiceNotes has its own cap (MAX_BRAND_VOICE_LENGTH = 800) — it is
+        // injected into the AI system prompt, not sent to customers, so it is not
+        // tied to the Instagram DM template limit above.
+        const brandVoiceOverLimit = 'a'.repeat(MAX_BRAND_VOICE_LENGTH + 1);
+        const brandVoiceAtLimit = 'a'.repeat(MAX_BRAND_VOICE_LENGTH);
+
+        it('rejects brandVoiceNotes longer than MAX_BRAND_VOICE_LENGTH', async () => {
+            const { authService } = await import('../../src/services/auth');
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'user_123',
+                facebookId: 'fb_123',
+            });
+
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: { brandVoiceNotes: brandVoiceOverLimit },
+            });
+
+            expect(response.statusCode).toBe(400);
+            const body = JSON.parse(response.body);
+            expect(body.error).toBe('Bad Request');
+            expect(body.message).toContain('brandVoiceNotes');
+        });
+
+        it('accepts brandVoiceNotes exactly at MAX_BRAND_VOICE_LENGTH', async () => {
+            const { authService } = await import('../../src/services/auth');
+            const { settingsService } = await import('../../src/services/settings');
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'user_123',
+                facebookId: 'fb_123',
+            });
+            vi.mocked(settingsService.updateSettings).mockResolvedValue({
+                id: 'settings_123',
+                userId: 'user_123',
+                brandVoiceNotes: brandVoiceAtLimit,
+            } as never);
+
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: { brandVoiceNotes: brandVoiceAtLimit },
             });
 
             expect(response.statusCode).toBe(200);
@@ -1103,7 +1150,7 @@ describe('Settings Routes', () => {
             ['replyDelay out of range', { replyDelay: 999 }, 'replyDelay'],
             ['awayMessage too long', { awayMessage: 'a'.repeat(MAX_TEMPLATE_MESSAGE_LENGTH + 1) }, 'awayMessage'],
             ['greetingMessage too long', { greetingMessage: 'a'.repeat(MAX_TEMPLATE_MESSAGE_LENGTH + 1) }, 'greetingMessage'],
-            ['brandVoiceNotes too long', { brandVoiceNotes: 'a'.repeat(MAX_TEMPLATE_MESSAGE_LENGTH + 1) }, 'brandVoiceNotes'],
+            ['brandVoiceNotes too long', { brandVoiceNotes: 'a'.repeat(MAX_BRAND_VOICE_LENGTH + 1) }, 'brandVoiceNotes'],
             ['commentEscalationMinutes below 5', { commentEscalationMinutes: 1 }, 'commentEscalationMinutes'],
             ['messageEscalationMinutes above 1440', { messageEscalationMinutes: 2000 }, 'messageEscalationMinutes'],
             ['unknown enum commentReplyMode', { commentReplyMode: 'mixed' }, 'commentReplyMode'],
