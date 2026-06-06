@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
+import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import { ReplyStyleCard } from '@/components/settings/ReplyStyleCard';
 import type { SettingsState } from '@/components/settings/types';
 
@@ -80,50 +80,50 @@ describe('ReplyStyleCard', () => {
     vi.mocked(pagesApi.getAll).mockResolvedValue({ data: [] } as never);
   });
 
-  it('shows example chips only when brand voice is empty', () => {
+  it('shows the "start from a template" button only when brand voice is empty', () => {
     let current = makeSettings();
     const setSettings = vi.fn((s: SettingsState) => { current = s; });
 
     const { rerender } = render(<ReplyStyleCard settings={current} setSettings={setSettings} />);
 
-    // Empty: chips visible
-    expect(screen.getByText(/Always mention free shipping over 200 SAR/i)).toBeInTheDocument();
-    expect(screen.getByText(/Never recommend non-halal products/i)).toBeInTheDocument();
+    // Empty: template button visible
+    expect(screen.getByRole('button', { name: /Start from a template/i })).toBeInTheDocument();
 
-    // Non-empty: chips hidden
+    // Non-empty: template button hidden
     current = makeSettings({ brandVoiceNotesMulti: { en: 'something', sourceLang: 'en' } });
     rerender(<ReplyStyleCard settings={current} setSettings={setSettings} />);
-    expect(screen.queryByText(/Always mention free shipping over 200 SAR/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Start from a template/i })).not.toBeInTheDocument();
   });
 
-  it('clicking an example chip inserts it into the textarea', () => {
+  it('clicking the template button inserts the persona skeleton into the textarea', () => {
     let current = makeSettings();
     const setSettings = vi.fn((s: SettingsState) => { current = s; });
 
     render(<ReplyStyleCard settings={current} setSettings={setSettings} />);
 
-    const chip = screen.getByText(/Never recommend non-halal products/i);
-    fireEvent.click(chip);
+    fireEvent.click(screen.getByRole('button', { name: /Start from a template/i }));
 
+    // Inserts the generic persona skeleton (replyStyle.exampleTemplate) under the
+    // dashboard language, stamping the source language for auto-translation.
     expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({
       brandVoiceNotesMulti: expect.objectContaining({
-        en: 'Never recommend non-halal products',
+        en: expect.stringContaining('Name:'),
         sourceLang: 'en',
       }),
     }));
   });
 
-  it('counter renders at 80%+ of MAX_TEMPLATE_MESSAGE_LENGTH (not a hardcoded 500)', () => {
+  it('counter renders at 80%+ of MAX_BRAND_VOICE_LENGTH (not a hardcoded 500)', () => {
     // Counter is hidden below the 80% threshold to reduce visual noise; only appears
     // when the merchant is approaching the limit. Test with a value above the threshold.
-    const charCount = Math.ceil(MAX_TEMPLATE_MESSAGE_LENGTH * 0.95);
+    const charCount = Math.ceil(MAX_BRAND_VOICE_LENGTH * 0.95);
     const filler = 'x'.repeat(charCount);
     const current = makeSettings({ brandVoiceNotesMulti: { en: filler, sourceLang: 'en' } });
     render(<ReplyStyleCard settings={current} setSettings={vi.fn()} />);
 
     // The counter shows "<count>/<max>" — proves we use the shared constant, not 500.
-    expect(screen.getByText(`${charCount}/${MAX_TEMPLATE_MESSAGE_LENGTH}`)).toBeInTheDocument();
-    expect(MAX_TEMPLATE_MESSAGE_LENGTH).toBe(1000);
+    expect(screen.getByText(`${charCount}/${MAX_BRAND_VOICE_LENGTH}`)).toBeInTheDocument();
+    expect(MAX_BRAND_VOICE_LENGTH).toBe(800);
   });
 
   it('clicking a tone radio button changes settings.replyStyle', () => {
