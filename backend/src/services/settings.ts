@@ -7,10 +7,26 @@ import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
 import { PIPELINE_FIELDS } from './pipelineFields';
+import { coerceMultiLang } from './multiLangTranslation';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
 const SETTINGS_CACHE_TTL = 300;
 const cacheKey = (userId: string) => `settings:v1:${userId}`;
+
+/**
+ * Normalize every multilingual JSONB field to a real object (see coerceMultiLang).
+ * Applied on BOTH getSettings paths — the DB path (via mapToUserSettings) and the
+ * Redis cache-hit path, which returns the parsed JSON directly and would otherwise
+ * leak a double-encoded string straight to the reply pipeline / translate logic.
+ */
+function normalizeMultiFields(s: UserSettings): UserSettings {
+    s.awayMessageMulti = coerceMultiLang(s.awayMessageMulti);
+    s.greetingMessageMulti = coerceMultiLang(s.greetingMessageMulti);
+    s.limitFallbackMessageMulti = coerceMultiLang(s.limitFallbackMessageMulti);
+    s.dualReplyNudgeMulti = coerceMultiLang(s.dualReplyNudgeMulti);
+    s.brandVoiceNotesMulti = coerceMultiLang(s.brandVoiceNotesMulti);
+    return s;
+}
 
 // Re-export for backward compatibility
 export type { UserSettings, UpdateSettingsDTO };
@@ -37,7 +53,7 @@ export class SettingsService {
         try {
             const cached = await redis.get(key);
             if (cached) {
-                return JSON.parse(cached) as UserSettings;
+                return normalizeMultiFields(JSON.parse(cached) as UserSettings);
             }
         } catch {
             // Redis unavailable — fall through to DB
@@ -58,6 +74,7 @@ export class SettingsService {
                 .returning();
             result = this.mapToUserSettings(newSettings);
         }
+        result = normalizeMultiFields(result);
 
         // Populate cache — fail open
         try {
@@ -92,7 +109,7 @@ export class SettingsService {
             .where(eq(settings.userId, userId))
             .returning();
 
-        const result = this.mapToUserSettings(updated);
+        const result = normalizeMultiFields(this.mapToUserSettings(updated));
 
         // Invalidate cache — next getSettings call will re-populate from DB
         try {
