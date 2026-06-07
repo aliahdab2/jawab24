@@ -74,6 +74,61 @@ const INITIAL_SETTINGS: SettingsState = {
   holdLowConfidence: false,
 };
 
+/**
+ * Maps the small, stable sections to their SettingsState keys so a successful
+ * save can flash a contextual "Saved ✓" next to the section(s) that changed.
+ * Anything NOT listed here is treated as "advanced" (the catch-all), so new
+ * advanced fields don't need to be registered — keeps this map low-drift.
+ */
+const SECTION_FIELD_KEYS: Record<'general' | 'autoReply' | 'aiPersonality', (keyof SettingsState)[]> = {
+  general: ['dashboardLanguage', 'defaultReplyLanguage', 'autoDetectLanguage'],
+  autoReply: ['aiEnabled', 'commentsAutoReply', 'messagesAutoReply', 'commentReplyMode'],
+  aiPersonality: ['replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti'],
+};
+
+/** Which sections changed between two settings snapshots (for the Saved ✓ flash). */
+function computeChangedSections(current: SettingsState, baseline: SettingsState): Set<string> {
+  const sections = new Set<string>();
+  for (const key of Object.keys(current) as (keyof SettingsState)[]) {
+    if (JSON.stringify(current[key]) === JSON.stringify(baseline[key])) continue;
+    if (SECTION_FIELD_KEYS.general.includes(key)) sections.add('general');
+    else if (SECTION_FIELD_KEYS.autoReply.includes(key)) sections.add('autoReply');
+    else if (SECTION_FIELD_KEYS.aiPersonality.includes(key)) sections.add('aiPersonality');
+    else sections.add('advanced');
+  }
+  return sections;
+}
+
+/** Subtle, accessible inline "Saved ✓" confirmation shown next to a section header. */
+function SectionSavedFlash({ show, label }: { show: boolean; label: string }) {
+  if (!show) return null;
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 dark:text-green-400 animate-fade-in"
+    >
+      <Check className="w-3.5 h-3.5" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+/** Uppercase settings section label paired with its contextual "Saved ✓" flash. */
+function SettingsSectionHeader({
+  label,
+  saved,
+  savedLabel,
+  className,
+}: { label: string; saved: boolean; savedLabel: string; className?: string }) {
+  return (
+    <div className={clsx('flex items-center gap-2.5', className)}>
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{label}</p>
+      <SectionSavedFlash show={saved} label={savedLabel} />
+    </div>
+  );
+}
+
 const SettingsPage: NextPageWithLayout = () => {
   const t = useTranslations('settings');
   const tc = useTranslations('common');
@@ -90,6 +145,8 @@ const SettingsPage: NextPageWithLayout = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Sections that just saved — drives the contextual "Saved ✓" flash, cleared after 2s.
+  const [savedSections, setSavedSections] = useState<Set<string>>(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -194,6 +251,10 @@ const SettingsPage: NextPageWithLayout = () => {
     }
     setFieldErrors({});
 
+    // Snapshot which sections changed BEFORE we reset initialSettings on success,
+    // so the contextual "Saved ✓" flash can target the right section header(s).
+    const changedSections = computeChangedSections(settings, initialSettings);
+
     setSaving(true);
     setSaved(false);
     try {
@@ -210,7 +271,11 @@ const SettingsPage: NextPageWithLayout = () => {
       }
 
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setSavedSections(changedSections);
+      setTimeout(() => {
+        setSaved(false);
+        setSavedSections(new Set());
+      }, 2000);
     } catch (error) {
       // Forward backend validation details (Fastify schema 400s include the
       // exact failing field/rule) to Sentry so we can triage the root cause.
@@ -305,7 +370,7 @@ const SettingsPage: NextPageWithLayout = () => {
       />
 
       {/* Section: General */}
-      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 mt-2">{t('general')}</p>
+      <SettingsSectionHeader label={t('general')} saved={savedSections.has('general')} savedLabel={t('settingsSaved')} className="mb-3 mt-2" />
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
         <LanguageSelector
           settings={settings}
@@ -318,7 +383,7 @@ const SettingsPage: NextPageWithLayout = () => {
       </div>
 
       {/* Section: Auto-Reply */}
-      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionAutoReply')}</p>
+      <SettingsSectionHeader label={t('sectionAutoReply')} saved={savedSections.has('autoReply')} savedLabel={t('settingsSaved')} className="mb-3" />
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
         {/* AI master switch — promoted to top of the section because it gates
             whether the AI Personality section appears below and whether smart
@@ -348,7 +413,7 @@ const SettingsPage: NextPageWithLayout = () => {
       </div>
 
       {/* Section: AI Personality */}
-      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionAiPersonality')}</p>
+      <SettingsSectionHeader label={t('sectionAiPersonality')} saved={savedSections.has('aiPersonality')} savedLabel={t('settingsSaved')} className="mb-3" />
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
         {settings.aiEnabled ? (
           <ReplyStyleCard
@@ -382,9 +447,12 @@ const SettingsPage: NextPageWithLayout = () => {
           </div>
         }
       >
-        <span className={clsx('block font-bold landscape:text-sm', showAdvanced ? 'text-foreground' : 'text-foreground/70')}>
-          {showAdvanced ? t('hideAdvanced') : t('showAdvanced')}
-        </span>
+        <div className="flex items-center gap-2.5">
+          <span className={clsx('font-bold landscape:text-sm', showAdvanced ? 'text-foreground' : 'text-foreground/70')}>
+            {showAdvanced ? t('hideAdvanced') : t('showAdvanced')}
+          </span>
+          <SectionSavedFlash show={savedSections.has('advanced')} label={t('settingsSaved')} />
+        </div>
         <p className="text-xs text-muted-foreground landscape:hidden">
           {t('advancedDescription')}
         </p>

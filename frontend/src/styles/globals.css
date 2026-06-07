@@ -45,7 +45,16 @@
        below. Floors to 12px on no-notch viewports, then adds a 16px buffer so
        toasts never hug the status bar / notch. */
     --toast-offset-top: calc(max(var(--sai-top), 12px) + 16px);
-    
+
+    /* Toast bottom offset — toasts anchor to the bottom corner. On mobile the
+       bottom nav occupies that space, so clear it plus the gesture safe-area
+       inset. Reuses --nav-bottom-height (4rem portrait / 3rem landscape) so the
+       toast tracks the nav in both orientations rather than hard-coding it.
+       Single source of truth for the sonner Toaster mobileOffset (set on the
+       React component) and the .is-native override below. On nav-less pages
+       (login/landing) this just floats the toast a little higher — harmless. */
+    --toast-offset-bottom: calc(var(--nav-bottom-height) + var(--sai-bottom) + 12px);
+
     /* Landscape side padding - uses actual safe area or minimum 44px */
     --sai-side-landscape: 44px;
 
@@ -1465,12 +1474,13 @@
   padding-right: var(--sai-right);
 }
 
-/* Native apps: push Sonner toasts below the status bar safe area.
-   Sonner uses --offset-top (desktop >600px) and --mobile-offset-top (mobile ≤600px).
-   We override both so toasts always clear the status bar on native platforms. */
-.is-native [data-sonner-toaster][data-y-position="top"] {
-  --offset-top: var(--toast-offset-top) !important;
-  --mobile-offset-top: var(--toast-offset-top) !important;
+/* Native apps: push Sonner toasts above the bottom nav + gesture inset.
+   Sonner uses --offset-bottom (desktop >600px) and --mobile-offset-bottom (mobile ≤600px).
+   We override both so bottom toasts always clear the bottom nav / home indicator
+   on native platforms (Android WebView doesn't report env() reliably). */
+.is-native [data-sonner-toaster][data-y-position="bottom"] {
+  --offset-bottom: var(--toast-offset-bottom) !important;
+  --mobile-offset-bottom: var(--toast-offset-bottom) !important;
 }
 
 /* Native apps: use injected variable (Android WebView doesn't report env() correctly) */

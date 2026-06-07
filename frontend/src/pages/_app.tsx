@@ -517,13 +517,15 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
               {getLayout(<Component {...pageProps} />)}
               <Toaster
                 richColors
-                position="top-center"
+                // Bottom corner, mirrored for RTL (start-side stays clear of the
+                // sidebar): bottom-right in LTR, bottom-left in AR.
+                position={isRTLLocale(effectiveLocale) ? 'bottom-left' : 'bottom-right'}
                 closeButton
                 duration={4000}
                 theme="system"
                 dir={isRTLLocale(effectiveLocale) ? 'rtl' : 'ltr'}
-                offset={{ top: '16px' }}
-                mobileOffset={{ top: 'var(--toast-offset-top)' }}
+                offset={{ bottom: '16px' }}
+                mobileOffset={{ bottom: 'var(--toast-offset-bottom)' }}
               />
               {showPushDeniedBanner && (
                 <PushDeniedBanner onDismiss={handleDismissPushDeniedBanner} />
