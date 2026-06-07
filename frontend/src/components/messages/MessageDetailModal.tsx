@@ -438,8 +438,9 @@ export function MessageDetailModal({
             </button>
           </div>
 
-          {/* Actions row: pause/resume (left) + resolve/unresolve (right) */}
-          <div className="flex items-start justify-between mt-3 pt-3 border-t border-theme-border">
+          {/* Actions row: pause/resume (ghost, start) + resolve/unresolve (end).
+              Resolve is the primary affordance → filled teal; Pause stays ghost. */}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-theme-border">
             <PauseToggle
               paused={!!isPaused}
               remainingMinutes={conversation.pauseStatus?.remainingMinutes}
@@ -457,7 +458,7 @@ export function MessageDetailModal({
             {hasUnresolvedIncoming ? (
               <button
                 onClick={() => { onResolve(conversation.senderId, pageId); onClose(); }}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold btn-primary transition-all"
               >
                 <CheckCircle className="w-4 h-4 flex-shrink-0" />
                 {tComments('resolve')}
@@ -465,7 +466,7 @@ export function MessageDetailModal({
             ) : hasResolvedIncoming && onUnresolve ? (
               <button
                 onClick={() => { onUnresolve(conversation.senderId, pageId); onClose(); }}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-muted"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border border-theme-border text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
               >
                 <Undo2 className="w-4 h-4 flex-shrink-0" />
                 {tComments('unresolve')}

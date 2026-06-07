@@ -33,14 +33,20 @@ export interface FlagTagStyle {
 }
 
 /**
- * Get the visual style for a flag tag.
- * Urgent flags get red styling; non-urgent get amber/warning.
+ * Get the visual style for a flag tag. Three distinct categories:
+ * - Urgent (cancellation/refund/exchange/angry) → red, pulsing.
+ * - "Missing from Business Info" prompts (add price / info / phone) → blue/info.
+ *   These are actionable guidance, not errors, so they read differently.
+ * - Everything else (low confidence, SLA, dm_failed, …) → amber/warning.
  */
 export function getFlagTagStyle(flagKey: string): FlagTagStyle {
     // Strip SLA suffix (e.g. "sla_no_reply:60" → "sla_no_reply") for lookup
     const baseKey = flagKey.replace(/:.*$/, '');
     if (URGENT_FLAGS.has(baseKey)) {
         return { cssClass: 'status-error', urgent: true };
+    }
+    if (KB_FLAGS.has(baseKey)) {
+        return { cssClass: 'status-info', urgent: false };
     }
     return { cssClass: 'status-warning', urgent: false };
 }
