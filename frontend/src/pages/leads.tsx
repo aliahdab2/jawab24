@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
-import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver } from '@/hooks';
+import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, useDebounce } from '@/hooks';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageHeader, EmptyState, ConfirmationModal, Select, UpgradeCTA } from '@/components/ui';
+import { PageHeader, EmptyState, ConfirmationModal, Select, UpgradeCTA, Input } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useUIStore } from '@/lib/store';
 import { leadsApi, pagesApi, subscriptionApi, type Lead, type LeadStatus } from '@/lib/api';
@@ -18,6 +18,10 @@ import {
   Download,
   Lock,
   Loader2,
+  Search,
+  X,
+  MessageSquare,
+  ChevronRight,
 } from 'lucide-react';
 import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG } from '@/components/leads/StatusControl';
 import { useTranslations } from 'next-intl';
@@ -215,13 +219,14 @@ interface LeadDetailModalProps {
   pages: Page[];
   onClose: () => void;
   onStatusChange: (next: LeadStatus) => void;
+  onViewConversation: () => void;
   isPending: boolean;
   language: string;
   t: ReturnType<typeof useTranslations>;
   tc: ReturnType<typeof useTranslations>;
 }
 
-function LeadDetailModal({ lead, pages, onClose, onStatusChange, isPending, language, t, tc }: LeadDetailModalProps) {
+function LeadDetailModal({ lead, pages, onClose, onStatusChange, onViewConversation, isPending, language, t, tc }: LeadDetailModalProps) {
   const pageName = pages.find((p) => p.id === lead.pageId)?.name ?? '—';
   const fields = lead.extractedData?.fields ?? [];
   const sourceLabel = lead.sourceType === 'comment' ? t('sourceComment') : t('sourceMessage');
@@ -265,6 +270,24 @@ function LeadDetailModal({ lead, pages, onClose, onStatusChange, isPending, lang
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">{t('status')}</p>
           <StatusPicker status={lead.status} onSelect={onStatusChange} t={t} disabled={isPending} />
         </div>
+
+        {/* ── View conversation ── only for message-sourced leads, which have a DM thread.
+            Comment-sourced leads have no message thread to open. */}
+        {lead.sourceType === 'message' && (
+          <div className="px-5 py-4 border-b border-theme-border">
+            <button
+              type="button"
+              onClick={onViewConversation}
+              className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl border border-theme-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <MessageSquare className="w-4 h-4 text-icon-muted flex-shrink-0" aria-hidden="true" />
+                <span className="truncate">{t('viewConversation')}</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-icon-muted flex-shrink-0 rtl:rotate-180" aria-hidden="true" />
+            </button>
+          </div>
+        )}
 
         {/* ── Summary / intent ── */}
         {lead.extractedData?.summary && (
@@ -383,6 +406,8 @@ const LeadsPage: NextPageWithLayout = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [exporting, setExporting] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
   const { data: pagesData } = useQuery<Page[]>({
     queryKey: ['pages'],
@@ -463,6 +488,46 @@ const LeadsPage: NextPageWithLayout = () => {
   // authoritative even as more pages stream in.
   const total = leadsData?.pages[0]?.total ?? 0;
 
+  // Per-status counts for the filter-tab badges. There's no count-by-status
+  // endpoint, so we read the `total` of a minimal (limit:1) query per status in
+  // parallel — a lead is always exactly one status, so "All" is their sum.
+  // React Query caches these and they only refetch when the page or a mutation
+  // invalidates them.
+  const { data: statusCounts } = useQuery({
+    queryKey: ['leads-counts', selectedPageId],
+    queryFn: async () => {
+      const [nw, contacted, converted] = await Promise.all(
+        (['new', 'contacted', 'converted'] as LeadStatus[]).map((s) =>
+          leadsApi.getByPage(selectedPageId, { status: s, limit: 1 }).then((r) => r.data.total),
+        ),
+      );
+      return { new: nw, contacted, converted, all: nw + contacted + converted };
+    },
+    enabled: !!selectedPageId,
+    staleTime: 30_000,
+  });
+
+  // Client-side search over the loaded leads (name / phone / summary), mirroring
+  // the Messages page. Status filtering stays server-side via the query key.
+  const filteredLeads = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return leads;
+    return leads.filter((l) =>
+      (l.senderName ?? '').toLowerCase().includes(q) ||
+      l.phone.toLowerCase().includes(q) ||
+      (l.extractedData?.summary ?? '').toLowerCase().includes(q),
+    );
+  }, [leads, debouncedSearch]);
+
+  // Open the related message thread for a (message-sourced) lead. messageId
+  // deep-links reliably regardless of the inbox filter; senderId is the fallback.
+  const handleViewConversation = useCallback((lead: Lead) => {
+    const query = lead.sourceType === 'message' && lead.sourceId
+      ? { messageId: lead.sourceId }
+      : { conversation: lead.senderId };
+    router.push({ pathname: '/messages', query });
+  }, [router]);
+
   // URL-driven detail drawer (?lead=<id>) + notification deep-link (?leadId=<id>),
   // shared with the Comments page via useUrlSelectedResource. The deep-link fetches
   // the lead directly so the bell opens that exact customer's card even when it's
@@ -510,6 +575,7 @@ const LeadsPage: NextPageWithLayout = () => {
         toast.success(t('statusUpdated'), { id: 'lead-status' });
       }
       invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
+      queryClient.invalidateQueries({ queryKey: ['leads-counts', selectedPageId] });
     },
     onError: (err) => {
       captureError(err, 'Failed to update lead status');
@@ -523,6 +589,7 @@ const LeadsPage: NextPageWithLayout = () => {
       toast.success(t('deleteSuccess'));
       setLeadToDelete(null);
       invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
+      queryClient.invalidateQueries({ queryKey: ['leads-counts', selectedPageId] });
     },
     onError: (err) => {
       captureError(err, 'Failed to delete lead');
@@ -588,11 +655,11 @@ const LeadsPage: NextPageWithLayout = () => {
     }
   };
 
-  const filterTabs: { key: StatusFilter; label: string }[] = [
-    { key: 'all',       label: t('filterAll') },
-    { key: 'new',       label: t('filterNew') },
-    { key: 'contacted', label: t('filterContacted') },
-    { key: 'converted', label: t('filterConverted') },
+  const filterTabs: { key: StatusFilter; label: string; count?: number }[] = [
+    { key: 'all',       label: t('filterAll'),       count: statusCounts?.all },
+    { key: 'new',       label: t('filterNew'),       count: statusCounts?.new },
+    { key: 'contacted', label: t('filterContacted'), count: statusCounts?.contacted },
+    { key: 'converted', label: t('filterConverted'), count: statusCounts?.converted },
   ];
 
   const isPending = statusMutation.isPending || deleteMutation.isPending;
@@ -610,13 +677,13 @@ const LeadsPage: NextPageWithLayout = () => {
                 <button
                   onClick={handleExport}
                   disabled={exporting}
-                  className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors disabled:opacity-50"
-                  aria-label={t('exportCsv')}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors disabled:opacity-50"
                 >
                   {exporting
-                    ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-                    : <Download className="w-5 h-5" aria-hidden="true" />
+                    ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                    : <Download className="w-4 h-4" aria-hidden="true" />
                   }
+                  <span>{t('exportCsv')}</span>
                 </button>
               ) : (
                 <UpgradeCTA
@@ -660,11 +727,47 @@ const LeadsPage: NextPageWithLayout = () => {
               )}
             >
               {tab.label}
+              {tab.count !== undefined && (
+                <span className={clsx(
+                  'text-xs tabular-nums',
+                  statusFilter === tab.key ? 'text-white/70' : 'text-subtle',
+                )}>
+                  {tab.count.toLocaleString()}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
-        <span className={clsx('text-sm text-muted-foreground sm:ms-auto', total === 0 && 'invisible')}>
+        {/* Search — client-side filter over the loaded leads (name / phone / summary) */}
+        <div role="search" aria-label={tc('search')} className="relative group w-full sm:w-[240px] sm:ms-auto">
+          <Search
+            className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4 h-4 text-muted-foreground group-focus-within:text-brand-500 transition-colors z-10"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            inputMode="search"
+            autoComplete="off"
+            aria-label={tc('search')}
+            placeholder={tc('search') + '...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="py-2 ps-10 pe-10 rounded-full bg-muted/50 border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all text-sm"
+          />
+          {searchQuery.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              aria-label={t('clearSearch')}
+              className="absolute top-1/2 -translate-y-1/2 end-2.5 p-2 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors z-10"
+            >
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+
+        <span className={clsx('text-sm text-muted-foreground', total === 0 && 'invisible')}>
           {t('leadCount', { count: total })}
         </span>
       </div>
@@ -681,11 +784,13 @@ const LeadsPage: NextPageWithLayout = () => {
         <EmptyState icon={Users} title={t('loadFailed')} variant="search" />
       ) : leads.length === 0 ? (
         <EmptyState icon={Users} title={t('empty')} description={t('emptySub')} />
+      ) : filteredLeads.length === 0 ? (
+        <EmptyState icon={Search} title={tc('noData')} variant="search" />
       ) : (
         <>
           {/* Mobile: card list */}
           <div className="flex flex-col gap-3 md:hidden">
-            {leads.map((lead) => (
+            {filteredLeads.map((lead) => (
               <LeadCard
                 key={lead.id}
                 lead={lead}
@@ -713,7 +818,7 @@ const LeadsPage: NextPageWithLayout = () => {
                 </tr>
               </thead>
               <tbody>
-                {leads.map((lead) => (
+                {filteredLeads.map((lead) => (
                   <LeadRow
                     key={lead.id}
                     lead={lead}
@@ -751,6 +856,7 @@ const LeadsPage: NextPageWithLayout = () => {
             statusMutation.mutate({ lead: selectedLead, status });
             setSelectedLead((prev) => prev ? { ...prev, status } : null);
           }}
+          onViewConversation={() => handleViewConversation(selectedLead)}
           isPending={statusMutation.isPending}
           language={language}
           t={t}

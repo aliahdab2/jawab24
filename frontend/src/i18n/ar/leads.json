@@ -39,6 +39,8 @@
   "filterNew": "جديد",
   "filterContacted": "تم التواصل",
   "filterConverted": "تحوّل",
+  "viewConversation": "عرض المحادثة",
+  "clearSearch": "مسح البحث",
   "leadCount": "{count, plural, zero {لا عملاء} one {عميل واحد} two {عميلان} few {# عملاء} many {# عميل} other {# عميل}}",
   "newLeadsBadge": "{count, plural, zero {} one {# جديد} two {# جديد} few {# جديد} many {# جديد} other {# جديد}}",
   "selectPage": "اختر صفحة لعرض العملاء المحتملين",

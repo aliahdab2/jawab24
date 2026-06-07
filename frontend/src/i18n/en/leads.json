@@ -39,6 +39,8 @@
   "filterNew": "New",
   "filterContacted": "Contacted",
   "filterConverted": "Converted",
+  "viewConversation": "View conversation",
+  "clearSearch": "Clear search",
   "leadCount": "{count, plural, one {# lead} other {# leads}}",
   "newLeadsBadge": "{count, plural, one {# new} other {# new}}",
   "selectPage": "Select a page to view leads",
