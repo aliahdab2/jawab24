@@ -369,8 +369,10 @@ test.describe('Dashboard Page', () => {
     await expect(pageButton).toBeVisible({ timeout: 15000 });
     await expect(pageButton).toHaveAttribute('aria-expanded', 'true');
 
-    // The expanded panel should show the "Manage Page" CTA link
-    const manageLink = page.getByRole('link', { name: new RegExp(t('dashboard.pageAccordion.managePage'), 'i') });
+    // The expanded panel should show the "Manage Page" CTA link.
+    // Exact match: the pages usage bar can also render a "Manage Pages" (plural)
+    // CTA when at/over the limit, and a loose regex would match both.
+    const manageLink = page.getByRole('link', { name: t('dashboard.pageAccordion.managePage'), exact: true });
     await expect(manageLink).toBeVisible();
 
     // The href must deep-link to the individual page card via hash
