@@ -114,6 +114,34 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Post context preview: clamped to 4 lines by default with a "show more"
+  // toggle (matches the platform's own "see more" pattern, no nested scrollbox).
+  const postRef = useRef<HTMLParagraphElement>(null);
+  const [postExpanded, setPostExpanded] = useState(false);
+  const [postOverflows, setPostOverflows] = useState(false);
+
+  // Navigating prev/next remounts this modal (parent keys it by comment id), so
+  // postExpanded resets to its initial collapsed state automatically — no manual
+  // reset needed.
+
+  // Only show the toggle when the clamped post actually overflows 4 lines.
+  // Skipped while expanded so postOverflows keeps its last clamped reading
+  // (the toggle must stay visible to collapse again).
+  useEffect(() => {
+    const el = postRef.current;
+    if (!el || postExpanded) return;
+    let cancelled = false;
+    const measure = () => { if (!cancelled) setPostOverflows(el.scrollHeight - el.clientHeight > 1); };
+    measure();
+    // ResizeObserver (not window.resize) catches the modal/container rewrapping;
+    // fonts.ready re-measures after the async Arabic webfonts (Cairo/Tajawal)
+    // load and shift the line count. Matches the pattern in MessageDetailModal.
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    document.fonts?.ready.then(measure).catch(() => { /* font API unavailable — initial measure stands */ });
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [comment.postMessage, postExpanded]);
+
   // Pause state
   const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
   const [pauseLoading, setPauseLoading] = useState(false);
@@ -296,9 +324,26 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                     <FileText className="w-3.5 h-3.5 flex-shrink-0 text-icon-muted" aria-hidden="true" />
                     <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{t('postContext')}</span>
                   </div>
-                  <p className="px-3 py-2.5 text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed line-clamp-4" dir="auto">
+                  <p
+                    ref={postRef}
+                    className={clsx(
+                      'px-3 pt-2.5 pb-2 text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed',
+                      !postExpanded && 'line-clamp-4',
+                    )}
+                    dir="auto"
+                  >
                     {comment.postMessage}
                   </p>
+                  {(postOverflows || postExpanded) && (
+                    <button
+                      type="button"
+                      onClick={() => setPostExpanded((v) => !v)}
+                      aria-expanded={postExpanded}
+                      className="block w-full px-3 pb-2.5 text-start text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+                    >
+                      {postExpanded ? t('postShowLess') : t('postShowMore')}
+                    </button>
+                  )}
                 </div>
                 {postTriggerKeyword && (
                   <div className="flex items-center gap-1.5 flex-wrap px-1">
@@ -330,12 +375,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             {/* Outgoing: existing reply */}
             {mode === 'full' && comment.replied && comment.replyText && (
               <div className="flex flex-col items-end">
-                {/* Label to clearly distinguish the AI/business reply from the
-                    customer's comment above. */}
-                <span className="flex items-center gap-1 mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-brand-600">
-                  <Sparkles className="w-3 h-3" aria-hidden="true" />
-                  {comment.replyMethod === 'ai' ? t('aiReplyLabel') : t('reply')}
-                </span>
+                {/* The reply is identified by the ReplySourceBadge below the
+                    bubble (AI / manual / template / post reply); the bubble's
+                    right-aligned brand styling already distinguishes it from the
+                    customer's comment, so no separate header label is needed. */}
                 <div className="max-w-[90%] sm:max-w-[85%] rounded-2xl rounded-be-none p-3 sm:p-4 shadow-sm bg-brand-600 text-white">
                   <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(comment.replyText)}</p>
                 </div>
