@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { Sparkles, CheckCircle, Gauge, Timer } from 'lucide-react';
-import { Card, InfoPopover } from '@/components/ui';
+import { Card, InfoPopover, Sparkline } from '@/components/ui';
 import { Badge } from '@/components/ui/Badge';
 import { useTranslations, useLocale } from 'next-intl';
 import { formatDuration } from '@/lib/formatDuration';
@@ -27,6 +27,9 @@ interface CommandCenterProps {
   /** ISO string — end of current billing period; shown as "resets {date}" under the
    *  primary tile so merchants understand the quota is per-period, not all-time. */
   quotaResetsAt?: string;
+  /** Daily Smart-Reply volume (oldest → newest) for the inline sparkline on the
+   *  primary tile. Omitted/short series simply renders no trend line. */
+  smartRepliesTrend?: number[];
 }
 
 interface MetricCell {
@@ -50,6 +53,10 @@ interface MetricCell {
   /** Tailwind class for the progress-bar fill — pre-resolved by the caller so
    *  the severity thresholds (red/amber/brand) live in one place. */
   progressBarClass?: string;
+  /** Optional inline trend line drawn next to the value (primary tile only). */
+  sparkline?: number[];
+  /** Tailwind text-* colour for the sparkline stroke. */
+  sparklineClass?: string;
 }
 
 export function CommandCenter({
@@ -63,6 +70,7 @@ export function CommandCenter({
   onRetry,
   quota,
   quotaResetsAt,
+  smartRepliesTrend,
 }: CommandCenterProps) {
   const tDash = useTranslations('dashboard');
   const tErrors = useTranslations('errors');
@@ -72,6 +80,9 @@ export function CommandCenter({
   const speedDisplay = avgSpeedSeconds != null
     ? formatDuration(avgSpeedSeconds, tTime)
     : '—';
+
+  // Reply rate is already a 0–100 percentage, so it gets a literal progress bar.
+  const replyRatePercent = Math.max(0, Math.min(100, parseFloat(replyRate) || 0));
 
   // Determine quota severity for the Smart Replies metric
   const quotaPercent = quota?.limit ? quota.percentUsed : 0;
@@ -144,6 +155,8 @@ export function CommandCenter({
       subtext: primarySubtext ?? undefined,
       progressPercent: hasQuota ? Math.min(100, quotaPercent) : undefined,
       progressBarClass: showOverLimit ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-brand-500',
+      sparkline: smartRepliesTrend,
+      sparklineClass: showOverLimit ? 'text-red-500/60' : isWarning ? 'text-amber-500/60' : 'text-brand-500/60',
     },
     {
       label: tDash('commandCenter.repliedToday'),
@@ -167,6 +180,8 @@ export function CommandCenter({
       iconBg: 'icon-bg-amber-light',
       iconColor: '',
       tooltip: tDash('commandCenter.replyRateTooltip'),
+      progressPercent: replyRatePercent,
+      progressBarClass: 'bg-amber-500',
     },
     {
       label: tDash('commandCenter.avgSpeed'),
@@ -223,9 +238,17 @@ export function CommandCenter({
             >
               <div className="flex items-start justify-between gap-2 flex-nowrap">
                 <div className="min-w-0 flex-1">
-                  <p className="text-lg sm:text-2xl md:text-3xl font-bold leading-none tracking-tight text-foreground tabular-nums whitespace-nowrap">
-                    {metric.value}
-                  </p>
+                  <div className="flex items-end gap-2">
+                    <p className="text-lg sm:text-2xl md:text-3xl font-bold leading-none tracking-tight text-foreground tabular-nums whitespace-nowrap">
+                      {metric.value}
+                    </p>
+                    {metric.sparkline && (
+                      <Sparkline
+                        data={metric.sparkline}
+                        className={clsx('mb-0.5 shrink-0', metric.sparklineClass)}
+                      />
+                    )}
+                  </div>
                   <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground dark:text-surface-700 mt-1.5 inline-flex items-center gap-1">
                       {metric.label}
                       {metric.tooltip && (

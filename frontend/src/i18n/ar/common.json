@@ -1,5 +1,19 @@
 {
   "appName": "Jawab24",
+  "intentLabel": {
+    "QUESTION": "سؤال",
+    "COMPLIMENT": "إطراء",
+    "COMPLAINT": "شكوى",
+    "PURCHASE_INTENT": "نية شراء",
+    "GREETING": "ترحيب",
+    "BUSINESS_INQUIRY": "استفسار تجاري",
+    "OFFENSIVE": "مسيء",
+    "SPAM_OR_IRRELEVANT": "غير ذي صلة"
+  },
+  "feedPreview": {
+    "onPost": "على المنشور",
+    "noPreview": "لا توجد معاينة"
+  },
   "loading": "جاري التحميل...",
   "save": "حفظ",
   "saving": "جاري الحفظ...",
