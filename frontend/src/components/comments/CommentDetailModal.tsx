@@ -246,7 +246,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             {(onPrev || onNext) && (
               <>
                 <button
-                  onClick={onPrev}
+                  onClick={goPrev}
                   disabled={!hasPrev}
                   className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label={t('previousComment')}
@@ -254,7 +254,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   <ChevronLeft className="w-5 h-5 rtl:rotate-180" aria-hidden="true" />
                 </button>
                 <button
-                  onClick={onNext}
+                  onClick={goNext}
                   disabled={!hasNext}
                   className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label={t('nextComment')}
