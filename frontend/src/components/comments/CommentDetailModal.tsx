@@ -77,6 +77,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   useEscapeKey(onClose, !kbOpen);
   useBodyScrollLock(true);
 
+  // When prev/next navigation is enabled, pin the modal to a stable height so
+  // the header (and its arrow buttons) doesn't jump between taps as comments of
+  // different lengths load. Single-comment usages (e.g. dashboard) stay
+  // content-sized.
+  const hasNav = !!(onPrev || onNext);
   const needsAttention = checkNeedsAttention(comment);
   const isHeldReply = !comment.replied && !!comment.aiOriginalReply && comment.flagReason?.includes('held_low_confidence');
   const isInstagram = comment.source === 'instagram' || (!comment.source && !comment.facebookCommentId);
@@ -170,7 +175,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="comment-detail-modal-title"
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-[calc(100vh-var(--keyboard-height,0px))] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y"
+        className={clsx(
+          "bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-[calc(100vh-var(--keyboard-height,0px))] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y",
+          // Stable height while navigating so the header arrows stay put between taps.
+          hasNav && "h-[85vh] sm:h-[80vh]"
+        )}
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
