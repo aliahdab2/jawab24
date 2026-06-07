@@ -232,7 +232,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label={t('previousComment')}
                 >
-                  <ChevronLeft className="w-5 h-5 rtl:rotate-180" />
+                  <ChevronLeft className="w-5 h-5 rtl:rotate-180" aria-hidden="true" />
                 </button>
                 <button
                   onClick={onNext}
@@ -240,7 +240,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label={t('nextComment')}
                 >
-                  <ChevronRight className="w-5 h-5 rtl:rotate-180" />
+                  <ChevronRight className="w-5 h-5 rtl:rotate-180" aria-hidden="true" />
                 </button>
                 <div className="w-px h-5 bg-theme-border mx-1" aria-hidden="true" />
               </>

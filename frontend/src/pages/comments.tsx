@@ -537,30 +537,27 @@ const CommentsPage: NextPageWithLayout = () => {
           aria-label={tc('view')}
           className="hidden sm:flex items-center gap-0.5 p-1 rounded-full bg-muted/50 flex-shrink-0"
         >
-          <button
-            type="button"
-            onClick={() => setListView(false)}
-            aria-pressed={!listView}
-            aria-label={t('viewGrid')}
-            className={clsx(
-              'p-2 rounded-full transition-colors',
-              !listView ? 'bg-card shadow-sm text-brand-600' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setListView(true)}
-            aria-pressed={listView}
-            aria-label={t('viewList')}
-            className={clsx(
-              'p-2 rounded-full transition-colors',
-              listView ? 'bg-card shadow-sm text-brand-600' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <List className="w-4 h-4" />
-          </button>
+          {([
+            { list: false, icon: LayoutGrid, label: t('viewGrid') },
+            { list: true, icon: List, label: t('viewList') },
+          ] as const).map(({ list, icon: Icon, label }) => {
+            const active = listView === list;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setListView(list)}
+                aria-pressed={active}
+                aria-label={label}
+                className={clsx(
+                  'p-2 rounded-full transition-colors',
+                  active ? 'bg-card shadow-sm text-brand-600' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Icon className="w-4 h-4" aria-hidden="true" />
+              </button>
+            );
+          })}
         </div>
       </div>
 
