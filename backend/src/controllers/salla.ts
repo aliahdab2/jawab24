@@ -4,7 +4,12 @@ import {
     getStoreByDomain,
     deactivateStore,
 } from '../services/ecommerce';
-import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
+import {
+    dispatchOrderNotification,
+    orderConfirmedEvent,
+    orderShippedEvent,
+    orderDeliveredEvent,
+} from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
@@ -156,19 +161,15 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
     const trackingNumber = order.shipments?.[0]?.tracking_number;
 
     if (event === 'order.created') {
-        return { platform: 'salla', storeId, type: 'order_confirmed', customerPhone: phone, customerName, orderId, orderNumber };
+        return orderConfirmedEvent('salla', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
     }
     // `order.updated` fires alongside `order.status.updated` on every status change —
     // notifications are driven solely off `order.status.updated` to avoid double-sending.
     if (event === 'order.shipment.created' || (isStatusUpdate && slug === 'shipped')) {
-        return { platform: 'salla', storeId, type: 'order_shipped', customerPhone: phone, customerName, orderId, orderNumber, trackingNumber };
+        return orderShippedEvent('salla', storeId, { customerPhone: phone, customerName, orderId, orderNumber, trackingNumber });
     }
     if (isStatusUpdate && (slug === 'completed' || slug === 'delivered')) {
-        return {
-            platform: 'salla', storeId, type: 'order_delivered',
-            customerPhone: phone, customerName, orderId, orderNumber,
-            also: [{ type: 'review_request', variables: { review_url: '' } }],
-        };
+        return orderDeliveredEvent('salla', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
     }
     return null;
 }
