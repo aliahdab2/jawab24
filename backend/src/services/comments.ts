@@ -126,6 +126,8 @@ export class CommentsService {
             aiIntent: comments.aiIntent,
             aiOriginalReply: comments.aiOriginalReply,
             resolved: comments.resolved,
+            hiddenAt: comments.hiddenAt,
+            moderationAction: comments.moderationAction,
             source: sql<string>`'facebook'`.as('source'),
         })
             .from(comments)
@@ -173,6 +175,8 @@ export class CommentsService {
             aiIntent: instagramComments.aiIntent,
             aiOriginalReply: instagramComments.aiOriginalReply,
             resolved: instagramComments.resolved,
+            hiddenAt: instagramComments.hiddenAt,
+            moderationAction: instagramComments.moderationAction,
             source: sql<string>`'instagram'`.as('source'),
         })
             .from(instagramComments)

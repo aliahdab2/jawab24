@@ -9,6 +9,7 @@ vi.mock('../../src/services/comments', () => ({
         getCommentsByPost: vi.fn(),
         getComment: vi.fn(),
         getCommentForWorkspace: vi.fn(),
+        getModerationTarget: vi.fn(),
         updateComment: vi.fn(),
         markAsReplied: vi.fn(),
         getStats: vi.fn(),
@@ -19,9 +20,23 @@ vi.mock('../../src/services/comments', () => ({
     },
 }));
 
+vi.mock('../../src/services/commentModeration', () => ({
+    commentModeration: {
+        hide: vi.fn(),
+        unhide: vi.fn(),
+        remove: vi.fn(),
+        blockAuthor: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/services/auditLog', () => ({
+    auditLog: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Import controller AFTER mocks
 import { commentsController } from '../../src/controllers/comments';
 import { commentsService } from '../../src/services/comments';
+import { commentModeration } from '../../src/services/commentModeration';
 
 describe('CommentsController', () => {
     let mockRequest: Partial<FastifyRequest>;
@@ -241,19 +256,90 @@ describe('CommentsController', () => {
 
     });
 
-    // ─── delete() ────────────────────────────────────────────────
+    // ─── moderation: hide / unhide / block / delete ──────────────
+
+    describe('hide', () => {
+        it('hides via the moderation service and returns success', async () => {
+            mockRequest.params = { id: 'c-99' };
+            vi.mocked(commentModeration.hide).mockResolvedValue({ status: 'ok' });
+
+            await commentsController.hide(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentModeration.hide).toHaveBeenCalledWith('c-99', 'test_workspace_id', 'user-123');
+            expect(mockReply.send).toHaveBeenCalledWith({ success: true });
+        });
+
+        it('returns 404 when the comment is not found', async () => {
+            mockRequest.params = { id: 'missing' };
+            vi.mocked(commentModeration.hide).mockResolvedValue({ status: 'not_found' });
+
+            await commentsController.hide(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
+        });
+
+        it('rejects non-Facebook comments with 400', async () => {
+            mockRequest.params = { id: 'ig-1' };
+            vi.mocked(commentModeration.hide).mockResolvedValue({ status: 'unsupported_platform' });
+
+            await commentsController.hide(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+        });
+    });
+
+    describe('unhide', () => {
+        it('un-hides via the moderation service', async () => {
+            mockRequest.params = { id: 'c-99' };
+            vi.mocked(commentModeration.unhide).mockResolvedValue({ status: 'ok' });
+
+            await commentsController.unhide(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentModeration.unhide).toHaveBeenCalledWith('c-99', 'test_workspace_id');
+            expect(mockReply.send).toHaveBeenCalledWith({ success: true });
+        });
+    });
+
+    describe('block', () => {
+        it('blocks the author via the moderation service', async () => {
+            mockRequest.params = { id: 'c-99' };
+            vi.mocked(commentModeration.blockAuthor).mockResolvedValue({ status: 'ok', blockedUserId: 'fb_user_9', platformPageId: 'fb_page_1' });
+
+            await commentsController.block(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentModeration.blockAuthor).toHaveBeenCalledWith('c-99', 'test_workspace_id');
+            expect(mockReply.send).toHaveBeenCalledWith({ success: true });
+        });
+
+        it('returns 400 when commenter identity is unavailable', async () => {
+            mockRequest.params = { id: 'c-99' };
+            vi.mocked(commentModeration.blockAuthor).mockResolvedValue({ status: 'no_identity' });
+
+            await commentsController.block(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+        });
+    });
 
     describe('delete', () => {
-        it('should delete comment and return 204', async () => {
+        it('deletes on the platform then locally and returns 204', async () => {
             mockRequest.params = { id: 'c-99' };
-            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'c-99' } as any);
-            vi.mocked(commentsService.deleteComment).mockResolvedValue(undefined);
+            vi.mocked(commentModeration.remove).mockResolvedValue({ status: 'ok' });
 
             await commentsController.delete(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.deleteComment).toHaveBeenCalledWith('c-99');
+            expect(commentModeration.remove).toHaveBeenCalledWith('c-99', 'test_workspace_id', 'user-123');
             expect(mockReply.status).toHaveBeenCalledWith(204);
             expect(mockReply.send).toHaveBeenCalled();
+        });
+
+        it('returns 404 when the comment is not found', async () => {
+            mockRequest.params = { id: 'missing' };
+            vi.mocked(commentModeration.remove).mockResolvedValue({ status: 'not_found' });
+
+            await commentsController.delete(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
         });
     });
 

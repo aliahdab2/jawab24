@@ -336,6 +336,13 @@ const CommentsPage: NextPageWithLayout = () => {
     }
   }, [queryClient, t, tc]);
 
+  // Refresh the list + stats after a moderation action (hide/unhide/delete/block).
+  // The modal owns the API call + success/error toast; this only re-syncs the list.
+  const handleModerated = useCallback(() => {
+    invalidateInfiniteListFresh(queryClient, ['comments']);
+    queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+  }, [queryClient]);
+
   const exportToCSV = async () => {
     setExporting(true);
     try {
@@ -608,6 +615,7 @@ const CommentsPage: NextPageWithLayout = () => {
           onReplySuccess={() => refetch()}
           onResolve={!selectedComment.resolved ? () => handleResolve(selectedComment.id) : undefined}
           onUnresolve={selectedComment.resolved ? () => handleUnresolve(selectedComment.id) : undefined}
+          onModerated={handleModerated}
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
           pageUrl={selectedCommentPageUrl}
           postTriggerKeyword={selectedComment.postId ? triggersByPostId[selectedComment.postId]?.keyword ?? null : null}

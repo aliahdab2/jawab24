@@ -190,6 +190,9 @@ export interface CommentData {
   flagMeta?: import('@jawab24/shared').FlagMeta | null;
   aiIntent?: string | null;
   source?: 'facebook' | 'instagram';
+  /** Moderation state — null/absent = visible. Set when hidden/deleted on the platform. */
+  hiddenAt?: string | null;
+  moderationAction?: 'hide' | 'delete' | null;
 }
 
 export interface CommentsPaginatedResponse {
@@ -249,6 +252,11 @@ export const commentsApi = {
     }),
   resolve: (id: string) => api.post(`/comments/${id}/resolve`),
   unresolve: (id: string) => api.post(`/comments/${id}/unresolve`),
+  // Moderation (Facebook only). hide/unhide are member+; block/delete are admin-only.
+  hide: (id: string) => api.post(`/comments/${id}/hide`),
+  unhide: (id: string) => api.post(`/comments/${id}/unhide`),
+  block: (id: string) => api.post(`/comments/${id}/block`),
+  remove: (id: string) => api.delete(`/comments/${id}`),
 };
 
 // Settings API

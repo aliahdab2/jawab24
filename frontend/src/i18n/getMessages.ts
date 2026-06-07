@@ -24,6 +24,7 @@ import enLeads         from './en/leads.json';
 import enLanding       from './en/landing.json';
 import enLogout        from './en/logout.json';
 import enMessages      from './en/messages.json';
+import enModeration    from './en/moderation.json';
 import enMeta          from './en/meta.json';
 import enNav           from './en/nav.json';
 import enNotifications from './en/notifications.json';
@@ -75,6 +76,7 @@ import arLeads         from './ar/leads.json';
 import arLanding       from './ar/landing.json';
 import arLogout        from './ar/logout.json';
 import arMessages      from './ar/messages.json';
+import arModeration    from './ar/moderation.json';
 import arMeta          from './ar/meta.json';
 import arNav           from './ar/nav.json';
 import arNotifications from './ar/notifications.json';
@@ -129,6 +131,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/landing': enLanding,       'ar/landing': arLanding,
   'en/logout': enLogout,         'ar/logout': arLogout,
   'en/messages': enMessages,     'ar/messages': arMessages,
+  'en/moderation': enModeration, 'ar/moderation': arModeration,
   'en/meta': enMeta,             'ar/meta': arMeta,
   'en/nav': enNav,               'ar/nav': arNav,
   'en/notifications': enNotifications, 'ar/notifications': arNotifications,

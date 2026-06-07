@@ -1,8 +1,19 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { commentsService } from '../services/comments';
+import { commentModeration, type ModerationStatus } from '../services/commentModeration';
+import { auditLog } from '../services/auditLog';
 import { UpdateCommentDTO } from '../types';
 import { parseInboxFilters, parseLimit } from '../lib/queryParsers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
+
+/** Map a non-ok moderation status to an HTTP error response. Returns true if handled. */
+function sendModerationError(reply: FastifyReply, status: ModerationStatus): boolean {
+    if (status === 'ok') return false;
+    if (status === 'not_found') reply.status(404).send({ error: 'Comment not found' });
+    else if (status === 'unsupported_platform') reply.status(400).send({ error: 'Moderation is only supported for Facebook comments' });
+    else if (status === 'no_identity') reply.status(400).send({ error: 'Cannot block: commenter identity unavailable' });
+    return true;
+}
 
 export class CommentsController {
     /**
@@ -180,19 +191,95 @@ export class CommentsController {
     }
 
     /**
-     * Delete a comment
+     * Hide a comment on the platform (reversible). Member+.
+     * POST /comments/:id/hide
+     */
+    async hide(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.user) return reply.status(401).send({ error: 'Unauthorized' });
+        const { id } = request.params;
+        const userId = req.user.userId;
+
+        try {
+            const result = await commentModeration.hide(id, req.workspaceId, userId);
+            if (sendModerationError(reply, result.status)) return;
+            void auditLog({
+                userId, workspaceId: req.workspaceId, action: 'moderation.hide',
+                entityType: 'comment', entityId: id,
+            });
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to hide comment' });
+        }
+    }
+
+    /**
+     * Un-hide a previously hidden comment. Member+.
+     * POST /comments/:id/unhide
+     */
+    async unhide(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.user) return reply.status(401).send({ error: 'Unauthorized' });
+        const { id } = request.params;
+        const userId = req.user.userId;
+
+        try {
+            const result = await commentModeration.unhide(id, req.workspaceId);
+            if (sendModerationError(reply, result.status)) return;
+            void auditLog({
+                userId, workspaceId: req.workspaceId, action: 'moderation.unhide',
+                entityType: 'comment', entityId: id,
+            });
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to unhide comment' });
+        }
+    }
+
+    /**
+     * Block the comment's author from the page (Facebook only). Admin+.
+     * POST /comments/:id/block
+     */
+    async block(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.user) return reply.status(401).send({ error: 'Unauthorized' });
+        const { id } = request.params;
+        const userId = req.user.userId;
+
+        try {
+            const result = await commentModeration.blockAuthor(id, req.workspaceId);
+            if (sendModerationError(reply, result.status)) return;
+            void auditLog({
+                userId, workspaceId: req.workspaceId, action: 'moderation.block',
+                entityType: 'comment', entityId: id,
+                metadata: { blockedUserId: result.blockedUserId, platformPageId: result.platformPageId },
+            });
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to block user' });
+        }
+    }
+
+    /**
+     * Delete a comment — removes it on the platform first, then our stored row. Admin+.
      * DELETE /comments/:id
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
         const req = request as ResolvedWorkspaceRequest;
+        if (!req.user) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
+        const userId = req.user.userId;
 
         try {
-            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
-            if (!owned) {
-                return reply.status(404).send({ error: 'Comment not found' });
-            }
-            await commentsService.deleteComment(id);
+            const result = await commentModeration.remove(id, req.workspaceId, userId);
+            if (sendModerationError(reply, result.status)) return;
+            void auditLog({
+                userId, workspaceId: req.workspaceId, action: 'moderation.delete',
+                entityType: 'comment', entityId: id,
+            });
             return reply.status(204).send();
         } catch (error) {
             request.log.error(error);

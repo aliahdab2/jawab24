@@ -29,7 +29,12 @@ export type AuditAction =
     | 'account.deleted'
     | 'account.fb_data_deletion'
     | 'kb.updated'
-    | 'cleanup.ran';
+    | 'cleanup.ran'
+    | 'moderation.hide'
+    | 'moderation.unhide'
+    | 'moderation.delete'
+    | 'moderation.block'
+    | 'moderation.auto_hide';
 
 export interface AuditEntry {
     userId: string;

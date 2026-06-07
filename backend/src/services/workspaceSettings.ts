@@ -43,6 +43,7 @@ const DEFAULTS: WorkspaceSettings = {
     brandVoiceNotes: '',
     brandVoiceNotesMulti: {},
     holdLowConfidence: false,
+    moderation: { enabled: false, action: 'hide', blockAuthor: true },
 };
 
 type LegacyRow = Partial<Record<PipelineField, unknown>>;
