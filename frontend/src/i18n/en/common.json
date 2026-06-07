@@ -1,5 +1,19 @@
 {
   "appName": "Jawab24",
+  "intentLabel": {
+    "QUESTION": "Question",
+    "COMPLIMENT": "Compliment",
+    "COMPLAINT": "Complaint",
+    "PURCHASE_INTENT": "Purchase intent",
+    "GREETING": "Greeting",
+    "BUSINESS_INQUIRY": "Business inquiry",
+    "OFFENSIVE": "Offensive",
+    "SPAM_OR_IRRELEVANT": "Spam"
+  },
+  "feedPreview": {
+    "onPost": "On post",
+    "noPreview": "No preview"
+  },
   "loading": "Loading...",
   "save": "Save",
   "cancel": "Cancel",

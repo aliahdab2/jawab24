@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, PageHeader, Button, PageSkeleton, UpgradeCTA } from '@/components/ui';
+import { Card, PageHeader, Button, PageSkeleton, UpgradeCTA, FeedSnippet, ArrowLink } from '@/components/ui';
+import { intentLabelKey } from '@/utils/feedPreview';
 import dynamic from 'next/dynamic';
 
 const OnboardingWizard = dynamic(() => import('@/components/onboarding').then(m => ({ default: m.OnboardingWizard })), { ssr: false });
@@ -14,7 +15,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { isIOSNative } from '@/lib/capacitor';
 import { subscriptionApi, settingsApi, pagesApi, commentsApi, messagesApi, analyticsApi, api } from '@/lib/api';
-import type { AnalyticsOverview } from '@/lib/api';
+import type { AnalyticsOverview, AiUsageReport } from '@/lib/api';
 import {
   MessageSquare,
   MessageCircle,
@@ -23,7 +24,6 @@ import {
   Sparkles,
   Crown,
   AlertTriangle,
-  ArrowRight,
   Clock,
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -57,8 +57,10 @@ function SectionError({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function UsageProgress({ label, used, limit, percent }: { label: string; used: number; limit: number | null; percent: number }) {
+function UsageProgress({ label, used, limit, percent, overLimitCta }: { label: string; used: number; limit: number | null; percent: number; overLimitCta?: { label: string; href: string } }) {
   const roundedPercent = Math.round(percent);
+  // At/over the limit, surface a direct action (e.g. "Manage Pages") right on the bar.
+  const showCta = overLimitCta && percent >= 100;
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap justify-between items-end gap-x-3 gap-y-1 text-xs">
@@ -100,6 +102,9 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
           )}
         </div>
       </div>
+      {showCta && (
+        <ArrowLink href={overLimitCta.href} size="xs">{overLimitCta.label}</ArrowLink>
+      )}
     </div>
   );
 }
@@ -124,6 +129,13 @@ const DashboardPage: NextPageWithLayout = () => {
   const tPages = useTranslations('pages');
   const tPlans = useTranslations('plans');
   const { intlLocale } = useLanguage();
+
+  // Resolve a normalized AI intent to its human-readable label (common ns),
+  // or null when there's no canonical intent to show.
+  const resolveIntentLabel = (intent?: string | null) => {
+    const key = intentLabelKey(intent);
+    return key ? tc(key as Parameters<typeof tc>[0]) : null;
+  };
   const { isAuthenticated, fbToken, user } = useAuthStore();
   const { isOwner } = useWorkspaceRole();
   const { setOnboardingVisible } = useUIStore();
@@ -234,6 +246,17 @@ const DashboardPage: NextPageWithLayout = () => {
     enabled: isAuthenticated,
   });
 
+  // Daily Smart-Reply (AI call) volume — feeds the inline sparkline on the
+  // primary metric tile. Best-effort: if it fails, the tile just shows no trend.
+  const { data: aiUsage } = useQuery({
+    queryKey: ['dashboard-ai-usage'],
+    queryFn: async () => {
+      const res = await analyticsApi.getAiUsage(30);
+      return (res.data ?? null) as AiUsageReport | null;
+    },
+    enabled: isAuthenticated,
+  });
+
   const { data: needsActionComments } = useQuery({
     queryKey: ['dashboard-needs-action-comments'],
     queryFn: async () => {
@@ -268,6 +291,7 @@ const DashboardPage: NextPageWithLayout = () => {
     queryClient.invalidateQueries({ queryKey: ['dashboard-usage'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-settings'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-ai-usage'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-comments'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-recent-messages'] });
   }, [queryClient]);
@@ -556,6 +580,7 @@ const DashboardPage: NextPageWithLayout = () => {
           topupBalance: usage.topup?.balance,
         } : undefined}
         quotaResetsAt={usage?.currentPeriod?.end}
+        smartRepliesTrend={aiUsage?.byDay?.slice(-14).map((d) => d.calls)}
       />
 
       {/* Inbox: Comments + Messages side by side */}
@@ -590,10 +615,7 @@ const DashboardPage: NextPageWithLayout = () => {
                   )}
                 </div>
                 {commentItems.length > 0 && (
-                  <Link href="/comments" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
-                    <span>{tc('viewAll')}</span>
-                    <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
-                  </Link>
+                  <ArrowLink href="/comments">{tc('viewAll')}</ArrowLink>
                 )}
               </div>
 
@@ -602,7 +624,6 @@ const DashboardPage: NextPageWithLayout = () => {
                   <SectionError onRetry={refetchAll} />
                 ) : commentItems.length > 0 ? (
                   commentItems.slice(0, maxRows).map((comment) => {
-                    const snippet = comment.message || '';
                     const timeLabel = getTimeLabel(comment.createdAt);
 
                     return (
@@ -629,9 +650,13 @@ const DashboardPage: NextPageWithLayout = () => {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed break-words">
-                            {snippet}
-                          </p>
+                          <FeedSnippet
+                            text={comment.message}
+                            postContext={comment.postMessage}
+                            intentLabel={resolveIntentLabel(comment.aiIntent)}
+                            onPostLabel={tc('feedPreview.onPost')}
+                            noPreviewLabel={tc('feedPreview.noPreview')}
+                          />
                         </div>
                       </button>
                     );
@@ -669,10 +694,7 @@ const DashboardPage: NextPageWithLayout = () => {
                   )}
                 </div>
                 {messageItems.length > 0 && (
-                  <Link href="/messages" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
-                    <span>{tc('viewAll')}</span>
-                    <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
-                  </Link>
+                  <ArrowLink href="/messages">{tc('viewAll')}</ArrowLink>
                 )}
               </div>
 
@@ -681,7 +703,6 @@ const DashboardPage: NextPageWithLayout = () => {
                   <SectionError onRetry={refetchAll} />
                 ) : messageItems.length > 0 ? (
                   messageItems.slice(0, maxRows).map((msg) => {
-                    const snippet = msg.message || '';
                     const timeLabel = getTimeLabel(msg.createdTime || msg.createdAt);
 
                     return (
@@ -708,9 +729,12 @@ const DashboardPage: NextPageWithLayout = () => {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed break-words">
-                            {snippet}
-                          </p>
+                          <FeedSnippet
+                            text={msg.message}
+                            intentLabel={resolveIntentLabel(msg.aiIntent)}
+                            onPostLabel={tc('feedPreview.onPost')}
+                            noPreviewLabel={tc('feedPreview.noPreview')}
+                          />
                         </div>
                       </button>
                     );
@@ -824,6 +848,7 @@ const DashboardPage: NextPageWithLayout = () => {
                               used={effectivePagesUsed}
                               limit={effectivePagesLimit}
                               percent={effectivePagesLimit ? (effectivePagesUsed / effectivePagesLimit) * 100 : 0}
+                              overLimitCta={{ label: tPages('managePages'), href: '/pages' }}
                             />
                           );
                         })()}

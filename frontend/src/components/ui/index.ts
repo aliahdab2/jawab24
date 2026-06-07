@@ -32,3 +32,6 @@ export { ThemeToggleButton } from './ThemeToggleButton';
 export { KeywordChipInput } from './KeywordChipInput';
 export { UpgradeCTA } from './UpgradeCTA';
 export { InfoPopover } from './InfoPopover';
+export { Sparkline } from './Sparkline';
+export { FeedSnippet } from './FeedSnippet';
+export { ArrowLink } from './ArrowLink';
