@@ -266,7 +266,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
         {/* Chat Thread */}
         <div className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50">
-          <div className="min-h-full flex flex-col justify-end gap-4">
+          {/* When navigating (fixed-height modal) anchor content to the top so the
+              post + comment stay in the same place across comments; otherwise keep
+              the chat-style bottom anchoring near the compose box. */}
+          <div className={clsx('min-h-full flex flex-col gap-4', hasNav ? 'justify-start' : 'justify-end')}>
             {/* Post context snippet */}
             {comment.postMessage && (
               <div className="flex flex-col gap-2">
