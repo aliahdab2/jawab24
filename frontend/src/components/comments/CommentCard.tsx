@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { formatMessageTime } from '@/utils/dateUtils';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
+import { isLowSignalText, intentLabelKey } from '@/utils/feedPreview';
 import type { Comment } from '@jawab24/shared';
 
 export interface CommentCardProps {
@@ -80,6 +81,13 @@ export const CommentCard = React.memo(function CommentCard({
   const { dateLocale } = useLanguage();
   const needsAttention = checkNeedsAttention(comment);
   const isGrouped = (groupCount ?? 1) > 1;
+
+  // When the comment text is low-signal ("...", emoji-only), fall back to a
+  // readable AI-intent label instead of a useless bubble. The post context is
+  // already shown on its own line above, so we don't repeat it here.
+  const lowSignal = isLowSignalText(comment.message);
+  const intentKey = intentLabelKey(comment.aiIntent);
+  const intentLabel = intentKey ? tc(intentKey as Parameters<typeof tc>[0]) : null;
 
   const formatTime = (date?: string | Date | null) => formatMessageTime(date, dateLocale);
 
@@ -197,7 +205,15 @@ export const CommentCard = React.memo(function CommentCard({
                    <span className="line-clamp-1 break-words" dir="auto">{comment.postMessage || t('postContext')}</span>
                  </div>
                  {onTriggerClick && (
-                   <div className="relative self-start">
+                   <div className={clsx(
+                     'relative self-start transition-opacity',
+                     // Declutter: hide the button until the card is hovered/focused —
+                     // but ONLY on hover-capable pointers (@media hover:hover), so
+                     // touch devices (incl. tablets ≥sm) always keep it visible.
+                     // Also kept visible when a trigger is active (status cue) or while
+                     // the one-time NEW badge is driving first-use discovery.
+                     !triggerActive && !showNewBadge && '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100',
+                   )}>
                      <button
                        type="button"
                        onClick={e => { e.stopPropagation(); onTriggerClick(e); }}
@@ -227,9 +243,15 @@ export const CommentCard = React.memo(function CommentCard({
                   "px-4 py-2.5 bg-muted/70 dark:bg-muted/50 rounded-2xl rounded-ss-sm text-foreground text-sm leading-relaxed",
                   "transition-colors"
                )}>
-                 <p className={clsx(variant === 'compact' ? "line-clamp-2" : "whitespace-pre-wrap")} dir="auto">
-                    {renderMessageText(comment.message)}
-                 </p>
+                 {lowSignal ? (
+                   <p className="italic text-muted-foreground">
+                     {intentLabel ?? tc('feedPreview.noPreview')}
+                   </p>
+                 ) : (
+                   <p className={clsx(variant === 'compact' ? "line-clamp-2" : "whitespace-pre-wrap")} dir="auto">
+                      {renderMessageText(comment.message)}
+                   </p>
+                 )}
                </div>
              </div>
 

@@ -15,6 +15,7 @@ export { useLandscape } from './useLandscape';
 export { useBodyScrollLock } from './useBodyScrollLock';
 export { useModalBackHandler, dismissTopModal } from './useModalBackHandler';
 export { useSwipe } from './useSwipe';
+export { useArrowKeyNavigation } from './useArrowKeyNavigation';
 export { useDebounce } from './useDebounce';
 export { useInfiniteScrollObserver } from './useInfiniteScrollObserver';
 export { useSSE } from './useSSE';

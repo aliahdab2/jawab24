@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
@@ -6,14 +6,15 @@ import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySour
 import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
+import { isRTLLocale } from '@/utils/locale';
 import { commentsApi, messagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
 import { parseKeywords } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
-import { useHandoffPauseDuration } from '@/hooks';
+import { useHandoffPauseDuration, useSwipe, useArrowKeyNavigation } from '@/hooks';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
@@ -30,6 +31,8 @@ import {
   Undo2,
   FileText,
   Hash,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 interface CommentDetailModalProps {
@@ -42,6 +45,11 @@ interface CommentDetailModalProps {
   pageName?: string;
   pageUrl?: string;
   postTriggerKeyword?: string | null;
+  /** Navigate to the previous/next comment in the list without closing. */
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }
 
 export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
@@ -54,10 +62,16 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   pageName,
   pageUrl,
   postTriggerKeyword,
+  onPrev,
+  onNext,
+  hasPrev = false,
+  hasNext = false,
 }) => {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
   const tMessages = useTranslations('messages');
+  const locale = useLocale();
+  const isRtl = isRTLLocale(locale);
   const { dateLocale } = useLanguage();
   const [kbOpen, setKbOpen] = useState(false);
 
@@ -65,6 +79,30 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   // so ESC closes only the topmost (KB) modal — not both at once.
   useEscapeKey(onClose, !kbOpen);
   useBodyScrollLock(true);
+
+  // When prev/next navigation is enabled, pin the modal to a stable height so
+  // the header (and its arrow buttons) doesn't jump between taps as comments of
+  // different lengths load. Single-comment usages (e.g. dashboard) stay
+  // content-sized.
+  const hasNav = !!(onPrev || onNext);
+
+  // Bounded navigation, reused by the header buttons, arrow keys, and swipe.
+  const goPrev = useCallback(() => { if (hasPrev) onPrev?.(); }, [hasPrev, onPrev]);
+  const goNext = useCallback(() => { if (hasNext) onNext?.(); }, [hasNext, onNext]);
+
+  // Shared icon-button style for the header controls (prev / next / close).
+  const iconBtnClass = 'p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors';
+
+  // Keyboard ← / → step through comments (RTL-mirrored). Disabled while the KB
+  // editor is layered on top; the hook itself ignores presses while typing.
+  useArrowKeyNavigation({ enabled: hasNav && !kbOpen, onPrev: goPrev, onNext: goNext, rtl: isRtl });
+
+  // Swipe ← / → on touch (Android/iOS): horizontal-dominant swipes only, so it
+  // never fights the thread's vertical scroll. Mirrored for RTL.
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: () => { if (hasNav) (isRtl ? goPrev : goNext)(); },
+    onSwipeRight: () => { if (hasNav) (isRtl ? goNext : goPrev)(); },
+  });
 
   const needsAttention = checkNeedsAttention(comment);
   const isHeldReply = !comment.replied && !!comment.aiOriginalReply && comment.flagReason?.includes('held_low_confidence');
@@ -159,7 +197,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="comment-detail-modal-title"
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-[calc(100vh-var(--keyboard-height,0px))] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y"
+        className={clsx(
+          "bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-[calc(100vh-var(--keyboard-height,0px))] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y",
+          // Stable height while navigating so the header arrows stay put between taps.
+          hasNav && "h-[85vh] sm:h-[80vh]"
+        )}
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -203,13 +245,30 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
-            aria-label={t('close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            {(onPrev || onNext) && (
+              <>
+                {[
+                  { onClick: goPrev, disabled: !hasPrev, label: t('previousComment'), Icon: ChevronLeft },
+                  { onClick: goNext, disabled: !hasNext, label: t('nextComment'), Icon: ChevronRight },
+                ].map(({ onClick, disabled, label, Icon }) => (
+                  <button
+                    key={label}
+                    onClick={onClick}
+                    disabled={disabled}
+                    className={clsx(iconBtnClass, 'disabled:opacity-30 disabled:cursor-not-allowed')}
+                    aria-label={label}
+                  >
+                    <Icon className="w-5 h-5 rtl:rotate-180" aria-hidden="true" />
+                  </button>
+                ))}
+                <div className="w-px h-5 bg-theme-border mx-1" aria-hidden="true" />
+              </>
+            )}
+            <button onClick={onClose} className={iconBtnClass} aria-label={t('close')}>
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Pause state banner — visible when Smart Reply is paused for this customer */}
@@ -222,16 +281,24 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         />
 
         {/* Chat Thread */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50">
-          <div className="min-h-full flex flex-col justify-end gap-4">
-            {/* Post context snippet */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50" {...swipeHandlers}>
+          {/* When navigating (fixed-height modal) anchor content to the top so the
+              post + comment stay in the same place across comments; otherwise keep
+              the chat-style bottom anchoring near the compose box. */}
+          <div className={clsx('min-h-full flex flex-col gap-4', hasNav ? 'justify-start' : 'justify-end')}>
+            {/* Post context — a clearly-labeled "Post" card so it reads as the
+                post the comment was left on, distinct from the conversation
+                bubbles. Clamped (no nested scrollbox) since it's context. */}
             {comment.postMessage && (
               <div className="flex flex-col gap-2">
-                <div className="flex items-start gap-2 px-3 py-2.5 bg-background rounded-lg text-sm text-muted-foreground border border-theme-border">
-                  <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <div className="max-h-28 overflow-y-auto min-w-0 flex-1">
-                    <p className="whitespace-pre-wrap break-words leading-relaxed" dir="auto">{comment.postMessage}</p>
+                <div className="rounded-xl border border-theme-border bg-card overflow-hidden shadow-sm">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted border-b border-theme-border">
+                    <FileText className="w-3.5 h-3.5 flex-shrink-0 text-icon-muted" aria-hidden="true" />
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{t('postContext')}</span>
                   </div>
+                  <p className="px-3 py-2.5 text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed line-clamp-4" dir="auto">
+                    {comment.postMessage}
+                  </p>
                 </div>
                 {postTriggerKeyword && (
                   <div className="flex items-center gap-1.5 flex-wrap px-1">
@@ -263,6 +330,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             {/* Outgoing: existing reply */}
             {mode === 'full' && comment.replied && comment.replyText && (
               <div className="flex flex-col items-end">
+                {/* Label to clearly distinguish the AI/business reply from the
+                    customer's comment above. */}
+                <span className="flex items-center gap-1 mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-brand-600">
+                  <Sparkles className="w-3 h-3" aria-hidden="true" />
+                  {comment.replyMethod === 'ai' ? t('aiReplyLabel') : t('reply')}
+                </span>
                 <div className="max-w-[90%] sm:max-w-[85%] rounded-2xl rounded-be-none p-3 sm:p-4 shadow-sm bg-brand-600 text-white">
                   <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(comment.replyText)}</p>
                 </div>
