@@ -13,7 +13,7 @@ import { SwipeableCommentCard } from '@/components/comments';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const PostTriggerModal = dynamic(() => import('@/components/comments/PostTriggerModal').then(m => ({ default: m.PostTriggerModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce, usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver } from '@/hooks';
+import { useDebounce, usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, usePersistedBoolean } from '@/hooks';
 import { commentsApi, pagesApi, postsApi, type CommentsQueryParams } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import {
@@ -26,6 +26,8 @@ import {
   AlertTriangle,
   ExternalLink,
   Loader2,
+  LayoutGrid,
+  List,
   type LucideIcon,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -64,6 +66,8 @@ const CommentsPage: NextPageWithLayout = () => {
   const [isTransitioning, setIsTransitioning] = useState(false);
 
   const [filter, setFilter] = useState<FilterType>('needs_action');
+  // Card grid (masonry) vs. compact single-column list — persisted per user.
+  const [listView, setListView] = usePersistedBoolean('comments:listView', false);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
 
@@ -288,6 +292,17 @@ const CommentsPage: NextPageWithLayout = () => {
     },
     onBeforeOpen: closeTriggerModal,
   });
+
+  // Prev/next navigation across the visible cards (one card = a group's latest
+  // comment), so the detail modal can step through without close/reopen.
+  const navComments = useMemo(() => filteredGroups.map(g => g.latestComment), [filteredGroups]);
+  const navIndex = selectedComment ? navComments.findIndex(c => c.id === selectedComment.id) : -1;
+  const goToPrevComment = useCallback(() => {
+    if (navIndex > 0) openComment(navComments[navIndex - 1]);
+  }, [navIndex, navComments, openComment]);
+  const goToNextComment = useCallback(() => {
+    if (navIndex >= 0 && navIndex < navComments.length - 1) openComment(navComments[navIndex + 1]);
+  }, [navIndex, navComments, openComment]);
 
   // Update Page Title — use server stats counts to match chip badges
   useEffect(() => {
@@ -515,6 +530,38 @@ const CommentsPage: NextPageWithLayout = () => {
             </button>
           )}
         </div>
+
+        {/* Grid / List view toggle */}
+        <div
+          role="group"
+          aria-label={tc('view')}
+          className="hidden sm:flex items-center gap-0.5 p-1 rounded-full bg-muted/50 flex-shrink-0"
+        >
+          <button
+            type="button"
+            onClick={() => setListView(false)}
+            aria-pressed={!listView}
+            aria-label={t('viewGrid')}
+            className={clsx(
+              'p-2 rounded-full transition-colors',
+              !listView ? 'bg-card shadow-sm text-brand-600' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setListView(true)}
+            aria-pressed={listView}
+            aria-label={t('viewList')}
+            className={clsx(
+              'p-2 rounded-full transition-colors',
+              listView ? 'bg-card shadow-sm text-brand-600' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <List className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Comments List */}
@@ -522,7 +569,8 @@ const CommentsPage: NextPageWithLayout = () => {
         <>
           <div
             className={clsx(
-              "columns-1 lg:columns-2 gap-3 sm:gap-4 pb-4 sm:pb-6 transition-all duration-300 ease-out",
+              "pb-4 sm:pb-6 transition-all duration-300 ease-out",
+              listView ? "flex flex-col gap-3 sm:gap-4" : "columns-1 lg:columns-2 gap-3 sm:gap-4",
               isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
             )}
           >
@@ -531,10 +579,10 @@ const CommentsPage: NextPageWithLayout = () => {
               const page = comment.pageId ? pageById.get(comment.pageId) : undefined;
               const earlierComments = group.count > 1 ? group.comments.slice(1) : undefined;
               return (
-                <div key={group.groupKey} className="break-inside-avoid mb-3 sm:mb-4">
+                <div key={group.groupKey} className={clsx("break-inside-avoid", !listView && "mb-3 sm:mb-4")}>
                   <SwipeableCommentCard
                     comment={comment}
-                    variant="full"
+                    variant={listView ? 'compact' : 'full'}
                     pageName={page?.name}
                     showPlatformIcon={showPlatformIcon}
                     animationDelay={i < 10 ? i * 0.05 : 0}
@@ -611,6 +659,10 @@ const CommentsPage: NextPageWithLayout = () => {
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
           pageUrl={selectedCommentPageUrl}
           postTriggerKeyword={selectedComment.postId ? triggersByPostId[selectedComment.postId]?.keyword ?? null : null}
+          onPrev={goToPrevComment}
+          onNext={goToNextComment}
+          hasPrev={navIndex > 0}
+          hasNext={navIndex >= 0 && navIndex < navComments.length - 1}
         />
       )}
 

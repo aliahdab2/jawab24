@@ -30,6 +30,8 @@ import {
   Undo2,
   FileText,
   Hash,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 interface CommentDetailModalProps {
@@ -42,6 +44,11 @@ interface CommentDetailModalProps {
   pageName?: string;
   pageUrl?: string;
   postTriggerKeyword?: string | null;
+  /** Navigate to the previous/next comment in the list without closing. */
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }
 
 export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
@@ -54,6 +61,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   pageName,
   pageUrl,
   postTriggerKeyword,
+  onPrev,
+  onNext,
+  hasPrev = false,
+  hasNext = false,
 }) => {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
@@ -203,13 +214,36 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
-            aria-label={t('close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            {(onPrev || onNext) && (
+              <>
+                <button
+                  onClick={onPrev}
+                  disabled={!hasPrev}
+                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label={t('previousComment')}
+                >
+                  <ChevronLeft className="w-5 h-5 rtl:rotate-180" />
+                </button>
+                <button
+                  onClick={onNext}
+                  disabled={!hasNext}
+                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label={t('nextComment')}
+                >
+                  <ChevronRight className="w-5 h-5 rtl:rotate-180" />
+                </button>
+                <div className="w-px h-5 bg-theme-border mx-1" aria-hidden="true" />
+              </>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+              aria-label={t('close')}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Pause state banner — visible when Smart Reply is paused for this customer */}
@@ -263,6 +297,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             {/* Outgoing: existing reply */}
             {mode === 'full' && comment.replied && comment.replyText && (
               <div className="flex flex-col items-end">
+                {/* Label to clearly distinguish the AI/business reply from the
+                    customer's comment above. */}
+                <span className="flex items-center gap-1 mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-brand-600">
+                  <Sparkles className="w-3 h-3" aria-hidden="true" />
+                  {comment.replyMethod === 'ai' ? t('aiReplyLabel') : t('reply')}
+                </span>
                 <div className="max-w-[90%] sm:max-w-[85%] rounded-2xl rounded-be-none p-3 sm:p-4 shadow-sm bg-brand-600 text-white">
                   <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(comment.replyText)}</p>
                 </div>
