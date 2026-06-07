@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
@@ -6,14 +6,15 @@ import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySour
 import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
+import { isRTLLocale } from '@/utils/locale';
 import { commentsApi, messagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
 import { parseKeywords } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
-import { useHandoffPauseDuration } from '@/hooks';
+import { useHandoffPauseDuration, useSwipe, useArrowKeyNavigation } from '@/hooks';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
@@ -69,6 +70,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const t = useTranslations('comments');
   const tc = useTranslations('common');
   const tMessages = useTranslations('messages');
+  const locale = useLocale();
+  const isRtl = isRTLLocale(locale);
   const { dateLocale } = useLanguage();
   const [kbOpen, setKbOpen] = useState(false);
 
@@ -82,6 +85,22 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   // different lengths load. Single-comment usages (e.g. dashboard) stay
   // content-sized.
   const hasNav = !!(onPrev || onNext);
+
+  // Bounded navigation, reused by the header buttons, arrow keys, and swipe.
+  const goPrev = useCallback(() => { if (hasPrev) onPrev?.(); }, [hasPrev, onPrev]);
+  const goNext = useCallback(() => { if (hasNext) onNext?.(); }, [hasNext, onNext]);
+
+  // Keyboard ← / → step through comments (RTL-mirrored). Disabled while the KB
+  // editor is layered on top; the hook itself ignores presses while typing.
+  useArrowKeyNavigation({ enabled: hasNav && !kbOpen, onPrev: goPrev, onNext: goNext, rtl: isRtl });
+
+  // Swipe ← / → on touch (Android/iOS): horizontal-dominant swipes only, so it
+  // never fights the thread's vertical scroll. Mirrored for RTL.
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: () => { if (hasNav) (isRtl ? goPrev : goNext)(); },
+    onSwipeRight: () => { if (hasNav) (isRtl ? goNext : goPrev)(); },
+  });
+
   const needsAttention = checkNeedsAttention(comment);
   const isHeldReply = !comment.replied && !!comment.aiOriginalReply && comment.flagReason?.includes('held_low_confidence');
   const isInstagram = comment.source === 'instagram' || (!comment.source && !comment.facebookCommentId);
@@ -265,7 +284,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         />
 
         {/* Chat Thread */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50" {...swipeHandlers}>
           {/* When navigating (fixed-height modal) anchor content to the top so the
               post + comment stay in the same place across comments; otherwise keep
               the chat-style bottom anchoring near the compose box. */}
