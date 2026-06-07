@@ -658,38 +658,86 @@ describe('Salla Controller', () => {
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
-        // --- A3 regression: real Salla event names + slug-based status (verified
-        // against a live order.created payload — data.status.slug, flat under data) ---
-        it('should dispatch order_delivered on order.status.updated with slug "delivered" (A3)', async () => {
+        // --- Phase 4.2 regression: REAL Salla payload shapes captured from a live dev
+        // store (2026-06-07). order.created/updated are flat with split mobile+mobile_code;
+        // order.status.updated nests the order under data.order with the slug at
+        // data.customized.slug. See SALLA_LAUNCH_VALIDATION.md §S4. ---
+        it('should dispatch order_confirmed on order.created with reference_id + composed phone', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
             const body = {
-                event: 'order.status.updated', merchant: 12345,
-                data: { id: 1686116368, customer: { mobile: '+966555123456', first_name: 'Test' }, status: { slug: 'delivered', name: 'تم التوصيل' } },
+                event: 'order.created', merchant: 2108580704,
+                data: {
+                    id: 815530083, reference_id: 264810440,
+                    status: { slug: 'payment_pending' },
+                    customer: { first_name: 'abc', mobile: 555555555, mobile_code: '+971' },
+                    amounts: { sub_total: { amount: 268, currency: 'SAR' } }, currency: 'SAR',
+                },
             };
             const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
             await webhookHandler(req, mockReply());
 
             expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
             expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
-                platform: 'salla', storeId: 'store-1', type: 'order_delivered', customerPhone: '+966555123456',
+                platform: 'salla', storeId: 'store-1', type: 'order_confirmed',
+                customerPhone: '+971555555555', customerName: 'abc', orderNumber: '264810440', orderId: '815530083',
             });
         });
 
-        it('should dispatch order_shipped on order.shipment.created with the tracking number (A3)', async () => {
+        it('should dispatch order_delivered on order.status.updated (order nested under data.order, slug at data.customized.slug)', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
             const body = {
-                event: 'order.shipment.created', merchant: 12345,
-                data: { id: 1686116368, customer: { mobile: '+966555123456' }, shipments: [{ tracking_number: 'TRK-123' }] },
+                event: 'order.status.updated', merchant: 2108580704,
+                data: {
+                    id: 3104087823890992600,           // activity id — NOT the order id
+                    status: 'تم التوصيل',               // localized string, not an object
+                    customized: { slug: 'delivered', name: 'تم التوصيل' },
+                    order: { id: 964176593, reference_id: 264808310, customer: { name: 'abc def', mobile: '+971555555555' } },
+                },
             };
             const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
             await webhookHandler(req, mockReply());
 
-            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({ type: 'order_shipped', trackingNumber: 'TRK-123' });
+            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                platform: 'salla', storeId: 'store-1', type: 'order_delivered',
+                customerPhone: '+971555555555', customerName: 'abc def', orderId: '964176593', orderNumber: '264808310',
+            });
         });
 
-        it('should NOT dispatch for the phantom "order.completed" event (A3 regression)', async () => {
+        it('should dispatch order_shipped on order.status.updated with slug "shipped"', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'order.status.updated', merchant: 2108580704,
+                data: {
+                    status: 'تم الشحن', customized: { slug: 'shipped' },
+                    order: { id: 964176593, reference_id: 264808310, customer: { name: 'abc def', mobile: '+971555555555' } },
+                },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({ type: 'order_shipped', orderNumber: '264808310' });
+        });
+
+        it('should NOT dispatch on order.updated (avoids double-send with order.status.updated)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'order.updated', merchant: 2108580704,
+                data: { id: 964176593, reference_id: 264808310, status: { slug: 'delivered' }, customer: { first_name: 'abc', mobile: 555555555, mobile_code: '+971' } },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+            await webhookHandler(req, rep);
+
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should NOT dispatch for the phantom "order.completed" event', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
             const body = { event: 'order.completed', merchant: 12345, data: { id: 1, customer: { mobile: '+966555' } } };

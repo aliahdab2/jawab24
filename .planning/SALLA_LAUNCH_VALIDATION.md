@@ -137,7 +137,22 @@ curl -X POST -H "Content-Type: application/json" \
 
 ### S4. Webhook event-name corrections (A3 — STAGED patch, apply after payload capture)
 
-> **Source:** doc research + adversarial verification against Salla's official docs (docs.salla.dev) and both official SDKs, 2026-05-30. The corrected event **strings** are high-confidence; the **JSON path** is the one load-bearing unknown that a real payload must settle — see "Confirm first" below. **Do not apply blind to prod.**
+> ## ⚠️ SUPERSEDED — Phase 4.2 LIVE capture (2026-06-07)
+> A real dev store (`salla.sa/dev-jkgsyu3w6pzzfrzw`, merchant `2108580704`) was installed and real webhook bodies were captured. **They contradict the doc-based research below.** Trust this block; the rest of §S4 is kept only for history.
+>
+> **Hard lesson:** the Partners portal's *event display labels* are NOT the delivered `event` strings. The portal labeled the product event "product.availability.updated", but Salla **delivered `product.status.updated`** — which our code already had. So event-name renames driven off portal labels are unreliable; only a delivered `event` field is authoritative.
+>
+> **Event names — CONFIRMED by delivery (verbatim):** `order.created`, `order.updated`, `order.status.updated`, `product.status.updated`, `app.installed`. **NOT renamed:** `product.status.updated` stays as-is (the earlier "→ availability.updated" was wrong). **Still UNCONFIRMED — do NOT rename without a real delivery:** `abandoned.cart` (vs portal "cart.abandoned") and the shipment event (`order.shipment.created` vs portal "shipment.updated"). Neither was captured (cart blocked by store maintenance mode; shipment needs a real carrier+address+shipment object — a status→"Shipped" change does NOT emit it).
+>
+> **The REAL bug was the PARSER, not the names** — two different payload shapes (FIXED in `buildSallaOrderEvent`, 2026-06-07, + regression tests, all green):
+> - `order.created` / `order.updated` — flat under `data`: order id `data.id`, number `data.reference_id` (NOT `data.reference`), slug `data.status.slug` (status is an object), customer `data.customer.mobile` (bare local number) + `data.customer.mobile_code` (e.g. "+971"), name `data.customer.first_name`, total `data.amounts.sub_total.amount` + `data.currency` (NO `data.total`).
+> - `order.status.updated` — order NESTED at `data.order.*`; `data.status` is a localized STRING; slug at `data.customized.slug`; customer at `data.order.customer.mobile` (already full international) + `.name`.
+> - Phone must be composed as `mobile_code + mobile` when `mobile` is a bare number.
+> - `order.updated` fires alongside `order.status.updated` on every status change → notifications driven solely off `order.status.updated` to avoid double-send.
+>
+> Raw captured payloads: `~/.claude/projects/.../memory/salla_phase42_real_payloads.jsonl`.
+
+> **Source (historical, below):** doc research + adversarial verification against Salla's official docs (docs.salla.dev) and both official SDKs, 2026-05-30. The corrected event **strings** are high-confidence; the **JSON path** is the one load-bearing unknown that a real payload must settle — see "Confirm first" below. **Do not apply blind to prod.**
 
 **What's wrong today** (`controllers/salla.ts:buildSallaOrderEvent` + `SALLA_WEBHOOK_EVENTS` + adapter `SALLA_WEBHOOK_TOPICS`):
 - `order.completed` — **does not exist.** Completion/delivery is a *status value* inside `order.status.updated`: `data.status.slug ∈ {"completed","delivered"}`. Branch on `slug` (stable English id), **never** `name` (localized Arabic: تم التنفيذ / تم التوصيل).

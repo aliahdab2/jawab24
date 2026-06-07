@@ -74,46 +74,96 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
     return reply.status(200).send({ ok: true });
 }
 
-interface SallaOrderData {
+// Salla delivers TWO different order payload shapes (verified against live dev-store
+// webhooks, 2026-06-07 — see SALLA_LAUNCH_VALIDATION.md §S4):
+//   • order.created / order.updated — order fields are FLAT under `data`; `data.status`
+//     is an object (`data.status.slug`); the customer's mobile is a bare local number
+//     (`data.customer.mobile`) plus a separate `data.customer.mobile_code` (e.g. "+971").
+//   • order.status.updated — the order is NESTED under `data.order`; `data.status` is a
+//     localized Arabic STRING (not an object); the stable status slug lives at
+//     `data.customized.slug`; the customer mobile is already in full international form.
+// Always branch on the English `slug`, never the localized `name`.
+interface SallaCustomer {
+    first_name?: string;
+    name?: string;
+    mobile?: string | number;
+    mobile_code?: string;
+}
+
+interface SallaOrderCore {
     id?: number;
-    reference?: string;
-    customer?: { first_name?: string; mobile?: string };
-    total?: { amount?: number; currency?: string };
-    // Branch on `slug` (stable English id) — `name` is localized Arabic.
-    // Verified against a live order.created payload (data.status.slug, flat under data).
-    status?: { slug?: string; name?: string };
+    reference_id?: number;
+    customer?: SallaCustomer;
     shipments?: Array<{ tracking_number?: string }>;
+    amounts?: { sub_total?: { amount?: number; currency?: string } };
+    currency?: string;
+}
+
+interface SallaWebhookData extends SallaOrderCore {
+    status?: { slug?: string };           // present on order.created / order.updated
+    customized?: { slug?: string };        // status slug on order.status.updated
+    order?: SallaOrderCore;                // nested order on order.status.updated
+    total?: { amount?: number; currency?: string }; // best-effort for abandoned.cart
+}
+
+/** Build a full international phone from Salla's split `mobile` + `mobile_code`. */
+function normalizeSallaPhone(customer?: SallaCustomer): string | undefined {
+    const raw = customer?.mobile;
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    const mobile = String(raw);
+    if (mobile.startsWith('+')) return mobile; // already international (order.status.updated)
+    const code = customer?.mobile_code ? String(customer.mobile_code) : '';
+    return code ? `${code}${mobile}` : mobile;
+}
+
+function sallaCustomerName(customer?: SallaCustomer): string | undefined {
+    return customer?.first_name ?? customer?.name;
+}
+
+function formatSallaTotal(data: SallaWebhookData): string | undefined {
+    const sub = data.amounts?.sub_total;
+    if (typeof sub?.amount === 'number') return `${sub.amount} ${sub.currency ?? data.currency ?? ''}`.trim();
+    if (typeof data.total?.amount === 'number') return `${data.total.amount} ${data.total.currency ?? ''}`.trim();
+    return undefined;
 }
 
 function buildSallaOrderEvent(storeId: string, event: string, body: unknown): OrderEvent | null {
-    const { data } = body as { data?: SallaOrderData };
+    const { data } = body as { data?: SallaWebhookData };
     if (!data) return null;
 
     if (event === 'abandoned.cart') {
-        const phone = data.customer?.mobile;
+        const phone = normalizeSallaPhone(data.customer);
         if (!phone) return null;
-        const cartTotal = data.total ? `${data.total.amount} ${data.total.currency ?? ''}`.trim() : undefined;
         return {
             platform: 'salla', storeId, type: 'abandoned_cart',
-            customerPhone: phone, customerName: data.customer?.first_name,
+            customerPhone: phone, customerName: sallaCustomerName(data.customer),
             orderId: String(data.id ?? ''), orderNumber: String(data.id ?? ''),
-            cartTotal,
+            cartTotal: formatSallaTotal(data),
         };
     }
 
-    const phone = data.customer?.mobile;
+    // Resolve the order + slug from whichever shape this event uses.
+    const isStatusUpdate = event === 'order.status.updated';
+    const order: SallaOrderCore = isStatusUpdate ? (data.order ?? {}) : data;
+    const slug = isStatusUpdate ? data.customized?.slug : data.status?.slug;
+
+    const phone = normalizeSallaPhone(order.customer);
     if (!phone) return null;
 
-    const orderId = String(data.id ?? '');
-    const orderNumber = data.reference ?? orderId;
-    const trackingNumber = data.shipments?.[0]?.tracking_number;
-    const customerName = data.customer?.first_name;
+    const orderId = String(order.id ?? '');
+    const orderNumber = typeof order.reference_id === 'number' ? String(order.reference_id) : orderId;
+    const customerName = sallaCustomerName(order.customer);
+    const trackingNumber = order.shipments?.[0]?.tracking_number;
 
     if (event === 'order.created') {
         return { platform: 'salla', storeId, type: 'order_confirmed', customerPhone: phone, customerName, orderId, orderNumber };
-    } else if (event === 'order.shipment.created' || (event === 'order.status.updated' && data.status?.slug === 'shipped')) {
+    }
+    // `order.updated` fires alongside `order.status.updated` on every status change —
+    // notifications are driven solely off `order.status.updated` to avoid double-sending.
+    if (event === 'order.shipment.created' || (isStatusUpdate && slug === 'shipped')) {
         return { platform: 'salla', storeId, type: 'order_shipped', customerPhone: phone, customerName, orderId, orderNumber, trackingNumber };
-    } else if (event === 'order.status.updated' && (data.status?.slug === 'completed' || data.status?.slug === 'delivered')) {
+    }
+    if (isStatusUpdate && (slug === 'completed' || slug === 'delivered')) {
         return {
             platform: 'salla', storeId, type: 'order_delivered',
             customerPhone: phone, customerName, orderId, orderNumber,
