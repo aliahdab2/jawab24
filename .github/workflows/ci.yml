@@ -389,6 +389,7 @@ jobs:
           docker run -d --name ai-worker-test \
             -e REDIS_URL=redis://localhost:6379 \
             -e NODE_ENV=production \
+            -e OPENAI_API_KEY=sk-ci-smoke-test-dummy-key \
             jawab24-ai-worker:test
 
           sleep 8
