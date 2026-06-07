@@ -207,11 +207,12 @@ export const CommentCard = React.memo(function CommentCard({
                  {onTriggerClick && (
                    <div className={clsx(
                      'relative self-start transition-opacity',
-                     // Declutter: on hover-capable (sm+) screens hide the button until
-                     // the card is hovered/focused. Keep it always visible on mobile,
-                     // when a trigger is already active (status cue), or while the
-                     // one-time NEW badge is driving first-use discovery.
-                     !triggerActive && !showNewBadge && 'sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100',
+                     // Declutter: hide the button until the card is hovered/focused —
+                     // but ONLY on hover-capable pointers (@media hover:hover), so
+                     // touch devices (incl. tablets ≥sm) always keep it visible.
+                     // Also kept visible when a trigger is active (status cue) or while
+                     // the one-time NEW badge is driving first-use discovery.
+                     !triggerActive && !showNewBadge && '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100',
                    )}>
                      <button
                        type="button"
