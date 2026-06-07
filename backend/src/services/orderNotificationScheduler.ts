@@ -23,6 +23,41 @@ export interface OrderEvent {
     also?: Array<{ type: OrderNotificationType; variables: Record<string, string> }>;
 }
 
+/** Fields shared by every order-derived notification, common to all platforms. */
+export interface OrderEventFields {
+    customerPhone: string;
+    customerName?: string;
+    orderId: string;
+    orderNumber: string;
+}
+
+// Factories that build a platform-normalized OrderEvent. Each platform's webhook
+// controller extracts these fields from its own payload shape, then calls the matching
+// factory — keeping the event-shape (and the "review_request after delivery" rule) in
+// one place instead of duplicated across the Salla/Shopify/Zid controllers.
+
+export function orderConfirmedEvent(platform: string, storeId: string, fields: OrderEventFields): OrderEvent {
+    return { platform, storeId, type: 'order_confirmed', ...fields };
+}
+
+export function orderShippedEvent(
+    platform: string,
+    storeId: string,
+    fields: OrderEventFields & { trackingNumber?: string },
+): OrderEvent {
+    return { platform, storeId, type: 'order_shipped', ...fields };
+}
+
+export function orderDeliveredEvent(platform: string, storeId: string, fields: OrderEventFields): OrderEvent {
+    return {
+        platform,
+        storeId,
+        type: 'order_delivered',
+        ...fields,
+        also: [{ type: 'review_request', variables: { review_url: '' } }],
+    };
+}
+
 /**
  * Schedule one or more customer notifications for an order event.
  * Shared across Salla, Shopify, and Zid controllers.

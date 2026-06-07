@@ -6,7 +6,12 @@ import type { WorkspaceRequest } from '../middleware/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { upsertSingleProduct, deleteSingleProduct, registerWebhooksWithPersist } from '../services/ecommerce';
 import { config } from '../config';
-import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
+import {
+    dispatchOrderNotification,
+    orderConfirmedEvent,
+    orderShippedEvent,
+    orderDeliveredEvent,
+} from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
 import {
     PENDING_SHOPIFY_COOKIE_OPTIONS,
@@ -278,15 +283,11 @@ function buildShopifyOrderEvent(storeId: string, topic: string, body: unknown): 
     const customerName = order.customer?.first_name;
 
     if (topic === 'orders/create') {
-        return { platform: 'shopify', storeId, type: 'order_confirmed', customerPhone: phone, customerName, orderId, orderNumber };
+        return orderConfirmedEvent('shopify', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
     } else if (topic === 'orders/fulfilled') {
-        return { platform: 'shopify', storeId, type: 'order_shipped', customerPhone: phone, customerName, orderId, orderNumber, trackingNumber };
+        return orderShippedEvent('shopify', storeId, { customerPhone: phone, customerName, orderId, orderNumber, trackingNumber });
     } else if (topic === 'orders/updated' && order.fulfillment_status === 'delivered') {
-        return {
-            platform: 'shopify', storeId, type: 'order_delivered',
-            customerPhone: phone, customerName, orderId, orderNumber,
-            also: [{ type: 'review_request', variables: { review_url: '' } }],
-        };
+        return orderDeliveredEvent('shopify', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
     }
     return null;
 }

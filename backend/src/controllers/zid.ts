@@ -5,7 +5,12 @@ import {
     getStoreByMerchantId,
     deactivateStore,
 } from '../services/ecommerce';
-import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
+import {
+    dispatchOrderNotification,
+    orderConfirmedEvent,
+    orderShippedEvent,
+    orderDeliveredEvent,
+} from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
@@ -98,15 +103,11 @@ function buildZidOrderEvent(storeId: string, event: string, body: unknown): Orde
     const customerName = data.customer?.name;
 
     if (event === 'order.created') {
-        return { platform: 'zid', storeId, type: 'order_confirmed', customerPhone: phone, customerName, orderId, orderNumber };
+        return orderConfirmedEvent('zid', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
     } else if (event === 'order.shipped') {
-        return { platform: 'zid', storeId, type: 'order_shipped', customerPhone: phone, customerName, orderId, orderNumber, trackingNumber };
+        return orderShippedEvent('zid', storeId, { customerPhone: phone, customerName, orderId, orderNumber, trackingNumber });
     } else if (event === 'order.delivered') {
-        return {
-            platform: 'zid', storeId, type: 'order_delivered',
-            customerPhone: phone, customerName, orderId, orderNumber,
-            also: [{ type: 'review_request', variables: { review_url: '' } }],
-        };
+        return orderDeliveredEvent('zid', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
     }
     return null;
 }

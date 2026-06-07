@@ -79,7 +79,8 @@ vi.mock('../../src/services/workspace', () => ({
 }));
 
 const mockDispatchOrderNotification = vi.fn();
-vi.mock('../../src/services/orderNotificationScheduler', () => ({
+vi.mock('../../src/services/orderNotificationScheduler', async (importActual) => ({
+    ...(await importActual<typeof import('../../src/services/orderNotificationScheduler')>()),
     dispatchOrderNotification: (...args: any[]) => mockDispatchOrderNotification(...args),
 }));
 
