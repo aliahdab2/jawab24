@@ -270,14 +270,19 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               post + comment stay in the same place across comments; otherwise keep
               the chat-style bottom anchoring near the compose box. */}
           <div className={clsx('min-h-full flex flex-col gap-4', hasNav ? 'justify-start' : 'justify-end')}>
-            {/* Post context snippet */}
+            {/* Post context — a clearly-labeled "Post" card so it reads as the
+                post the comment was left on, distinct from the conversation
+                bubbles. Clamped (no nested scrollbox) since it's context. */}
             {comment.postMessage && (
               <div className="flex flex-col gap-2">
-                <div className="flex items-start gap-2 px-3 py-2.5 bg-background rounded-lg text-sm text-muted-foreground border border-theme-border">
-                  <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <div className="max-h-28 overflow-y-auto min-w-0 flex-1">
-                    <p className="whitespace-pre-wrap break-words leading-relaxed" dir="auto">{comment.postMessage}</p>
+                <div className="rounded-xl border border-theme-border bg-card overflow-hidden shadow-sm">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted border-b border-theme-border">
+                    <FileText className="w-3.5 h-3.5 flex-shrink-0 text-icon-muted" aria-hidden="true" />
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{t('postContext')}</span>
                   </div>
+                  <p className="px-3 py-2.5 text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed line-clamp-4" dir="auto">
+                    {comment.postMessage}
+                  </p>
                 </div>
                 {postTriggerKeyword && (
                   <div className="flex items-center gap-1.5 flex-wrap px-1">
