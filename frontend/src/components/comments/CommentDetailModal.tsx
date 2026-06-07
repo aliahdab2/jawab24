@@ -90,6 +90,9 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const goPrev = useCallback(() => { if (hasPrev) onPrev?.(); }, [hasPrev, onPrev]);
   const goNext = useCallback(() => { if (hasNext) onNext?.(); }, [hasNext, onNext]);
 
+  // Shared icon-button style for the header controls (prev / next / close).
+  const iconBtnClass = 'p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors';
+
   // Keyboard ← / → step through comments (RTL-mirrored). Disabled while the KB
   // editor is layered on top; the hook itself ignores presses while typing.
   useArrowKeyNavigation({ enabled: hasNav && !kbOpen, onPrev: goPrev, onNext: goNext, rtl: isRtl });
@@ -245,30 +248,24 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           <div className="flex items-center gap-0.5 flex-shrink-0">
             {(onPrev || onNext) && (
               <>
-                <button
-                  onClick={goPrev}
-                  disabled={!hasPrev}
-                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label={t('previousComment')}
-                >
-                  <ChevronLeft className="w-5 h-5 rtl:rotate-180" aria-hidden="true" />
-                </button>
-                <button
-                  onClick={goNext}
-                  disabled={!hasNext}
-                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label={t('nextComment')}
-                >
-                  <ChevronRight className="w-5 h-5 rtl:rotate-180" aria-hidden="true" />
-                </button>
+                {[
+                  { onClick: goPrev, disabled: !hasPrev, label: t('previousComment'), Icon: ChevronLeft },
+                  { onClick: goNext, disabled: !hasNext, label: t('nextComment'), Icon: ChevronRight },
+                ].map(({ onClick, disabled, label, Icon }) => (
+                  <button
+                    key={label}
+                    onClick={onClick}
+                    disabled={disabled}
+                    className={clsx(iconBtnClass, 'disabled:opacity-30 disabled:cursor-not-allowed')}
+                    aria-label={label}
+                  >
+                    <Icon className="w-5 h-5 rtl:rotate-180" aria-hidden="true" />
+                  </button>
+                ))}
                 <div className="w-px h-5 bg-theme-border mx-1" aria-hidden="true" />
               </>
             )}
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
-              aria-label={t('close')}
-            >
+            <button onClick={onClose} className={iconBtnClass} aria-label={t('close')}>
               <X className="w-5 h-5" />
             </button>
           </div>
