@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CreditCard,
   Shield,
+  ShieldX,
   Users,
   UsersRound,
   Store,
@@ -170,6 +171,7 @@ export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boo
       items: [
         { key: 'nav.comments', href: '/comments', icon: MessageSquare },
         { key: 'nav.messages', href: '/messages', icon: MessageCircle },
+        { key: 'nav.moderation', href: '/moderation', icon: ShieldX },
         { key: 'nav.leads', href: '/leads', icon: Users },
       ],
     },

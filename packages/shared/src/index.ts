@@ -118,6 +118,9 @@ export interface Comment {
   resolved?: boolean | null;
   postMessage?: string | null;
   source?: 'facebook' | 'instagram';
+  /** Moderation state — null/absent = visible. Set when hidden/deleted on the platform. */
+  hiddenAt?: string | Date | null;
+  moderationAction?: 'hide' | 'delete' | null;
 }
 
 // --- Business Profile Types ---
@@ -871,6 +874,23 @@ export interface WorkspaceSettings {
   brandVoiceNotes: string;
   brandVoiceNotesMulti: Record<string, string>;
   holdLowConfidence: boolean;
+  /** Auto-moderation of AI-detected offensive/abusive comments (Facebook only). */
+  moderation?: ModerationSettings;
+}
+
+/**
+ * Auto-moderation config. When `enabled`, a comment the AI classifies as
+ * offensive/abusive is auto-actioned: the comment is hidden or deleted per
+ * `action`, and (when `blockAuthor`) its author is blocked from the page.
+ * Defaults are OFF + the recoverable `hide` action.
+ */
+export interface ModerationSettings {
+  /** Master switch — DEFAULT false (no auto-moderation until opted in). */
+  enabled: boolean;
+  /** Comment action on a match: 'hide' (reversible) or 'delete' (permanent). DEFAULT 'hide'. */
+  action: 'hide' | 'delete';
+  /** Also block the offending author from the page. DEFAULT true. */
+  blockAuthor: boolean;
 }
 
 // --- Business Info structured prompt block (Stage 2.6) ---

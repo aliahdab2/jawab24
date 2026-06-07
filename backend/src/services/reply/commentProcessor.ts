@@ -1,6 +1,7 @@
 import { workspaceSettingsService } from '../workspaceSettings';
 import { messagesService } from '../messages';
 import { commentsService } from '../comments';
+import { commentModeration } from '../commentModeration';
 import { rateLimiter, commentDebounce } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
@@ -465,6 +466,24 @@ export class CommentProcessor {
                         commentId: comment.id, platformCommentId, aiIntent, commentMessage,
                     });
                     return { success: true, commentId: comment.id };
+                }
+
+                // Auto-moderation (opt-in, Facebook only): when enabled, an offensive/abusive
+                // comment is hidden-or-deleted + the author optionally blocked, instead of just
+                // flagged. Fail-safe — if it can't act (non-FB, error), it returns false and we
+                // fall through to the normal flag flow below. Never throws into the pipeline.
+                const mod = userSettings.moderation;
+                if (mod?.enabled && platform === 'facebook') {
+                    const handled = await commentModeration.autoModerateOffensive(
+                        comment.id, workspaceId, userId, { action: mod.action, blockAuthor: mod.blockAuthor },
+                    );
+                    if (handled) {
+                        pipelineMetrics.record(pipeline, 'skipped_risky');
+                        this.logger.info(`[${platform}] Offensive comment auto-moderated`, {
+                            commentId: comment.id, platformCommentId, action: mod.action, blocked: mod.blockAuthor,
+                        });
+                        return { success: true, commentId: comment.id };
+                    }
                 }
 
                 // Offensive: flag for merchant attention (needsAttention=true, NOT resolved).

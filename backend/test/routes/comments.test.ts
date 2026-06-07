@@ -2,9 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify from 'fastify';
 import commentsRoutes from '../../src/routes/comments';
 import { commentsService } from '../../src/services/comments';
+import { commentModeration } from '../../src/services/commentModeration';
 
 // Mock services
 vi.mock('../../src/services/comments');
+vi.mock('../../src/services/commentModeration', () => ({
+    commentModeration: {
+        hide: vi.fn().mockResolvedValue({ status: 'ok' }),
+        unhide: vi.fn().mockResolvedValue({ status: 'ok' }),
+        remove: vi.fn().mockResolvedValue({ status: 'ok' }),
+        blockAuthor: vi.fn().mockResolvedValue({ status: 'ok', blockedUserId: 'u', platformPageId: 'p' }),
+    },
+}));
+vi.mock('../../src/services/auditLog', () => ({
+    auditLog: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../../src/middleware/auth', () => ({
     authenticate: async (req: any) => {
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
@@ -165,9 +177,8 @@ describe('Comments Routes', () => {
     });
 
     describe('DELETE /comments/:id', () => {
-        it('should delete a comment', async () => {
-            vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'comment_1' } as any);
-            vi.mocked(commentsService.deleteComment).mockResolvedValue(undefined);
+        it('should delete a comment (platform + local)', async () => {
+            vi.mocked(commentModeration.remove).mockResolvedValue({ status: 'ok' });
 
             const response = await app.inject({
                 method: 'DELETE',
@@ -175,7 +186,37 @@ describe('Comments Routes', () => {
             });
 
             expect(response.statusCode).toBe(204);
-            expect(commentsService.deleteComment).toHaveBeenCalledWith('comment_1');
+            expect(commentModeration.remove).toHaveBeenCalledWith('comment_1', 'test_workspace_id', 'test_user_id');
+        });
+    });
+
+    describe('POST /comments/:id/hide', () => {
+        it('should hide a comment', async () => {
+            vi.mocked(commentModeration.hide).mockResolvedValue({ status: 'ok' });
+
+            const response = await app.inject({ method: 'POST', url: '/comments/comment_1/hide' });
+
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.body)).toEqual({ success: true });
+        });
+
+        it('should 404 when the comment is not found', async () => {
+            vi.mocked(commentModeration.hide).mockResolvedValue({ status: 'not_found' });
+
+            const response = await app.inject({ method: 'POST', url: '/comments/missing/hide' });
+
+            expect(response.statusCode).toBe(404);
+        });
+    });
+
+    describe('POST /comments/:id/block', () => {
+        it('should block the author', async () => {
+            vi.mocked(commentModeration.blockAuthor).mockResolvedValue({ status: 'ok', blockedUserId: 'u', platformPageId: 'p' });
+
+            const response = await app.inject({ method: 'POST', url: '/comments/comment_1/block' });
+
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.body)).toEqual({ success: true });
         });
     });
 

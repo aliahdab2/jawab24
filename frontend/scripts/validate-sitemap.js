@@ -52,6 +52,7 @@ const EXCLUDED_ROUTES = new Map([
   ['leads', 'app workspace (auth-gated)'],
   ['login', 'utility page (not indexed)'],
   ['logout', 'utility page (not indexed)'],
+  ['moderation', 'app workspace (auth-gated)'],
   ['messages', 'app workspace (auth-gated)'],
   ['pages', 'app workspace (auth-gated)'],
   ['payment/cancel', 'transactional (noindex)'],

@@ -1,0 +1,21 @@
+{
+  "title": "Comment Moderation",
+  "subtitle": "Automatically handle offensive or abusive comments on your Facebook pages.",
+  "autoTitle": "Auto-moderation",
+  "autoDesc": "When our AI detects a comment as offensive or abusive, act on it automatically instead of just flagging it for review.",
+  "enableLabel": "Enable auto-moderation",
+  "actionLabel": "When a comment is flagged offensive or abusive",
+  "actionHide": "Hide the comment",
+  "actionHideHint": "Reversible — the comment is hidden from everyone except its author. You can unhide it anytime.",
+  "actionDelete": "Delete the comment",
+  "actionDeleteHint": "Permanent — the comment is removed for everyone and cannot be restored.",
+  "blockLabel": "Also block the author from the page",
+  "blockHint": "The author can no longer comment or message the page. You can unblock them later.",
+  "facebookOnlyNote": "Applies to Facebook comments only.",
+  "reviewNote": "Hidden comments appear in your Comments inbox with a “Hidden” badge, where you can unhide them.",
+  "saveSuccess": "Moderation settings saved",
+  "saveError": "Couldn't save settings. Please try again.",
+  "save": "Save",
+  "statusOn": "On",
+  "statusOff": "Off"
+}

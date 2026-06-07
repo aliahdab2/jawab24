@@ -8,6 +8,7 @@ import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
+import { useWorkspaceRole } from '@/hooks';
 import { commentsApi, messagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
@@ -30,6 +31,10 @@ import {
   Undo2,
   FileText,
   Hash,
+  EyeOff,
+  Eye,
+  Trash2,
+  Ban,
 } from 'lucide-react';
 
 interface CommentDetailModalProps {
@@ -38,6 +43,8 @@ interface CommentDetailModalProps {
   onReplySuccess: () => void;
   onResolve?: () => void;
   onUnresolve?: () => void;
+  /** Called after a moderation action (hide/unhide/delete/block) succeeds, to refresh the list. */
+  onModerated?: () => void;
   mode?: 'full' | 'quick';
   pageName?: string;
   pageUrl?: string;
@@ -50,6 +57,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   onReplySuccess,
   onResolve,
   onUnresolve,
+  onModerated,
   mode = 'full',
   pageName,
   pageUrl,
@@ -59,6 +67,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const tc = useTranslations('common');
   const tMessages = useTranslations('messages');
   const { dateLocale } = useLanguage();
+  const { isAdmin } = useWorkspaceRole();
   const [kbOpen, setKbOpen] = useState(false);
 
   // Disable the comment's ESC-to-close while the KB editor is layered on top,
@@ -139,6 +148,47 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     } finally {
       setIsSending(false);
     }
+  };
+
+  // ── Moderation (Facebook only) ──────────────────────────────────────────
+  const canModerate = !isInstagram;
+  const isHidden = !!comment.hiddenAt;
+  const [moderating, setModerating] = useState<null | 'hide' | 'delete' | 'block'>(null);
+
+  const runModeration = async (
+    action: 'hide' | 'delete' | 'block',
+    fn: () => Promise<unknown>,
+    successKey: string,
+    closeAfter: boolean,
+  ) => {
+    setModerating(action);
+    try {
+      await fn();
+      toast.success(t(successKey));
+      onModerated?.();
+      if (closeAfter) onClose();
+    } catch (error) {
+      const status = (error as { response?: { status?: number } }).response?.status;
+      if (status === 403) {
+        toast.error(t('moderationForbidden'));
+      } else {
+        captureError(error, 'Comment moderation failed', { tags: { component: 'comment-detail', action: `moderation-${action}` } });
+        toast.error(tc('error'));
+      }
+    } finally {
+      setModerating(null);
+    }
+  };
+
+  const handleHide = () => runModeration('hide', () => commentsApi.hide(comment.id), 'hideSuccess', false);
+  const handleUnhide = () => runModeration('hide', () => commentsApi.unhide(comment.id), 'unhideSuccess', false);
+  const handleDelete = () => {
+    if (!window.confirm(t('deleteConfirm'))) return;
+    runModeration('delete', () => commentsApi.remove(comment.id), 'deleteSuccess', true);
+  };
+  const handleBlock = () => {
+    if (!window.confirm(t('blockConfirm'))) return;
+    runModeration('block', () => commentsApi.block(comment.id), 'blockSuccess', false);
   };
 
   const accentColor = needsAttention
@@ -331,10 +381,56 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
           )}
 
+          {/* Moderation row (Facebook only): hide/unhide (member+), delete/block (admin) */}
+          {canModerate && (
+            <div className="flex items-center gap-1.5 flex-wrap mt-3 pt-3 border-t border-theme-border">
+              {isHidden ? (
+                <button
+                  onClick={handleUnhide}
+                  disabled={moderating !== null}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {moderating === 'hide' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5 flex-shrink-0" />}
+                  {t('unhide')}
+                </button>
+              ) : (
+                <button
+                  onClick={handleHide}
+                  disabled={moderating !== null}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {moderating === 'hide' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <EyeOff className="w-3.5 h-3.5 flex-shrink-0" />}
+                  {t('hide')}
+                </button>
+              )}
+
+              {isAdmin && (
+                <>
+                  <button
+                    onClick={handleBlock}
+                    disabled={moderating !== null || !comment.fromId}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-red-700 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50"
+                  >
+                    {moderating === 'block' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5 flex-shrink-0" />}
+                    {t('block')}
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={moderating !== null}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-red-700 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50"
+                  >
+                    {moderating === 'delete' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />}
+                    {t('delete')}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Actions row: pause/resume + resolve/unresolve */}
           <div className={clsx(
             'flex items-center justify-between',
-            (showComposeRow || isHeldReply) ? 'mt-3' : 'mt-1'
+            (showComposeRow || isHeldReply || canModerate) ? 'mt-3' : 'mt-1'
           )}>
             {mode === 'full' && comment.fromId ? (
               <PauseToggle

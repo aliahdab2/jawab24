@@ -14,6 +14,7 @@ import {
   FileText,
   ChevronDown,
   MessageSquare,
+  EyeOff,
 } from 'lucide-react';
 import { formatMessageTime } from '@/utils/dateUtils';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
@@ -80,6 +81,7 @@ export const CommentCard = React.memo(function CommentCard({
   const { dateLocale } = useLanguage();
   const needsAttention = checkNeedsAttention(comment);
   const isGrouped = (groupCount ?? 1) > 1;
+  const isHidden = !!comment.hiddenAt;
 
   const formatTime = (date?: string | Date | null) => formatMessageTime(date, dateLocale);
 
@@ -174,6 +176,12 @@ export const CommentCard = React.memo(function CommentCard({
                     </span>
                   )}
                   {statusBadge}
+                  {isHidden && (
+                    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-info border text-[10px] font-bold uppercase tracking-wide">
+                      <EyeOff className="w-3 h-3" />
+                      {t('hiddenBadge')}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                    <span className="text-[10px] text-subtle">

@@ -56,16 +56,29 @@ export default async function commentsRoutes(fastify: FastifyInstance) {
         memberRoutes.post('/comments/:id/feedback', {
             schema: { tags: ['Comments'], summary: 'Submit feedback for a comment reply', security: auth },
         }, commentsController.feedback);
+
+        // Hiding is reversible + non-destructive — same tier as resolve.
+        memberRoutes.post('/comments/:id/hide', {
+            schema: { tags: ['Comments'], summary: 'Hide a comment on the platform (reversible)', security: auth },
+        }, commentsController.hide);
+
+        memberRoutes.post('/comments/:id/unhide', {
+            schema: { tags: ['Comments'], summary: 'Un-hide a previously hidden comment', security: auth },
+        }, commentsController.unhide);
     });
 
-    // --- Admin+: destructive operations ---
+    // --- Admin+: destructive / irreversible operations ---
     fastify.register(async (adminRoutes) => {
         adminRoutes.addHook('preHandler', authenticate);
         adminRoutes.addHook('preHandler', resolveWorkspace);
         adminRoutes.addHook('preHandler', requireRole('admin'));
 
         adminRoutes.delete('/comments/:id', {
-            schema: { tags: ['Comments'], summary: 'Delete a comment', security: auth },
+            schema: { tags: ['Comments'], summary: 'Delete a comment (platform + local)', security: auth },
         }, commentsController.delete);
+
+        adminRoutes.post('/comments/:id/block', {
+            schema: { tags: ['Comments'], summary: 'Block the comment author from the page (Facebook only)', security: auth },
+        }, commentsController.block);
     });
 }

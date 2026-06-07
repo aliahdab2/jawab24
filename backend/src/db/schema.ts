@@ -288,6 +288,12 @@ export const comments = pgTable('comments', {
     flagMeta: jsonb('flag_meta'),
     aiIntent: varchar('ai_intent', { length: 50 }),
     resolved: boolean('resolved').default(false),
+    // Moderation: NULL = visible. Set when a comment is hidden/deleted on the platform via
+    // manual action or auto-moderation. moderationAction records the last action ('hide'|'delete');
+    // moderatedBy records provenance ('auto' for automation, or the acting user id).
+    hiddenAt: timestamp('hidden_at'),
+    moderationAction: varchar('moderation_action', { length: 20 }),
+    moderatedBy: varchar('moderated_by', { length: 50 }),
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -300,6 +306,7 @@ export const comments = pgTable('comments', {
         detectedLanguageIdx: index('idx_comments_detected_language').on(table.detectedLanguage),
         needsAttentionIdx: index('idx_comments_needs_attention').on(table.needsAttention),
         resolvedIdx: index('idx_comments_resolved').on(table.resolved),
+        hiddenAtIdx: index('idx_comments_hidden_at').on(table.hiddenAt),
         createdAtIdx: index('idx_comments_created_at').on(table.createdAt),
         createdTimeIdx: index('idx_comments_created_time').on(table.createdTime),
         // Composite index for actionRequired filter: (resolved=false AND (replied=false OR needsAttention=true)) ORDER BY createdAt DESC
@@ -330,6 +337,11 @@ export const instagramComments = pgTable('instagram_comments', {
     flagMeta: jsonb('flag_meta'),
     aiIntent: varchar('ai_intent', { length: 50 }),
     resolved: boolean('resolved').default(false),
+    // Moderation: NULL = visible. See comments table for rationale. Instagram supports
+    // hide/delete but not author-blocking (no Graph API for it).
+    hiddenAt: timestamp('hidden_at'),
+    moderationAction: varchar('moderation_action', { length: 20 }),
+    moderatedBy: varchar('moderated_by', { length: 50 }),
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -341,6 +353,7 @@ export const instagramComments = pgTable('instagram_comments', {
         repliedIdx: index('idx_instagram_comments_replied').on(table.replied),
         needsAttentionIdx: index('idx_instagram_comments_needs_attention').on(table.needsAttention),
         resolvedIdx: index('idx_instagram_comments_resolved').on(table.resolved),
+        hiddenAtIdx: index('idx_instagram_comments_hidden_at').on(table.hiddenAt),
         createdAtIdx: index('idx_instagram_comments_created_at').on(table.createdAt),
         createdTimeIdx: index('idx_instagram_comments_created_time').on(table.createdTime),
         // Composite index for actionRequired filter (mirrors comments table)
