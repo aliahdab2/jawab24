@@ -544,8 +544,29 @@ describe('CommentProcessor', () => {
             'test_workspace_id',
             'flagged_reply',
             expect.objectContaining({ senderName: 'Bob', reason: 'angry_customer' }),
-            expect.objectContaining({ commentId: 'comment-uuid', type: 'comment' }),
+            expect.objectContaining({ commentId: 'comment-uuid', type: 'comment', urgent: true }),
         );
+    });
+
+    it('should send a non-urgent flagged_reply for a routine (non-urgent) flag', async () => {
+        const { notificationService } = await import('../../src/services/notifications');
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'Here is some info.',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'info_not_in_kb',
+            aiIntent: 'QUESTION',
+        });
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'What are your hours?', 'from-1', 'Sam',
+        );
+
+        const call = vi.mocked(notificationService.sendTemplateNotificationToWorkspace).mock.calls
+            .find(c => c[1] === 'flagged_reply');
+        expect(call).toBeDefined();
+        expect((call![3] as Record<string, unknown>).urgent).toBeUndefined();
     });
 
     it('should NOT notify when reply is not flagged', async () => {
@@ -739,12 +760,12 @@ describe('CommentProcessor', () => {
         expect(adapter.markAsReplied).not.toHaveBeenCalled();
         // flagComment should be called
         expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'offensive_or_abusive', 'OFFENSIVE');
-        // Notification should be skipped_reply
+        // Notification should be skipped_reply, flagged urgent (offensive → loud channel)
         expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
             'test_workspace_id',
             'skipped_reply',
             expect.objectContaining({ senderName: 'Troll', reason: 'offensive_or_abusive' }),
-            expect.objectContaining({ commentId: 'comment-uuid', type: 'comment' }),
+            expect.objectContaining({ commentId: 'comment-uuid', type: 'comment', urgent: true }),
         );
         expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.skipped_risky']).toBe(1);
     });
@@ -786,12 +807,12 @@ describe('CommentProcessor', () => {
         expect(adapter.sendReply).toHaveBeenCalled();
         expect(adapter.markAsReplied).toHaveBeenCalled();
         expect(adapter.flagComment).not.toHaveBeenCalled();
-        // Should still notify as flagged_reply (not skipped)
+        // Should still notify as flagged_reply (not skipped), flagged urgent (angry_customer)
         expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
             'test_workspace_id',
             'flagged_reply',
             expect.objectContaining({ senderName: 'Bob', reason: 'angry_customer' }),
-            expect.any(Object),
+            expect.objectContaining({ urgent: true }),
         );
     });
 

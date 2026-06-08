@@ -532,6 +532,31 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
             }),
         );
     });
+
+    it('should send an urgent skipped_reply for an offensive DM', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'offensive',
+            aiIntent: 'OFFENSIVE',
+        } as any);
+
+        const adapter = createMockAdapter();
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'abusive text', 'msg-1',
+        );
+
+        const { notificationService } = await import('../../src/services/notifications');
+        const sendMock = vi.mocked(notificationService.sendTemplateNotificationToWorkspace);
+
+        expect(sendMock).toHaveBeenCalledWith(
+            'test_workspace_id',
+            'skipped_reply',
+            expect.anything(),
+            expect.objectContaining({ urgent: true }),
+        );
+    });
 });
 
 describe('MessageProcessor — Page OFF behavior', () => {

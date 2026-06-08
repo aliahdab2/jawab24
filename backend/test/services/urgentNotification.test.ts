@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isUrgentFlag, buildNotificationReason } from '../../src/services/reply/urgentFlags';
+import { isUrgentFlag, isUrgentNotification, buildNotificationReason } from '../../src/services/reply/urgentFlags';
 
 describe('isUrgentFlag', () => {
     it('returns false for undefined', () => {
@@ -35,6 +35,26 @@ describe('isUrgentFlag', () => {
 
     it('handles whitespace around flags', () => {
         expect(isUrgentFlag(' cancellation_request , low_confidence ')).toBe(true);
+    });
+});
+
+describe('isUrgentNotification', () => {
+    it('is true for any urgent flag', () => {
+        expect(isUrgentNotification('cancellation_request')).toBe(true);
+        expect(isUrgentNotification('angry_customer,low_confidence')).toBe(true);
+    });
+
+    it('is true for OFFENSIVE intent even without an urgent flag', () => {
+        expect(isUrgentNotification(undefined, 'OFFENSIVE')).toBe(true);
+        expect(isUrgentNotification('offensive', 'OFFENSIVE')).toBe(true);
+        expect(isUrgentNotification('', 'OFFENSIVE')).toBe(true);
+    });
+
+    it('is false for non-urgent flags and non-offensive intents', () => {
+        expect(isUrgentNotification('low_confidence', 'QUESTION')).toBe(false);
+        expect(isUrgentNotification('info_not_in_kb', 'COMPLAINT')).toBe(false);
+        expect(isUrgentNotification(undefined, undefined)).toBe(false);
+        expect(isUrgentNotification(undefined, null)).toBe(false);
     });
 });
 
