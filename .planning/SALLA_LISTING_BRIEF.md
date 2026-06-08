@@ -248,12 +248,12 @@ When every box below is ticked, Phase 5 is done.
 - [ ] Listing copy (name, tagline, long description) in **Arabic** — final, marketing-approved
 - [ ] Listing copy in **English** — final
 - [ ] Feature bullets in both languages
-- [ ] Privacy policy URL points to a live page covering Section 6 checklist
-- [ ] Terms of service URL — verify exists and references Salla
+- [x] Privacy policy URL points to a live page covering Section 6 checklist — `/privacy` covers Salla (سلة) + PDPL + processors (OpenAI/Stripe) in EN **and** AR (verified 2026-06-07; merged PR #176)
+- [x] Terms of service URL — `/terms` exists and references Salla in EN (×2) and AR (سلة ×3) (verified 2026-06-07)
 - [ ] Support email — set up, monitored, auto-responder configured
-- [ ] Salla App Store category + tags chosen
-- [ ] Pricing model decision documented
-- [ ] Free tier policy documented
+- [x] Salla App Store category + tags chosen — direction decided (Marketing/Sales lead; tags in §2); exact Salla taxonomy still to confirm in portal (§9.1)
+- [x] Pricing model decision documented — Salla-managed billing (decided 2026-05-30, §7)
+- [x] Free tier policy documented — capped to jawab24.com free plan (~100 AI replies/mo), then paid via Salla (decided 2026-05-30, §7)
 
 ### Nice-to-have (not blocking)
 - [ ] Press kit page (`jawab24.com/press` or similar)
@@ -266,12 +266,14 @@ When every box below is ticked, Phase 5 is done.
 
 Before locking copy/assets, confirm:
 
-1. **Salla App Store exact spec sheet** — banner dimensions, video size cap, screenshot count limits. Browse the Partners portal or contact Salla developer support.
-2. **Marketing approval on Arabic copy** — who signs off? Get it in writing before assets are produced.
-3. **Designer availability** — icon refresh + screenshots + video are 1-2 days of design work. Booked in?
-4. **Demo store access** — assets need to show realistic Salla data. Use the dev store from Phase 4.2 or a separate "marketing" store?
-5. **Beta merchant testimonials** — any existing Jawab24 users on Salla we can quote (with permission)?
-6. **Decision on billing model (A vs B)** — calendar-time blocker for any pricing screen.
+1. **Salla App Store exact spec sheet** — banner dimensions, video size cap, screenshot count limits. Browse the Partners portal or contact Salla developer support. ⏳ STILL OPEN.
+2. **Marketing approval on Arabic copy** — who signs off? Get it in writing before assets are produced. ⏳ STILL OPEN — copy is draft-complete, blocked only on sign-off.
+3. **Designer availability** — icon refresh + screenshots + video are 1-2 days of design work. Booked in? ⏳ STILL OPEN — the long pole.
+4. ✅ **Demo store access — RESOLVED.** Use the Phase 4.2 dev store `salla.sa/dev-jkgsyu3w6pzzfrzw` (merchant 2108580704). Caveat: its storefront is stuck in maintenance mode (admin toggle UI broken), so storefront screenshots are hard — admin/product/playground screens are fine; consider a separate "marketing" store only if a live storefront shot is required.
+5. **Beta merchant testimonials** — any existing Jawab24 users on Salla we can quote (with permission)? ⏳ OPEN (nice-to-have).
+6. ✅ **Billing model — DECIDED 2026-05-30: (A) Salla-managed billing.** No longer a blocker.
+
+> **Phase 4.2 outcome (2026-06-07):** the order-notification wiring the copy gated behind "قريباً" is now **code-validated against real Salla payloads and merged** (PR #267 parser fix + #268 refactor; order.created/shipped/delivered confirmed; S3 HMAC passed). `cart.abandoned` remains unconfirmed (blocked by Salla's broken maintenance-toggle UI) and there is **no separate shipment webhook** (shipping is conveyed via `order.status.updated` slug). **Copy decision for the team:** order-confirmation/shipped/delivered notifications could be promoted from "قريباً" to a shipped feature IF the in-product enable path is merchant-ready; keep abandoned-cart as "قريباً". Confirm feature-enabled state before changing the description.
 
 ---
 
