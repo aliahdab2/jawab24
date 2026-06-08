@@ -368,8 +368,8 @@ const CommentsPage: NextPageWithLayout = () => {
           formatDateForExport(c.repliedAt, language),
         ];
       });
-      const { savedToDocuments } = await downloadCSV(`comments_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
-      toast.success(savedToDocuments ? tc('exportSavedToFiles') : tc('export'));
+      const { savedToFiles } = await downloadCSV(`comments_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
+      toast.success(savedToFiles ? tc('exportSavedToFiles') : tc('export'));
     } catch (error) {
       captureError(error, 'Comment export failed', { tags: { page: 'comments', action: 'export' } });
       toast.error(tc('error'));

@@ -394,8 +394,8 @@ const MessagesPage: NextPageWithLayout = () => {
           formatDateForExport(msg.repliedAt, language),
         ];
       });
-      const { savedToDocuments } = await downloadCSV(`messages_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
-      toast.success(savedToDocuments ? tc('exportSavedToFiles') : tc('export'));
+      const { savedToFiles } = await downloadCSV(`messages_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
+      toast.success(savedToFiles ? tc('exportSavedToFiles') : tc('export'));
     } catch (error) {
       captureError(error, 'Message export failed', { tags: { page: 'messages', action: 'export' } });
     } finally {
