@@ -24,9 +24,17 @@ import { createHash } from 'crypto';
  * below) — an unknown sound name just falls back to the default tone.
  */
 const ANDROID_CHANNEL_ID = 'jawab24_default';
-const ANDROID_URGENT_CHANNEL_ID = process.env.ANDROID_URGENT_SOUND === 'true'
-    ? 'jawab24_urgent_v2'
-    : 'jawab24_urgent';
+
+/**
+ * Resolve the Android urgent channel id. The custom-sound channel (v2) is only
+ * addressed once `ANDROID_URGENT_SOUND` is enabled (see the comment above) so
+ * not-yet-updated apps don't get pushes dropped. Pure + exported so both
+ * branches are unit-testable without depending on process.env at import time.
+ */
+export function resolveUrgentChannelId(useCustomSound: boolean): string {
+    return useCustomSound ? 'jawab24_urgent_v2' : 'jawab24_urgent';
+}
+const ANDROID_URGENT_CHANNEL_ID = resolveUrgentChannelId(process.env.ANDROID_URGENT_SOUND === 'true');
 /** APNs sound file bundled in the iOS app (ios/App/App/urgent_alert.caf). */
 const IOS_URGENT_SOUND = 'urgent_alert.caf';
 
@@ -127,6 +135,14 @@ const PUSH_COOLDOWN_SECONDS: Partial<Record<NotificationType, number>> = {
     provider_failover: 600, // 10 min
     new_lead:        120,  // 2 min — coalesce a burst of distinct leads; bell row still stored
 };
+
+/**
+ * Urgent pushes (offensive/high-stakes — `data.urgent === true`) get a much
+ * shorter, SEPARATE cooldown than the 5-min per-type window above. A second
+ * *distinct* bad comment should still buzz the phone, but a brigading flood is
+ * still throttled to at most one urgent push per minute per user.
+ */
+const URGENT_PUSH_COOLDOWN_SECONDS = 60;
 
 // Notification templates — keyed by locale for easy multi-language expansion
 export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationPayload, 'titles' | 'bodies'>> = {
@@ -495,12 +511,17 @@ class NotificationService {
         // Rate-limit noisy notification types to prevent phone spam on bulk processing.
         // `pushEnabled === false` suppresses only the push (bell row already stored above).
         if (tokens.length > 0 && options?.pushEnabled !== false) {
-            const cooldown = PUSH_COOLDOWN_SECONDS[payload.type];
+            // Urgent pushes get a short, SEPARATE cooldown so a second distinct bad
+            // comment still alerts; routine pushes keep their 5-min per-type window.
+            const isUrgent = payload.data?.urgent === true;
+            const cooldown = isUrgent ? URGENT_PUSH_COOLDOWN_SECONDS : PUSH_COOLDOWN_SECONDS[payload.type];
             let pushAllowed = true;
 
             if (cooldown) {
                 try {
-                    const key = `notif:push:rl:${userId}:${payload.type}`;
+                    // ':urgent' suffix keeps urgent and routine pushes of the same type
+                    // in independent rate-limit windows.
+                    const key = `notif:push:rl:${userId}:${payload.type}${isUrgent ? ':urgent' : ''}`;
                     const set = await redis.set(key, '1', 'EX', cooldown, 'NX');
                     pushAllowed = set === 'OK'; // null means key already existed → rate limited
                 } catch {
@@ -510,6 +531,11 @@ class NotificationService {
             }
 
             if (pushAllowed) {
+                // Fire-and-forget diagnostic counter so urgent-alert volume (the main
+                // notification-fatigue risk) is observable. Never gates the send.
+                if (isUrgent) {
+                    redis.incr(`metrics:notif:urgent_push:${payload.type}`).catch(() => { /* diagnostic only */ });
+                }
                 await this.sendPushNotification(userId, notification.id, tokens, payload, userLanguage);
             }
         }

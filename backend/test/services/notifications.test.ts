@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 // Mock Redis before importing the service (notifications.ts uses redis.set for push rate-limiting)
 // vi.hoisted ensures the variable is initialized before vi.mock's factory runs
-const { mockRedisSet } = vi.hoisted(() => ({
+const { mockRedisSet, mockRedisIncr } = vi.hoisted(() => ({
     mockRedisSet: vi.fn().mockResolvedValue('OK'),
+    mockRedisIncr: vi.fn().mockResolvedValue(1),
 }));
 vi.mock('../../src/lib/redis', () => ({
-    redis: { set: mockRedisSet },
+    redis: { set: mockRedisSet, incr: mockRedisIncr },
 }));
 
 // Mock the database before importing the service
@@ -28,7 +29,7 @@ vi.mock('../../src/db', () => ({
 }));
 
 // Import after mocking
-import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS, buildFcmMessage } from '../../src/services/notifications';
+import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS, buildFcmMessage, resolveUrgentChannelId } from '../../src/services/notifications';
 import { db } from '../../src/db';
 
 describe('NotificationService', () => {
@@ -692,6 +693,8 @@ describe('NotificationService', () => {
         beforeEach(() => {
             mockRedisSet.mockReset();
             mockRedisSet.mockResolvedValue('OK');
+            mockRedisIncr.mockReset();
+            mockRedisIncr.mockResolvedValue(1);
         });
 
         it('should call redis.set with NX for rate-limited notification types', async () => {
@@ -798,6 +801,25 @@ describe('NotificationService', () => {
             expect(db.insert).toHaveBeenCalled();
             // ...but the entire push block (cooldown check + FCM send) is skipped.
             expect(mockRedisSet).not.toHaveBeenCalled();
+        });
+
+        it('urgent pushes use a separate key + short (60s) cooldown so distinct bad comments still alert', async () => {
+            setupWithDeviceTokens();
+
+            await notificationService.sendNotification('user-1', {
+                type: 'skipped_reply',
+                titles: { en: 'Offensive', ar: 'مسيء' },
+                bodies: { en: 'Body', ar: 'نص' },
+                data: { urgent: true },
+            });
+
+            expect(mockRedisSet).toHaveBeenCalledWith(
+                'notif:push:rl:user-1:skipped_reply:urgent',
+                '1',
+                'EX',
+                60,
+                'NX',
+            );
         });
     });
 
@@ -981,6 +1003,16 @@ describe('NotificationService', () => {
 
             const fr = buildFcmMessage({ ...base, data: { urgent: true } }, 'fr', ['t']) as any;
             expect(fr.notification.title).toBe('Title EN'); // no fr → English fallback
+        });
+    });
+
+    describe('resolveUrgentChannelId', () => {
+        it('returns the legacy channel when custom sound is off (default/safe)', () => {
+            expect(resolveUrgentChannelId(false)).toBe('jawab24_urgent');
+        });
+
+        it('returns the v2 custom-sound channel when enabled', () => {
+            expect(resolveUrgentChannelId(true)).toBe('jawab24_urgent_v2');
         });
     });
 });
