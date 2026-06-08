@@ -149,10 +149,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const pauseDuration = useHandoffPauseDuration();
 
   // Auto-focus the composer on open only for comments you're likely to reply to
-  // (unreplied / needs-attention). Already-replied comments still show the
-  // composer, but don't pop the keyboard — important when arrowing through the list.
+  // (unreplied / needs-attention). NOT while prev/next navigation is active: the
+  // soft keyboard shrinks the modal (max-h accounts for --keyboard-height), so
+  // auto-focusing some comments and not others made the modal — and its nav
+  // arrows — jump between heights while arrowing. Tap the box to reply instead.
   useEffect(() => {
-    if (comment.replied && !needsAttention) return;
+    if (hasNav || (comment.replied && !needsAttention)) return;
     const timer = setTimeout(() => {
       textareaRef.current?.focus();
     }, 100);

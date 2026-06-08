@@ -541,10 +541,12 @@ test.describe('Comment Detail Modal', () => {
 
     await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
-    // Compose textarea should be in footer
+    // Compose textarea should be in the footer and ready to type. Auto-focus is
+    // intentionally off while prev/next navigation is active (opening from the list)
+    // so the keyboard doesn't pop and shift the modal height between comments.
     const textarea = page.locator(`textarea[aria-label="${t('comments.typeReply')}"]`);
     await expect(textarea).toBeVisible();
-    await expect(textarea).toBeFocused({ timeout: 3000 });
+    await expect(textarea).toBeEditable();
   });
 
   test('shows a follow-up composer for already-replied comments', async ({ page }) => {
