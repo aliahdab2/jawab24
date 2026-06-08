@@ -75,16 +75,11 @@ describe('getFlagTagStyle', () => {
     expect(getFlagTagStyle('angry_customer')).toEqual({ cssClass: 'status-error', urgent: true });
   });
 
-  it('returns info (blue) style for "missing from Business Info" prompts', () => {
-    expect(getFlagTagStyle('info_not_in_kb')).toEqual({ cssClass: 'status-info', urgent: false });
-    expect(getFlagTagStyle('price_not_in_kb')).toEqual({ cssClass: 'status-info', urgent: false });
-    expect(getFlagTagStyle('phone_not_in_kb')).toEqual({ cssClass: 'status-info', urgent: false });
-  });
-
-  it('returns warning (amber) style for other non-urgent flags', () => {
+  it('returns warning (amber) style for all non-urgent flags (incl. missing-from-KB prompts)', () => {
     expect(getFlagTagStyle('low_confidence')).toEqual({ cssClass: 'status-warning', urgent: false });
-    expect(getFlagTagStyle('sla_no_reply')).toEqual({ cssClass: 'status-warning', urgent: false });
-    expect(getFlagTagStyle('dm_failed')).toEqual({ cssClass: 'status-warning', urgent: false });
+    expect(getFlagTagStyle('info_not_in_kb')).toEqual({ cssClass: 'status-warning', urgent: false });
+    expect(getFlagTagStyle('price_not_in_kb')).toEqual({ cssClass: 'status-warning', urgent: false });
+    expect(getFlagTagStyle('phone_not_in_kb')).toEqual({ cssClass: 'status-warning', urgent: false });
   });
 });
 

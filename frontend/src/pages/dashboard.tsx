@@ -652,9 +652,7 @@ const DashboardPage: NextPageWithLayout = () => {
                           </div>
                           <FeedSnippet
                             text={comment.message}
-                            postContext={comment.postMessage}
                             intentLabel={resolveIntentLabel(comment.aiIntent)}
-                            onPostLabel={tc('feedPreview.onPost')}
                             noPreviewLabel={tc('feedPreview.noPreview')}
                           />
                         </div>
@@ -732,7 +730,6 @@ const DashboardPage: NextPageWithLayout = () => {
                           <FeedSnippet
                             text={msg.message}
                             intentLabel={resolveIntentLabel(msg.aiIntent)}
-                            onPostLabel={tc('feedPreview.onPost')}
                             noPreviewLabel={tc('feedPreview.noPreview')}
                           />
                         </div>
