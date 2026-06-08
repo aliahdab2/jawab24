@@ -547,16 +547,19 @@ test.describe('Comment Detail Modal', () => {
     await expect(textarea).toBeFocused({ timeout: 3000 });
   });
 
-  test('should not show compose textarea for already-replied comments', async ({ page }) => {
+  test('shows a follow-up composer for already-replied comments', async ({ page }) => {
     await setupPage(page);
     // Click the replied comment (Jane Doe)
     await page.locator('text=What are your business hours?').first().click();
 
     await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
-    // No compose textarea for replied comment
+    // The composer is always available now: even an already-replied comment can
+    // get a manual follow-up reply, which keeps the modal footer consistent while
+    // arrowing between comments. Replied comments use the "follow-up" placeholder.
     const textarea = page.locator(`textarea[aria-label="${t('comments.typeReply')}"]`);
-    await expect(textarea).not.toBeVisible();
+    await expect(textarea).toBeVisible();
+    await expect(textarea).toHaveAttribute('placeholder', t('comments.followUpReply'));
   });
 
   test('should close modal when X button is clicked', async ({ page }) => {
