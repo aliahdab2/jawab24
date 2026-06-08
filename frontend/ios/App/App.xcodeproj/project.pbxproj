@@ -17,6 +17,7 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		58511415E6A21DC29BFDF80C /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED98963F9E828070A6490813 /* Pods_App.framework */; };
 		F1A2B3C4D5E6F7A8B9C0D1E2 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E6F7A8B9C0D1E3 /* GoogleService-Info.plist */; };
+		BADC0DE150A1B2C3D4E5F602 /* urgent_alert.caf in Resources */ = {isa = PBXBuildFile; fileRef = BADC0DE150A1B2C3D4E5F601 /* urgent_alert.caf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 		E9BC9013A140FED4C41A5371 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
 		ED98963F9E828070A6490813 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1A2B3C4D5E6F7A8B9C0D1E3 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		BADC0DE150A1B2C3D4E5F601 /* urgent_alert.caf */ = {isa = PBXFileReference; lastKnownFileType = file; path = urgent_alert.caf; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +91,7 @@
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
 				F1A2B3C4D5E6F7A8B9C0D1E3 /* GoogleService-Info.plist */,
+				BADC0DE150A1B2C3D4E5F601 /* urgent_alert.caf */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 			);
@@ -178,6 +181,7 @@
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
 				F1A2B3C4D5E6F7A8B9C0D1E2 /* GoogleService-Info.plist in Resources */,
+				BADC0DE150A1B2C3D4E5F602 /* urgent_alert.caf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

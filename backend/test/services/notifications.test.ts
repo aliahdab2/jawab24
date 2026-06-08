@@ -28,7 +28,7 @@ vi.mock('../../src/db', () => ({
 }));
 
 // Import after mocking
-import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS } from '../../src/services/notifications';
+import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS, buildFcmMessage } from '../../src/services/notifications';
 import { db } from '../../src/db';
 
 describe('NotificationService', () => {
@@ -940,6 +940,47 @@ describe('NotificationService', () => {
             const token = 'sensitive-fcm-token-do-not-leak';
             const hash = hashToken(token);
             expect(hash).not.toContain(token);
+        });
+    });
+
+    describe('buildFcmMessage', () => {
+        const base = {
+            type: 'skipped_reply' as const,
+            titles: { en: 'Title EN', ar: 'Title AR' },
+            bodies: { en: 'Body EN', ar: 'Body AR' },
+        };
+
+        it('routes urgent pushes to the urgent channel + high priority + custom iOS sound', () => {
+            const msg = buildFcmMessage(
+                { ...base, data: { commentId: 'c1', urgent: true } },
+                'en',
+                ['tok-1'],
+            ) as any;
+
+            expect(msg.android.priority).toBe('high');
+            expect(msg.android.notification.channelId).toBe('jawab24_urgent'); // default until ANDROID_URGENT_SOUND flips to v2
+            expect(msg.apns.headers['apns-priority']).toBe('10');
+            expect(msg.apns.payload.aps.sound).toBe('urgent_alert.caf');
+        });
+
+        it('routes routine pushes to the quiet default channel with no custom sound', () => {
+            const msg = buildFcmMessage(
+                { ...base, type: 'new_comment', data: { commentId: 'c1' } },
+                'en',
+                ['tok-1'],
+            ) as any;
+
+            expect(msg.android.priority).toBe('normal');
+            expect(msg.android.notification.channelId).toBe('jawab24_default');
+            expect(msg.apns).toBeUndefined();
+        });
+
+        it('resolves title/body for the user language, falling back to English', () => {
+            const ar = buildFcmMessage({ ...base, data: { urgent: true } }, 'ar', ['t']) as any;
+            expect(ar.notification.title).toBe('Title AR');
+
+            const fr = buildFcmMessage({ ...base, data: { urgent: true } }, 'fr', ['t']) as any;
+            expect(fr.notification.title).toBe('Title EN'); // no fr → English fallback
         });
     });
 });
