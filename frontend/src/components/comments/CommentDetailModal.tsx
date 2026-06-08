@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, DetailSheet } from '@/components/ui';
 import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
@@ -222,23 +221,13 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     ? 'bg-blue-400'
     : 'bg-brand-500';
 
-  return createPortal(
-    <div
-      className="modal-overlay fixed top-0 start-0 end-0 bottom-[var(--keyboard-height,0px)] bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200 touch-none"
-      onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
-      onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="comment-detail-modal-title"
-        className={clsx(
-          "bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-[calc(100vh-var(--keyboard-height,0px))] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y",
-          // Stable height while navigating so the header arrows stay put between taps.
-          hasNav && "h-[85vh] sm:h-[80vh]"
-        )}
-        onTouchMove={(e) => e.stopPropagation()}
-        onWheel={(e) => e.stopPropagation()}
+  return (
+    <>
+      <DetailSheet
+        dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'comment-detail-modal-title' }}
+        // Stable desktop height while navigating so the header arrows stay put
+        // between taps; mobile is always full-screen (h-full, in DetailSheet).
+        panelClassName={hasNav ? 'sm:h-[80vh]' : 'sm:h-auto'}
       >
         {/* Status accent bar */}
         <div className={clsx('h-1 flex-shrink-0', accentColor)} />
@@ -490,7 +479,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           </div>
         </div>
 
-      </div>
+      </DetailSheet>
 
       {comment.pageId && (
         <InlineKbEditorModal
@@ -499,7 +488,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           onClose={() => setKbOpen(false)}
         />
       )}
-    </div>,
-    document.body
+    </>
   );
 };

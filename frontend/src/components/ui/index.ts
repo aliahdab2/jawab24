@@ -7,6 +7,7 @@ export { Select } from './Select';
 export { Textarea } from './Textarea';
 export { FormField } from './FormField';
 export { Modal } from './Modal';
+export { DetailSheet } from './DetailSheet';
 export { SidePanel } from './SidePanel';
 export { EmptyState } from './EmptyState';
 export { PageHeader } from './PageHeader';

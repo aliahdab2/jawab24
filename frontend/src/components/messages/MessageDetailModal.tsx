@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, DetailSheet } from '@/components/ui';
 import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -223,16 +222,11 @@ export function MessageDetailModal({
   const isPaused = conversation.pauseStatus?.paused;
   const pauseDuration = useHandoffPauseDuration();
 
-  return createPortal(
-    <div
-      className="modal-overlay fixed top-0 start-0 end-0 bottom-[var(--keyboard-height,0px)] bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200 touch-none"
-      onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
-      onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
-    >
-      <div
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-[calc(100vh-var(--keyboard-height,0px))] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y"
-        onTouchMove={(e) => e.stopPropagation()}
-        onWheel={(e) => e.stopPropagation()}
+  return (
+    <>
+      <DetailSheet
+        dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'message-detail-modal-title' }}
+        panelClassName="sm:h-auto"
       >
         {/* Breadcrumb */}
         <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-muted-foreground">
@@ -265,7 +259,7 @@ export function MessageDetailModal({
               <User className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="text-start min-w-0">
-              <h2 className="text-lg font-semibold text-foreground leading-tight truncate">
+              <h2 id="message-detail-modal-title" className="text-lg font-semibold text-foreground leading-tight truncate">
                 {conversation.senderName || tc('user')}
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
@@ -480,7 +474,7 @@ export function MessageDetailModal({
           </div>
         </div>
 
-      </div>
+      </DetailSheet>
 
       {pageId && (
         <InlineKbEditorModal
@@ -489,7 +483,6 @@ export function MessageDetailModal({
           onClose={() => setKbOpen(false)}
         />
       )}
-    </div>,
-    document.body
+    </>
   );
 }
