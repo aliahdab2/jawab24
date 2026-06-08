@@ -642,8 +642,8 @@ const LeadsPage: NextPageWithLayout = () => {
         ];
       });
       const dateStamp = new Date().toISOString().slice(0, 10);
-      const { savedToDocuments } = await downloadCSV(`leads-${dateStamp}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
-      toast.success(savedToDocuments ? tc('exportSavedToFiles') : t('exportCsv'));
+      const { savedToFiles } = await downloadCSV(`leads-${dateStamp}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
+      toast.success(savedToFiles ? tc('exportSavedToFiles') : t('exportCsv'));
     } catch (err) {
       const isPermissionDenied = err instanceof DOMException && err.name === 'NotAllowedError';
       if (!isPermissionDenied) {
