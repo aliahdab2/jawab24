@@ -234,8 +234,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         aria-labelledby="comment-detail-modal-title"
         className={clsx(
           "bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-[calc(100vh-var(--keyboard-height,0px))] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y",
-          // Stable height while navigating so the header arrows stay put between taps.
-          hasNav && "h-[85vh] sm:h-[80vh]"
+          // While navigating, pin a stable height so the header arrows stay put
+          // between taps. On mobile that's full-screen (same keyboard-aware calc as
+          // max-h) — matching the messages modal so the sheet doesn't leave a gap
+          // at the top; desktop stays a centered 80vh dialog.
+          hasNav && "h-[calc(100vh-var(--keyboard-height,0px))] sm:h-[80vh]"
         )}
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
