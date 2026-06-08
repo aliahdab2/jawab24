@@ -3,8 +3,6 @@
   "sectionDesc": "Invite people to help manage your replies",
   "memberCountBadge": "{count, plural, one {# member} other {# members}}",
   "pendingInvitesBadge": "{count, plural, one {# pending invite} other {# pending invites}}",
-  "savedAutomatically": "Changes are saved automatically",
-  "savedConfirmation": "Saved ✓",
   "invitePlaceholder": "Email address",
   "sendInvite": "Invite",
   "inviteTitle": "Invite a teammate",

@@ -3,8 +3,6 @@
   "sectionDesc": "ادعُ أشخاصاً للمساعدة في إدارة ردودك",
   "memberCountBadge": "{count, plural, zero {لا أعضاء} one {عضو واحد} two {عضوان} few {# أعضاء} many {# عضوًا} other {# عضو}}",
   "pendingInvitesBadge": "{count, plural, zero {لا دعوات معلّقة} one {دعوة معلّقة واحدة} two {دعوتان معلّقتان} few {# دعوات معلّقة} many {# دعوة معلّقة} other {# دعوة معلّقة}}",
-  "savedAutomatically": "يتم حفظ التغييرات تلقائيًا",
-  "savedConfirmation": "تم الحفظ ✓",
   "invitePlaceholder": "البريد الإلكتروني",
   "sendInvite": "دعوة",
   "inviteTitle": "دعوة عضو جديد",

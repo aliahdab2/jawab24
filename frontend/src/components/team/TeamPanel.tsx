@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { Card, Button, ConfirmationModal } from '@/components/ui';
 import { Users, Mail, Phone, Crown, Shield, User, X, ChevronDown, Copy, Check, Link, UserPlus, UserMinus, RefreshCw } from 'lucide-react';
@@ -117,10 +117,6 @@ export function TeamPanel() {
   const [roleDropdown, setRoleDropdown] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<{ url: string; contact: string } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
-  // Transient "saved" status: flashes for ~2s after any successful mutation,
-  // then fades back to the idle autosave hint. (Team changes persist per click.)
-  const [justSaved, setJustSaved] = useState(false);
-  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const myMember = members.find((m) => m.userId === user?.id);
   const myRole = myMember?.role ?? 'member';
@@ -154,16 +150,6 @@ export function TeamPanel() {
     fetchData();
   }, [fetchData]);
 
-  // Flash the "saved" confirmation, resetting any in-flight timer so rapid
-  // successive saves keep the confirmation visible for a full window each time.
-  const flashSaved = useCallback(() => {
-    setJustSaved(true);
-    if (savedTimer.current) clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(() => setJustSaved(false), 2000);
-  }, []);
-
-  useEffect(() => () => { if (savedTimer.current) clearTimeout(savedTimer.current); }, []);
-
   const showInviteLink = (token: string, contactValue: string) => {
     const url = `${BRAND_ASSETS.urls.base}/invites/accept?token=${token}`;
     setInviteLink({ url, contact: contactValue });
@@ -192,7 +178,6 @@ export function TeamPanel() {
       ? (smsSent ? 'inviteResentSms' : emailSent ? 'inviteResentEmail' : 'inviteResent')
       : (smsSent ? 'inviteSentSms' : emailSent ? 'inviteSentEmail' : 'inviteSent');
     toast.success(t(key as Parameters<typeof t>[0], { contact: contactValue }));
-    flashSaved();
   };
 
   const handleInvite = async () => {
@@ -245,7 +230,6 @@ export function TeamPanel() {
       await workspaceApi.revokeInvite(inviteId);
       setInviteLink(null);
       toast.success(t('inviteRevoked'));
-      flashSaved();
       await fetchData();
     } catch (error) {
       captureError(error, 'Failed to revoke invite', { tags: { page: 'team', action: 'revokeInvite' } });
@@ -258,7 +242,6 @@ export function TeamPanel() {
       await workspaceApi.removeMember(removeTarget.userId);
       toast.success(t('memberRemoved', { name: removeTarget.userName || removeTarget.userEmail || '' }));
       setRemoveTarget(null);
-      flashSaved();
       await fetchData();
     } catch (error) {
       captureError(error, 'Failed to remove member', { tags: { page: 'team', action: 'removeMember' } });
@@ -271,7 +254,6 @@ export function TeamPanel() {
     try {
       await workspaceApi.updateMemberRole(userId, newRole);
       toast.success(t('roleUpdated'));
-      flashSaved();
       await fetchData();
     } catch (error) {
       captureError(error, 'Failed to update role', { tags: { page: 'team', action: 'updateRole' } });
@@ -290,7 +272,10 @@ export function TeamPanel() {
 
   return (
     <>
-      <Card className="border-none p-5 sm:p-6 landscape:p-4 animate-slide-up space-y-6">
+      {/* Border stays transparent in light (shadow gives separation there) and
+          becomes visible in dark, where the soft shadow doesn't read — without
+          it the dark card has no edge and looks like a flat slab. */}
+      <Card className="border border-transparent dark:border-theme-border p-5 sm:p-6 landscape:p-4 animate-slide-up space-y-6">
         {/* ── Invite a teammate (owners + admins only) ── */}
         {isAdmin && (
           <section>
@@ -392,7 +377,7 @@ export function TeamPanel() {
                 "5 / 3". */}
             <span
               dir="ltr"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-surface-100 dark:bg-surface-800 rounded-full px-2.5 py-1 flex-shrink-0"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-surface-100 dark:bg-white/10 rounded-full px-2.5 py-1 flex-shrink-0"
               aria-label={`${totalCount} / ${MAX_MEMBERS}`}
             >
               <Users className="w-3.5 h-3.5" aria-hidden="true" />
@@ -402,7 +387,7 @@ export function TeamPanel() {
 
           {/* Empty state — shown to non-admins who are alone */}
           {isAlone && !isAdmin && (
-            <div className="text-center py-8 px-4 rounded-xl border border-dashed border-theme-border bg-surface-50 dark:bg-surface-800/40 mb-2">
+            <div className="text-center py-8 px-4 rounded-xl border border-dashed border-theme-border bg-surface-50 dark:bg-background mb-2">
               <Users className="w-10 h-10 mx-auto text-icon-muted mb-3" aria-hidden="true" />
               <p className="font-bold text-foreground">{t('emptyTitle')}</p>
               <p className="text-sm text-muted-foreground mt-1">{t('emptyDesc')}</p>
@@ -499,7 +484,7 @@ export function TeamPanel() {
             return (
               <div key={invite.id} className="flex items-start gap-3 py-3 opacity-70">
                 {/* Icon avatar */}
-                <div className="w-9 h-9 rounded-full bg-surface-100 dark:bg-surface-800 text-icon-muted flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="w-9 h-9 rounded-full bg-surface-100 dark:bg-white/10 text-icon-muted flex items-center justify-center flex-shrink-0 mt-0.5">
                   <ContactIcon className="w-4 h-4" aria-hidden="true" />
                 </div>
 
@@ -560,7 +545,7 @@ export function TeamPanel() {
               const RoleIcon = ROLE_ICONS[r];
               const cap = r.charAt(0).toUpperCase() + r.slice(1);
               return (
-                <li key={r} className="flex flex-col gap-2 rounded-xl border border-theme-border bg-surface-50 dark:bg-surface-800/40 p-3 text-start">
+                <li key={r} className="flex flex-col gap-2 rounded-xl border border-theme-border bg-surface-50 dark:bg-background p-3 text-start">
                   <span className={clsx('inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-xs font-bold', getRoleBadgeColor(r))}>
                     <RoleIcon className="w-3 h-3" aria-hidden="true" />
                     {t(`role${cap}` as 'roleOwner' | 'roleAdmin' | 'roleMember')}
@@ -573,20 +558,6 @@ export function TeamPanel() {
             })}
           </ul>
         </section>
-
-        {/* Autosave status — subtle footer. aria-live announces the transient
-            "saved" flash after a mutation, then fades back to the idle hint. */}
-        <p
-          aria-live="polite"
-          className={clsx(
-            'text-xs text-center pt-1 transition-colors duration-500',
-            justSaved
-              ? 'text-emerald-600 dark:text-emerald-400 font-medium'
-              : 'text-muted-foreground',
-          )}
-        >
-          {justSaved ? t('savedConfirmation') : t('savedAutomatically')}
-        </p>
       </Card>
 
       {/* Remove confirmation */}
