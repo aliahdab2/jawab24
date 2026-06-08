@@ -205,30 +205,11 @@ AUDIT_FAILED=false
 # Patched versions exist (7.5.6+) but cannot be applied without breaking the typecheck via
 # pdfjs-dist semver-minor bump in the same lockfile regeneration. Track upstream
 # firebase-admin release that ships protobufjs >=7.5.6 transitively, then drop these.
-# GHSA-58qx-3vcg-4xpx — ws uninitialized memory disclosure (moderate, <=8.20.0). Backend
-# uses ws transitively via openai (server-side streaming completions to the OpenAI API
-# endpoint, not attacker-controlled) and vitest (test-time only, not production). No
-# user-facing WebSocket exposure in our backend. Patched in 8.20.1; drop this once
-# openai's transitive ws pin moves past 8.20.0.
-# GHSA-q8mj-m7cp-5q26 — qs DoS via TypeError in qs.stringify (moderate, <=6.15.1).
-# Triggered when qs.stringify is called with encodeValuesOnly:true AND a comma-format
-# array containing null/undefined entries. Backend uses qs transitively via Fastify
-# (incoming query *parsing* — qs.parse, not the vulnerable stringify path) and via
-# axios (outgoing param *stringify* — code-controlled objects, never user input, never
-# null/undefined in comma arrays, never encodeValuesOnly). The vulnerable code path
-# requires attacker-controlled input flowing into stringify with the specific encoder
-# config; not reachable in our code. Patched in qs 6.15.2; drop this once Fastify and
-# axios transitive pins move past 6.15.1.
-# GHSA-ph9p-34f9-6g65 — tmp path traversal via unsanitized prefix/postfix (high, <0.2.6).
-# Backend uses tmp transitively via exceljs (KB Excel-file extraction in
-# services/kb/file-extractor.ts). exceljs calls tmp.file() with NO options object —
-# it never passes prefix/postfix, so the attacker-controlled-path vector cannot be
-# reached: the vulnerable parameters are never set, let alone from user input.
-# Patched in tmp 0.2.6. An npm `overrides` bump was attempted but npm won't re-resolve
-# the already-locked transitive without a full lockfile regen (avoided pre-deploy due
-# to the Fastify-plugin stale-dep risk). Drop this once exceljs's transitive tmp pin
-# moves past 0.2.5.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-58qx-3vcg-4xpx|GHSA-q8mj-m7cp-5q26|GHSA-ph9p-34f9-6g65"
+#
+# Fixed and removed from this allowlist (bumped to patched versions via root overrides):
+#   GHSA-ph9p-34f9-6g65 (tmp ->0.2.7), GHSA-58qx-3vcg-4xpx (ws ->8.21.0),
+#   GHSA-q8mj-m7cp-5q26 (qs ->6.15.2).
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
