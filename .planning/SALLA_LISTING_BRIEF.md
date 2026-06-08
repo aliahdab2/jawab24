@@ -57,7 +57,15 @@
 ### Short tagline (~50 chars Arabic) — DRAFT, sales-rep reframe
 **مندوب مبيعاتك الذكي على فيسبوك وإنستغرام**
 
+### Short description / App description — ✅ FINAL (live in Salla app 1565152053 since 2026-06-08)
+Sales-rep positioning; claims only what the product truly does ("answers"). It does NOT transact — the sale closes in the merchant's Salla store, so no "يبيع نيابةً عنك"/transact claim. No "رد آلي".
+
+- **Arabic (111 chars):** مندوب مبيعات بالذكاء الاصطناعي يقرأ منتجات متجرك في سلة وأسعارها، فيجيب عملاءك على فيسبوك وإنستغرام طوال اليوم.
+- **English (120 chars):** An AI sales rep that reads your Salla products and prices and answers your customers on Facebook and Instagram, all day.
+
 ### Long description (Arabic, ~250 words) — DRAFT, sales-rep frame (awaiting marketing sign-off)
+
+> ⚠️ Honesty pass before sign-off: soften any transact-implying wording to match the FINAL short description above — e.g. `ليُتمّ عملية البيع` and the bullet `يبيع بالعربية…` imply Jawab24 closes the sale. It persuades/recommends; the customer checks out in Salla. Reframe to "يقترح/يقنع/يقود للشراء", not "يبيع/يُتمّ البيع".
 
 > Wedge: lead on Arabic-first AI depth + live Salla catalog (verified shipped). Proactive order/cart features held as "قريباً" until Phase 4.2 validates their Salla wiring (see A2/A3 in the launch plan). Arabic is canonical; English below is the translation.
 
