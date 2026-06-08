@@ -108,7 +108,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const isHeldReply = !comment.replied && !!comment.aiOriginalReply && comment.flagReason?.includes('held_low_confidence');
   const isInstagram = comment.source === 'instagram' || (!comment.source && !comment.facebookCommentId);
   const externalUrl = getCommentExternalUrl(comment, pageUrl);
-  const showComposeRow = !comment.replied || needsAttention;
 
   const [replyText, setReplyText] = useState(isHeldReply ? comment.aiOriginalReply! : '');
   const [isSending, setIsSending] = useState(false);
@@ -149,13 +148,17 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [pauseLoading, setPauseLoading] = useState(false);
   const pauseDuration = useHandoffPauseDuration();
 
-  // Auto-focus textarea on open (for unreplied / needs-attention comments)
+  // Auto-focus the composer on open only for comments you're likely to reply to
+  // (unreplied / needs-attention). Already-replied comments still show the
+  // composer, but don't pop the keyboard — important when arrowing through the list.
   useEffect(() => {
-    if (!showComposeRow) return;
+    if (comment.replied && !needsAttention) return;
     const timer = setTimeout(() => {
       textareaRef.current?.focus();
     }, 100);
     return () => clearTimeout(timer);
+    // Focus once when this comment's modal opens; the modal is keyed by comment id,
+    // so it remounts (and re-runs this) on navigation — no reactive deps needed.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch pause status for the commenter
@@ -239,7 +242,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div className={clsx('h-1 flex-shrink-0', accentColor)} />
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-theme-border flex-shrink-0">
+        <div className="flex items-center justify-between gap-3 px-4 md:px-6 py-3 md:py-4 border-b border-theme-border flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className={clsx(
               'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0',
@@ -252,7 +255,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 {comment.fromName || tc('unknownUser')}
               </h2>
               {pageName && (
-                <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
                   <PlatformIcon
                     platform={isInstagram ? 'instagram' : 'facebook'}
                     size="sm"
@@ -261,7 +264,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   {externalUrl ? (
                     <button
                       onClick={() => openExternalUrl(externalUrl)}
-                      className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground hover:text-brand-500 transition-colors cursor-pointer"
+                      className="flex items-center gap-1 min-w-0 text-[10px] font-medium text-muted-foreground hover:text-brand-500 transition-colors cursor-pointer"
                     >
                       <span className="truncate">{pageName}</span>
                       <ExternalLink className="w-3 h-3 flex-shrink-0" />
@@ -413,46 +416,46 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
           )}
 
-          {/* Compose row — only when unreplied or needs attention */}
-          {showComposeRow && (
-            <div className="flex items-end gap-2">
-              <textarea
-                ref={textareaRef}
-                id="comment-reply-textarea"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendReply();
-                  }
-                }}
-                dir="auto"
-                placeholder={comment.replied && needsAttention ? t('followUpReply') : t('typeReply')}
-                aria-label={t('typeReply')}
-                rows={1}
-                className="flex-1 min-w-0 resize-none overscroll-contain rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
-                style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
-                disabled={isSending}
-              />
-              <button
-                onClick={handleSendReply}
-                disabled={!replyText.trim() || isSending}
-                aria-label={t('sendReply')}
-                className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
-              >
-                {isSending
-                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                  : <Send className="w-4 h-4" />
+          {/* Compose row — always shown so every comment is answerable and the modal
+              footer stays consistent while navigating (a follow-up reply on an
+              already-replied comment uses the "follow up" placeholder). */}
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={textareaRef}
+              id="comment-reply-textarea"
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendReply();
                 }
-              </button>
-            </div>
-          )}
+              }}
+              dir="auto"
+              placeholder={comment.replied ? t('followUpReply') : t('typeReply')}
+              aria-label={t('typeReply')}
+              rows={1}
+              className="flex-1 min-w-0 resize-none overscroll-contain rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
+              style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
+              disabled={isSending}
+            />
+            <button
+              onClick={handleSendReply}
+              disabled={!replyText.trim() || isSending}
+              aria-label={t('sendReply')}
+              className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
+            >
+              {isSending
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Send className="w-4 h-4" />
+              }
+            </button>
+          </div>
 
           {/* Actions row: pause/resume + resolve/unresolve */}
           <div className={clsx(
             'flex items-center justify-between',
-            (showComposeRow || isHeldReply) ? 'mt-3' : 'mt-1'
+            'mt-3'
           )}>
             {mode === 'full' && comment.fromId ? (
               <PauseToggle
