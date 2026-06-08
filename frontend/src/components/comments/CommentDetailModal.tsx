@@ -114,8 +114,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Post context preview: clamped to 4 lines by default with a "show more"
-  // toggle (matches the platform's own "see more" pattern, no nested scrollbox).
+  // Post context preview: clamped to 6 lines by default with a "show more"
+  // toggle (matches the platform's own "see more" pattern, no nested scrollbox —
+  // which traps touch scrolling in the mobile WebView). The generous 6-line clamp
+  // means most posts show in full and the toggle only appears for long ones.
   const postRef = useRef<HTMLParagraphElement>(null);
   const [postExpanded, setPostExpanded] = useState(false);
   const [postOverflows, setPostOverflows] = useState(false);
@@ -124,7 +126,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   // postExpanded resets to its initial collapsed state automatically — no manual
   // reset needed.
 
-  // Only show the toggle when the clamped post actually overflows 4 lines.
+  // Only show the toggle when the clamped post actually overflows 6 lines.
   // Skipped while expanded so postOverflows keeps its last clamped reading
   // (the toggle must stay visible to collapse again).
   useEffect(() => {
@@ -328,7 +330,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                     ref={postRef}
                     className={clsx(
                       'px-3 pt-2.5 pb-2 text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed',
-                      !postExpanded && 'line-clamp-4',
+                      !postExpanded && 'line-clamp-6',
                     )}
                     dir="auto"
                   >
