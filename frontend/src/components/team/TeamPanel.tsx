@@ -377,7 +377,7 @@ export function TeamPanel() {
                 "5 / 3". */}
             <span
               dir="ltr"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-surface-100 dark:bg-surface-800 rounded-full px-2.5 py-1 flex-shrink-0"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-surface-100 dark:bg-white/10 rounded-full px-2.5 py-1 flex-shrink-0"
               aria-label={`${totalCount} / ${MAX_MEMBERS}`}
             >
               <Users className="w-3.5 h-3.5" aria-hidden="true" />
@@ -387,7 +387,7 @@ export function TeamPanel() {
 
           {/* Empty state — shown to non-admins who are alone */}
           {isAlone && !isAdmin && (
-            <div className="text-center py-8 px-4 rounded-xl border border-dashed border-theme-border bg-surface-50 dark:bg-surface-800/40 mb-2">
+            <div className="text-center py-8 px-4 rounded-xl border border-dashed border-theme-border bg-surface-50 dark:bg-background mb-2">
               <Users className="w-10 h-10 mx-auto text-icon-muted mb-3" aria-hidden="true" />
               <p className="font-bold text-foreground">{t('emptyTitle')}</p>
               <p className="text-sm text-muted-foreground mt-1">{t('emptyDesc')}</p>
@@ -484,7 +484,7 @@ export function TeamPanel() {
             return (
               <div key={invite.id} className="flex items-start gap-3 py-3 opacity-70">
                 {/* Icon avatar */}
-                <div className="w-9 h-9 rounded-full bg-surface-100 dark:bg-surface-800 text-icon-muted flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="w-9 h-9 rounded-full bg-surface-100 dark:bg-white/10 text-icon-muted flex items-center justify-center flex-shrink-0 mt-0.5">
                   <ContactIcon className="w-4 h-4" aria-hidden="true" />
                 </div>
 
@@ -545,7 +545,7 @@ export function TeamPanel() {
               const RoleIcon = ROLE_ICONS[r];
               const cap = r.charAt(0).toUpperCase() + r.slice(1);
               return (
-                <li key={r} className="flex flex-col gap-2 rounded-xl border border-theme-border bg-surface-50 dark:bg-surface-800/40 p-3 text-start">
+                <li key={r} className="flex flex-col gap-2 rounded-xl border border-theme-border bg-surface-50 dark:bg-background p-3 text-start">
                   <span className={clsx('inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-xs font-bold', getRoleBadgeColor(r))}>
                     <RoleIcon className="w-3 h-3" aria-hidden="true" />
                     {t(`role${cap}` as 'roleOwner' | 'roleAdmin' | 'roleMember')}
