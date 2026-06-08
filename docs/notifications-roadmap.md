@@ -312,6 +312,42 @@ If push fails, fall back to email for critical alerts.
 
 ---
 
+## Android Notification Channels & the Urgent Custom Sound
+
+Three Android channels are created at app startup (`Jawab24Application.java`) and the
+backend addresses them by id (`notifications.ts`). The id sent **must** match a channel
+that exists on the device, or Android 8+ silently drops the push.
+
+| Channel id | Importance | Sound | Used for |
+|------------|-----------|-------|----------|
+| `jawab24_default` | DEFAULT | system | routine pushes (replies, billing, leads) |
+| `jawab24_urgent` | HIGH | system (default) | urgent pushes — heads-up, **legacy** |
+| `jawab24_urgent_v2` | HIGH | **custom** (`urgent_alert`) | urgent pushes with the distinct bad-comment sound |
+
+A push is "urgent" when `data.urgent === true` (offensive / high-stakes comments + DMs).
+Urgent pushes also get a short, separate 60s rate-limit window (`URGENT_PUSH_COOLDOWN_SECONDS`)
+so a second *distinct* bad comment still alerts, and a fire-and-forget counter
+`metrics:notif:urgent_push:{type}` for volume monitoring.
+
+### Why a `_v2` channel
+An Android channel's sound is **immutable after creation**. `jawab24_urgent` already exists
+on installed devices with the default sound, so the custom sound had to go on a new channel id.
+
+### Deploy flag: `ANDROID_URGENT_SOUND`
+Gates which Android channel the backend addresses for urgent pushes (`resolveUrgentChannelId`):
+
+| Value | Channel | When |
+|-------|---------|------|
+| unset / `false` (default) | `jawab24_urgent` | safe for all app versions — **keep here until the new Android app is adopted** |
+| `true` | `jawab24_urgent_v2` | flip **only after** the app version that creates `jawab24_urgent_v2` is widely installed |
+
+> Flipping it on too early means urgent pushes are silently dropped on not-yet-updated Android
+> devices. iOS is unaffected — an unknown `aps.sound` falls back to the default tone, so the
+> iOS custom sound (`urgent_alert.caf`) activates automatically once the app updates.
+> Once the flip is permanent, a later app version can delete the legacy `jawab24_urgent` channel.
+
+---
+
 ## Monitoring & Metrics
 
 Track these metrics to ensure notification health:

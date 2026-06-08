@@ -22,7 +22,7 @@ import { subscriptionsService } from '../subscriptions';
 import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
-import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
+import { isUrgentNotification, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
 import { isPunctuationOnly } from '../../utils/commentText';
 import {
@@ -584,7 +584,7 @@ export class MessageProcessor {
                     workspaceId,
                     'skipped_reply',
                     { senderName: senderName || senderId, reason: flagReason || 'offensive' },
-                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
+                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged', urgent: true },
                 ).catch(err => this.logger.error('Offensive message notification failed', { err }));
                 pipelineMetrics.record(pipeline, 'skipped_risky');
                 return { success: true, messageId: platformMessageId };
@@ -747,7 +747,7 @@ export class MessageProcessor {
             // 17. Notify if flagged — use enriched reason for high-stakes flags
             if (needsAttention && page.userId) {
                 const notifyReason = buildNotificationReason(flagReason, consolidatedText);
-                const urgent = isUrgentFlag(flagReason);
+                const urgent = isUrgentNotification(flagReason, aiIntent);
 
                 notificationService.sendTemplateNotificationToWorkspace(
                     workspaceId,

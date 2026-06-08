@@ -4,6 +4,7 @@ import { commentsService } from '../comments';
 import { rateLimiter, commentDebounce } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
+import { isUrgentNotification, buildNotificationReason } from './urgentFlags';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
 import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag } from '../../utils/commentText';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
@@ -477,7 +478,7 @@ export class CommentProcessor {
                     workspaceId,
                     'skipped_reply',
                     { senderName: fromName || 'Unknown', reason: flagReason || 'offensive' },
-                    { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                    { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged', urgent: true },
                 ).catch(err => this.logger.error('Offensive comment notification failed', { err }));
                 pipelineMetrics.record(pipeline, 'skipped_risky');
                 return { success: true, commentId: comment.id };
@@ -518,7 +519,12 @@ export class CommentProcessor {
                         workspaceId,
                         'new_comment',
                         { senderName: fromName || 'Unknown' },
-                        { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                        {
+                            commentId: comment.id,
+                            type: 'comment',
+                            deepLink: '/comments?filter=flagged',
+                            ...(isUrgentNotification(flagReason, aiIntent) ? { urgent: true } : {}),
+                        },
                     ).catch(err => this.logger.error('New comment notification failed', { err }));
                     pipelineMetrics.record(pipeline, 'no_reply_generated');
                     return { success: false, commentId: comment.id, error: 'No reply generated' };
@@ -541,11 +547,18 @@ export class CommentProcessor {
 
             // 10-12. Send reply, mark as replied, fire SSE events + metrics
             if (needsAttention) {
+                const notifyReason = buildNotificationReason(flagReason, commentMessage);
+                const urgent = isUrgentNotification(flagReason, aiIntent);
                 notificationService.sendTemplateNotificationToWorkspace(
                     workspaceId,
                     'flagged_reply',
-                    { senderName: fromName || 'Unknown', reason: flagReason || 'AI flagged this reply' },
-                    { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                    { senderName: fromName || 'Unknown', reason: notifyReason },
+                    {
+                        commentId: comment.id,
+                        type: 'comment',
+                        deepLink: '/comments?filter=flagged',
+                        ...(urgent ? { urgent: true } : {}),
+                    },
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }
 

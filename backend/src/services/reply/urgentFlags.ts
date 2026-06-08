@@ -25,6 +25,19 @@ export function isUrgentFlag(flagReason: string | undefined): boolean {
 }
 
 /**
+ * Whether a flagged comment/message warrants an urgent push (loud channel /
+ * heads-up). True when the flag is high-stakes OR the AI classified the content
+ * as OFFENSIVE — offensive/abusive public content is reputation-urgent even when
+ * no flagReason string was attached (the offensive skip path may pass an empty
+ * flagReason and only the intent). Kept separate from URGENT_FLAGS so the
+ * business-action flag set (used for order-number enrichment + frontend styling)
+ * stays focused.
+ */
+export function isUrgentNotification(flagReason: string | undefined, aiIntent?: string | null): boolean {
+    return isUrgentFlag(flagReason) || aiIntent === 'OFFENSIVE';
+}
+
+/**
  * Build a human-readable notification reason.
  * For high-stakes flags, returns a label like "Cancellation Request — order #5678".
  * For non-urgent flags, returns the original flagReason unchanged.
