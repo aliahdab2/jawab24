@@ -132,34 +132,14 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       });
     }).catch(() => {});
 
-    // Track --keyboard-height and keyboard-open via visualViewport API.
-    //
-    // Primary use: iOS (KeyboardResize.None). vv.height shrinks while window.innerHeight
-    // stays fixed → kbHeight = keyboard height. Fires during animation for smooth layout.
-    //
-    // Android: windowSoftInputMode=adjustNothing means neither window.innerHeight nor
-    // vv.height changes when keyboard opens. This handler is effectively a no-op on
-    // Android; keyboardDidShow in keyboardSetup.ts is the authoritative source there.
-    const vv = window.visualViewport;
-    let removeVv: (() => void) | undefined;
-    if (vv) {
-      const updateKeyboardHeight = () => {
-        const kbHeight = Math.max(0, window.innerHeight - vv.height);
-        if (kbHeight > 50) {
-          document.documentElement.style.setProperty('--keyboard-height', `${kbHeight}px`);
-          document.documentElement.classList.add('keyboard-open');
-        } else {
-          document.documentElement.style.setProperty('--keyboard-height', '0px');
-          document.documentElement.classList.remove('keyboard-open');
-        }
-      };
-      vv.addEventListener('resize', updateKeyboardHeight);
-      removeVv = () => vv.removeEventListener('resize', updateKeyboardHeight);
-    }
+    // --keyboard-height / keyboard-open tracking lives in setupKeyboard()
+    // (src/lib/keyboardSetup.ts), wired up in initNativePlatform below. Keeping
+    // it in one place means a single source of truth for the keyboard height —
+    // two competing writers used to race and double-count, floating modals far
+    // above the keyboard on edge-to-edge Android.
 
     return () => {
       clearTimeout(splashTimeout);
-      removeVv?.();
     };
   }, []); // Empty deps = runs once on mount
 
