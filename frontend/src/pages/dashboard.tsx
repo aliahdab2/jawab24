@@ -57,44 +57,53 @@ function SectionError({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function UsageProgress({ label, used, limit, percent, overLimitCta }: { label: string; used: number; limit: number | null; percent: number; overLimitCta?: { label: string; href: string } }) {
+function UsageProgress({ label, used, limit, percent, overLimitCta, coveredByTopup }: { label: string; used: number; limit: number | null; percent: number; overLimitCta?: { label: string; href: string }; coveredByTopup?: boolean }) {
   const roundedPercent = Math.round(percent);
   // At/over the limit, surface a direct action (e.g. "Manage Pages") right on the bar.
   const showCta = overLimitCta && percent >= 100;
+  // When the plan is maxed but a non-expiring top-up reserve covers it, the
+  // merchant is fine — keep the bar and badge calm (brand) instead of amber/red,
+  // matching the Smart Replies tile's "on top-up" state. Without this the two
+  // dashboard views give contradictory signals at 100%.
+  const calm = coveredByTopup || percent <= 75;
+  const barClass = calm
+    ? 'bg-gradient-to-r from-brand-500 to-brand-600'
+    : percent > 100
+      ? 'bg-gradient-to-r from-red-500 to-red-600'
+      : 'bg-gradient-to-r from-amber-500 to-amber-600';
+  const barGlow = calm
+    ? 'rgba(20, 184, 166, 0.3)'
+    : percent > 100 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)';
+  const pctClass = coveredByTopup
+    ? 'status-brand'
+    : roundedPercent > 90 ? 'status-error' : roundedPercent > 75 ? 'status-warning' : 'text-muted-foreground';
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap justify-between items-end gap-x-3 gap-y-1 text-xs">
+      <div className="flex flex-wrap justify-between items-start gap-x-3 gap-y-1 text-xs">
         <span className="font-bold text-muted-foreground opacity-80 uppercase tracking-wider min-w-0">
           {label}
         </span>
-        <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+        {/* Used count headlined; the "/ limit" and percent sit on the line below. */}
+        <div className="flex flex-col items-end gap-0.5 whitespace-nowrap">
           <span className="font-bold text-foreground text-lg leading-none">
             {used.toLocaleString()}
           </span>
-          <span className="text-muted-foreground font-medium text-xs">/ {limit ? limit.toLocaleString() : '∞'}</span>
-          {limit && (
-            <span className={clsx(
-              'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-              roundedPercent > 90 ? 'status-error' :
-                roundedPercent > 75 ? 'status-warning' :
-                  'text-muted-foreground'
-            )}>
-              {roundedPercent}%
-            </span>
-          )}
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-muted-foreground font-medium text-xs">/ {limit ? limit.toLocaleString() : '∞'}</span>
+            {limit && (
+              <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded-full', pctClass)}>
+                {roundedPercent}%
+              </span>
+            )}
+          </span>
         </div>
       </div>
       <div className="h-2.5 w-full bg-surface-300 dark:bg-white/10 rounded-full overflow-hidden shadow-inner p-0.5 relative">
         <div
-          className={clsx(
-            "h-full rounded-full transition-all duration-1000 relative shadow-sm",
-            percent > 100 ? 'bg-gradient-to-r from-red-500 to-red-600' :
-              percent > 75 ? 'bg-gradient-to-r from-amber-500 to-amber-600' :
-                'bg-gradient-to-r from-brand-500 to-brand-600'
-          )}
+          className={clsx("h-full rounded-full transition-all duration-1000 relative shadow-sm", barClass)}
           style={{
             width: `${Math.min(percent, 100)}%`,
-            boxShadow: percent > 10 ? `0 0 10px ${percent > 100 ? 'rgba(239, 68, 68, 0.3)' : percent > 75 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(20, 184, 166, 0.3)'}` : 'none'
+            boxShadow: percent > 10 ? `0 0 10px ${barGlow}` : 'none'
           }}
         >
           {percent > 20 && (
@@ -828,12 +837,23 @@ const DashboardPage: NextPageWithLayout = () => {
                         {tSub('usage')}
                       </p>
                       <div className="space-y-6">
-                        <UsageProgress
-                          label={tSub('aiRepliesUsed')}
-                          used={usage.aiReplies.used}
-                          limit={usage.aiReplies.limit}
-                          percent={usage.aiReplies.percentUsed}
-                        />
+                        <div>
+                          <UsageProgress
+                            label={tSub('aiRepliesUsed')}
+                            used={usage.aiReplies.used}
+                            limit={usage.aiReplies.limit}
+                            percent={usage.aiReplies.percentUsed}
+                            coveredByTopup={usage.aiReplies.percentUsed >= 100 && (usage.topup?.balance ?? 0) > 0}
+                          />
+                          {/* Non-expiring top-up reserve — surfaced here so the usage
+                              summary reflects the merchant's true remaining headroom,
+                              not just the monthly plan bucket. */}
+                          {(usage.topup?.balance ?? 0) > 0 && (
+                            <p className="mt-2.5 text-xs font-semibold text-brand-600">
+                              {tSub('topupReserve', { balance: (usage.topup?.balance ?? 0).toLocaleString(intlLocale) })}
+                            </p>
+                          )}
+                        </div>
                         {(() => {
                           const effectivePagesUsed = Math.max(usage.pages.used, pages.length);
                           const effectivePagesLimit = isDemoUser

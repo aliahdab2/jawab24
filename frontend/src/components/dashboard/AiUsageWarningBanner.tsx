@@ -168,27 +168,29 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
                                 ? tSub('limitBanner.reachedTitle')
                                 : tSub('limitBanner.warningTitle')}
                     </p>
-                    <p className="text-xs sm:text-sm opacity-80 mt-1 inline-flex items-center gap-1 flex-wrap">
-                        <span>
-                            {onTopup
-                                ? tSub('limitBanner.onTopupUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
-                                : tSub('limitBanner.usage', {
-                                    used: used.toLocaleString(locale),
-                                    limit: limit.toLocaleString(locale),
-                                })}
-                            {resetDate && (
-                                <>
-                                    {' · '}
-                                    {tSub('limitBanner.resetsOn', { date: resetDate })}
-                                </>
-                            )}
-                        </span>
-                        <span className="relative group inline-flex">
-                            <Info className="w-3.5 h-3.5 opacity-70 cursor-help" aria-label={tSub('limitBanner.scopeTooltip')} />
-                            <span className="absolute bottom-full start-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 text-[11px] font-normal text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none w-56 text-center z-10 leading-snug">
-                                {tSub('limitBanner.scopeTooltip')}
+                    <p className="text-xs sm:text-sm opacity-80 mt-1">
+                        <span className="inline-flex items-center gap-1 flex-wrap">
+                            <span>
+                                {onTopup
+                                    ? tSub('limitBanner.onTopupUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
+                                    : tSub('limitBanner.usage', {
+                                        used: used.toLocaleString(locale),
+                                        limit: limit.toLocaleString(locale),
+                                    })}
+                            </span>
+                            <span className="relative group inline-flex">
+                                <Info className="w-3.5 h-3.5 opacity-70 cursor-help" aria-label={tSub('limitBanner.scopeTooltip')} />
+                                <span className="absolute bottom-full start-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 text-[11px] font-normal text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none w-56 text-center z-10 leading-snug">
+                                    {tSub('limitBanner.scopeTooltip')}
+                                </span>
                             </span>
                         </span>
+                        {/* Reset date on its own line — no separator dot (reads cleaner). */}
+                        {resetDate && (
+                            <span className="block">
+                                {tSub('limitBanner.resetsOn', { date: resetDate })}
+                            </span>
+                        )}
                     </p>
                 </div>
 
