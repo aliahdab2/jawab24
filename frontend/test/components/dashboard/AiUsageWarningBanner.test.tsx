@@ -45,7 +45,7 @@ describe('AiUsageWarningBanner — top-up awareness', () => {
     const banner = screen.getByTestId('ai-usage-warning-banner');
     expect(banner).toHaveAttribute('data-severity', 'topup');
     expect(screen.getByText("You're now using your top-up balance")).toBeInTheDocument();
-    expect(screen.getByText(/10,000 top-up replies left/)).toBeInTheDocument();
+    expect(screen.getByText(/10,000 top-up left/)).toBeInTheDocument();
 
     // The misleading "used all Smart Replies" wall copy and the fallback prompt
     // (the fallback never fires while top-up covers replies) must NOT appear.

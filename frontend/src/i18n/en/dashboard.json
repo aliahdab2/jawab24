@@ -62,11 +62,12 @@
     "avgSpeed": "Avg Speed",
     "quotaWarning": "{percent}% of plan",
     "quotaExceeded": "Over limit",
-    "onTopup": "On top-up",
+    "onTopupLeft": "{balance} top-up left",
     "smartRepliesTooltip": "Replies sent in the last 30 days.",
     "planUsageTooltip": "Smart replies used this billing period. Resets at the start of your next cycle.",
     "resetsOn": "Resets {date}",
     "planUsageOf": "of {limit}",
+    "topupAvailable": "+{balance} top-up",
     "replyRateTooltip": "Share of incoming items answered in the last 30 days.",
     "avgSpeedTooltip": "Average time from a customer's message to your reply, over the last 30 days.",
     "repliedTodayTooltip": "{comments, plural, one {# comment} other {# comments}} + {messages, plural, one {# message} other {# messages}}"

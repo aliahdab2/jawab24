@@ -19,9 +19,10 @@ interface CommandCenterProps {
     used: number;
     percentUsed: number;
     limit: number | null;
-    /** Non-expiring top-up balance. When the plan quota is maxed but this is
-     *  > 0, Smart Replies keep sending from it — so the badge reads "on top-up"
-     *  rather than the alarming red "over limit". */
+    /** Non-expiring top-up balance. When > 0 it's surfaced on the tile so
+     *  merchants can see their reserve at any usage level — as a pill beside
+     *  the usage under the plan limit, or folded into the quota badge
+     *  ("{n} top-up left") once the plan is maxed and replies run from it. */
     topupBalance?: number;
   };
   /** ISO string — end of current billing period; shown as "resets {date}" under the
@@ -47,6 +48,8 @@ interface MetricCell {
   /** Small text under the label — used for "Resets {date}" on the plan-usage
    *  tile, or "Last 30 days" when no quota exists. */
   subtext?: string;
+  /** Optional small pill rendered inline beside the subtext (e.g. top-up reserve). */
+  subtextBadge?: React.ReactNode;
   /** When set (0-100), renders a slim progress bar under the value. Used on the
    *  plan-usage tile so merchants can glance at "how full am I." */
   progressPercent?: number;
@@ -100,6 +103,15 @@ export function CommandCenter({
   const quotaUsed = quota?.used ?? 0;
   const resetDate = formatQuotaResetDate(quotaResetsAt, locale);
 
+  // Top-up is a separate, non-expiring bucket consumed only after the monthly
+  // plan quota runs out. It was previously invisible until the merchant blew
+  // past the plan limit, so a banked balance looked lost. Surface it whenever
+  // there's a balance: a pill beside the subtext under the limit, or the quota
+  // badge ("{n} top-up left") once on top-up.
+  const topupBalance = quota?.topupBalance ?? 0;
+  const hasTopup = topupBalance > 0;
+  const topupFormatted = topupBalance.toLocaleString(locale);
+
   // The "used" count is the actionable number — show it as the headline. The
   // limit is context, so it lives in the subtext as "of {limit}". This avoids
   // the layout problem from "used / limit" on one line where Arabic's "ألف" is
@@ -112,16 +124,33 @@ export function CommandCenter({
   const planUsageDetail = hasQuota && quota?.limit != null
     ? `${quotaUsed.toLocaleString(locale)} / ${quota.limit.toLocaleString(locale)}`
     : null;
-  const primaryTooltip = hasQuota && resetDate && planUsageDetail
-    ? `${planUsageDetail} · ${tDash('commandCenter.resetsOn', { date: resetDate })}`
-    : hasQuota
-      ? planUsageDetail ?? tDash('commandCenter.planUsageTooltip')
-      : tDash('commandCenter.smartRepliesTooltip');
+  // Build the plan-usage tooltip from parts — one fact per line (no separator
+  // dots, which read as a confusing run-on). The reset date appears only when
+  // present. The top-up reserve is intentionally NOT repeated here — the
+  // always-visible pill (under limit) / badge (on top-up) already shows it.
+  let primaryTooltip: string;
+  if (hasQuota) {
+    const parts = [planUsageDetail];
+    if (resetDate) parts.push(tDash('commandCenter.resetsOn', { date: resetDate }));
+    primaryTooltip = parts.filter(Boolean).join('\n') || tDash('commandCenter.planUsageTooltip');
+  } else {
+    primaryTooltip = tDash('commandCenter.smartRepliesTooltip');
+  }
+  // Subtext shows the plan context ("of 4,500"); the banked top-up reserve rides
+  // alongside it as a small pill (primaryTopupBadge), not a second line.
   const primarySubtext = hasQuota && quota?.limit != null
     ? tDash('commandCenter.planUsageOf', { limit: quota.limit.toLocaleString(locale) })
     : !hasQuota
       ? tDash('last30Days')
       : null;
+  // The pill previews the banked reserve *before* the plan wall. Once over the
+  // limit the quota badge already reads "On top-up", so showing the pill too
+  // would duplicate the same fact on one tile — hide it in that state.
+  const primaryTopupBadge = hasQuota && hasTopup && !isOverLimit ? (
+    <Badge variant="info" size="xs">
+      {tDash('commandCenter.topupAvailable', { balance: topupFormatted })}
+    </Badge>
+  ) : null;
 
   // Quota badge: only when approaching / over limit. On-top-up takes precedence
   // over over-limit (replies are still flowing), which takes precedence over warning.
@@ -134,7 +163,7 @@ export function CommandCenter({
         className="mt-1"
       >
         {onTopup
-          ? tDash('commandCenter.onTopup')
+          ? tDash('commandCenter.onTopupLeft', { balance: topupFormatted })
           : showOverLimit
             ? tDash('commandCenter.quotaExceeded')
             : tDash('commandCenter.quotaWarning', { percent: Math.round(quotaPercent) })}
@@ -153,6 +182,7 @@ export function CommandCenter({
       badge: quotaBadge,
       tooltip: primaryTooltip,
       subtext: primarySubtext ?? undefined,
+      subtextBadge: primaryTopupBadge ?? undefined,
       progressPercent: hasQuota ? Math.min(100, quotaPercent) : undefined,
       progressBarClass: showOverLimit ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-brand-500',
       sparkline: smartRepliesTrend,
@@ -253,16 +283,21 @@ export function CommandCenter({
                       {metric.label}
                       {metric.tooltip && (
                         <InfoPopover label={metric.label} panelWidth="sm">
-                          <span className="block normal-case tracking-normal font-normal leading-snug">
+                          <span className="block normal-case tracking-normal font-normal leading-snug whitespace-pre-line">
                             {metric.tooltip}
                           </span>
                         </InfoPopover>
                       )}
                   </p>
-                  {metric.subtext && (
-                    <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-1 normal-case tracking-normal font-normal">
-                      {metric.subtext}
-                    </p>
+                  {(metric.subtext || metric.subtextBadge) && (
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                      {metric.subtext && (
+                        <span className="text-[10px] sm:text-[11px] text-muted-foreground normal-case tracking-normal font-normal">
+                          {metric.subtext}
+                        </span>
+                      )}
+                      {metric.subtextBadge}
+                    </div>
                   )}
                   {metric.badge}
                 </div>
