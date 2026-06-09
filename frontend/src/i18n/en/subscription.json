@@ -25,8 +25,6 @@
     "usage": "{used} of {limit} Smart Replies used",
     "scopeTooltip": "Counts every message Jawab processed, including filtered spam.",
     "resetsOn": "resets on {date}",
-    "dismiss": "Dismiss",
-    "dismissLabel": "Dismiss usage warning",
     "customizeFallback": "Customize fallback reply",
     "highVolumeLink": "See Scale plans"
   }

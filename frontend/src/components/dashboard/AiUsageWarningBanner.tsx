@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { AlertTriangle, Sparkles, Info, MessageSquareOff } from 'lucide-react';
@@ -29,11 +30,14 @@ interface AiUsageWarningBannerProps {
  * AI-reply limit. Shown on the dashboard above the plan card.
  *
  * - Hidden below 80% or for unlimited plans (limit === null).
- * - Amber warning at 80–99% — dismissible for 24h.
+ * - Violet warning at 80–99% — swipe to dismiss for 24h.
  * - Info banner at >=100% WITH a top-up balance — Smart Replies still send
- *   from top-up, so this is reassuring, not alarming, and dismissible for 24h.
+ *   from top-up, so this is reassuring, not alarming, and swipe-dismissible for 24h.
  * - Red critical banner at >=100% with NO top-up balance — not dismissible
  *   (Smart Replies are genuinely paused).
+ *
+ * The warning/top-up states can be swipe-dismissed (drag horizontally past
+ * ~100px). The critical state is pinned — there's no gesture to hide it.
  */
 export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail, topupBalance }: AiUsageWarningBannerProps) {
     const tSub = useTranslations('subscription');
@@ -56,23 +60,101 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
     const warning = useTimedDismiss({ key: 'aiUsageWarning80DismissedAt', durationMs: 24 * 60 * 60 * 1000 });
     const topupNotice = useTimedDismiss({ key: 'aiUsageOnTopupDismissedAt', durationMs: 24 * 60 * 60 * 1000 });
 
+    // Swipe-to-dismiss replaces the old dismiss button. Only the non-critical
+    // states are dismissible — the critical banner stays pinned because Smart
+    // Replies are genuinely paused and the merchant must see it.
+    const swipeable = isWarning || onTopup;
+    const dismiss = isWarning ? warning.dismiss : topupNotice.dismiss;
+
+    const startXRef = useRef(0);
+    const [dragX, setDragX] = useState(0);
+    const [isDragging, setIsDragging] = useState(false);
+
+    useEffect(() => {
+        if (!isDragging) return;
+        const handleMove = (e: PointerEvent) => setDragX(e.clientX - startXRef.current);
+        const handleUp = (e: PointerEvent) => {
+            const dx = e.clientX - startXRef.current;
+            setIsDragging(false);
+            if (Math.abs(dx) > 100) {
+                // Past the threshold: slide fully off-screen in the drag direction,
+                // then persist the 24h dismissal once the 0.3s exit animation has
+                // played (calling dismiss() immediately would unmount mid-animation).
+                setDragX(dx > 0 ? window.innerWidth : -window.innerWidth);
+                window.setTimeout(dismiss, 300);
+            } else {
+                // Released short of the threshold: snap back to rest.
+                setDragX(0);
+            }
+        };
+        window.addEventListener('pointermove', handleMove);
+        window.addEventListener('pointerup', handleUp);
+        window.addEventListener('pointercancel', handleUp);
+        return () => {
+            window.removeEventListener('pointermove', handleMove);
+            window.removeEventListener('pointerup', handleUp);
+            window.removeEventListener('pointercancel', handleUp);
+        };
+    }, [isDragging, dismiss]);
+
     if (limit === null || (!isWarning && !limitReached)) return null;
     if (isWarning && warning.dismissed) return null;
     if (onTopup && topupNotice.dismissed) return null;
 
     const resetDate = formatQuotaResetDate(resetsAt, locale);
 
+    const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+        if (!swipeable) return;
+        startXRef.current = e.clientX;
+        setIsDragging(true);
+    };
+
+    // The 80–99% warning uses soft-violet inline styles rather than Tailwind
+    // classes: dark-mode opacity variants render inconsistently across our
+    // themes, so the palette is pinned with explicit rgba values here.
+    const violetCardStyle: CSSProperties = isWarning
+        ? {
+            backgroundColor: 'rgba(76, 29, 149, 0.25)',
+            borderColor: 'rgba(139, 92, 246, 0.35)',
+            // Logical start matches the `border-s-4` accent stripe (correct in RTL).
+            borderInlineStartColor: 'rgba(167, 139, 250, 0.6)',
+            color: 'rgb(221, 214, 254)',
+        }
+        : {};
+    const violetIconStyle: CSSProperties = isWarning
+        ? { backgroundColor: 'rgba(109, 40, 217, 0.2)', color: 'rgb(196, 181, 253)' }
+        : {};
+
+    // Fade proportionally to the drag distance; fully transparent by the time
+    // it has slid out (clamped at 250px so the snap-back range fades gently).
+    const dragOpacity = 1 - Math.min(Math.abs(dragX) / 250, 1);
+    const cardStyle: CSSProperties = {
+        ...violetCardStyle,
+        ...(swipeable
+            ? {
+                transform: `translateX(${dragX}px)`,
+                opacity: dragOpacity,
+                // Drives snap-back / slide-out; suppressed mid-drag so the banner
+                // tracks the pointer 1:1 instead of lagging behind by 0.3s.
+                transition: isDragging ? 'none' : 'transform 0.3s ease, opacity 0.3s ease',
+                cursor: isDragging ? 'grabbing' : 'grab',
+                // Let the page scroll vertically; we own horizontal gestures.
+                touchAction: 'pan-y',
+            }
+            : {}),
+    };
+
     const palette = isCritical
         ? 'bg-rose-50 text-rose-900 border-rose-200 border-s-rose-500 dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60'
         : onTopup
             ? 'bg-sky-50 text-sky-900 border-sky-200 border-s-sky-500 dark:bg-sky-900/40 dark:text-sky-200 dark:border-sky-700/60'
-            : 'bg-amber-50 text-amber-900 border-amber-200 border-s-amber-500 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700/60';
+            : ''; // warning → violet inline styles (violetCardStyle)
 
     const iconBg = isCritical
         ? 'bg-rose-200/50 text-rose-600 dark:bg-rose-800/40 dark:text-rose-400'
         : onTopup
             ? 'bg-sky-200/50 text-sky-700 dark:bg-sky-800/40 dark:text-sky-400'
-            : 'bg-amber-200/50 text-amber-700 dark:bg-amber-800/40 dark:text-amber-400';
+            : ''; // warning → violet inline styles (violetIconStyle)
 
     const StateIcon = onTopup ? Sparkles : AlertTriangle;
 
@@ -82,12 +164,17 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
                 'mb-6 overflow-hidden border border-s-4',
                 palette,
             )}
+            style={cardStyle}
             padding="none"
             data-testid="ai-usage-warning-banner"
             data-severity={isCritical ? 'critical' : onTopup ? 'topup' : 'warning'}
+            onPointerDown={swipeable ? handlePointerDown : undefined}
         >
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 sm:p-5">
-                <div className={clsx('w-10 h-10 rounded-lg flex items-center justify-center shrink-0', iconBg)}>
+                <div
+                    className={clsx('w-10 h-10 rounded-lg flex items-center justify-center shrink-0', iconBg)}
+                    style={violetIconStyle}
+                >
                     <StateIcon className="w-5 h-5" aria-hidden="true" />
                 </div>
 
@@ -143,8 +230,7 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
                         to "I hit my limit, how do I keep going?". Plan upgrade comes
                         second for users who need a structural change. Both CTAs
                         self-gate on iOS (App Store Guideline 3.1.1), so we don't
-                        wrap them in an outer isIOSNative() check here. The dismiss
-                        button stays visible on iOS — it's informational, not billing. */}
+                        wrap them in an outer isIOSNative() check here. */}
                     <BuyTopUpCTA
                         planSlug={planSlug}
                         userEmail={userEmail}
@@ -166,16 +252,6 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
                                 {tSub(atTopPublicTier ? 'limitBanner.highVolumeLink' : 'upgradePlan')}
                             </Button>
                         </UpgradeCTA>
-                    )}
-                    {(isWarning || onTopup) && (
-                        <button
-                            type="button"
-                            onClick={isWarning ? warning.dismiss : topupNotice.dismiss}
-                            className="text-xs font-semibold opacity-70 hover:opacity-100 underline px-2 py-1"
-                            aria-label={tSub('limitBanner.dismissLabel')}
-                        >
-                            {tSub('limitBanner.dismiss')}
-                        </button>
                     )}
                 </div>
             </div>

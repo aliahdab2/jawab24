@@ -25,8 +25,6 @@
     "usage": "تم استخدام {used} من {limit} رد ذكي",
     "scopeTooltip": "يحتسب كل رسالة عالجها جواب، بما فيها المزعجة المُصفّاة.",
     "resetsOn": "يتجدد في {date}",
-    "dismiss": "تجاهل",
-    "dismissLabel": "تجاهل تنبيه الاستهلاك",
     "customizeFallback": "خصّص الرد الاحتياطي",
     "highVolumeLink": "باقات التوسّع"
   }

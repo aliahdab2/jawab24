@@ -1,8 +1,15 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { UsageSummary } from '@jawab24/shared';
 import { AiUsageWarningBanner } from './AiUsageWarningBanner';
+
+// jsdom has no PointerEvent, so testing-library's fireEvent.pointer* drops
+// clientX. Dispatch a MouseEvent typed as a pointer event instead — it carries
+// clientX and still matches the component's pointer listeners by type string.
+function firePointer(target: Window | Element, type: string, clientX: number) {
+    fireEvent(target, new MouseEvent(type, { clientX, bubbles: true }));
+}
 
 const mockIsIOSNative = vi.fn(() => false);
 const mockIsNative = vi.fn(() => false);
@@ -89,27 +96,65 @@ describe('AiUsageWarningBanner', () => {
         expect(screen.queryByText(/resets on/i)).not.toBeInTheDocument();
     });
 
-    it('shows a dismiss button on warning and hides on critical', () => {
-        const { rerender } = render(
-            <AiUsageWarningBanner aiReplies={makeAiReplies({ percentUsed: 85 })} />,
-        );
-        expect(screen.getByRole('button', { name: /dismiss/i })).toBeInTheDocument();
-
-        rerender(
-            <AiUsageWarningBanner
-                aiReplies={makeAiReplies({ used: 500, remaining: 0, percentUsed: 100 })}
-            />,
-        );
+    it('no longer renders a dismiss button (dismissal is now a swipe gesture)', () => {
+        render(<AiUsageWarningBanner aiReplies={makeAiReplies({ percentUsed: 85 })} />);
         expect(screen.queryByRole('button', { name: /dismiss/i })).not.toBeInTheDocument();
     });
 
-    it('hides after dismiss is clicked (warning only)', () => {
-        const { rerender } = render(
-            <AiUsageWarningBanner aiReplies={makeAiReplies({ percentUsed: 85 })} />,
-        );
-        fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
-        rerender(<AiUsageWarningBanner aiReplies={makeAiReplies({ percentUsed: 85 })} />);
-        expect(screen.queryByTestId('ai-usage-warning-banner')).not.toBeInTheDocument();
+    it('dismisses the warning when swiped past the 100px threshold and keeps it dismissed', () => {
+        vi.useFakeTimers();
+        try {
+            const { rerender } = render(
+                <AiUsageWarningBanner aiReplies={makeAiReplies({ percentUsed: 85 })} />,
+            );
+            const banner = screen.getByTestId('ai-usage-warning-banner');
+            firePointer(banner, 'pointerdown', 100);
+            firePointer(window, 'pointermove', 260);
+            firePointer(window, 'pointerup', 260); // dragged 160px > 100px
+            // Exit animation runs for 0.3s before the dismissal is persisted.
+            act(() => { vi.advanceTimersByTime(300); });
+            expect(screen.queryByTestId('ai-usage-warning-banner')).not.toBeInTheDocument();
+
+            // Re-render with the same warning: it stays dismissed (persisted 24h).
+            rerender(<AiUsageWarningBanner aiReplies={makeAiReplies({ percentUsed: 85 })} />);
+            expect(screen.queryByTestId('ai-usage-warning-banner')).not.toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('snaps back (stays visible) when the swipe is below the threshold', () => {
+        vi.useFakeTimers();
+        try {
+            render(<AiUsageWarningBanner aiReplies={makeAiReplies({ percentUsed: 85 })} />);
+            const banner = screen.getByTestId('ai-usage-warning-banner');
+            firePointer(banner, 'pointerdown', 100);
+            firePointer(window, 'pointermove', 150);
+            firePointer(window, 'pointerup', 150); // dragged 50px < 100px
+            act(() => { vi.advanceTimersByTime(300); });
+            expect(screen.getByTestId('ai-usage-warning-banner')).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('does not dismiss the critical banner on swipe (Smart Replies are paused — it must stay)', () => {
+        vi.useFakeTimers();
+        try {
+            render(
+                <AiUsageWarningBanner
+                    aiReplies={makeAiReplies({ used: 500, remaining: 0, percentUsed: 100 })}
+                />,
+            );
+            const banner = screen.getByTestId('ai-usage-warning-banner');
+            firePointer(banner, 'pointerdown', 100);
+            firePointer(window, 'pointermove', 400);
+            firePointer(window, 'pointerup', 400); // far past threshold
+            act(() => { vi.advanceTimersByTime(300); });
+            expect(screen.getByTestId('ai-usage-warning-banner')).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('does not honor a stale warning dismissal once the limit is reached', () => {
