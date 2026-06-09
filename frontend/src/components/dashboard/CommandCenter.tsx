@@ -147,7 +147,7 @@ export function CommandCenter({
   // limit the quota badge already reads "On top-up", so showing the pill too
   // would duplicate the same fact on one tile — hide it in that state.
   const primaryTopupBadge = hasQuota && hasTopup && !isOverLimit ? (
-    <Badge variant="info" size="xs">
+    <Badge variant="info" size="xs" className="uppercase">
       {tDash('commandCenter.topupAvailable', { balance: topupFormatted })}
     </Badge>
   ) : null;
