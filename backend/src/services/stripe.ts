@@ -321,6 +321,27 @@ export class StripeService {
     }
 
     /**
+     * Cancel a PaymentIntent — used to retire an abandoned top-up checkout so it
+     * can never later capture money (which would double-credit a customer the
+     * admin has already credited by hand).
+     *
+     * Stripe only allows cancellation while the PI is in a non-terminal,
+     * uncaptured state (requires_payment_method / requires_capture /
+     * requires_confirmation / requires_action / processing). If it has raced to
+     * `succeeded` (the customer paid in the meantime), this throws — callers MUST
+     * treat that throw as "money is in flight, do NOT clear the pending row".
+     */
+    async cancelPaymentIntent(
+        paymentIntentId: string,
+        cancellationReason?: Stripe.PaymentIntentCancelParams.CancellationReason,
+    ): Promise<Stripe.PaymentIntent> {
+        return requireStripe().paymentIntents.cancel(
+            paymentIntentId,
+            cancellationReason ? { cancellation_reason: cancellationReason } : undefined,
+        );
+    }
+
+    /**
      * Get Stripe Customer by ID
      */
     async getCustomer(customerId: string): Promise<Stripe.Customer> {

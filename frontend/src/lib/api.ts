@@ -598,14 +598,41 @@ export const adminApi = {
     source?: 'manual' | 'admin';
     externalRef?: string;
     note?: string;
-  }) => {
-    const response = await api.post('/admin/topup', data);
-    return response.data as {
-      success: boolean;
-      purchase?: { id: string; pack: '5k' | '10k'; repliesAdded: number };
-      newBalance?: number;
-      error?: string;
-    };
+    // Override the open-pending-Stripe-top-up guard (admin POST /topup) when the
+    // admin confirms the credit is unrelated to a stuck card payment.
+    force?: boolean;
+  }): Promise<{
+    success: boolean;
+    purchase?: { id: string; pack: '5k' | '10k'; repliesAdded: number };
+    newBalance?: number;
+    // On failure the backend returns a machine code in `error` (e.g.
+    // 'PENDING_STRIPE_TOPUP') and a human-readable explanation in `message`.
+    error?: string;
+    message?: string;
+    pendingPaymentIntentIds?: Array<string | null>;
+  }> => {
+    try {
+      const response = await api.post('/admin/topup', data);
+      return response.data;
+    } catch (err) {
+      // axios rejects on non-2xx — unwrap the backend error body so the caller
+      // can surface the real reason (409 pending-Stripe guard, 404, 400, 500)
+      // instead of a useless generic message.
+      if (axios.isAxiosError(err) && err.response?.data) {
+        const body = err.response.data as {
+          error?: string;
+          message?: string;
+          pendingPaymentIntentIds?: Array<string | null>;
+        };
+        return {
+          success: false,
+          error: body.error,
+          message: body.message,
+          pendingPaymentIntentIds: body.pendingPaymentIntentIds,
+        };
+      }
+      throw err; // network/unknown failure — let the caller's catch handle it
+    }
   },
 
   // Generate a hosted Stripe payment link for a custom amount to collect money

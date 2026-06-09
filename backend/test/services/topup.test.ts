@@ -30,7 +30,7 @@ vi.mock('../../src/db/schema', () => ({
 }));
 
 vi.mock('../../src/services/stripe', () => ({
-    stripeService: { retrievePaymentIntent: vi.fn() },
+    stripeService: { retrievePaymentIntent: vi.fn(), cancelPaymentIntent: vi.fn() },
 }));
 
 vi.mock('../../src/utils/sentryHelpers', () => ({
@@ -503,6 +503,139 @@ describe('topupService.findOpenPendingStripeTopups', () => {
         const result = await topupService.findOpenPendingStripeTopups('user_1');
 
         expect(result).toEqual(rows);
+    });
+});
+
+describe('topupService.resolvePendingStripeTopupsForCredit', () => {
+    let db: { select: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+    let stripeService: {
+        retrievePaymentIntent: ReturnType<typeof vi.fn>;
+        cancelPaymentIntent: ReturnType<typeof vi.fn>;
+    };
+
+    // findOpenPendingStripeTopups → db.select(...).from().where() resolves rows.
+    function seedPendingRows(rows: unknown[]) {
+        db.select.mockReturnValue({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue(rows) })) });
+    }
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        db = (await import('../../src/db')).db as unknown as typeof db;
+        stripeService = (await import('../../src/services/stripe')).stripeService as unknown as typeof stripeService;
+        // markStripeTopupFailed → db.update(...).set().where() resolves.
+        db.update.mockReturnValue({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })) });
+    });
+
+    const NOW = new Date('2026-06-09T18:00:00Z').getTime();
+    const minutesAgo = (m: number) => new Date(NOW - m * 60_000);
+
+    it('clears an abandoned requires_payment_method PI past grace (cancel + mark failed) and does NOT block', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_abandoned', createdAt: minutesAgo(60) }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'requires_payment_method' });
+        stripeService.cancelPaymentIntent.mockResolvedValue({ status: 'canceled' });
+        const failSpy = vi.spyOn(topupService, 'markStripeTopupFailed').mockResolvedValue(undefined);
+
+        const { blocking, cleared } = await topupService.resolvePendingStripeTopupsForCredit('user_1', { now: NOW });
+
+        expect(stripeService.cancelPaymentIntent).toHaveBeenCalledWith('pi_abandoned', 'abandoned');
+        expect(failSpy).toHaveBeenCalledWith('pi_abandoned');
+        expect(blocking).toEqual([]);
+        expect(cleared).toEqual(['pi_abandoned']);
+        failSpy.mockRestore();
+    });
+
+    it('BLOCKS a fresh requires_payment_method PI still inside the grace (customer may be mid-checkout)', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_fresh', createdAt: minutesAgo(2) }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'requires_payment_method' });
+
+        const { blocking } = await topupService.resolvePendingStripeTopupsForCredit('user_1', { now: NOW });
+
+        expect(stripeService.cancelPaymentIntent).not.toHaveBeenCalled();
+        expect(blocking).toEqual(['pi_fresh']);
+    });
+
+    it('clears a canceled PI (mark failed) without canceling again, and does NOT block', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_canceled', createdAt: minutesAgo(60) }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'canceled' });
+        const failSpy = vi.spyOn(topupService, 'markStripeTopupFailed').mockResolvedValue(undefined);
+
+        const { blocking, cleared } = await topupService.resolvePendingStripeTopupsForCredit('user_1', { now: NOW });
+
+        expect(stripeService.cancelPaymentIntent).not.toHaveBeenCalled();
+        expect(failSpy).toHaveBeenCalledWith('pi_canceled');
+        expect(blocking).toEqual([]);
+        expect(cleared).toEqual(['pi_canceled']);
+        failSpy.mockRestore();
+    });
+
+    it('BLOCKS a succeeded PI (money captured — reconcile/webhook will credit it)', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_paid', createdAt: minutesAgo(60) }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'succeeded' });
+
+        const { blocking } = await topupService.resolvePendingStripeTopupsForCredit('user_1', { now: NOW });
+
+        expect(stripeService.cancelPaymentIntent).not.toHaveBeenCalled();
+        expect(blocking).toEqual(['pi_paid']);
+    });
+
+    it('BLOCKS an in-flight PI (processing / requires_action)', async () => {
+        seedPendingRows([
+            { stripePaymentIntentId: 'pi_processing', createdAt: minutesAgo(60) },
+            { stripePaymentIntentId: 'pi_3ds', createdAt: minutesAgo(60) },
+        ]);
+        stripeService.retrievePaymentIntent
+            .mockResolvedValueOnce({ status: 'processing' })
+            .mockResolvedValueOnce({ status: 'requires_action' });
+
+        const { blocking } = await topupService.resolvePendingStripeTopupsForCredit('user_1', { now: NOW });
+
+        expect(blocking).toEqual(['pi_processing', 'pi_3ds']);
+    });
+
+    it('BLOCKS (does NOT clear) when Stripe cannot be reached — conservative, no double-credit risk taken', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_unverifiable', createdAt: minutesAgo(60) }]);
+        stripeService.retrievePaymentIntent.mockRejectedValue(new Error('Stripe 503'));
+
+        const { blocking } = await topupService.resolvePendingStripeTopupsForCredit('user_1', { now: NOW });
+
+        expect(blocking).toEqual(['pi_unverifiable']);
+    });
+
+    it('BLOCKS when a cancel races to succeeded (cancel throws) — never clears a row that just got paid', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_raced', createdAt: minutesAgo(60) }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'requires_payment_method' });
+        stripeService.cancelPaymentIntent.mockRejectedValue(new Error('PI already succeeded'));
+        const failSpy = vi.spyOn(topupService, 'markStripeTopupFailed').mockResolvedValue(undefined);
+
+        const { blocking } = await topupService.resolvePendingStripeTopupsForCredit('user_1', { now: NOW });
+
+        expect(failSpy).not.toHaveBeenCalled();
+        expect(blocking).toEqual(['pi_raced']);
+        failSpy.mockRestore();
+    });
+
+    it('resolves a mixed set: clears the abandoned one, blocks the live one', async () => {
+        seedPendingRows([
+            { stripePaymentIntentId: 'pi_abandoned', createdAt: minutesAgo(60) },
+            { stripePaymentIntentId: 'pi_live', createdAt: minutesAgo(60) },
+        ]);
+        stripeService.retrievePaymentIntent
+            .mockResolvedValueOnce({ status: 'requires_payment_method' })
+            .mockResolvedValueOnce({ status: 'processing' });
+        stripeService.cancelPaymentIntent.mockResolvedValue({ status: 'canceled' });
+        vi.spyOn(topupService, 'markStripeTopupFailed').mockResolvedValue(undefined);
+
+        const { blocking } = await topupService.resolvePendingStripeTopupsForCredit('user_1', { now: NOW });
+
+        expect(stripeService.cancelPaymentIntent).toHaveBeenCalledWith('pi_abandoned', 'abandoned');
+        expect(blocking).toEqual(['pi_live']);
+    });
+
+    it('returns nothing to block when the user has no pending stripe rows', async () => {
+        seedPendingRows([]);
+        const { blocking } = await topupService.resolvePendingStripeTopupsForCredit('user_1', { now: NOW });
+        expect(blocking).toEqual([]);
+        expect(stripeService.retrievePaymentIntent).not.toHaveBeenCalled();
     });
 });
 

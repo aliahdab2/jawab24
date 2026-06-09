@@ -100,6 +100,8 @@
     "topupSubmit": "Credit pack",
     "topupSuccess": "Credited {replies, plural, one {# reply} other {# replies}}. New balance: {balance, plural, one {# reply} other {# replies}}.",
     "topupErrorGeneric": "Failed to credit top-up.",
+    "topupPendingConflict": "This customer has {count, plural, one {# card payment} other {# card payments}} still in progress that may complete and credit on its own. Crediting manually now may double-credit them. Force only if this credit is unrelated to that payment.",
+    "topupForceButton": "Force credit anyway",
     "paymentTitle": "Collect Payment",
     "paymentSubtitle": "Generate a Stripe link to bill this customer for replies you already credited by hand. Paying it never adds replies — it only records the payment.",
     "paymentCreateButton": "New payment link",
