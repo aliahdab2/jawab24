@@ -557,6 +557,28 @@
            dark:bg-violet-950/50 dark:text-violet-200 dark:border-violet-800/60;
   }
 
+  /* AI usage warning banner (80–99%): amber in light (the original palette),
+     soft violet in dark. The dark values are pinned rgba (not Tailwind opacity
+     variants, which render inconsistently across themes). Pair with `border`
+     + `border-s-4` in the component; border-inline-start-color matches that
+     accent stripe so it stays correct in RTL. */
+  .alert-usage-warning {
+    @apply bg-amber-50 text-amber-900 border-amber-200 border-s-amber-500;
+  }
+  .dark .alert-usage-warning {
+    background-color: rgba(76, 29, 149, 0.25);
+    border-color: rgba(139, 92, 246, 0.35);
+    border-inline-start-color: rgba(167, 139, 250, 0.6);
+    color: rgb(221, 214, 254);
+  }
+  .icon-bg-usage-warning {
+    @apply bg-amber-200/50 text-amber-700;
+  }
+  .dark .icon-bg-usage-warning {
+    background-color: rgba(109, 40, 217, 0.2);
+    color: rgb(196, 181, 253);
+  }
+
   /* --- Danger zone (destructive action sections) --- */
   .danger-zone {
     @apply bg-red-50/30 dark:bg-red-900/20;

@@ -109,52 +109,37 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
         setIsDragging(true);
     };
 
-    // The 80–99% warning uses soft-violet inline styles rather than Tailwind
-    // classes: dark-mode opacity variants render inconsistently across our
-    // themes, so the palette is pinned with explicit rgba values here.
-    const violetCardStyle: CSSProperties = isWarning
-        ? {
-            backgroundColor: 'rgba(76, 29, 149, 0.25)',
-            borderColor: 'rgba(139, 92, 246, 0.35)',
-            // Logical start matches the `border-s-4` accent stripe (correct in RTL).
-            borderInlineStartColor: 'rgba(167, 139, 250, 0.6)',
-            color: 'rgb(221, 214, 254)',
-        }
-        : {};
-    const violetIconStyle: CSSProperties = isWarning
-        ? { backgroundColor: 'rgba(109, 40, 217, 0.2)', color: 'rgb(196, 181, 253)' }
-        : {};
-
     // Fade proportionally to the drag distance; fully transparent by the time
     // it has slid out (clamped at 250px so the snap-back range fades gently).
     const dragOpacity = 1 - Math.min(Math.abs(dragX) / 250, 1);
-    const cardStyle: CSSProperties = {
-        ...violetCardStyle,
-        ...(swipeable
-            ? {
-                transform: `translateX(${dragX}px)`,
-                opacity: dragOpacity,
-                // Drives snap-back / slide-out; suppressed mid-drag so the banner
-                // tracks the pointer 1:1 instead of lagging behind by 0.3s.
-                transition: isDragging ? 'none' : 'transform 0.3s ease, opacity 0.3s ease',
-                cursor: isDragging ? 'grabbing' : 'grab',
-                // Let the page scroll vertically; we own horizontal gestures.
-                touchAction: 'pan-y',
-            }
-            : {}),
-    };
+    // Inline style is now purely the swipe transform — colors live in themed
+    // semantic classes (palette/iconBg) so they adapt to light vs dark.
+    const cardStyle: CSSProperties | undefined = swipeable
+        ? {
+            transform: `translateX(${dragX}px)`,
+            opacity: dragOpacity,
+            // Drives snap-back / slide-out; suppressed mid-drag so the banner
+            // tracks the pointer 1:1 instead of lagging behind by 0.3s.
+            transition: isDragging ? 'none' : 'transform 0.3s ease, opacity 0.3s ease',
+            cursor: isDragging ? 'grabbing' : 'grab',
+            // Let the page scroll vertically; we own horizontal gestures.
+            touchAction: 'pan-y',
+        }
+        : undefined;
 
+    // Warning (80–99%) is amber in light / soft violet in dark — see the
+    // `.alert-usage-warning` / `.icon-bg-usage-warning` classes in globals.css.
     const palette = isCritical
         ? 'bg-rose-50 text-rose-900 border-rose-200 border-s-rose-500 dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60'
         : onTopup
             ? 'bg-sky-50 text-sky-900 border-sky-200 border-s-sky-500 dark:bg-sky-900/40 dark:text-sky-200 dark:border-sky-700/60'
-            : ''; // warning → violet inline styles (violetCardStyle)
+            : 'alert-usage-warning';
 
     const iconBg = isCritical
         ? 'bg-rose-200/50 text-rose-600 dark:bg-rose-800/40 dark:text-rose-400'
         : onTopup
             ? 'bg-sky-200/50 text-sky-700 dark:bg-sky-800/40 dark:text-sky-400'
-            : ''; // warning → violet inline styles (violetIconStyle)
+            : 'icon-bg-usage-warning';
 
     const StateIcon = onTopup ? Sparkles : AlertTriangle;
 
@@ -171,10 +156,7 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
             onPointerDown={swipeable ? handlePointerDown : undefined}
         >
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 sm:p-5">
-                <div
-                    className={clsx('w-10 h-10 rounded-lg flex items-center justify-center shrink-0', iconBg)}
-                    style={violetIconStyle}
-                >
+                <div className={clsx('w-10 h-10 rounded-lg flex items-center justify-center shrink-0', iconBg)}>
                     <StateIcon className="w-5 h-5" aria-hidden="true" />
                 </div>
 
