@@ -28,9 +28,11 @@ const config: CapacitorConfig = {
   },
   plugins: {
     Keyboard: {
-      // Use 'none' — keyboard overlays content without resizing.
-      // Android overrides to 'body' at runtime in _app.tsx (works correctly on Android WebView).
-      // iOS must use 'none' because 'body' permanently distorts the WKWebView layout.
+      // 'none' on both platforms — the keyboard overlays content without resizing
+      // the WebView. iOS must use 'none' ('body' permanently distorts WKWebView);
+      // Android relies on windowSoftInputMode=adjustNothing + the --keyboard-height
+      // CSS variable that setupKeyboard() derives from the visual viewport.
+      // (setResizeMode is a no-op on Android, so there is no runtime override.)
       resize: KeyboardResize.None,
     },
     StatusBar: {
