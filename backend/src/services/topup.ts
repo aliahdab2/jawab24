@@ -102,6 +102,16 @@ async function transitionPendingStripeTopup(
         );
 }
 
+/**
+ * How long a top-up checkout may sit in `requires_payment_method` (no card
+ * attached, no money in flight) before the admin manual-credit guard treats it
+ * as abandoned and cancels it. Card top-ups use Stripe automatic capture, so a
+ * PI with no payment method idle this long is a walked-away checkout, not a live
+ * one — short enough to unblock the admin promptly, long enough not to cancel a
+ * customer who is genuinely mid-checkout.
+ */
+const ABANDONED_CHECKOUT_GRACE_MINUTES = 15;
+
 export const topupService = {
     /**
      * Credit a top-up purchase atomically: insert a `succeeded` row in
@@ -379,6 +389,90 @@ export const topupService = {
                     eq(topupPurchases.status, 'pending'),
                 ),
             );
+    },
+
+    /**
+     * Decide whether an admin manual credit must be blocked by pending Stripe
+     * top-ups — verifying each against Stripe's authoritative state and
+     * self-healing the ones that carry no double-credit risk.
+     *
+     * The naive guard (block whenever ANY pending stripe row exists) is too
+     * blunt: a customer who merely OPENS a card-top-up checkout and walks away
+     * leaves a `pending` row whose PaymentIntent is `requires_payment_method`
+     * with no payment method attached and no money in flight. That can never
+     * capture unless the customer returns and pays, so it carries ZERO
+     * double-credit risk — yet the blunt guard would lock the admin out of
+     * manual crediting for up to `abandonAfterHours` (24h, the reconcile sweep's
+     * abandonment window) for that customer. That is the production incident this
+     * fixes (2026-06-09).
+     *
+     * Per pending row, by PaymentIntent status:
+     *   - `requires_payment_method` idle past `graceMinutes` → abandoned checkout.
+     *     Cancel the PI (so it can NEVER later capture and double-credit) then
+     *     mark the row `failed`. NOT blocking.
+     *   - `canceled` → already dead. Mark the row `failed`. NOT blocking.
+     *   - anything else — `succeeded` (money captured, reconcile/webhook will
+     *     credit), `processing` / `requires_action` / `requires_confirmation`
+     *     (live, may still capture), a *fresh* `requires_payment_method` still
+     *     inside the grace (customer may be mid-checkout right now), or a Stripe
+     *     error we cannot verify → BLOCKING. A manual credit on top would be a
+     *     genuine double-credit; the caller surfaces it and offers `force`.
+     *
+     * Conservative by construction: every uncertain case blocks, and the
+     * abandoned-clear is race-safe — `cancelPaymentIntent` throws if the PI
+     * already succeeded, and `markStripeTopupFailed` is `status='pending'`-gated,
+     * so it can never clobber a row a concurrent webhook/sweep just credited.
+     * (Distinct from `reconcileStripeTopups`, the background sweep: that is a
+     * passive 24h-window backstop that settles/refunds; this is an interactive
+     * guard whose short grace is justified because the admin actively crediting
+     * is strong evidence the customer settled through another channel.)
+     *
+     * Returns `blocking` (PaymentIntent ids that still block — empty → safe to
+     * credit) and `cleared` (ids whose abandoned/canceled rows it self-healed, so
+     * the caller can audit-log the PI cancellations it triggered).
+     */
+    async resolvePendingStripeTopupsForCredit(
+        userId: string,
+        options?: { graceMinutes?: number; now?: number },
+    ): Promise<{ blocking: string[]; cleared: string[] }> {
+        const graceMinutes = options?.graceMinutes ?? ABANDONED_CHECKOUT_GRACE_MINUTES;
+        const now = options?.now ?? Date.now();
+        const rows = await this.findOpenPendingStripeTopups(userId);
+        const blocking: string[] = [];
+        const cleared: string[] = [];
+
+        for (const row of rows) {
+            const piId = row.stripePaymentIntentId;
+            // A stripe row with no PaymentIntent id can't be verified — block.
+            if (!piId) { blocking.push('unknown'); continue; }
+            try {
+                const pi = await stripeService.retrievePaymentIntent(piId);
+                const ageMinutes = (now - new Date(row.createdAt).getTime()) / 60_000;
+
+                if (pi.status === 'requires_payment_method' && ageMinutes >= graceMinutes) {
+                    // Abandoned, idle checkout. Cancel first so it can never later
+                    // capture; only then retire the row. cancel() throwing (raced to
+                    // succeeded) drops to the catch → still blocking, never cleared.
+                    await stripeService.cancelPaymentIntent(piId, 'abandoned');
+                    await this.markStripeTopupFailed(piId);
+                    cleared.push(piId);
+                } else if (pi.status === 'canceled') {
+                    await this.markStripeTopupFailed(piId);
+                    cleared.push(piId);
+                } else {
+                    blocking.push(piId);
+                }
+            } catch (err) {
+                captureError(err, 'resolvePendingStripeTopupsForCredit: could not verify pending top-up', {
+                    level: 'warning',
+                    tags: { area: 'topup_admin_guard' },
+                    extra: { userId, paymentIntentId: piId },
+                });
+                blocking.push(piId);
+            }
+        }
+
+        return { blocking, cleared };
     },
 
     /**

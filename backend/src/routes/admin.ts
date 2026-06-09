@@ -1763,18 +1763,39 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 const { userId, pack, source = 'manual', externalRef, note, force = false } = request.body;
                 const adminUserId = (request as AuthenticatedRequest).user?.userId;
 
-                // Guard against double-crediting a stuck Stripe top-up: if the user has an
-                // open pending Stripe row, the reconciliation sweep will auto-credit it
-                // within ~15 min, so a manual credit on top would double-credit. Surface
-                // it and require an explicit force override for a genuinely-unrelated comp.
+                // Guard against double-crediting a Stripe top-up whose money could
+                // still be captured. This verifies each of the user's pending Stripe
+                // rows against Stripe's authoritative state and self-heals abandoned
+                // checkouts (a customer who opened a card top-up and never paid leaves
+                // an idle `requires_payment_method` PI that carries no double-credit
+                // risk); only genuinely in-flight / already-succeeded payments block.
+                // An explicit force override stays available for an unrelated comp.
                 if (!force) {
-                    const pendingStripe = await topupService.findOpenPendingStripeTopups(userId);
-                    if (pendingStripe.length > 0) {
+                    const { blocking, cleared } = await topupService.resolvePendingStripeTopupsForCredit(userId);
+                    // The guard cancels abandoned checkouts as a side effect — never do
+                    // that silently. Record it (structured log + audit trail) so a
+                    // canceled customer PaymentIntent is always traceable to this action.
+                    if (cleared.length > 0) {
+                        request.log.info(
+                            { userId, adminUserId, canceledPaymentIntentIds: cleared },
+                            'manual_topup guard: auto-canceled abandoned pending Stripe top-up(s)',
+                        );
+                        await db.insert(adminAuditLogs).values({
+                            adminUserId,
+                            targetUserId: userId,
+                            action: 'topup_pending_cancelled',
+                            previousValue: null,
+                            newValue: { canceledPaymentIntentIds: cleared },
+                            paymentReference: null,
+                            note: 'Abandoned Stripe top-up checkout(s) canceled while crediting manually',
+                        });
+                    }
+                    if (blocking.length > 0) {
                         return reply.status(409).send({
                             success: false,
                             error: 'PENDING_STRIPE_TOPUP',
-                            message: `User has ${pendingStripe.length} pending Stripe top-up(s). The reconciliation sweep auto-credits stuck Stripe payments within ~15 min — manual crediting now risks a double-credit. Resend with force=true only if this credit is unrelated to those payments.`,
-                            pendingPaymentIntentIds: pendingStripe.map(p => p.stripePaymentIntentId),
+                            message: `User has ${blocking.length} in-flight Stripe top-up(s) that may still complete and credit automatically — manual crediting now risks a double-credit. Resend with force=true only if this credit is unrelated to those payments.`,
+                            pendingPaymentIntentIds: blocking,
                         });
                     }
                 } else {

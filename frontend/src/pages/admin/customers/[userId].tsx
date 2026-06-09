@@ -154,6 +154,9 @@ export default function AdminCustomerDetailPage() {
     const [topupSource, setTopupSource] = useState<'manual' | 'admin'>('manual');
     const [topupExternalRef, setTopupExternalRef] = useState('');
     const [topupNote, setTopupNote] = useState('');
+    // When non-null, the customer has this many stuck pending Stripe top-ups and
+    // the 409 guard blocked the credit — we offer an explicit force override.
+    const [topupPendingCount, setTopupPendingCount] = useState<number | null>(null);
 
     // Collect-payment form state — generate a Stripe link to bill a customer for
     // an already-granted manual credit. Collect-only: never credits reply balance.
@@ -315,12 +318,16 @@ export default function AdminCustomerDetailPage() {
         }
     };
 
-    const handleTopup = async () => {
+    // force=true re-sends with the open-pending-Stripe-top-up guard overridden,
+    // used by the conflict prompt below after the admin confirms the credit is
+    // unrelated to a stuck card payment.
+    const handleTopup = async (force = false) => {
         if (!userId || typeof userId !== 'string') return;
 
         setTopupLoading(true);
         setTopupError(null);
         setTopupSuccess(null);
+        setTopupPendingCount(null);
 
         try {
             const response = await adminApi.creditTopup({
@@ -329,6 +336,7 @@ export default function AdminCustomerDetailPage() {
                 source: topupSource,
                 externalRef: topupExternalRef || undefined,
                 note: topupNote || undefined,
+                force: force || undefined,
             });
 
             if (response.success && response.purchase) {
@@ -344,8 +352,15 @@ export default function AdminCustomerDetailPage() {
                 if (customerRes.success) {
                     setCustomer(customerRes.data);
                 }
+            } else if (response.error === 'PENDING_STRIPE_TOPUP') {
+                // The customer has a stuck pending Stripe top-up — crediting on top
+                // risks a double-credit if that card payment later settles. Surface
+                // the conflict and offer an explicit force override.
+                setTopupPendingCount(response.pendingPaymentIntentIds?.length ?? 1);
             } else {
-                setTopupError(response.error || t('customer.topupErrorGeneric'));
+                // Surface the real backend reason (404, 400, 500, …) rather than a
+                // blanket generic message.
+                setTopupError(response.message || response.error || t('customer.topupErrorGeneric'));
             }
         } catch (err) {
             setTopupError(t('customer.topupErrorGeneric'));
@@ -925,6 +940,7 @@ export default function AdminCustomerDetailPage() {
                                     onClick={() => {
                                         setShowTopupForm(!showTopupForm);
                                         setTopupError(null);
+                                        setTopupPendingCount(null);
                                     }}
                                     className="w-full"
                                     variant="secondary"
@@ -944,6 +960,21 @@ export default function AdminCustomerDetailPage() {
                                 {topupError && (
                                     <div role="alert" className="mb-4 alert-error border px-4 py-3 rounded-lg text-sm">
                                         {topupError}
+                                    </div>
+                                )}
+
+                                {topupPendingCount !== null && (
+                                    <div role="alert" className="mb-4 alert-warning border px-4 py-3 rounded-lg text-sm space-y-3">
+                                        <p>{t('customer.topupPendingConflict', { count: topupPendingCount })}</p>
+                                        <Button
+                                            onClick={() => handleTopup(true)}
+                                            loading={topupLoading}
+                                            disabled={topupLoading}
+                                            variant="danger"
+                                            className="w-full"
+                                        >
+                                            {t('customer.topupForceButton')}
+                                        </Button>
                                     </div>
                                 )}
 
@@ -1003,7 +1034,7 @@ export default function AdminCustomerDetailPage() {
                                     </div>
 
                                     <Button
-                                        onClick={handleTopup}
+                                        onClick={() => handleTopup()}
                                         loading={topupLoading}
                                         disabled={topupLoading}
                                         className="w-full"
