@@ -25,6 +25,10 @@ interface PricingPageProps {
   plans: Plan[];
 }
 
+// FAQ entries rendered on the page AND emitted as FAQPage JSON-LD — keep in
+// sync with the faq<N>Q/faq<N>A keys in i18n/{en,ar}/pricing.json.
+const FAQ_IDS = [1, 2, 3, 4, 5, 6, 7, 8];
+
 
 function PlanCard({
   plan,
@@ -433,7 +437,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           dangerouslySetInnerHTML={{ __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "FAQPage",
-            "mainEntity": [1, 2, 3, 4, 5].map(i => ({
+            "mainEntity": FAQ_IDS.map(i => ({
               "@type": "Question",
               "name": t(`pricing.faq${i}Q`),
               "acceptedAnswer": {
@@ -628,7 +632,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             {t('pricing.faqTitle')}
           </h2>
           <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => {
+            {FAQ_IDS.map((i) => {
               const qKey = `pricing.faq${i}Q`;
               const aKey = `pricing.faq${i}A`;
               const faqPanelId = `pricing-faq-panel-${i}`;
