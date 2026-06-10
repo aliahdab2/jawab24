@@ -26,6 +26,7 @@
   "markNew": "Mark as New",
   "statusUpdated": "Status updated",
   "customizeStages": "Customize leads",
+  "customizeShort": "Customize",
   "customizeNudge": "You're using the default stages — add your own follow-up stages and data fields to fit your business.",
   "customizeStagesDesc": "Make the leads page fit your business: add follow-up stages with your own names (e.g. \"Shipped\", \"Delivered\" for a store) and data fields you fill in per customer (e.g. \"Amount paid\"). Everything appears on lead cards and in the CSV export.",
   "templates": "Templates",

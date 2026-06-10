@@ -26,13 +26,6 @@ import {
 import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG, SUB_STAGE_BG, resolveSubStage } from '@/components/leads/StatusControl';
 import { LeadCustomFieldsSection } from '@/components/leads/LeadCustomFields';
 import dynamic from 'next/dynamic';
-
-// Admin-only customization flow — lazy-loaded so it doesn't sit in the page
-// bundle for every merchant viewing leads (same pattern as comments/pages modals).
-const StageCustomizerModal = dynamic(
-  () => import('@/components/leads/StageCustomizerModal').then((m) => ({ default: m.StageCustomizerModal })),
-  { ssr: false },
-);
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
@@ -51,6 +44,13 @@ const LEADS_PER_PAGE = 50;
 
 // Sentry tags for unexpected failures when opening a deep-linked lead.
 const deepLinkErrorTag = { page: 'leads', action: 'deep-link' } as const;
+
+// Admin-only customization flow — lazy-loaded so it doesn't sit in the page
+// bundle for every merchant viewing leads (same pattern as comments/pages modals).
+const StageCustomizerModal = dynamic(
+  () => import('@/components/leads/StageCustomizerModal').then((m) => ({ default: m.StageCustomizerModal })),
+  { ssr: false },
+);
 
 // ── Extracted-field chips (list views) ────────────────────────────────────────
 // The AI's structured fields (course, budget, color…) are the feature's star —
@@ -71,7 +71,8 @@ function FieldChips({ lead, language }: { lead: Lead; language: string }) {
           className="inline-flex items-center gap-1 max-w-full bg-muted rounded-md px-1.5 py-0.5 text-xs text-muted-foreground"
         >
           {isRTLLocale(language) ? f.label_ar : f.label_en}:
-          <span className="font-medium text-foreground truncate">{f.value}</span>
+          {/* min-w-0 lets the flex item shrink so truncate actually clips long values */}
+          <span className="font-medium text-foreground truncate min-w-0" title={f.value}>{f.value}</span>
         </span>
       ))}
     </div>
@@ -773,12 +774,14 @@ const LeadsPage: NextPageWithLayout = () => {
         action={
           selectedPageId ? (
             <div className="flex items-center gap-1">
-              {/* Customize stages — merchant-defined statuses (free text, any business type) */}
+              {/* Customize stages — merchant-defined statuses (free text, any business type).
+                  On mobile: short label + border so it reads as a button, not a stray icon. */}
               <button
                 onClick={() => setStageModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors border border-theme-border sm:border-transparent"
               >
                 <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
+                <span className="sm:hidden">{t('customizeShort')}</span>
                 <span className="hidden sm:inline">{t('customizeStages')}</span>
               </button>
               <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
