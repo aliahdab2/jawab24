@@ -58,10 +58,16 @@ const StageCustomizerModal = dynamic(
 // a click. Chips, not table columns: fields differ per lead, so columns would
 // explode on pages with mixed inquiries.
 
-function FieldChips({ lead, language }: { lead: Lead; language: string }) {
-  const chips = (lead.extractedData?.fields ?? [])
+/** The lead's first two extracted fields with real values — single source of
+ *  truth for both the chip row and the "anything to show?" checks. */
+function leadTopFields(lead: Lead) {
+  return (lead.extractedData?.fields ?? [])
     .filter((f) => f.value && f.value.trim())
     .slice(0, 2);
+}
+
+function FieldChips({ lead, language }: { lead: Lead; language: string }) {
+  const chips = leadTopFields(lead);
   if (chips.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1">
@@ -424,14 +430,12 @@ function LeadRow({ lead, language, stages, onStatusChange, onDelete, onSelect, i
         <div className="flex flex-col gap-1">
           <FieldChips lead={lead} language={language} />
           {lead.extractedData?.summary ? (
-            // title = full text, so the truncation is hoverable (desktop only cell)
+            // title = full text, so the truncation is hoverable (desktop-only cell)
             <p className="text-sm text-muted-foreground truncate" title={lead.extractedData.summary}>
               {lead.extractedData.summary}
             </p>
           ) : (
-            !(lead.extractedData?.fields ?? []).some((f) => f.value?.trim()) && (
-              <p className="text-sm text-muted-foreground">—</p>
-            )
+            leadTopFields(lead).length === 0 && <p className="text-sm text-muted-foreground">—</p>
           )}
         </div>
       </td>

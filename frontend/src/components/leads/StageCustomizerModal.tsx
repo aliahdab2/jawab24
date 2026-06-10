@@ -326,31 +326,34 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
                     {/* Color picker — 8 preset dots, dark-mode safe. The button
                         is 28px for a usable touch target; the dot stays small. */}
                     <div className="flex items-center gap-0.5 flex-shrink-0" role="group" aria-label={t('subStageColor')}>
-                      {COLORS.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          aria-label={t(COLOR_LABEL_KEY[c] as Parameters<typeof t>[0])}
-                          title={t(COLOR_LABEL_KEY[c] as Parameters<typeof t>[0])}
-                          aria-pressed={sub.color === c}
-                          onClick={() => {
-                            const next = [...list];
-                            next[idx] = { ...sub, color: c };
-                            update(status, next);
-                          }}
-                          className="w-7 h-7 flex items-center justify-center rounded-full"
-                        >
-                          <span
-                            className={clsx(
-                              'w-5 h-5 rounded-full transition-transform',
-                              SUB_STAGE_BG[c],
-                              sub.color === c
-                                ? 'ring-2 ring-offset-1 ring-foreground/40 dark:ring-offset-card scale-110'
-                                : 'opacity-40 hover:opacity-80',
-                            )}
-                          />
-                        </button>
-                      ))}
+                      {COLORS.map((c) => {
+                        const colorName = t(COLOR_LABEL_KEY[c] as Parameters<typeof t>[0]);
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            aria-label={colorName}
+                            title={colorName}
+                            aria-pressed={sub.color === c}
+                            onClick={() => {
+                              const next = [...list];
+                              next[idx] = { ...sub, color: c };
+                              update(status, next);
+                            }}
+                            className="w-7 h-7 flex items-center justify-center rounded-full"
+                          >
+                            <span
+                              className={clsx(
+                                'w-5 h-5 rounded-full transition-transform',
+                                SUB_STAGE_BG[c],
+                                sub.color === c
+                                  ? 'ring-2 ring-offset-1 ring-foreground/40 dark:ring-offset-card scale-110'
+                                  : 'opacity-40 hover:opacity-80',
+                              )}
+                            />
+                          </button>
+                        );
+                      })}
                     </div>
 
                     <button
