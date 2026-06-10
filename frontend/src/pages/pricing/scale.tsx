@@ -7,7 +7,7 @@ import { Card, Button } from '@/components/ui';
 import { BuyTopUpCTA } from '@/components/billing/BuyTopUpCTA';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
 import { PlanTabSelector } from '@/components/billing/PlanTabSelector';
-import { formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
+import { formatUsd, getSarMonthlyEquivalent, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
 import { subscriptionApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';
@@ -63,8 +63,11 @@ function ScalePlanCard({
   const numberLocale = locale === 'ar' ? 'ar-u-nu-latn' : locale || 'en';
   const formatNumber = (n: number) => new Intl.NumberFormat(numberLocale).format(n);
 
-  // USD is pegged at 3.75 SAR.
-  const sarMonthly = Math.round((plan.price / 100) * 3.75);
+  const sarMonthly = getSarMonthlyEquivalent(plan.price, 'month');
+
+  // Same action-based prominence as the main pricing grid: upgrades get the
+  // solid primary button; the current plan and downgrades stay quiet.
+  const isDowngrade = hasActiveSubscription && !isCurrentPlan && plan.price <= currentPlanPrice;
 
   const ctaLabel = isCurrentPlan
     ? tPricing('currentPlan')
@@ -148,7 +151,7 @@ function ScalePlanCard({
             onClick={onSelect}
             loading={loading}
             disabled={isCurrentPlan}
-            variant={isTop ? 'primary' : 'secondary'}
+            variant={!isCurrentPlan && !isDowngrade ? 'primary' : 'secondary'}
             className="w-full py-3 text-sm rounded-xl font-bold"
           >
             {isCurrentPlan ? (

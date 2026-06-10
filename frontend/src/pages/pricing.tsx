@@ -17,7 +17,7 @@ import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHero';
-import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings, formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
+import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings, getSarMonthlyEquivalent, formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
 import { PlanTabSelector } from '@/components/billing/PlanTabSelector';
 
@@ -75,10 +75,15 @@ function PlanCard({
   // Format price
   const formatPrice = (price: number) => formatUsd(price, locale);
 
-  // SAR equivalent (USD is pegged at 3.75 SAR)
-  const sarMonthly = !isFree ? Math.round((isAnnual ? monthlyEquivalent : plan.price) / 100 * 3.75) : 0;
+  const sarMonthly = !isFree ? getSarMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) : 0;
 
   const isPro = plan.slug === 'pro';
+
+  // CTA prominence follows the ACTION, not the plan: upgrades/new subscriptions
+  // get the solid primary button; downgrades and the current plan stay quiet so
+  // the eye lands on the action we want to encourage.
+  const isDowngrade = hasActiveSubscription && !isCurrentPlan && plan.price <= currentPlanPrice;
+  const ctaProminent = !isCurrentPlan && !isDowngrade && !isFree;
 
   // Color identity from the shared helper; layout emphasis (scale/z) stays local.
   const accentClasses = planAccentClasses(
@@ -245,14 +250,8 @@ function PlanCard({
             onClick={onSelect}
             loading={loading}
             disabled={isCurrentPlan}
-            variant={isPro || isPopular || plan.slug === 'starter' ? 'primary' : 'secondary'}
-            className={clsx(
-              'w-full py-3 text-sm rounded-xl transition-all duration-300',
-              isPro && 'pricing-btn-pro',
-              isPopular && 'pricing-btn-business',
-              plan.slug === 'starter' && 'pricing-btn-starter',
-              !isPro && !isPopular && plan.slug !== 'starter' && 'font-bold',
-            )}
+            variant={ctaProminent ? 'primary' : 'secondary'}
+            className="w-full py-3 text-sm rounded-xl transition-all duration-300"
           >
             {isCurrentPlan ? (
               <div className="flex items-center justify-center gap-2">

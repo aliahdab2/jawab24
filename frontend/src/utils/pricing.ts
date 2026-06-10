@@ -38,6 +38,18 @@ export function getAnnualSavings(
   return monthlyCents * 12 - yearly;
 }
 
+/** USD is pegged at 3.75 SAR — informational "≈ SAR/mo" hint only, not a charged amount. */
+const USD_TO_SAR = 3.75;
+
+/** Approximate SAR per-month equivalent (whole riyals) for a plan's price. */
+export function getSarMonthlyEquivalent(
+  monthlyCents: number,
+  interval: 'month' | 'year',
+  yearlyCents?: number | null,
+): number {
+  return Math.round((getMonthlyEquivalent(monthlyCents, interval, yearlyCents) / 100) * USD_TO_SAR);
+}
+
 /** Format a USD price (in cents) with the locale's currency style, no decimals.
  *  Arabic uses Latin numerals (`ar-u-nu-latn`) to match the rest of the pricing UI. */
 export function formatUsd(cents: number, locale?: string): string {
@@ -63,7 +75,9 @@ export function planAccentClasses(accent: PlanAccent): { ring: string; surface: 
     case 'current':
       return { ring: 'ring-2 ring-emerald-400 shadow-[0_20px_40px_rgba(16,185,129,0.18)]', surface: 'bg-emerald-50/40 dark:bg-emerald-950/40' };
     case 'amber':
-      return { ring: 'ring-2 ring-amber-400 shadow-[0_20px_40px_rgba(217,161,12,0.15)]', surface: 'bg-amber-50/30 dark:bg-amber-950/30' };
+      // Softer than the 'blue' (Most Popular) accent on purpose — Pro reads as a
+      // premium touch without competing with the Business card for attention.
+      return { ring: 'ring-1 ring-amber-300 dark:ring-amber-700/60 shadow-[0_12px_24px_rgba(217,161,12,0.10)]', surface: 'bg-amber-50/30 dark:bg-amber-950/30' };
     case 'blue':
       return { ring: 'ring-2 ring-blue-500 shadow-[0_20px_40px_rgba(59,130,246,0.18)]', surface: 'bg-card' };
     case 'plain':
