@@ -1305,7 +1305,9 @@ Customer question arrives
 │    storePolicies_hash +              │
 │    replyStyle +                      │
 │    PROMPT_VERSION +                  │
-│    customerContext                   │
+│    customerContext +                 │
+│    model +                           │
+│    brandVoice_hash                   │
 │  )                                   │
 │                                      │
 │  Value: {reply, intent,              │
@@ -1328,6 +1330,8 @@ Customer question arrives
 │    • promptVersion                   │
 │    • channel (comment/dm) *          │
 │    • replyStyle *                    │
+│    • model *                         │
+│    • brandVoiceHash *                │
 │    (* stored in metadata JSONB,      │
 │       filtered application-side)     │
 │                                      │
@@ -1339,6 +1343,7 @@ Customer question arrives
 │  Skipped entirely for:               │
 │    • PRICE intent                    │
 │    • PURCHASE_INTENT intent          │
+│    • COMPLAINT intent                │
 │    (exact answers required — only    │
 │     exact hash cache remains active) │
 │    • customerContext present         │
@@ -1371,13 +1376,15 @@ Customer question arrives
 | Reply style changed | New keys (style in hash) | N/A |
 | Customer context differs | New keys (context in hash) | Skipped entirely |
 | Prompt version bumped | New keys (version in hash) | Old entries filtered |
+| Brand voice changed | New keys (voice hash in key) | Old entries filtered (voice hash in metadata) |
+| Model override changed | New keys (model in key) | Old entries filtered (model in metadata) |
 
 ## عربي
 
 ### بنية الكاش ثلاثية الطبقات
 
 **الطبقة 1: الكاش الدقيق (Redis)**
-- مفتاح: SHA256 (التعليق + اللغة + معرف الصفحة + إصدار KB + المنشور + السياسات + الأسلوب + إصدار الأوامر + سياق العميل)
+- مفتاح: SHA256 (التعليق + اللغة + معرف الصفحة + إصدار KB + المنشور + السياسات + الأسلوب + إصدار الأوامر + سياق العميل + النموذج + بصمة أسلوب العلامة)
 - القيمة: {الرد، النية، الثقة، الأعلام}
 - مدة الصلاحية: 30 يوم
 - احتياطي: PostgreSQL
@@ -1909,6 +1916,7 @@ Normal operation: CLOSED
 | Table | Retention | Batch Size | Trigger |
 |-------|----------|------------|---------|
 | `ai_cache` | 30 days (by `lastUsedAt`) | 1,000 rows | `POST /health/cleanup` |
+| `semantic_cache` | KB-version mismatch + 30 days age backstop | 1,000 rows | `POST /health/cleanup` |
 | `logs` | 90 days | 1,000 rows | `POST /health/cleanup` |
 | `ai_usage_log` | 180 days | 1,000 rows | `POST /health/cleanup` |
 | `refresh_tokens` | Expired + revoked >7 days | All | `POST /health/cleanup` |

@@ -425,6 +425,101 @@ describe('AI Service', () => {
         });
     });
 
+    /** Generate a reply for `comment` and return the exact-cache key it read. */
+    async function cacheKeyFor(
+        comment: string,
+        context?: Record<string, unknown>,
+    ): Promise<string> {
+        const { redis } = await import('../../src/lib/redis');
+        vi.mocked(redis.get).mockClear();
+        vi.mocked(redis.get).mockResolvedValue(null);
+        vi.mocked(axios.post).mockResolvedValue({
+            data: { reply: 'reply', language: 'en' },
+        });
+        await service.generateReply({ comment, ...(context ? { context } : {}) });
+        return vi.mocked(redis.get).mock.calls[0][0] as string;
+    }
+
+    describe('generateReply - exact cache key Arabic normalization', () => {
+        // Regression: buildCacheKey previously skipped normalizeArabic, so alef
+        // variants (أ/إ/ا), tatweel, and Arabic-Indic digits each got their own
+        // cache bucket — pure fragmentation for Arabic traffic.
+        it('alef variants produce the same cache key', async () => {
+            expect(await cacheKeyFor('أهلا كم السعر')).toBe(await cacheKeyFor('اهلا كم السعر'));
+        });
+
+        it('tatweel-stretched text produces the same cache key', async () => {
+            expect(await cacheKeyFor('السـعر؟')).toBe(await cacheKeyFor('السعر؟'));
+        });
+
+        it('Arabic-Indic digits produce the same cache key as Western digits', async () => {
+            expect(await cacheKeyFor('عندكم ٥٠ قطعة؟')).toBe(await cacheKeyFor('عندكم 50 قطعة؟'));
+        });
+
+        it('different questions still produce different cache keys', async () => {
+            expect(await cacheKeyFor('كم السعر')).not.toBe(await cacheKeyFor('وين موقعكم'));
+        });
+    });
+
+    describe('generateReply - exact cache key brand voice scoping', () => {
+        // Brand voice is prompt-injected but settings saves never bump
+        // kbActiveVersion — the key scope is the only staleness protection.
+        it('different brand voices produce different cache keys', async () => {
+            expect(await cacheKeyFor('hello', { brandVoiceNotes: 'warm and friendly' }))
+                .not.toBe(await cacheKeyFor('hello', { brandVoiceNotes: 'formal and terse' }));
+        });
+
+        it('same brand voice produces the same cache key', async () => {
+            expect(await cacheKeyFor('hello', { brandVoiceNotes: 'warm and friendly' }))
+                .toBe(await cacheKeyFor('hello', { brandVoiceNotes: 'warm and friendly' }));
+        });
+
+        it('brand-voiced and voiceless workspaces use different cache keys', async () => {
+            expect(await cacheKeyFor('hello', { brandVoiceNotes: 'warm and friendly' }))
+                .not.toBe(await cacheKeyFor('hello'));
+        });
+
+        it('empty brand voice keeps the key identical to no brand voice (rollout back-compat)', async () => {
+            expect(await cacheKeyFor('hello', { brandVoiceNotes: '' }))
+                .toBe(await cacheKeyFor('hello'));
+        });
+    });
+
+    describe('generateReply - semantic cache model scope normalization', () => {
+        // Regression (#164): check() was passed the resolved model name while
+        // save() stored `undefined` for default-model rows. The strict-equality
+        // metadata filter then rejected every row, silently disabling semantic
+        // cache reads for all default-model workspaces.
+        async function semanticCheckArgsFor(model?: string): Promise<unknown[]> {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(axios.post).mockResolvedValue({ data: { reply: 'reply', language: 'en' } });
+            const { semanticCacheService } = await import('../../src/services/kb/semantic-cache');
+            const checkSpy = vi.spyOn(semanticCacheService, 'check').mockResolvedValue(null);
+
+            await service.generateReply({
+                comment: 'Hello',
+                ...(model ? { model } : {}),
+                context: { pageId: 'page-1', kbActiveVersion: 3, queryEmbedding: [0.1, 0.2] },
+            });
+
+            expect(checkSpy).toHaveBeenCalledTimes(1);
+            const args = checkSpy.mock.calls[0];
+            checkSpy.mockRestore();
+            return args;
+        }
+
+        it('passes undefined model for default-model workspaces (matches save-side scoping)', async () => {
+            const args = await semanticCheckArgsFor();
+            expect((args[4] as { model?: string }).model).toBeUndefined();
+        });
+
+        it('passes the model name for non-default workspaces', async () => {
+            const args = await semanticCheckArgsFor('gpt-4o');
+            expect((args[4] as { model?: string }).model).toBe('gpt-4o');
+        });
+    });
+
     describe('generateReply - belt-and-suspenders against ai-worker fallback_reply', () => {
         // The ai-worker has an internal `getFallbackReply()` that returns a templated
         // "Thanks, we'll get back to you" string with `flags: ['fallback_reply']` on a
@@ -1069,9 +1164,17 @@ describe('AI Service - Semantic Cache Integration', () => {
         expect(mockEmbed).not.toHaveBeenCalled();
         // But should still check semantic cache
         expect(mockSemCache.check).toHaveBeenCalledTimes(1);
-        // The embedding passed to check should be the pre-computed one
-        // 7th arg is the resolved model (DEFAULT_AI_MODEL since no override set).
-        expect(mockSemCache.check).toHaveBeenCalledWith('page-1', preComputed, expect.any(String), 1, undefined, undefined, 'gpt-4.1-mini');
+        // The embedding passed to check should be the pre-computed one.
+        // Options.model is the model cache scope: undefined for the default model
+        // so it matches save-side rows (which also store undefined for the
+        // default — passing the model name here was the #164 bug that disabled
+        // semantic reads for all default-model workspaces).
+        expect(mockSemCache.check).toHaveBeenCalledWith('page-1', preComputed, expect.any(String), 1, {
+            channel: undefined,
+            replyStyle: undefined,
+            model: undefined,
+            brandVoiceHash: undefined,
+        });
     });
 
     it('should save to semantic cache with pre-GPT intent after AI call', async () => {

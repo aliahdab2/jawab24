@@ -22,8 +22,10 @@ vi.mock('drizzle-orm', () => ({
     sql: vi.fn((strings: TemplateStringsArray, ...values: any[]) => ({ strings, values })),
 }));
 
-import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
+import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, cleanupSemanticCache, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
 import { db } from '../../src/db';
+import { lt } from 'drizzle-orm';
+import { SEMANTIC_CACHE_TTL_DAYS } from '../../src/services/kb/semantic-cache';
 
 function mockDeleteChain(batches: Array<Array<{ id: string }>>) {
     let callCount = 0;
@@ -109,6 +111,28 @@ describe('cleanup utilities', () => {
             const result = await cleanupRefreshTokens();
             expect(result.error).toBe('connection refused');
             expect(result.deletedCount).toBe(0);
+        });
+    });
+
+    describe('cleanupSemanticCache', () => {
+        // Regression: the age backstop must stay aligned with SEMANTIC_CACHE_TTL_DAYS —
+        // a longer TTL in the read query is silently undone if cleanup purges earlier.
+        it('purges by age using SEMANTIC_CACHE_TTL_DAYS (30 days)', async () => {
+            (db as unknown as { execute: ReturnType<typeof vi.fn> }).execute =
+                vi.fn().mockResolvedValue([]);
+            mockDeleteChain([[]]);
+
+            const result = await cleanupSemanticCache();
+
+            expect(result.error).toBeUndefined();
+            expect(SEMANTIC_CACHE_TTL_DAYS).toBe(30);
+            const ageCall = vi.mocked(lt).mock.calls.find(
+                (c) => c[0] === 'semantic_cache.created_at',
+            );
+            expect(ageCall).toBeDefined();
+            const cutoff = (ageCall![1] as Date).getTime();
+            const daysBack = (Date.now() - cutoff) / 86_400_000;
+            expect(daysBack).toBeCloseTo(SEMANTIC_CACHE_TTL_DAYS, 1);
         });
     });
 
