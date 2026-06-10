@@ -248,10 +248,32 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
     <SidePanel isOpen onClose={onClose} title={lead.senderName ?? tc('unknown')} subtitle={pageName}>
       <div className="flex flex-col gap-0 pb-8">
 
+        {/* ── What the lead wants ── first thing a merchant reads, so it leads
+            the panel: AI summary + extracted details in one block. */}
+        {(lead.extractedData?.summary || fields.length > 0) && (
+          <div className="px-5 pt-4 pb-4 border-b border-theme-border">
+            {lead.extractedData?.summary && (
+              <p className="text-sm leading-relaxed text-foreground">{lead.extractedData.summary}</p>
+            )}
+            {fields.length > 0 && (
+              <div className={clsx('flex flex-col gap-2', lead.extractedData?.summary && 'mt-3 pt-3 border-t border-theme-border/60')}>
+                {fields.map((f) => (
+                  <div key={f.key} className="flex items-start justify-between gap-4">
+                    <span className="text-sm text-muted-foreground shrink-0">
+                      {isRTLLocale(language) ? f.label_ar : f.label_en}
+                    </span>
+                    <span className="text-sm font-medium text-end select-all cursor-text">{f.value || '—'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Contact actions ── */}
-        <div className="px-5 pt-5 pb-4 border-b border-theme-border">
+        <div className="px-5 pt-4 pb-4 border-b border-theme-border">
           {/* Phone number — readable, selectable */}
-          <p dir="ltr" className="font-mono text-lg font-semibold text-foreground text-center mb-4 select-all">
+          <p dir="ltr" className="font-mono text-base font-semibold text-foreground text-center mb-3 select-all">
             {lead.phone}
           </p>
           {/* Primary actions; the conversation shortcut rides along as a compact
@@ -308,31 +330,6 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
             status: merchants fill these in the same gesture as moving the lead
             (e.g. mark converted → write المبلغ المدفوع). */}
         <LeadCustomFieldsSection lead={lead} fieldDefs={fieldDefs} onSaved={onFieldsSaved} t={t} />
-
-        {/* ── Summary / intent ── */}
-        {lead.extractedData?.summary && (
-          <div className="px-5 py-4 border-b border-theme-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{t('intent')}</p>
-            <p className="text-sm leading-relaxed text-foreground">{lead.extractedData.summary}</p>
-          </div>
-        )}
-
-        {/* ── AI-extracted fields ── */}
-        {fields.length > 0 && (
-          <div className="px-5 py-4 border-b border-theme-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">{t('extractedDetails')}</p>
-            <div className="flex flex-col gap-2.5">
-              {fields.map((f) => (
-                <div key={f.key} className="flex items-start justify-between gap-4">
-                  <span className="text-sm text-muted-foreground shrink-0">
-                    {isRTLLocale(language) ? f.label_ar : f.label_en}
-                  </span>
-                  <span className="text-sm font-medium text-end select-all cursor-text">{f.value || '—'}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* ── Secondary metadata ── */}
         <div className="px-5 py-4 flex flex-col gap-2.5">
