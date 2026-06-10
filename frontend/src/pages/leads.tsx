@@ -21,7 +21,6 @@ import {
   Search,
   X,
   MessageSquare,
-  ChevronRight,
   SlidersHorizontal,
 } from 'lucide-react';
 import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG, SUB_STAGE_BG, resolveSubStage } from '@/components/leads/StatusControl';
@@ -255,11 +254,12 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
           <p dir="ltr" className="font-mono text-lg font-semibold text-foreground text-center mb-4 select-all">
             {lead.phone}
           </p>
-          {/* Two primary actions */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Primary actions; the conversation shortcut rides along as a compact
+              icon so it doesn't cost a whole section below. */}
+          <div className="flex gap-3">
             <a
               href={`tel:${lead.phone}`}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-sm transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-sm transition-colors"
               aria-label={t('call')}
             >
               <Phone className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
@@ -268,7 +268,7 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
             <button
               type="button"
               onClick={() => openExternalUrl(`https://wa.me/${lead.phone.replace(/\D/g, '')}`)}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] active:bg-[#17a34a] text-white font-semibold text-sm transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] active:bg-[#17a34a] text-white font-semibold text-sm transition-colors"
               aria-label={t('whatsapp')}
             >
               <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -276,6 +276,18 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
               </svg>
               {t('whatsapp')}
             </button>
+            {/* View conversation — only message-sourced leads have a DM thread */}
+            {lead.sourceType === 'message' && (
+              <button
+                type="button"
+                onClick={onViewConversation}
+                className="w-12 flex items-center justify-center rounded-xl border border-theme-border text-icon-muted hover:bg-muted hover:text-foreground transition-colors"
+                aria-label={t('viewConversation')}
+                title={t('viewConversation')}
+              >
+                <MessageSquare className="w-5 h-5" aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -296,22 +308,6 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
             status: merchants fill these in the same gesture as moving the lead
             (e.g. mark converted → write المبلغ المدفوع). */}
         <LeadCustomFieldsSection lead={lead} fieldDefs={fieldDefs} onSaved={onFieldsSaved} t={t} />
-
-        {/* ── View conversation ── only for message-sourced leads, which have a DM thread.
-            Comment-sourced leads have no message thread to open. */}
-        {lead.sourceType === 'message' && (
-          <button
-            type="button"
-            onClick={onViewConversation}
-            className="w-full flex items-center justify-between gap-2 px-5 py-3 border-b border-theme-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
-          >
-            <span className="flex items-center gap-2 min-w-0">
-              <MessageSquare className="w-4 h-4 text-icon-muted flex-shrink-0" aria-hidden="true" />
-              <span className="truncate">{t('viewConversation')}</span>
-            </span>
-            <ChevronRight className="w-4 h-4 text-icon-muted flex-shrink-0 rtl:rotate-180" aria-hidden="true" />
-          </button>
-        )}
 
         {/* ── Summary / intent ── */}
         {lead.extractedData?.summary && (
