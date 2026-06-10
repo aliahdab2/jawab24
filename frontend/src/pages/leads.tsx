@@ -85,9 +85,11 @@ function FieldChips({ lead, language }: { lead: Lead; language: string }) {
   );
 }
 
-// ── Lead card (mobile, swipeable) ─────────────────────────────────────────────
+// ── Lead list items ───────────────────────────────────────────────────────────
+// LeadCard (mobile) and LeadRow (desktop) are two renderings of the same item —
+// one shared props contract so their handlers can never drift apart.
 
-interface LeadCardProps {
+interface LeadItemProps {
   lead: Lead;
   language: string;
   stages?: LeadStagesConfig;
@@ -101,7 +103,7 @@ interface LeadCardProps {
 // Width of the action panel revealed by swiping left
 const SWIPE_ACTION_WIDTH = 160;
 
-function LeadCard({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadCardProps) {
+function LeadCard({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadItemProps) {
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const startX = useRef(0);
@@ -391,18 +393,7 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
 
 // ── Lead row (desktop table) ──────────────────────────────────────────────────
 
-interface LeadRowProps {
-  lead: Lead;
-  language: string;
-  stages?: LeadStagesConfig;
-  onStatusChange: (lead: Lead, next: LeadStatus, subStage?: string | null) => void;
-  onDelete: (lead: Lead) => void;
-  onSelect: (lead: Lead) => void;
-  isPending: boolean;
-  t: ReturnType<typeof useTranslations>;
-}
-
-function LeadRow({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadRowProps) {
+function LeadRow({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadItemProps) {
   return (
     <tr
       className="group border-b border-theme-border hover:bg-muted/40 transition-colors cursor-pointer"
