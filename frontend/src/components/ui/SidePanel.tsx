@@ -136,7 +136,10 @@ export function SidePanel({ isOpen, onClose, title, subtitle, children }: SidePa
           'flex md:hidden flex-col',
           // Full screen: detail content is dense (status, fields, conversation),
           // so use every pixel instead of a partial sheet with a peek gap.
-          'absolute inset-0 h-[100dvh] bg-card shadow-2xl',
+          // bottom tracks --keyboard-height (same pattern as the shared Modal)
+          // so the custom-field inputs stay above the soft keyboard on
+          // overlay-mode WebViews.
+          'absolute inset-x-0 top-0 bottom-[var(--keyboard-height,0px)] bg-card shadow-2xl',
           'pt-safe pb-safe',
           // Transition: no transition while dragging (instant follow), spring-back when released
           dragOffset > 0 ? '' : 'transition-transform duration-300 ease-out',

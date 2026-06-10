@@ -53,6 +53,8 @@
   "fieldsSaveFailed": "Failed to save",
   "saveFields": "Save data",
   "templateApplied": "Template applied — edit it freely, then save",
+  "templateOverwriteTitle": "Replace current setup?",
+  "templateOverwriteMessage": "Applying a template replaces the stages and fields you've configured. Leads keep all their data — ones tagged with old stages show the main status badge until you pick a new stage. Nothing is saved until you press Save.",
   "preview": "Preview:",
   "statusConvertedCelebration": "Lead converted — great win!",
   "statusUpdateFailed": "Failed to update status",

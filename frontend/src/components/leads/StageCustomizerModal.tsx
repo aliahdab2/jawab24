@@ -28,7 +28,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { Modal, Button, Input } from '@/components/ui';
+import { Modal, Button, Input, ConfirmationModal } from '@/components/ui';
 import {
   workspaceApi,
   type LeadStatus,
@@ -147,6 +147,7 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<LeadStagesConfig>({});
   const [fieldsDraft, setFieldsDraft] = useState<LeadCustomFieldDef[]>([]);
+  const [pendingTemplate, setPendingTemplate] = useState<TemplateKey | null>(null);
 
   // Re-seed the drafts each time the modal opens (config may have changed).
   useEffect(() => {
@@ -188,6 +189,17 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
     setDraft(templateStages(key, rtl));
     setFieldsDraft(templateFields(key, rtl));
     toast.info(t('templateApplied'), { id: 'lead-stages' });
+  };
+
+  // A template replaces the whole draft — confirm first if the merchant
+  // already has stages/fields configured so one tap can't wipe their setup.
+  const draftHasContent =
+    ALL_STATUSES.some((s) => (draft[s] ?? []).some((sub) => sub.label.trim())) ||
+    fieldsDraft.some((f) => f.label.trim());
+
+  const requestTemplate = (key: TemplateKey) => {
+    if (draftHasContent) setPendingTemplate(key);
+    else applyTemplate(key);
   };
 
   const handleSave = () => {
@@ -235,7 +247,7 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
               <button
                 key={key}
                 type="button"
-                onClick={() => applyTemplate(key)}
+                onClick={() => requestTemplate(key)}
                 className="px-3 py-1.5 rounded-full text-xs font-medium border border-theme-border text-foreground/80 hover:bg-muted hover:text-foreground transition-colors"
               >
                 {t(TEMPLATE_LABEL_KEY[key] as Parameters<typeof t>[0])}
@@ -280,31 +292,9 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
 
               <div className="flex flex-col gap-2">
                 {list.map((sub, idx) => (
-                  <div key={sub.id} className="flex items-center gap-2">
-                    {/* Color picker — 8 preset dots, dark-mode safe */}
-                    <div className="flex items-center gap-1 flex-shrink-0" role="group" aria-label={t('subStageColor')}>
-                      {COLORS.map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          aria-label={c}
-                          aria-pressed={sub.color === c}
-                          onClick={() => {
-                            const next = [...list];
-                            next[idx] = { ...sub, color: c };
-                            update(status, next);
-                          }}
-                          className={clsx(
-                            'w-4 h-4 rounded-full transition-transform',
-                            SUB_STAGE_BG[c],
-                            sub.color === c
-                              ? 'ring-2 ring-offset-1 ring-foreground/40 dark:ring-offset-card scale-110'
-                              : 'opacity-40 hover:opacity-80',
-                          )}
-                        />
-                      ))}
-                    </div>
-
+                  // flex-wrap: on narrow screens the color row drops to its own
+                  // line under the input instead of squeezing the dots.
+                  <div key={sub.id} className="flex items-center gap-2 flex-wrap">
                     <Input
                       value={sub.label}
                       maxLength={MAX_LABEL_LENGTH}
@@ -316,8 +306,37 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
                         next[idx] = { ...sub, label: e.target.value };
                         update(status, next);
                       }}
-                      className="flex-1 text-sm py-2"
+                      className="flex-1 min-w-[160px] text-sm py-2"
                     />
+
+                    {/* Color picker — 8 preset dots, dark-mode safe. The button
+                        is 28px for a usable touch target; the dot stays small. */}
+                    <div className="flex items-center gap-0.5 flex-shrink-0" role="group" aria-label={t('subStageColor')}>
+                      {COLORS.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          aria-label={c}
+                          aria-pressed={sub.color === c}
+                          onClick={() => {
+                            const next = [...list];
+                            next[idx] = { ...sub, color: c };
+                            update(status, next);
+                          }}
+                          className="w-7 h-7 flex items-center justify-center rounded-full"
+                        >
+                          <span
+                            className={clsx(
+                              'w-5 h-5 rounded-full transition-transform',
+                              SUB_STAGE_BG[c],
+                              sub.color === c
+                                ? 'ring-2 ring-offset-1 ring-foreground/40 dark:ring-offset-card scale-110'
+                                : 'opacity-40 hover:opacity-80',
+                            )}
+                          />
+                        </button>
+                      ))}
+                    </div>
 
                     <button
                       type="button"
@@ -408,6 +427,18 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
           )}
         </div>
       </div>
+
+      <ConfirmationModal
+        isOpen={pendingTemplate !== null}
+        onClose={() => setPendingTemplate(null)}
+        onConfirm={() => {
+          if (pendingTemplate) applyTemplate(pendingTemplate);
+          setPendingTemplate(null);
+        }}
+        title={t('templateOverwriteTitle')}
+        message={t('templateOverwriteMessage')}
+        variant="warning"
+      />
     </Modal>
   );
 }
