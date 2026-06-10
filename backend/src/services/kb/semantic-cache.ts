@@ -22,6 +22,13 @@ const INTENT_THRESHOLDS: Record<string, number> = {
 };
 const DEFAULT_SIMILARITY_THRESHOLD = 0.93;
 
+/** TTL backstop for semantic cache rows, aligned with the exact cache's 30-day
+ * Redis TTL (ai.ts). Version scoping (kbActiveVersion + promptVersion) is the
+ * real invalidation; this only bounds row age. The cleanup job
+ * (utils/cleanup.ts) purges rows older than this — keep both in sync via this
+ * constant or extended TTLs here are silently undone by cleanup. */
+export const SEMANTIC_CACHE_TTL_DAYS = 30;
+
 /** Intents where exact answers matter — skip semantic cache entirely.
  * Exact cache (hash-based) still applies; only vector similarity is bypassed. */
 const SKIP_SEMANTIC_CACHE_INTENTS = new Set(['PRICE', 'PURCHASE_INTENT', 'COMPLAINT']);
@@ -31,6 +38,22 @@ export interface SemanticCacheHit {
     intent: string;
     confidence?: string;
     flags?: string[];
+}
+
+/**
+ * Metadata-scope filters for check(). An options object rather than trailing
+ * positional optionals — `model` and `brandVoiceHash` are both
+ * `string | undefined`, and a positional caller/callee mismatch on exactly
+ * such a parameter is what silently disabled semantic reads for the default
+ * fleet in #164.
+ */
+export interface SemanticCacheCheckOptions {
+    channel?: string;
+    replyStyle?: string;
+    /** Resolved model when non-default; undefined means the default model. */
+    model?: string;
+    /** hashBrandVoice(notes) from ai.ts; undefined means no brand voice set. */
+    brandVoiceHash?: string;
 }
 
 export interface SemanticCacheSaveParams {
@@ -49,6 +72,15 @@ export interface SemanticCacheSaveParams {
      * Omit/undefined means the default model was used.
      */
     model?: string;
+    /**
+     * Short hash of the brand voice notes the reply was generated with
+     * (hashBrandVoice in ai.ts). Stored in metadata and filtered app-side at
+     * check time — brand voice is prompt-injected but settings saves never bump
+     * kbActiveVersion, so without this scope a merchant who rewrites their
+     * brand voice keeps reading old-voice replies until TTL expiry.
+     * Omit/undefined means no brand voice was set.
+     */
+    brandVoiceHash?: string;
     metadata?: { confidence?: string; flags?: string[]; intent?: string };
 }
 
@@ -61,8 +93,10 @@ export interface SemanticCacheSaveParams {
  * - intent (PRICE queries don't match HOURS queries even if words overlap)
  * - kbActiveVersion (stale entries auto-invalidate when KB is re-ingested)
  * - promptVersion (stale entries auto-invalidate when prompt is updated)
- * - channel + replyStyle (stored in metadata JSONB, filtered application-side)
- * - 7-day TTL (eventual expiration)
+ * - channel + replyStyle + model + brandVoiceHash (stored in metadata JSONB,
+ *   filtered application-side)
+ * - 30-day TTL backstop (SEMANTIC_CACHE_TTL_DAYS — version scoping above is the
+ *   primary invalidation)
  */
 export class SemanticCacheService {
     private logger: Logger = noopLogger;
@@ -80,10 +114,9 @@ export class SemanticCacheService {
         queryEmbedding: number[],
         intent: string,
         kbActiveVersion: number,
-        channel?: string,
-        replyStyle?: string,
-        model?: string,
+        options: SemanticCacheCheckOptions = {},
     ): Promise<SemanticCacheHit | null> {
+        const { channel, replyStyle, model, brandVoiceHash } = options;
         // Skip semantic cache for price-sensitive intents — exact answers required
         if (SKIP_SEMANTIC_CACHE_INTENTS.has(intent)) {
             return null;
@@ -106,7 +139,7 @@ export class SemanticCacheService {
                   AND intent = ${intent}
                   AND kb_active_version_at_creation = ${kbActiveVersion}
                   AND prompt_version = ${PROMPT_VERSION}
-                  AND created_at > NOW() - INTERVAL '7 days'
+                  AND created_at > NOW() - (${SEMANTIC_CACHE_TTL_DAYS} * INTERVAL '1 day')
                   AND 1 - (query_embedding <=> ${vectorStr}::vector) >= ${threshold}
                 ORDER BY 1 - (query_embedding <=> ${vectorStr}::vector) DESC
                 LIMIT 5
@@ -130,11 +163,18 @@ export class SemanticCacheService {
                 const rowModel = (meta.model as string | undefined) ?? undefined;
                 const wantModel = model || undefined;
                 if (rowModel !== wantModel) return false;
+                // Brand voice: strict both-ways match, unlike the model rule above.
+                // Legacy rows (no brandVoiceHash field) can't tell us which voice
+                // generated them, so they only serve workspaces with NO brand voice
+                // set — a voice-having workspace must regenerate rather than risk
+                // an old-voice reply.
+                const rowBrandVoice = (meta.brandVoiceHash as string | undefined) ?? undefined;
+                if (rowBrandVoice !== (brandVoiceHash || undefined)) return false;
                 return true;
             });
 
             if (!matched) {
-                this.logger.debug('[SemanticCache] miss (channel/style/model mismatch)', { pageId, intent, channel, replyStyle, model });
+                this.logger.debug('[SemanticCache] miss (metadata scope mismatch: channel/style/model/brandVoice)', { pageId, intent, channel, replyStyle, model, brandVoiceHash });
                 return null;
             }
 
@@ -179,6 +219,7 @@ export class SemanticCacheService {
                 ...(params.channel ? { channel: params.channel } : {}),
                 ...(params.replyStyle ? { replyStyle: params.replyStyle } : {}),
                 ...(params.model ? { model: params.model } : {}),
+                ...(params.brandVoiceHash ? { brandVoiceHash: params.brandVoiceHash } : {}),
             };
 
             await db.execute(sql`

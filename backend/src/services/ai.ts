@@ -36,6 +36,16 @@ interface CacheContext {
      */
     model?: string;
     /**
+     * hashBrandVoice() of the language-resolved brand voice notes
+     * (contextEnricher). Brand voice is prompt-injected, so it must scope both
+     * caches: settings saves don't bump kbActiveVersion, and without key scoping
+     * a merchant who rewrites their brand voice keeps getting old-voice cached
+     * replies until TTL expiry. Read-side scoping (like storePolicies) instead
+     * of writer-side invalidation — writers can't forget it. Computed once per
+     * request in generateReply and shared with the semantic cache.
+     */
+    brandVoiceHash?: string;
+    /**
      * First-contact greeting suppression (see messageProcessor). When true the AI
      * is told NOT to greet because the backend prepends the merchant welcome. This
      * changes the generated reply, so it MUST scope the cache: without it a
@@ -73,6 +83,17 @@ interface WorkerGenerateResponse {
     tokensOut?: number;
 }
 
+/**
+ * Short content hash of the brand voice notes, shared by the exact-cache key
+ * (`bv:` component) and the semantic cache (`brandVoiceHash` metadata filter).
+ * Returns undefined for empty/absent notes so no-brand-voice traffic keeps
+ * byte-identical cache keys and legacy semantic rows stay matchable.
+ */
+function hashBrandVoice(notes?: string): string | undefined {
+    if (!notes) return undefined;
+    return crypto.createHash('md5').update(notes).digest('hex').slice(0, 8);
+}
+
 // logAiUsage moved to ./aiUsageLog so callers outside ai.ts can import it
 // statically without forming a circular dependency. Re-exported for back-compat
 // (existing tests and callers import from './ai').
@@ -103,7 +124,12 @@ export class AiService {
      * cross-page, stale-KB, and cross-post cache collisions.
      */
     private buildCacheKey(comment: string, ctx: CacheContext): string {
-        const normalized = comment
+        // normalizeArabic unifies alef variants (أ/إ/آ → ا), strips tatweel, and
+        // converts Arabic-Indic digits (٠-٩ → 0-9) so trivially-different Arabic
+        // spellings share one bucket — same normalization the embedding path uses
+        // for the semantic cache. Diacritics are \p{M}, so the symbol strip below
+        // already removes them.
+        const normalized = normalizeArabic(comment)
             .toLowerCase()
             .replace(/[^\p{L}\p{N}\s]/gu, '')
             .replace(/\s+/g, ' ')
@@ -133,6 +159,12 @@ export class AiService {
         // merchant welcome is prepended by the backend) gets its own bucket so it can
         // never collide with an ordinary reply that greeted on its own.
         if (ctx.suppressGreeting) key.push('sg:1');
+
+        // Brand voice is prompt-injected but settings saves never bump
+        // kbActiveVersion, so it must live in the key (same read-side scoping as
+        // storePolicies). Conditional append: workspaces without brand voice keep
+        // byte-identical keys, so only voice-having entries re-warm on rollout.
+        if (ctx.brandVoiceHash) key.push(`bv:${ctx.brandVoiceHash}`);
 
         return crypto.createHash('sha256').update(key.join(':')).digest('hex');
     }
@@ -283,6 +315,16 @@ export class AiService {
         const resolvedModel = request.model
             ? request.model
             : await getModelForUser(userId);
+        // The semantic cache stores `undefined` (not the model name) for
+        // default-model rows — see the save() call below. Reads MUST use the same
+        // normalization: passing the resolved name for a default workspace fails
+        // the strict-equality metadata filter against every stored row, silently
+        // disabling semantic hits for the entire default fleet (shipped in #164,
+        // found 2026-06-11).
+        const isNonDefaultModel = resolvedModel !== DEFAULT_AI_MODEL;
+        const modelCacheScope = isNonDefaultModel ? resolvedModel : undefined;
+        // Computed once; scopes the exact-cache key and the semantic cache reads/writes.
+        const brandVoiceHash = hashBrandVoice(request.context?.brandVoiceNotes);
 
         const cacheCtx: CacheContext = {
             language: request.language,
@@ -294,6 +336,7 @@ export class AiService {
             customerContext: request.context?.customerContext,
             model: resolvedModel,
             suppressGreeting: request.context?.suppressGreeting,
+            brandVoiceHash,
         };
 
         // DM conversations with history → skip all caches.
@@ -380,7 +423,12 @@ export class AiService {
                         { name: 'ai.cache.semantic', op: 'cache.get' },
                         () => semanticCacheService.check(
                             pageId, queryEmbedding as number[], detectedPreGptIntent ?? '', kbActiveVersion,
-                            request.context?.channel, request.context?.replyStyle, resolvedModel,
+                            {
+                                channel: request.context?.channel,
+                                replyStyle: request.context?.replyStyle,
+                                model: modelCacheScope,
+                                brandVoiceHash,
+                            },
                         ),
                     );
 
@@ -415,7 +463,6 @@ export class AiService {
         // from the OpenAI dashboard request count by ~2×). The hop's *failure*
         // mode is still tracked — see the catch block below.
         const primaryModel = resolvedModel;
-        const isNonDefaultModel = resolvedModel !== DEFAULT_AI_MODEL;
         try {
             const response = await aiWorkerCircuit.execute(() =>
                 Sentry.startSpan(
@@ -490,7 +537,8 @@ export class AiService {
                     kbActiveVersion,
                     channel: request.context?.channel,
                     replyStyle: request.context?.replyStyle,
-                    model: isNonDefaultModel ? resolvedModel : undefined,
+                    model: modelCacheScope,
+                    brandVoiceHash,
                     metadata: { confidence: response.data.confidence, flags: response.data.flags, intent: response.data.intent },
                 }).catch(err => {
                     this.logger.error('Semantic cache save failed', {

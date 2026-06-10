@@ -8,6 +8,7 @@ import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache } from
 import { lt, sql, SQL } from 'drizzle-orm';
 import type { PgTable, PgColumn } from 'drizzle-orm/pg-core';
 import { Logger, noopLogger, CleanupResult } from '../types';
+import { SEMANTIC_CACHE_TTL_DAYS } from '../services/kb/semantic-cache';
 
 /**
  * Delete rows matching a condition in batches to avoid long-running transactions.
@@ -85,8 +86,9 @@ export async function cleanupRefreshTokens(): Promise<CleanupResult> {
  *    in semantic-cache.ts filters them out. Cleaning them promptly frees space after
  *    every KB update without waiting for age-based expiry.
  *
- * 2. Age-expired: entries older than 7 days, matching the TTL enforced at query time.
- *    Catches orphaned entries for deleted pages or other edge cases.
+ * 2. Age-expired: entries older than SEMANTIC_CACHE_TTL_DAYS, matching the TTL
+ *    enforced at query time. Catches orphaned entries for deleted pages or other
+ *    edge cases.
  */
 export async function cleanupSemanticCache(batchSize: number = 1000): Promise<CleanupResult> {
     let totalDeleted = 0;
@@ -113,7 +115,7 @@ export async function cleanupSemanticCache(batchSize: number = 1000): Promise<Cl
         // 2. Age-expired entries: catch orphans for deleted pages or other edge cases.
         const aged = await batchDelete(
             'semantic_cache', semanticCache, semanticCache.id,
-            lt(semanticCache.createdAt, daysAgo(7)), batchSize,
+            lt(semanticCache.createdAt, daysAgo(SEMANTIC_CACHE_TTL_DAYS)), batchSize,
         );
         totalDeleted += aged.deletedCount;
         if (aged.error) throw new Error(aged.error);
