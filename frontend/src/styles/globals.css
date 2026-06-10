@@ -168,7 +168,7 @@
     --secondary-foreground: 235 240 245;
 
     --muted: 14 22 38;
-    --muted-foreground: 120 135 160;  /* #788da0 */
+    --muted-foreground: 148 163 184;  /* #94a3b8 — lifted from #788da0 (4.8:1, barely AA) to ~6.9:1 on --card for headroom on small text and tinted surfaces */
 
     --border: 28 40 60;               /* #1c283c — visible card edges */
     --ring: 79 116 178;               /* #4f74b2 (blue) */

@@ -26,7 +26,7 @@ import { useIOSPaymentRedirect, useIsDarkMode } from '@/hooks';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebUrl } from '@/lib/webUrl';
 import type { Plan } from '@jawab24/shared';
-import { getDisplayPrice, getMonthlyEquivalent } from '@/utils/pricing';
+import { getDisplayPrice, getMonthlyEquivalent, getSarMonthlyEquivalent } from '@/utils/pricing';
 
 type TopupPack = '5k' | '10k';
 interface TopupInfo {
@@ -569,6 +569,13 @@ function CheckoutPage() {
                         {!isTopup && billingInterval === 'year' && plan && (
                           <p className="text-xs text-muted-foreground mt-1">
                             {tPlans('perMonthEquivalent', { amount: `$${(getMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}` })} &middot; {tPlans('billedAnnually')}
+                          </p>
+                        )}
+                        {/* Same informational SAR hint as the pricing page — keeps the
+                            currency framing consistent through to payment. */}
+                        {!isTopup && plan && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {tPricing('sarEquivalent', { amount: getSarMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice).toLocaleString() })}
                           </p>
                         )}
                       </div>
