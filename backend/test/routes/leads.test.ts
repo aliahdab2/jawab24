@@ -10,6 +10,7 @@ vi.mock('../../src/services/leadExtractor', () => ({
         getLeadById: vi.fn(),
         getAllLeadsForExport: vi.fn(),
         updateLeadStatus: vi.fn(),
+        updateLeadCustomFields: vi.fn(),
         deleteLead: vi.fn(),
         getNewLeadsCount: vi.fn(),
     },
@@ -18,6 +19,23 @@ vi.mock('../../src/services/leadExtractor', () => ({
 vi.mock('../../src/services/pages', () => ({
     pagesService: {
         getPage: vi.fn().mockResolvedValue({ id: 'page_1', name: 'Test Page' }),
+    },
+}));
+
+vi.mock('../../src/services/workspaceSettings', () => ({
+    workspaceSettingsService: {
+        getSettings: vi.fn().mockResolvedValue({
+            leadStages: {
+                converted: [
+                    { id: 'sub_delivered', label: 'تم التسليم', color: 'emerald' },
+                    { id: 'sub_cancelled', label: 'إلغاء', color: 'rose' },
+                ],
+            },
+            leadFields: [
+                { id: 'field_paid', label: 'المبلغ المدفوع' },
+                { id: 'field_discount', label: 'الخصم' },
+            ],
+        }),
     },
 }));
 
@@ -41,6 +59,8 @@ const MOCK_LEAD = {
     senderName: 'Ali',
     phone: '0501234567',
     status: 'new' as const,
+    subStage: null,
+    customFields: null,
     sourceType: 'message' as const,
     sourceId: 'msg_1',
     extractedData: { summary: 'Interested in course', fields: [] },
@@ -239,6 +259,144 @@ describe('Leads Routes', () => {
                 method: 'PATCH',
                 url: '/leads/nonexistent/status',
                 payload: { pageId: 'page_1', status: 'contacted' },
+            });
+            expect(res.statusCode).toBe(404);
+        });
+
+        // ── Custom sub-stages (workspace-defined, free-text labels) ──────────
+
+        it('accepts a sub-stage defined for the target status', async () => {
+            vi.mocked(leadExtractorService.updateLeadStatus).mockResolvedValue({
+                ...MOCK_LEAD,
+                status: 'converted',
+                subStage: 'sub_delivered',
+            } as any);
+
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/status',
+                payload: { pageId: 'page_1', status: 'converted', subStage: 'sub_delivered' },
+            });
+
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.body).subStage).toBe('sub_delivered');
+            expect(leadExtractorService.updateLeadStatus).toHaveBeenCalledWith(
+                'lead_1', 'page_1', 'converted', 'sub_delivered',
+            );
+        });
+
+        it('rejects a sub-stage id the workspace never defined', async () => {
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/status',
+                payload: { pageId: 'page_1', status: 'converted', subStage: 'sub_foreign' },
+            });
+            expect(res.statusCode).toBe(400);
+            expect(leadExtractorService.updateLeadStatus).not.toHaveBeenCalled();
+        });
+
+        it('rejects a sub-stage defined under a DIFFERENT main status', async () => {
+            // sub_delivered exists, but only under "converted" — not "contacted".
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/status',
+                payload: { pageId: 'page_1', status: 'contacted', subStage: 'sub_delivered' },
+            });
+            expect(res.statusCode).toBe(400);
+        });
+
+        it('clears the sub-stage when only the main status is sent', async () => {
+            vi.mocked(leadExtractorService.updateLeadStatus).mockResolvedValue({
+                ...MOCK_LEAD,
+                status: 'contacted',
+                subStage: null,
+            } as any);
+
+            await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/status',
+                payload: { pageId: 'page_1', status: 'contacted' },
+            });
+
+            expect(leadExtractorService.updateLeadStatus).toHaveBeenCalledWith(
+                'lead_1', 'page_1', 'contacted', null,
+            );
+        });
+    });
+
+    describe('PATCH /leads/:id/fields', () => {
+        it('writes values for workspace-defined fields', async () => {
+            vi.mocked(leadExtractorService.updateLeadCustomFields).mockResolvedValue({
+                ...MOCK_LEAD,
+                customFields: { field_paid: '500 ر.س', field_discount: '10%' },
+            } as any);
+
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/fields',
+                payload: { pageId: 'page_1', fields: { field_paid: '500 ر.س', field_discount: '10%' } },
+            });
+
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.body).customFields).toEqual({ field_paid: '500 ر.س', field_discount: '10%' });
+            expect(leadExtractorService.updateLeadCustomFields).toHaveBeenCalledWith(
+                'lead_1', 'page_1', { field_paid: '500 ر.س', field_discount: '10%' },
+            );
+        });
+
+        it('rejects a field id the workspace never defined', async () => {
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/fields',
+                payload: { pageId: 'page_1', fields: { field_foreign: 'x' } },
+            });
+            expect(res.statusCode).toBe(400);
+            expect(leadExtractorService.updateLeadCustomFields).not.toHaveBeenCalled();
+        });
+
+        it('rejects non-string values', async () => {
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/fields',
+                payload: { pageId: 'page_1', fields: { field_paid: 500 } },
+            });
+            expect(res.statusCode).toBe(400);
+            expect(leadExtractorService.updateLeadCustomFields).not.toHaveBeenCalled();
+        });
+
+        it('stores null when every value is cleared (empty strings dropped)', async () => {
+            vi.mocked(leadExtractorService.updateLeadCustomFields).mockResolvedValue({
+                ...MOCK_LEAD,
+                customFields: null,
+            } as any);
+
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/fields',
+                payload: { pageId: 'page_1', fields: { field_paid: '  ', field_discount: '' } },
+            });
+
+            expect(res.statusCode).toBe(200);
+            expect(leadExtractorService.updateLeadCustomFields).toHaveBeenCalledWith(
+                'lead_1', 'page_1', null,
+            );
+        });
+
+        it('returns 400 when pageId is missing', async () => {
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/fields',
+                payload: { fields: { field_paid: '500' } },
+            });
+            expect(res.statusCode).toBe(400);
+        });
+
+        it('returns 404 when lead not found', async () => {
+            vi.mocked(leadExtractorService.updateLeadCustomFields).mockResolvedValue(null);
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/fields',
+                payload: { pageId: 'page_1', fields: { field_paid: '500' } },
             });
             expect(res.statusCode).toBe(404);
         });

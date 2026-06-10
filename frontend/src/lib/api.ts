@@ -963,6 +963,26 @@ export const orderNotificationsApi = {
 export type LeadStatus = 'new' | 'contacted' | 'converted';
 export type LeadSourceType = 'message' | 'comment';
 
+// Customizable sub-stages: free-text labels defined per workspace under each
+// fixed main status (store: "تم الشحن", clinic: "حجز موعد", school: "سجّل").
+export type LeadStageColor = 'blue' | 'amber' | 'emerald' | 'rose' | 'violet' | 'cyan' | 'orange' | 'slate';
+
+export interface LeadSubStage {
+  id: string;
+  label: string;
+  color: LeadStageColor;
+}
+
+export type LeadStagesConfig = Partial<Record<LeadStatus, LeadSubStage[]>>;
+
+// Merchant-defined per-lead data fields (e.g. المبلغ المدفوع, الخصم) — the
+// definitions live in workspace settings; values are stored on each lead
+// keyed by field id.
+export interface LeadCustomFieldDef {
+  id: string;
+  label: string;
+}
+
 export interface LeadField {
   key: string;
   label_en: string;
@@ -985,6 +1005,10 @@ export interface Lead {
   phone: string;
   extractedData: LeadExtractedData;
   status: LeadStatus;
+  /** Id of a workspace-defined sub-stage (see LeadStagesConfig), or null. */
+  subStage: string | null;
+  /** Merchant-entered values for the workspace's leadFields, keyed by field id. */
+  customFields: Record<string, string> | null;
   extractionStatus: 'completed' | 'pending' | 'failed';
   createdAt: string;
   updatedAt: string;
@@ -1010,8 +1034,12 @@ export const leadsApi = {
   getCount: (pageId: string) =>
     api.get<{ count: number }>('/leads/count', { params: { pageId } }),
 
-  updateStatus: (leadId: string, pageId: string, status: LeadStatus) =>
-    api.patch<Lead>(`/leads/${leadId}/status`, { pageId, status }),
+  updateStatus: (leadId: string, pageId: string, status: LeadStatus, subStage?: string | null) =>
+    api.patch<Lead>(`/leads/${leadId}/status`, { pageId, status, subStage: subStage ?? null }),
+
+  /** Replace the lead's custom field values (send every shown field — cleared inputs delete). */
+  updateCustomFields: (leadId: string, pageId: string, fields: Record<string, string>) =>
+    api.patch<Lead>(`/leads/${leadId}/fields`, { pageId, fields }),
 
   deleteLead: (leadId: string, pageId: string) =>
     api.delete(`/leads/${leadId}`, { params: { pageId } }),

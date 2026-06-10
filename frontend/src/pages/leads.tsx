@@ -8,7 +8,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader, EmptyState, ConfirmationModal, Select, UpgradeCTA, Input } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useUIStore } from '@/lib/store';
-import { leadsApi, pagesApi, subscriptionApi, type Lead, type LeadStatus } from '@/lib/api';
+import { leadsApi, pagesApi, subscriptionApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import type { Page, UsageSummary } from '@jawab24/shared';
 import {
@@ -22,8 +22,11 @@ import {
   X,
   MessageSquare,
   ChevronRight,
+  SlidersHorizontal,
 } from 'lucide-react';
-import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG } from '@/components/leads/StatusControl';
+import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG, SUB_STAGE_BG, resolveSubStage } from '@/components/leads/StatusControl';
+import { StageCustomizerModal } from '@/components/leads/StageCustomizerModal';
+import { LeadCustomFieldsSection } from '@/components/leads/LeadCustomFields';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
@@ -48,7 +51,8 @@ const deepLinkErrorTag = { page: 'leads', action: 'deep-link' } as const;
 interface LeadCardProps {
   lead: Lead;
   language: string;
-  onStatusChange: (lead: Lead, next: LeadStatus) => void;
+  stages?: LeadStagesConfig;
+  onStatusChange: (lead: Lead, next: LeadStatus, subStage?: string | null) => void;
   onDelete: (lead: Lead) => void;
   onSelect: (lead: Lead) => void;
   isPending: boolean;
@@ -58,7 +62,7 @@ interface LeadCardProps {
 // Width of the action panel revealed by swiping left
 const SWIPE_ACTION_WIDTH = 160;
 
-function LeadCard({ lead, language, onStatusChange, onDelete, onSelect, isPending, t }: LeadCardProps) {
+function LeadCard({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadCardProps) {
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const startX = useRef(0);
@@ -162,13 +166,20 @@ function LeadCard({ lead, language, onStatusChange, onDelete, onSelect, isPendin
               {lead.senderName ?? '—'}
             </p>
           </div>
-          <span className={clsx(
-            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-white flex-shrink-0',
-            STATUS_BG[lead.status],
-          )}>
-            <span className="w-1.5 h-1.5 rounded-full bg-white/60" aria-hidden="true" />
-            {t(STATUS_LABEL_KEY[lead.status] as Parameters<typeof t>[0])}
-          </span>
+          {(() => {
+            // Custom sub-stage badge takes over when set (merchant's own label
+            // and color); falls back to the main status badge otherwise.
+            const sub = resolveSubStage(stages, lead.status, lead.subStage);
+            return (
+              <span className={clsx(
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-white flex-shrink-0',
+                sub ? SUB_STAGE_BG[sub.color] : STATUS_BG[lead.status],
+              )}>
+                <span className="w-1.5 h-1.5 rounded-full bg-white/60" aria-hidden="true" />
+                {sub ? sub.label : t(STATUS_LABEL_KEY[lead.status] as Parameters<typeof t>[0])}
+              </span>
+            );
+          })()}
         </div>
 
         {/* Phone — selectable number + icon as call link */}
@@ -217,8 +228,11 @@ function LeadCard({ lead, language, onStatusChange, onDelete, onSelect, isPendin
 interface LeadDetailModalProps {
   lead: Lead;
   pages: Page[];
+  stages?: LeadStagesConfig;
+  fieldDefs: LeadCustomFieldDef[];
   onClose: () => void;
-  onStatusChange: (next: LeadStatus) => void;
+  onStatusChange: (next: LeadStatus, subStage?: string | null) => void;
+  onFieldsSaved: (updated: Lead) => void;
   onViewConversation: () => void;
   isPending: boolean;
   language: string;
@@ -226,7 +240,7 @@ interface LeadDetailModalProps {
   tc: ReturnType<typeof useTranslations>;
 }
 
-function LeadDetailModal({ lead, pages, onClose, onStatusChange, onViewConversation, isPending, language, t, tc }: LeadDetailModalProps) {
+function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChange, onFieldsSaved, onViewConversation, isPending, language, t, tc }: LeadDetailModalProps) {
   const pageName = pages.find((p) => p.id === lead.pageId)?.name ?? '—';
   const fields = lead.extractedData?.fields ?? [];
   const sourceLabel = lead.sourceType === 'comment' ? t('sourceComment') : t('sourceMessage');
@@ -268,8 +282,20 @@ function LeadDetailModal({ lead, pages, onClose, onStatusChange, onViewConversat
         {/* ── Status segmented control ── */}
         <div className="px-5 py-4 border-b border-theme-border">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">{t('status')}</p>
-          <StatusPicker status={lead.status} onSelect={onStatusChange} t={t} disabled={isPending} />
+          <StatusPicker
+            status={lead.status}
+            subStage={lead.subStage}
+            stages={stages}
+            onSelect={onStatusChange}
+            t={t}
+            disabled={isPending}
+          />
         </div>
+
+        {/* ── Merchant data fields (settings.leadFields) ── placed right after
+            status: merchants fill these in the same gesture as moving the lead
+            (e.g. mark converted → write المبلغ المدفوع). */}
+        <LeadCustomFieldsSection lead={lead} fieldDefs={fieldDefs} onSaved={onFieldsSaved} t={t} />
 
         {/* ── View conversation ── only for message-sourced leads, which have a DM thread.
             Comment-sourced leads have no message thread to open. */}
@@ -336,14 +362,15 @@ function LeadDetailModal({ lead, pages, onClose, onStatusChange, onViewConversat
 interface LeadRowProps {
   lead: Lead;
   language: string;
-  onStatusChange: (lead: Lead, next: LeadStatus) => void;
+  stages?: LeadStagesConfig;
+  onStatusChange: (lead: Lead, next: LeadStatus, subStage?: string | null) => void;
   onDelete: (lead: Lead) => void;
   onSelect: (lead: Lead) => void;
   isPending: boolean;
   t: ReturnType<typeof useTranslations>;
 }
 
-function LeadRow({ lead, language, onStatusChange, onDelete, onSelect, isPending, t }: LeadRowProps) {
+function LeadRow({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadRowProps) {
   return (
     <tr
       className="group border-b border-theme-border hover:bg-muted/40 transition-colors cursor-pointer"
@@ -365,7 +392,7 @@ function LeadRow({ lead, language, onStatusChange, onDelete, onSelect, isPending
         </div>
       </td>
       <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-        <StatusCell lead={lead} onStatusChange={onStatusChange} isPending={isPending} t={t} />
+        <StatusCell lead={lead} stages={stages} onStatusChange={onStatusChange} isPending={isPending} t={t} />
       </td>
       <td className="px-4 py-4 max-w-[200px]">
         <p className="text-sm text-muted-foreground truncate">
@@ -407,7 +434,22 @@ const LeadsPage: NextPageWithLayout = () => {
   const [exporting, setExporting] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [stageModalOpen, setStageModalOpen] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
+
+  // Workspace lead config — merchant-defined sub-stages (settings.leadStages)
+  // and custom data fields (settings.leadFields). Drives badges, the picker,
+  // the detail-panel field editor, and CSV.
+  const { data: workspaceSettings } = useQuery<{ leadStages?: LeadStagesConfig; leadFields?: LeadCustomFieldDef[] }>({
+    queryKey: ['workspace-settings'],
+    queryFn: async () => {
+      const { data } = await workspaceApi.getSettings();
+      return data as { leadStages?: LeadStagesConfig; leadFields?: LeadCustomFieldDef[] };
+    },
+    staleTime: 60_000,
+  });
+  const stages = workspaceSettings?.leadStages;
+  const fieldDefs = React.useMemo(() => workspaceSettings?.leadFields ?? [], [workspaceSettings?.leadFields]);
 
   const { data: pagesData } = useQuery<Page[]>({
     queryKey: ['pages'],
@@ -566,8 +608,8 @@ const LeadsPage: NextPageWithLayout = () => {
   });
 
   const statusMutation = useMutation({
-    mutationFn: ({ lead, status }: { lead: Lead; status: LeadStatus }) =>
-      leadsApi.updateStatus(lead.id, lead.pageId, status),
+    mutationFn: ({ lead, status, subStage }: { lead: Lead; status: LeadStatus; subStage?: string | null }) =>
+      leadsApi.updateStatus(lead.id, lead.pageId, status, subStage),
     onSuccess: (_, { status }) => {
       if (status === 'converted') {
         toast.success(`🎉 ${t('statusConvertedCelebration')}`, { id: 'lead-status', duration: 4000 });
@@ -577,9 +619,11 @@ const LeadsPage: NextPageWithLayout = () => {
       invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
       queryClient.invalidateQueries({ queryKey: ['leads-counts', selectedPageId] });
     },
-    onError: (err) => {
+    onError: (err, { lead }) => {
       captureError(err, 'Failed to update lead status');
       toast.error(t('statusUpdateFailed'), { id: 'lead-status' });
+      // Roll back the optimistic detail-panel echo to the pre-update lead.
+      setSelectedLead((prev) => (prev && prev.id === lead.id ? lead : prev));
     },
   });
 
@@ -625,7 +669,10 @@ const LeadsPage: NextPageWithLayout = () => {
         }
       }
 
-      const staticHeaders = [t('name'), t('phone'), t('status'), t('intent'), t('source'), t('createdAt')];
+      const staticHeaders = [t('name'), t('phone'), t('status'), t('subStage'), t('intent'), t('source'), t('createdAt')];
+      // Merchant-defined custom fields — one column per definition, in the
+      // merchant's configured order, labelled with their own field names.
+      const customFieldHeaders = fieldDefs.map((f) => f.label);
       const dynamicHeaders = exportDynamicKeys.map((k) => exportDynamicLabels[k] ?? k);
       const rows = allLeads.map((lead) => {
         const fieldMap = Object.fromEntries((lead.extractedData?.fields ?? []).map((f) => [f.key, f.value]));
@@ -635,14 +682,16 @@ const LeadsPage: NextPageWithLayout = () => {
           lead.senderName ?? '',
           lead.phone,
           statusKey ? t(statusKey) : lead.status,
+          resolveSubStage(stages, lead.status, lead.subStage)?.label ?? '',
           lead.extractedData?.summary ?? '',
           sourceLabel,
           formatDateForExport(lead.createdAt, language),
+          ...fieldDefs.map((f) => lead.customFields?.[f.id] ?? ''),
           ...exportDynamicKeys.map((k) => fieldMap[k] ?? ''),
         ];
       });
       const dateStamp = new Date().toISOString().slice(0, 10);
-      const { savedToFiles } = await downloadCSV(`leads-${dateStamp}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
+      const { savedToFiles } = await downloadCSV(`leads-${dateStamp}.csv`, [...staticHeaders, ...customFieldHeaders, ...dynamicHeaders], rows);
       toast.success(savedToFiles ? tc('exportSavedToFiles') : t('exportCsv'));
     } catch (err) {
       const isPermissionDenied = err instanceof DOMException && err.name === 'NotAllowedError';
@@ -672,7 +721,16 @@ const LeadsPage: NextPageWithLayout = () => {
         description={t('description')}
         action={
           selectedPageId ? (
-            <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
+            <div className="flex items-center gap-1">
+              {/* Customize stages — merchant-defined statuses (free text, any business type) */}
+              <button
+                onClick={() => setStageModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors"
+              >
+                <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
+                <span className="hidden sm:inline">{t('customizeStages')}</span>
+              </button>
+              <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
               {canExport ? (
                 <button
                   onClick={handleExport}
@@ -693,6 +751,7 @@ const LeadsPage: NextPageWithLayout = () => {
                   <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
                 </UpgradeCTA>
               )}
+              </div>
             </div>
           ) : undefined
         }
@@ -795,7 +854,8 @@ const LeadsPage: NextPageWithLayout = () => {
                 key={lead.id}
                 lead={lead}
                 language={language}
-                onStatusChange={(l, s) => statusMutation.mutate({ lead: l, status: s })}
+                stages={stages}
+                onStatusChange={(l, s, sub) => statusMutation.mutate({ lead: l, status: s, subStage: sub })}
                 onDelete={(l) => setLeadToDelete(l)}
                 onSelect={openLead}
                 isPending={isPending}
@@ -823,7 +883,8 @@ const LeadsPage: NextPageWithLayout = () => {
                     key={lead.id}
                     lead={lead}
                     language={language}
-                    onStatusChange={(l, s) => statusMutation.mutate({ lead: l, status: s })}
+                    stages={stages}
+                    onStatusChange={(l, s, sub) => statusMutation.mutate({ lead: l, status: s, subStage: sub })}
                     onDelete={(l) => setLeadToDelete(l)}
                     onSelect={openLead}
                     isPending={isPending}
@@ -851,10 +912,18 @@ const LeadsPage: NextPageWithLayout = () => {
         <LeadDetailModal
           lead={selectedLead}
           pages={pages}
+          stages={stages}
+          fieldDefs={fieldDefs}
           onClose={closeLead}
-          onStatusChange={(status) => {
-            statusMutation.mutate({ lead: selectedLead, status });
-            setSelectedLead((prev) => prev ? { ...prev, status } : null);
+          onStatusChange={(status, subStage) => {
+            statusMutation.mutate({ lead: selectedLead, status, subStage });
+            // Optimistic local echo. Selecting a main status clears the
+            // sub-stage (matches server behavior).
+            setSelectedLead((prev) => prev ? { ...prev, status, subStage: subStage ?? null } : null);
+          }}
+          onFieldsSaved={(updated) => {
+            setSelectedLead((prev) => (prev && prev.id === updated.id ? { ...prev, customFields: updated.customFields } : prev));
+            invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
           }}
           onViewConversation={() => handleViewConversation(selectedLead)}
           isPending={statusMutation.isPending}
@@ -863,6 +932,14 @@ const LeadsPage: NextPageWithLayout = () => {
           tc={tc}
         />
       )}
+
+      {/* Stage customizer — merchant-defined sub-stages (free text, per workspace) */}
+      <StageCustomizerModal
+        isOpen={stageModalOpen}
+        onClose={() => setStageModalOpen(false)}
+        stages={stages}
+        fields={fieldDefs}
+      />
 
       {/* Delete confirmation modal */}
       <ConfirmationModal

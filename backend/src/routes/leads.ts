@@ -34,6 +34,10 @@ export default async function leadsRoutes(fastify: FastifyInstance) {
         schema: { tags: ['Leads'], summary: 'Update lead status', security: auth },
     }, leadsController.updateStatus.bind(leadsController));
 
+    fastify.patch('/leads/:id/fields', {
+        schema: { tags: ['Leads'], summary: 'Update lead custom field values', security: auth },
+    }, leadsController.updateCustomFields.bind(leadsController));
+
     fastify.delete('/leads/:id', {
         schema: { tags: ['Leads'], summary: 'Delete a lead', security: auth },
     }, leadsController.deleteLead.bind(leadsController));
