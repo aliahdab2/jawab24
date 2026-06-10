@@ -80,41 +80,41 @@ const TEMPLATES: Record<TemplateKey, { ar: TemplateContent; en: TemplateContent 
   store: {
     ar: {
       stages: { contacted: ['بانتظار التأكيد', 'مؤجل'], converted: ['قيد التجهيز', 'تم الشحن', 'تم التسليم', 'إلغاء / مرتجع'] },
-      fields: ['المبلغ المدفوع', 'الخصم', 'رقم الطلب'],
+      fields: ['المبلغ المدفوع', 'الخصم', 'رقم الطلب', 'ملاحظات'],
     },
     en: {
       stages: { contacted: ['Awaiting confirmation', 'Postponed'], converted: ['Preparing', 'Shipped', 'Delivered', 'Cancelled / Returned'] },
-      fields: ['Amount paid', 'Discount', 'Order #'],
+      fields: ['Amount paid', 'Discount', 'Order #', 'Notes'],
     },
   },
   clinic: {
     ar: {
       stages: { contacted: ['حجز موعد', 'بانتظار التحاليل'], converted: ['تمت الزيارة', 'متابعة دورية', 'ألغى الموعد'] },
-      fields: ['نوع الزيارة', 'تاريخ الموعد'],
+      fields: ['نوع الزيارة', 'تاريخ الموعد', 'ملاحظات'],
     },
     en: {
       stages: { contacted: ['Appointment booked', 'Awaiting tests'], converted: ['Visited', 'Follow-up', 'Cancelled appointment'] },
-      fields: ['Visit type', 'Appointment date'],
+      fields: ['Visit type', 'Appointment date', 'Notes'],
     },
   },
   school: {
     ar: {
       stages: { contacted: ['مهتم', 'حجز مقابلة'], converted: ['سجّل بالدورة', 'أكمل الدورة', 'انسحب'] },
-      fields: ['الدورة', 'الرسوم المدفوعة'],
+      fields: ['الدورة', 'الرسوم المدفوعة', 'ملاحظات'],
     },
     en: {
       stages: { contacted: ['Interested', 'Interview booked'], converted: ['Enrolled', 'Completed', 'Withdrew'] },
-      fields: ['Course', 'Fees paid'],
+      fields: ['Course', 'Fees paid', 'Notes'],
     },
   },
   services: {
     ar: {
       stages: { contacted: ['طلب عرض سعر', 'بانتظار الموافقة'], converted: ['قيد التنفيذ', 'مكتمل', 'ملغي'] },
-      fields: ['نوع الخدمة', 'قيمة العرض'],
+      fields: ['نوع الخدمة', 'قيمة العرض', 'ملاحظات'],
     },
     en: {
       stages: { contacted: ['Quote requested', 'Awaiting approval'], converted: ['In progress', 'Done', 'Cancelled'] },
-      fields: ['Service type', 'Quote value'],
+      fields: ['Service type', 'Quote value', 'Notes'],
     },
   },
 };

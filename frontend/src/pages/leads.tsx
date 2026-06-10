@@ -52,6 +52,32 @@ const LEADS_PER_PAGE = 50;
 // Sentry tags for unexpected failures when opening a deep-linked lead.
 const deepLinkErrorTag = { page: 'leads', action: 'deep-link' } as const;
 
+// ── Extracted-field chips (list views) ────────────────────────────────────────
+// The AI's structured fields (course, budget, color…) are the feature's star —
+// surface each lead's top two right in the list instead of burying them behind
+// a click. Chips, not table columns: fields differ per lead, so columns would
+// explode on pages with mixed inquiries.
+
+function FieldChips({ lead, language }: { lead: Lead; language: string }) {
+  const chips = (lead.extractedData?.fields ?? [])
+    .filter((f) => f.value && f.value.trim())
+    .slice(0, 2);
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {chips.map((f) => (
+        <span
+          key={f.key}
+          className="inline-flex items-center gap-1 max-w-full bg-muted rounded-md px-1.5 py-0.5 text-xs text-muted-foreground"
+        >
+          {isRTLLocale(language) ? f.label_ar : f.label_en}:
+          <span className="font-medium text-foreground truncate">{f.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ── Lead card (mobile, swipeable) ─────────────────────────────────────────────
 
 interface LeadCardProps {
@@ -203,7 +229,8 @@ function LeadCard({ lead, language, stages, onStatusChange, onDelete, onSelect, 
           </a>
         </div>
 
-        {/* Summary */}
+        {/* What the lead wants — top extracted fields, then the summary */}
+        <FieldChips lead={lead} language={language} />
         {lead.extractedData?.summary && (
           <p className="text-sm text-muted-foreground line-clamp-2">
             {lead.extractedData.summary}
@@ -392,10 +419,20 @@ function LeadRow({ lead, language, stages, onStatusChange, onDelete, onSelect, i
       <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
         <StatusCell lead={lead} stages={stages} onStatusChange={onStatusChange} isPending={isPending} t={t} />
       </td>
-      <td className="px-4 py-4 max-w-[200px]">
-        <p className="text-sm text-muted-foreground truncate">
-          {lead.extractedData?.summary ?? '—'}
-        </p>
+      <td className="px-4 py-4 max-w-[240px]">
+        <div className="flex flex-col gap-1">
+          <FieldChips lead={lead} language={language} />
+          {lead.extractedData?.summary ? (
+            // title = full text, so the truncation is hoverable (desktop only cell)
+            <p className="text-sm text-muted-foreground truncate" title={lead.extractedData.summary}>
+              {lead.extractedData.summary}
+            </p>
+          ) : (
+            !(lead.extractedData?.fields ?? []).some((f) => f.value?.trim()) && (
+              <p className="text-sm text-muted-foreground">—</p>
+            )
+          )}
+        </div>
       </td>
       <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap">
         {formatDateForExport(lead.createdAt, language)}
@@ -448,6 +485,22 @@ const LeadsPage: NextPageWithLayout = () => {
   });
   const stages = workspaceSettings?.leadStages;
   const fieldDefs = React.useMemo(() => workspaceSettings?.leadFields ?? [], [workspaceSettings?.leadFields]);
+
+  // First-run nudge: "Customize" is a setup action a new merchant won't find in
+  // the utility corner. Show a dismissible hint while the workspace has no
+  // custom config at all; once configured (or dismissed) it never returns.
+  const [customizeNudgeDismissed, setCustomizeNudgeDismissed] = useState(true);
+  useEffect(() => {
+    setCustomizeNudgeDismissed(localStorage.getItem('leads-customize-nudge-dismissed') === '1');
+  }, []);
+  const hasLeadConfig =
+    Object.values(stages ?? {}).some((list) => (list ?? []).length > 0) || fieldDefs.length > 0;
+  const showCustomizeNudge =
+    workspaceSettings !== undefined && !hasLeadConfig && !customizeNudgeDismissed;
+  const dismissCustomizeNudge = () => {
+    localStorage.setItem('leads-customize-nudge-dismissed', '1');
+    setCustomizeNudgeDismissed(true);
+  };
 
   const { data: pagesData } = useQuery<Page[]>({
     queryKey: ['pages'],
@@ -754,6 +807,29 @@ const LeadsPage: NextPageWithLayout = () => {
           ) : undefined
         }
       />
+
+      {/* First-run hint: workspace has no custom stages/fields yet */}
+      {showCustomizeNudge && selectedPageId && (
+        <div className="alert-violet border rounded-2xl px-4 py-3 mb-4 flex items-center gap-3">
+          <SlidersHorizontal className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          <p className="text-sm flex-1">{t('customizeNudge')}</p>
+          <button
+            type="button"
+            onClick={() => setStageModalOpen(true)}
+            className="text-sm font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity flex-shrink-0"
+          >
+            {t('customizeStages')}
+          </button>
+          <button
+            type="button"
+            onClick={dismissCustomizeNudge}
+            aria-label={tc('close')}
+            className="p-1 -me-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex-shrink-0"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
