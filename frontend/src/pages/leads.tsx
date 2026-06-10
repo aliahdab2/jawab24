@@ -300,19 +300,17 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
         {/* ── View conversation ── only for message-sourced leads, which have a DM thread.
             Comment-sourced leads have no message thread to open. */}
         {lead.sourceType === 'message' && (
-          <div className="px-5 py-4 border-b border-theme-border">
-            <button
-              type="button"
-              onClick={onViewConversation}
-              className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl border border-theme-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
-            >
-              <span className="flex items-center gap-2 min-w-0">
-                <MessageSquare className="w-4 h-4 text-icon-muted flex-shrink-0" aria-hidden="true" />
-                <span className="truncate">{t('viewConversation')}</span>
-              </span>
-              <ChevronRight className="w-4 h-4 text-icon-muted flex-shrink-0 rtl:rotate-180" aria-hidden="true" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onViewConversation}
+            className="w-full flex items-center justify-between gap-2 px-5 py-3 border-b border-theme-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <MessageSquare className="w-4 h-4 text-icon-muted flex-shrink-0" aria-hidden="true" />
+              <span className="truncate">{t('viewConversation')}</span>
+            </span>
+            <ChevronRight className="w-4 h-4 text-icon-muted flex-shrink-0 rtl:rotate-180" aria-hidden="true" />
+          </button>
         )}
 
         {/* ── Summary / intent ── */}
