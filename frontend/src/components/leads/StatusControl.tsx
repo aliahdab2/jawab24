@@ -231,7 +231,13 @@ export function StatusCell({ lead, stages, onStatusChange, isPending, t }: Statu
       if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
       close();
     };
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        close();
+        // Keyboard users need their place back — return focus to the trigger.
+        triggerRef.current?.focus();
+      }
+    };
     const onScroll = () => close();
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('keydown', onKeyDown);
@@ -269,6 +275,8 @@ export function StatusCell({ lead, stages, onStatusChange, isPending, t }: Statu
         type="button"
         onClick={handleOpen}
         disabled={isPending}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className={clsx(
           'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all',
           activeSub ? SUB_STAGE_PILL[activeSub.color] : STATUS_PILL[lead.status],
@@ -281,6 +289,8 @@ export function StatusCell({ lead, stages, onStatusChange, isPending, t }: Statu
       {open && createPortal(
         <div
           ref={popoverRef}
+          role="dialog"
+          aria-label={t('status' as Parameters<typeof t>[0])}
           style={{ position: 'fixed', top: coords.top, left: coords.left, width: coords.width, zIndex: 9999 }}
           className="animate-in fade-in slide-in-from-top-2 duration-150 bg-card border border-theme-border rounded-2xl shadow-xl p-2"
         >

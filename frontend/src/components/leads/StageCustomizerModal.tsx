@@ -51,6 +51,19 @@ import {
 
 const COLORS = LEAD_STAGE_COLORS as readonly LeadStageColor[];
 
+// i18n keys for the color names — screen readers and tooltips must announce
+// colors in the merchant's language, not the palette's internal English names.
+const COLOR_LABEL_KEY: Record<LeadStageColor, string> = {
+  blue: 'colorBlue',
+  amber: 'colorAmber',
+  emerald: 'colorEmerald',
+  rose: 'colorRose',
+  violet: 'colorViolet',
+  cyan: 'colorCyan',
+  orange: 'colorOrange',
+  slate: 'colorSlate',
+};
+
 // ── Business-type templates ───────────────────────────────────────────────────
 // One tap fills suggested sub-stages AND data fields — fully editable
 // afterwards. Labels follow the merchant's current UI language (they're plain
@@ -273,6 +286,7 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
                 <button
                   type="button"
                   onClick={() => addSubStage(status)}
+                  aria-label={`${t('addSubStage')} — ${statusLabel}`}
                   className="ms-auto inline-flex items-center gap-1.5 text-sm font-medium text-brand-500 hover:text-brand-600 transition-colors"
                 >
                   <Plus className="w-4 h-4" aria-hidden="true" />
@@ -316,7 +330,8 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
                         <button
                           key={c}
                           type="button"
-                          aria-label={c}
+                          aria-label={t(COLOR_LABEL_KEY[c] as Parameters<typeof t>[0])}
+                          title={t(COLOR_LABEL_KEY[c] as Parameters<typeof t>[0])}
                           aria-pressed={sub.color === c}
                           onClick={() => {
                             const next = [...list];
@@ -342,7 +357,7 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
                       type="button"
                       onClick={() => update(status, list.filter((s) => s.id !== sub.id))}
                       aria-label={t('removeSubStage')}
-                      className="p-2 text-icon-muted hover:text-red-400 transition-colors flex-shrink-0"
+                      className="p-2 rounded-lg text-icon-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors flex-shrink-0"
                     >
                       <Trash2 className="w-4 h-4" aria-hidden="true" />
                     </button>
@@ -354,6 +369,7 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
                 <button
                   type="button"
                   onClick={() => addSubStage(status)}
+                  aria-label={`${t('addSubStage')} — ${statusLabel}`}
                   className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-500 hover:text-brand-600 transition-colors"
                 >
                   <Plus className="w-4 h-4" aria-hidden="true" />
@@ -407,7 +423,7 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
                   type="button"
                   onClick={() => setFieldsDraft(fieldsDraft.filter((f) => f.id !== field.id))}
                   aria-label={t('removeField')}
-                  className="p-2 text-icon-muted hover:text-red-400 transition-colors flex-shrink-0"
+                  className="p-2 rounded-lg text-icon-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors flex-shrink-0"
                 >
                   <Trash2 className="w-4 h-4" aria-hidden="true" />
                 </button>

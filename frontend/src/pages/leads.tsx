@@ -24,8 +24,15 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG, SUB_STAGE_BG, resolveSubStage } from '@/components/leads/StatusControl';
-import { StageCustomizerModal } from '@/components/leads/StageCustomizerModal';
 import { LeadCustomFieldsSection } from '@/components/leads/LeadCustomFields';
+import dynamic from 'next/dynamic';
+
+// Admin-only customization flow — lazy-loaded so it doesn't sit in the page
+// bundle for every merchant viewing leads (same pattern as comments/pages modals).
+const StageCustomizerModal = dynamic(
+  () => import('@/components/leads/StageCustomizerModal').then((m) => ({ default: m.StageCustomizerModal })),
+  { ssr: false },
+);
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
@@ -924,13 +931,16 @@ const LeadsPage: NextPageWithLayout = () => {
         />
       )}
 
-      {/* Stage customizer — merchant-defined sub-stages (free text, per workspace) */}
-      <StageCustomizerModal
-        isOpen={stageModalOpen}
-        onClose={() => setStageModalOpen(false)}
-        stages={stages}
-        fields={fieldDefs}
-      />
+      {/* Stage customizer — merchant-defined sub-stages (free text, per workspace).
+          Conditionally mounted so the dynamic() chunk only loads when opened. */}
+      {stageModalOpen && (
+        <StageCustomizerModal
+          isOpen
+          onClose={() => setStageModalOpen(false)}
+          stages={stages}
+          fields={fieldDefs}
+        />
+      )}
 
       {/* Delete confirmation modal */}
       <ConfirmationModal

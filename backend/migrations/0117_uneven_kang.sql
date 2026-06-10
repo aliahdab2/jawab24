@@ -1,1 +1,1 @@
-ALTER TABLE "leads" ADD COLUMN "custom_fields" jsonb;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "custom_fields" jsonb;

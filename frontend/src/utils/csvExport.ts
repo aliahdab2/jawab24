@@ -13,7 +13,21 @@
 import { getIntlLocale } from '@/i18n';
 import { isNativePlatform } from '@/lib/capacitor';
 
-function escapeCSVField(value: string): string {
+/**
+ * Neutralize spreadsheet formula injection (OWASP CSV injection): Excel/Calc
+ * execute cells starting with = @ + or - as formulas. Values here include
+ * customer-written and merchant-written free text, so prefix a `'` (renders
+ * as plain text) — except plain numbers/phones like "+96650…" or "-12.5",
+ * which spreadsheets treat as numeric, not formulas.
+ */
+function neutralizeFormula(value: string): string {
+  if (/^[=@]/.test(value)) return `'${value}`;
+  if (/^[+-]/.test(value) && !/^[+-][\d\s().-]*$/.test(value)) return `'${value}`;
+  return value;
+}
+
+function escapeCSVField(rawValue: string): string {
+  const value = neutralizeFormula(rawValue);
   if (value.includes(',') || value.includes('"') || value.includes('\n')) {
     return `"${value.replace(/"/g, '""')}"`;
   }
