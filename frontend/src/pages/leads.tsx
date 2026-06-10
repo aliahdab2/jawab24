@@ -8,7 +8,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader, EmptyState, ConfirmationModal, Select, UpgradeCTA, Input } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useUIStore } from '@/lib/store';
-import { leadsApi, pagesApi, subscriptionApi, type Lead, type LeadStatus } from '@/lib/api';
+import { leadsApi, pagesApi, subscriptionApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import type { Page, UsageSummary } from '@jawab24/shared';
 import {
@@ -21,9 +21,11 @@ import {
   Search,
   X,
   MessageSquare,
-  ChevronRight,
+  SlidersHorizontal,
 } from 'lucide-react';
-import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG } from '@/components/leads/StatusControl';
+import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG, SUB_STAGE_BG, resolveSubStage } from '@/components/leads/StatusControl';
+import { LeadCustomFieldsSection } from '@/components/leads/LeadCustomFields';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
@@ -43,12 +45,55 @@ const LEADS_PER_PAGE = 50;
 // Sentry tags for unexpected failures when opening a deep-linked lead.
 const deepLinkErrorTag = { page: 'leads', action: 'deep-link' } as const;
 
-// ── Lead card (mobile, swipeable) ─────────────────────────────────────────────
+// Admin-only customization flow — lazy-loaded so it doesn't sit in the page
+// bundle for every merchant viewing leads (same pattern as comments/pages modals).
+const StageCustomizerModal = dynamic(
+  () => import('@/components/leads/StageCustomizerModal').then((m) => ({ default: m.StageCustomizerModal })),
+  { ssr: false },
+);
 
-interface LeadCardProps {
+// ── Extracted-field chips (list views) ────────────────────────────────────────
+// The AI's structured fields (course, budget, color…) are the feature's star —
+// surface each lead's top two right in the list instead of burying them behind
+// a click. Chips, not table columns: fields differ per lead, so columns would
+// explode on pages with mixed inquiries.
+
+/** The lead's first two extracted fields with real values — single source of
+ *  truth for both the chip row and the "anything to show?" checks. */
+function leadTopFields(lead: Lead) {
+  return (lead.extractedData?.fields ?? [])
+    .filter((f) => f.value && f.value.trim())
+    .slice(0, 2);
+}
+
+function FieldChips({ lead, language }: { lead: Lead; language: string }) {
+  const chips = leadTopFields(lead);
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {chips.map((f) => (
+        <span
+          key={f.key}
+          className="inline-flex items-center gap-1 max-w-full bg-muted rounded-md px-1.5 py-0.5 text-xs text-muted-foreground"
+        >
+          {isRTLLocale(language) ? f.label_ar : f.label_en}:
+          {/* min-w-0 lets the flex item shrink so truncate actually clips long values */}
+          <span className="font-medium text-foreground truncate min-w-0" title={f.value}>{f.value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Lead list items ───────────────────────────────────────────────────────────
+// LeadCard (mobile) and LeadRow (desktop) are two renderings of the same item —
+// one shared props contract so their handlers can never drift apart.
+
+interface LeadItemProps {
   lead: Lead;
   language: string;
-  onStatusChange: (lead: Lead, next: LeadStatus) => void;
+  stages?: LeadStagesConfig;
+  onStatusChange: (lead: Lead, next: LeadStatus, subStage?: string | null) => void;
   onDelete: (lead: Lead) => void;
   onSelect: (lead: Lead) => void;
   isPending: boolean;
@@ -58,7 +103,7 @@ interface LeadCardProps {
 // Width of the action panel revealed by swiping left
 const SWIPE_ACTION_WIDTH = 160;
 
-function LeadCard({ lead, language, onStatusChange, onDelete, onSelect, isPending, t }: LeadCardProps) {
+function LeadCard({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadItemProps) {
   const [translateX, setTranslateX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const startX = useRef(0);
@@ -162,13 +207,20 @@ function LeadCard({ lead, language, onStatusChange, onDelete, onSelect, isPendin
               {lead.senderName ?? '—'}
             </p>
           </div>
-          <span className={clsx(
-            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-white flex-shrink-0',
-            STATUS_BG[lead.status],
-          )}>
-            <span className="w-1.5 h-1.5 rounded-full bg-white/60" aria-hidden="true" />
-            {t(STATUS_LABEL_KEY[lead.status] as Parameters<typeof t>[0])}
-          </span>
+          {(() => {
+            // Custom sub-stage badge takes over when set (merchant's own label
+            // and color); falls back to the main status badge otherwise.
+            const sub = resolveSubStage(stages, lead.status, lead.subStage);
+            return (
+              <span className={clsx(
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-white flex-shrink-0',
+                sub ? SUB_STAGE_BG[sub.color] : STATUS_BG[lead.status],
+              )}>
+                <span className="w-1.5 h-1.5 rounded-full bg-white/60" aria-hidden="true" />
+                {sub ? sub.label : t(STATUS_LABEL_KEY[lead.status] as Parameters<typeof t>[0])}
+              </span>
+            );
+          })()}
         </div>
 
         {/* Phone — selectable number + icon as call link */}
@@ -186,7 +238,8 @@ function LeadCard({ lead, language, onStatusChange, onDelete, onSelect, isPendin
           </a>
         </div>
 
-        {/* Summary */}
+        {/* What the lead wants — top extracted fields, then the summary */}
+        <FieldChips lead={lead} language={language} />
         {lead.extractedData?.summary && (
           <p className="text-sm text-muted-foreground line-clamp-2">
             {lead.extractedData.summary}
@@ -217,8 +270,11 @@ function LeadCard({ lead, language, onStatusChange, onDelete, onSelect, isPendin
 interface LeadDetailModalProps {
   lead: Lead;
   pages: Page[];
+  stages?: LeadStagesConfig;
+  fieldDefs: LeadCustomFieldDef[];
   onClose: () => void;
-  onStatusChange: (next: LeadStatus) => void;
+  onStatusChange: (next: LeadStatus, subStage?: string | null) => void;
+  onFieldsSaved: (updated: Lead) => void;
   onViewConversation: () => void;
   isPending: boolean;
   language: string;
@@ -226,7 +282,7 @@ interface LeadDetailModalProps {
   tc: ReturnType<typeof useTranslations>;
 }
 
-function LeadDetailModal({ lead, pages, onClose, onStatusChange, onViewConversation, isPending, language, t, tc }: LeadDetailModalProps) {
+function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChange, onFieldsSaved, onViewConversation, isPending, language, t, tc }: LeadDetailModalProps) {
   const pageName = pages.find((p) => p.id === lead.pageId)?.name ?? '—';
   const fields = lead.extractedData?.fields ?? [];
   const sourceLabel = lead.sourceType === 'comment' ? t('sourceComment') : t('sourceMessage');
@@ -235,17 +291,40 @@ function LeadDetailModal({ lead, pages, onClose, onStatusChange, onViewConversat
     <SidePanel isOpen onClose={onClose} title={lead.senderName ?? tc('unknown')} subtitle={pageName}>
       <div className="flex flex-col gap-0 pb-8">
 
+        {/* ── What the lead wants ── first thing a merchant reads, so it leads
+            the panel: AI summary + extracted details in one block. */}
+        {(lead.extractedData?.summary || fields.length > 0) && (
+          <div className="px-5 pt-4 pb-4 border-b border-theme-border">
+            {lead.extractedData?.summary && (
+              <p className="text-sm leading-relaxed text-foreground">{lead.extractedData.summary}</p>
+            )}
+            {fields.length > 0 && (
+              <div className={clsx('flex flex-col gap-2', lead.extractedData?.summary && 'mt-3 pt-3 border-t border-theme-border/60')}>
+                {fields.map((f) => (
+                  <div key={f.key} className="flex items-start justify-between gap-4">
+                    <span className="text-sm text-muted-foreground shrink-0">
+                      {isRTLLocale(language) ? f.label_ar : f.label_en}
+                    </span>
+                    <span className="text-sm font-medium text-end select-all cursor-text">{f.value || '—'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Contact actions ── */}
-        <div className="px-5 pt-5 pb-4 border-b border-theme-border">
+        <div className="px-5 pt-4 pb-4 border-b border-theme-border">
           {/* Phone number — readable, selectable */}
-          <p dir="ltr" className="font-mono text-lg font-semibold text-foreground text-center mb-4 select-all">
+          <p dir="ltr" className="font-mono text-base font-semibold text-foreground text-center mb-3 select-all">
             {lead.phone}
           </p>
-          {/* Two primary actions */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Primary actions; the conversation shortcut rides along as a compact
+              icon so it doesn't cost a whole section below. */}
+          <div className="flex gap-3">
             <a
               href={`tel:${lead.phone}`}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-sm transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-500 hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-sm transition-colors"
               aria-label={t('call')}
             >
               <Phone className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
@@ -254,7 +333,7 @@ function LeadDetailModal({ lead, pages, onClose, onStatusChange, onViewConversat
             <button
               type="button"
               onClick={() => openExternalUrl(`https://wa.me/${lead.phone.replace(/\D/g, '')}`)}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] active:bg-[#17a34a] text-white font-semibold text-sm transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] active:bg-[#17a34a] text-white font-semibold text-sm transition-colors"
               aria-label={t('whatsapp')}
             >
               <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -262,57 +341,38 @@ function LeadDetailModal({ lead, pages, onClose, onStatusChange, onViewConversat
               </svg>
               {t('whatsapp')}
             </button>
+            {/* View conversation — only message-sourced leads have a DM thread */}
+            {lead.sourceType === 'message' && (
+              <button
+                type="button"
+                onClick={onViewConversation}
+                className="w-12 flex items-center justify-center rounded-xl border border-theme-border text-icon-muted hover:bg-muted hover:text-foreground transition-colors"
+                aria-label={t('viewConversation')}
+                title={t('viewConversation')}
+              >
+                <MessageSquare className="w-5 h-5" aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
 
         {/* ── Status segmented control ── */}
         <div className="px-5 py-4 border-b border-theme-border">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">{t('status')}</p>
-          <StatusPicker status={lead.status} onSelect={onStatusChange} t={t} disabled={isPending} />
+          <StatusPicker
+            status={lead.status}
+            subStage={lead.subStage}
+            stages={stages}
+            onSelect={onStatusChange}
+            t={t}
+            disabled={isPending}
+          />
         </div>
 
-        {/* ── View conversation ── only for message-sourced leads, which have a DM thread.
-            Comment-sourced leads have no message thread to open. */}
-        {lead.sourceType === 'message' && (
-          <div className="px-5 py-4 border-b border-theme-border">
-            <button
-              type="button"
-              onClick={onViewConversation}
-              className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-xl border border-theme-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
-            >
-              <span className="flex items-center gap-2 min-w-0">
-                <MessageSquare className="w-4 h-4 text-icon-muted flex-shrink-0" aria-hidden="true" />
-                <span className="truncate">{t('viewConversation')}</span>
-              </span>
-              <ChevronRight className="w-4 h-4 text-icon-muted flex-shrink-0 rtl:rotate-180" aria-hidden="true" />
-            </button>
-          </div>
-        )}
-
-        {/* ── Summary / intent ── */}
-        {lead.extractedData?.summary && (
-          <div className="px-5 py-4 border-b border-theme-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{t('intent')}</p>
-            <p className="text-sm leading-relaxed text-foreground">{lead.extractedData.summary}</p>
-          </div>
-        )}
-
-        {/* ── AI-extracted fields ── */}
-        {fields.length > 0 && (
-          <div className="px-5 py-4 border-b border-theme-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">{t('extractedDetails')}</p>
-            <div className="flex flex-col gap-2.5">
-              {fields.map((f) => (
-                <div key={f.key} className="flex items-start justify-between gap-4">
-                  <span className="text-sm text-muted-foreground shrink-0">
-                    {isRTLLocale(language) ? f.label_ar : f.label_en}
-                  </span>
-                  <span className="text-sm font-medium text-end select-all cursor-text">{f.value || '—'}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* ── Merchant data fields (settings.leadFields) ── placed right after
+            status: merchants fill these in the same gesture as moving the lead
+            (e.g. mark converted → write المبلغ المدفوع). */}
+        <LeadCustomFieldsSection lead={lead} fieldDefs={fieldDefs} onSaved={onFieldsSaved} t={t} />
 
         {/* ── Secondary metadata ── */}
         <div className="px-5 py-4 flex flex-col gap-2.5">
@@ -333,17 +393,7 @@ function LeadDetailModal({ lead, pages, onClose, onStatusChange, onViewConversat
 
 // ── Lead row (desktop table) ──────────────────────────────────────────────────
 
-interface LeadRowProps {
-  lead: Lead;
-  language: string;
-  onStatusChange: (lead: Lead, next: LeadStatus) => void;
-  onDelete: (lead: Lead) => void;
-  onSelect: (lead: Lead) => void;
-  isPending: boolean;
-  t: ReturnType<typeof useTranslations>;
-}
-
-function LeadRow({ lead, language, onStatusChange, onDelete, onSelect, isPending, t }: LeadRowProps) {
+function LeadRow({ lead, language, stages, onStatusChange, onDelete, onSelect, isPending, t }: LeadItemProps) {
   return (
     <tr
       className="group border-b border-theme-border hover:bg-muted/40 transition-colors cursor-pointer"
@@ -365,12 +415,20 @@ function LeadRow({ lead, language, onStatusChange, onDelete, onSelect, isPending
         </div>
       </td>
       <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-        <StatusCell lead={lead} onStatusChange={onStatusChange} isPending={isPending} t={t} />
+        <StatusCell lead={lead} stages={stages} onStatusChange={onStatusChange} isPending={isPending} t={t} />
       </td>
-      <td className="px-4 py-4 max-w-[200px]">
-        <p className="text-sm text-muted-foreground truncate">
-          {lead.extractedData?.summary ?? '—'}
-        </p>
+      <td className="px-4 py-4 max-w-[240px]">
+        <div className="flex flex-col gap-1">
+          <FieldChips lead={lead} language={language} />
+          {lead.extractedData?.summary ? (
+            // title = full text, so the truncation is hoverable (desktop-only cell)
+            <p className="text-sm text-muted-foreground truncate" title={lead.extractedData.summary}>
+              {lead.extractedData.summary}
+            </p>
+          ) : (
+            leadTopFields(lead).length === 0 && <p className="text-sm text-muted-foreground">—</p>
+          )}
+        </div>
       </td>
       <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap">
         {formatDateForExport(lead.createdAt, language)}
@@ -407,7 +465,38 @@ const LeadsPage: NextPageWithLayout = () => {
   const [exporting, setExporting] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [stageModalOpen, setStageModalOpen] = useState(false);
   const debouncedSearch = useDebounce(searchQuery, 300);
+
+  // Workspace lead config — merchant-defined sub-stages (settings.leadStages)
+  // and custom data fields (settings.leadFields). Drives badges, the picker,
+  // the detail-panel field editor, and CSV.
+  const { data: workspaceSettings } = useQuery<{ leadStages?: LeadStagesConfig; leadFields?: LeadCustomFieldDef[] }>({
+    queryKey: ['workspace-settings'],
+    queryFn: async () => {
+      const { data } = await workspaceApi.getSettings();
+      return data as { leadStages?: LeadStagesConfig; leadFields?: LeadCustomFieldDef[] };
+    },
+    staleTime: 60_000,
+  });
+  const stages = workspaceSettings?.leadStages;
+  const fieldDefs = React.useMemo(() => workspaceSettings?.leadFields ?? [], [workspaceSettings?.leadFields]);
+
+  // First-run nudge: "Customize" is a setup action a new merchant won't find in
+  // the utility corner. Show a dismissible hint while the workspace has no
+  // custom config at all; once configured (or dismissed) it never returns.
+  const [customizeNudgeDismissed, setCustomizeNudgeDismissed] = useState(true);
+  useEffect(() => {
+    setCustomizeNudgeDismissed(localStorage.getItem('leads-customize-nudge-dismissed') === '1');
+  }, []);
+  const hasLeadConfig =
+    Object.values(stages ?? {}).some((list) => (list ?? []).length > 0) || fieldDefs.length > 0;
+  const showCustomizeNudge =
+    workspaceSettings !== undefined && !hasLeadConfig && !customizeNudgeDismissed;
+  const dismissCustomizeNudge = () => {
+    localStorage.setItem('leads-customize-nudge-dismissed', '1');
+    setCustomizeNudgeDismissed(true);
+  };
 
   const { data: pagesData } = useQuery<Page[]>({
     queryKey: ['pages'],
@@ -566,8 +655,8 @@ const LeadsPage: NextPageWithLayout = () => {
   });
 
   const statusMutation = useMutation({
-    mutationFn: ({ lead, status }: { lead: Lead; status: LeadStatus }) =>
-      leadsApi.updateStatus(lead.id, lead.pageId, status),
+    mutationFn: ({ lead, status, subStage }: { lead: Lead; status: LeadStatus; subStage?: string | null }) =>
+      leadsApi.updateStatus(lead.id, lead.pageId, status, subStage),
     onSuccess: (_, { status }) => {
       if (status === 'converted') {
         toast.success(`🎉 ${t('statusConvertedCelebration')}`, { id: 'lead-status', duration: 4000 });
@@ -577,9 +666,11 @@ const LeadsPage: NextPageWithLayout = () => {
       invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
       queryClient.invalidateQueries({ queryKey: ['leads-counts', selectedPageId] });
     },
-    onError: (err) => {
+    onError: (err, { lead }) => {
       captureError(err, 'Failed to update lead status');
       toast.error(t('statusUpdateFailed'), { id: 'lead-status' });
+      // Roll back the optimistic detail-panel echo to the pre-update lead.
+      setSelectedLead((prev) => (prev && prev.id === lead.id ? lead : prev));
     },
   });
 
@@ -625,7 +716,10 @@ const LeadsPage: NextPageWithLayout = () => {
         }
       }
 
-      const staticHeaders = [t('name'), t('phone'), t('status'), t('intent'), t('source'), t('createdAt')];
+      const staticHeaders = [t('name'), t('phone'), t('status'), t('subStage'), t('intent'), t('source'), t('createdAt')];
+      // Merchant-defined custom fields — one column per definition, in the
+      // merchant's configured order, labelled with their own field names.
+      const customFieldHeaders = fieldDefs.map((f) => f.label);
       const dynamicHeaders = exportDynamicKeys.map((k) => exportDynamicLabels[k] ?? k);
       const rows = allLeads.map((lead) => {
         const fieldMap = Object.fromEntries((lead.extractedData?.fields ?? []).map((f) => [f.key, f.value]));
@@ -635,14 +729,16 @@ const LeadsPage: NextPageWithLayout = () => {
           lead.senderName ?? '',
           lead.phone,
           statusKey ? t(statusKey) : lead.status,
+          resolveSubStage(stages, lead.status, lead.subStage)?.label ?? '',
           lead.extractedData?.summary ?? '',
           sourceLabel,
           formatDateForExport(lead.createdAt, language),
+          ...fieldDefs.map((f) => lead.customFields?.[f.id] ?? ''),
           ...exportDynamicKeys.map((k) => fieldMap[k] ?? ''),
         ];
       });
       const dateStamp = new Date().toISOString().slice(0, 10);
-      const { savedToFiles } = await downloadCSV(`leads-${dateStamp}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
+      const { savedToFiles } = await downloadCSV(`leads-${dateStamp}.csv`, [...staticHeaders, ...customFieldHeaders, ...dynamicHeaders], rows);
       toast.success(savedToFiles ? tc('exportSavedToFiles') : t('exportCsv'));
     } catch (err) {
       const isPermissionDenied = err instanceof DOMException && err.name === 'NotAllowedError';
@@ -672,7 +768,18 @@ const LeadsPage: NextPageWithLayout = () => {
         description={t('description')}
         action={
           selectedPageId ? (
-            <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
+            <div className="flex items-center gap-1">
+              {/* Customize stages — merchant-defined statuses (free text, any business type).
+                  On mobile: short label + border so it reads as a button, not a stray icon. */}
+              <button
+                onClick={() => setStageModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors border border-theme-border sm:border-transparent"
+              >
+                <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
+                <span className="sm:hidden">{t('customizeShort')}</span>
+                <span className="hidden sm:inline">{t('customizeStages')}</span>
+              </button>
+              <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
               {canExport ? (
                 <button
                   onClick={handleExport}
@@ -693,10 +800,34 @@ const LeadsPage: NextPageWithLayout = () => {
                   <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
                 </UpgradeCTA>
               )}
+              </div>
             </div>
           ) : undefined
         }
       />
+
+      {/* First-run hint: workspace has no custom stages/fields yet */}
+      {showCustomizeNudge && selectedPageId && (
+        <div className="alert-violet border rounded-2xl px-4 py-3 mb-4 flex items-center gap-3">
+          <SlidersHorizontal className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          <p className="text-sm flex-1">{t('customizeNudge')}</p>
+          <button
+            type="button"
+            onClick={() => setStageModalOpen(true)}
+            className="text-sm font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity flex-shrink-0"
+          >
+            {t('customizeStages')}
+          </button>
+          <button
+            type="button"
+            onClick={dismissCustomizeNudge}
+            aria-label={tc('close')}
+            className="p-1 -me-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex-shrink-0"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
@@ -795,7 +926,8 @@ const LeadsPage: NextPageWithLayout = () => {
                 key={lead.id}
                 lead={lead}
                 language={language}
-                onStatusChange={(l, s) => statusMutation.mutate({ lead: l, status: s })}
+                stages={stages}
+                onStatusChange={(l, s, sub) => statusMutation.mutate({ lead: l, status: s, subStage: sub })}
                 onDelete={(l) => setLeadToDelete(l)}
                 onSelect={openLead}
                 isPending={isPending}
@@ -823,7 +955,8 @@ const LeadsPage: NextPageWithLayout = () => {
                     key={lead.id}
                     lead={lead}
                     language={language}
-                    onStatusChange={(l, s) => statusMutation.mutate({ lead: l, status: s })}
+                    stages={stages}
+                    onStatusChange={(l, s, sub) => statusMutation.mutate({ lead: l, status: s, subStage: sub })}
                     onDelete={(l) => setLeadToDelete(l)}
                     onSelect={openLead}
                     isPending={isPending}
@@ -851,16 +984,35 @@ const LeadsPage: NextPageWithLayout = () => {
         <LeadDetailModal
           lead={selectedLead}
           pages={pages}
+          stages={stages}
+          fieldDefs={fieldDefs}
           onClose={closeLead}
-          onStatusChange={(status) => {
-            statusMutation.mutate({ lead: selectedLead, status });
-            setSelectedLead((prev) => prev ? { ...prev, status } : null);
+          onStatusChange={(status, subStage) => {
+            statusMutation.mutate({ lead: selectedLead, status, subStage });
+            // Optimistic local echo. Selecting a main status clears the
+            // sub-stage (matches server behavior).
+            setSelectedLead((prev) => prev ? { ...prev, status, subStage: subStage ?? null } : null);
+          }}
+          onFieldsSaved={(updated) => {
+            setSelectedLead((prev) => (prev && prev.id === updated.id ? { ...prev, customFields: updated.customFields } : prev));
+            invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
           }}
           onViewConversation={() => handleViewConversation(selectedLead)}
           isPending={statusMutation.isPending}
           language={language}
           t={t}
           tc={tc}
+        />
+      )}
+
+      {/* Stage customizer — merchant-defined sub-stages (free text, per workspace).
+          Conditionally mounted so the dynamic() chunk only loads when opened. */}
+      {stageModalOpen && (
+        <StageCustomizerModal
+          isOpen
+          onClose={() => setStageModalOpen(false)}
+          stages={stages}
+          fields={fieldDefs}
         />
       )}
 

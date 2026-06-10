@@ -33,6 +33,7 @@ const MOCK_LEAD = {
   name: 'Ali Test',
   phone: '+966501234567',
   status: 'new',
+  subStage: null,
   source: 'message',
   intent: 'Interested in pricing',
   createdAt: new Date().toISOString(),

@@ -770,6 +770,51 @@ export type LeadStatus = 'new' | 'contacted' | 'converted';
 export type LeadSourceType = 'message' | 'comment';
 export type LeadExtractionStatus = 'completed' | 'pending' | 'failed';
 
+// --- Lead Stages (customizable sub-stages) ---
+// The three main stages above are fixed (the pipeline, counters, and AI
+// extraction depend on 'new'). Merchants customize by defining SUB-STAGES
+// under each main stage — free-text labels so the feature stays generic
+// across business types (store: "تم الشحن/تم التسليم", clinic: "حجز موعد",
+// institute: "سجّل بالدورة", ...). Stored per workspace in settings JSONB.
+export const LEAD_STAGE_COLORS = ['blue', 'amber', 'emerald', 'rose', 'violet', 'cyan', 'orange', 'slate'] as const;
+export type LeadStageColor = typeof LEAD_STAGE_COLORS[number];
+
+export interface LeadSubStage {
+  /** Stable id (uuid) — stored on the lead so renaming a sub-stage doesn't orphan it. */
+  id: string;
+  /** Merchant free-text label, any language. */
+  label: string;
+  color: LeadStageColor;
+}
+
+/** Sub-stages per main stage. Missing key = no sub-stages for that stage. */
+export type LeadStagesConfig = Partial<Record<LeadStatus, LeadSubStage[]>>;
+
+/** Hard limits enforced server-side when saving leadStages. */
+export const MAX_SUB_STAGES_PER_STAGE = 20;
+export const MAX_SUB_STAGE_LABEL_LENGTH = 60;
+
+// --- Lead Custom Fields (merchant-defined per-lead data) ---
+// Stages answer "where is this lead?"; custom fields answer "what do I need
+// to WRITE about it?" — e.g. المبلغ المدفوع, الخصم, رقم الطلب. Field
+// definitions live in workspace settings (same JSONB pattern as leadStages);
+// each lead stores its values keyed by field id, so renaming a field never
+// orphans the data.
+export interface LeadCustomFieldDef {
+  /** Stable id (uuid) — values on leads are keyed by it. */
+  id: string;
+  /** Merchant free-text label, any language. */
+  label: string;
+}
+
+/** Values on a lead, keyed by LeadCustomFieldDef.id. */
+export type LeadCustomFieldValues = Record<string, string>;
+
+/** Hard limits enforced server-side when saving leadFields / field values. */
+export const MAX_LEAD_CUSTOM_FIELDS = 10;
+export const MAX_LEAD_FIELD_LABEL_LENGTH = 60;
+export const MAX_LEAD_FIELD_VALUE_LENGTH = 500;
+
 export interface LeadField {
   key: string;
   label_en: string;
@@ -792,6 +837,10 @@ export interface Lead {
   phone: string;
   extractedData: LeadExtractedData;
   status: LeadStatus;
+  /** Id of a LeadSubStage from the workspace's leadStages config, or null. */
+  subStage: string | null;
+  /** Merchant-entered values for the workspace's leadFields, keyed by field id. */
+  customFields: LeadCustomFieldValues | null;
   extractionStatus: LeadExtractionStatus;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -871,6 +920,10 @@ export interface WorkspaceSettings {
   brandVoiceNotes: string;
   brandVoiceNotesMulti: Record<string, string>;
   holdLowConfidence: boolean;
+  /** Customizable lead sub-stages per main stage (see LeadStagesConfig). */
+  leadStages?: LeadStagesConfig;
+  /** Merchant-defined per-lead data fields (see LeadCustomFieldDef). */
+  leadFields?: LeadCustomFieldDef[];
 }
 
 // --- Business Info structured prompt block (Stage 2.6) ---

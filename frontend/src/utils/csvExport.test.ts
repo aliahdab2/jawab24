@@ -88,6 +88,31 @@ describe('downloadCSV', () => {
     });
   });
 
+  describe('formula injection neutralization (OWASP CSV injection)', () => {
+    beforeEach(() => setNative(true));
+
+    async function exportedData(rows: string[][]): Promise<string> {
+      await downloadCSV('leads.csv', ['Value'], rows);
+      return writeFile.mock.calls[0][0].data as string;
+    }
+
+    it("prefixes formula-looking values with ' so spreadsheets render them as text", async () => {
+      const data = await exportedData([['=1+1'], ['@SUM(A1)'], ['+HYPERLINK(x)'], ['-2+cmd']]);
+      expect(data).toContain("'=1+1");
+      expect(data).toContain("'@SUM(A1)");
+      expect(data).toContain("'+HYPERLINK(x)");
+      expect(data).toContain("'-2+cmd");
+    });
+
+    it('leaves phone numbers and plain numerics untouched', async () => {
+      const data = await exportedData([['+966501234567'], ['-12.5'], ['(+966) 50-123']]);
+      expect(data).toContain('+966501234567');
+      expect(data).not.toContain("'+966501234567");
+      expect(data).toContain('-12.5');
+      expect(data).not.toContain("'-12.5");
+    });
+  });
+
   describe('web (non-native)', () => {
     beforeEach(() => {
       setNative(false);

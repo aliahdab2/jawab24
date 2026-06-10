@@ -21,9 +21,9 @@ interface SidePanelProps {
  * Desktop (md+): slides in from the right edge, full viewport height.
  *   The table stays visible behind a light backdrop.
  *
- * Mobile (<md): bottom sheet with:
+ * Mobile (<md): full-screen sheet with:
  *   - dvh height so it tracks the real viewport (no jump when browser chrome hides)
- *   - safe-area padding so content never hides behind the home indicator
+ *   - safe-area padding so content never hides behind the notch or home indicator
  *   - swipe-down-to-dismiss: drag the handle or header downward to close
  *   - snap-back: releasing before the threshold animates the sheet back up
  *
@@ -134,12 +134,13 @@ export function SidePanel({ isOpen, onClose, title, subtitle, children }: SidePa
       <div
         className={clsx(
           'flex md:hidden flex-col',
-          'absolute inset-x-0 bottom-0 bg-card shadow-2xl rounded-t-3xl',
-          // dvh tracks real viewport height (adjusts when browser chrome hides/shows)
-          // env(safe-area-inset-top) keeps a peek of page visible behind the notch
-          // 3rem = visual gap so user sees context behind the sheet
-          'max-h-[calc(100dvh-env(safe-area-inset-top)-3rem)]',
-          'pb-safe',
+          // Full screen: detail content is dense (status, fields, conversation),
+          // so use every pixel instead of a partial sheet with a peek gap.
+          // bottom tracks --keyboard-height (same pattern as the shared Modal)
+          // so the custom-field inputs stay above the soft keyboard on
+          // overlay-mode WebViews.
+          'absolute inset-x-0 top-0 bottom-[var(--keyboard-height,0px)] bg-card shadow-2xl',
+          'pt-safe pb-safe',
           // Transition: no transition while dragging (instant follow), spring-back when released
           dragOffset > 0 ? '' : 'transition-transform duration-300 ease-out',
           visible ? 'translate-y-0' : 'translate-y-full',

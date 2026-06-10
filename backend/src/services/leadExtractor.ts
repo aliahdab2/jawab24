@@ -54,6 +54,10 @@ export interface LeadRecord {
     phone: string;
     extractedData: LeadExtractedData;
     status: LeadStatus;
+    /** Workspace-defined sub-stage id (see settings.leadStages), or null. */
+    subStage: string | null;
+    /** Merchant-entered values for settings.leadFields, keyed by field id. */
+    customFields: Record<string, string> | null;
     extractionStatus: string;
     extractionAttempts: number;
     createdAt: Date;
@@ -416,10 +420,28 @@ class LeadExtractorService {
         leadId: string,
         pageId: string,
         status: LeadStatus,
+        // Always written: changing the main status without picking a sub-stage
+        // must clear any previous sub-stage (it belonged to the old status).
+        subStage: string | null = null,
     ): Promise<LeadRecord | null> {
         const [updated] = await db
             .update(leads)
-            .set({ status, updatedAt: new Date() })
+            .set({ status, subStage, updatedAt: new Date() })
+            .where(and(eq(leads.id, leadId), eq(leads.pageId, pageId)))
+            .returning();
+        return (updated as LeadRecord) ?? null;
+    }
+
+    async updateLeadCustomFields(
+        leadId: string,
+        pageId: string,
+        // Full replacement, not a merge — the detail panel always sends every
+        // field it shows, so a cleared input genuinely deletes the value.
+        customFields: Record<string, string> | null,
+    ): Promise<LeadRecord | null> {
+        const [updated] = await db
+            .update(leads)
+            .set({ customFields, updatedAt: new Date() })
             .where(and(eq(leads.id, leadId), eq(leads.pageId, pageId)))
             .returning();
         return (updated as LeadRecord) ?? null;

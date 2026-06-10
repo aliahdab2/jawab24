@@ -1086,6 +1086,12 @@ export const leads = pgTable('leads', {
     phone: varchar('phone', { length: 50 }).notNull(),
     extractedData: jsonb('extracted_data').$type<{ summary?: string; fields: Array<{ key: string; label_en: string; label_ar: string; value: string }> }>().notNull().default({ fields: [] }),
     status: varchar('status', { length: 20 }).notNull().default('new'), // 'new' | 'contacted' | 'converted'
+    // Id of a workspace-defined sub-stage (LeadSubStage.id) under the current main status.
+    // Null = main stage only. Labels live in workspaces.settings.leadStages — generic across business types.
+    subStage: varchar('sub_stage', { length: 64 }),
+    // Merchant-entered values for workspace-defined custom fields (settings.leadFields),
+    // keyed by field id so renaming a field never orphans the data. Null = none entered.
+    customFields: jsonb('custom_fields').$type<Record<string, string>>(),
     extractionStatus: varchar('extraction_status', { length: 20 }).notNull().default('completed'), // 'completed' | 'pending' | 'failed'
     extractionAttempts: integer('extraction_attempts').notNull().default(0),
     // Set when this lead has been included in a daily digest email to the owner (null = not yet emailed)
