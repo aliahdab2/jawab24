@@ -2410,11 +2410,20 @@ SSE lead:captured → frontend badge + toast
 - `(sender_id, page_id)` unique index — deduplication
 - `extracted_data` JSONB `{ summary, fields: [{ key, label_en, label_ar, value }] }`
 - `status`: `new` → `contacted` → `converted`
+- `sub_stage` varchar(64) — id of a merchant-defined sub-stage (see Customization below); nullable
+- `custom_fields` JSONB — merchant-entered values keyed by field-definition id
 - `source_type`: `message` or `comment`
+
+### Merchant Customization (June 2026)
+
+The three main statuses are fixed (the system depends on `new` for counters/digests/AI default). Merchants customize via workspace settings (`settings.leadStages` / `settings.leadFields`, admin-only writes, sanitized server-side):
+- **Sub-stages**: free-text label + color (8-color palette) per main status, ≤20 per status. Leads store the stable sub-stage **id** — renames propagate, deletions fall back to the main-status badge. `PATCH /leads/:id/status` validates the id against the workspace config (stale/foreign ids → 400).
+- **Custom data fields**: ≤10 free-text field definitions; values entered per lead from the detail panel, stored in `leads.custom_fields`, exported as CSV columns. Writes to undefined field ids are rejected.
+- **Business-type templates** (store/clinic/school/services) pre-fill an editable draft in the UI language via `StageCustomizerModal`.
 
 ### Frontend
 
-`/leads` page — page selector, status filter tabs (All/New/Contacted/Converted), dynamic table columns from `extractedData.fields`, CSV export, real-time SSE updates via `lead:captured` event, new-leads badge in sidebar.
+`/leads` page — page selector, status filter tabs (All/New/Contacted/Converted), dynamic table columns from `extractedData.fields`, CSV export (incl. sub-stage + custom-field columns), real-time SSE updates via `lead:captured` event, new-leads badge in sidebar. Detail panel ordered by merchant workflow: AI intent summary + extracted details first, then contact actions, status + sub-stage picker, custom data fields. "Customize leads" opens `StageCustomizerModal`.
 
 ### Rate Limiting
 
@@ -2438,10 +2447,19 @@ Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per 
 - مؤشر فريد على `(sender_id, page_id)` — لمنع التكرار
 - `extracted_data` JSONB يحتوي على `{ summary, fields: [{ key, label_en, label_ar, value }] }`
 - `status`: `new` → `contacted` → `converted`
+- `sub_stage` varchar(64) — معرّف مرحلة فرعية يحددها التاجر (انظر التخصيص أدناه)
+- `custom_fields` JSONB — قيم يدخلها التاجر، مفاتيحها معرّفات تعريفات الحقول
+
+### تخصيص التاجر (يونيو 2026)
+
+الحالات الرئيسية الثلاث ثابتة، ويخصص التاجر عبر إعدادات مساحة العمل (`settings.leadStages` / `settings.leadFields`، كتابة للمشرفين فقط مع تعقيم في الخادم):
+- **مراحل فرعية**: تسمية حرة + لون (8 ألوان) لكل حالة رئيسية، بحد 20 لكل حالة. يخزَّن **معرّف** المرحلة في العميل — إعادة التسمية تنعكس فورًا، والحذف يعود تلقائيًا لشارة الحالة الرئيسية.
+- **حقول بيانات**: حتى 10 حقول نصية، تعبَّأ لكل عميل من لوحة التفاصيل وتظهر كأعمدة في التصدير.
+- **قوالب جاهزة** (متجر/عيادة/معهد/خدمات) تملأ مسودة قابلة للتعديل بلغة الواجهة عبر `StageCustomizerModal`.
 
 ### الواجهة الأمامية
 
-صفحة `/leads` — تحديد الصفحة، تصفية بالحالة، أعمدة ديناميكية من `extractedData.fields`، تصدير CSV، تحديثات فورية عبر SSE، شارة عملاء جدد في الشريط الجانبي.
+صفحة `/leads` — تحديد الصفحة، تصفية بالحالة، أعمدة ديناميكية من `extractedData.fields`، تصدير CSV (يشمل المرحلة الفرعية والحقول المخصصة)، تحديثات فورية عبر SSE، شارة عملاء جدد في الشريط الجانبي. لوحة التفاصيل مرتبة حسب سير عمل التاجر: ملخص الطلب أولًا، ثم أزرار التواصل، ثم الحالة والمراحل، ثم حقول البيانات.
 
 ---
 
