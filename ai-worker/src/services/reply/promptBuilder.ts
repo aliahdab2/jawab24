@@ -39,6 +39,19 @@ function sanitizeForPrompt(text: string): string {
 }
 
 /**
+ * Sanitize a short, user-controlled field (brand voice, business info, customer
+ * context) for prompt embedding. Runs the full sanitizeForPrompt defense FIRST
+ * (so its tag/special-token patterns match while brackets are still present),
+ * then strips any stray angle brackets, then caps length. This gives these
+ * fields the same protection KB / policies / post text already get — previously
+ * they were only bracket-stripped, so override phrases ("ignore previous
+ * instructions") and SYSTEM:-impersonation markers survived verbatim.
+ */
+function sanitizeUserField(text: string, maxChars: number): string {
+    return sanitizeForPrompt(text).replace(/[<>]/g, '').slice(0, maxChars);
+}
+
+/**
  * Build system prompt for the AI.
  *
  * Structure (designed for OpenAI prompt caching — https://platform.openai.com/docs/guides/prompt-caching):
@@ -112,7 +125,7 @@ ${isDM
         const voiceHeader = isDM && request.context?.conversationHistory?.length
             ? 'guidelines from the business owner — incorporate naturally. CRITICAL: Do NOT repeat any point, offer, or promotion already stated in the conversation history — this overrides any "always mention" instructions in the brand voice notes below'
             : 'follow these additional guidelines from the business owner';
-        prompt += `\n\nBRAND VOICE NOTES (${voiceHeader}):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, MAX_BRAND_VOICE_LENGTH)}`;
+        prompt += `\n\nBRAND VOICE NOTES (${voiceHeader}):\n${sanitizeUserField(request.context.brandVoiceNotes, MAX_BRAND_VOICE_LENGTH)}`;
     }
 
     // Stage 2.6 structured BUSINESS_INFO block — merchant-confirmed only.
@@ -121,7 +134,7 @@ ${isDM
     // invent values for [NOT_PROVIDED] fields. Eval cases #11 (Damascus
     // phone hallucination) and #19 (structured-beats-stale-KB) gate this.
     if (request.context?.businessInfoBlock) {
-        prompt += `\n\n${request.context.businessInfoBlock.replace(/[<>]/g, '').slice(0, BUSINESS_INFO_MAX_CHARS)}`;
+        prompt += `\n\n${sanitizeUserField(request.context.businessInfoBlock, BUSINESS_INFO_MAX_CHARS)}`;
     }
 
     // Customer context goes into the user prompt (next to the message) when conversation
@@ -129,7 +142,7 @@ ${isDM
     // matters most (preventing re-asks). For single-message scenarios (comments, first DM),
     // it stays in the system prompt since there's no history to compete with.
     if (request.context?.customerContext && !request.context?.conversationHistory?.length) {
-        prompt += `\n\nCUSTOMER CONTEXT: ${request.context.customerContext.replace(/[<>]/g, '').slice(0, 300)}`;
+        prompt += `\n\nCUSTOMER CONTEXT: ${sanitizeUserField(request.context.customerContext, 300)}`;
     }
 
     // Add business knowledge: prefer retrieved chunks, fall back to static KB
@@ -230,7 +243,7 @@ export function buildUserPrompt(request: GenerateRequest): string {
     // history and passes it via customerContext. Placing it here (not in the system
     // prompt) ensures the model sees it adjacent to the current message.
     if (request.context?.customerContext && request.context.conversationHistory?.length) {
-        const safeCtx = request.context.customerContext.replace(/[<>]/g, '').slice(0, 300);
+        const safeCtx = sanitizeUserField(request.context.customerContext, 300);
         prompt = `[${safeCtx}]\n\n${prompt}`;
     }
 
