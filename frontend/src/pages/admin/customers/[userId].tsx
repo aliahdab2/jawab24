@@ -46,6 +46,11 @@ interface CustomerDetail {
         facebookPageId: string | null;
         instagramUsername: string | null;
         instagramAccountId: string | null;
+        autoReplyEnabled: boolean | null;
+        /** 'user' | 'plan_limit' | 'trial_block' | null — why auto-reply is off */
+        autoReplyDisabledReason: string | null;
+        /** Access token cleared (revoked / reconnect required) */
+        disconnected: boolean;
     }>;
     usage: {
         aiRepliesCount: number;
@@ -109,6 +114,14 @@ const ROLE_LABEL_KEYS: Record<'owner' | 'admin' | 'member', string> = {
     owner: 'customer.roleOwner',
     admin: 'customer.roleAdmin',
     member: 'customer.roleMember',
+};
+
+// Why auto-reply is off, keyed by pages.auto_reply_disabled_reason. Unknown /
+// legacy null reasons fall back to the bare "off" label.
+const PAGE_OFF_REASON_KEYS: Record<string, string> = {
+    user: 'customer.pageOffByMerchant',
+    plan_limit: 'customer.pageOffPlanLimit',
+    trial_block: 'customer.pageOffTrialUsed',
 };
 
 const FIELD_CLASS = 'w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-background text-foreground';
@@ -561,6 +574,25 @@ export default function AdminCustomerDetailPage() {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1 shrink-0">
+                                                    <span
+                                                        className={clsx(
+                                                            'text-xs px-2 py-0.5 rounded-full border whitespace-nowrap',
+                                                            p.disconnected
+                                                                ? 'status-error'
+                                                                : p.autoReplyEnabled
+                                                                    ? 'status-success'
+                                                                    : 'status-warning',
+                                                        )}
+                                                    >
+                                                        {p.disconnected
+                                                            ? t('customer.pageDisconnected')
+                                                            : p.autoReplyEnabled
+                                                                ? t('customer.pageReplyOn')
+                                                                : t(
+                                                                    (p.autoReplyDisabledReason && PAGE_OFF_REASON_KEYS[p.autoReplyDisabledReason])
+                                                                    || 'customer.pageReplyOff',
+                                                                )}
+                                                    </span>
                                                     {fbHref && (
                                                         <a
                                                             href={fbHref}

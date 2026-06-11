@@ -314,7 +314,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         .where(eq(subscriptions.userId, userId))
                         .limit(1);
 
-                    // Get pages with identifying info
+                    // Get pages with identifying info + reply state, so support can
+                    // answer "why isn't this customer getting replies?" at a glance
+                    // (auto-reply off / disconnected pages are the #1 cause).
                     const userPages = await db
                         .select({
                             id: pages.id,
@@ -322,6 +324,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             facebookPageId: pages.facebookPageId,
                             instagramUsername: pages.instagramUsername,
                             instagramAccountId: pages.instagramAccountId,
+                            autoReplyEnabled: pages.autoReplyEnabled,
+                            autoReplyDisabledReason: pages.autoReplyDisabledReason,
+                            disconnected: sql<boolean>`(${pages.accessToken} IS NULL OR ${pages.accessToken} = '')`,
                         })
                         .from(pages)
                         .where(eq(pages.userId, userId));
