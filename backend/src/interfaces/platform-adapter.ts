@@ -17,6 +17,12 @@ export interface PlatformPage {
     kbActiveVersion: number | null;
     /** Whether auto-reply is enabled for this platform on this page */
     autoReplyEnabled: boolean;
+    /**
+     * Why auto-reply is off ('user' | 'plan_limit' | 'trial_block' | null).
+     * Only the Facebook page-level toggle carries this; platform-specific
+     * toggles (Instagram) are merchant-explicit and never set a reason.
+     */
+    autoReplyDisabledReason?: string | null;
     /** Platform-specific account ID (e.g., instagramAccountId) — set by adapter */
     platformAccountId?: string;
     /** Linked e-commerce store ID for product-aware AI replies */

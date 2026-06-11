@@ -211,6 +211,59 @@ describe('CommentProcessor', () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toBe('Auto-reply disabled for this page');
+        // No reason recorded (legacy row / merchant intent unknown) → fully
+        // silent: the comment must NOT be ingested.
+        expect(adapter.findOrCreateContent).not.toHaveBeenCalled();
+        expect(adapter.storeComment).not.toHaveBeenCalled();
+    });
+
+    describe('disabled page — ingestion by disable reason', () => {
+        const disabledPage = (autoReplyDisabledReason: string | null) => ({
+            id: 'p', userId: 'u', workspaceId: 'test_workspace_id', name: 'N', accessToken: 't', knowledgeBase: null,
+            autoReplyEnabled: false,
+            autoReplyDisabledReason,
+        });
+
+        it.each(['trial_block', 'plan_limit'])(
+            'stores the comment unreplied (no Graph enrichment, no AI) when system-disabled: %s',
+            async (reason) => {
+                const adapter = createMockAdapter({
+                    getPage: vi.fn().mockResolvedValue(disabledPage(reason)),
+                });
+
+                const result = await commentProcessor.processComment(
+                    adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1', 'Bob',
+                );
+
+                expect(result.success).toBe(false);
+                expect(result.error).toBe('Auto-reply disabled for this page');
+                // Ingested: stub content (NO access token → no Graph API fetch) + stored comment
+                expect(adapter.findOrCreateContent).toHaveBeenCalledWith('p', 'content-1');
+                expect(adapter.storeComment).toHaveBeenCalledWith(
+                    'content-uuid', 'test_workspace_id', 'comment-1', 'Hello!', 'from-1', 'Bob', undefined,
+                );
+                // But never answered
+                expect(adapter.sendReply).not.toHaveBeenCalled();
+                expect(adapter.markAsReplied).not.toHaveBeenCalled();
+                expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+                expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.auto_reply_disabled']).toBe(1);
+            },
+        );
+
+        it('stays fully silent (no ingestion) when the merchant toggled the page off', async () => {
+            const adapter = createMockAdapter({
+                getPage: vi.fn().mockResolvedValue(disabledPage('user')),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!',
+            );
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Auto-reply disabled for this page');
+            expect(adapter.findOrCreateContent).not.toHaveBeenCalled();
+            expect(adapter.storeComment).not.toHaveBeenCalled();
+        });
     });
 
     it('should return error when page has no user', async () => {

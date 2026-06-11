@@ -245,11 +245,65 @@ describe('PagesService', () => {
             // Page connected but auto-reply OFF
             expect(insertedValues).toBeDefined();
             expect(insertedValues.autoReplyEnabled).toBe(false);
+            // System disable carries its reason so the comment pipeline ingests
+            // (but never answers) this page's comments and admin can diagnose it
+            expect(insertedValues.autoReplyDisabledReason).toBe('trial_block');
             // Reported so the UI can prompt a subscribe
             expect(result.trialBlockedCount).toBe(1);
             expect(result.trialBlockedPages).toEqual([{ pageName: 'Reused Business' }]);
             // Must NOT claim the channel (it belongs to the original account)
             expect(channelTrialService.record).not.toHaveBeenCalled();
+        });
+
+        it('refuses to connect pages beyond the plan limit instead of persisting them disabled', async () => {
+            const workspaceId = 'workspace-123';
+            const userId = 'user-123';
+            const accessToken = 'token-123';
+
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [
+                    { id: 'fb-page-1', name: 'First Page', access_token: 'pt-1' },
+                    { id: 'fb-page-2', name: 'Second Page', access_token: 'pt-2' },
+                ],
+            });
+
+            // No existing pages → both take the brand-new path
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }),
+                    }),
+                }),
+            } as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            // Starter-style plan: exactly one slot left
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canEnablePage).mockResolvedValueOnce({ allowed: true, remaining: 1 } as any);
+
+            const insertedValuesList: any[] = [];
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((values) => {
+                    insertedValuesList.push(values);
+                    return { returning: vi.fn().mockResolvedValue([{ id: `new-${insertedValuesList.length}`, ...values }]) };
+                }),
+            } as any);
+
+            const result = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+
+            // Only the first page is persisted — enabled, no disable reason
+            expect(insertedValuesList).toHaveLength(1);
+            expect(insertedValuesList[0].facebookPageId).toBe('fb-page-1');
+            expect(insertedValuesList[0].autoReplyEnabled).toBe(true);
+            expect(insertedValuesList[0].autoReplyDisabledReason).toBeNull();
+            // The over-limit page is refused outright (no disabled shadow page
+            // that would silently swallow webhook traffic) and named to the client
+            expect(result.skippedCount).toBe(1);
+            expect(result.skippedPages).toEqual([{ pageName: 'Second Page' }]);
+            // Refused page must not subscribe to webhooks either
+            expect(facebookService.subscribePageToWebhooks).toHaveBeenCalledTimes(1);
+            expect(facebookService.subscribePageToWebhooks).toHaveBeenCalledWith('fb-page-1', 'pt-1');
         });
 
         it('should disable pages revoked in Facebook', async () => {
@@ -559,6 +613,43 @@ describe('PagesService', () => {
     // ───────────────────────────────────────────
     // getPages — Redis stats cache
     // ───────────────────────────────────────────
+    describe('toggleAutoReply — disable reason bookkeeping', () => {
+        function mockUpdateCapture() {
+            const captured: { set?: any } = {};
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((values) => {
+                    captured.set = values;
+                    return { where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'page-1', ...values }]) }) };
+                }),
+            } as any);
+            return captured;
+        }
+
+        it("records 'user' as the disable reason on an explicit merchant toggle-off", async () => {
+            const captured = mockUpdateCapture();
+
+            await pagesService.toggleAutoReply('workspace-123', 'page-1', false);
+
+            expect(captured.set.autoReplyEnabled).toBe(false);
+            // Merchant intent — keeps the comment pipeline fully silent for
+            // this page, unlike system disables (plan_limit / trial_block)
+            expect(captured.set.autoReplyDisabledReason).toBe('user');
+            // Disabling must not wipe the auto-pause audit trail
+            expect(captured.set).not.toHaveProperty('autoPauseReason');
+        });
+
+        it('clears the disable reason (and auto-pause state) on re-enable', async () => {
+            const captured = mockUpdateCapture();
+
+            await pagesService.toggleAutoReply('workspace-123', 'page-1', true);
+
+            expect(captured.set.autoReplyEnabled).toBe(true);
+            expect(captured.set.autoReplyDisabledReason).toBeNull();
+            expect(captured.set.consecutiveSendFailures).toBe(0);
+            expect(captured.set.autoPauseReason).toBeNull();
+        });
+    });
+
     describe('getPages - stats caching', () => {
         const workspaceId = 'ws-123';
         const mockPages = [

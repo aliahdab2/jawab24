@@ -1651,6 +1651,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | ~~8~~ | ~~No pluralization in i18n~~ | ~~RESOLVED~~ | Migrated to next-intl v4 with ICU Message Format support. Arabic uses all 6 CLDR plural forms (zero/one/two/few/many/other) |
 | 9 | Inventory is point-in-time | Info | AI adds "verify before ordering" caveat |
 | ~~10~~ | ~~E-commerce customer notifications (abandoned cart, order updates, review requests)~~ | ~~RESOLVED~~ | Shipped — SMS via Vonage, BullMQ worker, dedup by platformEventId, opt-in per template (is_enabled=false default) |
+| ~~11~~ | ~~Plan-limit "shadow pages": pages connected beyond the plan's slot count were persisted with auto-reply silently OFF (slot went to whichever page Facebook listed first), and their incoming comments were dropped with no DB/inbox trace — merchants read it as "product broken" (June 2026 خوجة case: 9 comments lost; 160 across 3 merchants in 2 days)~~ | ~~RESOLVED~~ | Connect flow now refuses over-limit pages outright and returns their names (`skippedPages`); `pages.auto_reply_disabled_reason` records WHY a page is off (`user`/`plan_limit`/`trial_block`); comments on system-disabled pages are stored unreplied (no Graph fetch, no AI) instead of dropped; admin customer page shows per-page reply state |
 
 ### System Resilience
 
@@ -1793,7 +1794,7 @@ These are tracked per pipeline (facebook_comment, instagram_comment, facebook_me
 | `page_not_found` | Page doesn't exist in DB | Error |
 | `no_user` | Page has no associated user | Error |
 | `no_workspace` | Page has no associated workspace | Error |
-| `auto_reply_disabled` | Platform auto-reply toggle off | Expected |
+| `auto_reply_disabled` | Platform auto-reply toggle off. Comments: if the page was disabled by the SYSTEM (`auto_reply_disabled_reason` = `plan_limit`/`trial_block`) the comment is still stored unreplied (no Graph fetch, no AI); merchant-toggled (`user`) pages drop it silently. DMs are always stored regardless of reason. | Expected |
 | `settings_disabled` | Workspace settings disabled | Expected |
 | `post_disabled` | Post/media has auto-reply off | Expected |
 | `media_disabled` | Instagram media auto-reply off | Expected |

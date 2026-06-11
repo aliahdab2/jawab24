@@ -276,9 +276,9 @@ export class PagesController {
 
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
-            const { syncedPages, skippedCount, takenCount, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
+            const { syncedPages, skippedCount, skippedPages, pageLimit, takenCount, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
 
-            if (syncedPages.length === 0 && takenCount === 0 && (trialBlockedCount ?? 0) === 0) {
+            if (syncedPages.length === 0 && takenCount === 0 && (trialBlockedCount ?? 0) === 0 && skippedCount === 0) {
                 return reply.send({
                     synced: 0,
                     pages: [],
@@ -289,8 +289,14 @@ export class PagesController {
             const response: Record<string, unknown> = { synced: syncedPages.length, pages: syncedPages.map(serializePage) };
 
             if (skippedCount > 0) {
-                response.warning = `${skippedCount} page(s) were synced but auto-reply was not enabled due to your plan limit. Upgrade to enable more pages.`;
+                // Pages REFUSED at connect because the plan's page limit was
+                // reached (they are not persisted at all). Names included so the
+                // client can tell the merchant exactly which pages to expect
+                // missing — and offer the upgrade path.
+                response.warning = `${skippedCount} page(s) were not connected because your plan's page limit was reached. Upgrade to connect more pages.`;
                 response.skippedCount = skippedCount;
+                response.skippedPages = skippedPages;
+                response.pageLimit = pageLimit;
             }
 
             if (takenCount > 0) {

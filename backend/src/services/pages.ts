@@ -625,6 +625,9 @@ export class PagesService {
             .update(pages)
             .set({
                 autoReplyEnabled: enabled,
+                // Explicit toggle = merchant intent. 'user' keeps the comment
+                // pipeline fully silent for this page (unlike system disables).
+                autoReplyDisabledReason: enabled ? null : 'user',
                 updatedAt: new Date(),
                 // Clear auto-pause state only on the off → on transition.
                 // Disabling shouldn't wipe a paused-reason audit trail.
@@ -662,7 +665,7 @@ export class PagesService {
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
-            return { syncedPages: [], skippedCount: 0, takenCount: 0, trialBlockedCount: 0, trialBlockedPages: [] as { pageName: string }[], alreadyMemberOf: [] as AlreadyMemberOfEntry[] };
+            return { syncedPages: [], skippedCount: 0, skippedPages: [] as { pageName: string }[], pageLimit: null as number | null, takenCount: 0, trialBlockedCount: 0, trialBlockedPages: [] as { pageName: string }[], alreadyMemberOf: [] as AlreadyMemberOfEntry[] };
         }
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
@@ -717,6 +720,10 @@ export class PagesService {
             remainingSlots = 0;
         }
         let skippedCount = 0;
+        // Pages NOT connected because the plan's page limit was reached —
+        // names surfaced to the client so the merchant knows exactly what
+        // was refused and why (instead of a silently disabled shadow page).
+        const skippedPages: { pageName: string }[] = [];
         let takenCount = 0;
         // Pages connected but kept OFF because the channel already used its free
         // trial under another account and this account isn't paying (abuse guard).
@@ -790,7 +797,27 @@ export class PagesService {
                 });
                 const { blocked: trialBlocked } = await channelTrialService.evaluate(billing, pageChannels);
                 const slotAvailable = remainingSlots === null || remainingSlots > 0;
-                const shouldAutoEnable = slotAvailable && !trialBlocked;
+                // Plan page-limit reached: refuse the connection outright instead
+                // of persisting a disabled shadow page (pre-06/2026 behavior).
+                // Shadow pages kept receiving webhooks whose traffic was dropped
+                // with no inbox trace — merchants read that as "product broken".
+                // The merchant picks which page(s) to connect in Facebook's grant
+                // dialog, or upgrades for more slots. Pages actively owned by
+                // another workspace fall through to the taken/alreadyMemberOf
+                // handling below instead.
+                const ownedByActiveWorkspace = !!globalExisting && !isPageDisconnected(globalExisting);
+                if (!slotAvailable && !ownedByActiveWorkspace) {
+                    logger.info(`[Pages] Plan page limit reached — not connecting "${fbPage.name}" (${fbPage.id})`);
+                    skippedCount++;
+                    skippedPages.push({ pageName: fbPage.name });
+                    continue;
+                }
+                const shouldAutoEnable = !trialBlocked;
+                // Record WHY the system kept auto-reply off. Trial-blocked pages
+                // ARE persisted (connected-but-off) so the UI can prompt the
+                // merchant to subscribe; the comment pipeline ingests (but never
+                // answers) their comments, and the admin UI surfaces the reason.
+                const autoReplyDisabledReason = shouldAutoEnable ? null : 'trial_block';
                 // Pass globalExisting's profile so a reclaim/disconnect-recover
                 // preserves the merchant half if any (otherwise undefined → fresh).
                 const businessProfile = buildBusinessProfileContainer(fbPage, globalExisting?.businessProfile as StoredBusinessProfile);
@@ -808,6 +835,7 @@ export class PagesService {
                             tokenLastVerifiedAt: new Date(),
                             disconnectReason: null,
                             autoReplyEnabled: shouldAutoEnable,
+                            autoReplyDisabledReason,
                             instagramAccountId,
                             instagramUsername,
                             instagramProfilePicUrl,
@@ -877,6 +905,7 @@ export class PagesService {
                             accessToken: maybeEncryptToken(fbPage.access_token),
                             tokenLastVerifiedAt: new Date(),
                             autoReplyEnabled: shouldAutoEnable,
+                            autoReplyDisabledReason,
                             instagramAccountId,
                             instagramUsername,
                             instagramProfilePicUrl,
@@ -909,14 +938,11 @@ export class PagesService {
                     if (remainingSlots !== null) {
                         remainingSlots--;
                     }
-                } else if (trialBlocked) {
+                } else {
                     // Connected, but auto-reply stays OFF — channel already used its
                     // free trial. Surfaced so the UI can prompt the user to subscribe.
                     trialBlockedCount++;
                     trialBlockedPages.push({ pageName: fbPage.name });
-                } else {
-                    // Plan page-limit reached (slot unavailable).
-                    skippedCount++;
                 }
             }
         }
@@ -945,8 +971,8 @@ export class PagesService {
             logger.info(`[Pages] Disabled ${revokedPages.length} page(s) that user revoked access to in Facebook`);
         }
 
-        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} created with auto-reply disabled (plan limit), ${trialBlockedCount} blocked (free trial already used on channel), ${revokedPages.length} disabled (access revoked).`);
-        return { syncedPages, skippedCount, takenCount, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
+        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} not connected (plan limit), ${trialBlockedCount} blocked (free trial already used on channel), ${revokedPages.length} disabled (access revoked).`);
+        return { syncedPages, skippedCount, skippedPages, pageLimit: enableCheck.limit ?? null, takenCount, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
     }
 
     /**
