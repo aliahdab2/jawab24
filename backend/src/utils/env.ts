@@ -122,6 +122,16 @@ const EnvSchema = z.object({
         message: 'STRIPE_WEBHOOK_SECRET must be set in production when STRIPE_SECRET_KEY is configured — webhook signature verification (and all payment confirmation/crediting) fails without it',
         path: ['STRIPE_WEBHOOK_SECRET'],
     },
+).refine(
+    // Page/user tokens in the prod DB are AES-GCM encrypted at rest (enc:v1:
+    // rows). Without the key, maybeDecryptToken returns ciphertext as-is —
+    // Facebook then rejects it with code 190 and every send/sync breaks, while
+    // new writes silently revert to plaintext. Fail fast at startup instead.
+    data => data.NODE_ENV !== 'production' || !!data.FACEBOOK_TOKEN_ENCRYPTION_KEY,
+    {
+        message: 'FACEBOOK_TOKEN_ENCRYPTION_KEY must be set in production — stored page/user tokens are encrypted at rest and unreadable without it',
+        path: ['FACEBOOK_TOKEN_ENCRYPTION_KEY'],
+    },
 );
 
 export type Env = z.infer<typeof EnvSchema>;

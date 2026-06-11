@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock config before importing the module under test
 vi.mock('../../src/config', () => ({
@@ -9,7 +9,17 @@ vi.mock('../../src/config', () => ({
     },
 }));
 
-import { isEncrypted, encryptFbToken, decryptFbToken } from '../../src/services/facebookCrypto';
+// Mock Sentry capture so safeDecryptToken failure-reporting can be asserted
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: vi.fn(),
+}));
+
+import {
+    isEncrypted, encryptFbToken, decryptFbToken,
+    maybeEncryptToken, maybeDecryptToken, safeDecryptToken,
+} from '../../src/services/facebookCrypto';
+import { captureError } from '../../src/utils/sentryHelpers';
+import { config } from '../../src/config';
 
 const PREFIX = 'enc:v1:';
 
@@ -224,5 +234,72 @@ describe('key configuration', () => {
         }));
         const { encryptFbToken: encryptNoKey } = await import('../../src/services/facebookCrypto?nocache=' + Date.now());
         expect(() => encryptNoKey('token')).toThrow('FACEBOOK_TOKEN_ENCRYPTION_KEY');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// maybeEncryptToken / maybeDecryptToken
+// ---------------------------------------------------------------------------
+
+describe('maybeEncryptToken', () => {
+    it('preserves the empty-string disconnect sentinel (never encrypts "")', () => {
+        expect(maybeEncryptToken('')).toBe('');
+    });
+
+    it('encrypts non-empty tokens when the key is configured', () => {
+        const out = maybeEncryptToken('EAABsbCS4iNwBO-page-token');
+        expect(isEncrypted(out)).toBe(true);
+        expect(maybeDecryptToken(out)).toBe('EAABsbCS4iNwBO-page-token');
+    });
+
+    it('passes tokens through unchanged when no key is configured', () => {
+        const original = config.facebook.tokenEncryptionKey;
+        config.facebook.tokenEncryptionKey = '';
+        try {
+            expect(maybeEncryptToken('plain-token')).toBe('plain-token');
+            expect(maybeDecryptToken('plain-token')).toBe('plain-token');
+        } finally {
+            config.facebook.tokenEncryptionKey = original;
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// safeDecryptToken — never throws; corrupt rows surface as disconnected
+// ---------------------------------------------------------------------------
+
+describe('safeDecryptToken', () => {
+    beforeEach(() => {
+        vi.mocked(captureError).mockClear();
+    });
+
+    it('decrypts a valid encrypted token', () => {
+        const enc = encryptFbToken('page-token-123');
+        expect(safeDecryptToken(enc, { entity: 'page', id: 'p1' })).toBe('page-token-123');
+        expect(captureError).not.toHaveBeenCalled();
+    });
+
+    it('passes through legacy plaintext tokens', () => {
+        expect(safeDecryptToken('legacy-plaintext', { entity: 'page' })).toBe('legacy-plaintext');
+    });
+
+    it('returns "" for null/undefined/empty', () => {
+        expect(safeDecryptToken(null, { entity: 'user' })).toBe('');
+        expect(safeDecryptToken(undefined, { entity: 'user' })).toBe('');
+        expect(safeDecryptToken('', { entity: 'page' })).toBe('');
+        expect(captureError).not.toHaveBeenCalled();
+    });
+
+    it('returns "" and reports to Sentry on corrupt ciphertext instead of throwing', () => {
+        const corrupt = `enc:v1:${'aa'.repeat(16)}:not-real-ciphertext.c2hvcnQ=`;
+        expect(safeDecryptToken(corrupt, { entity: 'page', id: 'p1' })).toBe('');
+        expect(captureError).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns "" on a tampered auth tag (decryption failure must not 500 getPages)', () => {
+        const enc = encryptFbToken('real-token');
+        const tampered = enc.slice(0, -6) + 'AAAAA=';
+        expect(safeDecryptToken(tampered, { entity: 'page', id: 'p2' })).toBe('');
+        expect(captureError).toHaveBeenCalledTimes(1);
     });
 });

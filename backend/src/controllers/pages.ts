@@ -15,7 +15,7 @@ import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
 
 /** Add isConnected flag and strip accessToken from page response */
-function serializePage<T extends { accessToken?: string | null }>(page: T) {
+export function serializePage<T extends { accessToken?: string | null }>(page: T) {
     const { accessToken, ...rest } = page;
     return { ...rest, isConnected: !!accessToken && accessToken !== '' };
 }

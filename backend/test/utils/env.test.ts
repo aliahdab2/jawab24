@@ -108,7 +108,15 @@ describe('validateEnv', () => {
         NODE_ENV: 'production',
         REDIS_PASSWORD: 'a-strong-redis-password',
         RESEND_API_KEY: 're_test_key',
+        FACEBOOK_TOKEN_ENCRYPTION_KEY: 'a-token-encryption-key-32-chars!!',
     };
+
+    it('should throw in production when FACEBOOK_TOKEN_ENCRYPTION_KEY is missing', async () => {
+        const { FACEBOOK_TOKEN_ENCRYPTION_KEY: _omitted, ...withoutKey } = prodEnv;
+        process.env = { ...withoutKey };
+
+        await expect(import('../../src/utils/env')).rejects.toThrow('FACEBOOK_TOKEN_ENCRYPTION_KEY');
+    });
 
     it('should throw in production when Stripe is configured but STRIPE_WEBHOOK_SECRET is missing', async () => {
         process.env = { ...prodEnv, STRIPE_SECRET_KEY: 'sk_live_123' };

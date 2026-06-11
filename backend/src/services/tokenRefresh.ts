@@ -115,7 +115,21 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
             // encrypted (enc:v1:...). Sending the ciphertext makes FB return
             // code 190 with a malformed-token message, which isTokenRevoked()
             // then misclassifies as a real revoke and bulk-clears page tokens.
-            const userToken = maybeDecryptToken(user.facebookAccessToken);
+            //
+            // Decrypt failure (corrupt row / wrong key) is a config-or-data
+            // problem, NOT a revoked token: skip this user without touching
+            // page tokens, and don't let the outer catch label it transient —
+            // it would recur every sweep.
+            let userToken: string;
+            try {
+                userToken = maybeDecryptToken(user.facebookAccessToken);
+            } catch (decryptErr) {
+                captureError(decryptErr, 'User token decryption failed — skipping verification this sweep (pages NOT cleared)', {
+                    tags: { service: 'token-health', entity: 'user' },
+                    extra: { userId, pageCount: userPages.length },
+                });
+                continue;
+            }
 
             // 2. Try to re-fetch page tokens via /me/accounts
             //    This is the most reliable check: if it succeeds, tokens are valid
