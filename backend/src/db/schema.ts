@@ -140,6 +140,21 @@ export const pages = pgTable('pages', {
     //   - 'user_revoked':   reserved for future Deauthorize Callback (user removed app from FB)
     disconnectReason: varchar('disconnect_reason', { length: 30 }),
     autoReplyEnabled: boolean('auto_reply_enabled').default(true),
+    // Why auto_reply_enabled is false. Null when enabled, or for legacy rows disabled
+    // before this column existed (provenance unknown — treated as user-disabled).
+    // Distinguishes merchant intent from system enforcement — the comment pipeline
+    // stores comments unreplied for system-disabled pages but drops them for
+    // user-disabled ones (deliberate product choice).
+    //   - 'user':        merchant toggled the page off in the dashboard
+    //   - 'trial_block': channel already consumed its free trial under another account
+    //   - 'auto_pause':  send-failure auto-pause tripped (see pageAutoPause.ts; details
+    //                    in auto_pause_reason / auto_paused_at)
+    //   - 'plan_limit':  RESERVED — no current writer. Over-limit pages are refused at
+    //                    connect (not persisted); value kept only for support backfills
+    //                    of pre-06/2026 shadow pages
+    // The revoked-page sync path clears this to null (the blanked access_token is the
+    // authoritative disconnect signal there).
+    autoReplyDisabledReason: varchar('auto_reply_disabled_reason', { length: 30 }),
     // Instagram Business Account linked to this page
     instagramAccountId: varchar('instagram_account_id', { length: 255 }),
     instagramUsername: varchar('instagram_username', { length: 255 }),

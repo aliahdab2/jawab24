@@ -820,6 +820,13 @@
       "when": 1781049068114,
       "tag": "0117_uneven_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "5",
+      "when": 1781135284988,
+      "tag": "0118_chunky_green_goblin",
+      "breakpoints": true
     }
   ]
 }

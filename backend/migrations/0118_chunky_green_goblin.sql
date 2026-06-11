@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ADD COLUMN "auto_reply_disabled_reason" varchar(30);

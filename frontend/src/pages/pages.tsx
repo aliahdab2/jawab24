@@ -6,7 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover } from '@/components/ui';
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
@@ -43,6 +43,7 @@ import type { NextPageWithLayout } from './_app';
 const PagesPage: NextPageWithLayout = () => {
   const t = useTranslations('pages');
   const tc = useTranslations('common');
+  const locale = useLocale();
   const tDash = useTranslations('dashboard');
   const tTime = useTranslations('time');
   const tTest = useTranslations('testSmartReply');
@@ -119,6 +120,9 @@ const PagesPage: NextPageWithLayout = () => {
         takenCount?: number;
         alreadyMemberOf?: { workspaceId: string; workspaceName: string; role: string; pageName: string }[];
         trialBlockedCount?: number;
+        skippedCount?: number;
+        skippedPages?: { pageName: string }[];
+        pageLimit?: number | null;
       };
       const { data } = await api.post<SyncResponse>('/pages/sync', { accessToken: fbToken });
 
@@ -152,6 +156,18 @@ const PagesPage: NextPageWithLayout = () => {
         toast.warning(t('pageTrialUsedWarning', { count: data.trialBlockedCount }), { duration: Infinity });
       }
 
+      // Page(s) REFUSED at connect because the plan's page limit was reached.
+      // Named explicitly so the merchant knows exactly which pages were left
+      // out — without this they'd just see fewer pages than they granted.
+      if (data?.skippedCount && data.skippedCount > 0) {
+        const names = (data.skippedPages ?? []).map(p => p.pageName);
+        toast.warning(t('pageLimitSkippedWarning', {
+          count: data.skippedCount,
+          pageNames: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(names),
+          limit: data.pageLimit ?? 1,
+        }), { duration: Infinity });
+      }
+
       // Refresh list
       fetchPages();
 
@@ -160,7 +176,7 @@ const PagesPage: NextPageWithLayout = () => {
     } finally {
       setSyncing(false);
     }
-  }, [fbToken, fetchPages, t, setActiveWorkspace]);
+  }, [fbToken, fetchPages, t, setActiveWorkspace, locale]);
 
   // Keep ref updated
   handleSyncRef.current = handleSync;

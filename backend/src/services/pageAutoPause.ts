@@ -17,8 +17,10 @@ import { captureError } from '../utils/sentryHelpers';
  *  - On a *page-level* send failure (`our_fault` / `unknown` / `null` bucket),
  *    bump `pages.consecutive_send_failures`.
  *  - On any successful send, reset the counter to 0.
- *  - At PAUSE_THRESHOLD consecutive failures, flip `auto_reply_enabled=false`
- *    and set `auto_pause_reason='send_rejected'`.
+ *  - At PAUSE_THRESHOLD consecutive failures, flip `auto_reply_enabled=false`,
+ *    set `auto_pause_reason='send_rejected'`, and stamp
+ *    `auto_reply_disabled_reason='auto_pause'` (a SYSTEM disable — comments
+ *    keep being stored unreplied, see commentProcessor).
  *  - Comment + message processors short-circuit on paused pages BEFORE the
  *    OpenAI call, so paused pages cost nothing.
  *  - Customer toggling auto-reply back on in the UI clears the counter +
@@ -65,6 +67,9 @@ export async function recordSendFailure(
             .set({
                 consecutiveSendFailures: sql`${pages.consecutiveSendFailures} + 1`,
                 autoReplyEnabled: sql`CASE WHEN ${pages.consecutiveSendFailures} + 1 >= ${PAUSE_THRESHOLD} THEN false ELSE ${pages.autoReplyEnabled} END`,
+                // 'auto_pause' is a SYSTEM disable: the comment pipeline keeps storing
+                // (but not answering) comments, and the admin UI names the cause.
+                autoReplyDisabledReason: sql`CASE WHEN ${pages.consecutiveSendFailures} + 1 >= ${PAUSE_THRESHOLD} AND ${pages.autoReplyDisabledReason} IS NULL THEN 'auto_pause' ELSE ${pages.autoReplyDisabledReason} END`,
                 autoPauseReason: sql`CASE WHEN ${pages.consecutiveSendFailures} + 1 >= ${PAUSE_THRESHOLD} AND ${pages.autoPauseReason} IS NULL THEN 'send_rejected' ELSE ${pages.autoPauseReason} END`,
                 autoPausedAt: sql`CASE WHEN ${pages.consecutiveSendFailures} + 1 >= ${PAUSE_THRESHOLD} AND ${pages.autoPausedAt} IS NULL THEN NOW() ELSE ${pages.autoPausedAt} END`,
             })
@@ -111,6 +116,7 @@ export async function clearAutoPause(pageId: string): Promise<void> {
             consecutiveSendFailures: 0,
             autoPauseReason: null,
             autoPausedAt: null,
+            autoReplyDisabledReason: null,
         })
         .where(eq(pages.id, pageId));
 }

@@ -51,6 +51,7 @@ export function mapToPlatformPage(
     },
     overrides: {
         autoReplyEnabled: boolean;
+        autoReplyDisabledReason?: string | null;
         platformAccountId?: string;
     },
 ): PlatformPage {
@@ -63,6 +64,7 @@ export function mapToPlatformPage(
         knowledgeBase: page.knowledgeBase,
         kbActiveVersion: page.kbActiveVersion ?? null,
         autoReplyEnabled: overrides.autoReplyEnabled,
+        autoReplyDisabledReason: overrides.autoReplyDisabledReason ?? null,
         platformAccountId: overrides.platformAccountId,
         ecommerceStoreId: page.ecommerceStoreId,
         businessProfile: page.businessProfile as Record<string, unknown> | null,

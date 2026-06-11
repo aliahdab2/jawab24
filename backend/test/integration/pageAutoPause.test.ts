@@ -80,6 +80,8 @@ describe('pageAutoPause', () => {
             expect(after.autoReplyEnabled).toBe(false);
             expect(after.autoPauseReason).toBe('send_rejected');
             expect(after.autoPausedAt).not.toBeNull();
+            // SYSTEM disable — the comment pipeline keys ingestion off this value
+            expect(after.autoReplyDisabledReason).toBe('auto_pause');
         });
     });
 
@@ -136,6 +138,7 @@ describe('pageAutoPause', () => {
             expect(after.consecutiveSendFailures).toBe(0);
             expect(after.autoPauseReason).toBeNull();
             expect(after.autoPausedAt).toBeNull();
+            expect(after.autoReplyDisabledReason).toBeNull();
         });
 
         it('preserves auto-pause audit trail when customer disables auto-reply', async () => {
@@ -153,6 +156,10 @@ describe('pageAutoPause', () => {
             const after = await getPage(page.id);
             expect(after.autoPauseReason).toBe('send_rejected');
             expect(after.consecutiveSendFailures).toBe(PAUSE_THRESHOLD);
+            // Explicit merchant disable overrides the system reason: the page is
+            // now 'user'-silent (comment ingestion stops), while the auto-pause
+            // audit trail above is preserved separately.
+            expect(after.autoReplyDisabledReason).toBe('user');
         });
     });
 

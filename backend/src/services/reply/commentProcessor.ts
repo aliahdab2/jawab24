@@ -105,6 +105,36 @@ export class CommentProcessor {
             }
             if (!page.autoReplyEnabled) {
                 pipelineMetrics.record(pipeline, 'auto_reply_disabled');
+                // SYSTEM-disabled pages still ingest the comment: the merchant never
+                // chose to silence this page, so the comment must surface unreplied
+                // in the inbox instead of vanishing. Ingestion only — no access token
+                // is passed, so content creation is a stub row with no Graph API
+                // fetch, and no AI runs. Reasons: 'trial_block' (anti-abuse guard),
+                // 'auto_pause' (send-failure pause), 'plan_limit' (reserved — no
+                // current writer; honored for support backfills of legacy shadow
+                // pages). Merchant-toggled pages ('user', or null = pre-column
+                // legacy) stay fully silent: the merchant said "leave this page
+                // alone". DMs intentionally differ (always stored) — see
+                // messageProcessor step 3.
+                const systemDisabled = page.autoReplyDisabledReason === 'plan_limit'
+                    || page.autoReplyDisabledReason === 'trial_block'
+                    || page.autoReplyDisabledReason === 'auto_pause';
+                if (systemDisabled && page.workspaceId) {
+                    try {
+                        const content = await adapter.findOrCreateContent(page.id, contentId);
+                        await adapter.storeComment(content.id, page.workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags);
+                        invalidateWorkspaceStatsCache(page.workspaceId);
+                    } catch (storeError) {
+                        // Ingestion is best-effort: a storage failure must not turn
+                        // the deterministic "disabled page" skip into a retryable
+                        // job error (the reply outcome is identical either way).
+                        this.logger.error('Failed to ingest comment for system-disabled page', {
+                            platformCommentId,
+                            pageId: page.id,
+                            error: storeError instanceof Error ? storeError.message : String(storeError),
+                        });
+                    }
+                }
                 return { success: false, commentId: platformCommentId, error: 'Auto-reply disabled for this page' };
             }
             if (!page.userId) {

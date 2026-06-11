@@ -84,7 +84,7 @@ export class AuthController {
                 try {
                     const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken, undefined, createRequestLogger(request.log));
                     if (syncResult && syncResult.skippedCount > 0) {
-                        request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
+                        request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) not connected (plan page limit reached)`);
                     }
                     if (syncResult && (syncResult.revokedCount ?? 0) > 0) {
                         request.log.info(`Auto-sync: ${syncResult.revokedCount} page(s) disconnected (access revoked in Facebook)`);
@@ -311,7 +311,7 @@ export class AuthController {
                 try {
                     const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken, undefined, createRequestLogger(request.log));
                     if (syncResult && syncResult.skippedCount > 0) {
-                        request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
+                        request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) not connected (plan page limit reached)`);
                     }
                     if (syncResult && (syncResult.revokedCount ?? 0) > 0) {
                         request.log.info(`Auto-sync: ${syncResult.revokedCount} page(s) disconnected (access revoked in Facebook)`);
