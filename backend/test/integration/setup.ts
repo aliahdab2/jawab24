@@ -21,6 +21,13 @@ const connectionString =
 // This must happen before any app module is imported.
 process.env.DATABASE_URL = connectionString;
 
+// Mirror production: token encryption key set, so service write paths store
+// enc:v1: ciphertext and read paths decrypt. Raw fixture inserts (plaintext
+// tokens via testDb) still work through the legacy-passthrough read path.
+// Must be set before any app module imports src/config (read at module load).
+process.env.FACEBOOK_TOKEN_ENCRYPTION_KEY =
+    process.env.FACEBOOK_TOKEN_ENCRYPTION_KEY || 'integration-test-token-key-32-chars!!';
+
 // Dedicated connection for integration test helpers (direct DB reads/writes in assertions).
 const testClient = postgres(connectionString, { prepare: false, max: 3 });
 export const testDb = drizzle(testClient, { schema });

@@ -32,7 +32,16 @@ export class AuthService {
     /** Decrypt token — falls back gracefully to plaintext for legacy rows. */
     private maybeDecrypt(stored: string | null | undefined): string | null | undefined {
         if (!stored || !config.facebook.tokenEncryptionKey) return stored;
-        return decryptFbToken(stored);
+        try {
+            return decryptFbToken(stored);
+        } catch (error) {
+            // A corrupt row or wrong key must not fail login/user reads —
+            // treat as missing token (user re-links Facebook to restore it).
+            captureError(error, 'User token decryption failed — treating as missing', {
+                tags: { service: 'auth', entity: 'user' },
+            });
+            return null;
+        }
     }
 
     /**

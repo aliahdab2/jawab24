@@ -2256,22 +2256,26 @@ Facebook page access tokens are now **encrypted at rest** using AES-256-GCM encr
 │         │                                                     │
 │         ▼                                                     │
 │  ┌───────────────────────────────────────┐                    │
-│  │  maybeEncryptPageToken(token)          │                    │
+│  │  maybeEncryptToken(token)              │                    │
 │  │  • If FACEBOOK_TOKEN_ENCRYPTION_KEY    │                    │
 │  │    is configured → AES-256-GCM encrypt │                    │
-│  │  • Store: "enc:iv:ciphertext:tag"     │                    │
-│  │  • If no key → store plaintext         │                    │
+│  │  • Store: "enc:v1:iv:ciphertext.tag"  │                    │
+│  │  • Key is REQUIRED in production       │                    │
+│  │    (startup fails fast without it)     │                    │
 │  └───────────────┬───────────────────────┘                    │
 │                   │                                            │
 │                   ▼                                            │
 │  Stored in pages.access_token column                          │
+│  (users.facebook_access_token same scheme)                    │
 │                                                               │
 │  ─────────── ON READ ───────────                              │
 │                                                               │
 │  ┌───────────────────────────────────────┐                    │
-│  │  maybeDecryptPageToken(stored)         │                    │
-│  │  • If starts with "enc:" → decrypt    │                    │
+│  │  safeDecryptToken(stored)              │                    │
+│  │  • If starts with "enc:v1:" → decrypt │                    │
 │  │  • Otherwise → return as-is (legacy)  │                    │
+│  │  • Decrypt failure → Sentry + treat   │                    │
+│  │    page as disconnected (never 500s)  │                    │
 │  │  • Transparent to all consumers       │                    │
 │  └───────────────────────────────────────┘                    │
 │                                                               │
@@ -2279,8 +2283,8 @@ Facebook page access tokens are now **encrypted at rest** using AES-256-GCM encr
 │  • Shopify: access_token + IV columns                         │
 │  • Salla: access_token + refresh_token + IV columns           │
 │                                                               │
-│  Migration script: migrate-encrypt-page-tokens.ts             │
-│  (one-time migration for existing plaintext tokens)           │
+│  Backfill script: migrate-encrypt-page-tokens.ts              │
+│  (covers pages + users tables; idempotent, safe to re-run)    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -2290,11 +2294,12 @@ Facebook page access tokens are now **encrypted at rest** using AES-256-GCM encr
 
 توكنات الوصول لصفحات فيسبوك الآن **مشفرة في حالة السكون** باستخدام تشفير AES-256-GCM.
 
-- **عند الحفظ**: إذا كان مفتاح التشفير مُعداً → تشفير AES-256-GCM، التخزين بصيغة `enc:iv:ciphertext:tag`
-- **عند القراءة**: إذا كان يبدأ بـ `enc:` → فك التشفير، وإلا → إرجاع كنص عادي (للتوافق مع القديم)
-- **شفاف تماماً** لجميع المستهلكين
+- **عند الحفظ**: تشفير AES-256-GCM، التخزين بصيغة `enc:v1:iv:ciphertext.tag` — المفتاح **إلزامي في الإنتاج** (يفشل التشغيل فوراً بدونه)
+- **عند القراءة**: إذا كان يبدأ بـ `enc:v1:` → فك التشفير، وإلا → إرجاع كنص عادي (للتوافق مع القديم)
+- **فشل فك التشفير** (صف تالف أو مفتاح خاطئ) → تبليغ Sentry + تُعامل الصفحة كغير متصلة بدلاً من تعطيل لوحة التحكم
+- **شفاف تماماً** لجميع المستهلكين — توكنات المستخدمين (`users.facebook_access_token`) بنفس الآلية
 - توكنات المتاجر الإلكترونية (Shopify/Salla) مشفرة أيضاً مع أعمدة IV
-- سكريبت ترحيل لمرة واحدة للتوكنات الحالية: `migrate-encrypt-page-tokens.ts`
+- سكريبت التعبئة `migrate-encrypt-page-tokens.ts` يغطي جدولي الصفحات والمستخدمين، وآمن لإعادة التشغيل
 
 ---
 

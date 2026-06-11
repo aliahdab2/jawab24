@@ -11,7 +11,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { BusinessProfileSchema } from '../utils/validation';
 import { redis } from '../lib/redis';
-import { maybeEncryptToken, maybeDecryptToken } from './facebookCrypto';
+import { maybeEncryptToken, safeDecryptToken } from './facebookCrypto';
 import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { PgVectorStore } from './kb/pgvector-store';
@@ -297,7 +297,7 @@ export class PagesService {
         const emptyStats: PageStats & { replyRate: number } = {
             commentsCount: 0, repliesCount: 0, breakdown: emptyBreakdown, replyRate: 0, lastActivity: null,
         };
-        if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: maybeDecryptToken(p.accessToken), ...emptyStats }));
+        if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: safeDecryptToken(p.accessToken, { entity: 'page', id: p.id }), ...emptyStats }));
 
         // Stats are best-effort — if the query fails, pages still load with zeroed stats
         // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id
@@ -405,7 +405,7 @@ export class PagesService {
             };
             return {
                 ...page,
-                accessToken: maybeDecryptToken(page.accessToken),
+                accessToken: safeDecryptToken(page.accessToken, { entity: 'page', id: page.id }),
                 ...stats,
                 replyRate: stats.commentsCount > 0
                     ? Math.round((stats.repliesCount / stats.commentsCount) * 100)
@@ -424,7 +424,7 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
 
         const page = result[0] || null;
-        if (page) page.accessToken = maybeDecryptToken(page.accessToken);
+        if (page) page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
         return page;
     }
 
@@ -438,7 +438,7 @@ export class PagesService {
             .where(eq(pages.facebookPageId, facebookPageId));
 
         const page = result[0] || null;
-        if (page) page.accessToken = maybeDecryptToken(page.accessToken);
+        if (page) page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
         return page;
     }
 
@@ -975,7 +975,7 @@ export class PagesService {
             .where(eq(pages.instagramAccountId, instagramAccountId));
 
         const page = result[0] || null;
-        if (page) page.accessToken = maybeDecryptToken(page.accessToken);
+        if (page) page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
         return page;
     }
 
@@ -989,7 +989,7 @@ export class PagesService {
             .where(eq(pages.whatsappPhoneNumberId, phoneNumberId));
 
         const page = result[0] || null;
-        if (page) page.accessToken = maybeDecryptToken(page.accessToken);
+        if (page) page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
         return page;
     }
 }

@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { aesGcmEncrypt, aesGcmDecrypt, deriveKey } from '../lib/aesGcm';
+import { captureError } from '../utils/sentryHelpers';
 
 /**
  * Encrypt a page/user token if encryption key is configured.
@@ -18,6 +19,28 @@ export function maybeDecryptToken(token: string | null | undefined): string {
     if (!token) return '';
     if (!config.facebook.tokenEncryptionKey) return token;
     return decryptFbToken(token);
+}
+
+/**
+ * Decrypt like maybeDecryptToken, but never throw: one corrupt row (or a
+ * wrong key) must not take down whole-workspace reads — getPages() backs the
+ * dashboard, so a thrown decrypt error there 500s every page load. On failure
+ * the error goes to Sentry and the token surfaces as '' so the page renders
+ * as disconnected (Reconnect prompt) instead of an outage.
+ */
+export function safeDecryptToken(
+    stored: string | null | undefined,
+    context: { entity: 'page' | 'user'; id?: string },
+): string {
+    try {
+        return maybeDecryptToken(stored);
+    } catch (error) {
+        captureError(error, 'Token decryption failed — surfacing as disconnected', {
+            tags: { service: 'facebook-crypto', entity: context.entity },
+            extra: { id: context.id },
+        });
+        return '';
+    }
 }
 
 const PREFIX = 'enc:v1:';
