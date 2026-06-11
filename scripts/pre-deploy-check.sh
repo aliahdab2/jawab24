@@ -314,6 +314,49 @@ else
     exit 1
 fi
 
+# A running `next dev` for THIS repo shares frontend/.next with this build and
+# corrupts it mid-build: the build script's `rm -rf .next && lint && next build`
+# leaves a ~30s window during lint in which the dev server's watcher regenerates
+# .next (types/validator.ts, trace, dev chunks), so `next build` then races the
+# dev server's writes. Symptoms seen in the wild: ENOENT during the
+# export→server-pages rename step, and "File '.next/types/validator.ts' not
+# found" during typecheck (root-caused 2026-06-11; reconfirmed via controlled
+# before/after — 2/3 builds raced with a dev server up, 4/4 clean with it down).
+# Refuse to build until it's stopped — the retry below cannot save us while it
+# keeps writing.
+#
+# Detection note: the previous "$(pwd)/node_modules/.bin/next dev" pgrep pattern
+# never matched a real dev server — npm runs the dev script through the
+# symlink-resolved node_modules/next/dist/bin/next (and the bin is often
+# root-hoisted by npm workspaces), so the live command line doesn't contain the
+# .bin path. We now match any `next dev` whose command line references this repo
+# root, plus a port-3001 (frontend dev port) belt-and-braces check — immune to
+# bin-path / symlink / cwd / workspace-hoisting differences. We deliberately do
+# NOT block on a non-`next dev` listener (e.g. a stale `next start` from E2E) —
+# that doesn't regenerate .next and is auto-killed later in this script.
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEV_SERVER_PIDS=$(
+    {
+        pgrep -f "next dev" 2>/dev/null || true
+        lsof -nP -iTCP:3001 -sTCP:LISTEN -t 2>/dev/null || true
+    } | sort -u | while read -r _pid; do
+        [ -n "$_pid" ] || continue
+        _cmd=$(ps -ww -o command= -p "$_pid" 2>/dev/null || true)
+        # A dev server for THIS repo: command names `next dev` AND references the
+        # repo root (scopes out other projects' dev servers and non-dev listeners).
+        if printf '%s' "$_cmd" | grep -q "next dev" && printf '%s' "$_cmd" | grep -qF "$REPO_ROOT"; then
+            echo "$_pid"
+        fi
+    done | tr '\n' ' ' | sed 's/ *$//'
+)
+if [ -n "$DEV_SERVER_PIDS" ]; then
+    echo -e "${RED}   ❌ A Next.js dev server for this repo is running (PID(s): ${DEV_SERVER_PIDS})${NC}"
+    echo -e "${RED}      It writes into frontend/.next while this build runs, corrupting it${NC}"
+    echo -e "${RED}      (flaky ENOENT in the export step / missing .next/types files).${NC}"
+    echo -e "${RED}      Stop it first:  kill ${DEV_SERVER_PIDS}   then re-run this script.${NC}"
+    exit 1
+fi
+
 # Always clean .next and webpack cache before building to avoid stale vendor chunks
 # after npm install. Incremental builds sound nice but cause MODULE_NOT_FOUND errors.
 rm -rf frontend/.next frontend/node_modules/.cache
@@ -322,9 +365,8 @@ rm -rf frontend/.next frontend/node_modules/.cache
 # using '**/api/**' patterns match the actual request URLs.
 # This only affects the local pre-deploy build — production builds on the server
 # use their own .env with the real API URL.
-# Next.js 15 + i18n occasionally hits a flaky ENOENT during the export→server-pages
-# rename step (race condition in parallel static-page generation). Retry once with a
-# clean .next dir before declaring failure.
+# A retry is kept as belt-and-braces for genuinely transient flakes, but the
+# common cause (concurrent dev server) is blocked by the guard above.
 build_frontend() {
     CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend "$@"
 }
