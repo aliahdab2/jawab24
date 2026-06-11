@@ -335,11 +335,15 @@ describe('PagesService', () => {
             vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
 
             // Mock DB Update (for both existing page update and revoke)
+            const setCalls: any[] = [];
             vi.mocked(db.update).mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        returning: vi.fn().mockResolvedValue([{ id: 'p1' }])
-                    })
+                set: vi.fn().mockImplementation((values) => {
+                    setCalls.push(values);
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'p1' }])
+                        })
+                    };
                 })
             } as any);
 
@@ -350,6 +354,14 @@ describe('PagesService', () => {
 
             // db.update should be called: once for updating existing page-1, once for revoking page-2
             expect(db.update).toHaveBeenCalledTimes(2);
+
+            // The revoke write must clear the disable reason — the blanked token is
+            // the authoritative signal; a stale 'trial_block'/'auto_pause' would
+            // misdescribe the page in admin and the comment-ingestion gate
+            const revokeWrite = setCalls.find(v => v.accessToken === '');
+            expect(revokeWrite).toBeDefined();
+            expect(revokeWrite.autoReplyEnabled).toBe(false);
+            expect(revokeWrite.autoReplyDisabledReason).toBeNull();
         });
 
         // Regression guard for the "Noor unstuck" UX:

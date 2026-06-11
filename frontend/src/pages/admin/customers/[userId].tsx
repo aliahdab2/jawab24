@@ -122,6 +122,7 @@ const PAGE_OFF_REASON_KEYS: Record<string, string> = {
     user: 'customer.pageOffByMerchant',
     plan_limit: 'customer.pageOffPlanLimit',
     trial_block: 'customer.pageOffTrialUsed',
+    auto_pause: 'customer.pageOffAutoPaused',
 };
 
 const FIELD_CLASS = 'w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-background text-foreground';

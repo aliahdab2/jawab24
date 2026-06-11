@@ -50,6 +50,7 @@
     "pageOffByMerchant": "Auto-reply off — by merchant",
     "pageOffPlanLimit": "Auto-reply off — plan limit",
     "pageOffTrialUsed": "Auto-reply off — trial already used",
+    "pageOffAutoPaused": "Auto-reply off — paused after send failures",
     "pageDisconnected": "Disconnected",
     "viewOnFacebook": "View on Facebook",
     "viewOnInstagram": "View on Instagram",

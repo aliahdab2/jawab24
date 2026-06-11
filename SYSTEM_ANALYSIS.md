@@ -1794,7 +1794,7 @@ These are tracked per pipeline (facebook_comment, instagram_comment, facebook_me
 | `page_not_found` | Page doesn't exist in DB | Error |
 | `no_user` | Page has no associated user | Error |
 | `no_workspace` | Page has no associated workspace | Error |
-| `auto_reply_disabled` | Platform auto-reply toggle off. Comments: if the page was disabled by the SYSTEM (`auto_reply_disabled_reason` = `plan_limit`/`trial_block`) the comment is still stored unreplied (no Graph fetch, no AI); merchant-toggled (`user`) pages drop it silently. DMs are always stored regardless of reason. | Expected |
+| `auto_reply_disabled` | Platform auto-reply toggle off. Comments: if the page was disabled by the SYSTEM (`auto_reply_disabled_reason` = `trial_block`/`auto_pause`, or reserved `plan_limit`) the comment is still stored unreplied (no Graph fetch, no AI); merchant-toggled (`user`, or legacy null) pages drop it silently. DMs are always stored regardless of reason. | Expected |
 | `settings_disabled` | Workspace settings disabled | Expected |
 | `post_disabled` | Post/media has auto-reply off | Expected |
 | `media_disabled` | Instagram media auto-reply off | Expected |

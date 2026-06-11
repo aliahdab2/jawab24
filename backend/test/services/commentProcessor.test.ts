@@ -224,7 +224,7 @@ describe('CommentProcessor', () => {
             autoReplyDisabledReason,
         });
 
-        it.each(['trial_block', 'plan_limit'])(
+        it.each(['trial_block', 'auto_pause', 'plan_limit'])(
             'stores the comment unreplied (no Graph enrichment, no AI) when system-disabled: %s',
             async (reason) => {
                 const adapter = createMockAdapter({

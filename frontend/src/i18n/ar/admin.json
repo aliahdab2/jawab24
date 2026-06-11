@@ -50,6 +50,7 @@
     "pageOffByMerchant": "الرد التلقائي متوقف — أوقفه التاجر",
     "pageOffPlanLimit": "الرد التلقائي متوقف — حد الباقة",
     "pageOffTrialUsed": "الرد التلقائي متوقف — التجربة المجانية مستخدمة سابقًا",
+    "pageOffAutoPaused": "الرد التلقائي متوقف — أُوقف مؤقتًا بعد فشل الإرسال",
     "pageDisconnected": "غير متصلة",
     "viewOnFacebook": "عرض على فيسبوك",
     "viewOnInstagram": "عرض على إنستغرام",

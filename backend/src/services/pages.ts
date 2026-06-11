@@ -959,6 +959,11 @@ export class PagesService {
                 .update(pages)
                 .set({
                     autoReplyEnabled: false,
+                    // Clear any prior reason — the blanked access token is the
+                    // authoritative disconnect signal here, and a stale system
+                    // reason ('trial_block'/'auto_pause') would misdescribe the
+                    // page in the admin UI and the comment-ingestion gate.
+                    autoReplyDisabledReason: null,
                     instagramAutoReplyEnabled: false,
                     accessToken: '',
                     tokenLastVerifiedAt: null,
