@@ -221,7 +221,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
           /* Mobile APP Header — Logo at start, bell at end.
              Follows natural text direction (LTR/RTL). */
           <div
-            className="lg:hidden fixed top-0 left-0 right-0 h-14 sm:h-16 max-lg:landscape:h-10 flex items-center justify-between px-4 px-safe-landscape z-40 pt-safe box-content bg-card/90 backdrop-blur-md border-b border-theme-border"
+            className="lg:hidden fixed top-0 inset-x-0 h-14 sm:h-16 max-lg:landscape:h-10 flex items-center justify-between px-4 px-safe-landscape z-40 pt-safe box-content bg-card/90 backdrop-blur-md border-b border-theme-border"
           >
             <Link href="/dashboard" className="flex items-center min-w-[44px] min-h-[44px] max-lg:landscape:min-h-[40px] justify-center">
               <BrandLogo variant="vector" className="w-9 h-9 max-lg:landscape:w-7 max-lg:landscape:h-7" />
@@ -278,7 +278,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             {/* Bottom navigation - sits ABOVE the safe area in portrait, at bottom in landscape */}
             <nav
               aria-label="Mobile navigation"
-              className="lg:hidden fixed left-0 right-0 bg-card border-t border-theme-border/50 flex justify-around items-center h-16 max-lg:landscape:h-12 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] px-safe-landscape bottom-nav-position"
+              className="lg:hidden fixed inset-x-0 bg-card border-t border-theme-border/50 flex justify-around items-center h-16 max-lg:landscape:h-12 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] px-safe-landscape bottom-nav-position"
             >
               <MobileNavButton
                 onClick={() => router.push('/dashboard')}
@@ -485,7 +485,7 @@ function MobileMenuOverlay({
             // Landscape: Centered modal (iOS/Android standard for landscape)
             ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl w-[90vw] max-w-[600px] max-h-[85vh] animate-in zoom-in-95 duration-200 px-safe"
             // Portrait: Bottom sheet (iOS standard) with bottom safe area
-            : "bottom-0 left-0 right-0 rounded-t-[24px] animate-in slide-in-from-bottom duration-300 pb-safe"
+            : "bottom-0 inset-x-0 rounded-t-[24px] animate-in slide-in-from-bottom duration-300 pb-safe"
         )}
         style={{
           boxShadow: isLandscape 

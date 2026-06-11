@@ -53,7 +53,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     // Show nothing while checking auth
     if (!mounted || !_hasHydrated || !isAuthenticated || !user?.isAdmin) {
         return (
-            <div className="min-h-screen bg-surface-50 flex items-center justify-center">
+            <div className="min-h-dvh bg-surface-50 flex items-center justify-center">
                 <div className="animate-pulse text-muted-foreground">
                     {tc('loading')}
                 </div>

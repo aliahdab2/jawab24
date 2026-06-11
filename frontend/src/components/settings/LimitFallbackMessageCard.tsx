@@ -45,7 +45,7 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
               'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold',
               enabled
                 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                : 'bg-surface-100 text-surface-500 dark:bg-surface-800 dark:text-surface-400'
+                : 'bg-surface-100 text-muted-foreground dark:bg-surface-800'
             )}>
               <span className={clsx('w-1.5 h-1.5 rounded-full', enabled ? 'bg-green-500' : 'bg-surface-400')} />
               {enabled ? t('limitFallbackMessage.statusActive') : t('limitFallbackMessage.statusOff')}

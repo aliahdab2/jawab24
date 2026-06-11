@@ -73,7 +73,9 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
         <div
           className="flex-1 bg-zinc-900 flex items-center justify-center p-4"
           style={{
-            minHeight: '100vh',
+            // dvh, not vh: vh includes the mobile URL bar / keyboard area.
+            // Inline (not Tailwind) so the error UI renders even if CSS broke.
+            minHeight: '100dvh',
             paddingTop: 'var(--sai-top)',
             paddingBottom: 'var(--sai-bottom)',
           }}
