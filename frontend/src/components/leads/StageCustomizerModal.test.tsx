@@ -6,10 +6,11 @@ import { StageCustomizerModal } from './StageCustomizerModal';
 import en from '@/i18n/en/leads.json';
 import type { LeadStagesConfig } from '@/lib/api';
 
-const { updateSettings } = vi.hoisted(() => ({ updateSettings: vi.fn() }));
+const { updateSettings, updateLeadConfig } = vi.hoisted(() => ({ updateSettings: vi.fn(), updateLeadConfig: vi.fn() }));
 
 vi.mock('@/lib/api', () => ({
   workspaceApi: { updateSettings },
+  pagesApi: { updateLeadConfig },
 }));
 
 vi.mock('sonner', () => ({
@@ -62,6 +63,7 @@ describe('StageCustomizerModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     updateSettings.mockResolvedValue({ data: {} });
+    updateLeadConfig.mockResolvedValue({ data: {} });
   });
 
   it('applying a template on an empty draft fills stages and fields without confirmation', () => {
@@ -76,7 +78,7 @@ describe('StageCustomizerModal', () => {
   });
 
   it('applying a template over existing content asks for confirmation; cancel keeps the draft', () => {
-    renderModal({ stages: EXISTING });
+    renderModal({ workspaceStages: EXISTING });
     fireEvent.click(screen.getByText(en.templateStore));
 
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
@@ -87,7 +89,7 @@ describe('StageCustomizerModal', () => {
   });
 
   it('confirming the overwrite replaces the draft with the template', () => {
-    renderModal({ stages: EXISTING });
+    renderModal({ workspaceStages: EXISTING });
     fireEvent.click(screen.getByText(en.templateStore));
     fireEvent.click(screen.getByText('confirm-overwrite'));
 
@@ -96,7 +98,7 @@ describe('StageCustomizerModal', () => {
   });
 
   it('save drops rows with empty labels and trims the rest', async () => {
-    renderModal({ stages: EXISTING });
+    renderModal({ workspaceStages: EXISTING });
     // Add an empty row under converted — it must not reach the server.
     const addButtons = screen.getAllByText(en.addSubStage);
     fireEvent.click(addButtons[addButtons.length - 1]);
@@ -118,10 +120,41 @@ describe('StageCustomizerModal', () => {
         color: 'blue' as const,
       })),
     };
-    renderModal({ stages: full });
+    renderModal({ workspaceStages: full });
     // "new" and "contacted" sections still offer add; the full "converted" must not:
     // 2 collapsed sections → exactly 2 add-stage buttons remain.
     expect(screen.getAllByText(en.addSubStage)).toHaveLength(2);
     expect(screen.getByText('(20/20)')).toBeInTheDocument();
+  });
+
+  // Scope is implicit: the page selector on the leads screen IS the scope.
+  describe('scope routing (no toggle in the UI)', () => {
+    it('single-page workspace edits the shared workspace config, with a plain title', async () => {
+      renderModal({ workspaceStages: EXISTING });
+      expect(screen.getByText(en.customizeStages)).toBeInTheDocument(); // "Customize leads" (no page name)
+      fireEvent.click(screen.getByText('Save'));
+      await waitFor(() => expect(updateSettings).toHaveBeenCalledTimes(1));
+      expect(updateLeadConfig).not.toHaveBeenCalled();
+    });
+
+    it('multi-page workspace saves the SELECTED page override and names the page in the title', async () => {
+      renderModal({ multiPage: true, selectedPageId: 'pg1', pageName: 'Nourva', workspaceStages: EXISTING });
+      expect(screen.getByText('Customize leads · Nourva')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('Save'));
+      await waitFor(() => expect(updateLeadConfig).toHaveBeenCalledTimes(1));
+      expect(updateLeadConfig.mock.calls[0][0]).toBe('pg1');
+      expect(updateSettings).not.toHaveBeenCalled();
+    });
+
+    it('keeps a page override editable even when the workspace is now single-page (not orphaned)', async () => {
+      const pageOverride: LeadStagesConfig = { converted: [{ id: 'po', label: 'PageOnlyStage', color: 'blue' }] };
+      renderModal({ multiPage: false, selectedPageId: 'pg1', pageStages: pageOverride, workspaceStages: EXISTING });
+      // Seeds from the PAGE override, not the workspace config — the override is reachable.
+      expect(screen.getByDisplayValue('PageOnlyStage')).toBeInTheDocument();
+      expect(screen.queryByDisplayValue('My custom stage')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByText('Save'));
+      await waitFor(() => expect(updateLeadConfig).toHaveBeenCalledTimes(1));
+      expect(updateLeadConfig.mock.calls[0][0]).toBe('pg1');
+    });
   });
 });

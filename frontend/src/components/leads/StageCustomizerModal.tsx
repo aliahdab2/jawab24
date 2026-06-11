@@ -31,6 +31,7 @@ import { useTranslations } from 'next-intl';
 import { Modal, Button, Input, ConfirmationModal } from '@/components/ui';
 import {
   workspaceApi,
+  pagesApi,
   type LeadStatus,
   type LeadStagesConfig,
   type LeadSubStage,
@@ -145,41 +146,81 @@ function templateFields(key: TemplateKey, rtl: boolean): LeadCustomFieldDef[] {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
+type Scope = 'workspace' | 'page';
+
 interface StageCustomizerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Current workspace config — used to seed the draft on open. */
-  stages?: LeadStagesConfig;
-  fields?: LeadCustomFieldDef[];
+  /** Workspace-level config — the default every page inherits ("all pages"). */
+  workspaceStages?: LeadStagesConfig;
+  workspaceFields?: LeadCustomFieldDef[];
+  /** The page the merchant is viewing — enables the per-page override scope. */
+  selectedPageId?: string;
+  pageName?: string;
+  /** This page's current override; null/undefined = it inherits the workspace. */
+  pageStages?: LeadStagesConfig | null;
+  pageFields?: LeadCustomFieldDef[] | null;
+  /** True only when the workspace has 2+ pages. Per-page scope is offered just
+   *  then — a single-page merchant never meets the "this page / all pages"
+   *  concept and edits one shared config exactly as before. */
+  multiPage?: boolean;
 }
 
-export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageCustomizerModalProps) {
+export function StageCustomizerModal({
+  isOpen,
+  onClose,
+  workspaceStages,
+  workspaceFields,
+  selectedPageId,
+  pageName,
+  pageStages,
+  pageFields,
+  multiPage,
+}: StageCustomizerModalProps) {
   const t = useTranslations('leads');
   const tc = useTranslations('common');
   const { language } = useLanguage();
   const queryClient = useQueryClient();
+  // Scope is IMPLICIT — there's no scope control in the UI. The customizer edits
+  // the SELECTED PAGE when (a) the workspace has 2+ pages (the page selector on
+  // the leads screen is the scope), OR (b) this page already has its own override
+  // — so an existing per-page setup stays editable even if the workspace later
+  // shrank to a single page (otherwise its override would be orphaned/unreachable
+  // and would silently shadow the workspace config). Otherwise — single page, no
+  // override — it edits the one shared workspace config, and the merchant never
+  // meets the "this page vs all pages" concept.
+  const pageHasOverride = pageStages != null || pageFields != null;
+  const scope: Scope = (!!selectedPageId && (!!multiPage || pageHasOverride)) ? 'page' : 'workspace';
   const [draft, setDraft] = useState<LeadStagesConfig>({});
   const [fieldsDraft, setFieldsDraft] = useState<LeadCustomFieldDef[]>([]);
   const [pendingTemplate, setPendingTemplate] = useState<TemplateKey | null>(null);
 
-  // Re-seed the drafts each time the modal opens (config may have changed).
+  // Re-seed each time the modal opens, from the effective config for the active
+  // scope: the page's own override if it has one, else the workspace default
+  // (so a first-time edit starts from the current stages, not a blank slate).
   useEffect(() => {
-    if (isOpen) {
-      setDraft({
-        new: [...(stages?.new ?? [])],
-        contacted: [...(stages?.contacted ?? [])],
-        converted: [...(stages?.converted ?? [])],
-      });
-      setFieldsDraft([...(fields ?? [])]);
-    }
-  }, [isOpen, stages, fields]);
+    if (!isOpen) return;
+    const srcStages = scope === 'page' ? (pageStages ?? workspaceStages) : workspaceStages;
+    const srcFields = scope === 'page' ? (pageFields ?? workspaceFields) : workspaceFields;
+    setDraft({
+      new: [...(srcStages?.new ?? [])],
+      contacted: [...(srcStages?.contacted ?? [])],
+      converted: [...(srcStages?.converted ?? [])],
+    });
+    setFieldsDraft([...(srcFields ?? [])]);
+  }, [isOpen, scope, pageStages, pageFields, workspaceStages, workspaceFields]);
 
   const saveMutation = useMutation({
     mutationFn: (payload: { leadStages: LeadStagesConfig; leadFields: LeadCustomFieldDef[] }) =>
-      workspaceApi.updateSettings(payload),
+      scope === 'page' && selectedPageId
+        ? pagesApi.updateLeadConfig(selectedPageId, payload)
+        : workspaceApi.updateSettings(payload),
     onSuccess: () => {
       toast.success(t('stagesSaved'), { id: 'lead-stages' });
+      // A page-scoped save lands on the page row; a workspace save on
+      // workspace-settings — invalidate both so the leads list refreshes.
       queryClient.invalidateQueries({ queryKey: ['workspace-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['pages'] });
       onClose();
     },
     onError: (err) => {
@@ -233,7 +274,7 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={t('customizeStages')}
+      title={multiPage && pageName ? t('customizeStagesForPage', { name: pageName }) : t('customizeStages')}
       size="lg"
       mobilePresentation="fullscreen"
       footer={

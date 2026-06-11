@@ -3,6 +3,7 @@ import fastify from 'fastify';
 import leadsRoutes from '../../src/routes/leads';
 import { leadExtractorService } from '../../src/services/leadExtractor';
 import { pagesService } from '../../src/services/pages';
+import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 
 vi.mock('../../src/services/leadExtractor', () => ({
     leadExtractorService: {
@@ -22,9 +23,13 @@ vi.mock('../../src/services/pages', () => ({
     },
 }));
 
+// The leads controller validates subStage ids / field keys against the page's
+// EFFECTIVE config (page override ?? workspace default), resolved by
+// getEffectiveLeadConfig. By default it returns the workspace-level config; a
+// test can override the mock per-case to simulate a per-page override.
 vi.mock('../../src/services/workspaceSettings', () => ({
     workspaceSettingsService: {
-        getSettings: vi.fn().mockResolvedValue({
+        getEffectiveLeadConfig: vi.fn().mockResolvedValue({
             leadStages: {
                 converted: [
                     { id: 'sub_delivered', label: 'تم التسليم', color: 'emerald' },
@@ -399,6 +404,72 @@ describe('Leads Routes', () => {
                 payload: { pageId: 'page_1', fields: { field_paid: '500' } },
             });
             expect(res.statusCode).toBe(404);
+        });
+    });
+
+    // ── Per-page effective config (page override ?? workspace default) ───────
+    describe('per-page effective config threading', () => {
+        it('passes the fetched page row to the resolver so validation is page-aware', async () => {
+            vi.mocked(leadExtractorService.updateLeadStatus).mockResolvedValue({
+                ...MOCK_LEAD, status: 'converted', subStage: 'sub_delivered',
+            } as any);
+
+            await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/status',
+                payload: { pageId: 'page_1', status: 'converted', subStage: 'sub_delivered' },
+            });
+
+            expect(workspaceSettingsService.getEffectiveLeadConfig).toHaveBeenCalledWith(
+                'workspace_1', expect.objectContaining({ id: 'page_1' }),
+            );
+        });
+
+        it('accepts a sub-stage that exists only in the PAGE override', async () => {
+            vi.mocked(workspaceSettingsService.getEffectiveLeadConfig).mockResolvedValueOnce({
+                leadStages: { converted: [{ id: 'sub_page_only', label: 'تم الشحن', color: 'cyan' }] },
+                leadFields: [],
+            } as any);
+            vi.mocked(leadExtractorService.updateLeadStatus).mockResolvedValue({
+                ...MOCK_LEAD, status: 'converted', subStage: 'sub_page_only',
+            } as any);
+
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/status',
+                payload: { pageId: 'page_1', status: 'converted', subStage: 'sub_page_only' },
+            });
+            expect(res.statusCode).toBe(200);
+        });
+
+        it('rejects a workspace-only sub-stage once the page overrides that slice (replace, not merge)', async () => {
+            vi.mocked(workspaceSettingsService.getEffectiveLeadConfig).mockResolvedValueOnce({
+                leadStages: { converted: [{ id: 'sub_page_only', label: 'تم الشحن', color: 'cyan' }] },
+                leadFields: [],
+            } as any);
+
+            const res = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/status',
+                payload: { pageId: 'page_1', status: 'converted', subStage: 'sub_delivered' },
+            });
+            expect(res.statusCode).toBe(400);
+            expect(leadExtractorService.updateLeadStatus).not.toHaveBeenCalled();
+        });
+
+        it('validates field keys against the PAGE effective fields', async () => {
+            vi.mocked(workspaceSettingsService.getEffectiveLeadConfig).mockResolvedValueOnce({
+                leadStages: {},
+                leadFields: [{ id: 'field_page_only', label: 'رقم الطلب' }],
+            } as any);
+
+            const rejected = await app.inject({
+                method: 'PATCH',
+                url: '/leads/lead_1/fields',
+                payload: { pageId: 'page_1', fields: { field_paid: '500' } },
+            });
+            expect(rejected.statusCode).toBe(400);
+            expect(leadExtractorService.updateLeadCustomFields).not.toHaveBeenCalled();
         });
     });
 

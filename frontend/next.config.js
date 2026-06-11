@@ -6,6 +6,9 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 });
 
 const isMobile = process.env.IS_MOBILE_BUILD === 'true';
+// `next dev` runs with NODE_ENV=development; `next build`/`next start` with
+// production. Used to give the dev server its own build directory (see distDir).
+const isDev = process.env.NODE_ENV === 'development';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -14,9 +17,16 @@ const nextConfig = {
   reactStrictMode: true,
   // Mobile: static export for Capacitor; Production: standalone for minimal Docker images
   output: isMobile ? 'export' : 'standalone',
-  // Separate build directories per output mode to prevent stale artifact conflicts
-  // (standalone expects pages-manifest.json; export doesn't generate it)
-  distDir: isMobile ? '.next-mobile' : '.next',
+  // Separate build directories per mode so they can NEVER share .next:
+  //  - mobile (.next-mobile): export vs standalone produce incompatible artifacts
+  //  - dev (.next-dev): a `next dev` watcher writing to the SAME .next that a
+  //    concurrent `next build` is generating races the export→server-pages
+  //    rename — the root cause of flaky "ENOENT: rename .next/export/…html" and
+  //    "File '.next/types/validator.ts' not found" build failures. Isolating the
+  //    dev dir makes that class of failure structurally impossible (the
+  //    pre-deploy dev-server guard remains as a complementary belt-and-braces).
+  //    Production `next build`/`next start` stay on `.next` (Docker copies it).
+  distDir: isMobile ? '.next-mobile' : isDev ? '.next-dev' : '.next',
 
   images: {
     unoptimized: isMobile,

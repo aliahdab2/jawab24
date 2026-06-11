@@ -108,8 +108,10 @@ export class LeadsController {
             if (typeof subStage !== 'string' || subStage.length > 64) {
                 return reply.status(400).send({ error: 'invalid subStage' });
             }
-            const settings = await workspaceSettingsService.getSettings(req.workspaceId);
-            const configured = settings.leadStages?.[status] ?? [];
+            // Effective config = this page's override ?? workspace default, so a
+            // page-scoped sub-stage validates here exactly as the UI shows it.
+            const { leadStages } = await workspaceSettingsService.getEffectiveLeadConfig(req.workspaceId, page);
+            const configured = leadStages?.[status] ?? [];
             if (!configured.some((s) => s.id === subStage)) {
                 return reply.status(400).send({ error: 'subStage is not defined for this status' });
             }
@@ -146,8 +148,8 @@ export class LeadsController {
 
         // Only keys the workspace actually defined can be written — a stale or
         // foreign field id is rejected so deleted fields can't accumulate data.
-        const settings = await workspaceSettingsService.getSettings(req.workspaceId);
-        const defined = new Set((settings.leadFields ?? []).map((f) => f.id));
+        const { leadFields } = await workspaceSettingsService.getEffectiveLeadConfig(req.workspaceId, page);
+        const defined = new Set(leadFields.map((f) => f.id));
         const clean: Record<string, string> = {};
         for (const [key, value] of Object.entries(fields)) {
             if (!defined.has(key)) {

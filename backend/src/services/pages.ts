@@ -1,7 +1,7 @@
 import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
 import { eq, and, desc, sql, count } from 'drizzle-orm';
-import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
+import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
@@ -571,6 +571,28 @@ export class PagesService {
     }
 
     /**
+     * Save a page's lead-config overrides (leadStages / leadFields). Minimal
+     * sibling of updatePage with NO side-effects — lead config never feeds the
+     * reply pipeline, so there's no kbVersion bump and no KB ingestion. Only the
+     * keys present in the DTO are written, so a partial PATCH (e.g. just
+     * leadStages) leaves the other slice untouched. A null value reverts that
+     * slice to the workspace default.
+     */
+    async updateLeadConfig(workspaceId: string, pageId: string, data: UpdateLeadConfigDTO) {
+        const setData: Record<string, unknown> = { updatedAt: new Date() };
+        if ('leadStages' in data) setData.leadStages = data.leadStages ?? null;
+        if ('leadFields' in data) setData.leadFields = data.leadFields ?? null;
+
+        const [updatedPage] = await db
+            .update(pages)
+            .set(setData)
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return updatedPage ?? null;
+    }
+
+    /**
      * Fetch active products for a page's linked e-commerce store (if any).
      * Returns empty array if no store is linked or on error.
      */
@@ -752,6 +774,11 @@ export class PagesService {
                 // container. The `merchant` half is editor-write-only and is
                 // preserved verbatim from the existing row.
                 const businessProfile = buildBusinessProfileContainer(fbPage, existingPage.businessProfile as StoredBusinessProfile);
+                // NOTE: this set clause is an explicit allow-list. Do NOT add
+                // lead_stages / lead_fields here — they are per-page lead config
+                // and MUST survive a Facebook disconnect→reconnect (the row is the
+                // same; sync only refreshes FB-sourced fields). Adding them would
+                // silently wipe a merchant's customization on every re-sync.
                 const [updated] = await db
                     .update(pages)
                     .set({
@@ -841,6 +868,13 @@ export class PagesService {
                             instagramProfilePicUrl,
                             businessProfile,
                             businessProfileUpdatedAt: new Date(),
+                            // Reclaim moves the page from ANOTHER workspace into this one
+                            // — clear the previous owner's per-page lead config so it can't
+                            // leak across workspaces. The page inherits THIS workspace's
+                            // default until re-customized. (A same-workspace reconnect goes
+                            // through the existingPage branch above, which KEEPS the override.)
+                            leadStages: null,
+                            leadFields: null,
                             updatedAt: new Date(),
                         })
                         .where(eq(pages.id, globalExisting.id))

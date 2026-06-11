@@ -1,6 +1,7 @@
 import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import type { LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
 import type { FacebookMessageTag } from '../utils/commentText';
 
 // 1. Users Table
@@ -178,6 +179,13 @@ export const pages = pgTable('pages', {
     // Business profile — structured data from Facebook sync
     businessProfile: jsonb('business_profile').default({}),
     businessProfileUpdatedAt: timestamp('business_profile_updated_at'),
+    // Per-page overrides of the workspace lead config (settings.leadStages /
+    // settings.leadFields). NULL = inherit the workspace config; a set value is
+    // a full replacement for this page. Resolved via resolveEffectiveLeadStages/
+    // resolveEffectiveLeadFields in @jawab24/shared. No default — null must stay
+    // distinguishable from an empty {} / [] override.
+    leadStages: jsonb('lead_stages').$type<LeadStagesConfig>(),
+    leadFields: jsonb('lead_fields').$type<LeadCustomFieldDef[]>(),
     // Defensive auto-pause: when Facebook persistently rejects our reply sends
     // (Page restricted, unpublished, permission lost mid-flight), we bump the
     // counter on every page-level failure (our_fault / unknown buckets), reset

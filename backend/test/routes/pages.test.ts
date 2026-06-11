@@ -138,5 +138,92 @@ describe('Pages Routes', () => {
             expect(pagesService.toggleAutoReply).toHaveBeenCalledWith('test_workspace_id', 'page_1', false);
         });
     });
+
+    describe('PATCH /pages/:id/lead-config', () => {
+        const PAGE = { id: 'page_1', name: 'Nourva', accessToken: 'tok' };
+
+        it('saves a sanitized per-page override and returns the serialized page', async () => {
+            vi.mocked(pagesService.updateLeadConfig).mockResolvedValue({
+                ...PAGE,
+                leadStages: { converted: [{ id: 's1', label: 'Shipped', color: 'cyan' }] },
+                leadFields: [{ id: 'f1', label: 'Order #' }],
+            } as any);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/pages/page_1/lead-config',
+                payload: {
+                    leadStages: { converted: [{ id: 's1', label: 'Shipped', color: 'cyan' }] },
+                    leadFields: [{ id: 'f1', label: 'Order #' }],
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.payload);
+            expect(body.accessToken).toBeUndefined(); // serializePage strips it
+            expect(body.isConnected).toBe(true);
+            expect(pagesService.updateLeadConfig).toHaveBeenCalledWith(
+                'test_workspace_id',
+                'page_1',
+                expect.objectContaining({
+                    leadStages: { converted: [{ id: 's1', label: 'Shipped', color: 'cyan' }] },
+                    leadFields: [{ id: 'f1', label: 'Order #' }],
+                }),
+            );
+        });
+
+        it('reverts a slice to the workspace default when null is sent', async () => {
+            vi.mocked(pagesService.updateLeadConfig).mockResolvedValue(PAGE as any);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/pages/page_1/lead-config',
+                payload: { leadStages: null },
+            });
+
+            expect(response.statusCode).toBe(200);
+            // Only the provided slice is written; null passes through as "revert".
+            expect(pagesService.updateLeadConfig).toHaveBeenCalledWith(
+                'test_workspace_id', 'page_1', { leadStages: null },
+            );
+        });
+
+        it('does NOT clobber the untouched slice on a partial PATCH', async () => {
+            vi.mocked(pagesService.updateLeadConfig).mockResolvedValue(PAGE as any);
+
+            await app.inject({
+                method: 'PATCH',
+                url: '/pages/page_1/lead-config',
+                payload: { leadFields: [{ id: 'f1', label: 'Order #' }] },
+            });
+
+            const arg = vi.mocked(pagesService.updateLeadConfig).mock.calls[0][2];
+            expect(arg).not.toHaveProperty('leadStages');
+            expect(arg).toHaveProperty('leadFields');
+        });
+
+        it('rejects a malformed override with 400 and never calls the service', async () => {
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/pages/page_1/lead-config',
+                payload: { leadStages: 'not-an-object' },
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(pagesService.updateLeadConfig).not.toHaveBeenCalled();
+        });
+
+        it('returns 404 when the page is not in the workspace', async () => {
+            vi.mocked(pagesService.updateLeadConfig).mockResolvedValue(null as any);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/pages/page_1/lead-config',
+                payload: { leadFields: [] },
+            });
+
+            expect(response.statusCode).toBe(404);
+        });
+    });
 });
 

@@ -5,6 +5,7 @@ dist/
 build/
 .next/
 .next-mobile/
+.next-dev/
 *.log
 .DS_Store
 .lighthouseci/
