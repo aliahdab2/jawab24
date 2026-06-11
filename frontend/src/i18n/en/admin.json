@@ -34,6 +34,10 @@
   },
   "customer": {
     "title": "Customer Details",
+    "tabOverview": "Overview",
+    "tabBilling": "Billing",
+    "tabAi": "AI & KB",
+    "tabTeam": "Team",
     "backToList": "Back to Customers",
     "noName": "No name",
     "noEmail": "No email",
