@@ -28,6 +28,15 @@ process.env.DATABASE_URL = connectionString;
 process.env.FACEBOOK_TOKEN_ENCRYPTION_KEY =
     process.env.FACEBOOK_TOKEN_ENCRYPTION_KEY || 'integration-test-token-key-32-chars!!';
 
+// Ecommerce token crypto (Shopify/Salla/Zid store tokens) — same rationale.
+process.env.ECOMMERCE_TOKEN_ENCRYPTION_KEY =
+    process.env.ECOMMERCE_TOKEN_ENCRYPTION_KEY || 'integration-test-ecom-key-32-chars!!!';
+
+// Stripe webhook signature tests sign payloads with this secret and verify
+// through the REAL stripe.webhooks.constructEvent path (no service mock).
+process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_integration_dummy';
+process.env.STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_integration_test_secret';
+
 // Dedicated connection for integration test helpers (direct DB reads/writes in assertions).
 const testClient = postgres(connectionString, { prepare: false, max: 3 });
 export const testDb = drizzle(testClient, { schema });
