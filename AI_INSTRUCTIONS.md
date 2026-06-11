@@ -209,6 +209,7 @@ Fix root causes, not symptoms. No workarounds, no swallowed errors, no silenced 
 
 - If the cause is unknown, diagnose first.
 - "It works" is not enough — if the fix doesn't explain *why* the problem occurred, it's likely a symptom-fix. Race condition patched with `setTimeout(100)` instead of proper serialization is the classic example.
+- **Prevention over detection.** When a failure has a structural cause (a shared resource, a race, an unguarded code path), prefer the fix that makes it *impossible* over one that merely detects it and warns. A guard, alert, or retry is a complementary safety net — never the primary fix. Example (2026-06-11): dev-vs-build `.next` corruption was cured by giving the dev server its own `distDir` (collision impossible), with the pre-deploy dev-server guard kept only as belt-and-braces — not by the guard alone.
 - Narrowly-scoped escape hatches (e.g. `@ts-expect-error` for a known upstream bug, feature flags for gradual rollout) are OK **with** an inline comment explaining the reason.
 - Truly necessary temporary mitigations: label `// TEMP: <reason>` inline. Don't ship a TEMP without a documented path to the proper fix (linked issue, PR description, or clearly-scoped TODO). "We'll figure it out later" is not acceptable.
 
@@ -226,6 +227,16 @@ Rules:
 - Never leave a doc saying "Planned" or "Not implemented" after shipping the feature
 - Never leave a gap table entry un-struck after fixing the gap
 - Doc update belongs in the **same commit** as the code — not a follow-up
+
+### 16. Best Practice & Industry Standards Always
+
+When multiple valid approaches exist, choose the one that follows established **best practice** and recognized **industry standards** — even when a quicker, narrower change would "work." Default to the conventional, well-understood, standards-compliant solution over a bespoke or minimal one; reach for a non-standard approach only with a clear, stated reason. Concretely:
+
+- Follow the **industry-standard pattern** for the problem (REST/HTTP semantics, OWASP for security, WCAG for accessibility, semantic versioning, conventional commits, the framework's documented/idiomatic way) rather than inventing a local convention. The "Best Practices & Industry Standards" section below is the baseline, not the ceiling.
+- Don't ship the minimal patch when the well-engineered solution is the right call; never trade correctness, maintainability, or robustness for speed unless explicitly asked to.
+- If you spot a better, more standard approach than the obvious one mid-task, take it (or surface it and recommend it) rather than defaulting to the easy path.
+
+Pairs with Rule 14: the proper fix, done the proper (standard) way.
 
 ---
 
