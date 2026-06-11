@@ -1,11 +1,14 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { eq, and, isNull } from 'drizzle-orm';
-import { createHmac } from 'crypto';
 import { db } from '../db';
 import { waitlistEmails, emailUnsubscribes } from '../db/schema';
-import { config } from '../config';
 import { PHONE_REGEX } from '@jawab24/shared';
+import { verifyUnsubscribeToken } from '../utils/tokens';
+
+// Re-exported for backwards compatibility with existing importers that pulled
+// these from this route module. The canonical home is utils/tokens.ts.
+export { generateUnsubscribeToken, verifyUnsubscribeToken } from '../utils/tokens';
 
 const WaitlistSchema = z.object({
     contact: z.string().min(1).max(255),
@@ -15,20 +18,6 @@ const WaitlistSchema = z.object({
     const isPhone = PHONE_REGEX.test(data.contact.replace(/\s/g, ''));
     return isEmail || isPhone;
 }, { message: 'Please enter a valid email or phone number' });
-
-/**
- * Generate an HMAC token for unsubscribe links.
- * Uses JWT secret as the signing key — no extra env var needed.
- */
-export function generateUnsubscribeToken(email: string): string {
-    const secret = config.jwt.secret || 'waitlist-fallback-key';
-    return createHmac('sha256', secret).update(email.toLowerCase()).digest('hex');
-}
-
-/** Verify an unsubscribe token matches the email */
-export function verifyUnsubscribeToken(email: string, token: string): boolean {
-    return generateUnsubscribeToken(email) === token;
-}
 
 export default async function waitlistRoutes(fastify: FastifyInstance) {
     fastify.post('/', {

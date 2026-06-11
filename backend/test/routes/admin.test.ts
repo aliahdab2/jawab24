@@ -856,28 +856,41 @@ describe('Admin Routes', () => {
         it('returns paginated list of users', async () => {
             const { db } = await import('../../src/db');
 
-            const usersChain = {
+            // SQL filter/paginate flow (post-refactor): the controller fires the
+            // paginated SELECT (…orderBy().limit().offset()) and a separate
+            // COUNT(*) (…where()) concurrently via Promise.all. Mock both chains
+            // in call order — the page rows terminate on .offset(), the total on
+            // an awaited .where().
+            const pageChain = {
                 from: vi.fn().mockReturnThis(),
                 where: vi.fn().mockReturnThis(),
                 leftJoin: vi.fn().mockReturnThis(),
                 orderBy: vi.fn().mockReturnThis(),
-                limit: vi.fn().mockResolvedValue([
+                limit: vi.fn().mockReturnThis(),
+                offset: vi.fn().mockResolvedValue([
                     {
-                        id: 'user-1', email: 'user1@test.com', name: 'User 1', facebookId: 'fb-1', createdAt: '2025-01-01',
+                        id: 'user-1', email: 'user1@test.com', name: 'User 1', phone: null, facebookId: 'fb-1', createdAt: '2025-01-01',
                         subscriptionId: 'sub-1', subscriptionStatus: 'active', planId: 'plan-1',
                         planName: 'Pro', planSlug: 'pro', currentPeriodStart: '2025-01-01',
                         currentPeriodEnd: '2025-02-01', paymentMethod: 'manual',
                     },
                     {
-                        id: 'user-2', email: 'user2@test.com', name: 'User 2', facebookId: 'fb-2', createdAt: '2025-01-02',
+                        id: 'user-2', email: 'user2@test.com', name: 'User 2', phone: null, facebookId: 'fb-2', createdAt: '2025-01-02',
                         subscriptionId: null, subscriptionStatus: null, planId: null,
                         planName: null, planSlug: null, currentPeriodStart: null,
                         currentPeriodEnd: null, paymentMethod: null,
                     },
                 ]),
             };
+            const countChain = {
+                from: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([{ count: 2 }]),
+            };
 
-            vi.mocked(db.select).mockReturnValue(usersChain as any);
+            vi.mocked(db.select)
+                .mockReturnValueOnce(pageChain as any)
+                .mockReturnValueOnce(countChain as any);
 
             const response = await app.inject({
                 method: 'GET',
