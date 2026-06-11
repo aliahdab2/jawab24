@@ -38,6 +38,34 @@ export const CreatePlanSchema = z.object({
 export const UpdatePlanSchema = CreatePlanSchema.partial();
 
 // ==========================================
+// Admin — Waitlist / broadcast email send
+// ==========================================
+/**
+ * Body schema for POST /admin/waitlist/send-email.
+ *
+ * Safety caps preserved from the original inline schema:
+ *   - emailIds:    max 5000 per request
+ *   - extraEmails: max 500 per request
+ * Audience defaults to 'waitlist' when omitted.
+ */
+export const SendEmailSchema = z.object({
+    subject: z.string().trim().min(1, 'Subject is required').max(500),
+    body: z.string().trim().min(1, 'Body is required').max(100_000),
+    feature: z.string().trim().min(1).max(50).optional(),
+    emailIds: z.array(z.string().uuid()).max(5000).optional(),
+    extraEmails: z.array(z.string().email().max(255)).max(500).optional(),
+    audience: z.enum(['waitlist', 'users', 'both', 'extras']).optional().default('waitlist'),
+    // Optional: render a full-HTML template (e.g. waitlist-launch) instead of
+    // wrapping `body` in the generic shell. When set, each recipient receives
+    // the AR or EN htmlBody variant matching their resolved language
+    // (KB → dashboardLanguage → 'ar'). `subject` is still admin-controlled,
+    // `body` is kept as a fallback for recipients whose variant is missing.
+    templateId: z.string().trim().min(1).max(100).optional(),
+});
+
+export type SendEmailInput = z.infer<typeof SendEmailSchema>;
+
+// ==========================================
 // Business Profile
 // ==========================================
 export const BusinessProfileSchema = z.object({

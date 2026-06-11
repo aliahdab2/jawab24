@@ -118,7 +118,10 @@ vi.mock('../../src/services/email', () => ({
     },
 }));
 vi.mock('../../src/utils/emailTemplates', () => ({ waitlistEmailTemplate: vi.fn().mockReturnValue('<html></html>') }));
-vi.mock('../../src/routes/waitlist', () => ({ generateUnsubscribeToken: vi.fn().mockReturnValue('mock_token') }));
+// generateUnsubscribeToken moved from routes/waitlist.ts → utils/tokens.ts in the
+// admin routes → controller → service refactor; the admin send-email path now
+// imports it from utils/tokens, so the mock must target the new location.
+vi.mock('../../src/utils/tokens', () => ({ generateUnsubscribeToken: vi.fn().mockReturnValue('mock_token') }));
 
 describe('Admin Waitlist Route', () => {
     let app: ReturnType<typeof Fastify>;
