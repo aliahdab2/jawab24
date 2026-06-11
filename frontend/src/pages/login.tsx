@@ -263,8 +263,8 @@ export default function LoginPage() {
         {/* Left Side: Visual/Marketing (Hidden on mobile) */}
         <div className="hidden lg:flex lg:w-[55%] relative bg-zinc-900 dark:bg-transparent overflow-hidden items-center justify-center p-10 xl:p-16">
           {/* Animated Background (light mode only — dark mode uses parent overlays) */}
-          <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.15),transparent)] dark:hidden"></div>
-          <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(circle_at_bottom_left,rgba(139,92,246,0.15),transparent)] dark:hidden"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.15),transparent)] dark:hidden"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(139,92,246,0.15),transparent)] dark:hidden"></div>
           <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-10 dark:hidden"></div>
 
           <div className="relative z-10 w-full max-w-xl">

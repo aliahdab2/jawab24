@@ -2,26 +2,26 @@ import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-js';
 import type { CountryCode } from 'libphonenumber-js';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { isSmsBlockedPhone } from '@jawab24/shared';
-import { isRTLLocale } from '@/utils/locale';
 
+// Display names live in i18n (auth.countries.<code>) — never hardcode them here.
 const COUNTRY_OPTIONS = [
-    { code: 'SA' as CountryCode, dial: '+966', flag: '🇸🇦', name: 'Saudi Arabia', nameAr: 'السعودية' },
-    { code: 'SY' as CountryCode, dial: '+963', flag: '🇸🇾', name: 'Syria', nameAr: 'سوريا' },
-    { code: 'AE' as CountryCode, dial: '+971', flag: '🇦🇪', name: 'UAE', nameAr: 'الإمارات' },
-    { code: 'JO' as CountryCode, dial: '+962', flag: '🇯🇴', name: 'Jordan', nameAr: 'الأردن' },
-    { code: 'KW' as CountryCode, dial: '+965', flag: '🇰🇼', name: 'Kuwait', nameAr: 'الكويت' },
-    { code: 'BH' as CountryCode, dial: '+973', flag: '🇧🇭', name: 'Bahrain', nameAr: 'البحرين' },
-    { code: 'QA' as CountryCode, dial: '+974', flag: '🇶🇦', name: 'Qatar', nameAr: 'قطر' },
-    { code: 'OM' as CountryCode, dial: '+968', flag: '🇴🇲', name: 'Oman', nameAr: 'عُمان' },
-    { code: 'EG' as CountryCode, dial: '+20', flag: '🇪🇬', name: 'Egypt', nameAr: 'مصر' },
-    { code: 'IQ' as CountryCode, dial: '+964', flag: '🇮🇶', name: 'Iraq', nameAr: 'العراق' },
-    { code: 'LB' as CountryCode, dial: '+961', flag: '🇱🇧', name: 'Lebanon', nameAr: 'لبنان' },
-    { code: 'TR' as CountryCode, dial: '+90', flag: '🇹🇷', name: 'Turkey', nameAr: 'تركيا' },
-    { code: 'SE' as CountryCode, dial: '+46', flag: '🇸🇪', name: 'Sweden', nameAr: 'السويد' },
-    { code: 'GB' as CountryCode, dial: '+44', flag: '🇬🇧', name: 'UK', nameAr: 'المملكة المتحدة' },
-    { code: 'US' as CountryCode, dial: '+1', flag: '🇺🇸', name: 'USA', nameAr: 'الولايات المتحدة' },
+    { code: 'SA' as CountryCode, dial: '+966', flag: '🇸🇦' },
+    { code: 'SY' as CountryCode, dial: '+963', flag: '🇸🇾' },
+    { code: 'AE' as CountryCode, dial: '+971', flag: '🇦🇪' },
+    { code: 'JO' as CountryCode, dial: '+962', flag: '🇯🇴' },
+    { code: 'KW' as CountryCode, dial: '+965', flag: '🇰🇼' },
+    { code: 'BH' as CountryCode, dial: '+973', flag: '🇧🇭' },
+    { code: 'QA' as CountryCode, dial: '+974', flag: '🇶🇦' },
+    { code: 'OM' as CountryCode, dial: '+968', flag: '🇴🇲' },
+    { code: 'EG' as CountryCode, dial: '+20', flag: '🇪🇬' },
+    { code: 'IQ' as CountryCode, dial: '+964', flag: '🇮🇶' },
+    { code: 'LB' as CountryCode, dial: '+961', flag: '🇱🇧' },
+    { code: 'TR' as CountryCode, dial: '+90', flag: '🇹🇷' },
+    { code: 'SE' as CountryCode, dial: '+46', flag: '🇸🇪' },
+    { code: 'GB' as CountryCode, dial: '+44', flag: '🇬🇧' },
+    { code: 'US' as CountryCode, dial: '+1', flag: '🇺🇸' },
 ];
 
 // Detect default country from browser timezone — more accurate than locale
@@ -63,9 +63,8 @@ export function PhoneInput({
     'aria-label': ariaLabel,
     'aria-describedby': ariaDescribedBy,
 }: PhoneInputProps) {
-    const locale = useLocale();
-    const isRTL = isRTLLocale(locale);
     const t = useTranslations('auth');
+    const countryName = (code: CountryCode) => t(`countries.${code}` as Parameters<typeof t>[0]);
 
     const [selectedCountry, setSelectedCountry] = useState(
         () => COUNTRY_OPTIONS.find(c => c.code === getDefaultCountry()) ?? COUNTRY_OPTIONS[0]
@@ -167,7 +166,7 @@ export function PhoneInput({
                     className="flex items-center gap-1.5 px-3 py-3 border border-e-0 border-surface-300 dark:border-surface-600 rounded-s-xl bg-surface-50 dark:bg-surface-800 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors text-sm font-medium flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
                     aria-haspopup="listbox"
                     aria-expanded={showDropdown}
-                    aria-label={`Country: ${selectedCountry.name}`}
+                    aria-label={`${t('selectCountry')}: ${countryName(selectedCountry.code)}`}
                 >
                     <span aria-hidden="true">{selectedCountry.flag}</span>
                     <span className="text-muted-foreground text-xs">{selectedCountry.dial}</span>
@@ -204,7 +203,7 @@ export function PhoneInput({
                     ref={dropdownRef}
                     className="absolute top-full start-0 mt-1 w-64 bg-card border border-theme-border rounded-xl shadow-xl z-50 overflow-hidden"
                     role="listbox"
-                    aria-label="Select country"
+                    aria-label={t('selectCountry')}
                 >
                     <div className="max-h-56 overflow-y-auto">
                         {COUNTRY_OPTIONS.map(country => (
@@ -218,7 +217,7 @@ export function PhoneInput({
                             >
                                 <span aria-hidden="true">{country.flag}</span>
                                 <span className="font-medium text-foreground">
-                                    {isRTL ? country.nameAr : country.name}
+                                    {countryName(country.code)}
                                 </span>
                                 <span className="text-muted-foreground text-xs ms-auto">{country.dial}</span>
                             </button>

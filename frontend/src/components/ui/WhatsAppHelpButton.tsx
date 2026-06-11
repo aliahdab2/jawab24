@@ -115,7 +115,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 -z-10"></div>
+              <div className="absolute top-0 end-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -translate-y-1/2 ltr:translate-x-1/2 rtl:-translate-x-1/2 -z-10"></div>
 
               <div className="text-center mb-4">
                 <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto shadow-inner mb-3">

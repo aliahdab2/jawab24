@@ -43,7 +43,7 @@ export function Skeleton({
 export function AppSkeleton({ variant = 'default' }: { variant?: 'default' | 'dashboard' | 'landing' }) {
     if (variant === 'dashboard') {
         return (
-            <div className="min-h-screen bg-background">
+            <div className="min-h-dvh bg-background">
                 {/* Sidebar skeleton */}
                 <div className="hidden lg:block fixed inset-y-0 start-0 w-64 bg-card border-e border-theme-border">
                     <div className="p-6 animate-pulse">
@@ -84,7 +84,7 @@ export function AppSkeleton({ variant = 'default' }: { variant?: 'default' | 'da
 
     if (variant === 'landing') {
         return (
-            <div className="min-h-screen bg-card">
+            <div className="min-h-dvh bg-card">
                 {/* Nav skeleton */}
                 <div className="border-b border-theme-border px-6 py-4 animate-pulse">
                     <div className="max-w-6xl mx-auto flex justify-between items-center">
@@ -113,7 +113,7 @@ export function AppSkeleton({ variant = 'default' }: { variant?: 'default' | 'da
 
     // Default - minimal screen (no spinner/circular elements)
     return (
-        <div className="min-h-screen bg-card" />
+        <div className="min-h-dvh bg-card" />
     );
 }
 

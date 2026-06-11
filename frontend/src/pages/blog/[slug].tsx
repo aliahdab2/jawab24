@@ -328,7 +328,7 @@ export default function BlogPostPage({
           <span className="text-xs font-semibold uppercase tracking-wider text-brand-500">
             {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations')}
           </span>
-          <span className="text-surface-300 dark:text-surface-700" aria-hidden="true">&middot;</span>
+          <span className="text-subtle" aria-hidden="true">&middot;</span>
           <time dateTime={post.date} className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-icon-muted" aria-hidden="true" />
             {formattedDate}

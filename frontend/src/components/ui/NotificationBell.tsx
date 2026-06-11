@@ -312,7 +312,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                         e.stopPropagation();
                                         handleMarkAsRead(notification.id);
                                     }}
-                                    className="p-1.5 rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/30 text-surface-400 dark:text-surface-600 hover:text-brand-600 transition-colors"
+                                    className="p-1.5 rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/30 text-icon-muted hover:text-brand-600 transition-colors"
                                     title={t('markAsRead')}
                                 >
                                     <Check className="w-4 h-4" />
@@ -419,7 +419,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         </div>
                         <button
                             onClick={() => setIsOpen(false)}
-                            className="p-1.5 rounded-lg hover:bg-muted text-surface-400 dark:text-surface-600 hover:text-muted-foreground transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-muted text-icon-muted hover:text-muted-foreground transition-colors"
                             aria-label={t('close')}
                         >
                             <X className="w-4 h-4" />
