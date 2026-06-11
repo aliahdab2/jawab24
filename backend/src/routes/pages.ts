@@ -82,6 +82,14 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.toggleAutoReply);
 
+        adminRoutes.patch('/pages/:id/lead-config', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Set per-page lead sub-stages / custom fields (null reverts to workspace default)',
+                security: auth,
+            },
+        }, pagesController.updateLeadConfig);
+
         adminRoutes.post('/pages/:id/kb-gaps/:gapId/dismiss', {
             schema: {
                 tags: ['Pages'],

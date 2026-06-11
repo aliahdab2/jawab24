@@ -22,7 +22,7 @@
  *  - Templates fill an editable draft (stages + fields) and confirm via toast.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -31,6 +31,7 @@ import { useTranslations } from 'next-intl';
 import { Modal, Button, Input, ConfirmationModal } from '@/components/ui';
 import {
   workspaceApi,
+  pagesApi,
   type LeadStatus,
   type LeadStagesConfig,
   type LeadSubStage,
@@ -145,45 +146,104 @@ function templateFields(key: TemplateKey, rtl: boolean): LeadCustomFieldDef[] {
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
+type Scope = 'workspace' | 'page';
+
 interface StageCustomizerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Current workspace config — used to seed the draft on open. */
-  stages?: LeadStagesConfig;
-  fields?: LeadCustomFieldDef[];
+  /** Workspace-level config — the default every page inherits ("all pages"). */
+  workspaceStages?: LeadStagesConfig;
+  workspaceFields?: LeadCustomFieldDef[];
+  /** The page the merchant is viewing — enables the per-page override scope. */
+  selectedPageId?: string;
+  pageName?: string;
+  /** This page's current override; null/undefined = it inherits the workspace. */
+  pageStages?: LeadStagesConfig | null;
+  pageFields?: LeadCustomFieldDef[] | null;
 }
 
-export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageCustomizerModalProps) {
+export function StageCustomizerModal({
+  isOpen,
+  onClose,
+  workspaceStages,
+  workspaceFields,
+  selectedPageId,
+  pageName,
+  pageStages,
+  pageFields,
+}: StageCustomizerModalProps) {
   const t = useTranslations('leads');
   const tc = useTranslations('common');
   const { language } = useLanguage();
   const queryClient = useQueryClient();
+  // Whether this page already overrides the workspace default.
+  const pageHasOverride = pageStages != null || pageFields != null;
+  // Per-page scope is only offered when a page is selected; otherwise the modal
+  // edits the workspace default, exactly as before.
+  const canScopeToPage = !!selectedPageId;
+  const [scope, setScope] = useState<Scope>('workspace');
   const [draft, setDraft] = useState<LeadStagesConfig>({});
   const [fieldsDraft, setFieldsDraft] = useState<LeadCustomFieldDef[]>([]);
   const [pendingTemplate, setPendingTemplate] = useState<TemplateKey | null>(null);
 
-  // Re-seed the drafts each time the modal opens (config may have changed).
+  // Seed the drafts from the config for a given scope. Page scope starts from
+  // the page's own override if it has one, otherwise from the workspace default
+  // as a convenient starting point.
+  const seedFrom = useCallback((next: Scope) => {
+    const srcStages = next === 'page' ? (pageStages ?? workspaceStages) : workspaceStages;
+    const srcFields = next === 'page' ? (pageFields ?? workspaceFields) : workspaceFields;
+    setDraft({
+      new: [...(srcStages?.new ?? [])],
+      contacted: [...(srcStages?.contacted ?? [])],
+      converted: [...(srcStages?.converted ?? [])],
+    });
+    setFieldsDraft([...(srcFields ?? [])]);
+  }, [pageStages, pageFields, workspaceStages, workspaceFields]);
+
+  // Re-seed each time the modal opens. Default scope: edit this page if it
+  // already overrides, otherwise edit the workspace default (the common case).
   useEffect(() => {
-    if (isOpen) {
-      setDraft({
-        new: [...(stages?.new ?? [])],
-        contacted: [...(stages?.contacted ?? [])],
-        converted: [...(stages?.converted ?? [])],
-      });
-      setFieldsDraft([...(fields ?? [])]);
-    }
-  }, [isOpen, stages, fields]);
+    if (!isOpen) return;
+    const initial: Scope = pageHasOverride && canScopeToPage ? 'page' : 'workspace';
+    setScope(initial);
+    seedFrom(initial);
+  }, [isOpen, pageHasOverride, canScopeToPage, seedFrom]);
+
+  // Switching scope re-seeds the draft from that scope's current config.
+  const changeScope = (next: Scope) => {
+    setScope(next);
+    seedFrom(next);
+  };
 
   const saveMutation = useMutation({
-    mutationFn: (payload: { leadStages: LeadStagesConfig; leadFields: LeadCustomFieldDef[] }) =>
-      workspaceApi.updateSettings(payload),
+    mutationFn: (payload: { scope: Scope; leadStages: LeadStagesConfig; leadFields: LeadCustomFieldDef[] }) =>
+      payload.scope === 'page' && selectedPageId
+        ? pagesApi.updateLeadConfig(selectedPageId, { leadStages: payload.leadStages, leadFields: payload.leadFields })
+        : workspaceApi.updateSettings({ leadStages: payload.leadStages, leadFields: payload.leadFields }),
     onSuccess: () => {
       toast.success(t('stagesSaved'), { id: 'lead-stages' });
+      // Either save can change what leads render: the page override lives on the
+      // page row, the workspace default on workspace-settings — invalidate both.
       queryClient.invalidateQueries({ queryKey: ['workspace-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['pages'] });
       onClose();
     },
     onError: (err) => {
       captureError(err, 'Failed to save lead stages');
+      toast.error(t('stagesSaveFailed'), { id: 'lead-stages' });
+    },
+  });
+
+  // Reset this page back to the workspace default (clears its override).
+  const resetMutation = useMutation({
+    mutationFn: () => pagesApi.updateLeadConfig(selectedPageId as string, { leadStages: null, leadFields: null }),
+    onSuccess: () => {
+      toast.success(t('resetToWorkspaceDone'), { id: 'lead-stages' });
+      queryClient.invalidateQueries({ queryKey: ['pages'] });
+      onClose();
+    },
+    onError: (err) => {
+      captureError(err, 'Failed to reset lead config');
       toast.error(t('stagesSaveFailed'), { id: 'lead-stages' });
     },
   });
@@ -226,7 +286,7 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
     const cleanedFields = fieldsDraft
       .map((f) => ({ ...f, label: f.label.trim().slice(0, MAX_LABEL_LENGTH) }))
       .filter((f) => f.label.length > 0);
-    saveMutation.mutate({ leadStages: cleaned, leadFields: cleanedFields });
+    saveMutation.mutate({ scope, leadStages: cleaned, leadFields: cleanedFields });
   };
 
   return (
@@ -238,17 +298,82 @@ export function StageCustomizerModal({ isOpen, onClose, stages, fields }: StageC
       mobilePresentation="fullscreen"
       footer={
         <div className="flex items-center justify-end gap-3">
-          <Button variant="secondary" onClick={onClose} disabled={saveMutation.isPending}>
+          <Button variant="secondary" onClick={onClose} disabled={saveMutation.isPending || resetMutation.isPending}>
             {tc('cancel')}
           </Button>
-          <Button onClick={handleSave} loading={saveMutation.isPending}>
-            {tc('save')}
+          <Button onClick={handleSave} loading={saveMutation.isPending} disabled={resetMutation.isPending}>
+            {scope === 'page' && pageName ? t('saveForPage', { name: pageName }) : t('saveForAllPages')}
           </Button>
         </div>
       }
     >
       <div className="flex flex-col gap-5">
         <p className="text-sm text-muted-foreground leading-relaxed">{t('customizeStagesDesc')}</p>
+
+        {/* Scope — apply to this page only (override) or all pages (workspace
+            default). Only shown when a page is selected; a single-page workspace
+            just edits the workspace default. */}
+        {canScopeToPage && (
+          <div className="rounded-2xl border border-theme-border p-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              {t('appliesToLabel')}
+            </p>
+            <div
+              className="flex items-center gap-1 p-1 rounded-xl bg-muted sm:inline-flex"
+              role="group"
+              aria-label={t('appliesToLabel')}
+            >
+              <button
+                type="button"
+                onClick={() => changeScope('page')}
+                aria-pressed={scope === 'page'}
+                className={clsx(
+                  'flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                  scope === 'page' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {pageName ? t('appliesToPageNamed', { name: pageName }) : t('appliesToPage')}
+              </button>
+              <button
+                type="button"
+                onClick={() => changeScope('workspace')}
+                aria-pressed={scope === 'workspace'}
+                className={clsx(
+                  'flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                  scope === 'workspace' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {t('appliesToWorkspace')}
+              </button>
+            </div>
+
+            {scope === 'page' ? (
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <p className="text-xs text-muted-foreground flex-1 min-w-[180px]">
+                  {pageHasOverride
+                    ? t('scopeHintPageOverride', { name: pageName ?? '' })
+                    : t('scopeHintPageInherit', { name: pageName ?? '' })}
+                </p>
+                {pageHasOverride && (
+                  <button
+                    type="button"
+                    onClick={() => resetMutation.mutate()}
+                    disabled={resetMutation.isPending || saveMutation.isPending}
+                    className="text-xs font-semibold text-brand-500 hover:text-brand-600 underline underline-offset-2 transition-colors disabled:opacity-50"
+                  >
+                    {t('resetToWorkspace')}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {pageHasOverride
+                  ? t('scopeHintWorkspaceWithOverride', { name: pageName ?? '' })
+                  : t('scopeHintWorkspace')}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Business-type templates — quick start, fully editable afterwards */}
         <div>

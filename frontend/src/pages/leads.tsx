@@ -11,6 +11,7 @@ import { useUIStore } from '@/lib/store';
 import { leadsApi, pagesApi, subscriptionApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import type { Page, UsageSummary } from '@jawab24/shared';
+import { resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
 import {
   Users,
   Phone,
@@ -479,20 +480,19 @@ const LeadsPage: NextPageWithLayout = () => {
     },
     staleTime: 60_000,
   });
-  const stages = workspaceSettings?.leadStages;
-  const fieldDefs = React.useMemo(() => workspaceSettings?.leadFields ?? [], [workspaceSettings?.leadFields]);
+  // Workspace-level config = the default every page inherits.
+  const workspaceStages = workspaceSettings?.leadStages;
+  const workspaceFields = React.useMemo(() => workspaceSettings?.leadFields ?? [], [workspaceSettings?.leadFields]);
 
   // First-run nudge: "Customize" is a setup action a new merchant won't find in
-  // the utility corner. Show a dismissible hint while the workspace has no
-  // custom config at all; once configured (or dismissed) it never returns.
+  // the utility corner. Show a dismissible hint while the selected page has no
+  // effective config; once configured (or dismissed) it never returns.
+  // (hasLeadConfig / showCustomizeNudge are computed after the page-effective
+  // config below, since they depend on the selected page's override.)
   const [customizeNudgeDismissed, setCustomizeNudgeDismissed] = useState(true);
   useEffect(() => {
     setCustomizeNudgeDismissed(localStorage.getItem('leads-customize-nudge-dismissed') === '1');
   }, []);
-  const hasLeadConfig =
-    Object.values(stages ?? {}).some((list) => (list ?? []).length > 0) || fieldDefs.length > 0;
-  const showCustomizeNudge =
-    workspaceSettings !== undefined && !hasLeadConfig && !customizeNudgeDismissed;
   const dismissCustomizeNudge = () => {
     localStorage.setItem('leads-customize-nudge-dismissed', '1');
     setCustomizeNudgeDismissed(true);
@@ -544,6 +544,28 @@ const LeadsPage: NextPageWithLayout = () => {
       setSelectedPageId(validPages[0].id);
     }
   }, [validPages, selectedPageId, setSelectedPageId]);
+
+  // Effective lead config for the selected page = its override ?? workspace
+  // default (resolved by the shared helpers, so backend validation matches what
+  // the UI shows). Drives badges, the picker, the detail-panel field editor, and
+  // CSV — all already prop-driven, so they become page-aware for free.
+  const selectedPage = React.useMemo(
+    () => pages.find((p) => p.id === selectedPageId),
+    [pages, selectedPageId],
+  );
+  const pageHasOverride = selectedPage?.leadStages != null || selectedPage?.leadFields != null;
+  const stages = React.useMemo(
+    () => resolveEffectiveLeadStages(selectedPage?.leadStages, workspaceStages),
+    [selectedPage?.leadStages, workspaceStages],
+  );
+  const fieldDefs = React.useMemo(
+    () => resolveEffectiveLeadFields(selectedPage?.leadFields, workspaceFields),
+    [selectedPage?.leadFields, workspaceFields],
+  );
+  const hasLeadConfig =
+    Object.values(stages ?? {}).some((list) => (list ?? []).length > 0) || fieldDefs.length > 0;
+  const showCustomizeNudge =
+    workspaceSettings !== undefined && !hasLeadConfig && !customizeNudgeDismissed;
 
   const {
     data: leadsData,
@@ -844,6 +866,21 @@ const LeadsPage: NextPageWithLayout = () => {
           </div>
         )}
 
+        {/* Per-page override indicator — this page has its own sub-stages /
+            fields, not the workspace default. Tapping reopens the customizer
+            (where the merchant can edit or reset to the workspace default). */}
+        {pageHasOverride && selectedPageId && (
+          <button
+            type="button"
+            onClick={() => setStageModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium alert-violet border self-start sm:self-auto"
+            title={t('pageOverrideHint')}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-current" aria-hidden="true" />
+            {t('pageOverrideBadge')}
+          </button>
+        )}
+
         {/* Status filter tabs */}
         <div className="flex items-center gap-2 overflow-x-auto">
           {filterTabs.map((tab) => (
@@ -1011,8 +1048,12 @@ const LeadsPage: NextPageWithLayout = () => {
         <StageCustomizerModal
           isOpen
           onClose={() => setStageModalOpen(false)}
-          stages={stages}
-          fields={fieldDefs}
+          workspaceStages={workspaceStages}
+          workspaceFields={workspaceFields}
+          selectedPageId={selectedPageId}
+          pageName={selectedPage?.name}
+          pageStages={selectedPage?.leadStages ?? null}
+          pageFields={selectedPage?.leadFields ?? null}
         />
       )}
 

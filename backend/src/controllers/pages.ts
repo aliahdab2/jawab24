@@ -6,7 +6,8 @@ import { channelTrialService } from '../services/channelTrial';
 import { notificationService } from '../services/notifications';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
-import { CreatePageDTO, UpdatePageDTO, createRequestLogger } from '../types';
+import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
+import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
@@ -143,6 +144,56 @@ export class PagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to update page' });
+        }
+    }
+
+    /**
+     * Save per-page lead-config overrides (sub-stages / custom fields).
+     * PATCH /pages/:id/lead-config  (admin+ only)
+     * Body per slice: omitted key → unchanged; `null` → revert to workspace
+     * default; set value → full override for this page (sanitized; 400 on garbage).
+     */
+    async updateLeadConfig(request: FastifyRequest<{ Params: { id: string }; Body: UpdateLeadConfigDTO }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { id } = request.params;
+        const body = request.body ?? {};
+        const update: UpdateLeadConfigDTO = {};
+
+        if ('leadStages' in body) {
+            if (body.leadStages === null) {
+                update.leadStages = null;
+            } else {
+                const sanitized = sanitizeLeadStages(body.leadStages);
+                if (sanitized === undefined) {
+                    return reply.status(400).send({ error: 'Invalid leadStages config' });
+                }
+                update.leadStages = sanitized;
+            }
+        }
+        if ('leadFields' in body) {
+            if (body.leadFields === null) {
+                update.leadFields = null;
+            } else {
+                const sanitized = sanitizeLeadFields(body.leadFields);
+                if (sanitized === undefined) {
+                    return reply.status(400).send({ error: 'Invalid leadFields config' });
+                }
+                update.leadFields = sanitized;
+            }
+        }
+
+        try {
+            const page = await pagesService.updateLeadConfig(req.workspaceId, id, update);
+            if (!page) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+            return reply.send(serializePage(page));
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to update lead config' });
         }
     }
 

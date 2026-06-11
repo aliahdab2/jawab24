@@ -113,6 +113,16 @@ export interface UpdatePageDTO {
     businessProfile?: import('../utils/validation').BusinessProfileInput;
 }
 
+/**
+ * Per-page lead-config override payload (PATCH /pages/:id/lead-config).
+ * For each slice: `null` reverts it to the workspace default; a set value is a
+ * full replacement for this page; an absent key leaves that slice unchanged.
+ */
+export interface UpdateLeadConfigDTO {
+    leadStages?: import('@jawab24/shared').LeadStagesConfig | null;
+    leadFields?: import('@jawab24/shared').LeadCustomFieldDef[] | null;
+}
+
 // Post Types
 export interface Post {
     id: string;

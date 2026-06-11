@@ -287,6 +287,11 @@ export interface Page {
   // Business profile
   businessProfile?: BusinessProfile;
   businessProfileUpdatedAt?: string | Date | null;
+  // Per-page overrides of the workspace lead config. null/absent = inherit the
+  // workspace's settings.leadStages / settings.leadFields. Set = full replacement
+  // for this page (see resolveEffectiveLeadStages / resolveEffectiveLeadFields).
+  leadStages?: LeadStagesConfig | null;
+  leadFields?: LeadCustomFieldDef[] | null;
   // Connection status (true if Facebook access token is valid)
   isConnected?: boolean;
   // Defensive auto-pause: set to 'send_rejected' when the bot was paused after
@@ -814,6 +819,28 @@ export type LeadCustomFieldValues = Record<string, string>;
 export const MAX_LEAD_CUSTOM_FIELDS = 10;
 export const MAX_LEAD_FIELD_LABEL_LENGTH = 60;
 export const MAX_LEAD_FIELD_VALUE_LENGTH = 500;
+
+// --- Effective lead config (per-page override with workspace fallback) ---
+// leadStages/leadFields are configured at the workspace level, but a page may
+// optionally OVERRIDE either slice for itself. The effective config a lead's
+// UI and validation use is: page override ?? workspace default. A null/undefined
+// override means "inherit the workspace config"; an empty {}/[] is a deliberate
+// override (the merchant cleared that slice for this page). These two pure
+// resolvers are the single source of truth — both backend (validation) and
+// frontend (rendering) call them so the semantics never drift.
+export function resolveEffectiveLeadStages(
+  pageOverride: LeadStagesConfig | null | undefined,
+  workspaceDefault: LeadStagesConfig | undefined,
+): LeadStagesConfig | undefined {
+  return pageOverride ?? workspaceDefault;
+}
+
+export function resolveEffectiveLeadFields(
+  pageOverride: LeadCustomFieldDef[] | null | undefined,
+  workspaceDefault: LeadCustomFieldDef[] | undefined,
+): LeadCustomFieldDef[] {
+  return pageOverride ?? workspaceDefault ?? [];
+}
 
 export interface LeadField {
   key: string;

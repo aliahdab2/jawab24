@@ -152,6 +152,10 @@ export const pagesApi = {
     api.post('/pages/sync', accessToken ? { accessToken } : undefined, { timeout: LONG_RUNNING_TIMEOUT }),
   getKbGaps: (pageId: string) => api.get(`/pages/${pageId}/kb-gaps`),
   dismissGap: (pageId: string, gapId: string) => api.post(`/pages/${pageId}/kb-gaps/${gapId}/dismiss`),
+  // Per-page lead-config override. For each slice: null reverts to the workspace
+  // default; an omitted key leaves it unchanged; a value is a full override.
+  updateLeadConfig: (id: string, data: { leadStages?: LeadStagesConfig | null; leadFields?: LeadCustomFieldDef[] | null }) =>
+    api.patch(`/pages/${id}/lead-config`, data),
   testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] }) =>
     api.post(`/pages/${pageId}/test-reply`, data, { timeout: LONG_RUNNING_TIMEOUT }),
 };

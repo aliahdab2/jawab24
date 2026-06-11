@@ -5,8 +5,8 @@ import { redis } from '../lib/redis';
 import { t } from '../utils/i18n';
 import { captureError } from '../utils/sentryHelpers';
 import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
-import type { WorkspaceSettings } from '@jawab24/shared';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import type { WorkspaceSettings, LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
 import { PIPELINE_FIELDS, type PipelineField } from './pipelineFields';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
@@ -159,6 +159,24 @@ export class WorkspaceSettingsService {
         }
 
         return result;
+    }
+
+    /**
+     * Effective lead config for a page = per-page override ?? workspace default.
+     * Accepts the already-fetched page row (the leads controller has it) so we
+     * don't re-query the page. Reuses the Redis-cached getSettings for the
+     * workspace base. The two slices resolve independently: a page can override
+     * stages while still inheriting fields, or vice-versa.
+     */
+    async getEffectiveLeadConfig(
+        workspaceId: string,
+        page: { leadStages?: LeadStagesConfig | null; leadFields?: LeadCustomFieldDef[] | null },
+    ): Promise<{ leadStages: LeadStagesConfig | undefined; leadFields: LeadCustomFieldDef[] }> {
+        const ws = await this.getSettings(workspaceId);
+        return {
+            leadStages: resolveEffectiveLeadStages(page.leadStages, ws.leadStages),
+            leadFields: resolveEffectiveLeadFields(page.leadFields, ws.leadFields),
+        };
     }
 
     /**
