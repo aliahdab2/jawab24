@@ -774,6 +774,11 @@ export class PagesService {
                 // container. The `merchant` half is editor-write-only and is
                 // preserved verbatim from the existing row.
                 const businessProfile = buildBusinessProfileContainer(fbPage, existingPage.businessProfile as StoredBusinessProfile);
+                // NOTE: this set clause is an explicit allow-list. Do NOT add
+                // lead_stages / lead_fields here — they are per-page lead config
+                // and MUST survive a Facebook disconnect→reconnect (the row is the
+                // same; sync only refreshes FB-sourced fields). Adding them would
+                // silently wipe a merchant's customization on every re-sync.
                 const [updated] = await db
                     .update(pages)
                     .set({
@@ -863,6 +868,13 @@ export class PagesService {
                             instagramProfilePicUrl,
                             businessProfile,
                             businessProfileUpdatedAt: new Date(),
+                            // Reclaim moves the page from ANOTHER workspace into this one
+                            // — clear the previous owner's per-page lead config so it can't
+                            // leak across workspaces. The page inherits THIS workspace's
+                            // default until re-customized. (A same-workspace reconnect goes
+                            // through the existingPage branch above, which KEEPS the override.)
+                            leadStages: null,
+                            leadFields: null,
                             updatedAt: new Date(),
                         })
                         .where(eq(pages.id, globalExisting.id))

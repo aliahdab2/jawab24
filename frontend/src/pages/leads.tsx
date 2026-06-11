@@ -553,7 +553,6 @@ const LeadsPage: NextPageWithLayout = () => {
     () => pages.find((p) => p.id === selectedPageId),
     [pages, selectedPageId],
   );
-  const pageHasOverride = selectedPage?.leadStages != null || selectedPage?.leadFields != null;
   const stages = React.useMemo(
     () => resolveEffectiveLeadStages(selectedPage?.leadStages, workspaceStages),
     [selectedPage?.leadStages, workspaceStages],
@@ -866,21 +865,6 @@ const LeadsPage: NextPageWithLayout = () => {
           </div>
         )}
 
-        {/* Per-page override indicator — this page has its own sub-stages /
-            fields, not the workspace default. Tapping reopens the customizer
-            (where the merchant can edit or reset to the workspace default). */}
-        {pageHasOverride && selectedPageId && (
-          <button
-            type="button"
-            onClick={() => setStageModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium alert-violet border self-start sm:self-auto"
-            title={t('pageOverrideHint')}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-current" aria-hidden="true" />
-            {t('pageOverrideBadge')}
-          </button>
-        )}
-
         {/* Status filter tabs */}
         <div className="flex items-center gap-2 overflow-x-auto">
           {filterTabs.map((tab) => (
@@ -1054,6 +1038,7 @@ const LeadsPage: NextPageWithLayout = () => {
           pageName={selectedPage?.name}
           pageStages={selectedPage?.leadStages ?? null}
           pageFields={selectedPage?.leadFields ?? null}
+          multiPage={validPages.length > 1}
         />
       )}
 

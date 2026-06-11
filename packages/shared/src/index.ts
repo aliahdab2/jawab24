@@ -828,6 +828,9 @@ export const MAX_LEAD_FIELD_VALUE_LENGTH = 500;
 // override (the merchant cleared that slice for this page). These two pure
 // resolvers are the single source of truth — both backend (validation) and
 // frontend (rendering) call them so the semantics never drift.
+// Deliberate return-type asymmetry: stages may be `undefined` (no sub-stages →
+// callers guard with `stages?.[status] ?? []`), while fields always resolves to
+// an array, so field callers never need a null-check.
 export function resolveEffectiveLeadStages(
   pageOverride: LeadStagesConfig | null | undefined,
   workspaceDefault: LeadStagesConfig | undefined,
