@@ -17,7 +17,7 @@ interface Props {
     intlLocale: IntlLocale;
 }
 
-export function OverviewTab({ customer, formatDate, intlLocale }: Props) {
+export function OverviewSection({ customer, formatDate, intlLocale }: Props) {
     const t = useTranslations('admin');
     const leads = customer.leads ?? EMPTY_LEADS;
 
@@ -25,9 +25,9 @@ export function OverviewTab({ customer, formatDate, intlLocale }: Props) {
         <div className="space-y-6">
             {/* Profile Card */}
             <Card>
-                <h2 className="text-lg font-semibold text-foreground mb-4">
+                <h3 className="text-lg font-semibold text-foreground mb-4">
                     {t('customer.profile')}
-                </h2>
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex items-center gap-3">
                         <Mail className="w-5 h-5 text-muted-foreground" />
@@ -62,9 +62,9 @@ export function OverviewTab({ customer, formatDate, intlLocale }: Props) {
 
             {/* Connected Pages */}
             <Card>
-                <h2 className="text-lg font-semibold text-foreground mb-4">
+                <h3 className="text-lg font-semibold text-foreground mb-4">
                     {t('customer.pagesCount')}
-                </h2>
+                </h3>
                 {customer.pages && customer.pages.length > 0 ? (
                     <ul className="space-y-2">
                         {customer.pages.map((p) => {
@@ -164,9 +164,9 @@ export function OverviewTab({ customer, formatDate, intlLocale }: Props) {
 
             {/* Usage Card */}
             <Card>
-                <h2 className="text-lg font-semibold text-foreground mb-4">
+                <h3 className="text-lg font-semibold text-foreground mb-4">
                     {t('customer.usage')}
-                </h2>
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="bg-background rounded-lg p-4">
                         <div className="flex items-center gap-2 mb-2">
@@ -212,9 +212,9 @@ export function OverviewTab({ customer, formatDate, intlLocale }: Props) {
             <Card>
                 <div className="flex items-center gap-2 mb-4">
                     <Users className="w-5 h-5 text-brand-500" />
-                    <h2 className="text-lg font-semibold text-foreground">
+                    <h3 className="text-lg font-semibold text-foreground">
                         {t('customer.leadsTitle')}
-                    </h2>
+                    </h3>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                     <div className="bg-background rounded-lg p-3">

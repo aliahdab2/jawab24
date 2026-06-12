@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -11,13 +11,11 @@ import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import {
-    CustomerTabs,
-    normalizeTab,
-    type CustomerTab,
-    OverviewTab,
-    BillingTab,
-    AiTab,
-    TeamTab,
+    normalizeSection,
+    OverviewSection,
+    BillingSection,
+    AiSection,
+    TeamSection,
     type CustomerDetail,
     type Plan,
 } from '@/components/admin/customer';
@@ -35,18 +33,22 @@ export default function AdminCustomerDetailPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Active tab is driven by ?tab=overview|billing|ai|team. Default to overview
-    // when absent/invalid. Shallow routing so switching tabs never refetches data.
-    const activeTab = normalizeTab(router.query.tab);
-    const handleTabChange = useCallback((tab: CustomerTab) => {
-        router.replace(
-            { pathname: router.pathname, query: { ...router.query, tab } },
-            undefined,
-            { shallow: true },
-        );
-    }, [router]);
+    // All sections render at once. Legacy ?tab= deep links and #hash loads
+    // still land on the right section, but the content only mounts after the
+    // data arrives — so the browser's native anchor jump finds nothing and we
+    // scroll once ourselves.
+    const didInitialScroll = useRef(false);
+    useEffect(() => {
+        if (loading || !customer || didInitialScroll.current) return;
+        didInitialScroll.current = true;
+        const target = normalizeSection(router.query.tab)
+            ?? normalizeSection(window.location.hash.slice(1));
+        if (target && target !== 'overview') {
+            document.getElementById(target)?.scrollIntoView();
+        }
+    }, [loading, customer, router.query.tab]);
 
-    // Re-fetch only the customer detail (used by tabs after an action mutates it).
+    // Re-fetch only the customer detail (used by sections after an action mutates it).
     const reloadCustomer = useCallback(async () => {
         if (!userId || typeof userId !== 'string') return;
         try {
@@ -147,32 +149,53 @@ export default function AdminCustomerDetailPage() {
                     </div>
                 </div>
 
-                <CustomerTabs active={activeTab} onChange={handleTabChange} />
-
-                {activeTab === 'overview' && (
-                    <OverviewTab customer={customer} formatDate={formatDate} intlLocale={intlLocale} />
-                )}
-                {activeTab === 'billing' && (
-                    <BillingTab
-                        customer={customer}
-                        plans={plans}
-                        userId={userIdStr}
-                        formatDate={formatDate}
-                        intlLocale={intlLocale}
-                        onUpdated={reloadCustomer}
-                    />
-                )}
-                {activeTab === 'ai' && (
-                    <AiTab
-                        customer={customer}
-                        userId={userIdStr}
-                        intlLocale={intlLocale}
-                        onUpdated={reloadCustomer}
-                    />
-                )}
-                {activeTab === 'team' && (
-                    <TeamTab customer={customer} isRTL={isRTL} />
-                )}
+                {/* Two-column dashboard: wide main column for the data-heavy
+                    sections (overview, AI tables), narrow side column for the
+                    billing action cards and team. Stacks on small screens; the
+                    grid follows document direction so RTL flips it natively.
+                    scroll-mt clears the sticky admin header on deep links. */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                    <div className="lg:col-span-2 space-y-8">
+                        <section id="overview" aria-labelledby="overview-heading" className="scroll-mt-24 space-y-4">
+                            <h2 id="overview-heading" className="text-xl font-display font-semibold text-foreground">
+                                {t('customer.tabOverview')}
+                            </h2>
+                            <OverviewSection customer={customer} formatDate={formatDate} intlLocale={intlLocale} />
+                        </section>
+                        <section id="ai" aria-labelledby="ai-heading" className="scroll-mt-24 space-y-4">
+                            <h2 id="ai-heading" className="text-xl font-display font-semibold text-foreground">
+                                {t('customer.tabAi')}
+                            </h2>
+                            <AiSection
+                                customer={customer}
+                                userId={userIdStr}
+                                intlLocale={intlLocale}
+                                onUpdated={reloadCustomer}
+                            />
+                        </section>
+                    </div>
+                    <div className="space-y-8">
+                        <section id="billing" aria-labelledby="billing-heading" className="scroll-mt-24 space-y-4">
+                            <h2 id="billing-heading" className="text-xl font-display font-semibold text-foreground">
+                                {t('customer.tabBilling')}
+                            </h2>
+                            <BillingSection
+                                customer={customer}
+                                plans={plans}
+                                userId={userIdStr}
+                                formatDate={formatDate}
+                                intlLocale={intlLocale}
+                                onUpdated={reloadCustomer}
+                            />
+                        </section>
+                        <section id="team" aria-labelledby="team-heading" className="scroll-mt-24 space-y-4">
+                            <h2 id="team-heading" className="text-xl font-display font-semibold text-foreground">
+                                {t('customer.tabTeam')}
+                            </h2>
+                            <TeamSection customer={customer} isRTL={isRTL} />
+                        </section>
+                    </div>
+                </div>
             </div>
         </AdminLayout>
     );

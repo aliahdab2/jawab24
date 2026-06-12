@@ -12,7 +12,7 @@ interface Props {
     isRTL: boolean;
 }
 
-export function TeamTab({ customer, isRTL }: Props) {
+export function TeamSection({ customer, isRTL }: Props) {
     const t = useTranslations('admin');
 
     return (
@@ -21,10 +21,10 @@ export function TeamTab({ customer, isRTL }: Props) {
                 is a team member in someone else's (which is why they may show no pages
                 or plan of their own). The owner link jumps to the billable account. */}
             <Card>
-                <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                     <Users className="w-5 h-5 text-muted-foreground" aria-hidden="true" />
                     {t('customer.membershipTitle')}
-                </h2>
+                </h3>
                 {customer.workspaces && customer.workspaces.length > 0 ? (
                     <ul className="space-y-3">
                         {customer.workspaces.map((ws) => (

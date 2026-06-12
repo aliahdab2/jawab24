@@ -28,7 +28,7 @@ interface Props {
     onUpdated: () => void;
 }
 
-export function BillingTab({ customer, plans, userId, formatDate, intlLocale, onUpdated }: Props) {
+export function BillingSection({ customer, plans, userId, formatDate, intlLocale, onUpdated }: Props) {
     const t = useTranslations('admin');
 
     const [showUpgrade, setShowUpgrade] = useState(false);
@@ -71,9 +71,9 @@ export function BillingTab({ customer, plans, userId, formatDate, intlLocale, on
 
             {/* Subscription Card */}
             <Card>
-                <h2 className="text-lg font-semibold text-foreground mb-4">
+                <h3 className="text-lg font-semibold text-foreground mb-4">
                     {t('customer.subscription')}
-                </h2>
+                </h3>
                 {customer.subscription ? (
                     <div className="space-y-4">
                         <div>
@@ -133,9 +133,9 @@ export function BillingTab({ customer, plans, userId, formatDate, intlLocale, on
             {/* Top-up Card */}
             <Card>
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-foreground">
+                    <h3 className="text-lg font-semibold text-foreground">
                         {t('customer.topupTitle')}
-                    </h2>
+                    </h3>
                     <Plus className="w-5 h-5 text-brand-500" />
                 </div>
                 <div>
@@ -164,9 +164,9 @@ export function BillingTab({ customer, plans, userId, formatDate, intlLocale, on
                 customer for an already-granted manual credit. Collect-only. */}
             <Card>
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-foreground">
+                    <h3 className="text-lg font-semibold text-foreground">
                         {t('customer.paymentTitle')}
-                    </h2>
+                    </h3>
                     <ExternalLink className="w-5 h-5 text-brand-500" aria-hidden="true" />
                 </div>
                 <p className="text-xs text-muted-foreground">
