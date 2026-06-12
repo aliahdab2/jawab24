@@ -3324,6 +3324,90 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'TIER-1 REGRESSION (#19): structured > narrative precedence. Today merchant + KB agree; the test exists to fail loudly if injection ever stops happening.',
     },
+
+    // ─── Category 52: Date Awareness & Stale KB Dates ───
+    // As of PROMPT_VERSION v38 the model receives today's date (merchant timezone)
+    // in the dynamic prompt suffix. Merchants rarely update dates in their KB, so:
+    //  - a specific calendar date in KB/post that is already PAST must NOT be
+    //    presented as current/upcoming → hedge + `stale_kb_date` flag + low/medium
+    //  - FUTURE dates and recurring weekly schedules must stay confidently
+    //    answerable (no over-hedging)
+    // Seed fixtures (training page KB): stale registration window "يبدأ التسجيل
+    // 1 فبراير 2025" (future tense, date long past — the classic stale-KB shape)
+    // and a far-future TOEFL start "تبدأ 1 سبتمبر 2030" (refresh before 2030).
+    {
+        id: 420, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'comment',
+        message: 'متى تبدأ الدورة؟',
+        page: 'training',
+        postMessage: 'سجلوا الآن في دورة اللغة الإنجليزية المكثفة! الدورة تبدأ 1 مارس 2025 وخصم 20% للتسجيل المبكر ✨',
+        expected: { flags: ['stale_kb_date'], confidence: ['low', 'medium'] },
+        notes: 'Post start-date (March 2025) is long past. Must hedge, not relay it as upcoming. v37 baseline: relays confidently (model has no idea what today is).',
+    },
+    {
+        id: 421, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'comment',
+        message: 'العرض لسا شغال؟',
+        page: 'training',
+        postMessage: 'عرض خاص على دورة اللغة الإنجليزية! العرض ينتهي 31/12/2024 سارعوا بالتسجيل 🔥',
+        expected: { flags: ['stale_kb_date'], confidence: ['low', 'medium'] },
+        notes: 'Numeric dd/mm/yyyy expiry already passed — must not confirm the offer as live.',
+    },
+    {
+        id: 422, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'dm',
+        message: 'متى يبدأ التسجيل بدفعة اللغة الإنجليزية الجديدة؟',
+        page: 'training',
+        expected: { flags: ['stale_kb_date'], confidence: ['low', 'medium'] },
+        notes: 'KB registration window (Feb 2025, written in future tense) is past — the classic owner-never-updated-KB case. Must hedge + flag so the merchant sees the stale entry.',
+    },
+    {
+        id: 423, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'dm',
+        message: 'متى تبدأ دورة التوفل القادمة؟',
+        page: 'training',
+        expected: { confidence: ['high'], replyContainsAny: ['2030', '٢٠٣٠', 'سبتمبر'], flagsAbsent: ['stale_kb_date'] },
+        notes: 'Future KB date (Sept 2030) — answer confidently, no stale flag. Guards against over-hedging.',
+    },
+    {
+        id: 424, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'dm',
+        message: 'When does the next TOEFL course start?',
+        page: 'training',
+        expected: { confidence: ['high'], replyContainsAny: ['2030', 'September'], flagsAbsent: ['stale_kb_date'] },
+        notes: 'English variant of #423 — future date relayed confidently.',
+    },
+    {
+        id: 425, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'dm',
+        message: 'هل تداومون يوم السبت؟',
+        page: 'training',
+        expected: { confidence: ['high'], replyContainsAny: ['السبت', '9', '٩'], flagsAbsent: ['stale_kb_date'] },
+        notes: 'Recurring weekly schedule (Sat 9-5 in KB) is NOT a stale date — must answer confidently. Guards against the stale-date rule over-triggering on hours.',
+    },
+    {
+        id: 426, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'comment',
+        message: 'لين متى العرض؟',
+        page: 'electronics',
+        postMessage: 'عرض خاص! خصم 20% على جميع الجوالات هذا الأسبوع 📱🔥',
+        expected: { intent: ['QUESTION'], flagsAbsent: ['stale_kb_date'] },
+        notes: 'Relative date ("this week") on a live post is not a stale calendar date. No end date in KB so hedging is fine — but stale_kb_date must NOT fire.',
+    },
+    {
+        id: 427, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'dm',
+        message: 'هل أنتم فاتحين اليوم؟',
+        page: 'training',
+        expected: { confidence: ['high', 'medium'], flagsAbsent: ['stale_kb_date', 'info_not_in_kb'] },
+        notes: 'KB has full weekly hours — knowing today\'s weekday the model can answer "open/closed today" decisively (incl. "closed" on Fridays). v37 baseline: tends to hedge low ("real-time status unknown").',
+    },
+    {
+        id: 428, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'dm',
+        message: 'متى يبدأ التسجيل للطلاب الجدد؟',
+        page: 'school',
+        expected: { flags: ['stale_kb_date'], confidence: ['low', 'medium'] },
+        notes: 'CROSS-DOMAIN (school, not training institute): KB has a stale enrollment window (Mar–Apr 2025) next to an undated "registration open" line — the classic school-KB shape. Must hedge + flag, not relay the 2025 window as upcoming.',
+    },
+    {
+        id: 429, category: 52, categoryName: 'Date Awareness & Stale KB', channel: 'dm',
+        message: 'هل عرض الجمعة البيضاء لسا شغال؟',
+        page: 'electronics',
+        expected: { flags: ['stale_kb_date'], confidence: ['low', 'medium'] },
+        notes: 'E-COMMERCE PATH (electronics page is linked to the demo Shopify store → DM goes through the tool loop, which bypasses replyValidator): KB has a stale Black Friday offer (ends Nov 2025). Exercises applyToolPathDateGuard — must hedge + flag, not confirm the expired offer.',
+    },
 ];
 
 // ---------------------------------------------------------------------------
