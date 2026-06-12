@@ -135,17 +135,29 @@ One copy decision flagged for the team: the description hedges order-confirmatio
 
 ---
 
-## Launch strategy: submit early, hold the go-live (decided 2026-06-08)
+## Portal recon — live inspection of app 1565152053 (2026-06-12, Claude Chrome extension, read-only)
 
-Do **not** wait for WhatsApp. Get the app **reviewed + approved in parallel** with WhatsApp work, then control the public go-live:
-- **If Salla supports approved-but-unpublished** (confirm via §1 Q7): submit as soon as assets are ready → get approved → **hold publishing** until you choose (e.g. alongside the WhatsApp v1.1 moment).
-- **If Salla auto-publishes on approval** (§1 Q7 says yes): then "approve but don't launch" = **submit only when you're ready to be live**. The prep (assets, copy, support inbox) still happens now so submission is a same-day action whenever you decide.
+- **Publish flow**: one section, "Request to publish your App," with a single **"Start publishing your App"** button = the submit-for-review control (submitting agrees to the Apps T&C). No separate App Listing page or wizard reachable yet.
+- **🚨 NEW BLOCKER — Partners ID verification**: clicking "Start publishing your App" opens an **"ID Verification Required"** modal before any listing form. You cannot reach the submission form until the Partners account identity is verified. Requirements ([internationals](https://salla.dev/blog/partners-account-verification-for-internationals/) / [locals](https://salla.dev/blog/salla-partners-account-verification-for-locals/)):
+  - **Non-Saudi individual**: passport only — full name in English matching passport, passport number, issue/expiry dates, **bio-data page as PDF**. Certificates optional for Apps. Payout = **international bank account (outside KSA)** with bank name, holder name (matching passport, English), account number, currency, SWIFT, IBAN.
+  - **Saudi individual**: National ID or passport (PDF) + **mandatory Saudi National Address** in Account Settings + **Freelancer Certificate** required for Apps products.
+  - Path: Partners portal → dropdown by your name → Account Settings → Verify My Account.
+- **App status field**: header shows only `Status: Development` (Type: Public). No draft/in-review/approved/published state machine exposed.
+- **No go-live control**: no scheduling, hold, or publish toggle anywhere on the page. Only a "Preview At App Store" button. Observable flow is request → Salla review → (implied) publish.
+- **Icon upload field**: accepts `.jpg, .png, .gif` (file-input `accept` attr); **no dimensions stated inline** — sizing guidance only via the "Learn more about App Icon" doc link (consistent with the 512×512 spec in §1).
+
+## Launch strategy (decided 2026-06-08; REVISED 2026-06-12 after portal recon)
+
+Do **not** wait for WhatsApp. But the portal shows **no approved-but-unpublished control**, so until Salla support says otherwise, **assume auto-publish on approval** and plan the **submit-when-ready** path:
+- "Approve but don't launch" = **submit only when you're ready to be live**. All prep (ID verification, assets, copy, support inbox) happens now so submission is a same-day action whenever you decide.
+- If the support answer reveals a hold mechanism inside the post-verification listing flow, revert to submit-early-hold.
 
 WhatsApp is a fast-follow **v1.1** update (gated on Meta Embedded Signup, weeks out) — it slots into the same "قريباً → shipped" cadence the copy already uses. FB/IG is the launch wedge.
 
 ## Critical path recap
-1. Send §1 to Salla support → get exact specs **+ the publish-control answer (Q7)**.
-2. Get marketing sign-off on §1–2 copy (brief).
-3. Hand §3 + the brief to the designer → produce assets (the long pole).
-4. Set up support inbox + paste §2 auto-responder.
-5. Submit on the Partners portal → 5–10 day review → **approved, hold go-live per Q7 answer**.
+1. **Complete Partners ID verification** (gates the submission form; needs passport PDF + payout bank details — see portal recon above). Start now; verification review time unknown.
+2. Send §1 to Salla support → the publish-control answer (decides submit-when-ready vs submit-early-hold).
+3. Get marketing sign-off on §1–2 copy (brief).
+4. Hand §3 + the brief to the designer → produce assets (the long pole).
+5. Set up support inbox + paste §2 auto-responder.
+6. Submit on the Partners portal → 5–10 day review → go-live per the strategy above.
