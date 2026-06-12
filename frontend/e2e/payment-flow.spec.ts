@@ -567,9 +567,6 @@ test.describe('Payment Flow — Checkout', () => {
   });
 
   test('embedded checkout session is created automatically', async ({ page }) => {
-    let stripeSessionCreated = false;
-    let stripeRequestBody: Record<string, unknown> = {};
-
     await page.route('**/api/plans/plan_business', async (route) => {
       await route.fulfill({
         status: 200, contentType: 'application/json',
@@ -577,9 +574,12 @@ test.describe('Payment Flow — Checkout', () => {
       });
     });
 
+    // Route exists only to fulfill the response — assertions read the request
+    // object from waitForRequest below. Asserting via flags set inside the
+    // route handler is racy: under the serial full-suite run the request can
+    // be observed by waitForRequest while this handler loses the interception
+    // race, leaving the flag false (flaked pre-deploy on 2026-06-12).
     await page.route('**/api/payment/create-subscription-intent', async (route) => {
-      stripeSessionCreated = true;
-      stripeRequestBody = JSON.parse(route.request().postData() || '{}');
       await route.fulfill({
         status: 200, contentType: 'application/json',
         body: JSON.stringify({ clientSecret: 'pi_test_123_secret', type: 'payment', subscriptionId: 'sub_test_123' }),
@@ -593,9 +593,9 @@ test.describe('Payment Flow — Checkout', () => {
     );
 
     await page.goto('/en/checkout?planId=plan_business&interval=month');
-    await stripeRequest;
+    const sessionRequest = await stripeRequest;
 
-    expect(stripeSessionCreated).toBe(true);
+    const stripeRequestBody = JSON.parse(sessionRequest.postData() || '{}');
     expect(stripeRequestBody.planId).toBe('plan_business');
     expect(stripeRequestBody.billingInterval).toBe('month');
   });
