@@ -6,32 +6,36 @@
 
 ## 1. Listing spec sheet — MOSTLY ANSWERED from Salla's docs (2026-06-08)
 
-I searched Salla's docs before asking support. Most specs are public — and they **differ from the brief's assumptions** (the brief guessed Shopify-like values). Use these confirmed numbers; only 2 items genuinely need Salla support.
+I searched Salla's docs before asking support. Most specs are public — and they **differ from the brief's assumptions** (the brief guessed Shopify-like values). Use these confirmed numbers; only 1 item genuinely needs Salla support (the icon question was answered by deeper doc research, 2026-06-12 — see below).
 
 ### ✅ Confirmed from Salla docs
 | Listing field | Salla spec | Source |
 |---|---|---|
 | App name | AR + EN, **≤ 30 characters** | publishing standards |
 | Short description | **≤ 200 characters** (AR + EN) | publishing standards |
+| **App icon** | **upload at 512 × 512** (min 250 × 250, ratio 1:1), **PNG or JPEG, ≤ 1 MB**; symbol-only (no text), transparent **or** solid background, logo grid-aligned with empty space on all sides; Salla auto-scales down for placements | [Crafting the Perfect Salla App Icon](https://salla.dev/blog/crafting-the-perfect-salla-app-icon/) + Create-app docs ("Minimum width: 250 pixels, height: 250 pixels … ratio 1:1") |
 | **App Gallery** (the "screenshots") | **3 images, 1366 × 768** | publishing standards |
 | **Key Benefits** | **3 images, 1600 × 1600**, each with a title + description | publishing standards |
 | Promotional video | **optional, YouTube link, ≤ 2 minutes** (NOT an uploaded file) | publishing standards |
 | Privacy policy + FAQ | optional links | publishing standards |
 | Publishing flow | 6 sections: Basic Info, App Configurations, App Features, Pricing, Contact, Service Trial | Create-app docs |
 
+> ⚠️ Icon-spec trap: searching Arabic help.salla.sa for "أيقونة التطبيق" surfaces a **1024 × 1024 / auto-rounded-corners / 20% margin** spec — that is for **Salla App Maker** (merchants' own mobile apps on Google/Apple stores), NOT partner apps on the Salla App Store. Same for the help-center "سياسة نشر التطبيق" articles — all App Maker. Don't mix them up.
+
 > ⚠️ **This corrects the brief.** The brief assumed 4–6 screenshots @1280×720, a 1920×1080 banner, and a 60–90s *uploaded* video (≤30 MB). Reality: **3 gallery images @1366×768 + 3 key-benefit images @1600×1600 + a ≤2-min YouTube video.** There is **no separate "banner"** in the documented fields — the gallery + key-benefit images are the visuals. The screenshot script (brief §4, 6 screens) and video script (brief §5, 60–90s) must be re-scoped to this format. See §3 below.
 
-### ❓ Only these genuinely need Salla support — short email
-Sources: [Publishing standards](https://salla.dev/blog/standards-salla-apps-publications/) · [Publish App docs](https://docs.salla.dev/422990m0) · [Create your first App](https://docs.salla.dev/421410m0). The icon px and the go-live mechanic aren't documented publicly.
+### ❓ Only this genuinely needs Salla support — short email
+Sources checked exhaustively (2026-06-12): [Publishing standards](https://salla.dev/blog/standards-salla-apps-publications/) · [Publish App docs](https://docs.salla.dev/422990m0) · [Create your first App](https://docs.salla.dev/421410m0) + newer platform docs (439059m0, modified 2026-06-08) · [App Store FAQ](https://apps.salla.sa/en/faq) · [General policy](https://apps.salla.sa/en/general-policy) · [Partners apps policy](https://salla.partners/legal/apps-policy) · help.salla.sa · [Salla CLI](https://github.com/SallaApp/Salla-CLI). All publishing docs end at "submitted for publishing" — **the go-live mechanic (auto-publish on approval vs hold) is genuinely not documented publicly.** The icon question is answered (see table above) and was dropped from the email.
+
+Related confirmed fact ([End Services of Salla Apps](https://salla.dev/blog/end-services-of-salla-apps-on-the-partners-portal/)): **taking a Live app off the store is NOT self-serve** — with active subscriptions it requires booking a meeting with the Salla team (or emailing support@salla.dev); only under-development (never-published) apps can be deleted directly. This raises the stakes on the publish-timing answer: once live, pulling back is a heavyweight process.
 
 **Arabic (send this):**
 ```
 السلام عليكم،
 
-نحن بصدد نشر تطبيق "Jawab24" على متجر تطبيقات سلة. راجعنا التوثيق وبقي لدينا سؤالان:
+نحن بصدد نشر تطبيق "Jawab24" على متجر تطبيقات سلة. راجعنا التوثيق وبقي لدينا سؤال واحد:
 
-1. أيقونة التطبيق: ما الأبعاد بالبكسل والصيغة والحد الأقصى لحجم الملف؟ وهل تُطبّق سلة الزوايا الدائرية تلقائياً؟
-2. التحكم في موعد النشر: هل يمكننا تقديم التطبيق للمراجعة والحصول على الموافقة مع إبقائه غير منشور، ثم نشره يدوياً في الوقت الذي نختاره؟ أم يُنشر تلقائياً فور الموافقة؟ وهل يمكن إيقاف نشره لاحقاً؟
+التحكم في موعد النشر: هل يمكننا تقديم التطبيق للمراجعة والحصول على الموافقة مع إبقائه غير منشور، ثم نشره يدوياً في الوقت الذي نختاره؟ أم يُنشر تلقائياً فور الموافقة؟
 
 شكراً لكم.
 فريق Jawab24
@@ -41,16 +45,15 @@ Sources: [Publishing standards](https://salla.dev/blog/standards-salla-apps-publ
 ```
 Hello Salla Partners team,
 
-We reviewed the docs; two questions remain before we publish "Jawab24":
+We reviewed the docs; one question remains before we publish "Jawab24":
 
-1. App icon: exact pixel dimensions, format, and max file size? Does Salla auto-apply rounded corners?
-2. Publish-timing control: can we submit for review and get approved while keeping the app unpublished, then publish manually when we choose — or is it published automatically on approval? Can we unpublish later?
+Publish-timing control: can we submit for review and get approved while keeping the app unpublished, then publish manually when we choose — or is it published automatically on approval?
 
 Thank you.
 The Jawab24 team
 ```
 
-**Where to send:** Salla Partners portal support channel (`https://salla.partners`). The go-live answer (Q2) is the one that decides the "submit-and-hold" vs "submit-when-ready" path.
+**Where to send:** Salla Partners portal support channel (`https://salla.partners`). The go-live answer decides the "submit-and-hold" vs "submit-when-ready" path. (The "can we unpublish later" sub-question was removed — answered by the End-Services article: yes, but only via a meeting with the Salla team once subscriptions exist.)
 
 ---
 
@@ -99,7 +102,7 @@ Everything the designer needs. **These are Salla's real specs** (from the docs �
 ### Deliverables (exact Salla format)
 | Asset | Salla spec | Notes |
 |---|---|---|
-| App icon | high-res square PNG (deliver 1024×1024; **confirm exact px via §1 email**) | Reuse the existing Jawab24 brand mark (Play/App Store/Facebook). Readable when small. |
+| App icon | **512 × 512 PNG or JPEG, ≤ 1 MB** (min 250×250, ratio 1:1 — confirmed from Salla docs, see §1) | Reuse the existing Jawab24 brand mark (Play/App Store/Facebook). Symbol only, no text; transparent or solid background; grid-aligned with breathing room on all sides. Readable when small. |
 | **App Gallery — exactly 3 images, 1366 × 768** | the main "screenshots" | Pick the 3 strongest from brief §4 (suggest: #1 connected integration, #2 playground AI reply with real price, #3 comments auto-reply). All-Arabic UI (`/ar/...`). |
 | **Key Benefits — exactly 3 images, 1600 × 1600** | square; each needs a **title + short description** | Three core value props, e.g. "يقرأ منتجاتك من سلة" / "يرد بالعربية بلهجة عميلك" / "يرد على فيسبوك وإنستغرام تلقائياً". Square composition, not landscape. |
 | Promotional video | **optional, YouTube link, ≤ 2 minutes** | NOT an uploaded file — host on YouTube, paste the link. Re-cut the brief §5 script to ≤2 min. Arabic narration. |
