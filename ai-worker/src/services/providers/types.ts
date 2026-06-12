@@ -60,7 +60,8 @@ export const AI_REPLY_JSON_SCHEMA = {
             type: 'array' as const,
             items: { type: 'string' as const },
         },
+        date_sensitive: { type: 'boolean' as const },
     },
-    required: ['reply', 'intent', 'confidence', 'flags'] as const,
+    required: ['reply', 'intent', 'confidence', 'flags', 'date_sensitive'] as const,
     additionalProperties: false,
 };

@@ -79,10 +79,12 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
             // Non-critical — fall back to defaults
         }
     }
+    let timezone: string | undefined;
     if (page.workspaceId) {
         try {
             const wsSettings = await workspaceSettingsService.getSettings(page.workspaceId);
             defaultReplyLanguage = wsSettings.defaultReplyLanguage;
+            timezone = wsSettings.timezone;
         } catch {
             // Non-critical — fall back to default
         }
@@ -106,6 +108,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     // 2b. Stage 2.6 structured BUSINESS_INFO block — built from merchant half only.
     const { merchant } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null);
+    const merchantPhone = merchant?.phones?.find(p => !!p && p.trim() !== '')?.trim();
 
     // 3. When comment mode is dual or private, use DM channel for detailed reply
     const effectiveChannel: 'comment' | 'dm' = (channel === 'comment' && (commentReplyMode === 'dual' || commentReplyMode === 'private'))
@@ -129,9 +132,11 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         replyStyle,
         brandVoiceNotes,
         businessInfoBlock,
+        merchantPhone,
         customerContext,
         model,
         defaultReplyLanguage,
+        timezone,
         messageTags: channel === 'comment' ? messageTags : undefined,
         ourFacebookPageId: channel === 'comment' ? ourFacebookPageId : undefined,
         ecommerceStoreId: page.ecommerceStoreId ?? undefined,

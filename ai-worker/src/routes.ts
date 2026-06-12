@@ -130,9 +130,11 @@ async function routes(server: FastifyInstance) {
             originalRequest: GenerateRequest;
             toolResults: EcommerceToolResult[];
             originalToolCalls: Array<{ name: string; arguments: Record<string, string> }>;
+            /** True when any earlier round of this loop ran lookup_order — disables the date guard. */
+            priorOrderLookup?: boolean;
         };
     }>('/generate-with-tool-results', async (request, reply) => {
-        const { originalRequest, toolResults, originalToolCalls } = request.body;
+        const { originalRequest, toolResults, originalToolCalls, priorOrderLookup } = request.body;
 
         if (!originalRequest?.comment || !Array.isArray(toolResults) || !Array.isArray(originalToolCalls)
             || toolResults.length === 0 || toolResults.length !== originalToolCalls.length) {
@@ -140,7 +142,7 @@ async function routes(server: FastifyInstance) {
         }
 
         try {
-            const result = await generateWithToolResults(originalRequest, toolResults, originalToolCalls);
+            const result = await generateWithToolResults(originalRequest, toolResults, originalToolCalls, priorOrderLookup === true);
             return reply.send(result);
         } catch (error) {
             request.log.error(error, 'Failed to generate reply with tool results');

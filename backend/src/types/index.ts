@@ -61,6 +61,11 @@ export interface AiGenerateRequest {
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
         /**
+         * Merchant's IANA timezone (workspace settings). The ai-worker uses it to
+         * compute the "Today's date" prompt line for past/future date reasoning.
+         */
+        timezone?: string;
+        /**
          * When true, the backend has prepended the merchant's configured welcome
          * greeting to this reply (customer's first message). Tells ai-worker the
          * model must NOT greet again — go straight to the answer — so the customer
@@ -78,6 +83,12 @@ export interface AiGenerateResponse {
     intent?: string;
     confidence?: string;
     flags?: string[];
+    /**
+     * Model's judgment that the reply's correctness depends on today's date
+     * (deadline, offer validity, "open now"). Such replies are never written to
+     * the exact/semantic caches — they'd flip wrong when the date passes.
+     */
+    dateSensitive?: boolean;
     tokensUsed?: number;
     /**
      * Rich product cards to send as a follow-up attachment after the text reply.

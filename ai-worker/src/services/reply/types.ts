@@ -49,6 +49,12 @@ export interface GenerateRequest {
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
         /**
+         * Merchant's IANA timezone (settings.timezone, e.g. 'Asia/Riyadh'). Used to
+         * compute the "Today's date" line in the prompt so the model can reason
+         * about past/future dates in KB content. Absent → UTC.
+         */
+        timezone?: string;
+        /**
          * When true, the backend has already prepended the merchant's configured
          * welcome greeting to this reply (customer's first message). The model must
          * NOT add its own greeting — answer directly — or the customer sees a double
@@ -69,6 +75,13 @@ export interface GenerateResponse {
     intent?: string;
     confidence?: string;
     flags?: string[];
+    /**
+     * Model's judgment that the reply's correctness depends on today's date
+     * (deadlines, offer validity, "open now"). Backend skips exact + semantic
+     * cache writes for these replies — a correct date-dependent answer flips
+     * wrong when the date passes, well within the 30-day cache TTL.
+     */
+    dateSensitive?: boolean;
 }
 
 export interface TokenInfo {
@@ -88,6 +101,7 @@ export interface ParsedReply {
     confidence?: string;
     flags?: string[];
     hedging?: boolean;
+    date_sensitive?: boolean;
     language?: string;
 }
 
@@ -98,4 +112,6 @@ export interface ValidatedReply {
     confidence?: string;
     flags?: string[];
     language?: string;
+    /** Mapped from the model's `date_sensitive` JSON field; forced true when `stale_kb_date` is flagged. */
+    dateSensitive?: boolean;
 }

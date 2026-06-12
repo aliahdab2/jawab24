@@ -3,7 +3,7 @@ import { messagesService } from '../messages';
 import { commentsService } from '../comments';
 import { rateLimiter, commentDebounce } from '../protection';
 import { notificationService } from '../notifications';
-import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
+import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, pickSafeFallback, resolveFallbackLanguage } from './generator';
 import { isUrgentNotification, buildNotificationReason } from './urgentFlags';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
 import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag } from '../../utils/commentText';
@@ -452,6 +452,7 @@ export class CommentProcessor {
             generatorContext.businessInfoBlock = enriched.businessInfoBlock;
             generatorContext.replyStyle = userSettings.replyStyle;
             generatorContext.defaultReplyLanguage = userSettings.defaultReplyLanguage;
+            generatorContext.timezone = userSettings.timezone;
             // Pass commenter name so the AI addresses the actual commenter, not a tagged person
             generatorContext.senderName = fromName ?? undefined;
             // Facebook `message_tags` + our page id — feeds the user-tag skip rule
@@ -481,7 +482,7 @@ export class CommentProcessor {
                     knowledgeBase: generatorContext.knowledgeBase,
                     defaultReplyLanguage: userSettings.defaultReplyLanguage,
                 });
-                generatedText = PRICE_FALLBACK[lang];
+                generatedText = pickSafeFallback(flagReason, lang, enriched.merchantPhone);
             }
 
             // 8c. Skip reply — silent for spam/tags, flagged for offensive content

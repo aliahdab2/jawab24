@@ -87,7 +87,7 @@ export async function generateReplyWithProvider(
         });
 
         // Parse structured JSON response
-        let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean };
+        let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; date_sensitive?: boolean };
         try {
             parsed = JSON.parse(result.content);
         } catch {
@@ -114,6 +114,7 @@ export async function generateReplyWithProvider(
             intent: validated.intent,
             confidence: validated.confidence,
             flags: validated.flags,
+            dateSensitive: validated.dateSensitive,
             tokensUsed: result.tokensTotal,
             tokensIn: result.tokensIn,
             tokensInCached: result.tokensInCached,

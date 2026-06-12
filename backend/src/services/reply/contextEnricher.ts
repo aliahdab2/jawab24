@@ -22,6 +22,13 @@ export interface EnrichedContext {
      * AI falls back to merged narrative KB via `formatBusinessProfile`).
      */
     businessInfoBlock: string | null;
+    /**
+     * First merchant-confirmed phone number (`business_profile.merchant.phones[0]`,
+     * never FB suggestions). Used by `pickSafeFallback` to redirect customers to a
+     * real contact channel instead of promising a follow-up the bot can't make.
+     * Undefined when the merchant has no confirmed phone.
+     */
+    merchantPhone: string | undefined;
 }
 
 /**
@@ -81,6 +88,7 @@ export async function enrichPageContext(
     //     fields via [NOT_PROVIDED] markers (Damascus phone regression case #11).
     const { merchant } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null);
+    const merchantPhone = merchant?.phones?.find(p => !!p && p.trim() !== '')?.trim();
 
     // 4. Language-appropriate brand voice notes
     const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
@@ -95,5 +103,5 @@ export async function enrichPageContext(
         || legacyFallback
         || undefined;
 
-    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock };
+    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, merchantPhone };
 }
