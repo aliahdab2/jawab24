@@ -83,6 +83,21 @@ export type PaymentRequest = NonNullable<
     Awaited<ReturnType<typeof adminApi.listPaymentRequests>>['data']
 >[number];
 
+/**
+ * Section ids on the customer page. Also accepted as legacy ?tab= deep-link
+ * values (the page used tabs before the two-column layout).
+ */
+export const CUSTOMER_SECTIONS = ['overview', 'billing', 'ai', 'team'] as const;
+export type CustomerSection = (typeof CUSTOMER_SECTIONS)[number];
+
+/** Coerce an arbitrary ?tab=/#hash value to a valid section id, or null. */
+export function normalizeSection(value: string | string[] | undefined): CustomerSection | null {
+    const v = Array.isArray(value) ? value[0] : value;
+    return (CUSTOMER_SECTIONS as readonly string[]).includes(v ?? '')
+        ? (v as CustomerSection)
+        : null;
+}
+
 /** Locale string passed to Intl APIs (e.g. 'en-US' / 'ar-SA'), from useLanguage. */
 export type IntlLocale = string;
 

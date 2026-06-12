@@ -19,7 +19,7 @@ interface Props {
     onUpdated: () => void;
 }
 
-export function AiTab({ customer, userId, intlLocale, onUpdated }: Props) {
+export function AiSection({ customer, userId, intlLocale, onUpdated }: Props) {
     const t = useTranslations('admin');
     const tc = useTranslations('common');
 
@@ -95,9 +95,9 @@ export function AiTab({ customer, userId, intlLocale, onUpdated }: Props) {
         <div className="space-y-6">
             {/* AI Model Override Card */}
             <Card>
-                <h2 className="text-lg font-semibold text-foreground mb-4">
+                <h3 className="text-lg font-semibold text-foreground mb-4">
                     {t('customer.aiModel')}
-                </h2>
+                </h3>
                 <p className="text-xs text-muted-foreground mb-3">
                     {t('customer.aiModelHint')}
                 </p>
@@ -125,9 +125,9 @@ export function AiTab({ customer, userId, intlLocale, onUpdated }: Props) {
             {/* AI Cost by Page — period-scoped breakdown of OpenAI spend per Facebook/Instagram page */}
             <Card>
                 <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-                    <h2 className="text-lg font-semibold text-foreground">
+                    <h3 className="text-lg font-semibold text-foreground">
                         {t('customer.aiCostByPage')}
-                    </h2>
+                    </h3>
                     <div className="flex gap-1 bg-muted rounded-lg p-1">
                         {AI_COST_PERIODS.map((p) => (
                             <button
