@@ -34,7 +34,10 @@ async function dispatchAiReply(request: AiGenerateRequest): Promise<AiGenerateRe
  *  NOTE: low_confidence is intentionally NOT here — a low-confidence reply
  *  is still better than no reply at all. It gets flagged for review instead. */
 export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive'] as const;
-export const SAFE_FALLBACK_FLAGS = ['price_not_in_kb'] as const;
+// stale_date_in_reply: ai-worker's date guard (replyValidator Check 7) caught the
+// model relaying an already-past calendar date as the answer. Same contract as
+// price_not_in_kb — the reply must never reach the customer as generated.
+export const SAFE_FALLBACK_FLAGS = ['price_not_in_kb', 'stale_date_in_reply'] as const;
 export const SKIP_REPLY_INTENTS = ['OFFENSIVE', 'SPAM_OR_IRRELEVANT'] as const;
 
 /** Intents that skip silently — no needsAttention flag, no notification.
@@ -134,6 +137,32 @@ export const PRICE_FALLBACK: Record<string, string> = {
     en: t('priceFallback', 'en'),
 };
 
+/** Safe fallback replies when the date guard catches a stale date relayed as the answer */
+export const DATE_FALLBACK: Record<string, string> = {
+    ar: t('dateFallback', 'ar'),
+    en: t('dateFallback', 'en'),
+};
+
+/**
+ * Pick the safe-fallback text matching the flag that fired (see SAFE_FALLBACK_FLAGS).
+ * Date-guard detections get the dates wording; everything else keeps the original
+ * pricing wording for backward compatibility.
+ *
+ * No false follow-up promises (the bot cannot "get back to you" — same contract
+ * as eval Cat 44): with a merchant-confirmed phone on file the customer is
+ * redirected to it (prompt Example 2 pattern); without one, the text states the
+ * fact that the question was passed to the team (the reply IS flagged
+ * needs_attention and the merchant notified) — no callback promise.
+ */
+export function pickSafeFallback(flagReason: string | undefined, lang: string, merchantPhone?: string): string {
+    const flags = (flagReason || '').split(',').map(f => f.trim());
+    const isDate = flags.includes('stale_date_in_reply');
+    if (merchantPhone) {
+        return t(isDate ? 'dateFallbackPhone' : 'priceFallbackPhone', lang, { phone: merchantPhone });
+    }
+    return isDate ? DATE_FALLBACK[lang] : PRICE_FALLBACK[lang];
+}
+
 /**
  * Pick a language for canned fallback text (PRICE_FALLBACK, etc.).
  * The customer message is often script-less ("..."/emoji) when fallback fires,
@@ -193,6 +222,8 @@ export interface GenerateReplyContext {
     ecommerceStoreId?: string;
     // Language fallback
     defaultReplyLanguage?: string;
+    /** Merchant's IANA timezone (workspace settings) — drives the "Today's date" prompt line. */
+    timezone?: string;
     /**
      * Set by messageProcessor when the merchant's welcome greeting has been prepended
      * to this (first-contact) reply. Forwarded to the AI as `suppressGreeting` so the
@@ -243,9 +274,13 @@ export interface PlaygroundInput {
     brandVoiceNotes?: string;
     /** Stage 2.6 structured BUSINESS_INFO prompt block (merchant-confirmed only). */
     businessInfoBlock?: string | null;
+    /** First merchant-confirmed phone — see EnrichedContext.merchantPhone. */
+    merchantPhone?: string;
     customerContext?: string;
     model?: string;
     defaultReplyLanguage?: string;
+    /** See GenerateReplyContext.timezone. */
+    timezone?: string;
     /** See GenerateReplyContext.messageTags. */
     messageTags?: FacebookMessageTag[];
     /** See GenerateReplyContext.ourFacebookPageId. */
@@ -273,6 +308,8 @@ export interface PlaygroundResult {
     tokensUsed: number;
     model: string | null;
     gapRecorded: boolean;
+    /** Model's date-dependence judgment — production skips cache writes when true. Surfaced for eval/playground diagnostics. */
+    dateSensitive: boolean;
 }
 
 /** Lazy-init retrieval service (only created when RAG_MODE != 'off' and OPENAI_API_KEY exists) */
@@ -396,7 +433,7 @@ export class ReplyGenerator {
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
-                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, pipeline: 'comment_reply' }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
@@ -494,7 +531,7 @@ export class ReplyGenerator {
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, suppressGreeting: context.suppressGreeting, pipeline: 'dm_reply' },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, pipeline: 'dm_reply' },
                 };
 
                 const aiResponse = await dispatchAiReply(aiRequest);
@@ -623,8 +660,8 @@ export class ReplyGenerator {
         const {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
-            replyStyle, brandVoiceNotes, businessInfoBlock, customerContext, model, defaultReplyLanguage,
-            messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
+            replyStyle, brandVoiceNotes, businessInfoBlock, merchantPhone, customerContext, model, defaultReplyLanguage,
+            timezone, messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
         } = input;
 
         const ragMode = config.ragMode || 'off';
@@ -643,6 +680,7 @@ export class ReplyGenerator {
                     chunksRetrieved: 0, chunks: [], intent: 'SPAM_OR_IRRELEVANT',
                     confidence: null, flags: [], needsAttention: false, cached: false,
                     detectedLanguage: null, tokensUsed: 0, model: null, gapRecorded: false,
+                    dateSensitive: false,
                 };
             }
             questionForAI = pre.commentForAI;
@@ -692,6 +730,7 @@ export class ReplyGenerator {
                 ...(businessInfoBlock ? { businessInfoBlock } : {}),
                 ...(mergedCustomerCtx ? { customerContext: mergedCustomerCtx } : {}),
                 ...(defaultReplyLanguage ? { defaultReplyLanguage } : {}),
+                ...(timezone ? { timezone } : {}),
                 ...(ecommerceStoreId ? { ecommerceStoreId } : {}),
                 pipeline: pipeline ?? 'playground',
             },
@@ -748,7 +787,7 @@ export class ReplyGenerator {
                 knowledgeBase,
                 defaultReplyLanguage,
             });
-            finalReply = PRICE_FALLBACK[lang];
+            finalReply = pickSafeFallback(flags.join(','), lang, merchantPhone);
         }
 
         return {
@@ -766,6 +805,7 @@ export class ReplyGenerator {
             tokensUsed: aiResponse.tokensUsed || 0,
             model: aiResponse.model || null,
             gapRecorded,
+            dateSensitive: aiResponse.dateSensitive ?? false,
         };
     }
 

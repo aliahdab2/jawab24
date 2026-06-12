@@ -46,6 +46,8 @@ export interface CommentReplyContext {
     businessInfoBlock?: string | null;
     senderName?: string;
     defaultReplyLanguage?: string;
+    /** Merchant's IANA timezone (workspace settings) — drives the "Today's date" prompt line. */
+    timezone?: string;
     /** Facebook `message_tags` array — present for Facebook comments only. Feeds the
      *  user-tag / page-tag classification in commentPreprocess.preprocessCommentText. */
     messageTags?: import('../utils/commentText').FacebookMessageTag[];

@@ -1549,3 +1549,82 @@ describe('AI Service (disabled)', () => {
     });
 });
 
+
+describe('AI Service - date-sensitive replies never cached', () => {
+    let service: AiService;
+
+    beforeEach(() => {
+        service = new AiService();
+        vi.clearAllMocks();
+        vi.mocked(db.select).mockReturnValue({
+            from: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue([]),
+            }),
+        } as any);
+    });
+
+    it('skips the exact-cache write when the worker reports dateSensitive', async () => {
+        vi.mocked(axios.post).mockResolvedValue({
+            data: {
+                reply: 'العرض ينتهي 30 يونيو 2026',
+                language: 'ar',
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+                dateSensitive: true,
+            },
+        });
+        const saveSpy = vi.spyOn(service, 'saveToCache');
+
+        const result = await service.generateReply({ comment: 'العرض لمتى؟' });
+
+        expect(result.dateSensitive).toBe(true);
+        expect(saveSpy).not.toHaveBeenCalled();
+    });
+
+    it('still writes the exact cache for timeless replies (dateSensitive false/absent)', async () => {
+        vi.mocked(axios.post).mockResolvedValue({
+            data: {
+                reply: 'موقعنا الرياض حي العليا',
+                language: 'ar',
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+                dateSensitive: false,
+            },
+        });
+        const saveSpy = vi.spyOn(service, 'saveToCache').mockResolvedValue(undefined);
+
+        const result = await service.generateReply({ comment: 'وين موقعكم؟' });
+
+        expect(result.dateSensitive).toBe(false);
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips the semantic-cache write when dateSensitive', async () => {
+        vi.mocked(axios.post).mockResolvedValue({
+            data: {
+                reply: 'التسجيل مفتوح حتى 30 يونيو 2026',
+                language: 'ar',
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+                dateSensitive: true,
+            },
+        });
+        const { semanticCacheService } = await import('../../src/services/kb/semantic-cache');
+        const semSaveSpy = vi.spyOn(semanticCacheService, 'save').mockResolvedValue(undefined);
+
+        await service.generateReply({
+            comment: 'لمتى التسجيل؟',
+            context: {
+                pageId: 'page-1',
+                kbActiveVersion: 3,
+                queryEmbedding: [0.1, 0.2],
+                channel: 'dm',
+            },
+        });
+
+        expect(semSaveSpy).not.toHaveBeenCalled();
+    });
+});

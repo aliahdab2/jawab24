@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     flagHallucinatedPrice,
+    findPastDateInReply,
     isCommentTooLong,
     stripSelfIdentification,
     validateReply,
@@ -147,5 +148,104 @@ describe('validateReply orchestration', () => {
         const out = validateReply(base({ reply: 'Hello there, happy to help', intent: 'GREETING' }), req('hi'));
         expect(out.reply).toBe('Hello there, happy to help');
         expect(out.flags).toEqual([]);
+    });
+});
+
+describe('findPastDateInReply (Check 7 — date guard)', () => {
+    // Fixed clock: 2026-06-12 noon UTC. All assertions are relative to it, so the
+    // suite never goes time-dependent.
+    const NOW = new Date('2026-06-12T12:00:00Z');
+    const past = (reply: string, tz?: string) => findPastDateInReply(reply, tz, NOW);
+
+    it('flags an Arabic month-name date in the past', () => {
+        expect(past('يبدأ التسجيل 1 فبراير 2025')).toBe(true);
+    });
+
+    it('flags an English month-name date in the past', () => {
+        expect(past('Registration opens February 1, 2025')).toBe(true);
+    });
+
+    it('flags a Levantine month-name date in the past', () => {
+        expect(past('الدورة تبدأ 5 شباط 2025')).toBe(true);
+    });
+
+    it('flags a numeric dd/mm/yyyy date in the past', () => {
+        expect(past('العرض ينتهي 31/12/2024')).toBe(true);
+    });
+
+    it('flags an ISO date in the past', () => {
+        expect(past('valid until 2025-03-01')).toBe(true);
+    });
+
+    it('flags Arabic-Indic digits in a past date', () => {
+        expect(past('ينتهي العرض ٣١/١٢/٢٠٢٤')).toBe(true);
+    });
+
+    it('does NOT flag a future date', () => {
+        expect(past('الدورة القادمة تبدأ 1 سبتمبر 2030')).toBe(false);
+        expect(past('starts September 1, 2030')).toBe(false);
+    });
+
+    it('does NOT flag a bare year (founding years, model numbers)', () => {
+        expect(past('تأسسنا عام 2015 ونخدمكم منذ ذلك الحين')).toBe(false);
+    });
+
+    it('does NOT flag month+year granularity within the current month', () => {
+        expect(past('العرض ساري خلال يونيو 2026')).toBe(false);
+    });
+
+    it('flags month+year granularity for an earlier month', () => {
+        expect(past('كان العرض في مايو 2026')).toBe(true);
+    });
+
+    it('ambiguous d/m vs m/d: not flagged when one reading is future', () => {
+        // 05/07/2026 → 5 July (future) or 7 May (past): one future reading → no flag
+        expect(past('on 05/07/2026')).toBe(false);
+    });
+
+    it('does NOT flag replies without any calendar date', () => {
+        expect(past('نعم مفتوحين السبت من 9 صباحاً حتى 5 مساءً')).toBe(false);
+        expect(past('')).toBe(false);
+    });
+});
+
+describe('validateReply — Check 7 date guard wiring', () => {
+    const base = (over: Partial<ParsedReply>): ParsedReply => ({
+        reply: 'ok', intent: 'QUESTION', confidence: 'high', hedging: false, language: 'ar', flags: [], ...over,
+    });
+    // The guard reads the real clock via validateReply; "1 فبراير 2025" stays in
+    // the past forever, so these are stable without clock mocking.
+    const STALE = 'التسجيل يبدأ 1 فبراير 2025 وينتهي 28 فبراير 2025';
+
+    it('downgrades a stale-date QUESTION reply: flags + low confidence + dateSensitive', () => {
+        const out = validateReply(base({ reply: STALE }), req('متى يبدأ التسجيل؟'));
+        expect(out.flags).toContain('stale_kb_date');
+        expect(out.flags).toContain('stale_date_in_reply');
+        expect(out.flags).toContain('info_not_in_kb');
+        expect(out.confidence).toBe('low');
+        expect(out.dateSensitive).toBe(true);
+    });
+
+    it('does not double-add stale_kb_date when the model already set it', () => {
+        const out = validateReply(base({ reply: STALE, flags: ['stale_kb_date'] }), req('متى يبدأ التسجيل؟'));
+        expect(out.flags!.filter(f => f === 'stale_kb_date')).toHaveLength(1);
+    });
+
+    it('leaves future-date replies untouched', () => {
+        const out = validateReply(base({ reply: 'الدورة القادمة تبدأ 1 سبتمبر 2030' }), req('متى الدورة؟'));
+        expect(out.flags).not.toContain('stale_date_in_reply');
+        expect(out.confidence).toBe('high');
+    });
+
+    it('is gated to question-like intents (COMPLAINT replies are not touched)', () => {
+        const out = validateReply(base({ reply: STALE, intent: 'COMPLAINT' }), req('سيء جداً'));
+        expect(out.flags).not.toContain('stale_date_in_reply');
+    });
+
+    it('maps the model JSON date_sensitive field to dateSensitive', () => {
+        const out = validateReply(base({ reply: 'العرض ينتهي 30 ديسمبر 2099', date_sensitive: true }), req('العرض شغال؟'));
+        expect(out.dateSensitive).toBe(true);
+        const out2 = validateReply(base({ reply: 'موقعنا الرياض' }), req('وين موقعكم؟'));
+        expect(out2.dateSensitive).toBe(false);
     });
 });

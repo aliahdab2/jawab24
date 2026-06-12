@@ -20,6 +20,9 @@ import {
     MAX_INPUT_TOKENS,
     buildSystemPrompt,
     buildUserPrompt,
+    formatTodayForPrompt,
+    safeTimezone,
+    todayParts,
 } from '../src/services/reply/promptBuilder';
 import { STATIC_SYSTEM_PREFIX } from '../src/services/reply/systemPrompt';
 import type { GenerateRequest } from '../src/services/reply/types';
@@ -458,5 +461,66 @@ describe('buildUserPrompt', () => {
         const out = buildUserPrompt(req('hi', { customerContext: 'Name: Noor' }));
         expect(out.startsWith('Comment:')).toBe(true);
         expect(out).not.toContain('Noor');
+    });
+});
+
+describe('buildSystemPrompt — today\'s date (rule 12 date awareness)', () => {
+    it('includes a CONTEXT date line and a trailing date line in the dynamic suffix', () => {
+        const out = suffix(req('hello'));
+        // CONTEXT block line
+        expect(out).toMatch(/- Today's date: \w+, \d{4}-\d{2}-\d{2}/);
+        // Trailing reinforcement line (last block of the system prompt)
+        expect(out).toMatch(/Today's date: \w+, \d{4}-\d{2}-\d{2} \(for safety rule 12 date checks\)\.$/);
+    });
+
+    it('never produces a 4+ newline run when KB is present (visual-separation defense)', () => {
+        const out = buildSystemPrompt(req('hi', { knowledgeBase: 'some kb text' }));
+        expect(out).not.toMatch(/\n{4,}/);
+    });
+});
+
+describe('formatTodayForPrompt / safeTimezone / todayParts', () => {
+    const NOW = new Date('2026-06-12T12:00:00Z');
+
+    it('formats as "Weekday, YYYY-MM-DD" in the given timezone', () => {
+        expect(formatTodayForPrompt('Asia/Riyadh', NOW)).toBe('Friday, 2026-06-12');
+    });
+
+    it('falls back to UTC for an invalid IANA name', () => {
+        expect(safeTimezone('Not/AZone')).toBe('UTC');
+        expect(formatTodayForPrompt('Not/AZone', NOW)).toBe('Friday, 2026-06-12');
+    });
+
+    it('falls back to UTC when timezone is absent', () => {
+        expect(safeTimezone(undefined)).toBe('UTC');
+    });
+
+    it('crosses the date line correctly for far-east timezones', () => {
+        // 23:30 UTC on the 12th is already the 13th in Tokyo
+        const late = new Date('2026-06-12T23:30:00Z');
+        expect(todayParts('Asia/Tokyo', late)).toEqual({ year: 2026, month: 6, day: 13 });
+        expect(todayParts('UTC', late)).toEqual({ year: 2026, month: 6, day: 12 });
+    });
+});
+
+describe('buildUserPrompt — digit-only engagement comments', () => {
+    it('uses the engagement-post label for an Arabic-Indic digit comment ("علق بنقطة" CTA)', () => {
+        const out = buildUserPrompt(req('٠٠٠', { postMessage: 'لمعرفة التفاصيل علق بنقطة' }));
+        expect(out).toContain('Post (engagement post — evaluate comment in context of this post):');
+    });
+
+    it('uses the engagement-post label for a Latin digit comment ("comment 1" CTA)', () => {
+        const out = buildUserPrompt(req('1', { postMessage: 'Comment 1 to get the details' }));
+        expect(out).toContain('Post (engagement post — evaluate comment in context of this post):');
+    });
+
+    it('keeps the plain Post label for comments containing letters', () => {
+        const out = buildUserPrompt(req('price 1', { postMessage: 'Comment below for prices' }));
+        expect(out).not.toContain('engagement post');
+    });
+
+    it('does NOT inject any date into the user prompt (classification stability)', () => {
+        const out = buildUserPrompt(req('متى تبدأ الدورة؟', { postMessage: 'sale!' }));
+        expect(out).not.toMatch(/Today|today's date/i);
     });
 });
