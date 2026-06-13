@@ -483,17 +483,12 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   └── TIMEOUT/ERROR → Return FALLBACK reply
 │
 ├── SAVE to caches (exact + semantic)
-│   └── SKIPPED when reply is date_sensitive (deadline/offer-validity answers
-│       flip wrong once the date passes — never cached; prompt v38)
 │
 ├── SAFETY FILTERS:
 │   ├── Intent = OFFENSIVE or SPAM? → Flag → ❌ DON'T reply → STOP
 │   ├── Flag = price_not_in_kb? → Replace with SAFE FALLBACK
 │   │   (Tier A: currency-adjacent number not in KB)
 │   │   (Tier B: price-cue phrase + nearby number not in KB)
-│   ├── Flag = stale_date_in_reply? → Replace with DATE FALLBACK (prompt v38:
-│   │   model knows today's date in merchant TZ + worker date guard (Check 7)
-│   │   deterministically catches a past calendar date relayed as the answer)
 │   ├── Confidence = low AND holdLowConfidence? → ❌ DON'T send (AI draft saved for review) → STOP
 │   ├── [Comment] Reply > 50 words? → Add `comment_too_long` flag
 │   ├── [Comment, public mode] Reply > 280 chars? → Truncate at sentence

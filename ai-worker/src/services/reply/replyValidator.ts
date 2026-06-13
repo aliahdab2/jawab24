@@ -6,7 +6,6 @@
  */
 import { detectLanguage } from '../language';
 import { getKBText, resolveLanguage, resolveChannel } from './replyContext';
-import { todayParts } from './promptBuilder';
 import type { GenerateRequest, ParsedReply, ValidatedReply } from './types';
 
 /**
@@ -52,76 +51,6 @@ export function flagHallucinatedPrice(reply: string, kbText: string): boolean {
         }
     }
 
-    return false;
-}
-
-/** Month-name → number map for the date guard. Western-Arabic, Levantine, and English names.
- *  Bare "اب" (آب without madda) is deliberately excluded — it collides with ordinary words. */
-const MONTH_NAMES: Record<string, number> = {
-    january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
-    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
-    'يناير': 1, 'فبراير': 2, 'مارس': 3, 'أبريل': 4, 'ابريل': 4, 'مايو': 5, 'يونيو': 6,
-    'يوليو': 7, 'أغسطس': 8, 'اغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'اكتوبر': 10, 'نوفمبر': 11, 'ديسمبر': 12,
-    'كانون الثاني': 1, 'شباط': 2, 'آذار': 3, 'اذار': 3, 'نيسان': 4, 'أيار': 5, 'ايار': 5,
-    'حزيران': 6, 'تموز': 7, 'آب': 8, 'أيلول': 9, 'ايلول': 9,
-    'تشرين الأول': 10, 'تشرين الاول': 10, 'تشرين الثاني': 11, 'كانون الأول': 12, 'كانون الاول': 12,
-};
-// Longest-first so "كانون الثاني" wins over a hypothetical shorter overlap.
-const MONTH_ALTERNATION = Object.keys(MONTH_NAMES).sort((a, b) => b.length - a.length).join('|');
-// Optional day before the month, the month name, optional day after, then a year.
-const NAMED_DATE_PATTERN = new RegExp(
-    `(?:(\\d{1,2})\\s+)?(${MONTH_ALTERNATION})\\s*,?\\s*(?:(\\d{1,2})\\s*,?\\s*)?(20\\d{2})`,
-    'giu',
-);
-const NUMERIC_DATE_PATTERN = /(\d{1,2})\s*[/\-.]\s*(\d{1,2})\s*[/\-.]\s*(20\d{2})/g;
-const ISO_DATE_PATTERN = /(20\d{2})-(\d{1,2})-(\d{1,2})/g;
-
-/** Compare a (year, month, day?) candidate against today. Day-less candidates use
- *  month granularity — same month is NOT past. */
-function isPast(c: { year: number; month: number; day?: number }, today: { year: number; month: number; day: number }): boolean {
-    if (c.month < 1 || c.month > 12) return false;
-    if (c.year !== today.year) return c.year < today.year;
-    if (c.month !== today.month) return c.month < today.month;
-    return c.day !== undefined && c.day >= 1 && c.day <= 31 && c.day < today.day;
-}
-
-/**
- * Check 7 — the date guard: true when the reply states an explicit calendar date
- * that is already in the past (merchant timezone). Deterministic backstop for
- * prompt rule 12, mirroring the price guard (Check 1): the prompt catches most
- * stale-date relays, but at temp 0.5 it is probabilistic (eval #422 flipped on
- * roughly half of runs). Recognized forms: "1 فبراير 2025" / "February 1, 2025"
- * (Western-Arabic, Levantine, and English month names), "31/12/2024", and ISO
- * "2024-12-31"; Arabic-Indic digits are normalized first. Bare years are ignored
- * (founding years, model numbers). Ambiguous d/m vs m/d numeric dates count as
- * past only when BOTH readings are past.
- */
-export function findPastDateInReply(reply: string, timezone?: string, now: Date = new Date()): boolean {
-    if (!reply) return false;
-    const today = todayParts(timezone, now);
-    // Arabic-Indic digits → ASCII so one set of patterns covers both scripts.
-    const text = reply.replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660));
-
-    for (const m of text.matchAll(NAMED_DATE_PATTERN)) {
-        const month = MONTH_NAMES[m[2].toLowerCase()];
-        const day = m[1] ? parseInt(m[1], 10) : (m[3] ? parseInt(m[3], 10) : undefined);
-        if (isPast({ year: parseInt(m[4], 10), month, day }, today)) return true;
-    }
-    for (const m of text.matchAll(NUMERIC_DATE_PATTERN)) {
-        const [a, b, year] = [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
-        const dmReading = { year, month: b, day: a };
-        const mdReading = { year, month: a, day: b };
-        const dmValid = b >= 1 && b <= 12 && a >= 1 && a <= 31;
-        const mdValid = a >= 1 && a <= 12 && b >= 1 && b <= 31;
-        // Ambiguous order: flag only when every valid reading is past.
-        if (dmValid || mdValid) {
-            const readings = [dmValid ? dmReading : null, mdValid ? mdReading : null].filter(Boolean) as typeof dmReading[];
-            if (readings.every(r => isPast(r, today))) return true;
-        }
-    }
-    for (const m of text.matchAll(ISO_DATE_PATTERN)) {
-        if (isPast({ year: parseInt(m[1], 10), month: parseInt(m[2], 10), day: parseInt(m[3], 10) }, today)) return true;
-    }
     return false;
 }
 
@@ -231,19 +160,6 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest): Va
         }
     }
 
-    // Check 7: Date guard — the reply states an explicit calendar date that is
-    // already past (e.g. relaying a stale KB registration window as upcoming).
-    // Runs BEFORE Check 5 so the confidence downgrade picks up info_not_in_kb
-    // there. 'stale_date_in_reply' (distinct from the model-set 'stale_kb_date')
-    // marks a guard detection: the backend swaps the reply for the date fallback
-    // via SAFE_FALLBACK_FLAGS — a reply asserting a past date as current must
-    // never reach the customer, same contract as the price guard.
-    if (reply && HEDGE_CHECK_INTENTS.has(parsed.intent || '') && findPastDateInReply(reply, request.context?.timezone)) {
-        if (!flags.includes('stale_kb_date')) flags.push('stale_kb_date');
-        flags.push('stale_date_in_reply');
-        parsed = { ...parsed, confidence: 'low' };
-    }
-
     // Check 5: Low confidence without info_not_in_kb flag.
     // Per prompt rules: confidence=low means KB didn't answer the question → flag is mandatory.
     // Only for question-type intents — complaints, greetings, etc. can be low for other reasons.
@@ -259,9 +175,5 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest): Va
     // Check 6: Self-identification — strip any sentence revealing the bot is automated.
     const finalReply = stripSelfIdentification(reply, parsed.language || request.language || 'ar');
 
-    // date_sensitive (model judgment, snake_case in the JSON contract) → dateSensitive.
-    // A stale_kb_date flag implies date-dependence even if the model forgot the boolean.
-    const dateSensitive = parsed.date_sensitive === true || flags.includes('stale_kb_date');
-
-    return { ...parsed, reply: finalReply, flags, dateSensitive };
+    return { ...parsed, reply: finalReply, flags };
 }

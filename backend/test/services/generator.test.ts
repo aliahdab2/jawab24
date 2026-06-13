@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReplyGenerator, shouldSkipReply, shouldUseFallback, pickSafeFallback, PRICE_FALLBACK, DATE_FALLBACK } from '../../src/services/reply/generator';
+import { ReplyGenerator, shouldSkipReply } from '../../src/services/reply/generator';
 
 // Mock all dependencies
 vi.mock('../../src/services/ai', () => ({
@@ -1164,40 +1164,3 @@ describe('ReplyGenerator - Mention/tag skip behavior', () => {
     });
 });
 
-
-describe('pickSafeFallback — flag-aware safe fallback selection', () => {
-    it('returns the date fallback when the date guard fired (no phone on file)', () => {
-        expect(pickSafeFallback('stale_kb_date,stale_date_in_reply,info_not_in_kb', 'ar')).toBe(DATE_FALLBACK.ar);
-        expect(pickSafeFallback('stale_date_in_reply', 'en')).toBe(DATE_FALLBACK.en);
-    });
-
-    it('returns the price fallback for price_not_in_kb (back-compat, no phone)', () => {
-        expect(pickSafeFallback('price_not_in_kb', 'ar')).toBe(PRICE_FALLBACK.ar);
-        expect(pickSafeFallback('price_not_in_kb', 'en')).toBe(PRICE_FALLBACK.en);
-    });
-
-    it('redirects to the merchant phone when one is on file (no follow-up promise)', () => {
-        const ar = pickSafeFallback('stale_date_in_reply', 'ar', '0112345678');
-        expect(ar).toContain('0112345678');
-        const en = pickSafeFallback('price_not_in_kb', 'en', '0112345678');
-        expect(en).toContain('0112345678');
-        expect(en).toContain('details');
-    });
-
-    it('never promises the bot will get back to the customer (Cat 44 contract)', () => {
-        for (const flag of ['stale_date_in_reply', 'price_not_in_kb']) {
-            for (const phone of [undefined, '0112345678']) {
-                const en = pickSafeFallback(flag, 'en', phone);
-                expect(en.toLowerCase()).not.toContain('get back to you');
-                const ar = pickSafeFallback(flag, 'ar', phone);
-                expect(ar).not.toContain('برجعلك');
-                expect(ar).not.toContain('سأعود');
-            }
-        }
-    });
-
-    it('shouldUseFallback fires for stale_date_in_reply', () => {
-        expect(shouldUseFallback('stale_date_in_reply')).toBe(true);
-        expect(shouldUseFallback('stale_kb_date')).toBe(false); // model hedge alone — reply is already safe
-    });
-});

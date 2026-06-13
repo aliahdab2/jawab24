@@ -20,43 +20,6 @@ export const MAX_INPUT_TOKENS = parseInt(process.env.MAX_INPUT_TOKENS || '24000'
 const BUSINESS_INFO_MAX_CHARS = parseInt(process.env.BUSINESS_INFO_MAX_CHARS || '1500', 10);
 
 /**
- * Format today's date for the prompt in the merchant's timezone, e.g.
- * "Thursday, 2026-06-12". Weekday enables "are you open today?" reasoning;
- * ISO date enables past/future reasoning over calendar dates in KB content.
- * Invalid/absent timezone falls back to UTC (a few hours of skew around
- * midnight is immaterial for the month-scale staleness this guards against).
- */
-/** Validate an IANA timezone name, falling back to UTC. Shared with the reply validator's date guard. */
-export function safeTimezone(timezone?: string): string {
-    if (timezone) {
-        try {
-            // Throws RangeError for invalid IANA names — probe before trusting.
-            new Intl.DateTimeFormat('en-US', { timeZone: timezone });
-            return timezone;
-        } catch {
-            // fall back to UTC
-        }
-    }
-    return 'UTC';
-}
-
-/** Today's Y/M/D in the merchant timezone. Shared with the reply validator's date guard. */
-export function todayParts(timezone?: string, now: Date = new Date()): { year: number; month: number; day: number } {
-    const tz = safeTimezone(timezone);
-    // en-CA yields ISO YYYY-MM-DD
-    const iso = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-    const [year, month, day] = iso.split('-').map(Number);
-    return { year, month, day };
-}
-
-export function formatTodayForPrompt(timezone?: string, now: Date = new Date()): string {
-    const tz = safeTimezone(timezone);
-    const isoDate = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(now);
-    return `${weekday}, ${isoDate}`;
-}
-
-/**
  * Strip known prompt-injection patterns from user-controlled text
  * before embedding into prompts. Removes fake XML/tag closings,
  * common override phrases, and system-impersonation markers.
@@ -144,7 +107,6 @@ function buildDynamicSystemSuffix(request: GenerateRequest): string {
             : 'chatting with a customer via direct message on Messenger')
         : 'replying to a customer comment on a social media post'}
 - Reply language: ${languageName} (code: ${language})
-- Today's date: ${formatTodayForPrompt(request.context?.timezone)} (use this to judge whether dates in <business_knowledge> or the post are past or upcoming — see DATE AWARENESS rule)
 
 STYLE: Be ${styleDirective}.
 ${isDM
@@ -253,18 +215,6 @@ The <product_catalog> lists the actual products/items this business sells in the
 When a customer asks "where can I buy", "give me the link", or wants to purchase — share the store URL or specific product URL from <product_catalog> if available. NEVER invent or guess URLs.`;
     }
 
-    // Today's date LAST in the system prompt — directly after the KB/catalog blocks
-    // whose dates it must be compared against, and as close to the customer message
-    // as the system prompt allows. The copy in the CONTEXT block above is not enough
-    // on its own: buried mid-prompt, the model kept relaying near-past KB dates
-    // ("Feb 2025" when today is mid-2026) as upcoming — its training prior says
-    // those are future. Do NOT move this into the user prompt: that flipped
-    // borderline intent classifications (eval #298, #324).
-    // trimEnd: the KB block template ends with blank lines — naive += would stack
-    // a 4-newline run, which the anti-visual-separation defense (sanitizeForPrompt)
-    // forbids anywhere in the final prompt.
-    prompt = `${prompt.trimEnd()}\n\nToday's date: ${formatTodayForPrompt(request.context?.timezone)} (for safety rule 12 date checks).`;
-
     return prompt;
 }
 
@@ -273,23 +223,15 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
  */
 export function buildUserPrompt(request: GenerateRequest): string {
     const label = resolveChannel(request) === 'dm' ? 'Message' : 'Comment';
-    // NOTE: deliberately NO date/context additions here. The user prompt must stay
-    // byte-identical to its long-tested shape — injecting the date next to the
-    // customer message flipped borderline intent classifications (eval #298 sarcasm,
-    // #324 digit-only engagement comment). The date lives in the system prompt only;
-    // see the end of buildDynamicSystemSuffix.
     let prompt = `${label}:\n<customer_message>${request.comment}</customer_message>`;
 
     if (request.context?.postMessage) {
         const safePost = sanitizeForPrompt(request.context.postMessage).replace(/"/g, "'").slice(0, 500);
-        // When a letterless comment (punctuation, emoji, or digits-only like "٠٠٠"/"1")
-        // arrives with a post, the pipeline already determined it's worth replying (the
-        // post may be an engagement CTA — "علق بنقطة"/"comment 1 for details"). Signal
-        // this to the AI so it evaluates in context rather than defaulting to
-        // SPAM_OR_IRRELEVANT. Digits are included deliberately: digit-bump CTAs are
-        // common, and without the label these sit on the spam borderline (eval #324).
+        // When a punctuation/emoji-only comment arrives with a post, the pipeline already
+        // determined it's worth replying (the post may be an engagement CTA). Signal this
+        // to the AI so it evaluates in context rather than defaulting to SPAM_OR_IRRELEVANT.
         const commentOnly = request.comment.trim();
-        const isPunctuationOnly = /^[^\p{L}]+$/u.test(commentOnly) && commentOnly.length > 0;
+        const isPunctuationOnly = /^[^\p{L}\p{N}]+$/u.test(commentOnly) && commentOnly.length > 0;
         const postLabel = isPunctuationOnly
             ? `Post (engagement post — evaluate comment in context of this post): "${safePost}"`
             : `Post: "${safePost}"`;
