@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { FlagTag, ReplySourceBadge, InfoPopover } from '@/components/ui';
-import { isInfoGapFlag } from '@/utils/flagReason';
+import { isKbRelatedFlag } from '@/utils/flagReason';
 import {
   Clock,
   AlertTriangle,
@@ -133,13 +133,13 @@ export const MessageCard = React.memo(function MessageCard({
         {/* Row 1b: Status badge */}
         {statusBadge}
 
-        {/* Flag tag (if any) — info-gap flags get a hint explaining what to do */}
+        {/* Flag tag (if any) — KB-gap flags get a hint explaining what to do */}
         {conv.lastMessage.flagReason && (
           <div className="flex items-center gap-1">
             <FlagTag flagReason={conv.lastMessage.flagReason} flagMeta={conv.lastMessage.flagMeta} />
-            {isInfoGapFlag(conv.lastMessage.flagReason) && (
+            {isKbRelatedFlag(conv.lastMessage.flagReason) && (
               <InfoPopover label={tc('info')} panelWidth="sm">
-                <p className="leading-snug">{t('infoGapHint')}</p>
+                <p className="leading-snug">{t('kbGapHint')}</p>
               </InfoPopover>
             )}
           </div>

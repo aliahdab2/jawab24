@@ -5,12 +5,24 @@
  * into user-facing labels using the flagReason i18n namespace.
  */
 
-/** Flags that indicate the reply failed due to missing Business Info */
-const KB_FLAGS = new Set(['info_not_in_kb', 'price_not_in_kb', 'phone_not_in_kb']);
+import { KB_GAP_FLAGS } from '@jawab24/shared';
+
+/** KB-gap flags (info/price/phone) — the reply failed due to missing Business
+ *  Info. Sourced from @jawab24/shared so backend capture and frontend display
+ *  stay in lockstep (single source of truth). */
+const KB_FLAGS = new Set<string>(KB_GAP_FLAGS);
+
+/** Split a comma-separated flag_reason into trimmed, non-empty flag keys. */
+function parseFlags(flagReason: string | null | undefined): string[] {
+    if (!flagReason) return [];
+    return flagReason.split(',').map(f => f.trim()).filter(Boolean);
+}
 
 /**
- * Returns true when the primary flag on a comment/message is KB-related,
- * meaning the user should be guided to add info to Business Info.
+ * True when the *primary* (displayed) flag is KB-related — gate UI tied to the
+ * badge (the "Add to Business Info" CTA, the badge hint popover). For a
+ * position-agnostic check (e.g. is there a gap anywhere in the thread), use
+ * {@link isKbGapFlag} instead.
  */
 export function isKbRelatedFlag(flagReason: string | null | undefined): boolean {
     return KB_FLAGS.has(getPrimaryFlag(flagReason) ?? '');
@@ -50,8 +62,7 @@ export function getFlagTagStyle(flagKey: string): FlagTagStyle {
  * Urgent flags take priority over non-urgent ones.
  */
 export function getPrimaryFlag(flagReason: string | null | undefined): string | null {
-    if (!flagReason) return null;
-    const flags = flagReason.split(',').map(f => f.trim()).filter(Boolean);
+    const flags = parseFlags(flagReason);
     if (flags.length === 0) return null;
     // Prefer urgent flags
     return flags.find(f => URGENT_FLAGS.has(f)) || flags[0];
@@ -64,33 +75,46 @@ export function getPrimaryFlag(flagReason: string | null | undefined): string | 
 export interface FlagMetaShape {
     sla_no_reply?: { minutes: number };
     dm_failed?: { bucket?: string };
+    // KB-gap flags carry the customer question the AI couldn't answer.
     info_not_in_kb?: { question?: string };
+    price_not_in_kb?: { question?: string };
+    phone_not_in_kb?: { question?: string };
     [key: string]: Record<string, unknown> | undefined;
 }
 
-/** True when the row carries an `info_not_in_kb` flag (the AI couldn't answer
- *  from the knowledge base). One of possibly several comma-separated reasons. */
-export function isInfoGapFlag(flagReason: string | null | undefined): boolean {
-    if (!flagReason) return false;
-    return flagReason.split(',').map(f => f.trim()).includes('info_not_in_kb');
+/**
+ * True when the row carries any KB-gap flag (info/price/phone) anywhere in its
+ * comma-separated reasons — i.e. the AI couldn't answer from the knowledge base.
+ *
+ * Membership check (any position). Contrast with {@link isKbRelatedFlag}, which
+ * only tests the *primary* (displayed) flag: use isKbRelatedFlag to gate UI tied
+ * to the badge (CTA, badge hint), and isKbGapFlag to detect a gap regardless of
+ * which flag won the badge (e.g. finding the flagged message in a thread).
+ */
+export function isKbGapFlag(flagReason: string | null | undefined): boolean {
+    return parseFlags(flagReason).some(f => KB_FLAGS.has(f));
 }
 
 /**
- * Extract the customer question captured for an `info_not_in_kb` flag, so the
- * inbox can show the merchant exactly what to add to Business Info.
+ * Extract the customer question captured for a KB-gap flag (info/price/phone),
+ * so the inbox can show the merchant exactly what to add to Business Info.
  *
- * Returns the trimmed question when the row carries an info-gap flag with
- * captured question text, otherwise null. Rows flagged before the question was
- * captured (no flag_meta) return null — hosts fall back to the flagged
- * message's own text.
+ * Returns the trimmed question from the first KB-gap flag that carries one,
+ * otherwise null. Rows flagged before the question was captured (no flag_meta)
+ * return null — hosts fall back to the flagged message's own text.
  */
-export function getInfoGapQuestion(
+export function getKbGapQuestion(
     flagReason: string | null | undefined,
     flagMeta: FlagMetaShape | null | undefined,
 ): string | null {
-    if (!isInfoGapFlag(flagReason)) return null;
-    const question = flagMeta?.info_not_in_kb?.question?.trim();
-    return question || null;
+    if (!flagMeta) return null;
+    for (const flag of parseFlags(flagReason)) {
+        if (!KB_FLAGS.has(flag)) continue;
+        const meta = flagMeta[flag] as { question?: string } | undefined;
+        const question = meta?.question?.trim();
+        if (question) return question;
+    }
+    return null;
 }
 
 /**

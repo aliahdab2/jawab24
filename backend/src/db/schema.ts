@@ -326,7 +326,8 @@ export const comments = pgTable('comments', {
     flagReason: varchar('flag_reason', { length: 255 }),
     // Structured params/debug info for flag_reason keys that carry data
     // (e.g. { dm_failed: { bucket, code, fbMessage } }, { sla_no_reply: { minutes } },
-    // { info_not_in_kb: { question } } — the customer question that wasn't in the KB).
+    // and KB-gap flags { info_not_in_kb | price_not_in_kb | phone_not_in_kb: { question } }
+    // — the customer question that wasn't in the KB).
     // Plain keys like angry_customer / low_confidence leave this NULL.
     flagMeta: jsonb('flag_meta'),
     aiIntent: varchar('ai_intent', { length: 50 }),

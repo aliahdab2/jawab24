@@ -1,7 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { FlagTag, PlatformIcon, ReplySourceBadge, InfoPopover } from '@/components/ui';
-import { isInfoGapFlag } from '@/utils/flagReason';
+import { isKbRelatedFlag } from '@/utils/flagReason';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { renderMessageText } from '@/utils/renderMessageText';
@@ -198,9 +198,9 @@ export const CommentCard = React.memo(function CommentCard({
                 {comment.flagReason ? (
                   <div className="flex items-center gap-1 mt-0.5">
                     <FlagTag flagReason={comment.flagReason} flagMeta={comment.flagMeta} />
-                    {isInfoGapFlag(comment.flagReason) && (
+                    {isKbRelatedFlag(comment.flagReason) && (
                       <InfoPopover label={tc('info')} panelWidth="sm">
-                        <p className="leading-snug">{t('infoGapHint')}</p>
+                        <p className="leading-snug">{t('kbGapHint')}</p>
                       </InfoPopover>
                     )}
                   </div>
