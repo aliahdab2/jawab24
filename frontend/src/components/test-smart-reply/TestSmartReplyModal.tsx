@@ -10,6 +10,7 @@ import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { pagesApi } from '@/lib/api';
 import { iosOr } from '@/lib/iosCopy';
 import { captureError } from '@/lib/sentryHelpers';
+import { classifyTestReplyError } from '@/lib/testReplyErrors';
 import type { Page } from '@jawab24/shared';
 
 interface TestMessage {
@@ -114,10 +115,10 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
       };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err) {
-      const axiosErr = err as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.status === 429) {
+      const kind = classifyTestReplyError(err);
+      if (kind === 'rateLimit') {
         setError(t('rateLimit'));
-      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'AI_QUOTA_EXCEEDED') {
+      } else if (kind === 'quota') {
         setError(t(iosOr('quotaExceededIOS', 'quotaExceeded')));
       } else {
         setError(t('error'));

@@ -18,6 +18,7 @@ import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { PickPageStep } from './PickPageStep';
 import { ReviewInfoStep } from './ReviewInfoStep';
+import { TryReplyStep } from './TryReplyStep';
 import { SUGGESTION_CHIPS, type ChipId, type TFunction } from './onboardingTypes';
 
 interface OnboardingWizardProps {
@@ -61,6 +62,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     prices: '', hours: '', location: '', services: '', delivery: '', other: '',
   });
   const [activeChip, setActiveChip] = useState<ChipId | null>(null);
+  const [hasTriedReply, setHasTriedReply] = useState(false);
 
   // Reusable hooks
   const isLandscape = useLandscape();
@@ -173,7 +175,10 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     setChipData(prev => ({ ...prev, [chipId]: content }));
   }, []);
 
-  const handleComplete = async () => {
+  // Persist the page's Business Info (existing KB + chip additions). Called both
+  // when entering the "Try a reply" step (test-reply reads the STORED KB) and on
+  // finish. The PUT is idempotent, so running it on both transitions is safe.
+  const persistKnowledgeBase = useCallback(async () => {
     // Build final KB: existing content + chip additions
     let finalKb = knowledgeBase.trim();
 
@@ -197,27 +202,39 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         setSaving(false);
       }
     }
+  }, [knowledgeBase, chipData, selectedPageId, t]);
+
+  const handleComplete = async () => {
+    await persistKnowledgeBase();
     onComplete();
   };
 
   const selectedPage = pages.find(p => p.id === selectedPageId) || null;
   const hasEnabledPage = pages.some(p => p.autoReplyEnabled);
 
-  const totalSteps = 2;
+  // Step indices: 0 = pick page, 1 = review info, 2 = try a reply
+  const REVIEW_STEP = 1;
+  const TRY_STEP = 2;
+  const totalSteps = 3;
   const isLastStep = currentStep === totalSteps - 1;
   const isFirstStep = currentStep === 0;
 
   const canProceed = () => {
     if (currentStep === 0) return hasEnabledPage; // Must enable at least one page
-    return true; // Review step - always can proceed
+    return true; // Review + Try steps — always can proceed (trying is optional)
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (isLastStep) {
       handleComplete();
-    } else {
-      setCurrentStep(currentStep + 1);
+      return;
     }
+    // Entering the Try step: persist Business Info first so test-reply reads the
+    // latest stored KB (the test-reply request body carries no KB field).
+    if (currentStep === REVIEW_STEP) {
+      await persistKnowledgeBase();
+    }
+    setCurrentStep(currentStep + 1);
   };
 
   const handlePrev = () => {
@@ -273,7 +290,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               pageLimit={pageLimit}
             />
           )}
-          {currentStep === 1 && (
+          {currentStep === REVIEW_STEP && (
             <ReviewInfoStep
               selectedPage={selectedPage}
               knowledgeBase={knowledgeBase}
@@ -288,6 +305,15 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               t={t}
             />
           )}
+          {currentStep === TRY_STEP && (
+            <TryReplyStep
+              pageId={selectedPageId}
+              hasKnowledgeBase={Boolean(knowledgeBase.trim())}
+              isLandscape={isLandscape}
+              t={t}
+              onReplyShown={() => setHasTriedReply(true)}
+            />
+          )}
         </div>
 
         {/* Footer with progress and buttons */}
@@ -299,7 +325,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
 
           {/* Progress dots */}
           <div className="flex gap-2 justify-center mb-3">
-            {[0, 1].map((index) => (
+            {Array.from({ length: totalSteps }, (_, i) => i).map((index) => (
               <div
                 key={index}
                 className={`h-2 rounded-full transition-all ${
@@ -336,7 +362,9 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
               loading={saving}
               className={`flex-1 ${isFirstStep ? 'w-full' : ''}`}
             >
-              {isLastStep ? t('onboarding.letsGo') : t('onboarding.next')}
+              {isLastStep
+                ? (hasTriedReply ? t('onboarding.tryEnableOnPage') : t('onboarding.letsGo'))
+                : t('onboarding.next')}
               {!isLastStep && (
                 <>
                   <span className="rtl:inline ltr:hidden"><ArrowLeft className={isLandscape ? 'w-4 h-4' : 'w-5 h-5'} /></span>
