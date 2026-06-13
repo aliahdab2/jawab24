@@ -96,8 +96,8 @@ describe('NotificationService', () => {
         it('should have kb_gap template with correct placeholders', () => {
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('kb_gap');
             const template = NOTIFICATION_TEMPLATES.kb_gap;
-            expect(template.titles.en).toBe('Knowledge Base Gap Detected');
-            expect(template.titles.ar).toBe('فجوة في قاعدة المعرفة');
+            expect(template.titles.en).toBe('Business Info Gap Detected');
+            expect(template.titles.ar).toBe('فجوة في معلومات نشاطك التجاري');
             expect(template.bodies.en).toContain('{pageName}');
             expect(template.bodies.en).toContain('{topic}');
             expect(template.bodies.ar).toContain('{pageName}');
