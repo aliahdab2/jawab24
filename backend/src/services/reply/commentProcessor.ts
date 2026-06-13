@@ -19,6 +19,7 @@ import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
 import { leadExtractorService } from '../leadExtractor';
+import { recordActivationEvent } from '../activation';
 import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
 import {
     isTransientFbError,
@@ -817,6 +818,10 @@ export class CommentProcessor {
             replyText,
             senderName: fromName ?? null,
         });
+
+        // Activation funnel: this page just sent an automated reply. Idempotent —
+        // only the first send per user is recorded (unique user_id+event index).
+        void recordActivationEvent(userId, 'first_autoreply_sent', { pageId, channel: 'comment', replyMethod });
 
         // Defensive auto-pause: any successful send resets the failure streak.
         // Cheap (UPDATE guarded by counter > 0 inside the helper).

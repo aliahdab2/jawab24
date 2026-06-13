@@ -1,0 +1,151 @@
+import { sql } from 'drizzle-orm';
+import {
+    ACTIVATION_FUNNEL_STEPS,
+    type ActivationEvent,
+    type ActivationFunnel,
+} from '@jawab24/shared';
+import { db } from '../db';
+import { activationEvents } from '../db/schema';
+import { captureError } from '../utils/sentryHelpers';
+
+/**
+ * Activation funnel instrumentation — lightweight, internal product analytics.
+ *
+ * We track five milestones per user as they move from signup to their first
+ * automated reply. Each milestone is recorded at most once per user (a unique
+ * (user_id, event) index + onConflictDoNothing — see schema.ts), so:
+ *   - 'first_autoreply_sent' is idempotent for free (fires only the first time),
+ *   - the funnel query can count each user once per step without DISTINCT, and
+ *   - re-emitting on a later login / re-sync is a harmless no-op.
+ *
+ * No external analytics service — this is a single Postgres table.
+ */
+
+// ActivationEvent + funnel response types live in @jawab24/shared (single source
+// of truth shared with the frontend panel) — imported above.
+
+/** A KB only counts as "filled" once it carries real content, not a stray character. */
+export const KB_FILLED_MIN_CHARS = 80;
+
+/**
+ * Record an activation milestone for a user. Fire-and-forget: never blocks or
+ * throws into the caller's path (mirrors the aiMetrics emit pattern). Idempotent
+ * via the unique (user_id, event) index — the first emit wins, its metadata is
+ * preserved, later emits are silent no-ops.
+ *
+ * NOTE (hot path): `first_autoreply_sent` is emitted from the reply pipeline on
+ * EVERY successful send, so for an already-activated user this issues a full
+ * INSERT … ON CONFLICT DO NOTHING that is then discarded — a per-reply write
+ * proportional to reply volume, not to activating-user count. It is the cheapest
+ * class of Postgres write (a 2-column unique-index probe) and runs off the
+ * critical path, so it ships as-is. FOLLOW-UP if reply volume makes it matter:
+ * gate the INSERT behind a small in-process LRU of already-activated userIds,
+ * keeping the unique index as the correctness backstop.
+ *
+ * Returns the in-flight promise so tests can await it; production callers
+ * intentionally do not await.
+ */
+export async function recordActivationEvent(
+    userId: string,
+    event: ActivationEvent,
+    metadata: Record<string, unknown> = {},
+): Promise<void> {
+    // async + try/catch (not a bare .catch) so even a SYNCHRONOUS throw from the
+    // query builder — e.g. a mocked `db` in unit tests — is contained and never
+    // escapes into the caller's request path.
+    try {
+        await db
+            .insert(activationEvents)
+            .values({ userId, event, metadata })
+            .onConflictDoNothing();
+    } catch (err) {
+        captureError(err, 'Failed to record activation event', {
+            tags: { context: 'activation' },
+            extra: { userId, event },
+        });
+    }
+}
+
+interface FunnelRow {
+    signup: number;
+    page_connected: number;
+    kb_filled: number;
+    autoreply_enabled: number;
+    first_autoreply_sent: number;
+    median_hours_to_first_reply: string | null;
+}
+
+/**
+ * Compute the activation funnel for users who signed up within the last `days`.
+ *
+ * Cohort = users with a 'signup' event in the window. For each later milestone
+ * we count how many of those users reached it (pivoted in one pass), and we take
+ * the median hours from signup to first auto-reply over those who got there.
+ *
+ * Attribution is per-USER (the page owner — page.userId, which equals the syncing
+ * user and the signup user for solo merchants, the dominant case). This matches the
+ * brief ("where new users drop off"). KNOWN LIMITATION: in a multi-member workspace,
+ * if one teammate connects/edits a page owned (page.userId) by another, the steps
+ * attribute to different user_ids and a cohort user can show a later step without an
+ * earlier one. The panel renders that case honestly (gain badge, clamped bar). If
+ * the metric must answer "where MERCHANTS drop off", re-key all five emits on the
+ * workspace owner instead.
+ *
+ * Note: counts are "reached this step", not strictly monotonic — a user can send
+ * a template auto-reply without ever filling a KB, so a later step may exceed an
+ * earlier one. The panel reports drop-off honestly against the previous step.
+ */
+export async function getActivationFunnel(days: number): Promise<ActivationFunnel> {
+    const rows = await db.execute(sql`
+        WITH cohort AS (
+            SELECT user_id, MIN(created_at) AS signup_at
+            FROM ${activationEvents}
+            WHERE ${activationEvents.event} = 'signup'
+              AND ${activationEvents.createdAt} >= now() - make_interval(days => ${days})
+            GROUP BY user_id
+        ),
+        per_user AS (
+            SELECT
+                c.user_id,
+                c.signup_at,
+                MAX(CASE WHEN e.event = 'page_connected'       THEN 1 ELSE 0 END) AS connected,
+                MAX(CASE WHEN e.event = 'kb_filled'            THEN 1 ELSE 0 END) AS kb,
+                MAX(CASE WHEN e.event = 'autoreply_enabled'    THEN 1 ELSE 0 END) AS enabled,
+                MAX(CASE WHEN e.event = 'first_autoreply_sent' THEN 1 ELSE 0 END) AS replied,
+                MIN(CASE WHEN e.event = 'first_autoreply_sent' THEN e.created_at END) AS first_reply_at
+            FROM cohort c
+            LEFT JOIN ${activationEvents} e ON e.user_id = c.user_id
+            GROUP BY c.user_id, c.signup_at
+        )
+        SELECT
+            COUNT(*)::int                              AS signup,
+            COALESCE(SUM(connected), 0)::int           AS page_connected,
+            COALESCE(SUM(kb), 0)::int                  AS kb_filled,
+            COALESCE(SUM(enabled), 0)::int             AS autoreply_enabled,
+            COALESCE(SUM(replied), 0)::int             AS first_autoreply_sent,
+            ROUND(
+                (percentile_cont(0.5) WITHIN GROUP (
+                    ORDER BY EXTRACT(EPOCH FROM (first_reply_at - signup_at)) / 3600.0
+                ) FILTER (WHERE first_reply_at IS NOT NULL))::numeric,
+                2
+            )                                          AS median_hours_to_first_reply
+        FROM per_user
+    `);
+
+    const row = rows[0] as unknown as FunnelRow | undefined;
+    const counts: Record<ActivationEvent, number> = {
+        signup: Number(row?.signup ?? 0),
+        page_connected: Number(row?.page_connected ?? 0),
+        kb_filled: Number(row?.kb_filled ?? 0),
+        autoreply_enabled: Number(row?.autoreply_enabled ?? 0),
+        first_autoreply_sent: Number(row?.first_autoreply_sent ?? 0),
+    };
+
+    const median = row?.median_hours_to_first_reply;
+    return {
+        days,
+        steps: ACTIVATION_FUNNEL_STEPS.map((key) => ({ key, count: counts[key] })),
+        medianHoursToFirstReply:
+            median === null || median === undefined ? null : Number(median),
+    };
+}

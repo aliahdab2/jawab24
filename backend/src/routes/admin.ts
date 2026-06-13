@@ -164,6 +164,24 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             adminController.listAuditLogs,
         );
 
+        adminProtected.get(
+            '/activation-funnel',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Activation funnel (signup → first auto-reply) for the signup cohort in the window',
+                    security: auth,
+                    querystring: {
+                        type: 'object',
+                        properties: {
+                            days: { type: 'integer', minimum: 1, maximum: 365, default: 30 },
+                        },
+                    },
+                },
+            },
+            adminController.getActivationFunnel,
+        );
+
         // ============================================
         // AI Playground — Admin-only reply testing
         // ============================================

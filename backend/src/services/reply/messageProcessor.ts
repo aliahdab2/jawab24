@@ -33,6 +33,7 @@ import {
     classifyDmError,
 } from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
+import { recordActivationEvent } from '../activation';
 import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
 import { extractPostId } from '../../utils/instagram';
 
@@ -771,6 +772,10 @@ export class MessageProcessor {
                 message: outgoingMessage,
                 senderName: senderName ?? null,
             });
+
+            // Activation funnel: this page just sent an automated reply. Idempotent —
+            // only the first send per user is recorded (unique user_id+event index).
+            void recordActivationEvent(userId, 'first_autoreply_sent', { pageId: page.id, channel: 'message', replyMethod });
             // SSE: update usage counter if AI reply
             if (replyMethod === 'ai') {
                 publishSSEEvent(userId, 'usage:updated', { aiRepliesUsed: -1 });

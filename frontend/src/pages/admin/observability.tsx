@@ -6,6 +6,7 @@ import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, ConfirmationModal, Modal } from '@/components/ui';
 import { analyticsApi, adminApi } from '@/lib/api';
 import type { AiUsageReport, AnalyticsOverview, SystemHealthReport, CacheStats } from '@/lib/api';
+import type { ActivationFunnel, ActivationEvent } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
@@ -24,6 +25,7 @@ import {
   Trash2,
   Mail,
   Play,
+  Filter,
 } from 'lucide-react';
 
 function StatCard({ icon: Icon, label, value, sub }: {
@@ -73,6 +75,84 @@ function BreakdownTable({ title, data }: { title: string; data: Record<string, n
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function funnelStepLabel(key: ActivationEvent, t: ReturnType<typeof useTranslations<'admin'>>): string {
+  switch (key) {
+    case 'signup': return t('observability.funnelSignup');
+    case 'page_connected': return t('observability.funnelPageConnected');
+    case 'kb_filled': return t('observability.funnelKbFilled');
+    case 'autoreply_enabled': return t('observability.funnelAutoreplyEnabled');
+    case 'first_autoreply_sent': return t('observability.funnelFirstReply');
+    // Exhaustiveness guard: a new ActivationEvent must add a label here (compile error).
+    default: { const _exhaustive: never = key; return _exhaustive; }
+  }
+}
+
+function formatHoursToReply(hours: number | null, t: ReturnType<typeof useTranslations<'admin'>>): string {
+  if (hours == null) return '—';
+  if (hours >= 48) return t('observability.funnelDays', { value: Math.round((hours / 24) * 10) / 10 });
+  return t('observability.funnelHours', { value: Math.round(hours * 10) / 10 });
+}
+
+/**
+ * Activation funnel: signup → page connected → KB filled → auto-reply enabled →
+ * first auto-reply sent. Bar width is relative to the signup cohort. Counts are
+ * "reached this step" and are NOT guaranteed monotonic — a user can send a
+ * template auto-reply without ever filling a KB — so a later step may exceed an
+ * earlier one. The transition badge reports a drop-off, a gain, or no change
+ * honestly, and the bar/conversion are clamped to 100% of the baseline.
+ */
+function FunnelPanel({ funnel, t }: { funnel: ActivationFunnel; t: ReturnType<typeof useTranslations<'admin'>> }) {
+  const baseline = funnel.steps[0]?.count ?? 0;
+  return (
+    <div className="space-y-1.5">
+      {funnel.steps.map((step, i) => {
+        const prev = i > 0 ? funnel.steps[i - 1].count : null;
+        // Positive = lost users vs previous step, negative = gained, null = first step.
+        const deltaPct = prev && prev > 0 ? Math.round(((prev - step.count) / prev) * 100) : null;
+        const widthPct = baseline > 0 ? Math.min((step.count / baseline) * 100, 100) : 0;
+        const conversionPct = baseline > 0 ? Math.min(Math.round((step.count / baseline) * 100), 100) : 0;
+        return (
+          <div key={step.key}>
+            {deltaPct != null && (
+              <div className="flex items-center justify-end py-0.5">
+                <span
+                  className={clsx(
+                    'text-[10px] font-medium px-1.5 py-0.5 rounded-full',
+                    deltaPct > 0 ? 'status-warning' : deltaPct < 0 ? 'status-info' : 'status-success',
+                  )}
+                >
+                  {deltaPct > 0
+                    ? t('observability.funnelDropoff', { pct: deltaPct })
+                    : deltaPct < 0
+                      ? t('observability.funnelGain', { pct: -deltaPct })
+                      : t('observability.funnelNoDropoff')}
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground w-32 shrink-0 truncate" title={funnelStepLabel(step.key, t)}>
+                {funnelStepLabel(step.key, t)}
+              </span>
+              <div className="flex-1 h-6 bg-muted rounded-md overflow-hidden">
+                <div
+                  className="h-full bg-brand-500 dark:bg-brand-400 rounded-md transition-all"
+                  style={{ width: `${Math.max(widthPct, 2)}%` }}
+                />
+              </div>
+              {/* % and count sit on the card background (not the brand fill) so they
+                  always meet WCAG AA contrast — the fill carries no text. */}
+              <span className="text-xs text-muted-foreground w-10 text-end shrink-0 tabular-nums">{conversionPct}%</span>
+              <span className="text-sm font-bold text-foreground w-12 text-end shrink-0 tabular-nums">
+                {step.count.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -144,6 +224,14 @@ export default function AdminObservabilityPage() {
   });
 
   const isLoading = aiLoading || overviewLoading;
+
+  const { data: funnel } = useQuery<ActivationFunnel>({
+    queryKey: ['admin', 'activation-funnel', days],
+    queryFn: () => adminApi.getActivationFunnel(days),
+    staleTime: 60_000,
+    retry: false,
+    meta: { onError: (err: unknown) => captureError(err, 'Failed to load activation funnel', { tags: { page: 'observability' } }) },
+  });
 
   const { data: cacheStats, refetch: refetchCache } = useQuery<CacheStats>({
     queryKey: ['admin', 'cache-stats'],
@@ -246,6 +334,33 @@ export default function AdminObservabilityPage() {
           <div className="text-center py-12 text-muted-foreground">{t('observability.loading')}</div>
         ) : (
           <>
+            {/* Activation Funnel Section */}
+            {funnel && (
+              <section>
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                  {t('observability.activationFunnel')}
+                </h2>
+                <Card className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="icon-bg-brand p-2 rounded-lg">
+                        <Filter className="w-4 h-4" aria-hidden="true" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{t('observability.activationFunnelTitle')}</p>
+                        <p className="text-xs text-muted-foreground">{t('observability.activationFunnelSubtitle', { days: funnel.days })}</p>
+                      </div>
+                    </div>
+                    <div className="text-end">
+                      <p className="text-xs text-muted-foreground">{t('observability.funnelMedianTimeToReply')}</p>
+                      <p className="text-lg font-bold text-foreground">{formatHoursToReply(funnel.medianHoursToFirstReply, t)}</p>
+                    </div>
+                  </div>
+                  <FunnelPanel funnel={funnel} t={t} />
+                </Card>
+              </section>
+            )}
+
             {/* AI Cost Section */}
             <section>
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">

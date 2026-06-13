@@ -46,6 +46,25 @@ export const otpCodes = pgTable('otp_codes', {
     phoneIdx: index('otp_codes_phone_idx').on(table.phone),
 }));
 
+// Activation funnel events — lightweight, internal product analytics (NO external service).
+// One row per (user, milestone). The unique (user_id, event) index combined with
+// onConflictDoNothing in services/activation.ts makes every emit idempotent: the FIRST
+// time a user reaches a step wins, later emits are silent no-ops. That gives us
+// "first_autoreply_sent fires once per user" for free, and lets the funnel query count
+// each user once per step without DISTINCT gymnastics. See services/activation.ts.
+export const activationEvents = pgTable('activation_events', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    // 'signup' | 'page_connected' | 'kb_filled' | 'autoreply_enabled' | 'first_autoreply_sent'
+    // (enforced in TS via the ActivationEvent union in services/activation.ts).
+    event: text('event').notNull(),
+    metadata: jsonb('metadata').default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+    userEventUnique: uniqueIndex('activation_events_user_event_idx').on(table.userId, table.event),
+    createdAtIdx: index('activation_events_created_at_idx').on(table.createdAt),
+}));
+
 // ============================================
 // WORKSPACE / TEAM TABLES
 // ============================================

@@ -12,6 +12,7 @@ import crypto from 'crypto';
 import { encryptFbToken, decryptFbToken } from './facebookCrypto';
 import type { User, JWTPayload, AuthResponse } from '../types';
 import { subscriptionsService } from './subscriptions';
+import { recordActivationEvent } from './activation';
 import { captureError } from '../utils/sentryHelpers';
 // Secure JWT-like implementation using HMAC
 const ALGORITHM = 'sha256';
@@ -110,6 +111,14 @@ export class AuthService {
             .returning();
 
         const newUser = newUsers[0];
+
+        // Activation funnel: brand-new account (this is the create branch). Skip the
+        // seeded demo account so it doesn't sit permanently stuck-at-signup, inflating
+        // the cohort denominator (demo pages are seeded via direct inserts, never
+        // through the connect/KB/enable controllers, so it can never progress).
+        if (facebookId !== config.demo.userFacebookId) {
+            void recordActivationEvent(newUser.id, 'signup', { method: 'facebook' });
+        }
 
         // Create subscription for new user (with free trial)
         await this.createSubscriptionForNewUser(newUser.id);
@@ -281,14 +290,22 @@ export class AuthService {
     async findOrCreateUserByPhone(phone: string, name?: string): Promise<User> {
         // Upsert: atomic insert-or-ignore on the unique phone column.
         // ON CONFLICT DO NOTHING avoids a race window between SELECT and INSERT.
-        await db
+        // .returning() yields a row only when an INSERT actually happened, so a
+        // non-empty result means this is a brand-new account (not a returning login).
+        const inserted = await db
             .insert(users)
             .values({ phone, phoneVerified: true, name: name ?? null })
-            .onConflictDoNothing();
+            .onConflictDoNothing()
+            .returning({ id: users.id });
 
         // Now the row is guaranteed to exist — fetch it.
         const rows = await db.select().from(users).where(eq(users.phone, phone));
         const user = rows[0];
+
+        // Activation funnel: only the first creation, not every subsequent OTP login.
+        if (inserted.length > 0) {
+            void recordActivationEvent(user.id, 'signup', { method: 'phone' });
+        }
 
         await this.ensureSubscription(user.id);
         await this.provisionUserWorkspace(user.id, user.name || name || 'My Workspace', null, phone);
