@@ -40,7 +40,7 @@ describe('SetupChecklistCard', () => {
     // Completed step is NOT a link (just a done row)
     expect(screen.queryByRole('link', { name: 'Connect your page' })).not.toBeInTheDocument();
     // Incomplete steps are actionable links pointing at the right routes
-    expect(screen.getByRole('link', { name: 'Add your business info' })).toHaveAttribute('href', '/pages?openKb=true');
+    expect(screen.getByRole('link', { name: 'Add your Business Info' })).toHaveAttribute('href', '/pages?openKb=true');
     expect(screen.getByRole('link', { name: 'Turn on auto-reply' })).toHaveAttribute('href', '/settings');
     expect(screen.getByRole('link', { name: 'See your first reply' })).toHaveAttribute('href', '/comments');
   });
@@ -62,7 +62,7 @@ describe('SetupChecklistCard', () => {
     const shortKb = makePage({ knowledgeBase: 'x'.repeat(79), autoReplyEnabled: true });
     render(<SetupChecklistCard pages={[shortKb]} usage={makeUsage(0)} />);
     // KB step still incomplete (79 < 80) → rendered as a link
-    expect(screen.getByRole('link', { name: 'Add your business info' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Add your Business Info' })).toBeInTheDocument();
   });
 
   it('can be dismissed, persisting to localStorage', () => {
@@ -87,7 +87,7 @@ describe('SetupChecklistCard', () => {
     render(<SetupChecklistCard pages={[makePage({ isConnected: false, knowledgeBase: LONG_KB, autoReplyEnabled: true, repliesCount: 5 })]} usage={makeUsage(0)} />);
     expect(screen.getByText('Finish your setup (0/4)')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Connect your page' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Add your business info' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Add your Business Info' })).toBeInTheDocument();
   });
 
   it('marks the KB step done when ANY connected page has filled business info', () => {
@@ -96,7 +96,7 @@ describe('SetupChecklistCard', () => {
     const empty = makePage({ id: 'p2', knowledgeBase: null });
     render(<SetupChecklistCard pages={[filled, empty]} usage={makeUsage(0)} />);
     expect(screen.getByText('Finish your setup (2/4)')).toBeInTheDocument(); // connect + kb
-    expect(screen.queryByRole('link', { name: 'Add your business info' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Add your Business Info' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Turn on auto-reply' })).toBeInTheDocument();
   });
 });

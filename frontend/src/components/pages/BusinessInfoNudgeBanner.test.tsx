@@ -6,7 +6,7 @@ import { BusinessInfoNudgeBanner } from './BusinessInfoNudgeBanner';
 describe('BusinessInfoNudgeBanner', () => {
   it('renders the nudge text and an accessible CTA', () => {
     render(<BusinessInfoNudgeBanner onAdd={vi.fn()} />);
-    expect(screen.getByText('Add your business info so replies get more accurate')).toBeInTheDocument();
+    expect(screen.getByText('Add your Business Info so replies get more accurate')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add now' })).toBeInTheDocument();
   });
 
