@@ -610,7 +610,9 @@ test.describe('Dashboard Page', () => {
     await expect(banner).toBeVisible({ timeout: 15000 });
 
     // Click the dismiss button (desktop X)
-    const dismissButton = page.getByRole('button', { name: /dismiss/i });
+    // Target the SmartStatusBanner's dismiss specifically — the setup-checklist
+    // card adds its own bare "Dismiss" button, so /dismiss/i is now ambiguous.
+    const dismissButton = page.getByRole('button', { name: t('dashboard.smartBanner.dismissLabel') });
     await dismissButton.click();
 
     // Banner should disappear
@@ -633,7 +635,9 @@ test.describe('Dashboard Page', () => {
     ).toBeVisible({ timeout: 15000 });
 
     // Dismiss the banner
-    const dismissButton = page.getByRole('button', { name: /dismiss/i });
+    // Target the SmartStatusBanner's dismiss specifically — the setup-checklist
+    // card adds its own bare "Dismiss" button, so /dismiss/i is now ambiguous.
+    const dismissButton = page.getByRole('button', { name: t('dashboard.smartBanner.dismissLabel') });
     await dismissButton.click();
     await expect(page.getByText(/items need your attention/i)).not.toBeVisible({ timeout: 5000 });
 

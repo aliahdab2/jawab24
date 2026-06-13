@@ -142,7 +142,10 @@ test.describe('Knowledge Base Modal', () => {
     await expect(page.getByText('My Business Page').first()).toBeVisible({ timeout: 15000 });
 
     // Click the KB button to open the modal
-    const kbButton = page.getByText(t('kb.title')).first();
+    // Open via the page's KB CTA button (role-based) — not loose text. A text
+    // locator collides with the business-info nudge banner's copy ("Add your
+    // business info…"), which is a non-interactive <p>; the button can't.
+    const kbButton = page.getByRole('button', { name: t('pages.addBusinessInfo') });
     await kbButton.click();
 
     // Modal should be visible with title
@@ -157,7 +160,10 @@ test.describe('Knowledge Base Modal', () => {
 
     await expect(page.getByText('My Business Page').first()).toBeVisible({ timeout: 15000 });
 
-    const kbButton = page.getByText(t('kb.title')).first();
+    // Open via the page's KB CTA button (role-based) — not loose text. A text
+    // locator collides with the business-info nudge banner's copy ("Add your
+    // business info…"), which is a non-interactive <p>; the button can't.
+    const kbButton = page.getByRole('button', { name: t('pages.addBusinessInfo') });
     await kbButton.click();
 
     // Save button should be visible
@@ -172,7 +178,10 @@ test.describe('Knowledge Base Modal', () => {
 
     await expect(page.getByText('My Business Page').first()).toBeVisible({ timeout: 15000 });
 
-    const kbButton = page.getByText(t('kb.title')).first();
+    // Open via the page's KB CTA button (role-based) — not loose text. A text
+    // locator collides with the business-info nudge banner's copy ("Add your
+    // business info…"), which is a non-interactive <p>; the button can't.
+    const kbButton = page.getByRole('button', { name: t('pages.addBusinessInfo') });
     await kbButton.click();
 
     // Should show section labels from KB content
@@ -186,7 +195,10 @@ test.describe('Knowledge Base Modal', () => {
 
     await expect(page.getByText('My Business Page').first()).toBeVisible({ timeout: 15000 });
 
-    const kbButton = page.getByText(t('kb.title')).first();
+    // Open via the page's KB CTA button (role-based) — not loose text. A text
+    // locator collides with the business-info nudge banner's copy ("Add your
+    // business info…"), which is a non-interactive <p>; the button can't.
+    const kbButton = page.getByRole('button', { name: t('pages.addBusinessInfo') });
     await kbButton.click();
 
     // Click "Show Raw Text" toggle
@@ -210,7 +222,10 @@ test.describe('Knowledge Base Modal', () => {
 
     await expect(page.getByText('My Business Page').first()).toBeVisible({ timeout: 15000 });
 
-    const kbButton = page.getByText(t('kb.title')).first();
+    // Open via the page's KB CTA button (role-based) — not loose text. A text
+    // locator collides with the business-info nudge banner's copy ("Add your
+    // business info…"), which is a non-interactive <p>; the button can't.
+    const kbButton = page.getByRole('button', { name: t('pages.addBusinessInfo') });
     await kbButton.click();
 
     await expect(page.getByText(t('kb.addCustomSection'))).toBeVisible({ timeout: 5000 });
@@ -222,7 +237,10 @@ test.describe('Knowledge Base Modal', () => {
 
     await expect(page.getByText('My Business Page').first()).toBeVisible({ timeout: 15000 });
 
-    const kbButton = page.getByText(t('kb.title')).first();
+    // Open via the page's KB CTA button (role-based) — not loose text. A text
+    // locator collides with the business-info nudge banner's copy ("Add your
+    // business info…"), which is a non-interactive <p>; the button can't.
+    const kbButton = page.getByRole('button', { name: t('pages.addBusinessInfo') });
     await kbButton.click();
 
     // Modal should be open
@@ -242,7 +260,10 @@ test.describe('Knowledge Base Modal', () => {
 
     await expect(page.getByText('My Business Page').first()).toBeVisible({ timeout: 15000 });
 
-    const kbButton = page.getByText(t('kb.title')).first();
+    // Open via the page's KB CTA button (role-based) — not loose text. A text
+    // locator collides with the business-info nudge banner's copy ("Add your
+    // business info…"), which is a non-interactive <p>; the button can't.
+    const kbButton = page.getByRole('button', { name: t('pages.addBusinessInfo') });
     await kbButton.click();
 
     // Click save
