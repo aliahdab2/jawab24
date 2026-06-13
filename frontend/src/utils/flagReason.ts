@@ -64,7 +64,33 @@ export function getPrimaryFlag(flagReason: string | null | undefined): string | 
 export interface FlagMetaShape {
     sla_no_reply?: { minutes: number };
     dm_failed?: { bucket?: string };
+    info_not_in_kb?: { question?: string };
     [key: string]: Record<string, unknown> | undefined;
+}
+
+/** True when the row carries an `info_not_in_kb` flag (the AI couldn't answer
+ *  from the knowledge base). One of possibly several comma-separated reasons. */
+export function isInfoGapFlag(flagReason: string | null | undefined): boolean {
+    if (!flagReason) return false;
+    return flagReason.split(',').map(f => f.trim()).includes('info_not_in_kb');
+}
+
+/**
+ * Extract the customer question captured for an `info_not_in_kb` flag, so the
+ * inbox can show the merchant exactly what to add to Business Info.
+ *
+ * Returns the trimmed question when the row carries an info-gap flag with
+ * captured question text, otherwise null. Rows flagged before the question was
+ * captured (no flag_meta) return null — hosts fall back to the flagged
+ * message's own text.
+ */
+export function getInfoGapQuestion(
+    flagReason: string | null | undefined,
+    flagMeta: FlagMetaShape | null | undefined,
+): string | null {
+    if (!isInfoGapFlag(flagReason)) return null;
+    const question = flagMeta?.info_not_in_kb?.question?.trim();
+    return question || null;
 }
 
 /**

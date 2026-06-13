@@ -468,8 +468,11 @@ export class CommentProcessor {
             generatorContext.ourFacebookPageId = platform === 'facebook' ? platformPageId : undefined;
 
             const commentReplyMode = (userSettings.commentReplyMode as 'public' | 'private' | 'dual') || 'public';
-            let { replyText: generatedText, replyMethod, needsAttention, flagReason, aiIntent, confidence } =
+            const generated =
                 await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false, commentReplyMode);
+            // Only generatedText is reassigned below (fallback/truncation); the rest are const.
+            let generatedText = generated.replyText;
+            const { replyMethod, needsAttention, flagReason, flagMeta, aiIntent, confidence } = generated;
 
             // Capture the original AI-generated reply before any modifications (fallback, truncation, CTA)
             const aiOriginalReply = replyMethod === 'ai' ? (generatedText ?? undefined) : undefined;
@@ -602,7 +605,7 @@ export class CommentProcessor {
                 userSettings: userSettings as unknown as Record<string, unknown>,
                 postMessage: content.message || undefined,
                 contentId: content.id,
-                needsAttention, flagReason, aiIntent, aiOriginalReply,
+                needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
                 confidence,
             });
 
@@ -721,6 +724,7 @@ export class CommentProcessor {
         contentId: string;
         needsAttention?: boolean;
         flagReason?: string;
+        flagMeta?: import('@jawab24/shared').FlagMeta | null;
         aiIntent?: string;
         aiOriginalReply?: string;
         confidence?: string;
@@ -730,7 +734,7 @@ export class CommentProcessor {
             adapter, platform, pipeline, pageId, userId, workspaceId,
             comment, replyText, replyMethod, commentMessage,
             platformCommentId, platformPageId, accessToken, fromId, fromName, userSettings,
-            contentId, needsAttention, flagReason, aiIntent, aiOriginalReply,
+            contentId, needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
             confidence, triggerKeyword,
         } = opts;
 
@@ -809,6 +813,7 @@ export class CommentProcessor {
             flagReason,
             aiIntent,
             aiOriginalReply,
+            flagMeta,
         );
 
         publishSSEEvent(userId, 'comment:reply_sent', {

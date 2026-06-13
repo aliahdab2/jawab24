@@ -13,7 +13,7 @@ export { default as flagReasonAr } from './i18n/ar/flagReason.json';
 /**
  * Structured parameters/debug info attached to a flag_reason. Keyed by the
  * reason code so multi-flag rows (comma-separated flag_reason) can carry
- * per-reason data. Rows with only plain keys (info_not_in_kb, angry_customer,
+ * per-reason data. Rows with only plain keys (angry_customer, low_confidence,
  * etc.) leave flag_meta NULL.
  *
  * Example: flag_reason = "dm_failed,low_confidence",
@@ -28,6 +28,16 @@ export interface FlagMeta {
     };
     sla_no_reply?: {
         minutes: number;
+    };
+    info_not_in_kb?: {
+        /**
+         * The customer's message/question the AI couldn't answer from the
+         * knowledge base. Captured at flag time so the inbox can show the
+         * merchant exactly what to add to Business Info — the conversation
+         * may have moved on (e.g. a later "تمام"), so the flagged message
+         * text can't be reconstructed from the latest message alone.
+         */
+        question: string;
     };
     // Open-ended: future flags can add their own namespaced meta here.
     [key: string]: Record<string, unknown> | undefined;

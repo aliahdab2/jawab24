@@ -39,6 +39,8 @@
   "needsAttentionDesc": "Comments that require action.",
   "openComment": "Open comment from {name}",
   "addToBusinessInfo": "Add to Business Info",
+  "infoGapLabel": "Customer asked",
+  "infoGapHint": "This wasn't in your Business Info. Open the chat to add the answer so replies cover it next time.",
   "overview": "Overview of your activity",
   "totalComments": "Total Comments",
   "totalCommentsDesc": "All received comments",

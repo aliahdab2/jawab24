@@ -381,7 +381,7 @@ describe('Reply Service', () => {
                 'angry_customer', // flagReason
                 'COMPLAINT', // aiIntent
                 'We apologize for the inconvenience.', // aiOriginalReply (captured for AI replies)
-                undefined, // flagMeta (plain keys like angry_customer carry no structured params)
+                null, // flagMeta (plain keys like angry_customer carry no structured params)
             );
         });
 

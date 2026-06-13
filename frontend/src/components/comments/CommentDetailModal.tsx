@@ -18,6 +18,7 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
 import { getCommentExternalUrl } from '@/utils/pageUrl';
+import { isInfoGapFlag, getInfoGapQuestion } from '@/utils/flagReason';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import {
   Sparkles,
@@ -390,11 +391,16 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
         {/* Footer — always visible above keyboard */}
         <div className="px-4 pt-4 md:px-6 md:pt-4 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
-          {/* Needs attention banner */}
+          {/* Needs attention banner — for an info gap, the comment text IS the
+              unanswered question (fallback when no question was captured). */}
           {needsAttention && (
             <NeedsAttentionBanner
               flagReason={comment.flagReason}
               flagMeta={comment.flagMeta}
+              infoGapQuestion={
+                getInfoGapQuestion(comment.flagReason, comment.flagMeta)
+                ?? (isInfoGapFlag(comment.flagReason) ? comment.message?.trim() || null : null)
+              }
               onAddToKb={comment.pageId ? () => setKbOpen(true) : undefined}
             />
           )}

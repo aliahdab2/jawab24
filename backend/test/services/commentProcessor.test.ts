@@ -179,6 +179,7 @@ describe('CommentProcessor', () => {
         expect(adapter.sendReply).toHaveBeenCalled();
         expect(adapter.markAsReplied).toHaveBeenCalledWith(
             'comment-uuid', 'Thank you!', 'ai', 'en', false, undefined, undefined, 'Thank you!',
+            undefined, // flagMeta — none for this happy-path reply
         );
         expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.success']).toBe(1);
     });
