@@ -42,5 +42,19 @@
   "chipServicesPlaceholder": "e.g. Boys & girls education, grades K–12\nEnglish courses, private tutoring",
   "chipDeliveryPlaceholder": "e.g. Free delivery in Jeddah\n30 SAR for other cities",
   "chipOtherPlaceholder": "Write anything else Jawab should know...",
-  "voiceHint": "Tap a topic below and type or use the mic to add details."
+  "voiceHint": "Tap a topic below and type or use the mic to add details.",
+  "tryTitle": "Try a reply",
+  "tryDesc": "Send a test message and see how Jawab replies — instantly.",
+  "trySampleQuestion": "How much is delivery?",
+  "tryQuestionLabel": "Your test message",
+  "tryButton": "Try",
+  "tryThinking": "Thinking…",
+  "tryPlaceholderHint": "Your reply will appear here.",
+  "tryReplyBadge": "Replied in seconds",
+  "tryError": "Couldn't generate a reply. Please try again.",
+  "tryRateLimit": "Too many tries. Please wait a moment and try again.",
+  "tryQuotaExceeded": "You've reached your monthly smart reply limit. Upgrade your plan for more.",
+  "tryQuotaExceededIOS": "You've reached your monthly smart reply limit. It resets at the start of your next billing cycle.",
+  "tryEmptyKbHint": "Tip: add your business info above to get more accurate replies.",
+  "tryEnableOnPage": "Great, enable it on my page"
 }
