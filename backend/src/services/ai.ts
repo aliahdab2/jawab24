@@ -76,13 +76,6 @@ interface WorkerGenerateResponse {
     intent?: string;
     confidence?: string;
     flags?: string[];
-    /**
-     * Model's judgment that the reply's correctness depends on today's date
-     * (deadline, offer validity, "open now"). Gates the cache writes below —
-     * a correct date-dependent reply flips wrong when the date passes, well
-     * within the 30-day exact-cache TTL.
-     */
-    dateSensitive?: boolean;
     tokensUsed?: number;
     tokensIn?: number;
     /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at the model's cached rate — see aiPricing.ts). */
@@ -514,18 +507,11 @@ export class AiService {
                 throw new AiUnavailableError('ai-worker returned fallback_reply flag');
             }
 
-            // Date-sensitive replies are never cached: "the offer runs until June 30"
-            // is correct today and wrong on July 1, while the cache key (KB version,
-            // post, style, model, prompt version) is date-blind and the TTL is 30 days.
-            // Skipping the write (rather than date-bucketing the key) keeps the key
-            // byte-stable for the overwhelmingly timeless majority of traffic.
-            const dateSensitive = response.data.dateSensitive === true;
-
             // Save to exact cache (scoped by KB version + post context + model).
             // All models cache to their own bucket now — no more skip-when-non-default.
             // Eval pipeline never writes to cache (see `bypassAllCaches` above).
             const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
-            if (!bypassAllCaches && !dateSensitive) {
+            if (!bypassAllCaches) {
                 await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
             }
 
@@ -541,7 +527,7 @@ export class AiService {
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
             // Model is stored in metadata so check-time can filter to same-model entries.
             // Eval pipeline never writes (see `bypassAllCaches` above).
-            if (!bypassAllCaches && !dateSensitive && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+            if (!bypassAllCaches && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,
@@ -569,7 +555,6 @@ export class AiService {
                 intent: response.data.intent,
                 confidence: response.data.confidence,
                 flags: response.data.flags,
-                dateSensitive,
                 tokensUsed: response.data.tokensUsed,
             };
         } catch (error) {
@@ -656,7 +641,6 @@ export class AiService {
                         intent: failoverResponse.data.intent,
                         confidence: failoverResponse.data.confidence,
                         flags: failoverFlags,
-                        dateSensitive: failoverResponse.data.dateSensitive === true,
                         tokensUsed: failoverResponse.data.tokensUsed,
                     };
                 } catch (failoverError) {

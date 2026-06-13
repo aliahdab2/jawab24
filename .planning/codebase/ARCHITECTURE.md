@@ -304,12 +304,8 @@ Each service is independently deployable but shares:
      `src/services/reply/` module (see below).
    - `reply/` — reply-pipeline internals extracted from `openai.ts`:
      `systemPrompt.ts` (static cached prefix), `promptBuilder.ts` (system/user
-     prompt construction, incl. the "Today's date" line in merchant timezone
-     powering prompt rule 12 stale-date awareness), `replyValidator.ts`
-     (7 post-reply safety checks as pure, unit-tested functions — Check 7 is
-     the date guard: deterministic backstop that catches an already-past
-     calendar date relayed as the answer, mirroring the Check 1 price guard),
-     `replyContext.ts` (shared `getKBText` /
+     prompt construction), `replyValidator.ts` (6 post-reply safety checks as
+     pure, unit-tested functions), `replyContext.ts` (shared `getKBText` /
      `resolveLanguage` / `resolveChannel`), `types.ts` (request/response contract,
      re-exported by `openai.ts` for backward compatibility).
    - `anthropic.ts` — Anthropic Claude integration (alternative provider)

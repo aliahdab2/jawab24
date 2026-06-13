@@ -3,7 +3,7 @@ import { messagesService } from '../messages';
 import { conversationsService } from '../conversations';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
-import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, pickSafeFallback, resolveFallbackLanguage } from './generator';
+import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
 import { detectLanguageCode } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
@@ -546,7 +546,6 @@ export class MessageProcessor {
                         businessInfoBlock,
                         ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
                         defaultReplyLanguage: userSettings.defaultReplyLanguage,
-                        timezone: userSettings.timezone,
                         suppressGreeting: !!greetingPrefix,
                     },
                     userSettings.aiEnabled ?? false,
@@ -563,7 +562,7 @@ export class MessageProcessor {
                     knowledgeBase,
                     defaultReplyLanguage: userSettings.defaultReplyLanguage,
                 });
-                replyText = pickSafeFallback(flagReason, lang, enriched.merchantPhone);
+                replyText = PRICE_FALLBACK[lang];
             }
 
             // 12c. Skip reply — silent for spam/tags, flagged for offensive content

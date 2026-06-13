@@ -48,8 +48,6 @@ interface AiWorkerToolResponse {
     intent?: string;
     confidence?: string;
     flags?: string[];
-    /** See AiGenerateResponse.dateSensitive — passthrough only; this path never writes the reply caches. */
-    dateSensitive?: boolean;
 }
 
 const MAX_TOOL_CALLS_PER_ROUND = 3;
@@ -171,7 +169,6 @@ export async function generateReplyWithTools(
                 intent: data.intent,
                 confidence: data.confidence,
                 flags: data.flags,
-                dateSensitive: data.dateSensitive === true,
                 tokensUsed: totalTokens,
             };
         }
@@ -219,11 +216,6 @@ export async function generateReplyWithTools(
                     },
                     toolResults: lastToolResults,
                     originalToolCalls: validToolCalls,
-                    // Across ALL rounds, not just this one — order-lifecycle dates
-                    // (placed/shipped on a past date) are legitimate; the worker's
-                    // date guard must stay off for the whole loop once an order
-                    // lookup happened (worker only sees the current round otherwise).
-                    priorOrderLookup: allToolResults.some(r => r.tool_name === 'lookup_order'),
                 },
                 {
                     timeout: TOOL_LOOP_TIMEOUT_MS,
@@ -262,7 +254,6 @@ export async function generateReplyWithTools(
                 intent: roundData.intent,
                 confidence: roundData.confidence,
                 flags: roundData.flags,
-                dateSensitive: roundData.dateSensitive === true,
                 tokensUsed: totalTokens,
                 ...(productCards.length ? { productCards } : {}),
             };

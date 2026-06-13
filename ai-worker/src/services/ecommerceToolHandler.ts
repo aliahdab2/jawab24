@@ -16,7 +16,6 @@ import { withAiMetrics } from '../lib/aiMetrics';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { openaiService, type GenerateRequest, type GenerateResponse } from './openai';
-import { findPastDateInReply } from './reply/replyValidator';
 import type { EcommerceToolResult } from '@jawab24/shared';
 
 // --- Singleton OpenAI client (reuses config, avoids per-request instantiation) ---
@@ -48,39 +47,6 @@ export interface ToolEnabledResponse {
     intent?: string;
     confidence?: string;
     flags?: string[];
-    /** See GenerateResponse.dateSensitive — model's date-dependence judgment, mapped from `date_sensitive`. */
-    dateSensitive?: boolean;
-}
-
-/** Same question-like intent gate as replyValidator Check 7. */
-const DATE_GUARD_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
-
-/**
- * Date guard for the e-commerce tool path — mirrors replyValidator Check 7,
- * which this path bypasses (it parses JSON manually; validateReply never runs).
- * Critical for Shopify/Salla pages: store KBs/posts carry offer end-dates and
- * launch dates that go stale like any other KB content.
- *
- * Skipped when an order lookup is involved anywhere in the tool loop: order
- * lifecycle dates ("placed June 1", "shipped 05/06") are legitimate past dates
- * from live tool data, not stale KB content.
- */
-export function applyToolPathDateGuard<T extends { reply?: string; intent?: string; confidence?: string; flags?: string[] }>(
-    parsed: T,
-    request: GenerateRequest,
-    orderLookupInvolved: boolean,
-): T {
-    const reply = parsed.reply || '';
-    if (!reply || orderLookupInvolved || !DATE_GUARD_INTENTS.has(parsed.intent || '')) {
-        return parsed;
-    }
-    if (!findPastDateInReply(reply, request.context?.timezone)) {
-        return parsed;
-    }
-    const flags = [...(parsed.flags || [])];
-    if (!flags.includes('stale_kb_date')) flags.push('stale_kb_date');
-    if (!flags.includes('stale_date_in_reply')) flags.push('stale_date_in_reply');
-    return { ...parsed, flags, confidence: 'low' };
 }
 
 // --- OpenAI Tool Definitions (5 tools: 3 Phase-1 + 2 Phase-2) ---
@@ -310,9 +276,6 @@ export async function generateWithToolResults(
     request: GenerateRequest,
     toolResults: EcommerceToolResult[],
     originalToolCalls: Array<{ name: string; arguments: Record<string, string> }>,
-    /** True when ANY round of this tool loop ran lookup_order (backend tracks
-     *  across rounds) — disables the date guard; see applyToolPathDateGuard. */
-    priorOrderLookup: boolean = false,
 ): Promise<GenerateResponse> {
     const client = getOpenAIClient();
     if (!client) {
@@ -400,17 +363,12 @@ export async function generateWithToolResults(
         const content = choice?.message?.content?.trim() || '';
         const detectedLanguage = request.language || 'en';
 
-        let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; date_sensitive?: boolean };
+        let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] };
         try {
             parsed = JSON.parse(content);
         } catch {
             parsed = { reply: content, intent: 'QUESTION', confidence: 'medium', flags: ['invalid_json'] };
         }
-
-        const orderLookupInvolved = priorOrderLookup
-            || originalToolCalls.some(tc => tc.name === 'lookup_order')
-            || toolResults.some(r => r.tool_name === 'lookup_order');
-        parsed = applyToolPathDateGuard(parsed, request, orderLookupInvolved);
 
         return {
             reply: parsed.reply || 'Thank you for your patience!',
@@ -423,7 +381,6 @@ export async function generateWithToolResults(
             intent: parsed.intent,
             confidence: parsed.confidence,
             flags: parsed.flags,
-            dateSensitive: parsed.date_sensitive === true || (parsed.flags || []).includes('stale_kb_date'),
         };
     } catch (error) {
         Sentry.captureException(error instanceof Error ? error : new Error('OpenAI tool results error'), {
@@ -450,15 +407,12 @@ function parseDirectReply(
     request: GenerateRequest,
     completion: OpenAI.ChatCompletion,
 ): ToolEnabledResponse {
-    let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; date_sensitive?: boolean };
+    let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] };
     try {
         parsed = JSON.parse(content);
     } catch {
         parsed = { reply: content, intent: 'QUESTION', confidence: 'medium', flags: [] };
     }
-
-    // No tools ran on this path — any past date in the reply came from KB/post.
-    parsed = applyToolPathDateGuard(parsed, request, false);
 
     return {
         reply: parsed.reply || content,
@@ -471,6 +425,5 @@ function parseDirectReply(
         intent: parsed.intent,
         confidence: parsed.confidence,
         flags: parsed.flags,
-        dateSensitive: parsed.date_sensitive === true || (parsed.flags || []).includes('stale_kb_date'),
     };
 }

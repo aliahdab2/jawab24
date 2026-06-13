@@ -1769,7 +1769,7 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         expect(rf.type).toBe('json_schema');
         expect(rf.json_schema.name).toBe('ai_reply');
         expect(rf.json_schema.strict).toBe(true);
-        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags', 'hedging', 'date_sensitive', 'language']);
+        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags', 'hedging', 'language']);
         expect(rf.json_schema.schema.properties.intent.enum).toEqual([
             'QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
             'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT',
