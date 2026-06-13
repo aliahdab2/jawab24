@@ -54,6 +54,16 @@
   "kbNudgeLater": "Later",
   "kbNudgeEcomTitle": "Complete your business profile",
   "kbNudgeEcomBody": "Your store products are synced! Add business hours, location, and FAQs for even better replies.",
+  "setupChecklist": {
+    "titleWithProgress": "Finish your setup ({done}/{total})",
+    "subtitle": "A few quick steps to start getting smart replies",
+    "stepConnect": "Connect your page",
+    "stepKb": "Add your business info",
+    "stepEnable": "Turn on auto-reply",
+    "stepFirstReply": "See your first reply",
+    "done": "Done",
+    "dismiss": "Dismiss"
+  },
   "recentMessages": "Recent Messages",
   "noMessagesYet": "No recent messages. Messages will appear here once your pages receive DMs.",
   "commandCenter": {

@@ -10,6 +10,14 @@ export type ActivationEvent =
     | 'autoreply_enabled'
     | 'first_autoreply_sent';
 
+/**
+ * Minimum knowledge-base length (trimmed chars) for a page to count as having
+ * its business info "filled". Single source of truth shared by the backend
+ * activation funnel (`kb_filled` emit) and the frontend dashboard checklist /
+ * KB nudge — they MUST agree, so the threshold lives here.
+ */
+export const KB_FILLED_MIN_CHARS = 80;
+
 /** Ordered funnel steps — the sequence rendered signup → first reply. */
 export const ACTIVATION_FUNNEL_STEPS: readonly ActivationEvent[] = [
     'signup',

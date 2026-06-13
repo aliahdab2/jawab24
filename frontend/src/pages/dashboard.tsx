@@ -28,9 +28,10 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
-import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, AiUsageWarningBanner, type NeedsAttentionItem } from '@/components/dashboard';
+import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, AiUsageWarningBanner, SetupChecklistCard, type NeedsAttentionItem } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
 import { getPageExternalUrl } from '@/utils/pageUrl';
+import { isKbFilled } from '@/utils/kb';
 import { formatRelativeTime } from '@/utils/dateUtils';
 import type { NextPageWithLayout } from './_app';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
@@ -572,6 +573,10 @@ const DashboardPage: NextPageWithLayout = () => {
         />
       )}
 
+      {/* Activation checklist — "Finish your setup". Hides itself once complete or dismissed.
+          Gated on pages having loaded so we don't flash a 0/4 state during fetch. */}
+      {!pagesLoading && <SetupChecklistCard pages={pages} usage={usage ?? null} />}
+
       {/* Command Center — consolidated metrics */}
       <CommandCenter
         smartReplies={analytics?.byMethod?.ai ?? statsData.aiReplies}
@@ -882,11 +887,13 @@ const DashboardPage: NextPageWithLayout = () => {
             const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled);
             if (activePages.length === 0) return null;
 
-            const allKbFilled = activePages.every(p => (p.knowledgeBase || '').length >= 100);
+            // Use the shared KB-filled rule (>= KB_FILLED_MIN_CHARS, trimmed) so this
+            // nudge and the SetupChecklistCard above it never disagree on the same screen.
+            const allKbFilled = activePages.every(isKbFilled);
             if (allKbFilled) return null;
 
             const hasEcommerce = activePages.some(p => !!p.ecommerceStoreId);
-            const hasThinKb = activePages.some(p => (p.knowledgeBase || '').length < 100);
+            const hasThinKb = activePages.some(p => !isKbFilled(p));
             if (!hasThinKb) return null;
 
             const isEcomVariant = hasEcommerce;
