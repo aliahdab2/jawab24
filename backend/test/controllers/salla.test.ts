@@ -37,6 +37,7 @@ vi.mock('../../src/services/customerNotifications', () => ({
 
 // --- Mocked shared ecommerce service ---
 const mockGetStoreByDomain = vi.fn();
+const mockGetStoreByMerchantId = vi.fn();
 const mockGetStoreByWorkspace = vi.fn();
 const mockGetStoreByWorkspaceAny = vi.fn();
 const mockCreateStore = vi.fn().mockResolvedValue({ id: 'store-1', storeDomain: 'my-salla-store.salla.sa' });
@@ -49,6 +50,7 @@ const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-salla-123');
 
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreByDomain: (...args: any[]) => mockGetStoreByDomain(...args),
+    getStoreByMerchantId: (...args: any[]) => mockGetStoreByMerchantId(...args),
     getStoreByWorkspace: (...args: any[]) => mockGetStoreByWorkspace(...args),
     getStoreByWorkspaceAny: (...args: any[]) => mockGetStoreByWorkspaceAny(...args),
     createStore: (...args: any[]) => mockCreateStore(...args),
@@ -574,8 +576,9 @@ describe('Salla Controller', () => {
             expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'salla');
         });
 
-        it('should deactivate store on app.uninstalled event', async () => {
+        it('should deactivate store on app.uninstalled event (by resolved storeDomain, not merchant id)', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1', storeDomain: 'my-salla-store.salla.sa' });
             const body = { event: 'app.uninstalled', merchant: 12345 };
             const req = mockRequest({
                 headers: { 'x-salla-signature': 'valid_hmac' },
@@ -586,8 +589,54 @@ describe('Salla Controller', () => {
 
             await webhookHandler(req, rep);
 
-            expect(mockDeactivateStore).toHaveBeenCalledWith('salla', '12345');
+            // Must deactivate by the RESOLVED store's domain — not String(merchant),
+            // which never matches the storeDomain column (S1 regression).
+            expect(mockDeactivateStore).toHaveBeenCalledWith('salla', 'my-salla-store.salla.sa');
             expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        // --- S1 regression: Salla webhooks send the numeric `merchant` id, persisted in
+        // platformData.merchantId — NOT the storeDomain. So getStoreByDomain(merchant)
+        // misses and the merchantId fallback must catch it. Without the fallback EVERY
+        // Salla webhook no-ops in prod (incl. app.uninstalled → tokens never revoked).
+        // Mirrors the Zid controller's resolveStore() + its regression test. ---
+        it('should resolve the store via the merchantId fallback when domain lookup misses (product event)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue(null);                  // numeric merchant ≠ storeDomain
+            mockGetStoreByMerchantId.mockResolvedValue({ id: 'store-9', storeDomain: 'real-store.salla.sa' });
+            const body = { event: 'product.created', merchant: 2108580704 };
+            const req = mockRequest({
+                headers: { 'x-salla-signature': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+            await new Promise(r => setTimeout(r, 10));
+
+            expect(mockGetStoreByMerchantId).toHaveBeenCalledWith('salla', '2108580704');
+            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-9', 'salla');
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should deactivate via the merchantId fallback on app.uninstalled when domain lookup misses', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue(null);
+            mockGetStoreByMerchantId.mockResolvedValue({ id: 'store-9', storeDomain: 'real-store.salla.sa' });
+            const body = { event: 'app.uninstalled', merchant: 2108580704 };
+            const req = mockRequest({
+                headers: { 'x-salla-signature': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockGetStoreByMerchantId).toHaveBeenCalledWith('salla', '2108580704');
+            expect(mockDeactivateStore).toHaveBeenCalledWith('salla', 'real-store.salla.sa');
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 

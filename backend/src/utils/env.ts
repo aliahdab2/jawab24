@@ -54,6 +54,11 @@ const EnvSchema = z.object({
     SHOPIFY_API_SECRET: z.string().optional(),
     SHOPIFY_HOST_NAME: z.string().optional(),
     SHOPIFY_TOKEN_ENCRYPTION_KEY: z.string().min(32, 'SHOPIFY_TOKEN_ENCRYPTION_KEY must be at least 32 characters').optional(),
+    // Shared e-commerce token-at-rest key. ecommerceCrypto.ts reads
+    // ECOMMERCE_TOKEN_ENCRYPTION_KEY first, falling back to SHOPIFY_TOKEN_ENCRYPTION_KEY,
+    // so Salla/Zid/Shopify tokens all encrypt under whichever is set. Read from
+    // process.env directly there; declared here so the prod guard below can see it.
+    ECOMMERCE_TOKEN_ENCRYPTION_KEY: z.string().min(32, 'ECOMMERCE_TOKEN_ENCRYPTION_KEY must be at least 32 characters').optional(),
 
     // Salla (optional — required for Salla integration)
     SALLA_CLIENT_ID: z.string().optional(),
@@ -131,6 +136,37 @@ const EnvSchema = z.object({
     {
         message: 'FACEBOOK_TOKEN_ENCRYPTION_KEY must be set in production — stored page/user tokens are encrypted at rest and unreadable without it',
         path: ['FACEBOOK_TOKEN_ENCRYPTION_KEY'],
+    },
+).refine(
+    // Salla/Zid/Shopify access+refresh tokens are AES-256-GCM encrypted at rest via
+    // ecommerceCrypto.ts, which reads ECOMMERCE_TOKEN_ENCRYPTION_KEY (falling back to
+    // SHOPIFY_TOKEN_ENCRYPTION_KEY). Without either, the server boots fine but throws on
+    // the first store connect/sync/token-refresh — a silent prod outage. Fail fast at
+    // startup whenever any e-commerce integration is configured. (The Facebook guard
+    // above covers a different key/path; this is the e-commerce equivalent.)
+    data => data.NODE_ENV !== 'production'
+        || !(data.SHOPIFY_API_KEY || data.SALLA_CLIENT_ID || data.ZID_CLIENT_ID)
+        || !!data.ECOMMERCE_TOKEN_ENCRYPTION_KEY || !!data.SHOPIFY_TOKEN_ENCRYPTION_KEY,
+    {
+        message: 'ECOMMERCE_TOKEN_ENCRYPTION_KEY (or SHOPIFY_TOKEN_ENCRYPTION_KEY) must be set in production when a Shopify/Salla/Zid integration is configured — store tokens are encrypted at rest and unreadable without it',
+        path: ['ECOMMERCE_TOKEN_ENCRYPTION_KEY'],
+    },
+).refine(
+    // Salla webhook routes go live as soon as SALLA_CLIENT_ID is configured, but HMAC
+    // verification needs SALLA_WEBHOOK_SECRET. Missing/typo'd → verifyWebhookHmac fails
+    // closed → every Salla webhook (uninstall, order, product, cart) 401s silently. The
+    // merchant looks connected while nothing flows. Fail fast at startup instead.
+    data => data.NODE_ENV !== 'production' || !data.SALLA_CLIENT_ID || !!data.SALLA_WEBHOOK_SECRET,
+    {
+        message: 'SALLA_WEBHOOK_SECRET must be set in production when SALLA_CLIENT_ID is configured — Salla webhook HMAC verification fails closed without it (every webhook 401s)',
+        path: ['SALLA_WEBHOOK_SECRET'],
+    },
+).refine(
+    // Same coupling for Zid: routes live on ZID_CLIENT_ID, HMAC needs ZID_WEBHOOK_SECRET.
+    data => data.NODE_ENV !== 'production' || !data.ZID_CLIENT_ID || !!data.ZID_WEBHOOK_SECRET,
+    {
+        message: 'ZID_WEBHOOK_SECRET must be set in production when ZID_CLIENT_ID is configured — Zid webhook HMAC verification fails closed without it (every webhook 401s)',
+        path: ['ZID_WEBHOOK_SECRET'],
     },
 );
 

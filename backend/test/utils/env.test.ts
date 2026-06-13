@@ -118,6 +118,44 @@ describe('validateEnv', () => {
         await expect(import('../../src/utils/env')).rejects.toThrow('FACEBOOK_TOKEN_ENCRYPTION_KEY');
     });
 
+    // --- E-commerce token-encryption-key guard (Salla/Zid/Shopify share the key) ---
+    // SALLA_WEBHOOK_SECRET is set in these so the separate webhook-secret guard passes,
+    // isolating the token-key guard.
+    it('should throw in production when an e-commerce platform is configured but no token-encryption key is set', async () => {
+        process.env = { ...prodEnv, SALLA_CLIENT_ID: 'salla-client', SALLA_WEBHOOK_SECRET: 'a'.repeat(16) };
+
+        await expect(import('../../src/utils/env')).rejects.toThrow('ECOMMERCE_TOKEN_ENCRYPTION_KEY');
+    });
+
+    it('should accept production e-commerce config when ECOMMERCE_TOKEN_ENCRYPTION_KEY is set', async () => {
+        process.env = { ...prodEnv, SALLA_CLIENT_ID: 'salla-client', SALLA_WEBHOOK_SECRET: 'a'.repeat(16), ECOMMERCE_TOKEN_ENCRYPTION_KEY: 'c'.repeat(32) };
+
+        const mod = await import('../../src/utils/env');
+        expect(mod.env.SALLA_CLIENT_ID).toBe('salla-client');
+    });
+
+    it('should accept the SHOPIFY_TOKEN_ENCRYPTION_KEY fallback for e-commerce token encryption', async () => {
+        // SHOPIFY_API_KEY triggers the token-key guard but not the Salla/Zid webhook guards.
+        process.env = { ...prodEnv, SHOPIFY_API_KEY: 'shop-key', SHOPIFY_TOKEN_ENCRYPTION_KEY: 'd'.repeat(32) };
+
+        const mod = await import('../../src/utils/env');
+        expect(mod.env.SHOPIFY_TOKEN_ENCRYPTION_KEY).toBe('d'.repeat(32));
+    });
+
+    // --- Webhook-secret coupling guards. ECOMMERCE_TOKEN_ENCRYPTION_KEY is set so the
+    // token-key guard passes, isolating each webhook-secret guard. ---
+    it('should throw in production when SALLA_CLIENT_ID is set but SALLA_WEBHOOK_SECRET is missing', async () => {
+        process.env = { ...prodEnv, SALLA_CLIENT_ID: 'salla-client', ECOMMERCE_TOKEN_ENCRYPTION_KEY: 'c'.repeat(32) };
+
+        await expect(import('../../src/utils/env')).rejects.toThrow('SALLA_WEBHOOK_SECRET');
+    });
+
+    it('should throw in production when ZID_CLIENT_ID is set but ZID_WEBHOOK_SECRET is missing', async () => {
+        process.env = { ...prodEnv, ZID_CLIENT_ID: 'zid-client', ECOMMERCE_TOKEN_ENCRYPTION_KEY: 'c'.repeat(32) };
+
+        await expect(import('../../src/utils/env')).rejects.toThrow('ZID_WEBHOOK_SECRET');
+    });
+
     it('should throw in production when Stripe is configured but STRIPE_WEBHOOK_SECRET is missing', async () => {
         process.env = { ...prodEnv, STRIPE_SECRET_KEY: 'sk_live_123' };
 

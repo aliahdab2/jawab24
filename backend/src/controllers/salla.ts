@@ -2,6 +2,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import * as sallaService from '../services/salla';
 import {
     getStoreByDomain,
+    getStoreByMerchantId,
     deactivateStore,
 } from '../services/ecommerce';
 import {
@@ -52,14 +53,28 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
         return reply.status(200).send({ ok: true });
     }
 
+    // Salla webhooks identify the store by its numeric `merchant` id, which is
+    // persisted in platformData.merchantId — NOT in the storeDomain column (that
+    // holds the real domain). Try domain first for safety, then fall back to the
+    // merchantId lookup. Without the fallback, getStoreByDomain(String(merchant))
+    // never matches and EVERY Salla webhook silently no-ops in production —
+    // including app.uninstalled, so tokens/processing would survive an uninstall.
+    // Mirrors the Zid controller's resolveStore().
+    const resolveStore = async () => {
+        const byDomain = await getStoreByDomain('salla', String(merchant));
+        if (byDomain) return byDomain;
+        return getStoreByMerchantId('salla', String(merchant));
+    };
+
     if (event === 'app.uninstalled') {
-        await deactivateStore('salla', String(merchant));
+        const store = await resolveStore();
+        if (store) await deactivateStore('salla', store.storeDomain);
         return reply.status(200).send({ ok: true });
     }
 
     // All product.* events trigger a sync
     if (sallaService.isProductEvent(event || '')) {
-        const store = await getStoreByDomain('salla', String(merchant));
+        const store = await resolveStore();
         if (store) {
             enqueueSyncJob(store.id, 'salla').catch(err => {
                 request.log.error({ err }, 'Failed to enqueue Salla product sync');
@@ -69,7 +84,7 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
 
     // Order lifecycle and abandoned cart — schedule customer notifications
     if (event && sallaService.isOrderEvent(event)) {
-        const store = await getStoreByDomain('salla', String(merchant));
+        const store = await resolveStore();
         if (store) {
             const orderEvent = buildSallaOrderEvent(store.id, event, request.body);
             if (orderEvent) dispatchOrderNotification(orderEvent, request.log);
