@@ -33,7 +33,7 @@
     "subscriptionWelcomeIntro": "مرحباً {name}، شكراً لاشتراكك في Jawab24. باقة {plan} مفعّلة وجاهزة للاستخدام.",
     "subscriptionWelcomeTrialNote": "فترة التجربة المجانية تنتهي في {trialEnd}. يمكنك الإلغاء في أي وقت قبل ذلك ولن يتم خصم أي مبلغ.",
     "subscriptionWelcomeCta": "افتح لوحة التحكم",
-    "subscriptionWelcomeNextSteps": "الخطوة التالية: اربط صفحة فيسبوك أو إنستغرام، ثم أضف بعض الردود إلى قاعدة المعرفة. وسنتكفل بالباقي.",
+    "subscriptionWelcomeNextSteps": "الخطوة التالية: اربط صفحة فيسبوك أو إنستغرام، ثم أضف معلومات نشاطك التجاري. وسنتكفل بالباقي.",
     "subscriptionWelcomeBilling": "ستصلك فاتورة منفصلة بتفاصيل الدفع من Stripe خلال دقائق.",
     "subscriptionWelcomeSignoff": "— فريق Jawab24",
     "inviteEmailSubject": "لديك دعوة للانضمام إلى {workspace} على Jawab24",

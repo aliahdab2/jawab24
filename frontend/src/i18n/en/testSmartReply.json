@@ -19,7 +19,7 @@
   "rateLimit": "Too many requests. Please wait a moment.",
   "quotaExceeded": "Monthly smart reply limit reached. Upgrade your plan for more.",
   "quotaExceededIOS": "Monthly smart reply limit reached. Resets at the start of the next billing cycle.",
-  "addKbHint": "Add business info to this page for better replies",
+  "addKbHint": "Add Business Info to this page for better replies",
   "nudge": "Public comment",
   "private": "Private message"
 }

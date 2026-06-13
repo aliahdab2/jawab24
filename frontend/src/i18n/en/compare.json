@@ -25,7 +25,7 @@
     "shopifyIntegration": "Shopify Integration",
     "sallaIntegration": "Salla Integration",
     "priceVerification": "Price Hallucination Detection",
-    "knowledgeBaseRag": "Knowledge Base with RAG Search",
+    "knowledgeBaseRag": "Business Info with RAG Search",
     "confidenceScoring": "Confidence Scoring & Human Review",
     "businessHours": "Business Hours Scheduling",
     "rtlInterface": "Full RTL Arabic Interface",
@@ -54,13 +54,13 @@
     "advantage1": "Arabic-first: Jawab24 detects and replies in 6 Arabic dialect families. Chatfuel has no dialect-aware Arabic support.",
     "advantage2": "Salla integration: Jawab24 syncs your Salla store products, prices, and availability. Chatfuel does not support Salla.",
     "advantage3": "2-tier price verification: Jawab24 checks every AI-generated price against your catalog. Chatfuel has no price hallucination detection.",
-    "advantage4": "Knowledge Base with RAG: Jawab24 uses retrieval-augmented generation to answer from your verified business data. Chatfuel uses simpler FAQ matching.",
+    "advantage4": "Business Info with RAG: Jawab24 uses retrieval-augmented generation to answer from your verified business data. Chatfuel uses simpler FAQ matching.",
     "faqQ1": "Is Jawab24 better than Chatfuel for Arabic businesses?",
     "faqA1": "Yes. Jawab24 understands Arabic dialects, integrates with Salla, and has price verification — features Chatfuel does not provide.",
     "faqQ2": "Does Chatfuel work with Salla stores?",
     "faqA2": "No. Chatfuel supports Shopify but not Salla. Jawab24 natively integrates with both Shopify and Salla.",
     "faqQ3": "Which has better AI quality, Jawab24 or Chatfuel?",
-    "faqA3": "Jawab24 uses confidence scoring to hold uncertain replies for human review, plus RAG-powered Knowledge Base search. Chatfuel sends every auto-reply without confidence checks."
+    "faqA3": "Jawab24 uses confidence scoring to hold uncertain replies for human review, plus RAG-powered Business Info search. Chatfuel sends every auto-reply without confidence checks."
   },
   "tidio": {
     "seoTitle": "Jawab24 vs Tidio: Best Auto-Reply for Arabic E-Commerce (2026)",
@@ -80,7 +80,7 @@
   "botpress": {
     "seoTitle": "Jawab24 vs Botpress: Best Facebook & Instagram Auto-Reply for Arabic Businesses (2026)",
     "seoDescription": "Compare Jawab24 and Botpress for Facebook and Instagram auto-replies. See why Jawab24 is 90% cheaper, requires no coding, and is purpose-built for Arabic e-commerce with Salla and Shopify integration.",
-    "subtitle": "Botpress is a developer-focused chatbot platform that requires coding and flow building to set up. Jawab24 is a ready-to-use auto-reply system — connect your Facebook page, add your business info, and AI starts replying in minutes. No coding, no flow builders, no complex setup. At $15/month vs $89/month, Jawab24 is built for business owners, not developers.",
+    "subtitle": "Botpress is a developer-focused chatbot platform that requires coding and flow building to set up. Jawab24 is a ready-to-use auto-reply system — connect your Facebook page, add your Business Info, and AI starts replying in minutes. No coding, no flow builders, no complex setup. At $15/month vs $89/month, Jawab24 is built for business owners, not developers.",
     "advantage1": "83% cheaper: Jawab24 starts at $15/month all-inclusive. Botpress Plus costs $89/month plus separate AI usage fees that can grow unpredictably. Their Team plan is $495/month.",
     "advantage2": "Zero coding required: Jawab24 works out of the box — connect your page and Smart Replies start in minutes. Botpress requires building conversation flows, writing code, and developer involvement.",
     "advantage3": "Arabic-first: Jawab24 understands 6 Arabic dialect families and Franco-Arabic. Botpress has no Arabic dialect detection — it treats all Arabic the same.",
@@ -90,7 +90,7 @@
     "faqQ2": "Why is Botpress so much more expensive than Jawab24?",
     "faqA2": "Botpress is a developer platform for building custom chatbots across many channels. Its Plus plan costs $89/month plus AI usage fees on top. Jawab24 costs $15/month with Smart Replies included — no surprise bills. Jawab24 is focused on one thing: intelligent auto-replies for social media.",
     "faqQ3": "Can I use Botpress without coding?",
-    "faqA3": "Botpress has a visual flow builder, but users consistently report a steep learning curve, and advanced features require JavaScript coding. Jawab24 requires zero technical knowledge — connect your Facebook page, write your business info, and you are live."
+    "faqA3": "Botpress has a visual flow builder, but users consistently report a steep learning curve, and advanced features require JavaScript coding. Jawab24 requires zero technical knowledge — connect your Facebook page, write your Business Info, and you are live."
   },
   "speedly": {
     "seoTitle": "Jawab24 vs Speedly: AI Auto-Reply Comparison for Arabic Businesses (2026)",
@@ -99,7 +99,7 @@
     "advantage1": "All-inclusive pricing: Jawab24 bundles AI generation into the subscription, so you pay one predictable monthly bill. Speedly's pricing requires adding AI credits on top of the subscription, so your monthly cost grows with reply volume.",
     "advantage2": "Native e-commerce integration: Jawab24 syncs product catalogs from Shopify and Salla so AI replies use real prices and availability. Speedly does not integrate with external e-commerce platforms — it offers a built-in store instead.",
     "advantage3": "Price hallucination detection: Jawab24 verifies every AI-generated price against your product catalog before sending. This is a Jawab24-specific safeguard that prevents the AI from inventing prices in replies.",
-    "advantage4": "Knowledge Base with RAG: Jawab24 grounds replies in your verified business data through retrieval-augmented generation, with confidence scoring that holds uncertain replies for human review.",
+    "advantage4": "Business Info with RAG: Jawab24 grounds replies in your verified business data through retrieval-augmented generation, with confidence scoring that holds uncertain replies for human review.",
     "faqQ1": "How does pricing actually differ between Jawab24 and Speedly?",
     "faqA1": "Jawab24's monthly subscription covers AI generation — one fixed bill regardless of how many replies the AI handles. Speedly's subscription does not include AI usage; you add AI credits separately, so your effective cost increases with reply volume. The right comparison depends on your monthly reply count.",
     "faqQ2": "Does Speedly include AI usage in the subscription?",

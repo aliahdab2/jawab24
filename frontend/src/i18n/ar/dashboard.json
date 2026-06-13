@@ -50,9 +50,9 @@
   "sectionLoadError": "فشل في تحميل هذا القسم",
   "kbNudgeTitle": "خلّي ردودك أذكى",
   "kbNudgeBody": "أضف منتجاتك وأسعارك وساعات العمل والمعلومات المرتبطة بعملك لتحسين ردود جواب الذكية.",
-  "kbNudgeCta": "أضف معلومات",
+  "kbNudgeCta": "أضف معلومات نشاطك",
   "kbNudgeLater": "لاحقاً",
-  "kbNudgeEcomTitle": "أكمل ملف متجرك",
+  "kbNudgeEcomTitle": "أكمل معلومات نشاطك التجاري",
   "kbNudgeEcomBody": "منتجات متجرك متزامنة! أضف ساعات العمل والموقع والأسئلة الشائعة لردود أفضل.",
   "setupChecklist": {
     "titleWithProgress": "أكمل إعدادك ({done}/{total})",

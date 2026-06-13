@@ -218,10 +218,10 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: { en: '{preview}', ar: '{preview}' },
     },
     kb_gap: {
-        titles: { en: 'Knowledge Base Gap Detected', ar: 'فجوة في قاعدة المعرفة' },
+        titles: { en: 'Business Info Gap Detected', ar: 'فجوة في معلومات نشاطك التجاري' },
         bodies: {
-            en: 'Customers on "{pageName}" keep asking about "{topic}" but your knowledge base doesn\'t cover it.',
-            ar: 'عملاء "{pageName}" يسألون عن "{topic}" لكن قاعدة المعرفة لا تغطي هذا الموضوع.',
+            en: 'Customers on "{pageName}" keep asking about "{topic}" but your Business Info doesn\'t cover it.',
+            ar: 'عملاء "{pageName}" يسألون عن "{topic}" لكن معلومات نشاطك التجاري لا تغطي هذا الموضوع.',
         },
     },
     provider_failover: {
