@@ -34,12 +34,24 @@ describe('NeedsAttentionBanner', () => {
     render(
       <NeedsAttentionBanner
         flagReason="info_not_in_kb"
-        infoGapQuestion="Do you deliver to Jeddah?"
+        kbGapQuestion="Do you deliver to Jeddah?"
         onAddToKb={() => {}}
       />,
     );
     // The captured question is rendered verbatim (quoted) next to the label.
     expect(screen.getByText(/Do you deliver to Jeddah\?/)).toBeInTheDocument();
+    expect(screen.getByText(/Customer asked/i)).toBeInTheDocument();
+  });
+
+  it('shows the question for a price gap too', () => {
+    render(
+      <NeedsAttentionBanner
+        flagReason="price_not_in_kb"
+        kbGapQuestion="كم سعر دورة ICDL؟"
+        onAddToKb={() => {}}
+      />,
+    );
+    expect(screen.getByText(/كم سعر دورة ICDL؟/)).toBeInTheDocument();
     expect(screen.getByText(/Customer asked/i)).toBeInTheDocument();
   });
 

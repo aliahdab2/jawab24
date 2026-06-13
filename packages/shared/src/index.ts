@@ -29,19 +29,27 @@ export interface FlagMeta {
     sla_no_reply?: {
         minutes: number;
     };
-    info_not_in_kb?: {
-        /**
-         * The customer's message/question the AI couldn't answer from the
-         * knowledge base. Captured at flag time so the inbox can show the
-         * merchant exactly what to add to Business Info — the conversation
-         * may have moved on (e.g. a later "تمام"), so the flagged message
-         * text can't be reconstructed from the latest message alone.
-         */
-        question: string;
-    };
+    // KB-gap flags carry the customer question the AI couldn't answer from the
+    // knowledge base, captured at flag time. The inbox shows it so the merchant
+    // knows exactly what to add to Business Info — the conversation may have
+    // moved on (e.g. a later "تمام"/"شكراً"), so the flagged question can't be
+    // reconstructed from the latest message alone. Same shape across all three;
+    // only the one(s) actually flagged are populated.
+    info_not_in_kb?: { question: string };
+    price_not_in_kb?: { question: string };
+    phone_not_in_kb?: { question: string };
     // Open-ended: future flags can add their own namespaced meta here.
     [key: string]: Record<string, unknown> | undefined;
 }
+
+/**
+ * Flags meaning "the answer wasn't in the knowledge base" — the merchant should
+ * add it to Business Info. Each carries the customer's unanswered question in
+ * flag_meta (see FlagMeta). Single source of truth shared by the backend
+ * (capture, buildKbGapFlagMeta) and the frontend (display, getKbGapQuestion).
+ */
+export const KB_GAP_FLAGS = ['info_not_in_kb', 'price_not_in_kb', 'phone_not_in_kb'] as const;
+export type KbGapFlag = (typeof KB_GAP_FLAGS)[number];
 
 // --- Utilities ---
 export { normalizeArabic } from './utils/arabic-normalize';
@@ -974,5 +982,5 @@ export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, Migratio
 export { canonicalizeHoursEntry, canonicalizeHoursWeek } from './businessHours';
 export type { CanonicalHoursEntry, ParseResult, ParseSuccess, ParseFailure } from './businessHours';
 // --- Activation funnel (shared BE emit/query ↔ FE admin panel) ---
-export { ACTIVATION_FUNNEL_STEPS } from './activation';
+export { ACTIVATION_FUNNEL_STEPS, KB_FILLED_MIN_CHARS } from './activation';
 export type { ActivationEvent, ActivationFunnel, ActivationFunnelStep } from './activation';

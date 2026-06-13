@@ -8,7 +8,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
-import { isKbRelatedFlag, isInfoGapFlag, getInfoGapQuestion } from '@/utils/flagReason';
+import { isKbRelatedFlag, isKbGapFlag, getKbGapQuestion } from '@/utils/flagReason';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import { messagesApi } from '@/lib/api';
 import { useHandoffPauseDuration } from '@/hooks';
@@ -96,13 +96,13 @@ export function MessageDetailModal({
   const heldMessage = messages.find(
     m => m.direction === 'incoming' && !m.replied && !!m.aiOriginalReply && m.flagReason?.includes('held_low_confidence')
   );
-  // The unanswered question behind an info_not_in_kb flag — surfaced in the
-  // NeedsAttentionBanner so the merchant knows exactly what to add to Business
-  // Info. Prefer the question captured at flag time (flag_meta); fall back to
-  // the flagged message's own text for rows flagged before capture existed.
-  const flaggedInfoGap = messages.find(m => isInfoGapFlag(m.flagReason));
-  const infoGapQuestion = flaggedInfoGap
-    ? getInfoGapQuestion(flaggedInfoGap.flagReason, flaggedInfoGap.flagMeta) ?? flaggedInfoGap.message?.trim() ?? null
+  // The unanswered question behind a KB-gap flag (info/price/phone) — surfaced
+  // in the NeedsAttentionBanner so the merchant knows exactly what to add to
+  // Business Info. Prefer the question captured at flag time (flag_meta); fall
+  // back to the flagged message's own text for rows flagged before capture existed.
+  const flaggedKbGap = messages.find(m => isKbGapFlag(m.flagReason));
+  const kbGapQuestion = flaggedKbGap
+    ? getKbGapQuestion(flaggedKbGap.flagReason, flaggedKbGap.flagMeta) ?? flaggedKbGap.message?.trim() ?? null
     : null;
   const [replyText, setReplyText] = useState(heldMessage?.aiOriginalReply || '');
   const [sendError, setSendError] = useState<string | null>(null);
@@ -391,7 +391,7 @@ export function MessageDetailModal({
             <NeedsAttentionBanner
               flagReason={conversation.lastMessage.flagReason}
               flagMeta={conversation.lastMessage.flagMeta}
-              infoGapQuestion={infoGapQuestion}
+              kbGapQuestion={kbGapQuestion}
               onAddToKb={pageId ? () => setKbOpen(true) : undefined}
             />
           )}

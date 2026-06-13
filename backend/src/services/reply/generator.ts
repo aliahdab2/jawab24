@@ -10,7 +10,7 @@ import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '.
 import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
-import { DEFAULT_AI_MODEL, normalizeAiIntent, type ProductCard, type FlagMeta } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, type ProductCard, type FlagMeta } from '@jawab24/shared';
 import { detectLanguage, detectLanguageCode } from '../../utils/language';
 import type { FacebookMessageTag } from '../../utils/commentText';
 import { preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
@@ -63,27 +63,31 @@ export function shouldUseFallback(flagReason?: string): boolean {
     return flags.some(f => (SAFE_FALLBACK_FLAGS as readonly string[]).includes(f));
 }
 
-/** Max stored length for the captured info-gap question. Enough to convey the
+/** Max stored length for the captured KB-gap question. Enough to convey the
  *  topic without bloating flag_meta; the UI truncates further for display. */
-export const INFO_GAP_QUESTION_MAX = 280;
+export const KB_GAP_QUESTION_MAX = 280;
 
 /**
- * Build flag_meta for an `info_not_in_kb` flag by capturing the customer
+ * Build flag_meta for KB-gap flags (info/price/phone) by capturing the customer
  * question the AI couldn't answer from the knowledge base. This lets the inbox
  * show the merchant exactly what to add to Business Info, even after the
  * conversation moves on (a later "تمام" would otherwise hide the original ask).
  *
- * Returns null when the flag isn't present or there's no usable question text,
- * so callers can pass the result straight through to markAsReplied/flagMessage.
+ * Returns null when no KB-gap flag is present or there's no usable question
+ * text, so callers can pass the result straight through to markAsReplied. The
+ * question is stored under each KB-gap flag actually present (typically one).
  */
-export function buildInfoGapFlagMeta(flags: string[], queryText?: string): FlagMeta | null {
-    if (!flags.includes('info_not_in_kb')) return null;
+export function buildKbGapFlagMeta(flags: string[], queryText?: string): FlagMeta | null {
+    const present = KB_GAP_FLAGS.filter(f => flags.includes(f));
+    if (present.length === 0) return null;
     const question = queryText?.trim();
     if (!question) return null;
-    const clipped = question.length > INFO_GAP_QUESTION_MAX
-        ? `${question.slice(0, INFO_GAP_QUESTION_MAX - 1)}…`
+    const clipped = question.length > KB_GAP_QUESTION_MAX
+        ? `${question.slice(0, KB_GAP_QUESTION_MAX - 1)}…`
         : question;
-    return { info_not_in_kb: { question: clipped } };
+    const meta: FlagMeta = {};
+    for (const flag of present) meta[flag] = { question: clipped };
+    return meta;
 }
 
 /** Determine if a message needs human attention based on flags and intent.
@@ -853,8 +857,8 @@ export class ReplyGenerator {
             (normalizedIntent === 'OFFENSIVE' ? 'offensive' : null) ||
             undefined;
         // Capture the unanswered question so the inbox can tell the merchant
-        // exactly what to add to Business Info (see buildInfoGapFlagMeta).
-        const flagMeta = buildInfoGapFlagMeta(flags, queryText);
+        // exactly what to add to Business Info (see buildKbGapFlagMeta).
+        const flagMeta = buildKbGapFlagMeta(flags, queryText);
 
         await subscriptionsService.incrementAiReplies(userId);
 

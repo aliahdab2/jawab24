@@ -8,13 +8,13 @@ interface NeedsAttentionBannerProps {
   flagReason: string | null | undefined;
   flagMeta?: FlagMetaShape | null;
   /**
-   * The customer question the AI couldn't answer (info_not_in_kb). When set,
-   * it's shown inline so the merchant knows exactly what to add to Business
-   * Info — instead of having to scroll the thread to guess. The host computes
-   * this from the flagged message (flag_meta question, or its text as a
-   * fallback for rows flagged before the question was captured).
+   * The customer question the AI couldn't answer (any KB-gap flag: info /
+   * price / phone). When set, it's shown inline so the merchant knows exactly
+   * what to add to Business Info — instead of having to scroll the thread to
+   * guess. The host computes this from the flagged message (flag_meta question,
+   * or its text as a fallback for rows flagged before capture existed).
    */
-  infoGapQuestion?: string | null;
+  kbGapQuestion?: string | null;
   /**
    * Opens the Business Info / KB editor in place for this conversation's page.
    * When omitted, the KB CTA is hidden (e.g. when the host has no page context).
@@ -28,10 +28,10 @@ interface NeedsAttentionBannerProps {
  * and, when the flag is KB-related, a CTA that opens the Business Info editor
  * in place over the conversation (the host owns the editor; see InlineKbEditorModal).
  */
-export function NeedsAttentionBanner({ flagReason, flagMeta, infoGapQuestion, onAddToKb }: NeedsAttentionBannerProps) {
+export function NeedsAttentionBanner({ flagReason, flagMeta, kbGapQuestion, onAddToKb }: NeedsAttentionBannerProps) {
   const t = useTranslations('comments');
   const isKbFlag = isKbRelatedFlag(flagReason);
-  const question = infoGapQuestion?.trim();
+  const question = kbGapQuestion?.trim();
 
   return (
     <div className="flex flex-col gap-2 mb-3 px-3 py-2 rounded-lg status-warning border text-xs font-medium">
@@ -53,7 +53,7 @@ export function NeedsAttentionBanner({ flagReason, flagMeta, infoGapQuestion, on
       {/* The specific unanswered question — answers "what info should I add?" */}
       {question && (
         <p className="text-[11px] font-normal leading-snug opacity-90" dir="auto">
-          <span className="font-semibold">{t('infoGapLabel')}:</span>{' '}
+          <span className="font-semibold">{t('kbGapLabel')}:</span>{' '}
           <span>«{question}»</span>
         </p>
       )}
