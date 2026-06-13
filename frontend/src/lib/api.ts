@@ -15,7 +15,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -352,6 +352,7 @@ export interface CacheStats {
   semanticCache: { totalEntries: number; totalHits: number };
 }
 
+
 export interface LeadDigestSendBase {
   id: string;
   userEmail: string | null;
@@ -565,6 +566,15 @@ export const adminApi = {
   getUser: async (userId: string) => {
     const response = await api.get(`/admin/users/${userId}`);
     return response.data;
+  },
+
+  // Activation funnel (signup → first auto-reply) for the signup cohort in the window
+  getActivationFunnel: async (days?: number) => {
+    const response = await api.get<{ success: boolean; data: ActivationFunnel }>(
+      '/admin/activation-funnel',
+      { params: days ? { days } : undefined },
+    );
+    return response.data.data;
   },
 
   // Get AI cost breakdown by page for a single user, scoped to a preset period

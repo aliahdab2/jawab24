@@ -963,3 +963,6 @@ export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, Migratio
 // --- Business hours canonicalizer (Stage 2.6) ---
 export { canonicalizeHoursEntry, canonicalizeHoursWeek } from './businessHours';
 export type { CanonicalHoursEntry, ParseResult, ParseSuccess, ParseFailure } from './businessHours';
+// --- Activation funnel (shared BE emit/query ↔ FE admin panel) ---
+export { ACTIVATION_FUNNEL_STEPS } from './activation';
+export type { ActivationEvent, ActivationFunnel, ActivationFunnelStep } from './activation';

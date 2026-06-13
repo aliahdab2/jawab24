@@ -6,6 +6,7 @@ import { channelTrialService } from '../services/channelTrial';
 import { notificationService } from '../services/notifications';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
+import { recordActivationEvent, KB_FILLED_MIN_CHARS } from '../services/activation';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -126,6 +127,14 @@ export class PagesController {
             const page = await pagesService.updatePage(req.workspaceId, id, request.body);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
+            }
+
+            // Activation funnel: KB counts as "filled" only once it carries real content.
+            const kbTrimmed = typeof request.body.knowledgeBase === 'string'
+                ? request.body.knowledgeBase.trim()
+                : '';
+            if (page.userId && kbTrimmed.length >= KB_FILLED_MIN_CHARS) {
+                void recordActivationEvent(page.userId, 'kb_filled', { chars: kbTrimmed.length });
             }
 
             // Non-blocking: flag catalog-like patterns in raw KB so the editor
@@ -290,6 +299,10 @@ export class PagesController {
                     workspaceOwnerId,
                     workspaceId,
                 );
+                // Activation funnel: merchant turned auto-reply on (off → on or first time).
+                if (page.userId) {
+                    void recordActivationEvent(page.userId, 'autoreply_enabled', { pageId: page.id });
+                }
             }
             return reply.send(serializePage(page));
         } catch (error) {
@@ -328,6 +341,11 @@ export class PagesController {
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
             const { syncedPages, skippedCount, skippedPages, pageLimit, takenCount, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
+
+            // Activation funnel: the user has connected at least one page.
+            if (syncedPages.length > 0) {
+                void recordActivationEvent(userId, 'page_connected', { count: syncedPages.length });
+            }
 
             if (syncedPages.length === 0 && takenCount === 0 && (trialBlockedCount ?? 0) === 0 && skippedCount === 0) {
                 return reply.send({

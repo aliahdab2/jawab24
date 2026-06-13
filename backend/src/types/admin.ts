@@ -36,6 +36,11 @@ export interface AiCostQuery {
     period?: string;
 }
 
+export interface ActivationFunnelQuery {
+    /** Cohort window in days (querystring, coerced to int by Fastify schema). Default 30. */
+    days?: number;
+}
+
 export interface PaymentRequestBody {
     amountCents: number;
     currency?: string;

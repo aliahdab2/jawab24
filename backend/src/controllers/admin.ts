@@ -22,12 +22,14 @@ import {
     DuplicateTopupError,
 } from '../services/topup';
 import type { AdminUserAiCostPeriod } from '../services/analytics';
+import { getActivationFunnel } from '../services/activation';
 import type {
     ManualUpgradeBody,
     SearchUsersQuery,
     ListAllUsersQuery,
     AiModelBody,
     AiCostQuery,
+    ActivationFunnelQuery,
     PaymentRequestBody,
     KbUpdateBody,
     ReIngestBody,
@@ -340,6 +342,21 @@ export class AdminController {
         } catch (error) {
             request.log.error(error, 'Admin get audit logs failed');
             return reply.status(500).send({ success: false, error: 'Failed to get audit logs' });
+        }
+    }
+
+    /** GET /admin/activation-funnel?days=30 — signup → first-auto-reply funnel. */
+    async getActivationFunnel(request: FastifyRequest<{ Querystring: ActivationFunnelQuery }>, reply: FastifyReply) {
+        // Fastify coerces the querystring to a number via the route schema; clamp
+        // defensively to a sane window (1–365 days) regardless of input.
+        const raw = Number(request.query.days);
+        const days = Number.isFinite(raw) ? Math.min(365, Math.max(1, Math.trunc(raw))) : 30;
+        try {
+            const data = await getActivationFunnel(days);
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin activation funnel failed');
+            return reply.status(500).send({ success: false, error: 'Failed to get activation funnel' });
         }
     }
 
