@@ -33,10 +33,14 @@ const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-uuid-123');
 // doesn't pull in Redis/config initialization.
 const mockUpsertSingleProduct = vi.fn().mockResolvedValue(undefined);
 const mockDeleteSingleProduct = vi.fn().mockResolvedValue(undefined);
+const mockPurgeStore = vi.fn().mockResolvedValue(true);
+const mockRedactCustomerNotifications = vi.fn().mockResolvedValue(0);
 vi.mock('../../src/services/ecommerce', () => ({
     upsertSingleProduct: (...args: any[]) => mockUpsertSingleProduct(...args),
     deleteSingleProduct: (...args: any[]) => mockDeleteSingleProduct(...args),
     registerWebhooksWithPersist: (_storeId: string, _platform: string, fn: () => Promise<unknown>) => fn(),
+    purgeStore: (...args: any[]) => mockPurgeStore(...args),
+    redactCustomerNotifications: (...args: any[]) => mockRedactCustomerNotifications(...args),
 }));
 
 vi.mock('../../src/lib/webhookRetryQueue', () => ({
@@ -797,7 +801,36 @@ describe('Shopify Controller', () => {
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
-        it('gdprShopRedact deactivates store with valid HMAC', async () => {
+        it('gdprCustomerRedact deletes the customer PII by phone', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockRedactCustomerNotifications.mockResolvedValue(2);
+            const body = { shop_domain: 'test.myshopify.com', customer: { phone: '+966555123456' } };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await gdprCustomerRedact(req, rep);
+            expect(mockRedactCustomerNotifications).toHaveBeenCalledWith('shopify', 'test.myshopify.com', '+966555123456');
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('gdprCustomerRedact does not redact when no phone is provided', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            const body = { shop_domain: 'test.myshopify.com', customer: {} };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac' },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await gdprCustomerRedact(req, rep);
+            expect(mockRedactCustomerNotifications).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('gdprShopRedact hard-deletes (purges) the store with valid HMAC', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             const body = { shop_domain: 'test.myshopify.com' };
             const req = mockRequest({
@@ -807,7 +840,9 @@ describe('Shopify Controller', () => {
             });
             const rep = mockReply();
             await gdprShopRedact(req, rep);
-            expect(mockDeactivateStore).toHaveBeenCalledWith('test.myshopify.com');
+            // Hard delete (purgeStore), NOT the old soft deactivateStore.
+            expect(mockPurgeStore).toHaveBeenCalledWith('shopify', 'test.myshopify.com');
+            expect(rep.status).toHaveBeenCalledWith(200);
         });
 
         it('gdprShopRedact rejects invalid HMAC', async () => {

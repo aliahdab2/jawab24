@@ -7,7 +7,7 @@
  */
 import { eq, and, lt, sql, desc, notInArray } from 'drizzle-orm';
 import { db } from '../db';
-import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers } from '../db/schema';
+import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, customerNotificationsLog } from '../db/schema';
 import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceCrypto';
 import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
@@ -319,6 +319,53 @@ export async function disconnectStore(storeId: string) {
         uninstalledAt: new Date(),
         updatedAt: new Date(),
     }).where(eq(ecommerceStores.id, storeId));
+}
+
+/**
+ * Hard-delete a store and everything linked to it (GDPR erasure).
+ *
+ * Deleting the `ecommerce_stores` row removes its encrypted access/refresh
+ * tokens, and FK cascades remove all child data: `ecommerce_products`,
+ * `customer_notification_templates`, and `customer_notifications_log` — the last
+ * of which holds customer phone + name PII captured from order/cart webhooks.
+ * The `pages.ecommerce_store_id` FK is ON DELETE SET NULL, so any linked pages
+ * survive (merely unlinked). Unlike `deactivateStore`/`disconnectStore` (which
+ * only flip `is_active`), this leaves nothing behind.
+ *
+ * Used by Shopify's `shop/redact` compliance webhook and the inactive-store purge.
+ * Returns true if a store row was found and deleted.
+ */
+export async function purgeStore(platform: EcommercePlatform, storeDomain: string): Promise<boolean> {
+    const store = await getStoreByDomain(platform, storeDomain);
+    if (!store) return false;
+    await db.delete(ecommerceStores).where(eq(ecommerceStores.id, store.id));
+    return true;
+}
+
+/**
+ * Delete the stored PII for a single customer of a store — the phone + name rows
+ * in `customer_notifications_log` (the only customer PII we persist from
+ * e-commerce order/cart webhooks). Matched by phone using a last-9-digit
+ * comparison so country-code / formatting differences between the redact payload
+ * and the stored value don't cause a miss.
+ *
+ * Used by Shopify's `customers/redact` compliance webhook. Returns the number of
+ * rows deleted.
+ */
+export async function redactCustomerNotifications(
+    platform: EcommercePlatform,
+    storeDomain: string,
+    phone: string,
+): Promise<number> {
+    const digits = phone.replace(/\D/g, '').slice(-9);
+    if (digits.length < 7) return 0; // too short to match safely — avoid over-deleting
+    const store = await getStoreByDomain(platform, storeDomain);
+    if (!store) return 0;
+    const deleted = await db.delete(customerNotificationsLog).where(and(
+        eq(customerNotificationsLog.ecommerceStoreId, store.id),
+        sql`right(regexp_replace(${customerNotificationsLog.customerPhone}, '[^0-9]', '', 'g'), 9) = ${digits}`,
+    )).returning({ id: customerNotificationsLog.id });
+    return deleted.length;
 }
 
 /**

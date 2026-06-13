@@ -4,7 +4,7 @@ import * as shopifyService from '../services/shopify';
 import { workspaceService } from '../services/workspace';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
-import { upsertSingleProduct, deleteSingleProduct, registerWebhooksWithPersist } from '../services/ecommerce';
+import { upsertSingleProduct, deleteSingleProduct, registerWebhooksWithPersist, purgeStore, redactCustomerNotifications } from '../services/ecommerce';
 import { config } from '../config';
 import {
     dispatchOrderNotification,
@@ -293,9 +293,11 @@ function buildShopifyOrderEvent(storeId: string, topic: string, body: unknown): 
 }
 
 // --- GDPR Mandatory Endpoints (HMAC-verified) ---
-// Jawab24 only stores Shopify product catalog data, NOT customer PII.
-// customerDataRequest and customerRedact acknowledge the webhook but have
-// no customer data to export or delete. shopRedact fully removes store data.
+// customers/redact deletes the customer's stored PII (phone + name persisted in
+// customer_notifications_log from order/cart webhooks). shop/redact hard-deletes
+// the store and ALL its data (encrypted tokens, products, notification PII) via
+// purgeStore. customers/data_request is acknowledged + logged for manual
+// fulfilment within Shopify's 30-day window (no self-serve export portal yet).
 
 function verifyShopifyWebhookHmac(request: FastifyRequest, reply: FastifyReply): boolean {
     const hmac = request.headers['x-shopify-hmac-sha256'] as string;
@@ -315,6 +317,11 @@ function verifyShopifyWebhookHmac(request: FastifyRequest, reply: FastifyReply):
 export async function gdprCustomerDataRequest(request: FastifyRequest, reply: FastifyReply) {
     try {
         if (!verifyShopifyWebhookHmac(request, reply)) return;
+        // We persist minimal customer PII (phone + name in customer_notifications_log).
+        // No self-serve export yet — log for manual fulfilment within Shopify's 30-day
+        // window, and acknowledge promptly as Shopify requires.
+        const { shop_domain } = request.body as { shop_domain?: string };
+        request.log.info({ shop_domain }, 'Shopify GDPR customers/data_request received');
         return reply.status(200).send({ ok: true });
     } catch (error) {
         reportWebhookFailure(request, 'gdpr-customers-data-request', error);
@@ -325,6 +332,14 @@ export async function gdprCustomerDataRequest(request: FastifyRequest, reply: Fa
 export async function gdprCustomerRedact(request: FastifyRequest, reply: FastifyReply) {
     try {
         if (!verifyShopifyWebhookHmac(request, reply)) return;
+        const { shop_domain, customer } = request.body as {
+            shop_domain?: string;
+            customer?: { phone?: string };
+        };
+        if (shop_domain && customer?.phone) {
+            const removed = await redactCustomerNotifications('shopify', shop_domain, customer.phone);
+            request.log.info({ shop_domain, removed }, 'Shopify GDPR customers/redact processed');
+        }
         return reply.status(200).send({ ok: true });
     } catch (error) {
         reportWebhookFailure(request, 'gdpr-customers-redact', error);
@@ -336,9 +351,13 @@ export async function gdprShopRedact(request: FastifyRequest, reply: FastifyRepl
     try {
         if (!verifyShopifyWebhookHmac(request, reply)) return;
 
+        // shop/redact fires 48h after uninstall — the signal to fully erase the shop.
+        // Hard-delete (tokens, products, customer-notification PII) rather than the
+        // soft deactivate done at uninstall time.
         const { shop_domain } = request.body as { shop_domain?: string };
         if (shop_domain) {
-            await shopifyService.deactivateStore(shop_domain);
+            const purged = await purgeStore('shopify', shop_domain);
+            request.log.info({ shop_domain, purged }, 'Shopify GDPR shop/redact processed');
         }
         return reply.status(200).send({ ok: true });
     } catch (error) {
