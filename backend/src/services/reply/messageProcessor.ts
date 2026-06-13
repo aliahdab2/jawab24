@@ -525,7 +525,7 @@ export class MessageProcessor {
             );
             const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock } = enriched;
 
-            let { replyText, replyMethod, needsAttention, flagReason, aiIntent, confidence, productCards } =
+            const generated =
                 await replyGenerator.generateForMessage(
                     {
                         workspaceId,
@@ -550,6 +550,9 @@ export class MessageProcessor {
                     },
                     userSettings.aiEnabled ?? false,
                 );
+            // Only replyText is reassigned below (fallback substitution); the rest are const.
+            let replyText = generated.replyText;
+            const { replyMethod, needsAttention, flagReason, flagMeta, aiIntent, confidence, productCards } = generated;
             lap('12-generateReply');
 
             // Capture the original AI-generated reply before any modifications (fallback substitution)
@@ -708,7 +711,7 @@ export class MessageProcessor {
             let outgoingMessage: SSEMessageSnapshot | undefined;
             await db.transaction(async (tx) => {
                 // 14. Mark as replied
-                await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent, tx, aiOriginalReply);
+                await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent, tx, aiOriginalReply, flagMeta);
 
                 // 15. Store outgoing message
                 const stored = await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, replyText, replyMethod, tx);

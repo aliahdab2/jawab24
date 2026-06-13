@@ -10,7 +10,7 @@ import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '.
 import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
-import { DEFAULT_AI_MODEL, normalizeAiIntent, type ProductCard } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, normalizeAiIntent, type ProductCard, type FlagMeta } from '@jawab24/shared';
 import { detectLanguage, detectLanguageCode } from '../../utils/language';
 import type { FacebookMessageTag } from '../../utils/commentText';
 import { preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
@@ -61,6 +61,29 @@ export function shouldUseFallback(flagReason?: string): boolean {
     if (!flagReason) return false;
     const flags = flagReason.split(',').map(f => f.trim());
     return flags.some(f => (SAFE_FALLBACK_FLAGS as readonly string[]).includes(f));
+}
+
+/** Max stored length for the captured info-gap question. Enough to convey the
+ *  topic without bloating flag_meta; the UI truncates further for display. */
+export const INFO_GAP_QUESTION_MAX = 280;
+
+/**
+ * Build flag_meta for an `info_not_in_kb` flag by capturing the customer
+ * question the AI couldn't answer from the knowledge base. This lets the inbox
+ * show the merchant exactly what to add to Business Info, even after the
+ * conversation moves on (a later "تمام" would otherwise hide the original ask).
+ *
+ * Returns null when the flag isn't present or there's no usable question text,
+ * so callers can pass the result straight through to markAsReplied/flagMessage.
+ */
+export function buildInfoGapFlagMeta(flags: string[], queryText?: string): FlagMeta | null {
+    if (!flags.includes('info_not_in_kb')) return null;
+    const question = queryText?.trim();
+    if (!question) return null;
+    const clipped = question.length > INFO_GAP_QUESTION_MAX
+        ? `${question.slice(0, INFO_GAP_QUESTION_MAX - 1)}…`
+        : question;
+    return { info_not_in_kb: { question: clipped } };
 }
 
 /** Determine if a message needs human attention based on flags and intent.
@@ -215,6 +238,9 @@ export interface GenerateReplyResult {
     replyMethod: 'template' | 'ai';
     needsAttention?: boolean;
     flagReason?: string;
+    /** Structured per-reason detail for flagReason (e.g. the unanswered
+     *  question for info_not_in_kb). Persisted to the message/comment row. */
+    flagMeta?: FlagMeta | null;
     aiIntent?: string;
     confidence?: string;
     /**
@@ -826,6 +852,9 @@ export class ReplyGenerator {
             (normalizedIntent === 'COMPLAINT' ? 'complaint' : null) ||
             (normalizedIntent === 'OFFENSIVE' ? 'offensive' : null) ||
             undefined;
+        // Capture the unanswered question so the inbox can tell the merchant
+        // exactly what to add to Business Info (see buildInfoGapFlagMeta).
+        const flagMeta = buildInfoGapFlagMeta(flags, queryText);
 
         await subscriptionsService.incrementAiReplies(userId);
 
@@ -858,6 +887,7 @@ export class ReplyGenerator {
             replyMethod: 'ai',
             needsAttention,
             flagReason,
+            flagMeta,
             aiIntent: normalizedIntent,
             confidence: aiResponse.confidence,
             ...(aiResponse.productCards?.length ? { productCards: aiResponse.productCards } : {}),

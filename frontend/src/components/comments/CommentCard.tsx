@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
-import { FlagTag, PlatformIcon, ReplySourceBadge } from '@/components/ui';
+import { FlagTag, PlatformIcon, ReplySourceBadge, InfoPopover } from '@/components/ui';
+import { isInfoGapFlag } from '@/utils/flagReason';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { renderMessageText } from '@/utils/renderMessageText';
@@ -194,7 +195,16 @@ export const CommentCard = React.memo(function CommentCard({
                      </span>
                    )}
                 </div>
-                <FlagTag flagReason={comment.flagReason} flagMeta={comment.flagMeta} className="mt-0.5" />
+                {comment.flagReason ? (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <FlagTag flagReason={comment.flagReason} flagMeta={comment.flagMeta} />
+                    {isInfoGapFlag(comment.flagReason) && (
+                      <InfoPopover label={tc('info')} panelWidth="sm">
+                        <p className="leading-snug">{t('infoGapHint')}</p>
+                      </InfoPopover>
+                    )}
+                  </div>
+                ) : null}
              </div>
 
              {/* Post Context + Trigger Button */}

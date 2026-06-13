@@ -29,4 +29,22 @@ describe('NeedsAttentionBanner', () => {
     render(<NeedsAttentionBanner flagReason="info_not_in_kb" />);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
+
+  it('shows the unanswered question inline so the merchant knows what to add', () => {
+    render(
+      <NeedsAttentionBanner
+        flagReason="info_not_in_kb"
+        infoGapQuestion="Do you deliver to Jeddah?"
+        onAddToKb={() => {}}
+      />,
+    );
+    // The captured question is rendered verbatim (quoted) next to the label.
+    expect(screen.getByText(/Do you deliver to Jeddah\?/)).toBeInTheDocument();
+    expect(screen.getByText(/Customer asked/i)).toBeInTheDocument();
+  });
+
+  it('omits the question line when none was captured', () => {
+    render(<NeedsAttentionBanner flagReason="info_not_in_kb" onAddToKb={() => {}} />);
+    expect(screen.queryByText(/Customer asked/i)).not.toBeInTheDocument();
+  });
 });
