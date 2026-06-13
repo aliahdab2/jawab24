@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
     ACTIVATION_FUNNEL_STEPS,
+    KB_FILLED_MIN_CHARS,
     type ActivationEvent,
     type ActivationFunnel,
 } from '@jawab24/shared';
@@ -21,11 +22,10 @@ import { captureError } from '../utils/sentryHelpers';
  * No external analytics service — this is a single Postgres table.
  */
 
-// ActivationEvent + funnel response types live in @jawab24/shared (single source
-// of truth shared with the frontend panel) — imported above.
-
-/** A KB only counts as "filled" once it carries real content, not a stray character. */
-export const KB_FILLED_MIN_CHARS = 80;
+// ActivationEvent, funnel response types, and KB_FILLED_MIN_CHARS live in
+// @jawab24/shared (single source of truth shared with the frontend) — imported
+// above and re-exported here so existing backend importers keep working.
+export { KB_FILLED_MIN_CHARS };
 
 /**
  * Record an activation milestone for a user. Fire-and-forget: never blocks or

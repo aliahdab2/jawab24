@@ -6,6 +6,8 @@ import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover } from '@/components/ui';
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
+import { BusinessInfoNudgeBanner } from '@/components/pages/BusinessInfoNudgeBanner';
+import { needsBusinessInfo } from '@/utils/kb';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
@@ -427,6 +429,11 @@ const PagesPage: NextPageWithLayout = () => {
                   </a>
                 )}
               </div>
+
+              {/* Business-info nudge — connected page with empty/short KB (and not an e-commerce page) */}
+              {needsBusinessInfo(page) && (
+                <BusinessInfoNudgeBanner onAdd={() => openKnowledgeBase(page)} />
+              )}
 
               {/* Disconnected Banner */}
               {page.isConnected === false && (

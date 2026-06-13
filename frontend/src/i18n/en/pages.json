@@ -71,6 +71,8 @@
   "sectionInactive": "Inactive",
   "sectionDisconnected": "Needs Attention",
   "addInfo": "Add info",
+  "businessInfoNudgeText": "Add your business info so replies get more accurate",
+  "businessInfoNudgeCta": "Add now",
   "pageTakenWarning": "{count, plural, one {# page is} other {# pages are}} already connected to another Jawab24 account. Ask that account's owner to invite you as a team member.",
   "pageTakenInWorkspace": "{count, plural, one {# page is} other {# pages are}} already in workspace ‹{workspaceName}› where you're already a member. Switch to that workspace to manage them.",
   "switchWorkspaceCta": "Switch to {workspaceName}",
