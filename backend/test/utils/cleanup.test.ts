@@ -15,14 +15,17 @@ vi.mock('../../src/db/schema', () => ({
     refreshTokens: { id: 'refresh_tokens.id', expiresAt: 'refresh_tokens.expires_at', revokedAt: 'refresh_tokens.revoked_at' },
     otpCodes: { id: 'otp_codes.id', expiresAt: 'otp_codes.expires_at' },
     semanticCache: { id: 'semantic_cache.id', createdAt: 'semantic_cache.created_at' },
+    ecommerceStores: { id: 'ecommerce_stores.id', isActive: 'ecommerce_stores.is_active', uninstalledAt: 'ecommerce_stores.uninstalled_at' },
 }));
 
 vi.mock('drizzle-orm', () => ({
     lt: vi.fn((a: any, b: any) => ({ op: 'lt', field: a, value: b })),
+    eq: vi.fn((a: any, b: any) => ({ op: 'eq', field: a, value: b })),
+    and: vi.fn((...conds: any[]) => ({ op: 'and', conds })),
     sql: vi.fn((strings: TemplateStringsArray, ...values: any[]) => ({ strings, values })),
 }));
 
-import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, cleanupSemanticCache, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
+import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, cleanupSemanticCache, cleanupInactiveEcommerceStores, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
 import { db } from '../../src/db';
 import { lt } from 'drizzle-orm';
 import { SEMANTIC_CACHE_TTL_DAYS } from '../../src/services/kb/semantic-cache';
@@ -136,6 +139,30 @@ describe('cleanup utilities', () => {
         });
     });
 
+    describe('cleanupInactiveEcommerceStores', () => {
+        it('hard-deletes stores inactive past the retention window and returns count', async () => {
+            mockDeleteChain([[{ id: 'store-1' }, { id: 'store-2' }], []]);
+
+            const result = await cleanupInactiveEcommerceStores(30);
+
+            expect(db.delete).toHaveBeenCalled();
+            expect(result.table).toBe('ecommerce_stores');
+            expect(result.deletedCount).toBe(2);
+            // Cutoff must be ~30 days back, matched against uninstalled_at (not e.g. created_at).
+            const cutoffCall = vi.mocked(lt).mock.calls.find(c => c[0] === 'ecommerce_stores.uninstalled_at');
+            expect(cutoffCall).toBeDefined();
+            const daysBack = (Date.now() - (cutoffCall![1] as Date).getTime()) / 86_400_000;
+            expect(daysBack).toBeCloseTo(30, 1);
+        });
+
+        it('returns 0 when no inactive stores are past the window', async () => {
+            mockDeleteChain([[]]);
+            const result = await cleanupInactiveEcommerceStores(30);
+            expect(result.deletedCount).toBe(0);
+            expect(result.error).toBeUndefined();
+        });
+    });
+
     describe('runAllCleanupTasks', () => {
         it('should run all cleanup tasks and log results', async () => {
             mockDeleteChain([[]]);
@@ -143,7 +170,7 @@ describe('cleanup utilities', () => {
 
             const results = await runAllCleanupTasks(undefined, logger);
 
-            expect(results).toHaveLength(6); // aiCache, semanticCache, logs, usageLogs, refreshTokens, otpCodes
+            expect(results).toHaveLength(7); // aiCache, semanticCache, logs, usageLogs, refreshTokens, otpCodes, ecommerceStores
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting'));
         });
 

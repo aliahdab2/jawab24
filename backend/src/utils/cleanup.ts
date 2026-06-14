@@ -4,8 +4,8 @@
  */
 
 import { db } from '../db';
-import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache } from '../db/schema';
-import { lt, sql, SQL } from 'drizzle-orm';
+import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache, ecommerceStores } from '../db/schema';
+import { lt, eq, and, sql, SQL } from 'drizzle-orm';
 import type { PgTable, PgColumn } from 'drizzle-orm/pg-core';
 import { Logger, noopLogger, CleanupResult } from '../types';
 import { SEMANTIC_CACHE_TTL_DAYS } from '../services/kb/semantic-cache';
@@ -134,6 +134,32 @@ export async function cleanupOtpCodes(): Promise<CleanupResult> {
     return batchDelete('otp_codes', otpCodes, otpCodes.id, lt(otpCodes.expiresAt, new Date()), 1000);
 }
 
+/** Days an uninstalled/disconnected store is retained before GDPR erasure. */
+export const INACTIVE_STORE_RETENTION_DAYS = 30;
+
+/**
+ * GDPR data-minimisation: hard-delete e-commerce stores that have been inactive
+ * (uninstalled or disconnected) for longer than the retention window.
+ *
+ * Deleting the `ecommerce_stores` row drops its encrypted access/refresh tokens
+ * and FK-cascades to `ecommerce_products`, `customer_notification_templates` and
+ * `customer_notifications_log` (customer phone + name PII); `pages.ecommerce_store_id`
+ * is ON DELETE SET NULL so any linked page survives. This is the erasure path for
+ * Salla/Zid — which, unlike Shopify's `shop/redact`, have no compliance webhook —
+ * and a backstop for any Shopify `shop/redact` that never arrived. Rows with a
+ * NULL `uninstalled_at` are skipped (no known deactivation time → not safe to purge).
+ */
+export async function cleanupInactiveEcommerceStores(
+    daysOld: number = INACTIVE_STORE_RETENTION_DAYS,
+    batchSize: number = 1000,
+): Promise<CleanupResult> {
+    return batchDelete(
+        'ecommerce_stores', ecommerceStores, ecommerceStores.id,
+        and(eq(ecommerceStores.isActive, false), lt(ecommerceStores.uninstalledAt, daysAgo(daysOld))) as SQL,
+        batchSize,
+    );
+}
+
 /**
  * Run all cleanup tasks
  * @param options - Configuration options including retention days
@@ -144,6 +170,7 @@ export async function runAllCleanupTasks(
         aiCacheDays?: number;
         logsDays?: number;
         usageLogsDays?: number;
+        inactiveStoreDays?: number;
     },
     logger: Logger = noopLogger
 ): Promise<CleanupResult[]> {
@@ -151,10 +178,11 @@ export async function runAllCleanupTasks(
         aiCacheDays = 30,
         logsDays = 90,
         usageLogsDays = 180,
+        inactiveStoreDays = INACTIVE_STORE_RETENTION_DAYS,
     } = options || {};
-    
+
     logger.info('[Cleanup] Starting database cleanup tasks...');
-    
+
     const results = await Promise.all([
         cleanupAiCache(aiCacheDays),
         cleanupSemanticCache(),
@@ -162,6 +190,7 @@ export async function runAllCleanupTasks(
         cleanupUsageLogs(usageLogsDays),
         cleanupRefreshTokens(),
         cleanupOtpCodes(),
+        cleanupInactiveEcommerceStores(inactiveStoreDays),
     ]);
     
     // Log results
