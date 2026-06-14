@@ -1,23 +1,26 @@
 # E-Commerce Power Features for Jawab24
 
 > **Created:** 2026-04-04
-> **Status:** Phase 1 (foundation) partially shipped — see status table below
+> **Last reviewed:** 2026-06-13 — re-prioritized. See the ⛔ Meta-policy blocker on Phase 1d/1e/2 below; the next workstream is now **Inbound Order Auto-Resolve**.
+> **Status:** Phase 1 foundation + the order-status tool stack are shipped — but with **~0 production adoption** (2/82 pages have a store; 0 tool invocations as of 2026-06-13), so tool *enhancements* are parked and the real focus is store-connection adoption. DM abandoned-cart recovery (1d/1e/2) is **BLOCKED** on Meta policy.
 > **Companion plan:** `ECOMMERCE_NOTIFICATIONS_PLAN.md` — covers SMS delivery (broad reach for all customers).
 > This plan covers Facebook/Instagram DM delivery (rich experience for mapped customers).
-> **Delivery priority:** DM first (if customer mapping exists) → SMS fallback (if phone available) → skip
+> **Delivery priority (revised 2026-06-13):** Inside the 24h window → DM. Outside it, DM is **not** available for promotional/recovery content (Meta policy — see blocker) → SMS fallback (if phone available) → skip. Compliant proactive DM requires Meta's opt-in *Marketing Messages on Messenger* API.
 
-## Implementation Status (2026-04-25)
+## Implementation Status (2026-06-13)
 
 | Phase | Status | Notes |
 |---|---|---|
+| **Order-status tools** (lookup/track/inventory + 2-phase verify) | ✅ **Shipped & live** | 5 tools registered in `ecommerceToolHandler.ts:54-160`; all 3 platforms; order-read scopes already granted. NOT in the original phase list — the doc treated it as pre-existing |
+| **Inbound Order Auto-Resolve** (by phone/email) | ⏸️ **PARKED** (spec ready) | Cheap, customer-initiated, zero policy risk — but **0 tool usage & only 2/82 pages have a store** (prod check 2026-06-13). Build when adoption rises. See section below |
 | 1a — Messaging Type Support | ✅ **Shipped** (`ae2d9c5a`) | `sendPrivateMessage()` + `sendDirectMessage()` accept `opts.messagingType`, defaults to `RESPONSE` |
 | 1b — Rich Product Cards (Generic Template) | ✅ **Shipped** (`ae2d9c5a`) | `metaMessaging.ts` + `productCardBuilder.ts`; sends after text reply when `check_inventory` returns a synced product image |
 | 1c — Postback Webhook Handler | ⏸️ **Deferred** | Not needed for v1 — using `web_url` buttons only. Add when an action button is designed |
-| 1d — Customer Identity Mapping | 📋 **Planned** (Step 3) | Required before DM-based cart recovery |
-| 1e — Proactive Message Sender | 📋 **Planned** (Step 3) | Depends on 1d |
+| 1d — Customer Identity Mapping | ⛔ **BLOCKED** | Only useful for *outbound* proactive DMs, which Meta policy now blocks (see callout). Foundation for future Marketing-Messages path |
+| 1e — Proactive Message Sender | ⛔ **BLOCKED** | Depends on 1d **and** a compliant proactive channel (Meta Marketing Messages, opt-in). Not buildable as specced |
 | 1f — Tool Loop Return Type | ✅ **Shipped** (`ae2d9c5a`) | `AiGenerateResponse.productCards?` + `GenerateReplyResult.productCards?` threaded through pipeline |
-| 2 — Abandoned Cart Recovery (DM) | 📋 **Planned** (Step 3) | SMS version already live via `customerNotifications` |
-| 3 — Order Notifications (DM) | 📋 **Planned** (later) | SMS version already live |
+| 2 — Abandoned Cart Recovery (DM) | ⛔ **BLOCKED** | DM recovery outside 24h needs Meta Marketing Messages (opt-in, ~19 countries). **SMS version is already live** and covers broad reach — so DM recovery is now low-reach + high-effort |
+| 3 — Order Notifications (DM) | ⚠️ **Conditional** | Transactional, so likely viable via Meta **Utility Templates** (the deprecated tags' migration path). Re-scope against Utility Templates before building. SMS version already live |
 | 4a — Product Recommendations Carousel | ⏸️ **Deferred** | Defer until usage data shows demand |
 | 4b — Stock / Price Alerts | ⏸️ **Deferred** | Same |
 | 5 — Analytics Dashboard (lite) | ✅ **Shipped** (Step 2) | Page at `/ecommerce-analytics`, summary widget in `ConnectedStoreCard`, channel-keyed funnel ready for WhatsApp/DM |
@@ -105,6 +108,20 @@ interface ProductCard {
 
 **Implementation**: Treat postback as a synthetic incoming message with the product context pre-loaded. Feed into existing `messageProcessor.processMessage()` with the postback payload as the "message text" + product context in metadata.
 
+> ## ⛔ BLOCKER (added 2026-06-13): proactive DM cart recovery is not shippable as specced
+>
+> Phases 1d → 1e → 2 exist to send **proactive DMs outside the 24h messaging window**. That mechanism is now closed:
+>
+> - **The message tags this plan relies on are deprecated.** `POST_PURCHASE_UPDATE`, `CONFIRMED_EVENT_UPDATE`, and `ACCOUNT_UPDATE` were reportedly deprecated **effective 2026-04-27** and now return **error 100**. Phase 1e's line "if consent → use `MESSAGE_TAG` + `CONFIRMED_EVENT_UPDATE`" (below) is **invalid**.
+> - **The surviving `HUMAN_AGENT` tag does not apply.** It is support-only (7-day window, response to a user-initiated issue) and **explicitly bans promotional content**. Abandoned-cart recovery is promotional re-engagement → not permitted.
+> - **Blast radius is app-wide.** Misusing tags risks messaging-permission revocation / app-review failure for **every merchant on the Jawab24 Meta app** — an outage-class risk, not a feature risk.
+> - **Compliant paths (per Meta's deprecation notice):** promotional re-engagement (cart recovery) → opt-in **Marketing Messages on Messenger** API (explicit per-user opt-in; ~19 countries as of 2025); transactional updates (order/shipment notifications) → **Utility Templates**. Both are separate builds from what 1d/1e/2 specced. *(Confirmed against the live changelog 2026-06-13 — see Open Questions.)*
+> - **SMS cart recovery is already live** (`customerNotifications.ts`) and covers broad reach. So DM recovery is now *low-reach + high-effort + policy-gated*.
+>
+> **Decision:** deprioritize DM cart recovery. Do **not** build 1d/1e/2 as written. If revisited, scope it on Marketing Messages (opt-in) and re-confirm the policy against live `developers.facebook.com` docs first (see *Open questions* near the end). The next workstream is **Inbound Order Auto-Resolve** (customer-initiated, zero policy exposure) — see its section below.
+>
+> The 1d/1e/2 specs are retained below for reference / future Marketing-Messages reuse.
+
 ### 1d. Customer Identity Mapping
 
 **Problem**: Salla `abandoned.cart` webhook has customer email/phone, but we need their Facebook/Instagram `senderId` to DM them.
@@ -153,7 +170,43 @@ Shared utility for all proactive features:
 
 ---
 
-## Phase 2: Abandoned Cart Recovery (Weeks 2-3) — Highest ROI
+## Phase 1.5: Inbound Order Auto-Resolve (by phone/email) — NEXT, highest risk-adjusted value
+
+> **Added 2026-06-13.** The order-status tool stack is shipped, but today the customer must type an **order number** before `lookup_order` works. The single biggest friction (esp. guest checkouts) is "I don't have my order number." This workstream lets the customer resolve "وين طلبي؟" by giving their **phone or email** instead.
+>
+> **Why this *would* be the best next bet:** it improves a *live* feature, it is **customer-initiated** (always inside the 24h window → **zero Meta-policy exposure**, unlike Phase 2), and on Shopify it needs **no new OAuth scope / re-consent**.
+>
+> ### ⏸️ PARKED pending adoption — production check 2026-06-13
+>
+> Before committing dev-days, we pulled live usage. The signal kills the case for building *now*:
+> - **Only 2 of 82 pages** have a store connected (active stores: 1 Shopify, 1 Salla).
+> - The order-status tools have **0 invocations all-time** (`ai_usage_log`, pipeline `ecommerce_tools`) — never used in production.
+>
+> So there is **no demand to optimize and nothing to verify the flow against.** Building inbound auto-resolve now would be optimizing a feature with zero traffic — premature. **The real bottleneck is adoption: getting merchants to connect a store** (onboarding / activation), not more tool features. This spec is retained, complete and ready — pick it up when store-connection adoption is materially higher and order-lookup traffic actually exists.
+
+### New tool: `find_orders_by_contact`
+
+A Phase-1 tool taking `{ phone }` or `{ email }`, returning the matching order(s). The contact match **is** the identity check, so it slots into the existing two-phase model: return PII-gated summaries, then confirm details via the existing `verify_and_get_*` path (or treat a phone match as the verification). 
+
+- Register in `VALID_TOOL_NAMES` (`packages/shared/src/ecommerce-tools.ts`) and `ECOMMERCE_TOOLS` (`ai-worker/src/services/ecommerceToolHandler.ts`); add a `WHEN TO USE` line to `TOOL_PROMPT_ADDITION` ("customer asks about their order but gives a phone/email instead of an order number").
+- Reuse `phonesMatch()` / `namesMatch()` (`backend/src/services/ecommerceActions.ts:59-80`) to post-filter / confirm matches.
+- Reuse the existing platform request wrappers — `shopifyGraphQL()`, `sallaApiGet()`, `zidApiGet()` — for a new "search orders by contact" call. No new client framework.
+
+### Per-platform feasibility (on CURRENT scopes — no re-OAuth)
+
+| Platform | Feasible now? | Path |
+|---|---|---|
+| **Shopify** | ✅ Yes | `orders(query:"email:<addr>")` / `"phone:<num>"` via `shopifyGraphQL()` — same search syntax already used for `name:#…` at `shopify.ts:708`; supported on `read_orders`. **Build first.** |
+| **Salla** | ❓ Pending API test | `/admin/v2/orders?keyword=<phone>` (`salla.ts:438`) — undocumented whether `keyword` matches customer phone. Test against a dev store before committing. |
+| **Zid** | ❓ Pending API test | `/v1/orders?search=<phone>` (`zid.ts:413`); order response carries `customer_phone`. Test whether `search` indexes it. |
+
+**Sequencing:** ship Shopify first (unblocked), then add Salla/Zid once the API test confirms phone/email matching (else they are scope-blocked and need a separate scope/feature request).
+
+**Privacy:** keep the server-side verification gate — never surface order PII from a social identity until the phone/email match is confirmed server-side.
+
+---
+
+## Phase 2: Abandoned Cart Recovery (Weeks 2-3) — ⛔ BLOCKED (see callout above)
 
 ### 2a. New Webhook Subscriptions
 
@@ -342,20 +395,35 @@ LetsBot's whole product is WhatsApp. The remaining LetsBot-parity gaps for *that
 
 ---
 
-## Implementation Priority
+## Implementation Priority (revised 2026-06-13)
 
 | Phase | Feature | Impact | Effort | Status |
 |-------|---------|--------|--------|--------|
+| — | E-commerce **adoption** (get merchants to connect a store) | **The actual bottleneck** — only 2/82 pages connected | TBD | 🎯 Real near-term focus |
+| 0 | Verify shipped order-status flow E2E | De-risks future work, but **0 prod traffic** to verify against today | ~0.5 day | ⏸️ Moot until usage exists |
+| 1.5 | Inbound Order Auto-Resolve (Shopify → Salla/Zid) | High *once adoption exists*; no policy risk | ~3-5 days | ⏸️ PARKED — 0 tool usage, 2/82 pages (2026-06-13) |
 | 1 | Foundation (messaging type + rich cards + tool loop) | Enables all | ~2 days | ✅ Shipped (`ae2d9c5a`) |
 | 5 | Analytics Dashboard (lite) | Medium-High (retention) | ~3 days | ✅ Shipped (`17070f6a`) |
-| 1d/1e + 2 | Customer mapping + DM Cart Recovery | Very High (revenue) | ~8 days | 📋 Step 3 — next |
-| 6 | URL Wrapping + Click Tracking | High (closes attribution gap) | ~1.5 days | 📋 Lands with Step 3 |
-| 3 | Order Notifications via DM | High (satisfaction) | ~6 days | 📋 After Step 3 |
+| 1d/1e + 2 | Customer mapping + DM Cart Recovery | Was "Very High" — now low-reach (SMS covers it) | ~8 days+ | ⛔ BLOCKED (Meta policy) |
+| 3 | Order Notifications via DM | High (satisfaction) | ~6 days | ⚠️ Re-scope vs Utility Templates first |
+| 6 | URL Wrapping + Click Tracking | High (attribution) | ~1.5 days | 📋 Lands with a *compliant* proactive channel |
 | 7 | A/B Template Testing | Medium (retention) | ~4 days | 📋 After Phase 6 has data |
 | 4 | Enhanced AI Tools (recommendations + alerts) | Medium | ~5 days | ⏸️ Deferred until usage demands it |
 | WA | WhatsApp Phases 2/3/4/5/6 | Very High (LetsBot parity) | ~3 weeks code + paperwork | 📋 See `WHATSAPP_PLAN.md` |
 
-**Active roadmap from here:** Step 3 (cart recovery + URL wrapping bundled) → Phase 3 (DM order notifications) → Phase 7 (A/B testing) → WhatsApp template messages. Total ~5 weeks of code, plus calendar time on Meta paperwork running in parallel.
+**Active roadmap from here:** the production check (2026-06-13) shows **e-commerce adoption is the bottleneck** — only 2/82 pages have a store connected and the order-status tools have 0 invocations. So the near-term focus is **store-connection onboarding/activation**, not more tool features. Inbound Auto-Resolve is fully specced and **PARKED** until usage exists. DM cart recovery stays parked pending a compliant Meta channel (Marketing Messages opt-in for promo; Utility Templates for transactional). **SMS** covers broad-reach recovery/notifications today; **WhatsApp** template messages remain the real proactive-channel bet.
+
+---
+
+## Open questions to resolve before building (added 2026-06-13)
+
+Three load-bearing unknowns gate the revised roadmap. All are quick checks:
+
+1. **Meta policy — ✅ CONFIRMED 2026-06-13.** The official [Messenger Platform changelog](https://developers.facebook.com/docs/messenger-platform/changelog/) states `CONFIRMED_EVENT_UPDATE`, `ACCOUNT_UPDATE`, and `POST_PURCHASE_UPDATE` are deprecated **effective 2026-04-27** — requests with them now return **error 100**. The ⛔ blocker stands. Meta's stated migration paths split the two use cases: **Phase 2 (cart recovery = promotional)** → **Marketing Messages API** (explicit opt-in, limited countries); **Phase 3 (order notifications = transactional)** → **Utility Templates** (likely a compliant path — re-scope Phase 3 against Utility Templates specifically, not Marketing Messages). `HUMAN_AGENT` remains but is support-only / no promo.
+2. **Salla order search** (gates Salla auto-resolve). Does `/admin/v2/orders?keyword=<phone>` match customer phone, or only order number/reference? Test against a connected dev store.
+3. **Zid order search** (gates Zid auto-resolve). Does `/v1/orders?search=<phone>` index `customer_phone`? Test against a connected dev store.
+
+**Cleanup noted:** the Phase-4 `searchProducts()` in the "Modified Files" table below was never built, but left dangling comments referencing a non-existent `search_products` tool at `backend/src/services/reply/generator.ts:20` and `:284`. Remove or correct them whenever the order-status code is next touched.
 
 ---
 
