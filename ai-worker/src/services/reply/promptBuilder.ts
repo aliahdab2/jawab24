@@ -6,7 +6,7 @@
  * allowlist forbids it outside the real call sites), so buildMessages — which
  * assembles the SDK message array — stays in openai.ts and imports from here.
  */
-import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
+import { MAX_BRAND_VOICE_LENGTH, safeTimezone } from '@jawab24/shared';
 import { STATIC_SYSTEM_PREFIX } from './systemPrompt';
 import { resolveLanguage, resolveChannel } from './replyContext';
 import type { GenerateRequest } from './types';
@@ -18,6 +18,22 @@ export const MAX_INPUT_TOKENS = parseInt(process.env.MAX_INPUT_TOKENS || '24000'
 // 500 + address + phones + hours) can exceed this; the refusal directive is hoisted
 // to the top of the block (see businessInfoPrompt.ts) so it always survives the cut.
 const BUSINESS_INFO_MAX_CHARS = parseInt(process.env.BUSINESS_INFO_MAX_CHARS || '1500', 10);
+
+/**
+ * Format today's date for the prompt in the merchant's timezone, e.g.
+ * "Thursday, 2026-06-14". The weekday enables "are you open today?" reasoning;
+ * the ISO date lets the model judge whether calendar dates in KB content / the
+ * post are past or upcoming. Invalid/absent timezone falls back to UTC — a few
+ * hours of skew around midnight is immaterial for the month-scale staleness this
+ * targets.
+ */
+export function formatTodayForPrompt(timezone?: string, now: Date = new Date()): string {
+    const tz = safeTimezone(timezone);
+    // en-CA yields ISO YYYY-MM-DD
+    const isoDate = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(now);
+    return `${weekday}, ${isoDate}`;
+}
 
 /**
  * Strip known prompt-injection patterns from user-controlled text
@@ -107,6 +123,7 @@ function buildDynamicSystemSuffix(request: GenerateRequest): string {
             : 'chatting with a customer via direct message on Messenger')
         : 'replying to a customer comment on a social media post'}
 - Reply language: ${languageName} (code: ${language})
+- Today's date: ${formatTodayForPrompt(request.context?.timezone)}. Use it to judge whether a date in the business info or post is already past or still upcoming. A date or deadline BEFORE today has already passed — never describe such an offer, registration, or event as still open, upcoming, or "starts soon". Keep answering though: if some dates have passed, give the next/still-valid one when it's available and just drop the outdated detail — do NOT refuse or deflect the whole question over a stale date.
 
 STYLE: Be ${styleDirective}.
 ${isDM

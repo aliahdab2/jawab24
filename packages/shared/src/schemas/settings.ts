@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MAX_TEMPLATE_MESSAGE_LENGTH, MAX_BRAND_VOICE_LENGTH } from '../constants';
+import { isValidTimezone } from '../timezone';
 
 /**
  * Single source of truth for the `PUT /api/settings` payload shape.
@@ -39,17 +40,7 @@ export const UpdateSettingsSchema = z.object({
     timezone: z
         .string()
         .max(100)
-        .refine(
-            (tz) => {
-                try {
-                    Intl.DateTimeFormat(undefined, { timeZone: tz });
-                    return true;
-                } catch {
-                    return false;
-                }
-            },
-            { message: 'Invalid IANA timezone' },
-        )
+        .refine(isValidTimezone, { message: 'Invalid IANA timezone' })
         .optional(),
     awayMessage: z
         .string()

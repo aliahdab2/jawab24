@@ -49,6 +49,12 @@ export interface GenerateRequest {
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
         /**
+         * Merchant's IANA timezone (settings.timezone, e.g. 'Asia/Riyadh'). Used to
+         * compute the "Today's date" line in the prompt so the model can tell whether
+         * dates in KB content / the post are past or upcoming. Absent → UTC.
+         */
+        timezone?: string;
+        /**
          * When true, the backend has already prepended the merchant's configured
          * welcome greeting to this reply (customer's first message). The model must
          * NOT add its own greeting — answer directly — or the customer sees a double

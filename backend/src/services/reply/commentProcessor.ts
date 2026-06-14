@@ -453,6 +453,7 @@ export class CommentProcessor {
             generatorContext.businessInfoBlock = enriched.businessInfoBlock;
             generatorContext.replyStyle = userSettings.replyStyle;
             generatorContext.defaultReplyLanguage = userSettings.defaultReplyLanguage;
+            generatorContext.timezone = userSettings.timezone;
             // Pass commenter name so the AI addresses the actual commenter, not a tagged person
             generatorContext.senderName = fromName ?? undefined;
             // Facebook `message_tags` + our page id — feeds the user-tag skip rule

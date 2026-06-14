@@ -20,6 +20,7 @@ import {
     MAX_INPUT_TOKENS,
     buildSystemPrompt,
     buildUserPrompt,
+    formatTodayForPrompt,
 } from '../src/services/reply/promptBuilder';
 import { STATIC_SYSTEM_PREFIX } from '../src/services/reply/systemPrompt';
 import type { GenerateRequest } from '../src/services/reply/types';
@@ -40,6 +41,38 @@ describe('exported token-budget constants', () => {
         expect(KB_MAX_CHARS).toBeGreaterThan(0);
         expect(Number.isInteger(MAX_INPUT_TOKENS)).toBe(true);
         expect(MAX_INPUT_TOKENS).toBeGreaterThan(0);
+    });
+});
+
+describe('formatTodayForPrompt', () => {
+    // Fixed instant: 2026-06-14T21:00:00Z — already 2026-06-15 in Asia/Riyadh (+3).
+    const instant = new Date('2026-06-14T21:00:00Z');
+
+    it('formats as "Weekday, YYYY-MM-DD" in the given timezone', () => {
+        expect(formatTodayForPrompt('UTC', instant)).toBe('Sunday, 2026-06-14');
+    });
+
+    it('uses the merchant timezone, crossing the date line when ahead of UTC', () => {
+        // +3h pushes 21:00Z into the next calendar day.
+        expect(formatTodayForPrompt('Asia/Riyadh', instant)).toBe('Monday, 2026-06-15');
+    });
+
+    it('falls back to UTC when the timezone is invalid', () => {
+        expect(formatTodayForPrompt('Not/AZone', instant)).toBe('Sunday, 2026-06-14');
+    });
+});
+
+describe('buildSystemPrompt — today\'s date awareness', () => {
+    it('injects a "Today\'s date" line into the CONTEXT block', () => {
+        const out = suffix(req('hi', { timezone: 'Asia/Riyadh' }));
+        expect(out).toContain("- Today's date: ");
+        // The anti-deflection instruction is what distinguishes this from the
+        // reverted v38 guard — keep it so date-heavy KBs still get answered.
+        expect(out).toContain('do NOT refuse or deflect');
+    });
+
+    it('still injects the date line when no timezone is provided (UTC fallback)', () => {
+        expect(suffix(req('hi'))).toContain("- Today's date: ");
     });
 });
 
