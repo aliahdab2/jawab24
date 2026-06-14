@@ -117,19 +117,52 @@ export async function registerWebhooksWithPersist(
 }
 
 /**
- * Save webhook registration status into the store's platformData JSONB field.
- * Merges with existing platformData so other keys (e.g. planName, merchantId)
- * are preserved. Platform-agnostic — used by Shopify, Salla, Zid.
+ * Merge a patch into a store's platformData JSONB, preserving existing keys
+ * (merchantId, planName, …). One place for the merge skeleton shared by the
+ * webhook-status and token-health writers. Platform-agnostic.
+ *
+ * Deliberately a read-modify-write rather than an atomic `platformData || patch`
+ * jsonb expression: it keeps the merge logic unit-testable (the assertion that we
+ * preserve keys + set the right value lives in our code, not the DB engine) and
+ * matches the long-standing pattern here. The only concurrent overlap is
+ * webhook-status vs token-health writes to the same store within a sub-millisecond
+ * window — bidirectional and self-healing (each is re-derived next cycle), blast
+ * radius one store. If a higher-frequency writer is ever added, switch this single
+ * function to an atomic `coalesce(platform_data,'{}'::jsonb) || $patch::jsonb`.
  */
-export async function saveWebhookStatus(storeId: string, webhookStatus: WebhookRegistrationResult): Promise<void> {
+async function mergeStorePlatformData(storeId: string, patch: Record<string, unknown>): Promise<void> {
     const [store] = await db.select({ platformData: ecommerceStores.platformData })
         .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
-
     const existing = (store?.platformData as Record<string, unknown>) || {};
     await db.update(ecommerceStores).set({
-        platformData: { ...existing, webhookStatus },
+        platformData: { ...existing, ...patch },
         updatedAt: new Date(),
     }).where(eq(ecommerceStores.id, storeId));
+}
+
+/**
+ * Save webhook registration status into the store's platformData JSONB field.
+ * Platform-agnostic — used by Shopify, Salla, Zid.
+ */
+export async function saveWebhookStatus(storeId: string, webhookStatus: WebhookRegistrationResult): Promise<void> {
+    await mergeStorePlatformData(storeId, { webhookStatus });
+}
+
+/**
+ * Flag a store as needing re-authorisation: its OAuth token can no longer be
+ * refreshed (refresh token consumed/revoked → permanent failure from the platform).
+ * Stored in platformData.tokenHealth, surfaced to the merchant as a Reconnect
+ * prompt via mapToEcommerceStore's `needsReauth`. End-state idempotent (re-flagging
+ * a flagged store is a harmless re-merge).
+ *
+ * Recovery: the flag clears when the merchant reconnects (createStore's conflict
+ * merge resets tokenHealth on every reconnect path). updateStoreTokens also clears
+ * it on a successful refresh, but that rarely helps a flagged store — an
+ * invalid_grant refresh token never refreshes successfully — so RECONNECT is the
+ * real recovery path, which is exactly what the Reconnect CTA drives.
+ */
+export async function markStoreNeedsReauth(storeId: string): Promise<void> {
+    await mergeStorePlatformData(storeId, { tokenHealth: 'invalid' });
 }
 
 export const KB_MAX_CHARS = 8000; // Must match ai-worker's KB_MAX_CHARS
@@ -262,7 +295,14 @@ export async function createStore(opts: CreateStoreOptions) {
             storeEmail: opts.shopInfo?.shopEmail,
             storeCurrency: opts.shopInfo?.shopCurrency,
             storeTimezone: opts.shopInfo?.shopTimezone,
-            platformData: opts.platformData,
+            // MERGE platformData (don't replace) so existing keys — merchantId,
+            // webhookStatus — survive a reconnect, and ALWAYS clear tokenHealth so
+            // every reconnect path self-heals the needs-reauth flag. The claim path
+            // (claimPendingInstall) passes no platformData; Drizzle would omit an
+            // undefined value here, leaving a stale tokenHealth:'invalid' (stuck
+            // Reconnect banner). The logged-in callback passes only { merchantId }
+            // and would otherwise wipe webhookStatus. The jsonb || merge fixes both.
+            platformData: sql`coalesce(${ecommerceStores.platformData}, '{}'::jsonb) || ${JSON.stringify({ ...(opts.platformData ?? {}), tokenHealth: 'ok' })}::jsonb`,
             isActive: true,
             uninstalledAt: null,
             updatedAt: new Date(),
@@ -295,6 +335,16 @@ export async function updateStoreTokens(storeId: string, tokens: {
     if (refreshCiphertext) {
         updateSet.refreshToken = refreshCiphertext;
         updateSet.refreshTokenIv = refreshIv;
+    }
+
+    // A successful token write means the store is healthy again — clear any prior
+    // needs-reauth flag set by markStoreNeedsReauth. Only touch platformData when it
+    // was actually flagged, so we never clobber other keys on a routine refresh.
+    const [existing] = await db.select({ platformData: ecommerceStores.platformData })
+        .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
+    const pd = (existing?.platformData as Record<string, unknown>) || {};
+    if (pd.tokenHealth === 'invalid') {
+        updateSet.platformData = { ...pd, tokenHealth: 'ok' };
     }
 
     await db.update(ecommerceStores).set(updateSet)
@@ -870,6 +920,7 @@ export function mapToEcommerceStore(row: typeof ecommerceStores.$inferSelect): E
         isActive: row.isActive ?? true,
         installedAt: row.installedAt,
         webhookHealth: deriveWebhookHealth(webhookStatus),
+        needsReauth: platformData?.tokenHealth === 'invalid',
     };
 }
 

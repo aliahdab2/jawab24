@@ -25,6 +25,10 @@
     "reregisterSuccess": "Connection refreshed",
     "reregisterError": "Still not working. Try again in a few minutes."
   },
+  "needsReauth": {
+    "title": "Reconnection needed",
+    "body": "This store's authorization has expired, so we can't read its product data anymore. Reconnect to restore smart replies."
+  },
   "notConnected": {
     "connectBtn": "Connect Store",
     "freeLabel": "Free to connect",

@@ -122,6 +122,13 @@ function usePlatformT(id: PlatformId) {
 /*  Connected store card                                               */
 /* ------------------------------------------------------------------ */
 
+/** Re-run a platform's OAuth flow — shared by the needs-reauth banner (connected
+ * card) and the disconnected card so the redirect logic lives in one place. */
+function reconnectStore(platform: PlatformConfig, storeDomain: string) {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+  window.location.href = apiBase + platform.getReconnectPath(storeDomain);
+}
+
 function ConnectedStoreCard({
   platform,
   store,
@@ -152,6 +159,9 @@ function ConnectedStoreCard({
   // with a cryptic error. Disable those CTAs and explain why on hover instead.
   const demoLockMessage = isDemoUser ? tInt('demoLockedAction') : undefined;
   const actionsDisabled = isDemoUser;
+
+  // Re-run the OAuth flow when the store's token can no longer be refreshed.
+  const handleReconnect = () => reconnectStore(platform, store.storeDomain);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -223,6 +233,26 @@ function ConnectedStoreCard({
       </div>
 
       <div className="space-y-4">
+        {store.needsReauth && (
+          <div className="flex items-start gap-3 p-3 rounded-xl alert-error border" role="alert">
+            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="flex-1 text-sm">
+              <p className="font-semibold">{tInt('needsReauth.title')}</p>
+              <p className="text-muted-foreground mb-2">{tInt('needsReauth.body')}</p>
+              {canEdit && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleReconnect}
+                  disabled={actionsDisabled}
+                  title={demoLockMessage}
+                >
+                  {tInt('reconnect')}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
         {store.webhookHealth === 'pending' && (
           <div className="flex items-start gap-3 p-3 rounded-xl alert-warning border" role="status">
             <Loader2 className="w-5 h-5 mt-0.5 shrink-0 animate-spin" aria-hidden="true" />
@@ -233,7 +263,7 @@ function ConnectedStoreCard({
           </div>
         )}
         {store.webhookHealth === 'failed' && (
-          <div className="flex items-start gap-3 p-3 rounded-xl alert-danger border" role="alert">
+          <div className="flex items-start gap-3 p-3 rounded-xl alert-error border" role="alert">
             <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" aria-hidden="true" />
             <div className="flex-1 text-sm">
               <p className="font-semibold">{tInt('webhookHealth.failedTitle')}</p>
@@ -341,11 +371,7 @@ function ConnectedStoreCard({
 function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store: EcommerceStore }) {
   const t = usePlatformT(platform.id);
   const tInt = useTranslations('integrations');
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-
-  const handleReconnect = () => {
-    window.location.href = apiBase + platform.getReconnectPath(store.storeDomain);
-  };
+  const handleReconnect = () => reconnectStore(platform, store.storeDomain);
 
   return (
     <Card className="border-none shadow-card-soft p-6 landscape:p-4">

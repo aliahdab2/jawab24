@@ -320,6 +320,37 @@ describe('A-1.7 — mapToEcommerceStore must expose isActive (REGRESSION)', () =
     });
 });
 
+// ─── S3 (REGRESSION): mapToEcommerceStore derives needsReauth from token health ───
+
+describe('mapToEcommerceStore must expose needsReauth (platformData.tokenHealth)', () => {
+    const baseRow = {
+        id: 'store-1', userId: 'u-1', workspaceId: 'ws-1', platform: 'shopify',
+        storeDomain: 'x.myshopify.com', accessToken: 'enc', accessTokenIv: 'iv',
+        refreshToken: null, refreshTokenIv: null, tokenExpiresAt: null,
+        storeName: 'X', storeEmail: null, storeCurrency: 'USD', storeTimezone: null,
+        productCount: 0, productSummary: null, policiesSummary: null,
+        lastSyncAt: null, isActive: true,
+        installedAt: null, uninstalledAt: null,
+        createdAt: new Date(), updatedAt: new Date(),
+    };
+
+    it('needsReauth=true when platformData.tokenHealth is invalid', async () => {
+        const { mapToEcommerceStore } = await import('../../src/services/ecommerce');
+        const out = mapToEcommerceStore({ ...baseRow, platformData: { tokenHealth: 'invalid', merchantId: '123' } } as never);
+        expect(out.needsReauth).toBe(true);
+    });
+
+    it('needsReauth=false when tokenHealth is ok, absent, or platformData is null', async () => {
+        const { mapToEcommerceStore } = await import('../../src/services/ecommerce');
+        // 'ok' (cleared after a successful refresh)
+        expect(mapToEcommerceStore({ ...baseRow, platformData: { tokenHealth: 'ok' } } as never).needsReauth).toBe(false);
+        // merchantId-only — i.e. after a reconnect REPLACES platformData, dropping tokenHealth
+        expect(mapToEcommerceStore({ ...baseRow, platformData: { merchantId: '123' } } as never).needsReauth).toBe(false);
+        // legacy / brand-new row
+        expect(mapToEcommerceStore({ ...baseRow, platformData: null } as never).needsReauth).toBe(false);
+    });
+});
+
 // ─── A-1.9 (FIXED): claimPendingInstall awaits webhook registration ──────
 //
 // Helper: mock just enough of the DB chain to drive claimPendingInstall to

@@ -750,6 +750,15 @@ export interface EcommerceStore {
    * - 'unknown' — legacy row that predates webhookStatus tracking
    */
   webhookHealth: 'ok' | 'pending' | 'failed' | 'unknown';
+  /**
+   * True when the store's OAuth token can no longer be refreshed — the refresh
+   * token was consumed/revoked and the platform rejected it with a permanent 400
+   * (invalid_grant). Derived from `platform_data.tokenHealth`. Surfaced so the
+   * integrations card can prompt the merchant to reconnect; cleared automatically
+   * on the next successful token write. Shopify tokens never expire, so this stays
+   * false for Shopify.
+   */
+  needsReauth: boolean;
 }
 
 export interface EcommerceProduct {

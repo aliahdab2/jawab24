@@ -15,7 +15,7 @@ import { ecommerceStores } from '../db/schema';
 import { decrypt } from './ecommerceCrypto';
 import { captureError } from '../utils/sentryHelpers';
 import { redis } from '../lib/redis';
-import { getStoreById, updateStoreTokens } from './ecommerce';
+import { getStoreById, updateStoreTokens, markStoreNeedsReauth } from './ecommerce';
 
 const LOCK_WAIT_DELAY_MS = 2000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -61,6 +61,8 @@ export async function refreshAccessToken(storeId: string, cfg: TokenRefreshConfi
         if (store.tokenExpiresAt && store.tokenExpiresAt > oneDayFromNow) return;
 
         if (!store.refreshToken || !store.refreshTokenIv) {
+            // No refresh token at all → can never refresh → merchant must reconnect.
+            await markStoreNeedsReauth(storeId).catch(() => {});
             throw new Error(`No refresh token for ${platformLabel(cfg)} store ${storeId}`);
         }
 
@@ -81,6 +83,14 @@ export async function refreshAccessToken(storeId: string, cfg: TokenRefreshConfi
 
         if (!response.ok) {
             const text = await response.text();
+            // Permanent failure → the merchant must re-authorise: a 400 (RFC 6749
+            // returns 400 for invalid_grant), OR any response whose OAuth error is
+            // `invalid_grant` (some providers send it with 401/403). Flag it so the
+            // UI prompts a reconnect. 5xx / 429 / network failures are transient and
+            // left to retry on the next cycle (no flag).
+            if (response.status === 400 || /invalid_grant/i.test(text)) {
+                await markStoreNeedsReauth(storeId).catch(() => {});
+            }
             throw new Error(`${platformLabel(cfg)} token refresh failed: ${response.status} ${text}`);
         }
 

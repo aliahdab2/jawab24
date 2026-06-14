@@ -14,9 +14,11 @@ vi.mock('../../src/lib/redis', () => ({
 
 const mockGetStoreById = vi.fn();
 const mockUpdateStoreTokens = vi.fn();
+const mockMarkNeedsReauth = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
     updateStoreTokens: (...args: unknown[]) => mockUpdateStoreTokens(...args),
+    markStoreNeedsReauth: (...args: unknown[]) => mockMarkNeedsReauth(...args),
 }));
 
 // Mock DB (getStoresNeedingTokenRefresh uses it directly)
@@ -189,9 +191,66 @@ describe('refreshAccessToken', () => {
             refreshToken: 'enc',
             refreshTokenIv: 'iv',
         });
+        mockFetch.mockResolvedValueOnce(makeResponse(401, { error: 'invalid_client' }));
+
+        await expect(refreshAccessToken('store-1', testConfig)).rejects.toThrow('Salla token refresh failed: 401');
+        // 401 invalid_client is OUR credential problem, not the merchant's — do not flag.
+        expect(mockMarkNeedsReauth).not.toHaveBeenCalled();
+    });
+
+    it('flags reauth on a 401 that carries invalid_grant (provider not strictly RFC-6749)', async () => {
+        mockRedisSet.mockResolvedValueOnce('OK');
+        mockGetStoreById.mockResolvedValueOnce({
+            id: 'store-1',
+            tokenExpiresAt: futureDate(1000),
+            refreshToken: 'enc',
+            refreshTokenIv: 'iv',
+        });
         mockFetch.mockResolvedValueOnce(makeResponse(401, { error: 'invalid_grant' }));
 
         await expect(refreshAccessToken('store-1', testConfig)).rejects.toThrow('Salla token refresh failed: 401');
+        expect(mockMarkNeedsReauth).toHaveBeenCalledWith('store-1');
+    });
+
+    it('flags the store as needing reauth on a permanent 400 (invalid_grant) and rethrows', async () => {
+        mockRedisSet.mockResolvedValueOnce('OK');
+        mockGetStoreById.mockResolvedValueOnce({
+            id: 'store-1',
+            tokenExpiresAt: futureDate(1000),
+            refreshToken: 'enc',
+            refreshTokenIv: 'iv',
+        });
+        mockFetch.mockResolvedValueOnce(makeResponse(400, { error: 'invalid_grant' }));
+
+        await expect(refreshAccessToken('store-1', testConfig)).rejects.toThrow('Salla token refresh failed: 400');
+        expect(mockMarkNeedsReauth).toHaveBeenCalledWith('store-1');
+    });
+
+    it('does NOT flag reauth on a transient 5xx failure (left to retry)', async () => {
+        mockRedisSet.mockResolvedValueOnce('OK');
+        mockGetStoreById.mockResolvedValueOnce({
+            id: 'store-1',
+            tokenExpiresAt: futureDate(1000),
+            refreshToken: 'enc',
+            refreshTokenIv: 'iv',
+        });
+        mockFetch.mockResolvedValueOnce(makeResponse(503, { error: 'service unavailable' }));
+
+        await expect(refreshAccessToken('store-1', testConfig)).rejects.toThrow('Salla token refresh failed: 503');
+        expect(mockMarkNeedsReauth).not.toHaveBeenCalled();
+    });
+
+    it('flags reauth when there is no refresh token to use', async () => {
+        mockRedisSet.mockResolvedValueOnce('OK');
+        mockGetStoreById.mockResolvedValueOnce({
+            id: 'store-1',
+            tokenExpiresAt: futureDate(1000),
+            refreshToken: null,
+            refreshTokenIv: null,
+        });
+
+        await expect(refreshAccessToken('store-1', testConfig)).rejects.toThrow('No refresh token');
+        expect(mockMarkNeedsReauth).toHaveBeenCalledWith('store-1');
     });
 });
 
