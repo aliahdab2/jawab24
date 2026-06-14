@@ -547,6 +547,7 @@ export class MessageProcessor {
                         businessInfoBlock,
                         ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
                         defaultReplyLanguage: userSettings.defaultReplyLanguage,
+                        timezone: userSettings.timezone,
                         suppressGreeting: !!greetingPrefix,
                     },
                     userSettings.aiEnabled ?? false,

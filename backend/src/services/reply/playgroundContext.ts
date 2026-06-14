@@ -79,10 +79,12 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
             // Non-critical — fall back to defaults
         }
     }
+    let timezone: string | undefined;
     if (page.workspaceId) {
         try {
             const wsSettings = await workspaceSettingsService.getSettings(page.workspaceId);
             defaultReplyLanguage = wsSettings.defaultReplyLanguage;
+            timezone = wsSettings.timezone;
         } catch {
             // Non-critical — fall back to default
         }
@@ -132,6 +134,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         customerContext,
         model,
         defaultReplyLanguage,
+        timezone,
         messageTags: channel === 'comment' ? messageTags : undefined,
         ourFacebookPageId: channel === 'comment' ? ourFacebookPageId : undefined,
         ecommerceStoreId: page.ecommerceStoreId ?? undefined,

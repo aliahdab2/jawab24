@@ -61,6 +61,11 @@ export interface AiGenerateRequest {
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
         /**
+         * Merchant's IANA timezone (workspace settings). The ai-worker uses it to
+         * compute the "Today's date" prompt line for past/upcoming date reasoning.
+         */
+        timezone?: string;
+        /**
          * When true, the backend has prepended the merchant's configured welcome
          * greeting to this reply (customer's first message). Tells ai-worker the
          * model must NOT greet again — go straight to the answer — so the customer

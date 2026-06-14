@@ -52,6 +52,7 @@ export const KB_GAP_FLAGS = ['info_not_in_kb', 'price_not_in_kb', 'phone_not_in_
 export type KbGapFlag = (typeof KB_GAP_FLAGS)[number];
 
 // --- Utilities ---
+export { isValidTimezone, safeTimezone } from './timezone';
 export { normalizeArabic } from './utils/arabic-normalize';
 export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
@@ -624,7 +625,12 @@ export {
 } from './aiMetrics';
 
 /** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
-export const PROMPT_VERSION = 'v37';
+// v39: lightweight date awareness — inject today's date (merchant timezone) into the
+// prompt so the model stops relaying clearly-past KB/post dates as upcoming. NO
+// deterministic guard / flag / deflection (that was v38, reverted in #314 for
+// over-deflecting on date-heavy KBs). v38 is intentionally skipped to avoid colliding
+// with the reverted deploy's cache/log rows.
+export const PROMPT_VERSION = 'v39';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

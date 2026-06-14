@@ -220,6 +220,8 @@ export interface GenerateReplyContext {
     ecommerceStoreId?: string;
     // Language fallback
     defaultReplyLanguage?: string;
+    /** Merchant's IANA timezone (workspace settings) — drives the "Today's date" prompt line. */
+    timezone?: string;
     /**
      * Set by messageProcessor when the merchant's welcome greeting has been prepended
      * to this (first-contact) reply. Forwarded to the AI as `suppressGreeting` so the
@@ -276,6 +278,8 @@ export interface PlaygroundInput {
     customerContext?: string;
     model?: string;
     defaultReplyLanguage?: string;
+    /** See GenerateReplyContext.timezone. */
+    timezone?: string;
     /** See GenerateReplyContext.messageTags. */
     messageTags?: FacebookMessageTag[];
     /** See GenerateReplyContext.ourFacebookPageId. */
@@ -426,7 +430,7 @@ export class ReplyGenerator {
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
-                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, pipeline: 'comment_reply' }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
@@ -524,7 +528,7 @@ export class ReplyGenerator {
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, suppressGreeting: context.suppressGreeting, pipeline: 'dm_reply' },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, pipeline: 'dm_reply' },
                 };
 
                 const aiResponse = await dispatchAiReply(aiRequest);
@@ -654,7 +658,7 @@ export class ReplyGenerator {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
             replyStyle, brandVoiceNotes, businessInfoBlock, customerContext, model, defaultReplyLanguage,
-            messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
+            timezone, messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
         } = input;
 
         const ragMode = config.ragMode || 'off';
@@ -722,6 +726,7 @@ export class ReplyGenerator {
                 ...(businessInfoBlock ? { businessInfoBlock } : {}),
                 ...(mergedCustomerCtx ? { customerContext: mergedCustomerCtx } : {}),
                 ...(defaultReplyLanguage ? { defaultReplyLanguage } : {}),
+                ...(timezone ? { timezone } : {}),
                 ...(ecommerceStoreId ? { ecommerceStoreId } : {}),
                 pipeline: pipeline ?? 'playground',
             },
