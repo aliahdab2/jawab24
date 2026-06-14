@@ -68,6 +68,7 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
     updateStoreTokens: (...args: unknown[]) => mockUpdateStoreTokens(...args),
+    markStoreNeedsReauth: vi.fn().mockResolvedValue(undefined),
     replaceProductsAndRebuildSummary: (...args: unknown[]) => mockReplaceProductsAndRebuildSummary(...args),
 }));
 
