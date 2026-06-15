@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { formatMessageTime } from '@/utils/dateUtils';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
-import { isLowSignalText, intentLabelKey } from '@/utils/feedPreview';
 import type { Comment } from '@jawab24/shared';
 
 export interface CommentCardProps {
@@ -82,13 +81,6 @@ export const CommentCard = React.memo(function CommentCard({
   const { dateLocale } = useLanguage();
   const needsAttention = checkNeedsAttention(comment);
   const isGrouped = (groupCount ?? 1) > 1;
-
-  // When the comment text is low-signal ("...", emoji-only), fall back to a
-  // readable AI-intent label instead of a useless bubble. The post context is
-  // already shown on its own line above, so we don't repeat it here.
-  const lowSignal = isLowSignalText(comment.message);
-  const intentKey = intentLabelKey(comment.aiIntent);
-  const intentLabel = intentKey ? tc(intentKey as Parameters<typeof tc>[0]) : null;
 
   const formatTime = (date?: string | Date | null) => formatMessageTime(date, dateLocale);
 
@@ -253,15 +245,9 @@ export const CommentCard = React.memo(function CommentCard({
                   "px-4 py-2.5 bg-muted/70 dark:bg-muted/50 rounded-2xl rounded-ss-sm text-foreground text-sm leading-relaxed",
                   "transition-colors"
                )}>
-                 {lowSignal ? (
-                   <p className="italic text-muted-foreground">
-                     {intentLabel ?? tc('feedPreview.noPreview')}
-                   </p>
-                 ) : (
-                   <p className={clsx(variant === 'compact' ? "line-clamp-2" : "whitespace-pre-wrap")} dir="auto">
-                      {renderMessageText(comment.message)}
-                   </p>
-                 )}
+                 <p className={clsx(variant === 'compact' ? "line-clamp-2" : "whitespace-pre-wrap")} dir="auto">
+                    {renderMessageText(comment.message)}
+                 </p>
                </div>
              </div>
 
