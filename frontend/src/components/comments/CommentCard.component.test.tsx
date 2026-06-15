@@ -55,6 +55,21 @@ describe('CommentCard', () => {
     expect(screen.getByText('كم سعر الدورة؟')).toBeInTheDocument();
   });
 
+  it('shows the real low-signal comment text (e.g. a lone "."), never an intent label or "No preview"', () => {
+    // Post-reply keyword flow: customers comment "." on purpose — it must be
+    // shown verbatim, never replaced by the AI intent label or "No preview".
+    render(<CommentCard {...defaultProps} comment={{ ...baseComment, message: '.', aiIntent: 'QUESTION' }} />);
+    expect(screen.getByText('.')).toBeInTheDocument();
+    expect(screen.queryByText('Question')).not.toBeInTheDocument();
+    expect(screen.queryByText('No preview')).not.toBeInTheDocument();
+  });
+
+  it('shows an emoji-only comment verbatim', () => {
+    render(<CommentCard {...defaultProps} comment={{ ...baseComment, message: '👍', aiIntent: null }} />);
+    expect(screen.getByText('👍')).toBeInTheDocument();
+    expect(screen.queryByText('No preview')).not.toBeInTheDocument();
+  });
+
   it('renders commenter name', () => {
     render(<CommentCard {...defaultProps} />);
     expect(screen.getByText('أحمد محمد')).toBeInTheDocument();
