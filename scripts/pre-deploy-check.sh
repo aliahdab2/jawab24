@@ -322,16 +322,22 @@ else
     exit 1
 fi
 
-# A running `next dev` for THIS repo shares frontend/.next with this build and
-# corrupts it mid-build: the build script's `rm -rf .next && lint && next build`
-# leaves a ~30s window during lint in which the dev server's watcher regenerates
-# .next (types/validator.ts, trace, dev chunks), so `next build` then races the
-# dev server's writes. Symptoms seen in the wild: ENOENT during the
-# export→server-pages rename step, and "File '.next/types/validator.ts' not
-# found" during typecheck (root-caused 2026-06-11; reconfirmed via controlled
-# before/after — 2/3 builds raced with a dev server up, 4/4 clean with it down).
-# Refuse to build until it's stopped — the retry below cannot save us while it
-# keeps writing.
+# A running `next dev` for THIS repo USED to corrupt this build: both wrote to
+# frontend/.next, so during the build script's `rm -rf .next && lint && next
+# build` the dev server's watcher regenerated .next (types/validator.ts, trace,
+# dev chunks) and raced `next build`'s export→server-pages rename. Symptoms seen
+# in the wild: ENOENT during the rename step, and "File '.next/types/validator.ts'
+# not found" during typecheck (root-caused 2026-06-11; 2/3 builds raced with a
+# dev server up, 4/4 clean with it down).
+#
+# That class of failure is now STRUCTURALLY IMPOSSIBLE: `next dev`
+# (NODE_ENV=development) writes to `.next-dev` and `next build` (production)
+# writes to `.next` — see distDir in next.config.js (PR #310). The two never
+# share a path, so a concurrent dev server can no longer corrupt the build.
+# This check is therefore a NON-FATAL advisory (belt-and-braces), not a block:
+# we still surface a running dev server because it competes for CPU/RAM during
+# the build, and because the E2E step later in this script kills whatever listens
+# on port 3001 — so the dev server WILL be stopped before tests run regardless.
 #
 # Detection note: the previous "$(pwd)/node_modules/.bin/next dev" pgrep pattern
 # never matched a real dev server — npm runs the dev script through the
@@ -358,11 +364,11 @@ DEV_SERVER_PIDS=$(
     done | tr '\n' ' ' | sed 's/ *$//'
 )
 if [ -n "$DEV_SERVER_PIDS" ]; then
-    echo -e "${RED}   ❌ A Next.js dev server for this repo is running (PID(s): ${DEV_SERVER_PIDS})${NC}"
-    echo -e "${RED}      It writes into frontend/.next while this build runs, corrupting it${NC}"
-    echo -e "${RED}      (flaky ENOENT in the export step / missing .next/types files).${NC}"
-    echo -e "${RED}      Stop it first:  kill ${DEV_SERVER_PIDS}   then re-run this script.${NC}"
-    exit 1
+    echo -e "${YELLOW}   ⚠️  A Next.js dev server for this repo is running (PID(s): ${DEV_SERVER_PIDS})${NC}"
+    echo -e "${YELLOW}      The build is isolated (dev → .next-dev, build → .next), so it${NC}"
+    echo -e "${YELLOW}      cannot corrupt this build. It does compete for CPU/RAM, and the${NC}"
+    echo -e "${YELLOW}      E2E step later in this script will stop it (it owns port 3001).${NC}"
+    echo -e "${YELLOW}      To free resources / keep it alive elsewhere:  kill ${DEV_SERVER_PIDS}${NC}"
 fi
 
 # Always clean .next and webpack cache before building to avoid stale vendor chunks
