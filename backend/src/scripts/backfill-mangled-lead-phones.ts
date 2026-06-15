@@ -12,7 +12,8 @@
  * This script:
  *   1. Finds every lead whose `phone` is not a valid E.164 number.
  *   2. Loads the source message/comment text.
- *   3. Re-runs extractPhoneFromText (now backed by libphonenumber-js).
+ *   3. Re-runs extractPhoneFromText (country-agnostic regex extractor that now
+ *      also handles numbers written with spaces between digit groups).
  *   4. Updates the row when a better phone is recovered.
  *
  * Run once after deploy:

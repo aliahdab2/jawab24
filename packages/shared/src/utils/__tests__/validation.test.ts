@@ -99,6 +99,35 @@ describe('extractPhoneFromText', () => {
       expect(extractPhoneFromText('الارضي ٠١٢٢٢١٢٣٢١٢٣٤')).toBe('0122212321234');
     });
   });
+
+  describe('number written with spaces between digit groups (regression: spaced leads dropped)', () => {
+    // The whitespace-forbidding regex matched only the sub-8-digit fragments of
+    // a space-grouped number, so the gate found nothing and the entire lead
+    // (name + phone) was silently dropped. Writing a phone with spaces is very
+    // common in Arabic markets, so this lost a large share of leads.
+    it('extracts a national mobile grouped as 4-3-3', () => {
+      expect(extractPhoneFromText('0500 000 000')).toBe('0500000000');
+    });
+
+    it('extracts a national mobile grouped as 3-3-4 in Arabic prose', () => {
+      expect(extractPhoneFromText('رقمي 050 123 4567')).toBe('0501234567');
+    });
+
+    it('extracts an international mobile grouped with spaces after the country code', () => {
+      expect(extractPhoneFromText('+966 50 123 4567')).toBe('+966501234567');
+    });
+
+    it('extracts a spaced number written in Arabic-Indic digits', () => {
+      expect(extractPhoneFromText('رقم جوالي ٠٥٠ ١٢٣ ٤٥٦٧')).toBe('0501234567');
+    });
+
+    it('still does NOT weld two contiguous numbers separated by a single space (#81 holds)', () => {
+      // Neither block has an internal space, so the GROUPED shape (≤4-digit
+      // groups) can't span the gap — the two numbers stay separate.
+      const phones = extractPhonesFromText('للتواصل 0935924472 0112124470');
+      expect(phones).toEqual(['0935924472', '0112124470']);
+    });
+  });
 });
 
 describe('normalizeArabicIndic', () => {
