@@ -1,3 +1,5 @@
+import { findPhoneNumbersInText, type CountryCode } from 'libphonenumber-js';
+
 /** E.164 international phone format: +[1-9] followed by 1–14 digits */
 export const PHONE_REGEX = /^\+[1-9]\d{1,14}$/;
 
@@ -62,45 +64,37 @@ export function normalizeArabicIndic(text: string): string {
   return text.replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
 }
 
+/** A phone number extracted from free text. */
+export interface ExtractedPhone {
+  /** Faithful digits as the customer typed them (Arabic-Indic→ASCII, formatting
+   *  stripped, leading `+`/`00`→`+` preserved). Dials everywhere; what the merchant reads. */
+  raw: string;
+  /** Canonical E.164 when libphonenumber confidently validates the number against
+   *  a real numbering plan; null when it can't (unknown region / exotic plan). */
+  e164: string | null;
+  /** True when the number validates against a real numbering plan. */
+  valid: boolean;
+}
+
 /**
- * Match a phone-like digit run anywhere in text — no country, no plan validation.
+ * Permissive safety-net shapes used ONLY when libphonenumber can't resolve a run
+ * (no region hint, or a plan it doesn't recognise) — so a real lead is never
+ * silently dropped. libphonenumber is the primary, plan-validating extractor.
  *
- * Both the customer typing the number and the merchant reading it know what
- * country it belongs to; we have no business second-guessing them. Storing
- * exactly what the customer wrote (digits only, formatting stripped) keeps
- * the lead record faithful and works with `tel:` everywhere. For WhatsApp
- * click-to-chat the customer needs to have included `+countrycode` themselves.
+ *  - CONTIGUOUS: a single run, no internal whitespace (`- . ( )` allowed). Keeps
+ *    two space-separated numbers from welding (#81): each block matches alone.
+ *  - GROUPED: a number written with spaces between ≤4-digit groups (`050 123 4567`).
+ *    A contiguous 10-digit block can't parse as ≤4-digit groups, so #81 still holds.
  *
- * Shape: optional `+` or `00`, then 8–16 chars of digits / `- . ( )` bounded
- * by digits on both ends. Whitespace is NOT permitted inside the digit run —
- * that's the only thing that distinguishes this from the pre-#81 regex and
- * is what prevented two adjacent numbers from being welded into a 19-digit
- * garbage string. The size bound (8–16) is wide enough for every real-world
- * national/international format and tight enough to reject overlong digit
- * strings.
+ * The fallback digit floor (9) is intentionally stricter than a real phone's
+ * minimum: without a region we can't validate, and an 8-digit space-grouped run
+ * is far more likely a size/price sequence ("75 80 85 90") than a phone. Known
+ * regions still resolve genuine 8-digit national numbers via libphonenumber.
  */
-// Two complementary shapes, both bounded to a phone-plausible digit count in
-// code (see DIGIT_MIN/MAX) rather than by character count, so internal spaces
-// don't break the bound:
-//
-//  1. CONTIGUOUS — a single run with no internal whitespace (formatting chars
-//     `- . ( )` allowed). This is the original #81 shape and is what keeps two
-//     numbers separated by a space from welding: each 10-digit block matches on
-//     its own, the space ends the run.
-//  2. GROUPED — a number written with internal spaces between short digit groups
-//     (e.g. `050 123 4567`, `+966 50 123 4567`). Each group is 1–4 digits — the
-//     real-world grouping width. A contiguous 10-digit block can NOT be parsed as
-//     ≤4-digit groups, so the #81 welding case (`0935924472 0112124470`) is still
-//     immune: there's no internal space within either block for GROUPED to latch
-//     onto, so it never spans the gap between them.
-//
-// Before this, GROUPED didn't exist and CONTIGUOUS forbade internal whitespace,
-// so a single phone typed with spaces (very common in Arabic markets) produced
-// only sub-8-digit fragments and was dropped entirely — silently losing the lead.
 const CONTIGUOUS_PHONE_REGEX = /(?<!\d)(?:\+|00)?\d[\d\-().]{6,14}\d(?!\d)/g;
 const GROUPED_PHONE_REGEX = /(?<!\d)(?:\+|00)?\d{1,4}(?:[ \-.]\d{1,4}){1,6}(?!\d)/g;
-const DIGIT_MIN = 8;
-const DIGIT_MAX = 16;
+const FALLBACK_DIGIT_MIN = 9;
+const DIGIT_MAX = 15; // E.164 maximum
 
 /** Strip the formatting characters allowed inside the regexes (incl. spaces), preserve `+`. */
 function stripFormatting(s: string): string {
@@ -112,55 +106,123 @@ function digitCount(s: string): number {
   return (s.match(/\d/g) ?? []).length;
 }
 
-/**
- * Extract every phone-like digit run from free text, in the order they appear.
- *
- * Returns the strings exactly as the customer wrote them (Arabic-Indic digits
- * normalized to ASCII, formatting characters removed, `+` and `00` prefixes
- * preserved). Duplicates within the same message are de-duplicated. Handles both
- * contiguous numbers and numbers written with spaces between digit groups,
- * without welding two adjacent numbers into one (#81).
- */
-export function extractPhonesFromText(text: string): string[] {
-  const normalized = normalizeArabicIndic(text);
+/** Unicode bidi control marks Facebook/Instagram wrap RTL numbers in. */
+const BIDI_MARKS_REGEX = /[‎‏‪-‮⁦-⁩]/g;
 
-  // Collect candidates from both shapes, each tagged with its position so we can
-  // resolve overlaps (a GROUPED match may cover the same span as a CONTIGUOUS one).
-  const candidates: Array<{ start: number; end: number; raw: string }> = [];
+/** Normalise text before phone matching: drop bidi marks, Arabic-Indic→ASCII,
+ *  and rewrite a leading `00<cc>` international prefix to `+<cc>` (libphonenumber's
+ *  findNumbers ignores a bare `00`). */
+function preNormalizeForPhones(text: string): string {
+  let t = text.replace(BIDI_MARKS_REGEX, '');
+  t = normalizeArabicIndic(t);
+  t = t.replace(/(?<![\d+])00(\d{7,})/g, '+$1');
+  return t;
+}
+
+/**
+ * IANA timezone → ISO-3166 alpha-2 country, used to derive a merchant's default
+ * region from `settings.timezone`. Covers the markets Jawab24 serves; unknown
+ * zones return undefined (the extractor then relies on explicit `+CC` + fallback).
+ *
+ * This is the MERCHANT's region — a best-effort default for bare national numbers.
+ * An explicit country code the customer types always overrides it.
+ */
+const TIMEZONE_TO_COUNTRY: Record<string, CountryCode> = {
+  'Asia/Riyadh': 'SA', 'Asia/Dubai': 'AE', 'Asia/Qatar': 'QA', 'Asia/Bahrain': 'BH',
+  'Asia/Kuwait': 'KW', 'Asia/Muscat': 'OM', 'Asia/Aden': 'YE', 'Asia/Baghdad': 'IQ',
+  'Asia/Damascus': 'SY', 'Asia/Beirut': 'LB', 'Asia/Amman': 'JO', 'Asia/Jerusalem': 'PS',
+  'Asia/Gaza': 'PS', 'Asia/Hebron': 'PS', 'Asia/Istanbul': 'TR', 'Europe/Istanbul': 'TR',
+  'Africa/Cairo': 'EG', 'Africa/Tripoli': 'LY', 'Africa/Tunis': 'TN', 'Africa/Algiers': 'DZ',
+  'Africa/Casablanca': 'MA', 'Africa/Khartoum': 'SD', 'Africa/Nouakchott': 'MR',
+  'Europe/Stockholm': 'SE', 'Europe/London': 'GB',
+};
+
+/** Map an IANA timezone (e.g. settings.timezone) to a default ISO country, or undefined. */
+export function countryFromTimezone(tz?: string | null): CountryCode | undefined {
+  if (!tz) return undefined;
+  return TIMEZONE_TO_COUNTRY[tz];
+}
+
+/**
+ * Extract phone numbers from free text, validated against real numbering plans.
+ *
+ * Primary engine is libphonenumber-js: it parses every country's formats (spaces,
+ * dashes, `+CC`, national `0…`), validates against the actual plan — which is what
+ * rejects size/price/date sequences the old regex mistook for phones — and won't
+ * weld two adjacent numbers. `opts.defaultCountry` (the merchant's region) only
+ * resolves bare national numbers; an explicit `+CC` the customer types wins.
+ *
+ * A permissive fallback captures phone-plausible runs libphonenumber can't resolve
+ * (no region / exotic plan) so a real lead is never silently dropped — those come
+ * back with `e164: null, valid: false`. Results are de-duplicated (by E.164 when
+ * known, else raw digits) and ordered by position in the text.
+ */
+export function extractPhones(text: string, opts?: { defaultCountry?: string }): ExtractedPhone[] {
+  const normalized = preNormalizeForPhones(text);
+  const defaultCountry = opts?.defaultCountry as CountryCode | undefined;
+
+  interface Cand { start: number; end: number; raw: string; e164: string | null; valid: boolean }
+  const candidates: Cand[] = [];
+
+  // 1. libphonenumber — the validated primary. Keeps only numbers that match a
+  //    real plan, so non-phone digit runs (sizes, prices, dates) are excluded here.
+  const found = findPhoneNumbersInText(normalized, defaultCountry ? { defaultCountry } : undefined);
+  for (const f of found) {
+    if (!f.number.isValid()) continue;
+    candidates.push({
+      start: f.startsAt,
+      end: f.endsAt,
+      raw: stripFormatting(normalized.slice(f.startsAt, f.endsAt)),
+      e164: f.number.number,
+      valid: true,
+    });
+  }
+
+  // 2. Permissive fallback — never drop a lead libphonenumber couldn't resolve.
   for (const regex of [CONTIGUOUS_PHONE_REGEX, GROUPED_PHONE_REGEX]) {
     regex.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = regex.exec(normalized)) !== null) {
       const d = digitCount(m[0]);
-      if (d >= DIGIT_MIN && d <= DIGIT_MAX) {
-        candidates.push({ start: m.index, end: m.index + m[0].length, raw: m[0] });
-      }
+      if (d < FALLBACK_DIGIT_MIN || d > DIGIT_MAX) continue;
+      candidates.push({ start: m.index, end: m.index + m[0].length, raw: stripFormatting(m[0]), e164: null, valid: false });
     }
   }
 
-  // Earliest first; on a tie prefer the longer span (the fully-grouped match over
-  // a contiguous fragment of it).
-  candidates.sort((a, b) => a.start - b.start || b.end - a.end);
+  // Earliest first; at the same span prefer the validated (libphonenumber) candidate,
+  // then the longer match — so a validated number wins over a raw fallback of itself.
+  candidates.sort((a, b) =>
+    a.start - b.start || Number(b.valid) - Number(a.valid) || b.end - a.end,
+  );
 
+  const result: ExtractedPhone[] = [];
   const seen = new Set<string>();
-  const result: string[] = [];
   let lastEnd = -1;
   for (const c of candidates) {
-    if (c.start < lastEnd) continue; // overlaps an already-accepted match
-    const cleaned = stripFormatting(c.raw);
-    if (seen.has(cleaned)) continue;
-    seen.add(cleaned);
-    result.push(cleaned);
+    if (c.start < lastEnd) continue; // overlaps an already-accepted span
+    const key = c.e164 ?? c.raw;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ raw: c.raw, e164: c.e164, valid: c.valid });
     lastEnd = c.end;
   }
   return result;
 }
 
 /**
- * Extract the first phone-like digit run from free text.
- * Returns null if no phone-like sequence is present.
- * Used as the cheap gate before AI lead extraction.
+ * Back-compat: every phone-like run as raw digit strings, in order, de-duplicated.
+ * Region-less (relies on `+CC` + the permissive fallback). Prefer `extractPhones`
+ * for new code — it returns validation + E.164.
  */
-export function extractPhoneFromText(text: string): string | null {
-  return extractPhonesFromText(text)[0] ?? null;
+export function extractPhonesFromText(text: string): string[] {
+  return extractPhones(text).map(p => p.raw);
+}
+
+/**
+ * First phone in the text as a raw string, or null. The cheap gate before AI lead
+ * extraction. Pass `opts.defaultCountry` (from the merchant's timezone) to let
+ * libphonenumber validate national numbers.
+ */
+export function extractPhoneFromText(text: string, opts?: { defaultCountry?: string }): string | null {
+  return extractPhones(text, opts)[0]?.raw ?? null;
 }
