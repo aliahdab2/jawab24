@@ -8,29 +8,140 @@ import { detectLanguage } from '../language';
 import { getKBText, resolveLanguage, resolveChannel } from './replyContext';
 import type { GenerateRequest, ParsedReply, ValidatedReply } from './types';
 
+/** Map Arabic-Indic (U+0660–U+0669) and Eastern Arabic-Indic (U+06F0–U+06F9)
+ *  digits to ASCII, so "٢٥٠٠٠" and "25000" compare equal. JS `\d` only
+ *  matches [0-9], so without this Arabic-Indic prices are invisible to the guard —
+ *  both a false-negative hole and a source of inconsistency vs Western digits. */
+function normalizeDigits(s: string): string {
+    return s
+        .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0));
+}
+
+/** One number token (already digit-normalized) with optional grouping/decimal separators. */
+const NUM_TOKEN = '\\d[\\d,.\\u066B\\u066C]*';
+
+/** Word/letter multipliers that may follow a number ("25 ألف", "1.5 مليون", "25k", "3M").
+ *  Used inline in the currency pattern so the number→currency adjacency still matches
+ *  when a multiplier sits between them. (No `\b` — JS word boundaries are unreliable
+ *  against Arabic letters; the value-scaling helpers below do the real disambiguation.) */
+const MULT_INLINE = '(?:ألف|الف|آلاف|مليون|ملايين|[kKmM])';
+
+/** Parse a digit-normalized number token to its numeric value. Strips thousands
+ *  separators (ASCII comma, Arabic ٬ U+066C) and treats ٫ (U+066B) / "." as the
+ *  decimal point. Returns null when unparseable. */
+function toValue(token: string): number | null {
+    const cleaned = token.replace(/[,٬]/g, '').replace(/٫/g, '.');
+    const v = parseFloat(cleaned);
+    return Number.isFinite(v) ? v : null;
+}
+
+/** Multiplier implied by the text immediately AFTER a number ("ألف"→1000,
+ *  "مليون"→1e6, "k"/"K"→1000, "m"/"M"→1e6). The negative lookahead stops "km" /
+ *  "million" from being read as a k/m suffix. Returns 1 when none applies. */
+function leadingMultiplier(after: string): number {
+    if (/^\s*(?:ألف|الف|آلاف)/.test(after)) return 1000;
+    if (/^\s*(?:مليون|ملايين)/.test(after)) return 1_000_000;
+    if (/^\s*[kK](?![A-Za-z])/.test(after)) return 1000;
+    if (/^\s*[mM](?![A-Za-z])/.test(after)) return 1_000_000;
+    return 1;
+}
+
+/** Multiplier found inside a matched price substring (Tier A — the match may already
+ *  include the multiplier word between the number and the currency token). */
+function multiplierInMatch(s: string): number {
+    if (/(?:ألف|الف|آلاف)/.test(s)) return 1000;
+    if (/(?:مليون|ملايين)/.test(s)) return 1_000_000;
+    if (/\d\s*[kK](?![A-Za-z])/.test(s)) return 1000;
+    if (/\d\s*[mM](?![A-Za-z])/.test(s)) return 1_000_000;
+    return 1;
+}
+
+/** All numeric VALUES present in the KB text. For every "X <multiplier>" occurrence the
+ *  set holds BOTH X and X×multiplier, because merchant data is inconsistent ("150 ألف" =
+ *  150000 but "25000 ألف" = 25000) — storing both forms lets a reply match whichever way
+ *  it (or the KB) happened to write the figure, regardless of which RAG chunk was retrieved. */
+function collectKbValues(kbText: string): Set<number> {
+    const norm = normalizeDigits(kbText);
+    const values = new Set<number>();
+    const re = new RegExp(NUM_TOKEN, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(norm)) !== null) {
+        const v = toValue(m[0]);
+        if (v === null) continue;
+        values.add(v);
+        const mult = leadingMultiplier(norm.slice(m.index + m[0].length));
+        if (mult > 1) values.add(v * mult);
+    }
+    return values;
+}
+
+/** True when the quoted price `numToken` — taken raw, or scaled by `mult` if a
+ *  multiplier word/letter trailed it — corresponds to any value the KB lists.
+ *  Unparseable tokens are treated as "in KB" (never flag on parse failure). */
+function priceIsInKb(numToken: string, mult: number, kbValues: Set<number>): boolean {
+    const v = toValue(numToken);
+    if (v === null) return true;
+    if (kbValues.has(v)) return true;
+    return mult > 1 && kbValues.has(v * mult);
+}
+
+/** Currency markers, generic across the Arabic-speaking world (not just the Gulf) —
+ *  merchants may be in Syria, Libya, Egypt, Lebanon, the Maghreb, the Gulf, etc.
+ *  Three groups: symbols, ISO codes, and Arabic words/abbreviations. ISO codes that
+ *  collide with common English words (TRY→"try", MAD→"mad") are intentionally omitted —
+ *  the Arabic word / dotted abbreviation covers those currencies. Bare "رس" was removed
+ *  because it matches inside ordinary words like "الكورس"; "ريال" and "ر.س" cover SAR. */
+const CURRENCY = [
+    // Symbols
+    '\\$', '€', '£',
+    // ISO 4217 codes (Arabic-region + major; English-word collisions excluded)
+    'SAR', 'SR', 'AED', 'KWD', 'BHD', 'OMR', 'QAR', 'JOD', 'SYP', 'LBP',
+    'EGP', 'LYD', 'TND', 'DZD', 'IQD', 'YER', 'SDG', 'USD', 'EUR', 'GBP',
+    // Arabic currency words (cover any country that names its unit this way)
+    'ريال', 'ليرة', 'درهم', 'دينار', 'جنيه', 'دولار', 'يورو',
+    // Arabic dotted abbreviations
+    'ر\\.س', 'ل\\.س', 'ل\\.ل', 'د\\.ل', 'د\\.ت', 'د\\.ج', 'د\\.ك',
+    'د\\.ب', 'د\\.إ', 'د\\.أ', 'د\\.ع', 'ر\\.ق', 'ر\\.ع', 'ر\\.ي', 'ج\\.م', 'ج\\.س',
+].join('|');
+
 /**
  * Check 1 — Hallucinated prices, two-tier detection:
- *   Tier A: numbers adjacent to currency tokens (SAR, SR, ريال, $, etc.)
- *   Tier B: price-cue phrases + a number within 30 chars (no currency token)
- * Returns true when the reply quotes a number not present in the KB text.
+ *   Tier A: numbers adjacent to currency tokens (SAR, ريال, ل.س, $, …)
+ *   Tier B: a price-cue phrase with a number nearby (no currency token)
+ * Returns true when the reply quotes a price whose VALUE is not present in the KB.
  * Caller gates this on intent === 'QUESTION' and a non-empty KB.
+ *
+ * Comparison is by numeric VALUE, not string: Arabic-Indic digits are folded to
+ * ASCII, thousands separators stripped, and word/letter multipliers ("25 ألف",
+ * "1.5 مليون", "25k") expanded — so "25 ألف", "25,000", "25000" and "٢٥٠٠٠" all
+ * match. Multiplier expansion is bidirectional (see collectKbValues) to absorb the
+ * inconsistent way merchants write "ألف". Tier B captures whole number tokens, measures
+ * the cue→number gap by index (never slicing a digit run), and treats only the first
+ * number after each cue as the quoted price (so "والتوصيل 3 أيام" — a delivery duration —
+ * isn't read as a price).
  */
 export function flagHallucinatedPrice(reply: string, kbText: string): boolean {
-    const kbNums = new Set((kbText.match(/\d+(?:[,.\u066B]\d+)*/g) || []));
+    const nReply = normalizeDigits(reply);
+    const kbValues = collectKbValues(kbText);
 
-    // Tier A: currency-adjacent numbers
-    const pricePattern = /(?:SAR|SR|ريال|ر\.س|رس|\$|AED|USD|EUR|KWD|BHD|OMR|QAR|JOD)\s*\d+(?:[,.\u066B]\d+)*|\d+(?:[,.\u066B]\d+)*\s*(?:SAR|SR|ريال|ر\.س|رس|\$|AED|USD|EUR|KWD|BHD|OMR|QAR|JOD)/gi;
-    const replyPrices = reply.match(pricePattern) || [];
-    if (replyPrices.length > 0) {
-        const replyNums = replyPrices.map(p => p.replace(/[^\d,.\u066B]/g, '').replace(/^[,.]|[,.]$/g, ''));
-        if (replyNums.some(n => n && !kbNums.has(n))) {
+    // Tier A: currency-adjacent numbers (optional multiplier word between number and currency).
+    const pricePattern = new RegExp(
+        `(?:${CURRENCY})\\s*(${NUM_TOKEN})(?:\\s*${MULT_INLINE})?`
+        + `|(${NUM_TOKEN})(?:\\s*${MULT_INLINE})?\\s*(?:${CURRENCY})`,
+        'gi',
+    );
+    let pm: RegExpExecArray | null;
+    while ((pm = pricePattern.exec(nReply)) !== null) {
+        const num = pm[1] || pm[2] || '';
+        if (num && !priceIsInKb(num, multiplierInMatch(pm[0]), kbValues)) {
             return true;
         }
     }
 
-    // Tier B: price-cue phrases + nearby number (no currency token required)
+    // Tier B: price-cue phrase + nearby number (no currency token required).
     //   Strip whitelisted patterns first (phones, times, dates, order IDs, %).
-    const sanitized = reply
+    const sanitized = nReply
         .replace(/0[5-9]\d{8}/g, '')                                      // SA phone numbers
         .replace(/\+?\d{1,3}[-.\s]?\d{3}[-.\s]?\d{3,4}/g, '')             // intl phone
         .replace(/\d{1,2}[:/]\d{2}/g, '')                                  // times (9:00, 5:30)
@@ -38,15 +149,32 @@ export function flagHallucinatedPrice(reply: string, kbText: string): boolean {
         .replace(/#\d+|ORD-?\d+/gi, '')                                    // order IDs
         .replace(/\d+%/g, '');                                              // percentages
 
-    const priceCues = /(?:price|cost|costs|only|starts?\s*at|starting|for just|valued at|سعر|السعر|بسعر|قيمت[هة]|تكلفة|فقط|يبدأ من)/gi;
+    // Generic price/fee cues that fit ANY business type (retail, clinics, salons,
+    // services, real estate, courses…), not just one vertical:
+    //   • "كلفة" (bare) also matches الكلفة / تكلفة / بكلفة — the common cost-word.
+    //   • "ثمن" (price) and "رسوم" (fees) cover retail and service/clinic/school pricing.
+    //   • "fees?\b" is word-bounded so it doesn't match inside "feel"/"feedback".
+    const priceCues = /(?:price|cost|costs|fees?\b|only|starts?\s*at|starting|for just|valued at|سعر|السعر|بسعر|قيمت[هة]|كلفة|ثمن|رسوم|فقط|يبدأ من)/gi;
+    const cueIndexes: number[] = [];
     let cueMatch: RegExpExecArray | null;
     while ((cueMatch = priceCues.exec(sanitized)) !== null) {
-        const window = sanitized.slice(cueMatch.index, cueMatch.index + cueMatch[0].length + 30);
-        const numberInWindow = window.match(/\d+(?:[,.\u066B]\d+)*/);
-        if (numberInWindow) {
-            const num = numberInWindow[0];
-            if (num && !kbNums.has(num)) {
-                return true;
+        cueIndexes.push(cueMatch.index);
+    }
+    if (cueIndexes.length > 0) {
+        // A price quoted in prose follows its cue ("سعر دورة ... المبتدئ 25000"); allow
+        // enough span to clear a noun phrase between them. Only the FIRST number after
+        // each cue is treated as the quoted price — later numbers in the same sentence
+        // are usually durations/quantities ("والتوصيل 3 أيام"), not prices.
+        const CUE_TO_NUMBER_SPAN = 45;
+        const numRe = new RegExp(NUM_TOKEN, 'g');
+        for (const ci of cueIndexes) {
+            numRe.lastIndex = ci;
+            const nm = numRe.exec(sanitized);
+            if (nm && nm.index - ci <= CUE_TO_NUMBER_SPAN) {
+                const after = sanitized.slice(nm.index + nm[0].length, nm.index + nm[0].length + 12);
+                if (!priceIsInKb(nm[0], leadingMultiplier(after), kbValues)) {
+                    return true;
+                }
             }
         }
     }
