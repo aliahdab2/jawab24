@@ -79,11 +79,37 @@ export function normalizeArabicIndic(text: string): string {
  * national/international format and tight enough to reject overlong digit
  * strings.
  */
-const PHONE_LIKE_REGEX = /(?<!\d)(?:\+|00)?\d[\d\-().]{6,14}\d(?!\d)/g;
+// Two complementary shapes, both bounded to a phone-plausible digit count in
+// code (see DIGIT_MIN/MAX) rather than by character count, so internal spaces
+// don't break the bound:
+//
+//  1. CONTIGUOUS — a single run with no internal whitespace (formatting chars
+//     `- . ( )` allowed). This is the original #81 shape and is what keeps two
+//     numbers separated by a space from welding: each 10-digit block matches on
+//     its own, the space ends the run.
+//  2. GROUPED — a number written with internal spaces between short digit groups
+//     (e.g. `050 123 4567`, `+966 50 123 4567`). Each group is 1–4 digits — the
+//     real-world grouping width. A contiguous 10-digit block can NOT be parsed as
+//     ≤4-digit groups, so the #81 welding case (`0935924472 0112124470`) is still
+//     immune: there's no internal space within either block for GROUPED to latch
+//     onto, so it never spans the gap between them.
+//
+// Before this, GROUPED didn't exist and CONTIGUOUS forbade internal whitespace,
+// so a single phone typed with spaces (very common in Arabic markets) produced
+// only sub-8-digit fragments and was dropped entirely — silently losing the lead.
+const CONTIGUOUS_PHONE_REGEX = /(?<!\d)(?:\+|00)?\d[\d\-().]{6,14}\d(?!\d)/g;
+const GROUPED_PHONE_REGEX = /(?<!\d)(?:\+|00)?\d{1,4}(?:[ \-.]\d{1,4}){1,6}(?!\d)/g;
+const DIGIT_MIN = 8;
+const DIGIT_MAX = 16;
 
-/** Strip the formatting characters allowed inside the regex, preserve `+`. */
+/** Strip the formatting characters allowed inside the regexes (incl. spaces), preserve `+`. */
 function stripFormatting(s: string): string {
-  return s.replace(/[-().]/g, '');
+  return s.replace(/[\s\-().]/g, '');
+}
+
+/** Count digits only — the phone-plausibility bound is on digits, not characters. */
+function digitCount(s: string): number {
+  return (s.match(/\d/g) ?? []).length;
 }
 
 /**
@@ -91,18 +117,41 @@ function stripFormatting(s: string): string {
  *
  * Returns the strings exactly as the customer wrote them (Arabic-Indic digits
  * normalized to ASCII, formatting characters removed, `+` and `00` prefixes
- * preserved). Duplicates within the same message are de-duplicated.
+ * preserved). Duplicates within the same message are de-duplicated. Handles both
+ * contiguous numbers and numbers written with spaces between digit groups,
+ * without welding two adjacent numbers into one (#81).
  */
 export function extractPhonesFromText(text: string): string[] {
   const normalized = normalizeArabicIndic(text);
+
+  // Collect candidates from both shapes, each tagged with its position so we can
+  // resolve overlaps (a GROUPED match may cover the same span as a CONTIGUOUS one).
+  const candidates: Array<{ start: number; end: number; raw: string }> = [];
+  for (const regex of [CONTIGUOUS_PHONE_REGEX, GROUPED_PHONE_REGEX]) {
+    regex.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(normalized)) !== null) {
+      const d = digitCount(m[0]);
+      if (d >= DIGIT_MIN && d <= DIGIT_MAX) {
+        candidates.push({ start: m.index, end: m.index + m[0].length, raw: m[0] });
+      }
+    }
+  }
+
+  // Earliest first; on a tie prefer the longer span (the fully-grouped match over
+  // a contiguous fragment of it).
+  candidates.sort((a, b) => a.start - b.start || b.end - a.end);
+
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const m of normalized.matchAll(PHONE_LIKE_REGEX)) {
-    const cleaned = stripFormatting(m[0]);
-    if (!seen.has(cleaned)) {
-      seen.add(cleaned);
-      result.push(cleaned);
-    }
+  let lastEnd = -1;
+  for (const c of candidates) {
+    if (c.start < lastEnd) continue; // overlaps an already-accepted match
+    const cleaned = stripFormatting(c.raw);
+    if (seen.has(cleaned)) continue;
+    seen.add(cleaned);
+    result.push(cleaned);
+    lastEnd = c.end;
   }
   return result;
 }
