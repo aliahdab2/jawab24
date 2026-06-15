@@ -42,6 +42,156 @@ describe('flagHallucinatedPrice (Check 1)', () => {
     });
 });
 
+// Regression: Damascus training institute ("الفريق الدمشقي للتدريب").
+// Real production incident (page 39aeab89…): every price question was deflected
+// with the PRICE_FALLBACK ("خليني أتأكد من تفاصيل الأسعار وبرجعلك") even though the
+// price IS in the KB and GPT answered it with high confidence. Root cause: the
+// Tier-B price-cue window (`slice(cue, cue + cueLen + 30)`) is 30 chars wide, which
+// for natural Arabic phrasing either (a) bisects the price → compares a fragment
+// ("25" vs KB's "25000") → false POSITIVE, or (b) overshoots the number entirely →
+// a genuinely hallucinated price slips through → false NEGATIVE. Literal string
+// comparison ("25,000" ≠ "25000") and JS `\d` not matching Arabic-Indic digits
+// (٢٥٠٠٠) compound it. These assert the CORRECT behavior — they fail before the fix.
+describe('flagHallucinatedPrice — Damascus institute price-deflection regression', () => {
+    // Mirrors the real KB: the same price appears as "25000" (دورة الأمين section)
+    // and as "25,000" (دورة الأمين - مبتدئ section).
+    const aminKb = [
+        '✦ دورة الأمين:',
+        'دورة الأمين للمحاسبة 3 مستويات',
+        'الأول مبتدئ المدة شهر الكلفة 25000 ألف ل.س بالعملة القديمة',
+        'الثاني متقدم المدة شهر الكلفة 50000 ألف ل.س بالعملة القديمة',
+        'الثالث محترف المدة شهر الكلفة 75000 ألف ل.س بالعملة القديمة',
+        'اعداد محاسب مالي 150 ألف ل.س بالعملة القديمة',
+        '✦ دورة الأمين - مبتدئ:',
+        'السعر: 25,000 ل.س بالعملة القديمة',
+        'دورة الاونلاين ( محاسبة الأمين) ب 10 دولار',
+    ].join('\n');
+
+    // FALSE POSITIVE — the exact prod case: customer "محاسبة الأمين", GPT confidently
+    // quotes the correct beginner price, guard truncates "25000" → "25" and flags it.
+    it('does NOT flag the correct beginner price (cue far from a multi-digit number)', () => {
+        expect(flagHallucinatedPrice('سعر دورة محاسبة الأمين المبتدئ 25000 ل.س', aminKb)).toBe(false);
+    });
+
+    it('does NOT flag the same price written with a thousands separator', () => {
+        expect(flagHallucinatedPrice('سعر دورة محاسبة الأمين المبتدئ 25,000 ل.س بالعملة القديمة', aminKb)).toBe(false);
+    });
+
+    it('does NOT flag Arabic-Indic digits for a price present in KB', () => {
+        expect(flagHallucinatedPrice('سعر دورة محاسبة الأمين المبتدئ ٢٥٠٠٠ ل.س بالعملة القديمة', aminKb)).toBe(false);
+    });
+
+    it('does NOT flag the intermediate-level price', () => {
+        expect(flagHallucinatedPrice('كلفة المستوى المتقدم من دورة الأمين هي 50000 ل.س بالعملة القديمة', aminKb)).toBe(false);
+    });
+
+    // FALSE NEGATIVE controls — the fix must not buy false-positive safety by going
+    // blind. A price genuinely absent from KB must still be caught, even when the
+    // cue sits far from the number or the digits are Arabic-Indic.
+    it('STILL flags a genuinely hallucinated price (Western digits, cue far from number)', () => {
+        expect(flagHallucinatedPrice('سعر دورة محاسبة الأمين المبتدئ هو 99000 ل.س', aminKb)).toBe(true);
+    });
+
+    it('STILL flags a genuinely hallucinated price written in Arabic-Indic digits', () => {
+        expect(flagHallucinatedPrice('سعر دورة محاسبة الأمين المبتدئ هو ٩٩٩٩٩ ل.س', aminKb)).toBe(true);
+    });
+});
+
+// The merchant base is not Gulf-only — Syria (ل.س), Libya (دينار/د.ل), Egypt (ج.م/جنيه),
+// Lebanon (ل.ل), the Maghreb, etc. The guard must detect currency-adjacent prices in
+// ALL of these, not just SAR/AED. Each pair: an in-KB price (must NOT flag) and an
+// out-of-KB price in the same currency (must flag), via both the Tier B cue path and
+// the Tier A currency-adjacent path.
+describe('flagHallucinatedPrice — generic multi-country currency coverage', () => {
+    it('Syria (ل.س) — Tier A currency-adjacent, in KB vs hallucinated', () => {
+        const kb = 'الاشتراك الشهري 500 ل.س';
+        expect(flagHallucinatedPrice('الاشتراك 500 ل.س', kb)).toBe(false);
+        expect(flagHallucinatedPrice('الاشتراك 750 ل.س', kb)).toBe(true);
+    });
+
+    it('Libya (دينار / د.ل) — word and dotted abbreviation', () => {
+        const kb = 'سعر الخدمة 300 دينار ليبي (د.ل)';
+        expect(flagHallucinatedPrice('الخدمة بـ 300 دينار', kb)).toBe(false);
+        expect(flagHallucinatedPrice('الخدمة بـ 900 دينار', kb)).toBe(true);
+        expect(flagHallucinatedPrice('سعرها 999 د.ل', kb)).toBe(true);
+    });
+
+    it('Egypt (جنيه / ج.م) — Arabic currency word', () => {
+        const kb = 'الكورس بـ 1200 جنيه';
+        expect(flagHallucinatedPrice('الكورس 1200 جنيه', kb)).toBe(false);
+        expect(flagHallucinatedPrice('الكورس 1500 جنيه', kb)).toBe(true);
+    });
+
+    it('does NOT match the dropped bare "رس" token inside ordinary words (الكورس 12)', () => {
+        // "12 جلسة" is the session count, not a price; "كورس" must not read as a currency.
+        const kb = 'مدة الكورس 12 جلسة، والسعر 5000 ليرة';
+        expect(flagHallucinatedPrice('مدة الكورس 12 جلسة وسعره 5000 ليرة', kb)).toBe(false);
+    });
+});
+
+// Word/letter multipliers ("25 ألف" = 25000, "2 مليون", "25k"). Merchant KBs mix forms
+// inconsistently (the Damascus KB writes "150 ألف" AND "25,000" AND "25000 ألف"), and RAG
+// may retrieve only one form — so matching must be by VALUE and bidirectional: a reply
+// number matches whether it OR the KB used the multiplier word.
+describe('flagHallucinatedPrice — word/letter multipliers (value-based)', () => {
+    it('reply "ألف" form matches a plain-digit KB price', () => {
+        // KB has 25000; reply writes "25 ألف" → 25*1000 must match.
+        const kb = 'السعر 25000 ل.س';
+        expect(flagHallucinatedPrice('سعر الدورة 25 ألف ل.س', kb)).toBe(false);
+    });
+
+    it('reply plain-digit matches an "ألف" KB price', () => {
+        // KB writes "25 ألف"; reply writes "25000" → must match either way.
+        const kb = 'الكلفة 25 ألف ل.س';
+        expect(flagHallucinatedPrice('سعر الدورة 25000 ل.س', kb)).toBe(false);
+    });
+
+    it('handles مليون (×1,000,000) both directions', () => {
+        const kb = 'السعر 2 مليون ل.س';
+        expect(flagHallucinatedPrice('السعر 2000000 ل.س', kb)).toBe(false);
+        expect(flagHallucinatedPrice('السعر 2 مليون ل.س', kb)).toBe(false);
+    });
+
+    it('handles the Latin "k" suffix', () => {
+        const kb = 'price 25k SAR';
+        expect(flagHallucinatedPrice('the price is 25000 SAR', kb)).toBe(false);
+    });
+
+    it('STILL flags a hallucinated "ألف" price not in KB', () => {
+        const kb = 'الكلفة 25 ألف ل.س'; // {25, 25000}
+        expect(flagHallucinatedPrice('سعر الدورة 99 ألف ل.س', kb)).toBe(true);   // 99 / 99000 absent
+        expect(flagHallucinatedPrice('سعر الدورة 99000 ل.س', kb)).toBe(true);
+    });
+
+    it('does not treat "km" / "million-word" as a k/m multiplier', () => {
+        // "25 km" is a distance; the bare number 25 is what gets checked, and it IS in KB.
+        const kb = 'المسافة 25 كم والسعر 5000 ل.س';
+        expect(flagHallucinatedPrice('المسافة 25 km والسعر 5000 ل.س', kb)).toBe(false);
+    });
+});
+
+// The guard is business-type-agnostic: it works off generic price/fee cues, not
+// course-specific vocabulary. These cover non-course verticals (retail, clinic,
+// salon, service) using ثمن (price), رسوم (fees), and English "fee(s)".
+describe('flagHallucinatedPrice — generic across business types', () => {
+    it('clinic "رسوم" (fees) — in-KB vs hallucinated, no currency token', () => {
+        const kb = 'رسوم الكشف 200 والمتابعة 100';
+        expect(flagHallucinatedPrice('رسوم الكشف 200', kb)).toBe(false);
+        expect(flagHallucinatedPrice('رسوم الكشف 350', kb)).toBe(true);
+    });
+
+    it('retail "ثمن" (price) — in-KB vs hallucinated, no currency token', () => {
+        const kb = 'ثمن القطعة 80';
+        expect(flagHallucinatedPrice('ثمن القطعة 80', kb)).toBe(false);
+        expect(flagHallucinatedPrice('ثمن القطعة 120', kb)).toBe(true);
+    });
+
+    it('English "fee" is word-bounded — does not trip on "feel"', () => {
+        const kb = 'we have great service';
+        expect(flagHallucinatedPrice('we feel 500 customers love us', kb)).toBe(false);
+    });
+});
+
 describe('isCommentTooLong (Check 2)', () => {
     const long = Array.from({ length: 60 }, (_, i) => `w${i}`).join(' ');
     const short = 'just a few words here';
