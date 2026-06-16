@@ -15,6 +15,8 @@ import { noopLogger } from '../types/logger';
 import { extractPhoneFromText, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { LeadExtractedData, LeadStatus } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
+import { workspaceSettingsService } from './workspaceSettings';
+import { countryFromTimezone } from '../utils/phoneRegion';
 
 // Daily AI extraction limit per workspace (prevents runaway costs on high-traffic pages)
 const DAILY_EXTRACTION_LIMIT = 50;
@@ -110,8 +112,21 @@ class LeadExtractorService {
     async maybeCaptureLead(params: MaybeCaptureLeadParams): Promise<void> {
         const { pageId, userId, workspaceId, sourceId, sourceType, senderId, senderName, messageText, postMessage, replyText } = params;
 
+        // Derive the merchant's region from their timezone so bare national
+        // numbers (e.g. "0501234567") validate against the right numbering plan.
+        // An explicit +CC the customer types always overrides this hint. Settings
+        // are Redis-cached; if the lookup fails we degrade to region-less
+        // extraction (+CC + permissive fallback) rather than dropping the lead.
+        let defaultCountry: string | undefined;
+        try {
+            const settings = await workspaceSettingsService.getSettings(workspaceId);
+            defaultCountry = countryFromTimezone(settings.timezone);
+        } catch (err) {
+            this.logger.debug('lead phone region lookup failed; using region-less extraction', { err, workspaceId });
+        }
+
         // Gate: must contain a phone number
-        const rawPhone = extractPhoneFromText(messageText);
+        const rawPhone = extractPhoneFromText(messageText, defaultCountry ? { defaultCountry } : undefined);
         if (!rawPhone) return;
 
         try {

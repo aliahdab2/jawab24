@@ -62,6 +62,11 @@ vi.mock('../../src/services/messages', () => ({
 vi.mock('../../src/services/notifications', () => ({
     notificationService: { sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined) },
 }));
+// Region inference: a Saudi merchant. Deterministic so the gate doesn't rely on
+// an unmocked settings lookup throwing into the region-less catch.
+vi.mock('../../src/services/workspaceSettings', () => ({
+    workspaceSettingsService: { getSettings: vi.fn().mockResolvedValue({ timezone: 'Asia/Riyadh' }) },
+}));
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 vi.mock('../../src/services/aiModelResolver', () => ({
     getModelForUser: vi.fn().mockResolvedValue('gpt-4.1-mini'),
