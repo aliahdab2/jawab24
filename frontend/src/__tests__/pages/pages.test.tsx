@@ -200,6 +200,32 @@ describe('PagesPage - Toggle Error Handling', () => {
         });
     });
 
+    it('should show "renew subscription" toast (not page-limit) when toggle fails with SUBSCRIPTION_INACTIVE (402)', async () => {
+        mockedPagesApi.toggle.mockRejectedValue({
+            response: {
+                status: 402,
+                data: { code: 'SUBSCRIPTION_INACTIVE', error: 'Subscription expired. Please renew to continue.' },
+            },
+        });
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
+        });
+
+        const allSwitches = screen.getAllByRole('switch');
+        await act(async () => {
+            fireEvent.click(allSwitches[2]); // page_2 FB toggle (OFF -> ON)
+        });
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalledWith("Your subscription isn't active. Please renew it to continue.");
+        });
+        // Must NOT show the misleading page-limit message for a billing problem.
+        expect(mockToastError).not.toHaveBeenCalledWith('Page limit reached. Disable another page or upgrade your plan.');
+    });
+
     it('should show generic error toast on Facebook toggle failure (non-403)', async () => {
         mockedPagesApi.toggle.mockRejectedValue({
             response: { status: 500, data: {} },

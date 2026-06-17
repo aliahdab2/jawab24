@@ -13,6 +13,7 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
 import { BusinessProfileSchema, validateSchema } from '../utils/validation';
+import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
 
@@ -39,12 +40,8 @@ export class PagesController {
             // Check enabled page limit — billing is based on workspace owner's subscription
             const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId);
             if (!limitCheck.allowed) {
-                return reply.status(403).send({
-                    error: limitCheck.reason || 'Page limit reached',
-                    code: 'PAGE_LIMIT_REACHED',
-                    limit: limitCheck.limit,
-                    used: limitCheck.used,
-                });
+                const { status, body } = pageGateError(limitCheck);
+                return reply.status(status).send(body);
             }
 
             const page = await pagesService.createPage(workspaceId, userId, request.body);
@@ -261,12 +258,8 @@ export class PagesController {
 
                 const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {
-                    return reply.status(403).send({
-                        error: limitCheck.reason || 'Page limit reached',
-                        code: 'PAGE_LIMIT_REACHED',
-                        limit: limitCheck.limit,
-                        used: limitCheck.used,
-                    });
+                    const { status, body } = pageGateError(limitCheck);
+                    return reply.status(status).send(body);
                 }
 
                 // Anti free-trial-abuse: a channel gets one free trial across the

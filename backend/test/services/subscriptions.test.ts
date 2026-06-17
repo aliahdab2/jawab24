@@ -1065,12 +1065,14 @@ describe('checkSubscriptionStatus', () => {
         const result = subscriptionsService.checkSubscriptionStatus(makeSub({ status: 'canceled' }) as any);
         expect(result.allowed).toBe(false);
         expect(result.reason).toContain('canceled');
+        expect(result.code).toBe('subscription_inactive');
     });
 
     it('should reject paused subscriptions', () => {
         const result = subscriptionsService.checkSubscriptionStatus(makeSub({ status: 'paused' }) as any);
         expect(result.allowed).toBe(false);
         expect(result.reason).toContain('paused');
+        expect(result.code).toBe('subscription_inactive');
     });
 
     it('should reject expired trial', () => {
@@ -1080,6 +1082,7 @@ describe('checkSubscriptionStatus', () => {
         );
         expect(result.allowed).toBe(false);
         expect(result.reason).toContain('Trial has expired');
+        expect(result.code).toBe('subscription_inactive');
     });
 
     it('should allow past_due within grace period', () => {
@@ -1099,6 +1102,9 @@ describe('checkSubscriptionStatus', () => {
         );
         expect(result.allowed).toBe(false);
         expect(result.reason).toContain('expired');
+        // A billing problem must be distinguishable from a real page-count limit
+        // so the toggle endpoint shows "renew" instead of "disable a page".
+        expect(result.code).toBe('subscription_inactive');
     });
 
     it('should allow past_due with no period end (fallback)', () => {

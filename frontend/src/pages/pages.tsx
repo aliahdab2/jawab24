@@ -257,6 +257,8 @@ const PagesPage: NextPageWithLayout = () => {
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
       if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
         toast.error(t('reconnectRequired'));
+      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
+        toast.error(t('subscriptionInactive'));
       } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
       } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
@@ -282,6 +284,8 @@ const PagesPage: NextPageWithLayout = () => {
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
       if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
         toast.error(t('reconnectRequired'));
+      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
+        toast.error(t('subscriptionInactive'));
       } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
       } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {

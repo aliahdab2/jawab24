@@ -153,7 +153,9 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
     } catch (error: unknown) {
       captureError(error, 'Onboarding: failed to toggle page', { tags: { component: 'onboarding' } });
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
+      if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
+        toast.error(t('pages.subscriptionInactive'));
+      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('onboarding.pageLimitReachedIOS', 'onboarding.pageLimitReached'), { limit: pageLimit ?? 1 }));
       } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
         toast.error(t('pages.pageTrialUsedBlocked'));

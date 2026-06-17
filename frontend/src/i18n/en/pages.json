@@ -28,6 +28,7 @@
   "notLinked": "Not linked",
   "pageLimitReached": "Page limit reached. Disable another page or upgrade your plan.",
   "pageLimitReachedIOS": "Page limit reached. Disable another page to enable this one.",
+  "subscriptionInactive": "Your subscription isn't active. Please renew it to continue.",
   "instagramTooltip": "Make sure your Instagram Business account is connected to this Page in Meta settings, then click Sync.",
   "instagramNotConnected": "Instagram not connected",
   "businessInfoActive": "Edit Business Info",

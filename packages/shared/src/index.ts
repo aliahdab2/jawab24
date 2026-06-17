@@ -521,7 +521,7 @@ export interface LimitCheckResult {
   allowed: boolean;
   reason?: string;
   /** Stable machine code for clients to switch on. */
-  code?: 'ai_limit_reached';
+  code?: 'ai_limit_reached' | 'page_limit_reached' | 'subscription_inactive';
   limit?: number;
   used?: number;
   remaining?: number;

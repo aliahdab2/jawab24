@@ -4,6 +4,7 @@ import { pagesService } from '../services/pages';
 import { instagramService } from '../services/instagram';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
+import { pageGateError } from '../utils/pageGateResponse';
 import { db } from '../db';
 import { instagramMedia, instagramComments } from '../db/schema';
 import { eq, desc, inArray, sql } from 'drizzle-orm';
@@ -218,12 +219,8 @@ export class InstagramController {
             if (enabled) {
                 const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {
-                    return reply.status(403).send({
-                        error: limitCheck.reason || 'Page limit reached',
-                        code: 'PAGE_LIMIT_REACHED',
-                        limit: limitCheck.limit,
-                        used: limitCheck.used,
-                    });
+                    const { status, body } = pageGateError(limitCheck);
+                    return reply.status(status).send(body);
                 }
 
                 // Anti free-trial-abuse: a channel gets one free trial across the

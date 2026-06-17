@@ -287,8 +287,9 @@ describe('Top-up gate: canUseAiReplies', () => {
 
         expect(result.allowed).toBe(false);
         expect(result.reason).toContain('expired');
-        // Must NOT be ai_limit_reached — status block takes priority.
-        expect(result.code).toBeUndefined();
+        // Status block takes priority over quota: the denial is a billing problem,
+        // not a quota problem, so it carries subscription_inactive — never ai_limit_reached.
+        expect(result.code).toBe('subscription_inactive');
     });
 });
 

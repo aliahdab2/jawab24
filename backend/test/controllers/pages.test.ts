@@ -88,7 +88,23 @@ describe('Pages Controller', () => {
             await pagesController.create(mockRequest as any, mockReply as FastifyReply);
 
             expect(mockReply.status).toHaveBeenCalledWith(403);
-            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'Page limit reached' }));
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'PAGE_LIMIT_REACHED', error: 'Page limit reached' }));
+        });
+
+        it('should return 402 SUBSCRIPTION_INACTIVE (not a page-limit error) when subscription is past due', async () => {
+            vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({
+                allowed: false,
+                reason: 'Subscription expired. Please renew to continue.',
+                code: 'subscription_inactive',
+            } as any);
+
+            await pagesController.create(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(402);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
+                code: 'SUBSCRIPTION_INACTIVE',
+                error: 'Subscription expired. Please renew to continue.',
+            }));
         });
     });
 

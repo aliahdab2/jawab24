@@ -712,7 +712,7 @@ export const subscriptionsService = {
         const subscription = await this.getUserSubscription(userId);
 
         if (!subscription) {
-            return { allowed: false, reason: 'No active subscription' };
+            return { allowed: false, reason: 'No active subscription', code: 'subscription_inactive' };
         }
 
         // Check subscription status (canceled/paused/expired)
@@ -739,6 +739,7 @@ export const subscriptionsService = {
             return {
                 allowed: false,
                 reason: 'Page limit reached. Upgrade to add more pages.',
+                code: 'page_limit_reached',
                 limit,
                 used,
                 remaining: 0,
@@ -778,7 +779,7 @@ export const subscriptionsService = {
         const subscription = await this.getUserSubscription(userId);
 
         if (!subscription) {
-            return { allowed: false, reason: 'No active subscription' };
+            return { allowed: false, reason: 'No active subscription', code: 'subscription_inactive' };
         }
 
         // Check subscription status (canceled/paused/expired)
@@ -810,6 +811,7 @@ export const subscriptionsService = {
             return {
                 allowed: false,
                 reason: 'Enabled page limit reached. Disable another page or upgrade your plan.',
+                code: 'page_limit_reached',
                 limit,
                 used,
                 remaining: 0,
@@ -956,7 +958,7 @@ export const subscriptionsService = {
      */
     checkSubscriptionStatus(subscription: Subscription & { plan: Plan }): LimitCheckResult {
         if (subscription.status === 'canceled' || subscription.status === 'paused') {
-            return { allowed: false, reason: `Subscription is ${subscription.status}` };
+            return { allowed: false, reason: `Subscription is ${subscription.status}`, code: 'subscription_inactive' };
         }
 
         if (subscription.status === 'past_due') {
@@ -973,6 +975,7 @@ export const subscriptionsService = {
                     return {
                         allowed: false,
                         reason: 'Subscription expired. Please renew to continue.',
+                        code: 'subscription_inactive',
                     };
                 }
             }
@@ -981,7 +984,7 @@ export const subscriptionsService = {
         if (subscription.status === 'trialing' && subscription.trialEndsAt) {
             const trialEnd = new Date(subscription.trialEndsAt);
             if (trialEnd < new Date()) {
-                return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.' };
+                return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive' };
             }
         }
 
