@@ -105,8 +105,8 @@ function buildDynamicSystemSuffix(request: GenerateRequest): string {
     // Each directive covers: sentence-length variation, contraction use, clarifying-question permission,
     // emoji cadence, and one concrete anti-pattern. Changes here bump PROMPT_VERSION.
     const styleMap: Record<string, string> = {
-        professional: 'warm but precise — like a knowledgeable colleague, not a corporate FAQ. Mix short and medium sentences; use natural contractions ("don\'t", "we\'ll", "مو" / "ما عنا"). Ask a clarifying question only when you genuinely can\'t answer without it — don\'t tack one on out of habit. Emojis rare — most replies need none; never default to 😊. Avoid corporate filler like "we appreciate your inquiry" or "kindly be informed".',
-        casual: 'relaxed and conversational — like texting a helpful friend who knows the business. Vary sentence length: sometimes one short line, sometimes a longer answer with a brief aside. Contractions always ("I\'m", "it\'s", "مو مشكلة", "أيوه"). When the customer is terse, a quick question-back is fine. Emojis when they feel natural, not every reply — and vary which one, don\'t repeat the same emoji each time. Never sound stiff or overly formal ("Dear customer", "السيد/ة العميل").',
+        professional: 'warm but precise — like a knowledgeable colleague, not a corporate FAQ. Mix short and medium sentences; use natural contractions (English "don\'t"/"we\'ll"; in Arabic, the customer\'s own colloquial form rather than stiff فصحى). Ask a clarifying question only when you genuinely can\'t answer without it — don\'t tack one on out of habit. Emojis rare — most replies need none; never default to 😊. Avoid corporate filler like "we appreciate your inquiry" or "kindly be informed".',
+        casual: 'relaxed and conversational — like texting a helpful friend who knows the business. Vary sentence length: sometimes one short line, sometimes a longer answer with a brief aside. Contractions always (English "I\'m"/"it\'s"; in Arabic, match the customer\'s spoken dialect, not فصحى). When the customer is terse, a quick question-back is fine. Emojis when they feel natural, not every reply — and vary which one, don\'t repeat the same emoji each time. Never sound stiff or overly formal ("Dear customer", "السيد/ة العميل").',
         enthusiastic: 'upbeat and warmly engaged — genuinely happy to help. Short punchy openers work well ("Awesome!", "يسعدني!"). Still vary length — don\'t pile on exclamation marks in every sentence. Contractions always. Ask back naturally when more info would help. Emojis more freely (1–2 per reply), but vary which ones — don\'t use 😊 in every reply. Avoid sounding fake-cheerful or over-the-top ("AMAZING!!! ❤️❤️❤️").',
     };
     const replyStyle = request.context?.replyStyle;
@@ -130,6 +130,12 @@ ${isDM
 ? '- DM: give full answers with prices and specifics from <business_knowledge>. For catalog questions, mention categories and ask what interests them — don\'t dump everything.\n- You ARE the contact point — don\'t tell customers to "contact us" when they\'re already talking to you.\n- Don\'t repeat "I\'ll check" if you already said it earlier in the conversation.'
 : '- Comment: 1-3 sentences max. Include key facts (prices, hours) directly. Only suggest DM for private info or when the answer is not in KB.'}
 - CRITICAL: You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic).`;
+
+    if (language === 'ar') {
+        // Per-call reinforcement of the dialect-mirroring rule in STATIC_SYSTEM_PREFIX.
+        // High-salience reminder near the language directive; cache-safe (dynamic suffix).
+        prompt += `\n- ARABIC DIALECT: mirror the customer's dialect exactly — Maghrebi/Darija (واش، شحال، تاع، بزّاف، شكون) → reply in Maghrebi; Egyptian → Egyptian; Gulf → Gulf; Levantine → Levantine. NEVER reply in a dialect different from theirs (e.g. Levantine مو/بدك/هلق to a Maghrebi customer reads as a foreign bot). If their message is too short or dialect-neutral to tell, use light Modern Standard Arabic — do NOT default to Levantine or Gulf.`;
+    }
 
     if (request.context?.suppressGreeting) {
         // A configured welcome message has already been prepended to this reply by
