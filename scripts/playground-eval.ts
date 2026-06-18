@@ -1526,7 +1526,7 @@ const TEST_CASES: TestCase[] = [
         notes: 'Arabic sentence with English "laptop" and "budget" — must understand budget constraint and check KB',
     },
 
-    // 25.5 — Moroccan Arabic (Darija)
+    // 25.5 — Moroccan Arabic (Darija) — must NOT answer in Levantine (dialect-mirroring regression)
     {
         id: 202, category: 25, categoryName: 'Dialect Stress', channel: 'dm',
         message: 'واش عندكم شي formation ديال لانجليزية؟ شحال الثمن؟',
@@ -1534,8 +1534,11 @@ const TEST_CASES: TestCase[] = [
         expected: {
             intent: ['QUESTION'],
             replyMethod: ['ai'],
+            // Coarse guard: forbid Levantine-only tokens + the exact phrases the prod bug emitted.
+            // Won't prove the reply is good Darija (validate that manually), but catches a Levantine leak.
+            replyNotContains: ['بدك', 'هلق', 'منيح', 'لهيك', 'مو متوفر', 'شو حاب', 'هالمعلومة'],
         },
-        notes: 'Moroccan Darija — "واش" = هل, "شحال الثمن" = كم السعر — must answer from KB',
+        notes: 'Moroccan Darija — "واش" = هل, "شحال الثمن" = كم السعر — must answer from KB AND not reply in Levantine',
     },
 
     // 25.6 — Extremely abbreviated Gulf text (like real WhatsApp)
@@ -3323,6 +3326,62 @@ const TEST_CASES: TestCase[] = [
             replyContains: ['الملز'],
         },
         notes: 'TIER-1 REGRESSION (#19): structured > narrative precedence. Today merchant + KB agree; the test exists to fail loudly if injection ever stops happening.',
+    },
+
+    // ===== Category 25 (cont.): Dialect MIRRORING of the OUTPUT =====
+    // Earlier Cat-25 cases test that we PARSE dialects; these test that we REPLY in the
+    // customer's dialect — specifically that we never answer a non-Levantine customer in
+    // Levantine (the prod churn case: an Algerian merchant got Syrian-sounding replies).
+    // Guards are coarse (substring .includes of Levantine-only tokens + the exact phrases
+    // the prod bug emitted); they catch a Levantine leak but do NOT prove good Darija —
+    // validate dialect quality manually in the playground.
+    {
+        id: 412, category: 25, categoryName: 'Dialect Mirroring', channel: 'dm',
+        message: 'واش كاين عندكم؟ شحال الثمن تاع الدورة؟',
+        page: 'training',
+        expected: {
+            intent: ['QUESTION'],
+            replyMethod: ['ai'],
+            replyNotContains: ['بدك', 'هلق', 'منيح', 'لهيك', 'مو متوفر', 'شو حاب', 'هالمعلومة'],
+        },
+        notes: 'Algerian Darija ("واش كاين", "شحال", "تاع") — must answer from KB and NOT reply in Levantine. Mirrors the prod churn case.',
+    },
+    {
+        id: 413, category: 25, categoryName: 'Dialect Mirroring', channel: 'dm',
+        message: 'شكون يقدر يعاونّي نختار؟ بغيت نشري لابطوب',
+        page: 'electronics',
+        expected: {
+            intent: ['PURCHASE_INTENT', 'QUESTION'],
+            replyMethod: ['ai'],
+            replyNotContains: ['بدك', 'هلق', 'منيح', 'لهيك', 'مو متوفر', 'شو حاب', 'هالمعلومة'],
+        },
+        notes: 'Algerian Darija purchase intent ("شكون", "نعاونّي", "بغيت نشري") — must not reply in Levantine.',
+    },
+    {
+        id: 414, category: 25, categoryName: 'Dialect Mirroring', channel: 'dm',
+        message: 'عايز اعرف الكورسات اللي عندكوا بتبدأ امتى',
+        page: 'training',
+        expected: {
+            intent: ['QUESTION'],
+            replyMethod: ['ai'],
+            replyNotContains: ['بدك', 'هلق', 'منيح', 'لهيك', 'شو حاب', 'هالمعلومة'],
+        },
+        notes: 'Egyptian ("عايز", "عندكوا", "امتى") — must not answer in Levantine.',
+    },
+    {
+        id: 415, category: 25, categoryName: 'Dialect Mirroring', channel: 'dm',
+        message: 'نعم',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم دورات؟' },
+            { role: 'assistant', content: 'نعم، عندنا عدة دورات. تريد التفاصيل؟' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            // Dialect-neutral one-word reply on a thread with no dialect cue → MSA, never Levantine.
+            replyNotContains: ['بدك', 'هلق', 'منيح', 'لهيك', 'مو متوفر', 'شو حاب', 'هالمعلومة'],
+        },
+        notes: 'Dialect-neutral short turn — should stay MSA, must not default to Levantine.',
     },
 ];
 

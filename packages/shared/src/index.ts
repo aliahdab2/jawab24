@@ -631,7 +631,18 @@ export {
 // deterministic guard / flag / deflection (that was v38, reverted in #314 for
 // over-deflecting on date-heavy KBs). v38 is intentionally skipped to avoid colliding
 // with the reverted deploy's cache/log rows.
-export const PROMPT_VERSION = 'v39';
+// v40: Arabic dialect mirroring — the few-shot examples were accidentally all
+// Levantine, so the model copied that and replied Syrian to e.g. Algerian customers
+// (a real churn case). Fix: (1) balance the example dialects (Gulf/Egyptian/Levantine/
+// Maghrebi/MSA) and add Maghrebi/Darija anchors so no single dialect dominates;
+// (2) an explicit rule to mirror the customer's dialect — MSA only when the message is
+// dialect-neutral, never default to Levantine — reinforced per-call in the dynamic
+// suffix; (3) neutralized the Levantine tokens previously embedded in the per-call
+// style directives. The deflection example is kept in MSA so we don't re-seed the
+// exact phrase that leaked in prod. Known limit: the model reliably mirrors Gulf/
+// Egyptian/Levantine but falls back to MSA for low-resource Maghrebi/Darija output
+// (a model-capability ceiling, not a prompt gap).
+export const PROMPT_VERSION = 'v40';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
