@@ -6,5 +6,6 @@
   "aiRepliedMessage": "Auto-replied to a message",
   "aiRepliedMessageNamed": "Auto-replied to {name}",
   "newLead": "New lead from {name}",
+  "leadReturned": "{name} is back — follow up",
   "view": "View"
 }

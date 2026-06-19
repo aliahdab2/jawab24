@@ -1024,6 +1024,11 @@ export interface Lead {
   /** Merchant-entered values for the workspace's leadFields, keyed by field id. */
   customFields: Record<string, string> | null;
   extractionStatus: 'completed' | 'pending' | 'failed';
+  /** Re-engagement: true when an already-handled lead came back (re-shared a
+   *  number or showed new purchase intent). Independent of `status`. */
+  needsFollowUp: boolean;
+  /** Why the lead is flagged for follow-up, or null. */
+  followUpReason?: 'reshared_contact' | 'returned_intent' | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1034,7 +1039,7 @@ export interface LeadsPaginatedResponse {
 }
 
 export const leadsApi = {
-  getByPage: (pageId: string, params?: { status?: LeadStatus; limit?: number; offset?: number }) =>
+  getByPage: (pageId: string, params?: { status?: LeadStatus; needsFollowUp?: boolean; limit?: number; offset?: number }) =>
     api.get<LeadsPaginatedResponse>('/leads', { params: { pageId, ...params } }),
 
   /** Fetch a single lead by id — used by the notification deep-link to open the exact lead. */

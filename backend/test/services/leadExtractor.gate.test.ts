@@ -12,8 +12,18 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { openaiCreateMock, capturedInserts } = vi.hoisted(() => {
-    return { openaiCreateMock: vi.fn(), capturedInserts: [] as Array<Record<string, unknown>> };
+const { openaiCreateMock, capturedInserts, capturedConflicts, existingRows, capturedUpdates } = vi.hoisted(() => {
+    return {
+        openaiCreateMock: vi.fn(),
+        capturedInserts: [] as Array<Record<string, unknown>>,
+        // The SET clause passed to onConflictDoUpdate (the re-capture/upsert path).
+        capturedConflicts: [] as Array<Record<string, unknown>>,
+        // Rows the select() returns — empty = brand-new lead (isNew); non-empty =
+        // an existing lead (re-capture path). Tests mutate this.
+        existingRows: [] as Array<Record<string, unknown>>,
+        // The SET clause passed to db.update() (e.g. updateLeadStatus).
+        capturedUpdates: [] as Array<Record<string, unknown>>,
+    };
 });
 
 vi.mock('../../src/services/aiUsageLog', () => ({ logAiUsage: vi.fn().mockResolvedValue(undefined) }));
@@ -32,28 +42,48 @@ vi.mock('../../src/db', () => {
     const selectChain = {
         from: () => selectChain,
         where: () => selectChain,
-        limit: () => Promise.resolve([] as unknown[]),
+        limit: () => Promise.resolve(existingRows.slice()),
     };
     const insertChain = {
         values: (v: Record<string, unknown>) => {
             capturedInserts.push(v);
             return insertChain;
         },
-        onConflictDoUpdate: () => insertChain,
+        onConflictDoUpdate: (arg: { set: Record<string, unknown> }) => {
+            capturedConflicts.push(arg.set);
+            return insertChain;
+        },
+        // Upserted row: insert values, with the EXISTING lead's fields (e.g. status)
+        // taking precedence so re-capture tests can simulate a contacted/new lead.
         returning: () =>
-            Promise.resolve([{ id: 'lead-1', ...capturedInserts[capturedInserts.length - 1] }]),
+            Promise.resolve([{ id: 'lead-1', ...capturedInserts[capturedInserts.length - 1], ...(existingRows[0] ?? {}) }]),
+    };
+    const updateChain = {
+        set: (v: Record<string, unknown>) => {
+            capturedUpdates.push(v);
+            return updateChain;
+        },
+        where: () => updateChain,
+        returning: () => Promise.resolve([{ id: 'lead-1' }]),
     };
     return {
         db: {
             select: () => selectChain,
             insert: () => insertChain,
+            update: () => updateChain,
         },
     };
 });
 
-// Within the daily extraction limit (incr returns 1 ≤ 50).
+// Within the daily extraction limit (incr returns 1 ≤ 50). `set` NX backs the
+// re-engagement notify dedup.
 vi.mock('../../src/lib/redis', () => ({
-    redis: { incr: vi.fn().mockResolvedValue(1), expire: vi.fn().mockResolvedValue(1) },
+    redis: {
+        incr: vi.fn().mockResolvedValue(1),
+        expire: vi.fn().mockResolvedValue(1),
+        set: vi.fn().mockResolvedValue('OK'),
+        del: vi.fn().mockResolvedValue(1),
+    },
 }));
 vi.mock('../../src/lib/eventBus', () => ({ publishSSEEvent: vi.fn() }));
 vi.mock('../../src/services/messages', () => ({
@@ -74,6 +104,7 @@ vi.mock('../../src/services/aiModelResolver', () => ({
 }));
 
 import { leadExtractorService } from '../../src/services/leadExtractor';
+import { notificationService } from '../../src/services/notifications';
 
 function baseParams(overrides: Record<string, unknown> = {}) {
     return {
@@ -91,6 +122,10 @@ function baseParams(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
     capturedInserts.length = 0;
+    capturedConflicts.length = 0;
+    capturedUpdates.length = 0;
+    existingRows.length = 0;
+    vi.mocked(notificationService.sendTemplateNotificationToWorkspace).mockClear();
     openaiCreateMock.mockReset();
     // Default: the AI echoes the gate's phone and extracts a name field.
     openaiCreateMock.mockResolvedValue({
@@ -150,5 +185,59 @@ describe('maybeCaptureLead phone gate', () => {
 
         expect(capturedInserts).toHaveLength(0);
         expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('lead re-engagement (re-shared number)', () => {
+    it('upsert conflict clause flags follow-up WITHOUT regressing status (non-destructive)', async () => {
+        await leadExtractorService.maybeCaptureLead(baseParams({ messageText: 'رقمي 0934958473' }));
+
+        // The conflict-update SET is what runs for an existing lead. It sets the
+        // follow-up fields (status-gated in SQL) and must NEVER touch pipeline state.
+        expect(capturedConflicts).toHaveLength(1);
+        const set = capturedConflicts[0];
+        expect(set).toHaveProperty('needsFollowUp');
+        expect(set).toHaveProperty('followUpReason');
+        expect(set).not.toHaveProperty('status');
+        expect(set).not.toHaveProperty('subStage');
+    });
+
+    it('notifies "lead_reengaged" when a HANDLED lead (contacted) shares a number again', async () => {
+        existingRows.push({ id: 'lead-1', status: 'contacted' }); // handled → genuine return
+
+        await leadExtractorService.maybeCaptureLead(baseParams({ messageText: 'رقمي 0934958473' }));
+
+        const templates = vi.mocked(notificationService.sendTemplateNotificationToWorkspace).mock.calls.map((c) => c[1]);
+        expect(templates).toContain('lead_reengaged');
+        expect(templates).not.toContain('new_lead');
+    });
+
+    it('does NOT notify re-engaged while the lead is still "new" (initial-capture burst)', async () => {
+        // Existing lead still in 'new' = mid initial conversation, not "returning".
+        existingRows.push({ id: 'lead-1', status: 'new' });
+
+        await leadExtractorService.maybeCaptureLead(baseParams({ messageText: 'رقمي 0934958473' }));
+
+        expect(vi.mocked(notificationService.sendTemplateNotificationToWorkspace)).not.toHaveBeenCalled();
+    });
+
+    it('sends "new_lead" (not re-engaged) for a brand-new lead', async () => {
+        // existingRows empty → isNew = true
+        await leadExtractorService.maybeCaptureLead(baseParams({ messageText: 'رقمي 0934958473' }));
+
+        const templates = vi.mocked(notificationService.sendTemplateNotificationToWorkspace).mock.calls.map((c) => c[1]);
+        expect(templates).toContain('new_lead');
+        expect(templates).not.toContain('lead_reengaged');
+    });
+
+    it('clears the follow-up flag when the merchant changes status', async () => {
+        await leadExtractorService.updateLeadStatus('lead-1', 'page-1', 'contacted');
+
+        expect(capturedUpdates).toHaveLength(1);
+        expect(capturedUpdates[0]).toMatchObject({
+            status: 'contacted',
+            needsFollowUp: false,
+            followUpReason: null,
+        });
     });
 });

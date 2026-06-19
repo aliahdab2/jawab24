@@ -9,15 +9,15 @@ import { MAX_LEAD_FIELD_VALUE_LENGTH } from '@jawab24/shared';
 const VALID_STATUSES: LeadStatus[] = ['new', 'contacted', 'converted'];
 
 export class LeadsController {
-    /** GET /leads?pageId=&status=&limit=&offset= */
+    /** GET /leads?pageId=&status=&needsFollowUp=&limit=&offset= */
     async getLeads(
         request: FastifyRequest<{
-            Querystring: { pageId: string; status?: string; limit?: string; offset?: string };
+            Querystring: { pageId: string; status?: string; needsFollowUp?: string; limit?: string; offset?: string };
         }>,
         reply: FastifyReply,
     ) {
         const req = request as ResolvedWorkspaceRequest;
-        const { pageId, status, limit: limitStr, offset: offsetStr } = request.query;
+        const { pageId, status, needsFollowUp: needsFollowUpStr, limit: limitStr, offset: offsetStr } = request.query;
 
         if (!pageId) return reply.status(400).send({ error: 'pageId is required' });
 
@@ -27,11 +27,14 @@ export class LeadsController {
         const validStatus = status && (VALID_STATUSES as string[]).includes(status)
             ? (status as LeadStatus)
             : undefined;
+        // Filter for re-engaged leads ("returning" tab). Only the explicit 'true'
+        // narrows the list; absent/other values leave it unfiltered.
+        const needsFollowUp = needsFollowUpStr === 'true' ? true : undefined;
 
         const limit = Math.min(Number(limitStr) || 50, 200);
         const offset = Math.max(Number(offsetStr) || 0, 0);
 
-        const result = await leadExtractorService.getLeadsByPage(pageId, { status: validStatus, limit, offset });
+        const result = await leadExtractorService.getLeadsByPage(pageId, { status: validStatus, needsFollowUp, limit, offset });
         return reply.send(result);
     }
 

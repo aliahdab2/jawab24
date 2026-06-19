@@ -11,6 +11,7 @@ export type SSEEventType =
     | 'message:reply_failed'
     | 'usage:updated'
     | 'lead:captured'
+    | 'lead:re_engaged'
     | 'heartbeat';
 
 /** Lightweight message snapshot included in SSE events for optimistic cache updates. */
@@ -93,6 +94,16 @@ export interface SSEEventDataMap {
         pageId: string;
         senderName: string | null;
         phone: string;
+    };
+    /** An existing lead came back — re-shared a number or showed new purchase
+     *  intent. Frontend refreshes the list/counts and shows a "returning" toast.
+     *  Distinct from `lead:captured` (a brand-new lead). */
+    'lead:re_engaged': {
+        leadId: string;
+        pageId: string;
+        senderName: string | null;
+        phone: string | null;
+        reason: 'reshared_contact' | 'returned_intent';
     };
     'heartbeat': Record<string, never>;
 }
