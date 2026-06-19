@@ -62,6 +62,13 @@ export interface LeadRecord {
     customFields: Record<string, string> | null;
     extractionStatus: string;
     extractionAttempts: number;
+    /** Re-engagement: true when an existing lead came back (re-shared a number or
+     *  showed new purchase intent). Non-destructive — independent of `status`. */
+    needsFollowUp: boolean;
+    /** Why the lead is flagged for follow-up, or null. */
+    followUpReason: string | null;
+    /** When the lead was last flagged for follow-up, or null. */
+    followUpAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -196,19 +203,16 @@ class LeadExtractorService {
                 extractionStatus,
             });
 
-            // Notify workspace via SSE — real-time badge + toast in frontend
-            publishSSEEvent(userId, 'lead:captured', {
-                leadId: upserted.id,
-                pageId,
-                senderName: senderName ?? null,
-                phone: upserted.phone,
-            });
-
-            // Persistent push + in-app bell entry — only for genuinely new leads,
-            // so repeat messages from the same sender never re-notify. The push is
-            // gated per-user by the `newLeadAlertsEnabled` setting (bell row still
-            // stored when muted). Fire-and-forget, matching maybeCaptureLead's contract.
             if (isNew) {
+                // SSE: real-time badge + toast for a brand-new lead.
+                publishSSEEvent(userId, 'lead:captured', {
+                    leadId: upserted.id,
+                    pageId,
+                    senderName: senderName ?? null,
+                    phone: upserted.phone,
+                });
+                // Persistent push + in-app bell entry. Gated per-user by the
+                // `newLeadAlertsEnabled` setting (bell row still stored when muted).
                 notificationService.sendTemplateNotificationToWorkspace(
                     workspaceId,
                     'new_lead',
@@ -219,6 +223,16 @@ class LeadExtractorService {
                     { leadId: upserted.id, pageId, deepLink: `/leads?leadId=${upserted.id}` },
                     { gatePushBySetting: 'newLeadAlertsEnabled' },
                 ).catch(err => this.logger.error('New lead notification failed', { err }));
+            } else if (upserted.status !== 'new') {
+                // Re-engagement: a lead the merchant ALREADY handled (contacted/
+                // converted) shared a phone again — a genuine "came back". upsertLead
+                // flagged needsFollowUp non-destructively; surface it (deduped).
+                // A lead still in 'new' is mid-initial-capture (e.g. several phone
+                // messages in one conversation), NOT returning — so we don't notify.
+                await this.notifyReengaged({
+                    userId, workspaceId, leadId: upserted.id, pageId,
+                    senderName, phone: upserted.phone, reason: 'reshared_contact',
+                });
             }
         } catch (error) {
             captureError(error, 'Lead capture failed', {
@@ -226,6 +240,46 @@ class LeadExtractorService {
                 extra: { senderId },
             });
         }
+    }
+
+    /**
+     * Surface a re-engaged lead: SSE badge/toast + a `lead_reengaged` push, deduped
+     * to at most once per lead per 24h so a burst of messages never spams. Shared by
+     * the phone-reshare and intent paths. Fire-and-forget contract.
+     */
+    private async notifyReengaged(p: {
+        userId: string;
+        workspaceId: string;
+        leadId: string;
+        pageId: string;
+        senderName?: string;
+        phone?: string | null;
+        reason: 'reshared_contact' | 'returned_intent';
+    }): Promise<void> {
+        // Dedup window — Redis down → allow (never silently lose the signal).
+        let fresh: string | null = 'OK';
+        try {
+            fresh = await redis.set(`lead:reengaged:${p.leadId}`, '1', 'EX', 86400, 'NX');
+        } catch {
+            fresh = 'OK';
+        }
+        if (fresh !== 'OK') return;
+
+        publishSSEEvent(p.userId, 'lead:re_engaged', {
+            leadId: p.leadId,
+            pageId: p.pageId,
+            senderName: p.senderName ?? null,
+            phone: p.phone ?? null,
+            reason: p.reason,
+        });
+
+        notificationService.sendTemplateNotificationToWorkspace(
+            p.workspaceId,
+            'lead_reengaged',
+            { senderName: p.senderName || 'Unknown' },
+            { leadId: p.leadId, pageId: p.pageId, deepLink: `/leads?leadId=${p.leadId}`, urgent: true },
+            { gatePushBySetting: 'newLeadAlertsEnabled' },
+        ).catch(err => this.logger.error('Lead re-engaged notification failed', { err }));
     }
 
     private async checkAndIncrementDailyLimit(workspaceId: string): Promise<boolean> {
@@ -350,6 +404,15 @@ class LeadExtractorService {
                     extractedData: data.extractedData,
                     extractionStatus: data.extractionStatus,
                     extractionAttempts: sql`${leads.extractionAttempts} + 1`,
+                    // Re-engagement (non-destructive): flag for follow-up ONLY when the
+                    // merchant already moved this lead past 'new' (contacted/converted)
+                    // — i.e. they handled it and the customer came BACK. A lead still in
+                    // 'new' is mid-initial-capture (several phone messages in one
+                    // conversation), not "returning". Status is never touched; the flag
+                    // clears when the merchant next changes status.
+                    needsFollowUp: sql`CASE WHEN ${leads.status} <> 'new' THEN true ELSE ${leads.needsFollowUp} END`,
+                    followUpReason: sql`CASE WHEN ${leads.status} <> 'new' THEN 'reshared_contact' ELSE ${leads.followUpReason} END`,
+                    followUpAt: sql`CASE WHEN ${leads.status} <> 'new' THEN now() ELSE ${leads.followUpAt} END`,
                     updatedAt: new Date(),
                 },
             })
@@ -362,13 +425,14 @@ class LeadExtractorService {
 
     async getLeadsByPage(
         pageId: string,
-        options: { status?: LeadStatus; limit?: number; offset?: number },
+        options: { status?: LeadStatus; needsFollowUp?: boolean; limit?: number; offset?: number },
     ): Promise<LeadsPage> {
-        const { status, limit = 50, offset = 0 } = options;
+        const { status, needsFollowUp, limit = 50, offset = 0 } = options;
 
-        const whereClause = status
-            ? and(eq(leads.pageId, pageId), eq(leads.status, status))
-            : eq(leads.pageId, pageId);
+        const conditions = [eq(leads.pageId, pageId)];
+        if (status) conditions.push(eq(leads.status, status));
+        if (needsFollowUp !== undefined) conditions.push(eq(leads.needsFollowUp, needsFollowUp));
+        const whereClause = and(...conditions);
 
         const [rows, [{ value: total }]] = await Promise.all([
             db
@@ -441,9 +505,14 @@ class LeadExtractorService {
     ): Promise<LeadRecord | null> {
         const [updated] = await db
             .update(leads)
-            .set({ status, subStage, updatedAt: new Date() })
+            // Changing status = the merchant acted on the lead, so clear the
+            // re-engagement follow-up flag (it resurfaces again on the next return).
+            .set({ status, subStage, needsFollowUp: false, followUpReason: null, updatedAt: new Date() })
             .where(and(eq(leads.id, leadId), eq(leads.pageId, pageId)))
             .returning();
+        // Reset the notify dedup window too: now that the merchant handled it, a
+        // genuine new return should ping again (even within the original 24h).
+        redis.del(`lead:reengaged:${leadId}`).catch(() => { /* best-effort */ });
         return (updated as LeadRecord) ?? null;
     }
 

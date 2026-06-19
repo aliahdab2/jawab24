@@ -288,6 +288,22 @@ export function useSSE(): void {
             } catch { /* malformed event — ignore */ }
         });
 
+        // An existing lead came back (re-shared a number). Not a new lead, so we
+        // don't bump the new-leads badge; refresh the list + counts (the Returning
+        // tab/badge) and toast off-page so the merchant can follow up.
+        es.addEventListener('lead:re_engaged', (e) => {
+            try {
+                const event: SSEEvent<'lead:re_engaged'> = JSON.parse(e.data);
+                invalidateListAndStats({ listKey: ['leads'], statsKey: ['leads-counts'], pageRoute: '/leads' });
+                if (!isOnPage('/leads')) {
+                    showToast(
+                        t('leadReturned', { name: event.data.senderName || event.data.phone || '' }),
+                        { label: t('view'), onClick: () => routerRef.current.push('/leads') },
+                    );
+                }
+            } catch { /* malformed event — ignore */ }
+        });
+
         // --- Heartbeat (no action needed — keeps connection alive) ---
         es.addEventListener('heartbeat', () => {
             // no-op

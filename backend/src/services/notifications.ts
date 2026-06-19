@@ -97,7 +97,8 @@ export type NotificationType =
     | 'auto_reply_paused_billing'
     | 'refund_processed'
     | 'topup_credited'
-    | 'new_lead';
+    | 'new_lead'
+    | 'lead_reengaged';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -134,6 +135,7 @@ const PUSH_COOLDOWN_SECONDS: Partial<Record<NotificationType, number>> = {
     kb_gap:         3600,  // 1 hour
     provider_failover: 600, // 10 min
     new_lead:        120,  // 2 min — coalesce a burst of distinct leads; bell row still stored
+    lead_reengaged:  120,  // 2 min — burst coalescing (per-lead 24h dedup is in leadExtractor)
 };
 
 /**
@@ -278,6 +280,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: '{senderName} shared their phone: {phone}. Tap to view the lead.',
             ar: 'شارك {senderName} رقم هاتفه: {phone}. اضغط لعرض العميل المحتمل.',
+        },
+    },
+    lead_reengaged: {
+        titles: { en: 'Lead Returned', ar: 'عميل عاد للتواصل' },
+        bodies: {
+            en: '{senderName} is back and interested again. Tap to follow up.',
+            ar: 'عاد {senderName} وأبدى اهتمامه من جديد. اضغط للمتابعة.',
         },
     },
 };

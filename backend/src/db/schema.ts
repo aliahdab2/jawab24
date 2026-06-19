@@ -1138,6 +1138,14 @@ export const leads = pgTable('leads', {
     customFields: jsonb('custom_fields').$type<Record<string, string>>(),
     extractionStatus: varchar('extraction_status', { length: 20 }).notNull().default('completed'), // 'completed' | 'pending' | 'failed'
     extractionAttempts: integer('extraction_attempts').notNull().default(0),
+    // Re-engagement signal (mirrors messages.needsAttention): set true when an
+    // already-existing lead comes back — re-shares a phone number or sends a new
+    // PURCHASE_INTENT message. NON-DESTRUCTIVE: status stays as the merchant left it
+    // (contacted/converted). Surfaced as a "returning" badge + filter; cleared when
+    // the merchant changes status. Never auto-regress the lifecycle (CRM standard).
+    needsFollowUp: boolean('needs_follow_up').notNull().default(false),
+    followUpReason: varchar('follow_up_reason', { length: 40 }), // 'reshared_contact' | 'returned_intent'
+    followUpAt: timestamp('follow_up_at'),
     // Set when this lead has been included in a daily digest email to the owner (null = not yet emailed)
     digestEmailedAt: timestamp('digest_emailed_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -1148,6 +1156,7 @@ export const leads = pgTable('leads', {
     statusIdx: index('idx_leads_status').on(table.pageId, table.status),
     createdAtIdx: index('idx_leads_created_at').on(table.pageId, table.createdAt),
     digestEmailedAtIdx: index('idx_leads_digest_emailed_at').on(table.digestEmailedAt),
+    needsFollowUpIdx: index('idx_leads_needs_follow_up').on(table.pageId, table.needsFollowUp),
 }));
 
 // Audit log for daily lead digest emails — one row per send attempt (sent, skipped, or failed).

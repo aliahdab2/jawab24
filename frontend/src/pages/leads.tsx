@@ -23,6 +23,7 @@ import {
   X,
   MessageSquare,
   SlidersHorizontal,
+  RotateCcw,
 } from 'lucide-react';
 import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG, SUB_STAGE_BG, resolveSubStage } from '@/components/leads/StatusControl';
 import { LeadCustomFieldsSection } from '@/components/leads/LeadCustomFields';
@@ -37,7 +38,9 @@ import type { NextPageWithLayout } from './_app';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
 
-type StatusFilter = LeadStatus | 'all';
+// 'returning' is a cross-status filter (a lead that came back — needsFollowUp),
+// not a pipeline stage; it overlaps new/contacted/converted.
+type StatusFilter = LeadStatus | 'all' | 'returning';
 
 // Page size for the infinite-scroll list. Matches MESSAGES_PER_PAGE / COMMENTS_PER_PAGE
 // so all three list pages have consistent paging behaviour.
@@ -65,6 +68,19 @@ function leadTopFields(lead: Lead) {
   return (lead.extractedData?.fields ?? [])
     .filter((f) => f.value && f.value.trim())
     .slice(0, 2);
+}
+
+/** "Returning" badge — shown when an already-handled lead came back (needsFollowUp).
+ *  Visually matches the status badges (solid accent + white) with a soft pulse so a
+ *  re-engaged customer is unmissable, without touching the merchant's status. */
+function ReturningBadge({ show, label }: { show: boolean; label: string }) {
+  if (!show) return null;
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-white bg-accent-500 animate-pulse-soft flex-shrink-0">
+      <RotateCcw className="w-3 h-3" aria-hidden="true" />
+      {label}
+    </span>
+  );
 }
 
 function FieldChips({ lead, language }: { lead: Lead; language: string }) {
@@ -208,20 +224,23 @@ function LeadCard({ lead, language, stages, onStatusChange, onDelete, onSelect, 
               {lead.senderName ?? '—'}
             </p>
           </div>
-          {(() => {
-            // Custom sub-stage badge takes over when set (merchant's own label
-            // and color); falls back to the main status badge otherwise.
-            const sub = resolveSubStage(stages, lead.status, lead.subStage);
-            return (
-              <span className={clsx(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-white flex-shrink-0',
-                sub ? SUB_STAGE_BG[sub.color] : STATUS_BG[lead.status],
-              )}>
-                <span className="w-1.5 h-1.5 rounded-full bg-white/60" aria-hidden="true" />
-                {sub ? sub.label : t(STATUS_LABEL_KEY[lead.status] as Parameters<typeof t>[0])}
-              </span>
-            );
-          })()}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <ReturningBadge show={lead.needsFollowUp} label={t('returningBadge')} />
+            {(() => {
+              // Custom sub-stage badge takes over when set (merchant's own label
+              // and color); falls back to the main status badge otherwise.
+              const sub = resolveSubStage(stages, lead.status, lead.subStage);
+              return (
+                <span className={clsx(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-white flex-shrink-0',
+                  sub ? SUB_STAGE_BG[sub.color] : STATUS_BG[lead.status],
+                )}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/60" aria-hidden="true" />
+                  {sub ? sub.label : t(STATUS_LABEL_KEY[lead.status] as Parameters<typeof t>[0])}
+                </span>
+              );
+            })()}
+          </div>
         </div>
 
         {/* Phone — selectable number + icon as call link */}
@@ -401,7 +420,10 @@ function LeadRow({ lead, language, stages, onStatusChange, onDelete, onSelect, i
       onClick={() => onSelect(lead)}
     >
       <td className="px-4 py-4 text-sm text-foreground font-medium">
-        {lead.senderName ?? '—'}
+        <div className="flex items-center gap-2">
+          <span className="truncate">{lead.senderName ?? '—'}</span>
+          <ReturningBadge show={lead.needsFollowUp} label={t('returningBadge')} />
+        </div>
       </td>
       <td className="px-4 py-4 text-sm" dir="ltr" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2">
@@ -577,7 +599,12 @@ const LeadsPage: NextPageWithLayout = () => {
     queryKey: ['leads', selectedPageId, statusFilter],
     queryFn: ({ pageParam }) =>
       leadsApi.getByPage(selectedPageId, {
-        status: statusFilter === 'all' ? undefined : statusFilter,
+        // 'returning' filters by the follow-up flag (any status); 'all' = no filter.
+        ...(statusFilter === 'returning'
+          ? { needsFollowUp: true }
+          : statusFilter === 'all'
+            ? {}
+            : { status: statusFilter }),
         limit: LEADS_PER_PAGE,
         offset: pageParam,
       }).then((r) => r.data),
@@ -606,26 +633,33 @@ const LeadsPage: NextPageWithLayout = () => {
   const { data: statusCounts } = useQuery({
     queryKey: ['leads-counts', selectedPageId],
     queryFn: async () => {
-      const [nw, contacted, converted] = await Promise.all(
-        (['new', 'contacted', 'converted'] as LeadStatus[]).map((s) =>
+      const [nw, contacted, converted, returning] = await Promise.all([
+        ...(['new', 'contacted', 'converted'] as LeadStatus[]).map((s) =>
           leadsApi.getByPage(selectedPageId, { status: s, limit: 1 }).then((r) => r.data.total),
         ),
-      );
-      return { new: nw, contacted, converted, all: nw + contacted + converted };
+        // Returning overlaps the statuses (a lead keeps its stage), so it's a
+        // separate count, not part of the new+contacted+converted sum.
+        leadsApi.getByPage(selectedPageId, { needsFollowUp: true, limit: 1 }).then((r) => r.data.total),
+      ]);
+      return { new: nw, contacted, converted, all: nw + contacted + converted, returning };
     },
     enabled: !!selectedPageId,
     staleTime: 30_000,
   });
 
-  // Client-side search over the loaded leads (name / phone / summary), mirroring
-  // the Messages page. Status filtering stays server-side via the query key.
+  // Client-side search over the loaded leads (name / phone / summary / extracted
+  // fields), mirroring the Messages page. Status filtering stays server-side.
   const filteredLeads = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
     if (!q) return leads;
     return leads.filter((l) =>
       (l.senderName ?? '').toLowerCase().includes(q) ||
       l.phone.toLowerCase().includes(q) ||
-      (l.extractedData?.summary ?? '').toLowerCase().includes(q),
+      (l.extractedData?.summary ?? '').toLowerCase().includes(q) ||
+      // Also match the AI-extracted detail fields: when several people share one
+      // FB account, each name/phone they leave lives here (not in l.phone), so
+      // without this their names/numbers are unsearchable.
+      (l.extractedData?.fields ?? []).some((f) => (f.value ?? '').toLowerCase().includes(q)),
     );
   }, [leads, debouncedSearch]);
 
@@ -718,7 +752,8 @@ const LeadsPage: NextPageWithLayout = () => {
       // silently export only the rows currently in the infinite-scroll cache.
       const exportResp = await leadsApi.getAllForExport(
         selectedPageId,
-        statusFilter === 'all' ? undefined : statusFilter,
+        // CSV export is by status only; 'all' and 'returning' both export the full set.
+        statusFilter === 'all' || statusFilter === 'returning' ? undefined : statusFilter,
       );
       const allLeads = exportResp.data.data;
 
@@ -777,6 +812,8 @@ const LeadsPage: NextPageWithLayout = () => {
     { key: 'new',       label: t('filterNew'),       count: statusCounts?.new },
     { key: 'contacted', label: t('filterContacted'), count: statusCounts?.contacted },
     { key: 'converted', label: t('filterConverted'), count: statusCounts?.converted },
+    // Cross-status: leads that came back and need another look.
+    { key: 'returning', label: t('filterReturning'), count: statusCounts?.returning },
   ];
 
   const isPending = statusMutation.isPending || deleteMutation.isPending;
@@ -865,8 +902,9 @@ const LeadsPage: NextPageWithLayout = () => {
           </div>
         )}
 
-        {/* Status filter tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto">
+        {/* Status filter tabs — wrap onto multiple rows on small screens instead of
+            scrolling horizontally, so no tab (e.g. "Returning") gets hidden off-edge. */}
+        <div className="flex flex-wrap items-center gap-2">
           {filterTabs.map((tab) => (
             <button
               key={tab.key}

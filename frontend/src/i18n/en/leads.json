@@ -80,6 +80,8 @@
   "filterNew": "New",
   "filterContacted": "Contacted",
   "filterConverted": "Converted",
+  "filterReturning": "Returning",
+  "returningBadge": "Returning",
   "viewConversation": "View conversation",
   "clearSearch": "Clear search",
   "leadCount": "{count, plural, one {# lead} other {# leads}}",

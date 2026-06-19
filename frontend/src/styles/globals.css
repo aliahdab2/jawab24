@@ -3,6 +3,16 @@
 @tailwind utilities;
 
 @layer base {
+  /* Our search inputs render a custom clear button (×) in the page UI, so
+     suppress the browser's native WebKit/Blink search-cancel decoration —
+     otherwise type="search" shows a SECOND clear button. Applies to all
+     search inputs (leads, messages, comments). */
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
   :root {
     /* ═══════════════════════════════════════════════════════════════════
        LAYOUT STRATEGY - Single source of truth for all spacing

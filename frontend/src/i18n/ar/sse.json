@@ -6,5 +6,6 @@
   "aiRepliedMessage": "تم الرد التلقائي على رسالة",
   "aiRepliedMessageNamed": "تم الرد التلقائي على {name}",
   "newLead": "عميل محتمل جديد من {name}",
+  "leadReturned": "{name} عاد للتواصل — تابع معه",
   "view": "عرض"
 }

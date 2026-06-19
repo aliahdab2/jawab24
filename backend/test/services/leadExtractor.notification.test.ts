@@ -1,10 +1,12 @@
 /**
  * New-lead notification firing in leadExtractor.maybeCaptureLead.
  *
- * Invariant: a new_lead push/bell notification fires exactly once, only when the
- * lead is genuinely new (isNew === true). Repeat messages from the same sender
- * (an existing lead) and phone-less messages must NOT notify. Without this test,
- * a refactor could re-introduce notification spam on every customer message.
+ * Invariants:
+ *  - a `new_lead` push/bell fires exactly once, only when the lead is genuinely
+ *    new (isNew === true);
+ *  - a repeat sender (existing lead) who re-shares a number fires `lead_reengaged`
+ *    instead (re-engagement), never `new_lead`;
+ *  - phone-less messages don't notify at all.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -40,7 +42,11 @@ vi.mock('../../src/db', () => ({
 }));
 
 vi.mock('../../src/lib/redis', () => ({
-    redis: { incr: vi.fn().mockResolvedValue(1), expire: vi.fn().mockResolvedValue(1) },
+    redis: {
+        incr: vi.fn().mockResolvedValue(1),
+        expire: vi.fn().mockResolvedValue(1),
+        set: vi.fn().mockResolvedValue('OK'), // re-engagement notify dedup (NX)
+    },
 }));
 vi.mock('../../src/lib/eventBus', () => ({ publishSSEEvent: vi.fn() }));
 vi.mock('../../src/services/messages', () => ({
@@ -98,12 +104,17 @@ describe('leadExtractor — new_lead notification firing', () => {
         );
     });
 
-    it('does NOT fire for a repeat sender (existing lead → not new)', async () => {
+    it('fires lead_reengaged (not new_lead) for a handled lead that shares a number again', async () => {
         selectLimitMock.mockResolvedValue([{ id: 'lead-existing' }]); // existing → isNew = false
+        // Lead already handled (past 'new') → a re-share is a genuine return.
+        insertReturningMock.mockResolvedValue([{ id: 'lead-1', phone: PHONE, status: 'contacted' }]);
 
         await leadExtractorService.maybeCaptureLead(baseParams);
 
-        expect(sendWorkspaceMock).not.toHaveBeenCalled();
+        expect(sendWorkspaceMock).toHaveBeenCalledTimes(1);
+        const [workspaceId, template] = sendWorkspaceMock.mock.calls[0];
+        expect(workspaceId).toBe('ws-1');
+        expect(template).toBe('lead_reengaged');
     });
 
     it('does NOT fire (or even capture) when the message has no phone number', async () => {
