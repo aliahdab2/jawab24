@@ -161,6 +161,27 @@ export const subscriptionsService = {
             if (periodEnd < now) {
                 needsUpdate = true;
                 newStatus = sub.cancelAtPeriodEnd ? 'canceled' : 'past_due';
+
+                // Canary: a Stripe subscription reaching this branch means its
+                // renewal webhook never advanced the period — the exact failure
+                // that silently re-downgraded a paid customer (see utils/stripeCompat.ts).
+                // For an active Stripe sub the period should always be fresh; flag it
+                // loudly instead of quietly flipping a paying customer to past_due.
+                if (sub.paymentMethod === 'stripe' && sub.externalSubscriptionId && !sub.cancelAtPeriodEnd) {
+                    captureError(
+                        null,
+                        'Stripe subscription lazily expired — renewal webhook did not advance the period',
+                        {
+                            level: 'warning',
+                            tags: { service: 'subscriptions', flow: 'lazy_expiry' },
+                            extra: {
+                                subscriptionId: sub.id,
+                                externalSubscriptionId: sub.externalSubscriptionId,
+                                currentPeriodEnd: sub.currentPeriodEnd,
+                            },
+                        }
+                    );
+                }
             }
         }
 

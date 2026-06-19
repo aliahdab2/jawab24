@@ -11,6 +11,7 @@ import { emailService } from '../services/email';
 import { subscriptionWelcomeEmailTemplate } from '../utils/emailTemplates';
 import { captureError } from '../utils/sentryHelpers';
 import { stripeTsToDate } from '../utils/stripeTime';
+import { getInvoiceSubscriptionId, getSubscriptionPeriod } from '../utils/stripeCompat';
 import type { FastifyRequest } from 'fastify';
 import type Stripe from 'stripe';
 
@@ -148,6 +149,7 @@ export async function handleCheckoutComplete(
     // welcome email to genuinely-new rows (replayed webhooks won't double-send
     // because Stripe deduplicates events upstream and we only reach this
     // branch when no row with this externalSubscriptionId exists yet).
+    const period = getSubscriptionPeriod(stripeSubscription);
     const [insertedSub] = await db.insert(subscriptions).values({
         userId,
         planId,
@@ -156,8 +158,8 @@ export async function handleCheckoutComplete(
         paymentMethod: 'stripe',
         stripeCustomerId: stripeSubscription.customer as string,
         stripeCheckoutSessionId: session.id,
-        currentPeriodStart: stripeTsToDate(stripeSubscription.current_period_start),
-        currentPeriodEnd: stripeTsToDate(stripeSubscription.current_period_end),
+        currentPeriodStart: stripeTsToDate(period.start),
+        currentPeriodEnd: stripeTsToDate(period.end),
         trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
     }).returning({ id: subscriptions.id });
 
@@ -337,8 +339,9 @@ export async function handleSubscriptionUpdated(
         cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
         updatedAt: new Date(),
     };
-    const periodStart = stripeTsToDate(stripeSubscription.current_period_start);
-    const periodEnd = stripeTsToDate(stripeSubscription.current_period_end);
+    const period = getSubscriptionPeriod(stripeSubscription);
+    const periodStart = stripeTsToDate(period.start);
+    const periodEnd = stripeTsToDate(period.end);
     if (periodStart) updateValues.currentPeriodStart = periodStart;
     if (periodEnd) updateValues.currentPeriodEnd = periodEnd;
     if (resolvedPlanId) {
@@ -389,7 +392,7 @@ export async function handleSubscriptionDeleted(
  * Handle successful payment
  */
 export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: FastifyRequest) {
-    const stripeSubscriptionId = invoice.subscription as string;
+    const stripeSubscriptionId = getInvoiceSubscriptionId(invoice);
 
     if (!stripeSubscriptionId) {
         request.log.warn({ invoiceId: invoice.id }, 'Invoice has no subscription ID');
@@ -397,11 +400,12 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: F
     }
 
     // Pull the latest period boundaries from Stripe so DB matches Stripe's truth.
-    // On renewal Stripe advances current_period_start/end; we must mirror that
-    // and reset quota — otherwise the previous period's usage row keeps blocking.
+    // On renewal Stripe advances the period; we must mirror that and reset quota —
+    // otherwise the previous period's usage row keeps blocking.
     const stripeSubscription = await stripeService.getSubscription(stripeSubscriptionId);
-    const periodStart = stripeTsToDate(stripeSubscription.current_period_start);
-    const periodEnd = stripeTsToDate(stripeSubscription.current_period_end);
+    const period = getSubscriptionPeriod(stripeSubscription);
+    const periodStart = stripeTsToDate(period.start);
+    const periodEnd = stripeTsToDate(period.end);
 
     // Update subscription status with retry logic for race conditions
     let retries = 3;
@@ -542,7 +546,7 @@ export async function handleTopupPaymentFailed(paymentIntent: Stripe.PaymentInte
  * Handle failed payment
  */
 export async function handlePaymentFailed(invoice: Stripe.Invoice, request: FastifyRequest) {
-    const stripeSubscriptionId = invoice.subscription as string;
+    const stripeSubscriptionId = getInvoiceSubscriptionId(invoice);
 
     if (!stripeSubscriptionId) {
         return;
