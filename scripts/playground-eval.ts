@@ -152,12 +152,40 @@ async function resolvePageIds(): Promise<void> {
 // Test cases — 277 total (273 previous + 4 post-as-KB-source tests)
 // ---------------------------------------------------------------------------
 
+/**
+ * Phrases that promise the bot (or "the team") will follow up / reach out later.
+ * The AI is automated and cannot reliably action a callback across every
+ * conversation, so on an INFO-MISSING deflection it must never promise one
+ * (PROMPT_VERSION v41). Use this as `replyNotContains` ONLY on info-not-in-KB
+ * deflection tests.
+ *
+ * IMPORTANT: do NOT apply this list to cancel/refund/exchange tests (Cat 20).
+ * Those legitimately route to the team and DO say "بيتواصلون معك" — the phrases
+ * here are scoped to the future-tense/team-routing deflection forms only, but
+ * the safe rule is simply: never attach this to a genuine human-handoff test.
+ *
+ * Three families, by prompt era:
+ *  - v37/v38: "I'll get back to you" / "أرجعلك"
+ *  - v40:     "the team will contact you" / "سيتواصلون معك" / "نوصّلها للفريق"
+ *             (the family v41 removed — previously UNGUARDED here)
+ */
+const CALLBACK_PROMISE_PHRASES = [
+    // v37/v38 — "I'll check and get back to you"
+    'أرجعلك', 'وأرجعلك', 'سأرجعلك', 'أتحقق وأرجع', 'أتابع معك', 'سأتابع',
+    'get back to you', "I'll get back", 'let me check and get',
+    'check with the team and get back', 'follow up',
+    // v40 — "I'll route this to the team and they'll contact you" (the v41 gap)
+    'سيتواصلون معك', 'يتواصلو معاك', 'سأحوّلها للفريق', 'نوصّلها للفريق',
+    'بسأل الفريق', 'يردّوا عليك',
+    'contact you', "they'll contact", 'check with the team',
+];
+
 const TEST_CASES: TestCase[] = [
     // ===== Category 1: Confidence & Flag Accuracy =====
     // 1.1 — WHO vs WHAT mismatch
-    { id: 1, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'مين صاحب المعهد؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
-    { id: 2, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'مين المدير؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
-    { id: 3, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'Who founded this store?', page: 'electronics', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
+    { id: 1, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'مين صاحب المعهد؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'], replyNotContains: CALLBACK_PROMISE_PHRASES } },
+    { id: 2, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'مين المدير؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'], replyNotContains: CALLBACK_PROMISE_PHRASES } },
+    { id: 3, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'Who founded this store?', page: 'electronics', expected: { confidence: ['low'], flags: ['info_not_in_kb'], replyNotContains: CALLBACK_PROMISE_PHRASES } },
     // 1.2 — Question fully answered by KB
     { id: 4, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'كم سعر دورة الانجليزي؟', page: 'training', expected: { replyMethod: ['ai'] }, notes: 'Comment price Q matches سعر template' },
     { id: 5, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'وين موقعكم؟', page: 'training', expected: { confidence: ['high'], replyContains: ['الرياض'] } },
@@ -2894,7 +2922,7 @@ const TEST_CASES: TestCase[] = [
             replyMethod: ['ai'],
             confidence: ['low'],
             flags: ['info_not_in_kb'],
-            replyNotContains: ['أرجعلك', 'وأرجعلك', 'سأرجعلك', 'أتحقق وأرجع', 'أتابع معك', 'سأتابع', 'get back to you', "I'll get back"],
+            replyNotContains: CALLBACK_PROMISE_PHRASES,
         },
         notes: 'Programming course not in KB — AI must NOT promise to check and get back. Should be honest or redirect to contact.',
     },
@@ -2906,7 +2934,7 @@ const TEST_CASES: TestCase[] = [
             replyMethod: ['ai'],
             confidence: ['low'],
             flags: ['info_not_in_kb'],
-            replyNotContains: ['get back to you', "I'll get back", 'let me check and get', 'check with the team and get back', 'follow up'],
+            replyNotContains: CALLBACK_PROMISE_PHRASES,
         },
         notes: 'Online classes not in KB — English DM must not promise follow-up',
     },
@@ -2918,7 +2946,7 @@ const TEST_CASES: TestCase[] = [
             replyMethod: ['ai'],
             confidence: ['low'],
             flags: ['info_not_in_kb'],
-            replyNotContains: ['أرجعلك', 'وأرجعلك', 'سأرجعلك', 'أتحقق وأرجع', 'سأتابع'],
+            replyNotContains: CALLBACK_PROMISE_PHRASES,
         },
         notes: 'Installments not in KB — must not promise to check and follow up',
     },
@@ -2930,7 +2958,7 @@ const TEST_CASES: TestCase[] = [
             replyMethod: ['ai'],
             confidence: ['low'],
             flags: ['info_not_in_kb'],
-            replyNotContains: ['أرجعلك', 'وأرجعلك', 'سأرجعلك', 'أتحقق وأرجع', 'سأتابع'],
+            replyNotContains: CALLBACK_PROMISE_PHRASES,
         },
         notes: 'Instructor name not in KB — WHO question should not get a false follow-up promise',
     },
@@ -3429,21 +3457,23 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
         }
     }
 
-    // replyContains
-    if (e.replyContains && d.reply) {
+    // replyContains — an empty/null reply can never contain the expected text, so
+    // record a failing check rather than silently skipping (which would falsely PASS
+    // a test whose only assertion is replyContains).
+    if (e.replyContains) {
         for (const s of e.replyContains) {
-            const pass = d.reply.includes(s);
-            checks.push({ field: `contains:${s}`, pass, detail: pass ? 'found' : 'NOT found in reply' });
+            const pass = !!d.reply && d.reply.includes(s);
+            checks.push({ field: `contains:${s}`, pass, detail: pass ? 'found' : (d.reply ? 'NOT found in reply' : 'reply was empty') });
         }
     }
 
     // replyContainsAny (OR — at least one must be present)
-    if (e.replyContainsAny && d.reply) {
-        const reply = d.reply;
+    if (e.replyContainsAny) {
+        const reply = d.reply || '';
         const found = e.replyContainsAny.filter(s => reply.includes(s));
         const pass = found.length > 0;
         const label = e.replyContainsAny.join('|');
-        checks.push({ field: `containsAny:${label}`, pass, detail: pass ? `found: ${found.join(', ')}` : 'NONE found in reply' });
+        checks.push({ field: `containsAny:${label}`, pass, detail: pass ? `found: ${found.join(', ')}` : (d.reply ? 'NONE found in reply' : 'reply was empty') });
     }
 
     // replyNotContains
