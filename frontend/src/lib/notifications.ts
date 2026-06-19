@@ -444,11 +444,12 @@ export async function getUnreadCount(): Promise<UnreadCountResult> {
         if (axiosErr.response?.status === 429) {
             const raw = axiosErr.response.headers?.['retry-after'] ?? axiosErr.response.data?.retryAfter;
             const retryAfter = raw ? parseInt(String(raw), 10) : 60;
-            captureError(error, 'Notification poll rate-limited', {
-                level: 'warning',
-                tags: { area: 'notifications' },
-                extra: { retryAfter },
-            });
+            // Expected, self-healing backpressure: the poller backs off by
+            // retryAfter and resumes on the next tick. Record a breadcrumb only —
+            // reporting every handled 429 flooded Sentry (532 events,
+            // JAWAB24-FRONTEND-1R). A genuine outage still escalates via the
+            // poller's circuit breaker (3 consecutive failures → level=error).
+            addErrorBreadcrumb('notifications', 'Notification poll rate-limited (backing off)', { retryAfter });
             return { count: 0, retryAfter };
         }
         addErrorBreadcrumb('notifications', 'Failed to get unread count');
