@@ -642,7 +642,16 @@ export {
 // exact phrase that leaked in prod. Known limit: the model reliably mirrors Gulf/
 // Egyptian/Levantine but falls back to MSA for low-resource Maghrebi/Darija output
 // (a model-capability ceiling, not a prompt gap).
-export const PROMPT_VERSION = 'v40';
+// v41: info-missing deflection no longer promises a callback. The few-shot
+// examples (4, 7, 8, 14) and rule 5 / self-check previously taught "the team
+// will contact you / سيتواصلون معك / I'll check and get back to you" — an
+// implicit human follow-up the merchant can't reliably action across every AI
+// conversation, so it became a false promise. Now: when info isn't in KB, point
+// the customer to a contact channel from BUSINESS_INFO (so THEY reach out), or
+// be honest "I don't have that right now" with NO callback. Genuine cancel/
+// refund/exchange handoff (example 6b) is unchanged — those legitimately route
+// to the team and are flagged urgent.
+export const PROMPT_VERSION = 'v41';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
