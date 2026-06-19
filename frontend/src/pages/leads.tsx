@@ -617,15 +617,19 @@ const LeadsPage: NextPageWithLayout = () => {
     staleTime: 30_000,
   });
 
-  // Client-side search over the loaded leads (name / phone / summary), mirroring
-  // the Messages page. Status filtering stays server-side via the query key.
+  // Client-side search over the loaded leads (name / phone / summary / extracted
+  // fields), mirroring the Messages page. Status filtering stays server-side.
   const filteredLeads = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
     if (!q) return leads;
     return leads.filter((l) =>
       (l.senderName ?? '').toLowerCase().includes(q) ||
       l.phone.toLowerCase().includes(q) ||
-      (l.extractedData?.summary ?? '').toLowerCase().includes(q),
+      (l.extractedData?.summary ?? '').toLowerCase().includes(q) ||
+      // Also match the AI-extracted detail fields: when several people share one
+      // FB account, each name/phone they leave lives here (not in l.phone), so
+      // without this their names/numbers are unsearchable.
+      (l.extractedData?.fields ?? []).some((f) => (f.value ?? '').toLowerCase().includes(q)),
     );
   }, [leads, debouncedSearch]);
 
@@ -865,8 +869,9 @@ const LeadsPage: NextPageWithLayout = () => {
           </div>
         )}
 
-        {/* Status filter tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto">
+        {/* Status filter tabs — wrap onto multiple rows on small screens instead of
+            scrolling horizontally, so no tab gets hidden off-edge. */}
+        <div className="flex flex-wrap items-center gap-2">
           {filterTabs.map((tab) => (
             <button
               key={tab.key}
