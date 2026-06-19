@@ -14,6 +14,7 @@ import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, type ProductCard, ty
 import { detectLanguage, detectLanguageCode } from '../../utils/language';
 import type { FacebookMessageTag } from '../../utils/commentText';
 import { preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
+import { detectBusinessActionFlags } from './urgentFlags';
 
 /**
  * Single source of truth for AI dispatch: when a store is linked, route
@@ -740,6 +741,12 @@ export class ReplyGenerator {
         if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
             flags.push('low_confidence');
         }
+        // Deterministic backstop: ensure high-stakes business-action intents
+        // (cancel/refund/exchange) are flagged even when the model misses the
+        // phrasing — these must always reach the merchant.
+        for (const f of detectBusinessActionFlags(questionForAI)) {
+            if (!flags.includes(f)) flags.push(f);
+        }
 
         // Post-validation hallucination guard (same logic as processAiResponse)
         const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
@@ -832,6 +839,12 @@ export class ReplyGenerator {
         const flags = [...(aiResponse.flags || [])];
         if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
             flags.push('low_confidence');
+        }
+        // Deterministic backstop: ensure high-stakes business-action intents
+        // (cancel/refund/exchange) are flagged even when the model misses the
+        // phrasing — these must always reach the merchant.
+        for (const f of detectBusinessActionFlags(queryText)) {
+            if (!flags.includes(f)) flags.push(f);
         }
 
         // Post-validation: if RAG retrieval was attempted but found 0 chunks and GPT
