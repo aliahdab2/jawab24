@@ -59,6 +59,15 @@ vi.mock('../../src/services/workspaceSettings', () => ({
     },
 }));
 
+// The controller runs smart auto-translation for *Multi fields (controllers/settings.ts),
+// which calls the translation service (ai-worker/OpenAI). These route tests verify
+// field ACCEPTANCE, not translation — stub the network calls so a *Multi payload
+// doesn't 500 on an unavailable translator in the unit-test env (it works in prod).
+vi.mock('../../src/services/translation', () => ({
+    translateText: vi.fn(async ({ text }: { text: string }) => ({ translatedText: text })),
+    generateNudgeVariations: vi.fn(async (text: string) => [text]),
+}));
+
 describe('Settings Routes', () => {
     let app: FastifyInstance;
 
