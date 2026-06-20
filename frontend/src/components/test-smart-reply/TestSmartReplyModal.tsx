@@ -26,9 +26,13 @@ interface TestMessage {
 interface TestSmartReplyModalProps {
   page: Page;
   onClose: () => void;
+  /** Pre-fill the message box (e.g. a sample question when opened from the
+   *  onboarding checklist, so trying a reply is one click). The modal remounts
+   *  per open, so this seeds initial state cleanly. Omit for a blank box. */
+  initialQuestion?: string;
 }
 
-export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps) {
+export function TestSmartReplyModal({ page, onClose, initialQuestion }: TestSmartReplyModalProps) {
   const t = useTranslations('testSmartReply');
   const tCommon = useTranslations('common');
   const locale = useLocale();
@@ -46,7 +50,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
   };
   const [postContext, setPostContext] = useState('');
   const [showPostContext, setShowPostContext] = useState(false);
-  const [question, setQuestion] = useState('');
+  const [question, setQuestion] = useState(initialQuestion ?? '');
   const [messages, setMessages] = useState<TestMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

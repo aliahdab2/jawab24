@@ -44,7 +44,7 @@ describe('SetupChecklistCard', () => {
     // accessible name is a superset of the label — match by substring.
     expect(screen.getByRole('link', { name: /Add your Business Info/ })).toHaveAttribute('href', '/pages?openKb=true');
     expect(screen.getByRole('link', { name: 'Turn on auto-reply' })).toHaveAttribute('href', '/settings');
-    expect(screen.getByRole('link', { name: 'See your first reply' })).toHaveAttribute('href', '/comments');
+    expect(screen.getByRole('link', { name: 'Try your first reply' })).toHaveAttribute('href', '/pages?openTestReply=true');
   });
 
   it('hides itself entirely once all four steps are complete', () => {

@@ -58,7 +58,10 @@ export function SetupChecklistCard({ pages, usage }: SetupChecklistCardProps) {
     { key: 'connect', labelKey: 'stepConnect', done: pageConnected, href: '/pages' },
     { key: 'kb', labelKey: 'stepKb', done: kbFilled, href: '/pages?openKb=true' },
     { key: 'enable', labelKey: 'stepEnable', done: autoReplyOn, href: '/settings' },
-    { key: 'firstReply', labelKey: 'stepFirstReply', done: firstReplySent, href: '/comments' },
+    // Before a real reply exists, an inbox is empty — so send them to the Test
+    // Smart Reply modal where they can watch a reply generate from their own
+    // Business Info on demand. The step still completes on a real reply.
+    { key: 'firstReply', labelKey: 'stepFirstReply', done: firstReplySent, href: '/pages?openTestReply=true' },
   ];
 
   const doneCount = steps.filter((s) => s.done).length;
