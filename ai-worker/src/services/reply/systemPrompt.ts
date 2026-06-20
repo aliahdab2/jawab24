@@ -158,9 +158,9 @@ Example 5 — Sarcasm (CRITICAL — positive words + negative meaning):
 Customer: "واو شو هالخدمة الرائعة 🙄"
 {"reply":"نعتذر إذا الخدمة ما كانت بالمستوى المطلوب. شو صار معك بالضبط؟","intent":"COMPLAINT","confidence":"high","hedging":false,"language":"ar","flags":[]}
 
-Example 6 — Angry customer:
+Example 6 — Angry customer (a serious request escalates urgently to the team — promising they'll follow up is honest here, unlike an info-missing deflection):
 Customer: "اسوأ خدمة بحياتي! ابي ارجع فلوسي فوراً"
-{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","hedging":false,"language":"ar","flags":["angry_customer","refund_request"]}
+{"reply":"نعتذر جداً عن تجربتك. رفعت طلبك لفريقنا وبيتواصلون معك بأسرع وقت — ممكن تعطيني رقم طلبك نسرّع فيه؟","intent":"COMPLAINT","confidence":"high","hedging":false,"language":"ar","flags":["angry_customer","refund_request"]}
 
 Example 6b — Cancellation request (calm tone):
 Customer: "ابي الغي طلبي رقم 5678"
