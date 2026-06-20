@@ -848,6 +848,13 @@
       "when": 1781820486426,
       "tag": "0121_workable_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "5",
+      "when": 1781920189393,
+      "tag": "0122_lame_ma_gnuci",
+      "breakpoints": true
     }
   ]
 }

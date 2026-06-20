@@ -255,6 +255,47 @@ export const channelTrials = pgTable('channel_trials', {
     };
 });
 
+// 2c. Trial Grants Table — anti-abuse ledger for the per-ACCOUNT free trial
+//
+// Sibling to `channel_trials`, but guarding a different benefit: the one-time
+// 30-day free trial (default Starter plan) that every brand-new account gets.
+// Account deletion is a GDPR-honoring HARD delete (services/auth.ts deleteUser)
+// that also removes the user's subscription + usage rows — so without this ledger
+// a person could delete their account and re-sign-up with the same phone /
+// Facebook identity to mint a brand-new trial (and fresh monthly quota) over and
+// over. The unique constraints on users.phone / users.facebookId only block LIVE
+// duplicates; once the row is hard-deleted the value is reusable and the signup
+// path treats the returnee as brand-new.
+//
+// This table records, per signup identity, that the identity has ALREADY consumed
+// its free trial. The row SURVIVES the user delete (firstUserId SET NULL) so the
+// claim outlives the account. On the next signup, subscriptions.createSubscription
+// consults it and, if the identity is present, issues a 'canceled' subscription
+// (no trial dates) → zero free quota — the returning account looks new but must
+// subscribe to use Smart Replies.
+// First writer wins (unique identityType+identityHash, ON CONFLICT DO NOTHING).
+// See services/trialLedger.ts.
+//
+// The identity is stored ONLY as a keyed HMAC-SHA256 hash, never in plaintext: the
+// raw phone / Facebook id is PII we just hard-deleted, and an equality match (same
+// identity → same hash) is all this ledger ever needs.
+export const trialGrants = pgTable('trial_grants', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    // 'phone' (users.phone) | 'facebook' (users.facebookId) — the signup identity.
+    identityType: varchar('identity_type', { length: 20 }).notNull(),
+    // HMAC-SHA256 hex of the normalized identity, domain-separated. 64 hex chars.
+    identityHash: varchar('identity_hash', { length: 64 }).notNull(),
+    // The account that first claimed the trial. SET NULL on user delete so the
+    // claim survives the hard delete; firstUserId === null then reads as
+    // "trial consumed, original owner gone".
+    firstUserId: uuid('first_user_id').references(() => users.id, { onDelete: 'set null' }),
+    firstTrialedAt: timestamp('first_trialed_at').defaultNow(),
+}, (table) => {
+    return {
+        identityUnique: uniqueIndex('idx_trial_grants_type_hash').on(table.identityType, table.identityHash),
+    };
+});
+
 // 3. Posts Table (Facebook Posts)
 export const posts = pgTable('posts', {
     id: uuid('id').defaultRandom().primaryKey(),

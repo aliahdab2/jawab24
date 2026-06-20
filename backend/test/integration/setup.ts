@@ -49,7 +49,7 @@ beforeEach(async () => {
             messages, conversation_pauses, settings,
             subscriptions, usage, usage_logs, device_tokens, notifications,
             refresh_tokens, workspace_invites, workspace_members, workspaces,
-            kb_chunks, kb_gaps, activation_events,
+            kb_chunks, kb_gaps, activation_events, trial_grants,
             pages, users
         CASCADE
     `);

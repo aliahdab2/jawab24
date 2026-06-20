@@ -2,6 +2,7 @@ import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { subscriptions, plans, usage, usageLogs, pages, workspaces, users, topupPurchases } from '../db/schema';
 import { plansService } from './plans';
+import { trialLedgerService, type TrialIdentity } from './trialLedger';
 import { redis } from '../lib/redis';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
@@ -268,9 +269,39 @@ export const subscriptionsService = {
             throw new Error('No valid plan found');
         }
 
-        // Calculate trial end date if applicable
         const now = new Date();
-        const trialEndsAt = plan.trialDays > 0
+
+        // Free-trial anti-abuse. The 30-day trial is a one-time benefit per signup
+        // IDENTITY, not per account: account deletion hard-deletes the user +
+        // subscription rows, so re-signing-up with the same phone / Facebook id
+        // would otherwise mint a brand-new trial (and fresh monthly quota) every
+        // cycle — farmable for unlimited free usage. Only the organic signup path
+        // (no explicit planId → default plan) is gated; admin / Stripe plan
+        // assignments pass a planId and are untouched. A returning identity that
+        // already used its trial gets a 'canceled' subscription (no trial dates) →
+        // canUseAiReplies blocks it immediately, so the account looks new but starts
+        // with zero free replies and must subscribe. See services/trialLedger.ts and
+        // the trial_grants table in db/schema.ts.
+        let trialIdentities: TrialIdentity[] = [];
+        let trialAlreadyConsumed = false;
+        if (!planId && plan.trialDays > 0) {
+            const [identityRow] = await db
+                .select({ phone: users.phone, facebookId: users.facebookId })
+                .from(users)
+                .where(eq(users.id, userId))
+                .limit(1);
+            if (identityRow) {
+                trialIdentities = trialLedgerService.identitiesForUser(identityRow);
+                // Fail-open: a ledger read error must never block a legitimate new
+                // signup, so an unreachable ledger falls through to granting the trial.
+                trialAlreadyConsumed = await trialLedgerService
+                    .hasConsumedTrial(trialIdentities)
+                    .catch(() => false);
+            }
+        }
+
+        // Trial dates only for a real, fresh trial. A returning identity gets none.
+        const trialEndsAt = (plan.trialDays > 0 && !trialAlreadyConsumed)
             ? new Date(now.getTime() + plan.trialDays * 24 * 60 * 60 * 1000)
             : null;
 
@@ -278,8 +309,14 @@ export const subscriptionsService = {
         const periodEnd = new Date(now);
         periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-        // Determine initial status
-        const status: SubscriptionStatus = plan.trialDays > 0 ? 'trialing' : 'active';
+        // Determine initial status. A returning identity that already burned its
+        // trial lands in 'canceled' — zero free entitlement, blocked immediately by
+        // canUseAiReplies with no grace, and (unlike an expired 'trialing' row) NOT
+        // lazily flipped to 'past_due' by getUserSubscription, whose 3-day grace off
+        // a fresh currentPeriodEnd would otherwise re-open a month of free replies.
+        const status: SubscriptionStatus = trialAlreadyConsumed
+            ? 'canceled'
+            : (plan.trialDays > 0 ? 'trialing' : 'active');
 
         const result = await db
             .insert(subscriptions)
@@ -295,6 +332,13 @@ export const subscriptionsService = {
 
         // Initialize usage tracking for this period
         await this.initializeUsagePeriod(userId, now, periodEnd);
+
+        // Claim the trial in the survivor ledger only when a real, fresh trial was
+        // actually granted (first writer wins; preserves the original
+        // firstTrialedAt). Best-effort — never breaks subscription creation.
+        if (trialIdentities.length > 0 && !trialAlreadyConsumed) {
+            await trialLedgerService.record(trialIdentities, userId);
+        }
 
         return this.mapToSubscription(result[0]);
     },
