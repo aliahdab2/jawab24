@@ -46,13 +46,20 @@ export function usePageFilter(pages: Page[], options: UsePageFilterOptions = {})
   }, [pages, validateAgainst]);
 
   // Validate stored pageId against the valid-page set once pages load.
+  //
+  // Gate on `pages` being loaded (non-empty), NOT on `validPages` being non-empty:
+  // an empty `pages` array means the query hasn't resolved yet, so clearing here
+  // would clobber the localStorage-restored selection before we can validate it.
+  // But once pages HAVE loaded, a stored id that's invalid for this surface must be
+  // dropped even if zero pages qualify — otherwise a stale id (deleted workspace,
+  // or a page whose auto-reply is now off) gets queried and 404s the list.
   useEffect(() => {
-    if (validPages.length === 0 || !pageId) return;
+    if (!Array.isArray(pages) || pages.length === 0 || !pageId) return;
     if (!validPages.some(p => p.id === pageId)) {
       setPageId('');
       localStorage.removeItem(storageKey);
     }
-  }, [validPages, pageId, storageKey]);
+  }, [pages, validPages, pageId, storageKey]);
 
   const updatePageId = useCallback((newPageId: string) => {
     setPageId(newPageId);

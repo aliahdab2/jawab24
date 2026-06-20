@@ -520,7 +520,7 @@ const LeadsPage: NextPageWithLayout = () => {
     setCustomizeNudgeDismissed(true);
   };
 
-  const { data: pagesData } = useQuery<Page[]>({
+  const { data: pagesData, isLoading: pagesLoading } = useQuery<Page[]>({
     queryKey: ['pages'],
     queryFn: async () => {
       const { data } = await pagesApi.getAll();
@@ -548,10 +548,14 @@ const LeadsPage: NextPageWithLayout = () => {
   const pages = React.useMemo(() => pagesData ?? [], [pagesData]);
 
   // Persisted page filter — localStorage + URL sync (?page=<id>) + stale-selection
-  // cleanup. Same shape as /comments and /messages: only auto-reply-enabled pages
-  // appear in the dropdown so disconnected pages don't clutter the picker.
+  // cleanup. Unlike /comments and /messages (which only surface auto-reply traffic),
+  // leads exist on EVERY connected page — including ones whose auto-reply is off
+  // (e.g. a page blocked by the one-trial-per-channel rule). So validate against
+  // 'all' connected pages; otherwise a blocked page vanishes from the picker and a
+  // stale stored id is queried, 404ing the whole list.
   const { pageId: selectedPageId, updatePageId: setSelectedPageId, validPages, syncFromUrl } = usePageFilter(pages, {
     storageKey: 'leads-page-filter',
+    validateAgainst: 'all',
   });
 
   // Restore from URL query (deep-link) on mount.
@@ -575,6 +579,12 @@ const LeadsPage: NextPageWithLayout = () => {
     () => pages.find((p) => p.id === selectedPageId),
     [pages, selectedPageId],
   );
+  // Only query once the selection resolves to a page that's actually in the
+  // loaded list. Guards the zero-pages + stale-localStorage case: a leftover id
+  // (e.g. from a deleted workspace) would otherwise 404 the list endpoint. The
+  // `['pages']` query is shared and cached, so in the common case this gates
+  // nothing — selectedPage is already resolved on first render.
+  const selectedPageReady = !!selectedPageId && !!selectedPage;
   const stages = React.useMemo(
     () => resolveEffectiveLeadStages(selectedPage?.leadStages, workspaceStages),
     [selectedPage?.leadStages, workspaceStages],
@@ -612,7 +622,7 @@ const LeadsPage: NextPageWithLayout = () => {
     // Offset pagination: next page exists only when the last batch was a full page.
     getNextPageParam: (lastPage, allPages) =>
       lastPage.data.length < LEADS_PER_PAGE ? undefined : allPages.length * LEADS_PER_PAGE,
-    enabled: !!selectedPageId,
+    enabled: selectedPageReady,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });
@@ -643,7 +653,7 @@ const LeadsPage: NextPageWithLayout = () => {
       ]);
       return { new: nw, contacted, converted, all: nw + contacted + converted, returning };
     },
-    enabled: !!selectedPageId,
+    enabled: selectedPageReady,
     staleTime: 30_000,
   });
 
@@ -964,12 +974,15 @@ const LeadsPage: NextPageWithLayout = () => {
 
       {/* Content */}
       <div className="min-h-[320px]">
-      {!selectedPageId ? (
-        <EmptyState icon={Users} title={t('selectPage')} />
-      ) : isLoading ? (
+      {pagesLoading || isLoading ? (
         <div className="flex justify-center py-16" aria-busy="true">
           <Loader2 className="w-6 h-6 animate-spin text-brand-400" aria-hidden="true" />
         </div>
+      ) : !selectedPageReady ? (
+        // Pages have loaded but there's no valid selection (no pages connected,
+        // or a stale stored id). Prompt to pick a page rather than querying one
+        // that would 404.
+        <EmptyState icon={Users} title={t('selectPage')} />
       ) : isError ? (
         <EmptyState icon={Users} title={t('loadFailed')} variant="search" />
       ) : leads.length === 0 ? (
