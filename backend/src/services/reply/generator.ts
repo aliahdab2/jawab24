@@ -499,7 +499,13 @@ export class ReplyGenerator {
                     .pop();
                 const gapSource: GapSource = { type: 'dm', context: prevUserMsg?.content };
 
-                // Run RAG retrieval if enabled (pass full history for context-aware search)
+                // Run RAG retrieval if enabled (pass full history for context-aware search).
+                // NOTE: deliberately do NOT enrich the query with the originating post here.
+                // DM retrieval uses the customer's own messages only — enriching with post /
+                // post-reply content biases retrieval away from off-topic follow-ups (the
+                // Doaa case, 2026-04-19: an address question after a course post-reply missed
+                // the address chunk). The post is instead surfaced to the model as optional
+                // [current_post] context below, which does not skew retrieval.
                 const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge({
                     pageId, query: text, staticKB: knowledgeBase, kbActiveVersion: context.kbActiveVersion,
                     channel: 'dm', conversationHistory, hasEcommerceChunks: !!context.productCatalog, userId,
@@ -529,7 +535,7 @@ export class ReplyGenerator {
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, pipeline: 'dm_reply' },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };
 
                 const aiResponse = await dispatchAiReply(aiRequest);

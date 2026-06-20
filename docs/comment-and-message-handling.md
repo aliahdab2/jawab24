@@ -598,6 +598,20 @@ conversation row stores `origin_content_id` pointing at the post. Every follow-u
 DM is processed with `postMessage = origin post text`, exactly like the original
 comment had.
 
+> **Wiring note (fixed 2026-06-20):** the last hop of this flow was incomplete for a
+> long time. `messageProcessor` (step 11c) resolved `postMessage` and passed it to
+> `generator.generateForMessage`, but that method **dropped it** before building the
+> AI request — so `[current_post]` never reached the DM prompt and the model answered
+> as if the post reply never happened (e.g. asking "which course?" right after a
+> post-reply that named the course and price). The playground (`generateForPlayground`)
+> always forwarded it, so the bug was invisible there and only bit production DMs.
+> Fixed by forwarding `context.postMessage` into the DM AI request, mirroring
+> `generateForComment`. Note: RAG retrieval is deliberately **not** enriched with the
+> post here — the post is optional `[current_post]` context only, never a retrieval
+> signal. Enriching DM retrieval with post content regresses off-topic follow-ups (the
+> "Doaa case", 2026-04-19: an address question after a course post-reply missed the
+> address chunk); see `backend/test/services/generator-rag-enrichment.test.ts`.
+
 ```
 Scenario:     customer commented "." on TOT course post → dual-mode DM sent.
               Customer then DMs "تكلفة" in Messenger.

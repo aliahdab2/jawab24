@@ -17,6 +17,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReplyGenerator } from '../../src/services/reply/generator';
+import { aiService } from '../../src/services/ai';
 
 // ── Dependency mocks ──────────────────────────────────────────────────────────
 
@@ -202,6 +203,60 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             expect(ragQuery).not.toContain('المكياج');
             expect(ragQuery).not.toContain('25 ألف');
             expect(ragQuery).not.toContain('سعرها');
+        });
+    });
+
+    describe('originating-post context forwarding (dual-mode DM)', () => {
+        // Regression: when a DM thread started from a comment (dual/private mode),
+        // messageProcessor resolves the originating post and passes it as
+        // context.postMessage. generateForMessage previously DROPPED it, so the AI
+        // never saw the post the customer engaged with — it would ask "which course?"
+        // even though the post named the course and price. See promptBuilder's
+        // [current_post] block + the DM channel directive that consume it.
+
+        it('forwards postMessage into the DM AI request context when present', async () => {
+            mockGetConversationHistory.mockResolvedValue([]);
+            const postMessage = 'دورة الإسعافات الأولية بكلفة 25 ألف بالعملة القديمة. سجّل واحجز مقعدك.';
+
+            await generator.generateForMessage(
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'كم اشتراك الدورة', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1', postMessage },
+                true,
+            );
+
+            const calls = vi.mocked(aiService.generateReply).mock.calls;
+            expect(calls.length).toBeGreaterThan(0);
+            const ctx = calls[calls.length - 1][0].context;
+            expect(ctx?.channel).toBe('dm');
+            expect(ctx?.postMessage).toBe(postMessage);
+        });
+
+        it('omits postMessage when the DM did not originate from a comment', async () => {
+            mockGetConversationHistory.mockResolvedValue([]);
+
+            await generator.generateForMessage(
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'مرحبا', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
+                true,
+            );
+
+            const calls = vi.mocked(aiService.generateReply).mock.calls;
+            const ctx = calls[calls.length - 1][0].context;
+            expect(ctx?.postMessage).toBeUndefined();
+        });
+
+        it('does NOT enrich the RAG query with postMessage (Doaa regression guard)', async () => {
+            // The post is surfaced to the model as optional context only — it must
+            // never skew retrieval, or off-topic follow-ups regress (see Doaa case).
+            mockGetConversationHistory.mockResolvedValue([]);
+            const postMessage = 'دورة المكياج، سعرها 25 ألف، يومين بالأسبوع';
+
+            await generator.generateForMessage(
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'العنوان', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1', postMessage },
+                true,
+            );
+
+            const ragQuery: string = mockRetrieve.mock.calls[0][1];
+            expect(ragQuery).toBe('العنوان');
+            expect(ragQuery).not.toContain('المكياج');
         });
     });
 });
