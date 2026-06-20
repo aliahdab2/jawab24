@@ -154,20 +154,36 @@ async function resolvePageIds(): Promise<void> {
 
 /**
  * Phrases that promise the bot (or "the team") will follow up / reach out later.
- * The AI is automated and cannot reliably action a callback across every
- * conversation, so on an INFO-MISSING deflection it must never promise one
- * (PROMPT_VERSION v41). Use this as `replyNotContains` ONLY on info-not-in-KB
- * deflection tests.
  *
- * IMPORTANT: do NOT apply this list to cancel/refund/exchange tests (Cat 20).
- * Those legitimately route to the team and DO say "بيتواصلون معك" — the phrases
- * here are scoped to the future-tense/team-routing deflection forms only, but
- * the safe rule is simply: never attach this to a genuine human-handoff test.
+ * The rule is NOT "never say the team will contact you" — it's "only promise a
+ * callback when an URGENT alert escalates it to the merchant." Subtlety that's
+ * easy to get wrong: BOTH serious requests AND plain info-missing questions set
+ * needsAttention=true, so both fire a merchant notification (computeNeedsAttention
+ * returns true for a QUESTION whenever any flag, incl. info_not_in_kb, is present;
+ * commentProcessor/messageProcessor then send a `flagged_reply`). So needsAttention
+ * alone does NOT separate the two. The distinguishing signal is URGENCY: only
+ * URGENT_FLAGS (cancellation_request/refund_request/exchange_request/angry_customer)
+ * and OFFENSIVE get `urgent:true` (urgentFlags.ts). Those are low-volume and
+ * reliably actioned → "بيتواصلون معك" is HONEST. info_not_in_kb is high-volume and
+ * non-urgent → promising a callback every time floods the merchant with
+ * obligations they won't all action → empty promise at scale. That volume/urgency
+ * split — not "no notification fires" — is the real basis for v41/v42.
+ *
+ * Therefore: use this list as `replyNotContains` ONLY on NON-URGENT info-missing
+ * deflection tests (plain QUESTION, no urgent flag).
+ *
+ * IMPORTANT — never attach this list to a test that carries an URGENT flag
+ * (cancel/refund/exchange/angry_customer, Cat 15/Cat 20) or OFFENSIVE. Note the
+ * OVERLAP case: an exchange whose policy isn't in KB carries BOTH exchange_request
+ * AND info_not_in_kb, yet still legitimately says "the team will contact you"
+ * because it escalates URGENTLY. A naive "ban callbacks whenever info_not_in_kb"
+ * rule would wrongly break it — the exemption is driven by URGENCY, not by the
+ * flag set or by needsAttention alone.
  *
  * Three families, by prompt era:
  *  - v37/v38: "I'll get back to you" / "أرجعلك"
  *  - v40:     "the team will contact you" / "سيتواصلون معك" / "نوصّلها للفريق"
- *             (the family v41 removed — previously UNGUARDED here)
+ *             (the family v41 removed from info-missing deflection — prev. UNGUARDED)
  */
 const CALLBACK_PROMISE_PHRASES = [
     // v37/v38 — "I'll check and get back to you"

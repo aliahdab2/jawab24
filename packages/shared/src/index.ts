@@ -651,7 +651,17 @@ export {
 // be honest "I don't have that right now" with NO callback. Genuine cancel/
 // refund/exchange handoff (example 6b) is unchanged — those legitimately route
 // to the team and are flagged urgent.
-export const PROMPT_VERSION = 'v41';
+// v42: align the callback promise with what actually escalates to a human. A
+// reply that sets needsAttention=true fires a merchant notification regardless
+// of topic, but cancel/refund/exchange AND angry_customer raise an URGENT alert
+// that gets reliably actioned — so "the team will follow up" is honest for an
+// angry/serious customer too, not only the 3 request types. v41's example 6
+// (angry + refund) replied "give me order details" with no follow-up promise,
+// leaving an urgently-escalated customer with nothing reassuring; example 6 now
+// demonstrates the team follow-up (matching example 6b). No rule changed — rule
+// 5's no-callback restriction only covers info-missing questions, not angry
+// complaints. Info-missing deflection (v41 behavior) is unchanged.
+export const PROMPT_VERSION = 'v42';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
