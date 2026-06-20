@@ -42,6 +42,26 @@ import { formatRelativeTime } from '@/utils/dateUtils';
 import { getPageAvatarUrl, getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 
+/**
+ * Fire `onTrigger` exactly once when this page is opened with `?<param>=true`
+ * (a deep-link, e.g. from the dashboard), once `ready` is true, then strip the
+ * param from the URL. Both the Business Info editor and the Test Smart Reply
+ * modal open this way — one helper keeps the ref-guard + readiness + URL-cleanup
+ * from being copy-pasted per deep-link.
+ */
+function useOpenOnQueryParam(param: string, ready: boolean, onTrigger: () => void) {
+  const router = useRouter();
+  const handledRef = useRef(false);
+  useEffect(() => {
+    if (handledRef.current || !router.isReady || !ready) return;
+    if (router.query[param] !== 'true') return;
+    handledRef.current = true;
+    onTrigger();
+    // Clean up the URL without triggering a re-render.
+    router.replace(router.pathname, undefined, { shallow: true });
+  }, [router, param, ready, onTrigger]);
+}
+
 const PagesPage: NextPageWithLayout = () => {
   const t = useTranslations('pages');
   const tc = useTranslations('common');
@@ -49,8 +69,8 @@ const PagesPage: NextPageWithLayout = () => {
   const tDash = useTranslations('dashboard');
   const tTime = useTranslations('time');
   const tTest = useTranslations('testSmartReply');
+  const tOnboarding = useTranslations('onboarding');
   const { language } = useLanguage();
-  const router = useRouter();
   const { isAuthenticated, fbToken } = useAuthStore();
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const { canEdit, isOwner } = useWorkspaceRole();
@@ -64,6 +84,9 @@ const PagesPage: NextPageWithLayout = () => {
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
   const [testSmartReplyPage, setTestSmartReplyPage] = useState<Page | null>(null);
+  // Pre-fill the test-reply box with a sample question only when opened from the
+  // onboarding checklist deep-link (not from the per-page "Test smart reply" button).
+  const [testReplyPrefillSample, setTestReplyPrefillSample] = useState(false);
 
   // ESC key handled inside KnowledgeBaseModal
 
@@ -226,23 +249,26 @@ const PagesPage: NextPageWithLayout = () => {
     }
   }, [loading, pages.length, fbToken, isAuthenticated, isOwner, syncing]);
 
-  // Auto-open KB modal when navigated with ?openKb=true (e.g. from dashboard nudge)
-  const openKbHandledRef = useRef(false);
-  useEffect(() => {
-    if (openKbHandledRef.current || !router.isReady || loading || pages.length === 0) return;
-    if (router.query.openKb !== 'true') return;
+  // Deep-link auto-opens (e.g. from the dashboard nudge / setup checklist).
+  const pagesReady = !loading && pages.length > 0;
 
-    openKbHandledRef.current = true;
-    // Open the first page that actually needs business info — same canonical
-    // predicate as the dashboard nudge, the checklist, and the "Add info" chip.
-    const thinKbPage = pages.find(needsBusinessInfo);
-    const target = thinKbPage ?? pages[0];
-    setEditingPage(target);
+  // ?openKb=true → open the Business Info editor on the first page that needs it
+  // (same canonical predicate as the dashboard nudge, checklist, and "Add info" chip).
+  const openKbEditor = useCallback(() => {
+    setEditingPage(pages.find(needsBusinessInfo) ?? pages[0]);
     resetSaved();
+  }, [pages, resetSaved]);
+  useOpenOnQueryParam('openKb', pagesReady, openKbEditor);
 
-    // Clean up the URL without triggering a re-render
-    router.replace('/pages', undefined, { shallow: true });
-  }, [router.isReady, router.query.openKb, loading, pages, router, resetSaved]);
+  // ?openTestReply=true → open the Test Smart Reply modal (the checklist's "Try
+  // your first reply" step), pre-filled with a sample so trying a reply is one
+  // click, before any real customer messages — an inbox would just be empty then.
+  const openTestReply = useCallback(() => {
+    // Test against a connected page — a disconnected one can't generate a reply.
+    setTestReplyPrefillSample(true);
+    setTestSmartReplyPage(pages.find((p) => p.isConnected !== false) ?? pages[0]);
+  }, [pages]);
+  useOpenOnQueryParam('openTestReply', pagesReady, openTestReply);
 
   const handleToggle = async (pageId: string, enabled: boolean) => {
     setPages(prev => prev.map(page =>
@@ -609,7 +635,7 @@ const PagesPage: NextPageWithLayout = () => {
               {/* Test Smart Reply */}
               <div className="px-6 landscape:px-4 pb-4 landscape:pb-3">
                 <button
-                  onClick={() => setTestSmartReplyPage(page)}
+                  onClick={() => { setTestReplyPrefillSample(false); setTestSmartReplyPage(page); }}
                   className="group w-full p-3 landscape:p-2.5 rounded-xl border border-theme-border bg-card hover:bg-brand-50/10 dark:hover:bg-brand-900/10 transition-all"
                 >
                   <div className="flex items-center justify-between">
@@ -699,7 +725,11 @@ const PagesPage: NextPageWithLayout = () => {
 
       {/* Test Smart Reply Modal */}
       {testSmartReplyPage && (
-        <TestSmartReplyModal page={testSmartReplyPage} onClose={() => setTestSmartReplyPage(null)} />
+        <TestSmartReplyModal
+          page={testSmartReplyPage}
+          initialQuestion={testReplyPrefillSample ? tOnboarding('trySampleQuestion') : undefined}
+          onClose={() => { setTestSmartReplyPage(null); setTestReplyPrefillSample(false); }}
+        />
       )}
 
       {/* Connect Page confirmation dialog */}
