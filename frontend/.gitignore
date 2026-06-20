@@ -1,4 +1,10 @@
 
+# Next.js generated type shim. Auto-regenerated on every `next dev`/`build`/`lint`,
+# and this repo's split distDirs (.next for build, .next-dev for dev) make its
+# `/// <reference path>` flip between them — so tracking it just churns. CI/build
+# and local dev all regenerate it before typecheck.
+next-env.d.ts
+
 # APK output folder
 dist/
 
