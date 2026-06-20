@@ -741,6 +741,15 @@ export class PagesService {
         } else if (!enableCheck.allowed) {
             remainingSlots = 0;
         }
+        // Distinguish WHY connection may be refused so the client shows the right
+        // copy. 'subscription_inactive' (e.g. a returning identity on a canceled,
+        // trial-already-used subscription) is NOT a page-count problem — telling
+        // such a user to "upgrade your plan for more pages" is misleading; they need
+        // to subscribe. A genuine over-limit on an ACTIVE plan stays 'page_limit'.
+        const skipReason: 'subscription_inactive' | 'page_limit' =
+            (!enableCheck.allowed && enableCheck.code === 'subscription_inactive')
+                ? 'subscription_inactive'
+                : 'page_limit';
         let skippedCount = 0;
         // Pages NOT connected because the plan's page limit was reached —
         // names surfaced to the client so the merchant knows exactly what
@@ -1011,7 +1020,7 @@ export class PagesService {
         }
 
         logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} not connected (plan limit), ${trialBlockedCount} blocked (free trial already used on channel), ${revokedPages.length} disabled (access revoked).`);
-        return { syncedPages, skippedCount, skippedPages, pageLimit: enableCheck.limit ?? null, takenCount, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
+        return { syncedPages, skippedCount, skippedPages, skipReason, pageLimit: enableCheck.limit ?? null, takenCount, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
     }
 
     /**

@@ -147,6 +147,7 @@ const PagesPage: NextPageWithLayout = () => {
         trialBlockedCount?: number;
         skippedCount?: number;
         skippedPages?: { pageName: string }[];
+        skipReason?: 'subscription_inactive' | 'page_limit';
         pageLimit?: number | null;
       };
       const { data } = await api.post<SyncResponse>('/pages/sync', { accessToken: fbToken });
@@ -186,11 +187,18 @@ const PagesPage: NextPageWithLayout = () => {
       // out — without this they'd just see fewer pages than they granted.
       if (data?.skippedCount && data.skippedCount > 0) {
         const names = (data.skippedPages ?? []).map(p => p.pageName);
-        toast.warning(t('pageLimitSkippedWarning', {
-          count: data.skippedCount,
-          pageNames: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(names),
-          limit: data.pageLimit ?? 1,
-        }), { duration: Infinity });
+        const pageNames = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(names);
+        if (data.skipReason === 'subscription_inactive') {
+          // Trial already used (returning identity) — NOT a page-count limit, so
+          // don't tell them to "upgrade for more pages"; they need to subscribe.
+          toast.warning(t('trialUsedSkippedWarning', { count: data.skippedCount, pageNames }), { duration: Infinity });
+        } else {
+          toast.warning(t('pageLimitSkippedWarning', {
+            count: data.skippedCount,
+            pageNames,
+            limit: data.pageLimit ?? 1,
+          }), { duration: Infinity });
+        }
       }
 
       // Refresh list

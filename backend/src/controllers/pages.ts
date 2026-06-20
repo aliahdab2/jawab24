@@ -336,7 +336,7 @@ export class PagesController {
 
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
-            const { syncedPages, skippedCount, skippedPages, pageLimit, takenCount, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
+            const { syncedPages, skippedCount, skippedPages, skipReason, pageLimit, takenCount, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
 
             // Activation funnel: the user has connected at least one page.
             if (syncedPages.length > 0) {
@@ -354,14 +354,21 @@ export class PagesController {
             const response: Record<string, unknown> = { synced: syncedPages.length, pages: syncedPages.map(serializePage) };
 
             if (skippedCount > 0) {
-                // Pages REFUSED at connect because the plan's page limit was
-                // reached (they are not persisted at all). Names included so the
-                // client can tell the merchant exactly which pages to expect
-                // missing — and offer the upgrade path.
-                response.warning = `${skippedCount} page(s) were not connected because your plan's page limit was reached. Upgrade to connect more pages.`;
+                // Pages REFUSED at connect (not persisted). Surface the names so the
+                // client can tell the merchant exactly which pages are missing, plus
+                // the REASON so it shows the right call-to-action.
                 response.skippedCount = skippedCount;
                 response.skippedPages = skippedPages;
-                response.pageLimit = pageLimit;
+                response.skipReason = skipReason; // 'subscription_inactive' | 'page_limit'
+                if (skipReason === 'subscription_inactive') {
+                    // Returning identity / trial-already-used: NOT a page-count limit.
+                    // "Upgrade for more pages" is misleading — they must subscribe.
+                    response.warning = `${skippedCount} page(s) were not connected because this account's free trial was already used. Subscribe to connect and enable auto-reply.`;
+                    response.subscriptionRequired = true;
+                } else {
+                    response.warning = `${skippedCount} page(s) were not connected because your plan's page limit was reached. Upgrade to connect more pages.`;
+                    response.pageLimit = pageLimit;
+                }
             }
 
             if (takenCount > 0) {
