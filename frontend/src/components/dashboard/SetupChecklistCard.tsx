@@ -130,17 +130,39 @@ export function SetupChecklistCard({ pages, usage }: SetupChecklistCardProps) {
               </li>
             );
           }
+          // Business Info is the step replies are actually generated from, so we
+          // single it out as the most important one to finish.
+          const isKbStep = step.key === 'kb';
           return (
             <li key={step.key}>
               <Link
                 href={step.href}
-                className="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/60 transition-colors"
+                className={clsx(
+                  'group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors',
+                  isKbStep
+                    ? 'ring-1 ring-brand-500/30 bg-brand-50/40 dark:bg-brand-500/5 hover:bg-brand-50/70 dark:hover:bg-brand-500/10'
+                    : 'hover:bg-muted/60',
+                )}
               >
                 <Circle className="w-5 h-5 flex-shrink-0 text-icon-muted" aria-hidden="true" />
-                <span className="text-sm font-semibold text-foreground">{label}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{label}</span>
+                    {isKbStep && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full status-brand flex-shrink-0">
+                        {t('setupChecklist.stepKbBadge')}
+                      </span>
+                    )}
+                  </div>
+                  {isKbStep && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {t('setupChecklist.stepKbHint')}
+                    </p>
+                  )}
+                </div>
                 <ChevronRight
                   className={clsx(
-                    'ms-auto w-4 h-4 flex-shrink-0 text-muted-foreground group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors',
+                    'w-4 h-4 flex-shrink-0 text-muted-foreground group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors',
                     isRTL && 'rotate-180',
                   )}
                   aria-hidden="true"

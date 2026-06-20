@@ -233,8 +233,9 @@ const PagesPage: NextPageWithLayout = () => {
     if (router.query.openKb !== 'true') return;
 
     openKbHandledRef.current = true;
-    // Find the first page with thin KB (matches the dashboard nudge logic)
-    const thinKbPage = pages.find(p => (p.knowledgeBase || '').length < 200);
+    // Open the first page that actually needs business info — same canonical
+    // predicate as the dashboard nudge, the checklist, and the "Add info" chip.
+    const thinKbPage = pages.find(needsBusinessInfo);
     const target = thinKbPage ?? pages[0];
     setEditingPage(target);
     resetSaved();

@@ -59,6 +59,8 @@
     "subtitle": "A few quick steps to start getting smart replies",
     "stepConnect": "Connect your page",
     "stepKb": "Add your Business Info",
+    "stepKbBadge": "Most important",
+    "stepKbHint": "Your smart replies are built from this — the more complete it is, the better every reply.",
     "stepEnable": "Turn on auto-reply",
     "stepFirstReply": "See your first reply",
     "done": "Done",

@@ -40,7 +40,9 @@ describe('SetupChecklistCard', () => {
     // Completed step is NOT a link (just a done row)
     expect(screen.queryByRole('link', { name: 'Connect your page' })).not.toBeInTheDocument();
     // Incomplete steps are actionable links pointing at the right routes
-    expect(screen.getByRole('link', { name: 'Add your Business Info' })).toHaveAttribute('href', '/pages?openKb=true');
+    // The Business Info link carries an extra "Most important" badge + hint, so its
+    // accessible name is a superset of the label — match by substring.
+    expect(screen.getByRole('link', { name: /Add your Business Info/ })).toHaveAttribute('href', '/pages?openKb=true');
     expect(screen.getByRole('link', { name: 'Turn on auto-reply' })).toHaveAttribute('href', '/settings');
     expect(screen.getByRole('link', { name: 'See your first reply' })).toHaveAttribute('href', '/comments');
   });
@@ -62,7 +64,7 @@ describe('SetupChecklistCard', () => {
     const shortKb = makePage({ knowledgeBase: 'x'.repeat(79), autoReplyEnabled: true });
     render(<SetupChecklistCard pages={[shortKb]} usage={makeUsage(0)} />);
     // KB step still incomplete (79 < 80) → rendered as a link
-    expect(screen.getByRole('link', { name: 'Add your Business Info' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Add your Business Info/ })).toBeInTheDocument();
   });
 
   it('can be dismissed, persisting to localStorage', () => {
@@ -87,7 +89,7 @@ describe('SetupChecklistCard', () => {
     render(<SetupChecklistCard pages={[makePage({ isConnected: false, knowledgeBase: LONG_KB, autoReplyEnabled: true, repliesCount: 5 })]} usage={makeUsage(0)} />);
     expect(screen.getByText('Finish your setup (0/4)')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Connect your page' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Add your Business Info' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Add your Business Info/ })).toBeInTheDocument();
   });
 
   it('marks the KB step done when ANY connected page has filled business info', () => {
@@ -96,7 +98,26 @@ describe('SetupChecklistCard', () => {
     const empty = makePage({ id: 'p2', knowledgeBase: null });
     render(<SetupChecklistCard pages={[filled, empty]} usage={makeUsage(0)} />);
     expect(screen.getByText('Finish your setup (2/4)')).toBeInTheDocument(); // connect + kb
-    expect(screen.queryByRole('link', { name: 'Add your Business Info' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Add your Business Info/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Turn on auto-reply' })).toBeInTheDocument();
+  });
+
+  it('does NOT mark KB done for shallow auto-synced info (knowledgeBase === suggestedKnowledgeBase)', () => {
+    // First Facebook sync writes the same generated text into both fields. That is
+    // not merchant-provided info, so the step must stay incomplete (the core fix).
+    const autoSynced = makePage({ knowledgeBase: LONG_KB, suggestedKnowledgeBase: LONG_KB });
+    render(<SetupChecklistCard pages={[autoSynced]} usage={makeUsage(0)} />);
+    expect(screen.getByRole('link', { name: /Add your Business Info/ })).toBeInTheDocument();
+  });
+
+  it('marks KB done once the merchant enriches it beyond the Facebook snapshot', () => {
+    const enriched = makePage({ knowledgeBase: `${LONG_KB} real merchant details`, suggestedKnowledgeBase: LONG_KB });
+    render(<SetupChecklistCard pages={[enriched]} usage={makeUsage(0)} />);
+    expect(screen.queryByRole('link', { name: /Add your Business Info/ })).not.toBeInTheDocument();
+  });
+
+  it('emphasizes the Business Info step with a "Most important" badge while incomplete', () => {
+    render(<SetupChecklistCard pages={[makePage()]} usage={makeUsage(0)} />);
+    expect(screen.getByText('Most important')).toBeInTheDocument();
   });
 });

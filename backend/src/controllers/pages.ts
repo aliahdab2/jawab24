@@ -6,7 +6,7 @@ import { channelTrialService } from '../services/channelTrial';
 import { notificationService } from '../services/notifications';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
-import { recordActivationEvent, KB_FILLED_MIN_CHARS } from '../services/activation';
+import { recordActivationEvent, isBusinessInfoProvided } from '../services/activation';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -126,12 +126,15 @@ export class PagesController {
                 return reply.status(404).send({ error: 'Page not found' });
             }
 
-            // Activation funnel: KB counts as "filled" only once it carries real content.
-            const kbTrimmed = typeof request.body.knowledgeBase === 'string'
-                ? request.body.knowledgeBase.trim()
-                : '';
-            if (page.userId && kbTrimmed.length >= KB_FILLED_MIN_CHARS) {
-                void recordActivationEvent(page.userId, 'kb_filled', { chars: kbTrimmed.length });
+            // Activation funnel: KB counts as "filled" only once it carries real,
+            // merchant-provided content — enough text AND diverged from the Facebook
+            // auto-sync snapshot (shared gate, so the funnel and the dashboard
+            // checklist agree). Only evaluate when this PUT actually touched the KB.
+            if (request.body.knowledgeBase !== undefined && page.userId
+                && isBusinessInfoProvided(page.knowledgeBase, page.suggestedKnowledgeBase)) {
+                void recordActivationEvent(page.userId, 'kb_filled', {
+                    chars: (page.knowledgeBase ?? '').trim().length,
+                });
             }
 
             // Non-blocking: flag catalog-like patterns in raw KB so the editor

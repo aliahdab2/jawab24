@@ -1,5 +1,5 @@
 import type { Page } from '@jawab24/shared';
-import { KB_FILLED_MIN_CHARS } from '@jawab24/shared';
+import { KB_FILLED_MIN_CHARS, isBusinessInfoProvided } from '@jawab24/shared';
 
 /**
  * Minimum knowledge-base length (trimmed chars) for a page to count as
@@ -10,9 +10,15 @@ import { KB_FILLED_MIN_CHARS } from '@jawab24/shared';
  */
 export { KB_FILLED_MIN_CHARS };
 
-/** True once a page carries real business-info text (>= KB_FILLED_MIN_CHARS, trimmed). */
-export function isKbFilled(page: Pick<Page, 'knowledgeBase'>): boolean {
-  return (page.knowledgeBase ?? '').trim().length >= KB_FILLED_MIN_CHARS;
+/**
+ * True once a page carries real, merchant-provided business info: enough text
+ * (>= KB_FILLED_MIN_CHARS, trimmed) AND content that differs from the Facebook
+ * auto-sync snapshot. Delegates to the shared `isBusinessInfoProvided` so the
+ * checklist, the dashboard KB nudge, the /pages "Add info" chip, and the backend
+ * `kb_filled` activation milestone can never disagree on what "filled" means.
+ */
+export function isKbFilled(page: Pick<Page, 'knowledgeBase' | 'suggestedKnowledgeBase'>): boolean {
+  return isBusinessInfoProvided(page.knowledgeBase, page.suggestedKnowledgeBase);
 }
 
 /**
