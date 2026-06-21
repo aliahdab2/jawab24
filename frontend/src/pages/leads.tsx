@@ -3,10 +3,12 @@ import { useRouter } from 'next/router';
 import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, useDebounce } from '@/hooks';
 import { toast } from 'sonner';
 import clsx from 'clsx';
+import * as Popover from '@radix-ui/react-popover';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageHeader, EmptyState, ConfirmationModal, Select, UpgradeCTA, Input } from '@/components/ui';
+import { PageHeader, EmptyState, ConfirmationModal, UpgradeCTA, Input } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
+import { useIsDemoUser } from '@/features/demo/useDemoMode';
 import { useUIStore } from '@/lib/store';
 import { leadsApi, pagesApi, subscriptionApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
@@ -23,13 +25,16 @@ import {
   X,
   MessageSquare,
   SlidersHorizontal,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG, SUB_STAGE_BG, resolveSubStage } from '@/components/leads/StatusControl';
 import { LeadCustomFieldsSection } from '@/components/leads/LeadCustomFields';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { isRTLLocale } from '@/utils/locale';
+import { isRTLLocale, getLocaleDirection } from '@/utils/locale';
+import { isPageAutoReplyEnabled } from '@/utils/page';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import { captureError } from '@/lib/sentryHelpers';
 import { openExternalUrl } from '@/lib/openExternalUrl';
@@ -44,6 +49,11 @@ type StatusFilter = LeadStatus | 'all' | 'returning';
 // Page size for the infinite-scroll list. Matches MESSAGES_PER_PAGE / COMMENTS_PER_PAGE
 // so all three list pages have consistent paging behaviour.
 const LEADS_PER_PAGE = 50;
+
+// Shared style for the header action buttons (Customize / Export): icon-only on
+// mobile, icon + label at sm+. Bordered so the bare icon reads as a button.
+const HEADER_ACTION_BTN =
+  'flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] p-2 sm:px-3 sm:py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors border border-theme-border sm:border-transparent';
 
 // Sentry tags for unexpected failures when opening a deep-linked lead.
 const deepLinkErrorTag = { page: 'leads', action: 'deep-link' } as const;
@@ -543,7 +553,19 @@ const LeadsPage: NextPageWithLayout = () => {
     ? usageData.subscription.plan.slug !== 'starter' || usageData.subscription.status === 'trialing'
     : true;
 
-  const pages = React.useMemo(() => pagesData ?? [], [pagesData]);
+  // Only connected pages belong on the leads picker: a disconnected page (missing/
+  // invalid FB token, isConnected === false) captures nothing, so it shouldn't appear
+  // as a choice. Its historical leads return as soon as the page is reconnected.
+  // Paused-but-connected pages still show (marked «معطّلة»). This flows into
+  // usePageFilter, so the dropdown, the count, auto-select, and the stale-id cleanup
+  // all stay consistent.
+  // Demo carve-out: demo pages are synthetic and carry no access token, so isConnected
+  // is always false for them — skip the filter so demo mode still shows its pages.
+  const isDemoUser = useIsDemoUser();
+  const pages = React.useMemo(
+    () => (pagesData ?? []).filter((p) => isDemoUser || p.isConnected !== false),
+    [pagesData, isDemoUser],
+  );
 
   // Persisted page filter — localStorage + URL sync (?page=<id>) + stale-selection
   // cleanup. Unlike /comments and /messages (which only surface auto-reply traffic),
@@ -835,65 +857,101 @@ const LeadsPage: NextPageWithLayout = () => {
         title={t('title')}
         description={t('description')}
         beside={
+          // Page switcher as a Radix Popover (not the inline <Select>): its menu
+          // renders in a PORTAL, so it escapes the header's stacking context (no
+          // longer painted behind the lead cards) and is collision-aware (shifts to
+          // stay on-screen instead of spilling off the edge). Trigger is a compact
+          // pill; the title (flex-1) keeps width priority, this truncates first.
           validPages.length > 1 ? (
-            <Select
-              compact
-              // The flexible element on the title band: shrinks before the title is
-              // gutted, never below a readable stub (min-w), never past its cap.
-              className="!w-auto min-w-[6rem] max-w-[10rem] sm:max-w-[15rem]"
-              value={selectedPageId}
-              onChange={setSelectedPageId}
-              options={validPages.map((p) => {
-                // A connected page with auto-reply off still holds leads, so it stays
-                // selectable — but mark it so two entries don't read as two active pages.
-                const paused = !p.autoReplyEnabled && !p.instagramAutoReplyEnabled;
-                return paused
-                  ? { value: p.id, label: p.name, badge: t('pagePaused'), badgeTone: 'muted' as const }
-                  : { value: p.id, label: p.name };
-              })}
-              placeholder={t('selectPage')}
-              aria-label={t('selectPage')}
-            />
+            <Popover.Root>
+              <Popover.Trigger asChild>
+                <button
+                  type="button"
+                  aria-label={t('selectPage')}
+                  className="flex items-center gap-1.5 min-w-[5rem] max-w-[10.5rem] sm:max-w-[14rem] px-3 py-2 rounded-full bg-muted/50 text-sm font-medium text-foreground/90 hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                >
+                  <span className="truncate min-w-0">{selectedPage?.name ?? t('selectPage')}</span>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0 ms-auto" aria-hidden="true" />
+                </button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content
+                  align="start"
+                  sideOffset={6}
+                  collisionPadding={8}
+                  dir={getLocaleDirection(language)}
+                  className="z-[60] min-w-[14rem] max-w-[calc(100vw-1rem)] max-h-[60vh] overflow-y-auto bg-card border border-theme-border rounded-xl shadow-xl p-1.5 text-start animate-in fade-in slide-in-from-top-1 duration-150"
+                >
+                  {validPages.map((p) => {
+                    // A connected page with auto-reply off still holds leads, so it
+                    // stays selectable — marked so two entries don't read as active.
+                    const paused = !isPageAutoReplyEnabled(p);
+                    const active = p.id === selectedPageId;
+                    return (
+                      <Popover.Close asChild key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPageId(p.id)}
+                          className={clsx(
+                            'w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-start transition-colors',
+                            active
+                              ? 'bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300 font-semibold'
+                              : 'text-foreground/90 hover:bg-muted',
+                          )}
+                        >
+                          <Check className={clsx('w-4 h-4 flex-shrink-0', active ? 'text-brand-600' : 'opacity-0')} aria-hidden="true" />
+                          <span className="truncate min-w-0 flex-1">{p.name}</span>
+                          {paused && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-foreground/70 flex-shrink-0">
+                              {t('pagePaused')}
+                            </span>
+                          )}
+                        </button>
+                      </Popover.Close>
+                    );
+                  })}
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
           ) : undefined
         }
         action={
           selectedPageId ? (
+            // Customize + Export shown directly (icon-only on mobile, full label at sm+).
+            // The bordered icon reads as a button; aria-label/title carry the name.
             <div className="flex items-center gap-1">
-              {/* Customize stages — icon-only on mobile (the title band is now shared
-                  with the page selector); full label returns at sm+. The bordered icon
-                  reads as a button; aria-label/title carry the name at every breakpoint. */}
               <button
                 onClick={() => setStageModalOpen(true)}
                 aria-label={t('customizeStages')}
                 title={t('customizeStages')}
-                className="flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] p-2 sm:px-3 sm:py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors border border-theme-border sm:border-transparent"
+                className={HEADER_ACTION_BTN}
               >
                 <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{t('customizeStages')}</span>
               </button>
               <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
-              {canExport ? (
-                <button
-                  onClick={handleExport}
-                  disabled={exporting}
-                  aria-label={t('exportCsv')}
-                  title={t('exportCsv')}
-                  className="flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] p-2 sm:px-3 sm:py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors disabled:opacity-50 border border-theme-border sm:border-transparent"
-                >
-                  {exporting
-                    ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                    : <Download className="w-4 h-4" aria-hidden="true" />
-                  }
-                  <span className="hidden sm:inline">{t('exportCsv')}</span>
-                </button>
-              ) : (
-                <UpgradeCTA
-                  className="flex items-center justify-center gap-1.5 min-h-[40px] px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors cursor-pointer"
-                >
-                  <Lock className="w-4 h-4" aria-hidden="true" />
-                  <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
-                </UpgradeCTA>
-              )}
+                {canExport ? (
+                  <button
+                    onClick={handleExport}
+                    disabled={exporting}
+                    aria-label={t('exportCsv')}
+                    title={t('exportCsv')}
+                    className={clsx(HEADER_ACTION_BTN, 'disabled:opacity-50')}
+                  >
+                    {exporting
+                      ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                      : <Download className="w-4 h-4" aria-hidden="true" />
+                    }
+                    <span className="hidden sm:inline">{t('exportCsv')}</span>
+                  </button>
+                ) : (
+                  <UpgradeCTA
+                    className="flex items-center justify-center gap-1.5 min-h-[40px] px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors cursor-pointer"
+                  >
+                    <Lock className="w-4 h-4" aria-hidden="true" />
+                    <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
+                  </UpgradeCTA>
+                )}
               </div>
             </div>
           ) : undefined
@@ -925,49 +983,46 @@ const LeadsPage: NextPageWithLayout = () => {
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-        {/* Status filters (pick one) scroll on mobile / wrap on desktop — mirrors the
-            comments & messages filter bar so no chip gets hidden off-edge. The
-            cross-status "Returning" flag is lifted out, after the divider. */}
-        <div className="w-full sm:flex-1 sm:min-w-0 flex items-center gap-1.5 sm:gap-2">
-          <div className="flex-1 min-w-0 flex overflow-x-auto sm:flex-wrap items-center gap-1.5 sm:gap-2 scrollbar-hide pb-0.5 sm:pb-0">
-            {statusTabs.map((tab) => {
-              const active = statusFilter === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setStatusFilter(tab.key)}
-                  aria-pressed={active}
-                  className={clsx(
-                    'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
-                    active
-                      ? 'bg-brand-500 text-white shadow-sm shadow-brand-500/25'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
-                  )}
-                >
-                  {tab.label}
-                  {tab.count !== undefined && (
-                    <span className={clsx(
-                      'text-xs tabular-nums',
-                      active ? 'text-white/70' : 'text-subtle',
-                    )}>
-                      {tab.count.toLocaleString()}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+        {/* Filter chips — one horizontal-scroll row on mobile (wraps on desktop), like
+            the comments page. "Returning" (عاد للتواصل) is the LAST chip: a minor,
+            occasional signal, so it sits off-screen by default and the user scrolls
+            horizontally to reveal it rather than it taking permanent space. */}
+        <div className="w-full sm:flex-1 sm:min-w-0 flex overflow-x-auto sm:flex-wrap items-center gap-1.5 sm:gap-2 scrollbar-hide pb-0.5 sm:pb-0">
+          {statusTabs.map((tab) => {
+            const active = statusFilter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key)}
+                aria-pressed={active}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
+                  active
+                    ? 'bg-brand-500 text-white shadow-sm shadow-brand-500/25'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
+                )}
+              >
+                {tab.label}
+                {tab.count !== undefined && (
+                  <span className={clsx(
+                    'text-xs tabular-nums',
+                    active ? 'text-white/70' : 'text-subtle',
+                  )}>
+                    {tab.count.toLocaleString()}
+                  </span>
+                )}
+              </button>
+            );
+          })}
 
-          {/* Cross-status flag: a lead keeps its pipeline status and can ALSO be
-              "Returning", so it's a separate toggle (orange, matching the card badge)
-              — not a fifth mutually-exclusive status. Tapping it again clears it. */}
-          <span aria-hidden="true" className="w-px h-6 bg-theme-border flex-shrink-0" />
+          {/* Cross-status "Returning" flag — last chip; orange when active to echo the
+              card badge. Tapping it again clears it. */}
           <button
             type="button"
             onClick={() => setStatusFilter(returningActive ? 'all' : 'returning')}
             aria-pressed={returningActive}
             className={clsx(
-              'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 flex-shrink-0',
+              'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
               returningActive
                 ? 'bg-accent-500 text-white shadow-sm shadow-accent-500/25'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',

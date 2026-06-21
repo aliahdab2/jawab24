@@ -28,13 +28,16 @@ describe('setupKeyboard', () => {
     expect(kb.addListener).toHaveBeenCalledWith('keyboardDidHide', expect.any(Function));
   });
 
-  it('Android: does NOT register keyboardWillShow/WillHide (iOS-only events)', async () => {
+  it('Android: registers keyboardWillHide (early dismiss signal) but NOT keyboardWillShow', async () => {
     const kb = makeKeyboardMock();
     await setupKeyboard(kb, true);
 
     const events = kb.addListener.mock.calls.map((args: unknown[]) => args[0]);
+    // Show uses didShow (settled native height); hide uses willHide (animation START, so
+    // --keyboard-height releases the instant the keyboard begins leaving) + didHide (settle).
+    expect(events).toContain('keyboardWillHide');
+    expect(events).toContain('keyboardDidHide');
     expect(events).not.toContain('keyboardWillShow');
-    expect(events).not.toContain('keyboardWillHide');
   });
 
   it('Android: keyboardDidShow adds keyboard-open class', async () => {
@@ -79,12 +82,40 @@ describe('setupKeyboard', () => {
     expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('0px');
   });
 
-  it('Android: returns two cleanup functions', async () => {
+  it('Android: returns three cleanup functions (didShow + willHide + didHide)', async () => {
     const kb = makeKeyboardMock();
     const cleanup = await setupKeyboard(kb, true);
 
-    expect(cleanup).toHaveLength(2);
+    expect(cleanup).toHaveLength(3);
     cleanup.forEach(fn => expect(typeof fn).toBe('function'));
+  });
+
+  it('Android: keyboardWillHide clears --keyboard-height to 0px at the START of the dismiss', async () => {
+    document.documentElement.style.setProperty('--keyboard-height', '300px');
+    document.documentElement.classList.add('keyboard-open');
+    const kb = makeKeyboardMock();
+    await setupKeyboard(kb, true);
+
+    const willHide = kb.addListener.mock.calls.find((args: unknown[]) => args[0] === 'keyboardWillHide');
+    (willHide![1] as () => void)();
+
+    // nativeUp drops at animation start → height releases immediately, no waiting for didHide.
+    expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('0px');
+    expect(document.documentElement.classList.contains('keyboard-open')).toBe(false);
+  });
+
+  it('Android: a new keyboardDidShow cancels an in-flight collapse (height returns to native)', async () => {
+    const kb = makeKeyboardMock();
+    await setupKeyboard(kb, true);
+
+    const willHide = kb.addListener.mock.calls.find((a: unknown[]) => a[0] === 'keyboardWillHide');
+    (willHide![1] as () => void)();        // dismiss starts → collapsing pins height 0
+    expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('0px');
+
+    const show = kb.addListener.mock.calls.find((a: unknown[]) => a[0] === 'keyboardDidShow');
+    (show![1] as (i: { keyboardHeight: number }) => void)({ keyboardHeight: 300 }); // re-open cancels collapse
+    // jsdom has no visualViewport → native-height fallback. Height tracks the keyboard again.
+    expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('300px');
   });
 
   it('Android: cleanup functions call remove() on each listener', async () => {
@@ -168,7 +199,7 @@ describe('setupKeyboard', () => {
     expect(document.documentElement.classList.contains('keyboard-open')).toBe(false);
   });
 
-  it('iOS: returns two cleanup functions', async () => {
+  it('iOS: returns two cleanup functions (willShow + willHide)', async () => {
     const kb = makeKeyboardMock();
     const cleanup = await setupKeyboard(kb, false);
 
@@ -254,6 +285,10 @@ describe('setupKeyboard: single clamped source of truth', () => {
     const show = kb.addListener.mock.calls.find((a: unknown[]) => a[0] === 'keyboardDidShow');
     (show![1] as (i: { keyboardHeight: number }) => void)(info);
   };
+  const fireWillHide = (kb: ReturnType<typeof makeKeyboardMock>) => {
+    const wh = kb.addListener.mock.calls.find((a: unknown[]) => a[0] === 'keyboardWillHide');
+    (wh![1] as () => void)();
+  };
 
   it('clamps an implausibly large plugin height to <= 60% of the viewport', async () => {
     // No visual viewport → falls back to the plugin height, which on edge-to-edge
@@ -323,6 +358,36 @@ describe('setupKeyboard: single clamped source of truth', () => {
     expect(document.documentElement.classList.contains('keyboard-open')).toBe(true);
   });
 
+  // Regression for the dismiss gap + shake (June 2026): on an overlay device whose
+  // viewport tracks the inset, Android fires keyboardDidHide only AFTER the slide-down
+  // animation, so nativeUp stays true throughout the retract. As the keyboard leaves,
+  // vvPx decays 255→0; the instant it dips under MIN_KEYBOARD_PX the OLD code flipped to
+  // the native-height fallback (255, since shrank==0) and the modal jumped back UP for a
+  // frame before didHide snapped it to 0. Once the viewport has proven it surfaces the
+  // inset this session, its decay to ~0 must win → 0, not the stale native height.
+  it('overlay device, dismiss tail: viewport decay to ~0 wins over stale native height', async () => {
+    const handlers: Record<string, () => void> = {};
+    const vv = {
+      height: 804, offsetTop: 0,
+      addEventListener: (e: string, h: () => void) => { handlers[e] = h; },
+      removeEventListener: vi.fn(),
+    };
+    Object.defineProperty(window, 'innerHeight', { value: 804, configurable: true }); // baseline 804
+    Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
+    const kb = makeKeyboardMock();
+    await setupKeyboard(kb, true); // Android
+
+    // Keyboard opens (overlay: innerHeight constant, vv shrinks). didShow is post-animation.
+    vv.height = 549; handlers.resize();
+    fireShow(kb, { keyboardHeight: 255 });
+    expect(getKbHeight()).toBe('255px');
+
+    // Dismiss animation tail: keyboard ~85% retracted, viewport almost restored, but
+    // nativeUp is STILL true (keyboardDidHide is post-animation on Android).
+    vv.height = 770; handlers.resize(); // 34px inset (< 50)
+    expect(getKbHeight()).toBe('0px'); // must NOT snap back to 255
+  });
+
   // OVERLAY device whose visual viewport does NOT surface the IME inset (older Chromium /
   // some OEM skins): innerHeight unchanged AND vv.height unchanged, so the viewport reads
   // 0 — but the keyboard IS up. We MUST fall back to the native height, not 0, or the
@@ -336,6 +401,25 @@ describe('setupKeyboard: single clamped source of truth', () => {
 
     expect(getKbHeight()).toBe('255px');
     expect(document.documentElement.classList.contains('keyboard-open')).toBe(true);
+  });
+
+  // THE reported bug ("works first dismiss, breaks every dismiss after"): on cycles where
+  // the WebView's visualViewport goes silent, the height is held at the native value via
+  // the fallback during open, then the user dismisses. With only didHide (post-animation)
+  // the height stayed pinned at 255 through the whole slide-down (the gap). keyboardWillHide
+  // fires at the START of the animation → the height must release to 0 immediately,
+  // independent of any viewport frames.
+  it('silent viewport: willHide releases the native-height fallback at dismiss START', async () => {
+    stubViewport(804, { height: 804, offsetTop: 0, addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    const kb = makeKeyboardMock();
+    await setupKeyboard(kb, true); // Android
+
+    fireShow(kb, { keyboardHeight: 255 }); // viewport silent → fallback holds native 255
+    expect(getKbHeight()).toBe('255px');
+
+    fireWillHide(kb); // dismiss animation START — no viewport frames will arrive
+    expect(getKbHeight()).toBe('0px'); // released now, NOT pinned at 255 until didHide
+    expect(document.documentElement.classList.contains('keyboard-open')).toBe(false);
   });
 
   // iOS: keyboardWillShow fires BEFORE the visual viewport shrinks, so the viewport reads

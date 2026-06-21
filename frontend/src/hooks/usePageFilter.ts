@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import type { Page } from '@jawab24/shared';
+import { isPageAutoReplyEnabled } from '@/utils/page';
 
 const DEFAULT_STORAGE_KEY = 'inbox-page-filter';
 
@@ -42,7 +43,7 @@ export function usePageFilter(pages: Page[], options: UsePageFilterOptions = {})
   const validPages = useMemo(() => {
     if (!Array.isArray(pages)) return [];
     if (validateAgainst === 'all') return pages;
-    return pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled);
+    return pages.filter(isPageAutoReplyEnabled);
   }, [pages, validateAgainst]);
 
   // Validate stored pageId against the valid-page set once pages load.

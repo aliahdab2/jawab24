@@ -139,7 +139,7 @@ describe('StageCustomizerModal', () => {
 
     it('multi-page workspace saves the SELECTED page override and names the page in the title', async () => {
       renderModal({ multiPage: true, selectedPageId: 'pg1', pageName: 'Nourva', workspaceStages: EXISTING });
-      expect(screen.getByText('Customize leads · Nourva')).toBeInTheDocument();
+      expect(screen.getByText(en.customizeStagesForPage.replace('{name}', 'Nourva'))).toBeInTheDocument();
       fireEvent.click(screen.getByText('Save'));
       await waitFor(() => expect(updateLeadConfig).toHaveBeenCalledTimes(1));
       expect(updateLeadConfig.mock.calls[0][0]).toBe('pg1');

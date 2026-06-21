@@ -1495,6 +1495,28 @@
   padding-bottom: 8px;
 }
 
+/* --keyboard-height is owned by setupKeyboard() (src/lib/keyboardSetup.ts) and read by
+   keyboard-aware modals via `bottom: var(--keyboard-height)` / `max-height: calc(...)`.
+   Register it as an animatable <length> and EASE every change so the modal can never
+   shake: the soft keyboard's open/close drives --keyboard-height through several noisy
+   per-frame visualViewport readings (pan / offsetTop jitter), and MessageDetailModal's
+   ResizeObserver re-pins a bottom-anchored thread on every size change — so raw per-frame
+   updates juddered. The transition damps that into one smooth move regardless of how the
+   value arrives (and regardless of whether keyboardWillHide fires on a given device — the
+   reason a collapse-gated transition wasn't enough). It is intentionally ALWAYS ON, not
+   gated to the dismiss: open eases up too, which is fine and also damps the open jitter.
+   @property is supported on Android WebView (Chromium 85+) and iOS WKWebView (16.4+);
+   where unsupported the value simply snaps (still no shake, just not eased). */
+@property --keyboard-height {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+html.is-native {
+  transition: --keyboard-height 0.18s ease-out;
+}
+
 @media (orientation: landscape) {
   .is-native .pb-safe-modal {
     padding-bottom: 12px;
