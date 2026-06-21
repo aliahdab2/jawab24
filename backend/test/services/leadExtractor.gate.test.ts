@@ -188,6 +188,68 @@ describe('maybeCaptureLead phone gate', () => {
     });
 });
 
+describe('maybeCaptureLead — AI phone validation (price-as-phone guard)', () => {
+    it('REGRESSION: a non-phone figure the AI puts in "phone" (a price) does NOT overwrite the gate phone', async () => {
+        // Real bug: a customer asked about a course whose fee was 2,500,000; the
+        // extraction model dropped "2500000" into the "phone" field, and the code
+        // trusted it over the libphonenumber-validated gate phone — so the lead's
+        // call/WhatsApp buttons dialled a price. "2500000" is 7 digits and matches
+        // no numbering plan, so it must be rejected and the gate phone kept.
+        openaiCreateMock.mockResolvedValueOnce({
+            choices: [{ message: { content: JSON.stringify({
+                phone: '2500000', // the course fee, misclassified
+                summary: 'العميل يستفسر عن دورة الإسعافات الأولية',
+                fields: [{ key: 'course_of_interest', label_en: 'Course', label_ar: 'الدورة', value: 'دورة الإسعافات الأولية' }],
+            }) } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'سعر دورة الإسعافات 2500000، رقمي 0501234567' }),
+        );
+
+        expect(capturedInserts).toHaveLength(1);
+        expect(capturedInserts[0].phone).toBe('0501234567');
+        expect(capturedInserts[0].phone).not.toBe('2500000');
+    });
+
+    it('still trusts the AI phone when it IS a valid number (e.g. the canonical E.164)', async () => {
+        openaiCreateMock.mockResolvedValueOnce({
+            choices: [{ message: { content: JSON.stringify({
+                phone: '+966501234567', // valid, canonical form of the gate phone
+                summary: 'Customer shared contact details',
+                fields: [],
+            }) } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'رقمي 0501234567' }),
+        );
+
+        expect(capturedInserts).toHaveLength(1);
+        expect(capturedInserts[0].phone).toBe('+966501234567');
+    });
+
+    it('falls back to the gate phone when the AI returns an empty phone', async () => {
+        openaiCreateMock.mockResolvedValueOnce({
+            choices: [{ message: { content: JSON.stringify({
+                phone: '',
+                summary: 'Customer shared contact details',
+                fields: [],
+            }) } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'رقمي 0501234567' }),
+        );
+
+        expect(capturedInserts).toHaveLength(1);
+        expect(capturedInserts[0].phone).toBe('0501234567');
+    });
+});
+
 describe('lead re-engagement (re-shared number)', () => {
     it('upsert conflict clause flags follow-up WITHOUT regressing status (non-destructive)', async () => {
         await leadExtractorService.maybeCaptureLead(baseParams({ messageText: 'رقمي 0934958473' }));

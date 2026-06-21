@@ -166,8 +166,18 @@ class LeadExtractorService {
                             .join('\n');
                     }
 
-                    const aiResult = await this.callExtractionAI(conversationText, rawPhone, { userId, pageId });
-                    extractedPhone = aiResult.phone || rawPhone;
+                    const aiResult = await this.callExtractionAI(conversationText, { userId, pageId });
+                    // The extraction model occasionally drops a non-phone figure
+                    // (e.g. a course fee like "2500000") into the "phone" field.
+                    // Trust the AI's phone ONLY when it re-validates as a real phone;
+                    // otherwise keep the libphonenumber-validated gate phone, so the
+                    // merchant's call/WhatsApp buttons never dial a price. An empty AI
+                    // phone (the model's "not the sender's number" signal) also keeps
+                    // the gate phone — same as before.
+                    const aiPhone = aiResult.phone
+                        ? extractPhoneFromText(aiResult.phone, defaultCountry ? { defaultCountry } : undefined)
+                        : null;
+                    extractedPhone = aiPhone ?? rawPhone;
                     extractedData = { summary: aiResult.summary, fields: aiResult.fields };
                     extractionStatus = 'completed';
                 } catch (aiError) {
@@ -299,7 +309,6 @@ class LeadExtractorService {
 
     private async callExtractionAI(
         conversation: string,
-        rawPhone: string,
         logCtx: { userId: string; pageId: string },
     ): Promise<{ phone: string; summary?: string; fields: LeadExtractedData['fields'] }> {
         const prompt = EXTRACTION_PROMPT.replace('<CONVERSATION>', conversation);
@@ -355,7 +364,10 @@ class LeadExtractorService {
         };
 
         return {
-            phone: parsed.phone || rawPhone,
+            // Raw AI phone (empty when the model omits it or judges it isn't the
+            // sender's). Coerced to a string in case the model emits a bare number.
+            // The caller re-validates this before trusting it over the gate phone.
+            phone: String(parsed.phone ?? ''),
             summary: parsed.summary,
             fields: Array.isArray(parsed.fields) ? parsed.fields : [],
         };
