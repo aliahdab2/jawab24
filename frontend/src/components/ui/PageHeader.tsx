@@ -1,20 +1,48 @@
 import React from 'react';
+import clsx from 'clsx';
 
 interface PageHeaderProps {
   title: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
+  /**
+   * Optional control rendered INLINE on the title's band, right after the title
+   * (e.g. a screen-level page/context switcher). Kept out of the <h1> for a11y.
+   * When set, the title truncates and yields width to this control on narrow
+   * viewports instead of wrapping or pushing it to its own row. When unset, the
+   * header renders exactly as before — other PageHeader consumers are unaffected.
+   */
+  beside?: React.ReactNode;
   className?: string;
 }
 
-export function PageHeader({ title, description, action, className }: PageHeaderProps) {
+export function PageHeader({ title, description, action, beside, className }: PageHeaderProps) {
+  const heading = (
+    <h1
+      className={clsx(
+        'font-display font-extrabold text-foreground tracking-tight',
+        // When an inline control shares the band: smaller title (it's no longer the
+        // sole hero of the row) + ellipsize and yield width instead of wrapping.
+        beside
+          ? 'text-lg sm:text-2xl lg:text-3xl truncate min-w-0'
+          : 'text-xl sm:text-3xl lg:text-4xl',
+      )}
+    >
+      {title}
+    </h1>
+  );
   return (
     <div className={`mb-3 landscape:mb-2 sm:mb-8 lg:mb-10 animate-slide-up relative z-10 ${className || ''}`}>
       <div className="flex items-start justify-between gap-3 sm:gap-6">
         <div className="flex-1 min-w-0 text-start">
-          <h1 className="text-xl sm:text-3xl lg:text-4xl font-display font-extrabold text-foreground tracking-tight">
-            {title}
-          </h1>
+          {beside ? (
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              {heading}
+              <div className="min-w-0 flex items-center">{beside}</div>
+            </div>
+          ) : (
+            heading
+          )}
         </div>
         {action && (
           <div className="flex-shrink-0 flex items-center self-start">

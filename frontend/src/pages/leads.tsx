@@ -23,7 +23,6 @@ import {
   X,
   MessageSquare,
   SlidersHorizontal,
-  RotateCcw,
 } from 'lucide-react';
 import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG, SUB_STAGE_BG, resolveSubStage } from '@/components/leads/StatusControl';
 import { LeadCustomFieldsSection } from '@/components/leads/LeadCustomFields';
@@ -76,8 +75,7 @@ function leadTopFields(lead: Lead) {
 function ReturningBadge({ show, label }: { show: boolean; label: string }) {
   if (!show) return null;
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-white bg-accent-500 animate-pulse-soft flex-shrink-0">
-      <RotateCcw className="w-3 h-3" aria-hidden="true" />
+    <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium text-white bg-accent-500 animate-pulse-soft flex-shrink-0">
       {label}
     </span>
   );
@@ -817,14 +815,16 @@ const LeadsPage: NextPageWithLayout = () => {
     }
   };
 
-  const filterTabs: { key: StatusFilter; label: string; count?: number }[] = [
+  // The four mutually-exclusive pipeline filters — a lead is exactly one of these.
+  // "Returning" is NOT here: it's a cross-status flag (a converted lead can also be
+  // returning), so it renders as a separate toggle, not a fifth status.
+  const statusTabs: { key: StatusFilter; label: string; count?: number }[] = [
     { key: 'all',       label: t('filterAll'),       count: statusCounts?.all },
     { key: 'new',       label: t('filterNew'),       count: statusCounts?.new },
     { key: 'contacted', label: t('filterContacted'), count: statusCounts?.contacted },
     { key: 'converted', label: t('filterConverted'), count: statusCounts?.converted },
-    // Cross-status: leads that came back and need another look.
-    { key: 'returning', label: t('filterReturning'), count: statusCounts?.returning },
   ];
+  const returningActive = statusFilter === 'returning';
 
   const isPending = statusMutation.isPending || deleteMutation.isPending;
 
@@ -834,17 +834,41 @@ const LeadsPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
+        beside={
+          validPages.length > 1 ? (
+            <Select
+              compact
+              // The flexible element on the title band: shrinks before the title is
+              // gutted, never below a readable stub (min-w), never past its cap.
+              className="!w-auto min-w-[6rem] max-w-[10rem] sm:max-w-[15rem]"
+              value={selectedPageId}
+              onChange={setSelectedPageId}
+              options={validPages.map((p) => {
+                // A connected page with auto-reply off still holds leads, so it stays
+                // selectable — but mark it so two entries don't read as two active pages.
+                const paused = !p.autoReplyEnabled && !p.instagramAutoReplyEnabled;
+                return paused
+                  ? { value: p.id, label: p.name, badge: t('pagePaused'), badgeTone: 'muted' as const }
+                  : { value: p.id, label: p.name };
+              })}
+              placeholder={t('selectPage')}
+              aria-label={t('selectPage')}
+            />
+          ) : undefined
+        }
         action={
           selectedPageId ? (
             <div className="flex items-center gap-1">
-              {/* Customize stages — merchant-defined statuses (free text, any business type).
-                  On mobile: short label + border so it reads as a button, not a stray icon. */}
+              {/* Customize stages — icon-only on mobile (the title band is now shared
+                  with the page selector); full label returns at sm+. The bordered icon
+                  reads as a button; aria-label/title carry the name at every breakpoint. */}
               <button
                 onClick={() => setStageModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors border border-theme-border sm:border-transparent"
+                aria-label={t('customizeStages')}
+                title={t('customizeStages')}
+                className="flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] p-2 sm:px-3 sm:py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors border border-theme-border sm:border-transparent"
               >
                 <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
-                <span className="sm:hidden">{t('customizeShort')}</span>
                 <span className="hidden sm:inline">{t('customizeStages')}</span>
               </button>
               <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
@@ -852,17 +876,19 @@ const LeadsPage: NextPageWithLayout = () => {
                 <button
                   onClick={handleExport}
                   disabled={exporting}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors disabled:opacity-50"
+                  aria-label={t('exportCsv')}
+                  title={t('exportCsv')}
+                  className="flex items-center justify-center gap-1.5 min-h-[40px] min-w-[40px] p-2 sm:px-3 sm:py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground/80 hover:bg-muted transition-colors disabled:opacity-50 border border-theme-border sm:border-transparent"
                 >
                   {exporting
                     ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                     : <Download className="w-4 h-4" aria-hidden="true" />
                   }
-                  <span>{t('exportCsv')}</span>
+                  <span className="hidden sm:inline">{t('exportCsv')}</span>
                 </button>
               ) : (
                 <UpgradeCTA
-                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors cursor-pointer"
+                  className="flex items-center justify-center gap-1.5 min-h-[40px] px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors cursor-pointer"
                 >
                   <Lock className="w-4 h-4" aria-hidden="true" />
                   <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
@@ -899,47 +925,68 @@ const LeadsPage: NextPageWithLayout = () => {
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-        {/* Page selector — only shown when the merchant has 2+ pages (mirrors Messages/Comments) */}
-        {validPages.length > 1 && (
-          <div className="w-full sm:w-auto sm:min-w-[220px]">
-            <Select
-              value={selectedPageId}
-              onChange={setSelectedPageId}
-              options={validPages.map((p) => ({ value: p.id, label: p.name }))}
-              placeholder={t('selectPage')}
-              aria-label={t('selectPage')}
-            />
+        {/* Status filters (pick one) scroll on mobile / wrap on desktop — mirrors the
+            comments & messages filter bar so no chip gets hidden off-edge. The
+            cross-status "Returning" flag is lifted out, after the divider. */}
+        <div className="w-full sm:flex-1 sm:min-w-0 flex items-center gap-1.5 sm:gap-2">
+          <div className="flex-1 min-w-0 flex overflow-x-auto sm:flex-wrap items-center gap-1.5 sm:gap-2 scrollbar-hide pb-0.5 sm:pb-0">
+            {statusTabs.map((tab) => {
+              const active = statusFilter === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setStatusFilter(tab.key)}
+                  aria-pressed={active}
+                  className={clsx(
+                    'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
+                    active
+                      ? 'bg-brand-500 text-white shadow-sm shadow-brand-500/25'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
+                  )}
+                >
+                  {tab.label}
+                  {tab.count !== undefined && (
+                    <span className={clsx(
+                      'text-xs tabular-nums',
+                      active ? 'text-white/70' : 'text-subtle',
+                    )}>
+                      {tab.count.toLocaleString()}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
-        )}
 
-        {/* Status filter tabs — wrap onto multiple rows on small screens instead of
-            scrolling horizontally, so no tab (e.g. "Returning") gets hidden off-edge. */}
-        <div className="flex flex-wrap items-center gap-2">
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setStatusFilter(tab.key)}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200',
-                statusFilter === tab.key
-                  ? 'bg-brand-500 text-white shadow-sm shadow-brand-500/25'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
-              )}
-            >
-              {tab.label}
-              {tab.count !== undefined && (
-                <span className={clsx(
-                  'text-xs tabular-nums',
-                  statusFilter === tab.key ? 'text-white/70' : 'text-subtle',
-                )}>
-                  {tab.count.toLocaleString()}
-                </span>
-              )}
-            </button>
-          ))}
+          {/* Cross-status flag: a lead keeps its pipeline status and can ALSO be
+              "Returning", so it's a separate toggle (orange, matching the card badge)
+              — not a fifth mutually-exclusive status. Tapping it again clears it. */}
+          <span aria-hidden="true" className="w-px h-6 bg-theme-border flex-shrink-0" />
+          <button
+            type="button"
+            onClick={() => setStatusFilter(returningActive ? 'all' : 'returning')}
+            aria-pressed={returningActive}
+            className={clsx(
+              'flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 flex-shrink-0',
+              returningActive
+                ? 'bg-accent-500 text-white shadow-sm shadow-accent-500/25'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/80',
+            )}
+          >
+            {t('filterReturning')}
+            {statusCounts?.returning !== undefined && (
+              <span className={clsx(
+                'text-xs tabular-nums',
+                returningActive ? 'text-white/70' : 'text-subtle',
+              )}>
+                {statusCounts.returning.toLocaleString()}
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* Search — client-side filter over the loaded leads (name / phone / summary) */}
+        {/* Search — client-side filter over the loaded leads (name / phone / summary).
+            The page selector now lives beside the title (PageHeader `beside`). */}
         <div role="search" aria-label={tc('search')} className="relative group w-full sm:w-[240px] sm:ms-auto">
           <Search
             className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4 h-4 text-muted-foreground group-focus-within:text-brand-500 transition-colors z-10"
@@ -986,7 +1033,27 @@ const LeadsPage: NextPageWithLayout = () => {
       ) : isError ? (
         <EmptyState icon={Users} title={t('loadFailed')} variant="search" />
       ) : leads.length === 0 ? (
-        <EmptyState icon={Users} title={t('empty')} description={t('emptySub')} />
+        statusFilter === 'all' ? (
+          // No leads captured yet — the onboarding empty state.
+          <EmptyState icon={Users} title={t('empty')} description={t('emptySub')} />
+        ) : (
+          // Leads exist, but none match the active filter. Don't reuse the onboarding
+          // copy ("share a phone number") — that's misleading when there are leads.
+          <EmptyState
+            icon={Users}
+            title={returningActive ? t('emptyReturning') : t('emptyFiltered')}
+            description={returningActive ? t('emptyReturningSub') : undefined}
+            action={
+              <button
+                type="button"
+                onClick={() => setStatusFilter('all')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-brand-500 hover:bg-brand-600 transition-colors"
+              >
+                {t('showAllLeads')}
+              </button>
+            }
+          />
+        )
       ) : filteredLeads.length === 0 ? (
         <EmptyState icon={Search} title={tc('noData')} variant="search" />
       ) : (
