@@ -24,7 +24,10 @@ export function PageHeader({ title, description, action, beside, className }: Pa
         // When an inline control shares the band: smaller title (it's no longer the
         // sole hero of the row) + ellipsize and yield width instead of wrapping.
         beside
-          ? 'text-lg sm:text-2xl lg:text-3xl truncate min-w-0'
+          // Smaller on mobile and allowed to WRAP (no truncate) so the full title is
+          // always visible regardless of device width / system font scale; the selector
+          // beside it keeps its own width. Full size returns at sm+.
+          ? 'text-sm sm:text-2xl lg:text-3xl leading-tight min-w-0 flex-1'
           : 'text-xl sm:text-3xl lg:text-4xl',
       )}
     >
@@ -38,7 +41,7 @@ export function PageHeader({ title, description, action, beside, className }: Pa
           {beside ? (
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               {heading}
-              <div className="min-w-0 flex items-center">{beside}</div>
+              <div className="flex-shrink-0 flex items-center">{beside}</div>
             </div>
           ) : (
             heading

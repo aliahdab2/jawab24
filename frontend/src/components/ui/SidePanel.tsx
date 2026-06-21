@@ -88,7 +88,9 @@ export function SidePanel({ isOpen, onClose, title, subtitle, children }: SidePa
   if (!mounted || !shouldRender) return null;
 
   const content = (
-    <div className="fixed inset-0 z-50">
+    // z-[60] keeps the panel above every other fixed layer (the floating help
+    // button is z-50), independent of DOM paint order.
+    <div className="fixed inset-0 z-[60]">
       {/* Backdrop */}
       <div
         className={clsx(
@@ -104,7 +106,9 @@ export function SidePanel({ isOpen, onClose, title, subtitle, children }: SidePa
       <div
         className={clsx(
           'hidden md:flex flex-col',
-          'absolute inset-y-0 end-0 w-[440px] bg-card shadow-2xl',
+          // max-w-full: if this variant ever renders on a viewport narrower than
+          // 440px it covers the full width instead of hanging off the edge.
+          'absolute inset-y-0 end-0 w-[440px] max-w-full bg-card shadow-2xl',
           'transition-transform duration-300 ease-out',
           visible ? 'translate-x-0' : 'translate-x-full rtl:-translate-x-full',
         )}
