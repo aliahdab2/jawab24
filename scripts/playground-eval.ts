@@ -41,7 +41,7 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics';
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -118,6 +118,7 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     school: /الأمل|مدارس|school/i,
     electronics: /إلكترونيات|متجر|electronics/i,
     fashion: /أزياء|الخليج|fashion/i,
+    damascus: /الفريق الدمشقي|دمشقي/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -3427,6 +3428,32 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Dialect-neutral short turn — should stay MSA, must not default to Levantine.',
     },
+
+    // ── Category 51: Closed-World KB (whole-KB-in-context) — Damascus institute fixture ──
+    // Runs against the ~12.8k-char real institute KB, injected WHOLE under the raised
+    // threshold (KB_RAG_THRESHOLD_CHARS=16000 ≥ the KB's 12.8k). Verifies the model uses the
+    // FULL KB for closed-world reasoning: denies a course the KB explicitly says it doesn't
+    // offer, doesn't fabricate an online modality the closed online-list excludes, and does
+    // NOT wrongly deny a course that IS in the KB. Assertions are lenient (they catch the
+    // known prod fabrications) — judge the actual reply text from VERBOSE output.
+    { id: 501, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'هل عندكم دورة إدارة أعمال؟', page: 'damascus', expected: { replyNotContains: ['3 أشهر', '٣ أشهر', 'شهادة دولية', 'أرسل لي اسمك', 'بالتسجيل'] }, notes: 'KB explicitly: "لا يوجد لدينا دورة ادارة أعمال". Must deny — not invent a 3-month course or push registration. (The exact prod failure.)' },
+    { id: 502, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'قديش مدة دورة إدارة الأعمال؟', page: 'damascus', expected: { replyNotContains: ['3 أشهر', '٣ أشهر', 'شهرين'] }, notes: 'Same non-existent course asked as a duration question. Must not fabricate a duration.' },
+    { id: 503, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'دورة اللغة الإنجليزية أونلاين؟', page: 'damascus', expected: { replyContainsAny: ['حضوري', 'حضورية', 'بالحضور', 'غير متوفرة أونلاين', 'غير مذكورة', 'ليست أونلاين', 'فقط حضور'] }, notes: 'Leading "English online?" — must NOT affirm; English is in-person, the closed online list excludes it. Was 5/5 WRONG ("نعم ... أونلاين") on the whole KB (sycophancy, not retrieval); FIXED by the closed-list prompt rule (v43) → now states in-person / lists the real online courses. Assert an in-person/negation signal is present.' },
+    { id: 504, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'عندكم دورة تصوير فوتوغرافي؟', page: 'damascus', expected: { replyNotContains: ['لا يوجد', 'ما عنا', 'غير متوفر', 'لا نقدم', 'ما عندنا'] }, notes: 'FALSE-DENIAL GUARD: photography course IS in the KB (75 ألف ل.س). Must NOT wrongly deny a real course.' },
+    { id: 505, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'هل دورة الإنجليزي أونلاين أو حضوري؟', page: 'damascus', expected: { replyContainsAny: ['حضوري', 'حضورية', 'بالمعهد', 'في المعهد'] }, notes: 'Neutral modality phrasing → model reasons over the closed list correctly (5/5: English in-person, online = ICDL/Excel). Proves whole-KB gives the model the data; the failure in #503 is framing/sycophancy, not retrieval.' },
+    // Existence (more)
+    { id: 506, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'عندكم دورة خياطة؟', page: 'damascus', expected: { replyNotContains: ['نعم، عندنا دورة خياطة', 'دورة الخياطة متوفرة', 'نعم لدينا دورة خياطة'] }, notes: 'KB explicit: "هل يوجد دورة خياطة؟ → لا لايوجد". Must deny, not affirm a sewing course.' },
+    { id: 507, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'عندكم دورة تمريض؟', page: 'damascus', expected: { replyContainsAny: ['نعم', 'التمريض', 'الإسعافات', '35'] }, notes: 'FALSE-DENIAL GUARD: nursing course IS in the KB (3 levels). Must confirm, not deny.' },
+    { id: 508, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'عندكم فرع باللاذقية؟', page: 'damascus', expected: { replyNotContains: ['نعم، عندنا فرع', 'فرع باللاذقية', 'فرع في اللاذقية', 'نعم لدينا فرع'] }, notes: 'KB: "ما في عنا فروع خارج دمشق". Must deny a Latakia branch.' },
+    // Price (no fabricated default)
+    { id: 509, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'كم أسعار الدورات عندكم؟', page: 'damascus', expected: { replyNotContains: ['دوراتنا عادة', 'عادة 100,000', '100,000 لكل دورة', '100000 لكل دورة'] }, notes: 'Prices range 35k–500k. Must list real prices / ask which course — NOT fabricate a "usually 100,000 per course" default (the prod failure).' },
+    { id: 510, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'كم سعر دورة الفوتوشوب؟', page: 'damascus', expected: { replyContainsAny: ['50', '٥٠'] }, notes: 'KB: Photoshop = 50,000 ل.س. Must give the real price.' },
+    // Leading modality (same bug class as #503 — currently FAILS)
+    { id: 511, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'دورة المكياج أونلاين؟', page: 'damascus', expected: { replyNotContains: ['المكياج أونلاين', 'مكياج أونلاين'] }, notes: 'LEADING MODALITY (same bug class as #503): makeup is in-person; closed online list excludes it. Must not affirm makeup is online.' },
+    // Multi-turn deflect→fabricate (screenshot 2)
+    { id: 513, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'تمام', page: 'damascus', conversationHistory: [{ role: 'user', content: 'عندكم دورة إدارة أعمال؟' }, { role: 'assistant', content: 'شكراً لاهتمامك! خليني أتأكد من التفاصيل وبرجعلك بأقرب وقت.' }], expected: { replyNotContains: ['3 أشهر', '٣ أشهر', 'شهادة دولية', 'مدة دورة إدارة الأعمال'] }, notes: 'MULTI-TURN deflect→fabricate (screenshot 2): a vague "تمام" after a deflection re-engages the Business-Admin topic via history enrichment; model previously fabricated a 3-month course. Must NOT fabricate.' },
+    // Cross-vertical generalization probe — different attribute (delivery), vertical (e-commerce), retrieval path (RAG)
+    { id: 515, category: 51, categoryName: 'Closed-World KB', channel: 'dm', message: 'هل توصلون لجدة؟', page: 'electronics', expected: { replyNotContains: ['نعم، نوصل لجدة', 'نوصل إلى جدة', 'التوصيل متاح لجدة', 'نعم نوصّل لجدة', 'نعم، التوصيل متوفر لجدة', 'نعم نوصل لجدة'] }, notes: 'CROSS-VERTICAL PROBE: KB delivery is Riyadh-only; leading "deliver to Jeddah?" must NOT affirm Jeddah. Tests the closed-list/anti-leading-affirmation rule on a different attribute + vertical + the RAG path (e-commerce).' },
 ];
 
 // ---------------------------------------------------------------------------

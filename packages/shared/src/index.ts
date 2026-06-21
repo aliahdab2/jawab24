@@ -661,7 +661,21 @@ export {
 // demonstrates the team follow-up (matching example 6b). No rule changed — rule
 // 5's no-callback restriction only covers info-missing questions, not angry
 // complaints. Info-missing deflection (v41 behavior) is unchanged.
-export const PROMPT_VERSION = 'v42';
+// v43: closed-list / anti-leading-affirmation rule (confidence-mistakes section).
+// Pairs with raising the whole-KB-in-context threshold to 16000: injecting the
+// whole KB fixed EXISTENCE and PRICE fabrications, but a LEADING yes/no about an
+// attribute ("is the English course online?") still got a sycophantic "yes" 5/5
+// even with the full KB — a framing/agreeableness bias, NOT retrieval (the same
+// question asked neutrally, "online or in-person?", was correct 5/5). New rule:
+// do NOT affirm an attribute just because the customer framed it that way; when KB
+// enumerates the attribute (an "online courses" list, "delivery zones"), treat the
+// list as EXHAUSTIVE — an item not in it does NOT have the attribute, say so
+// confidently. Verified on the Damascus institute fixture (Cat 51): leading
+// English/makeup online flipped 0/5 → 5/5 correct, and generalizes cross-vertical
+// (electronics delivery-to-Jeddah probe passes). Necessary-but-insufficient note:
+// the rule is strongest when the KB enumerates the attribute; a structured offerings
+// index with explicit flags remains the durable fix for loosely-written KBs.
+export const PROMPT_VERSION = 'v43';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

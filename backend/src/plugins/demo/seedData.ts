@@ -3,6 +3,7 @@ import { pages, posts, comments, settings, notifications, messages, ecommerceSto
 import { eq, and, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { DAMASCUS_DEMO_KB } from './damascusKb';
 
 /**
  * Demo settings configuration
@@ -178,6 +179,18 @@ const DEMO_PAGES = [
 🔄 الاستبدال والاسترجاع: خلال 14 يوم`,
         autoReplyEnabled: true,
         instagramUsername: 'gulf_fashion_sa',
+    },
+    {
+        // Large-KB fixture — the real Damascus training institute KB (~12.8k chars,
+        // 40+ courses). Sits in the 5k–16k band, so it exercises the whole-KB-in-context
+        // path under the raised threshold. Named without "تدريب"/"النور"/"institute" so it
+        // does NOT collide with the `training` page's name pattern in playground-eval.ts.
+        // No businessProfile → pure-KB path (closed-world facts must come from the KB text).
+        facebookPageId: 'demo_page_damascus',
+        name: 'معهد الفريق الدمشقي للتأهيل',
+        suggestedKnowledgeBase: DAMASCUS_DEMO_KB,
+        autoReplyEnabled: true,
+        instagramUsername: null,
     },
 ];
 
@@ -1165,8 +1178,29 @@ export async function seedDemoData(
                 .where(eq(pages.facebookPageId, pageData.facebookPageId));
         }
 
+        // Insert any demo pages that don't exist yet (newly-added fixtures), so returning
+        // demo users pick them up without a full wipe/re-seed. Mirrors the create-path insert.
+        const existingFbIds = new Set(existingPages.map(p => p.facebookPageId));
+        for (const pageData of DEMO_PAGES) {
+            if (existingFbIds.has(pageData.facebookPageId)) continue;
+            await db.insert(pages).values({
+                userId,
+                workspaceId,
+                facebookPageId: pageData.facebookPageId,
+                name: pageData.name,
+                accessToken: 'demo_access_token',
+                autoReplyEnabled: pageData.autoReplyEnabled,
+                knowledgeBase: pageData.suggestedKnowledgeBase,
+                instagramUsername: pageData.instagramUsername,
+                instagramAutoReplyEnabled: false,
+                ...(pageData.businessProfile !== undefined && { businessProfile: pageData.businessProfile }),
+            });
+            logger.debug('[DemoData] Inserted newly-added demo page on refresh', { name: pageData.name });
+        }
+
         // Get demo page IDs for refresh
-        const demoExistingPages = existingPages.filter(p => p.facebookPageId && demoPageIds.includes(p.facebookPageId));
+        const refreshedExistingPages = await db.select().from(pages).where(eq(pages.userId, userId));
+        const demoExistingPages = refreshedExistingPages.filter(p => p.facebookPageId && demoPageIds.includes(p.facebookPageId));
         const existingPageIds = demoExistingPages.map(p => p.id);
 
         // Refresh messages: delete old → re-seed with fresh timestamps
