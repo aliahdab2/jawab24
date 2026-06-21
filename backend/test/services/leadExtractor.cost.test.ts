@@ -62,10 +62,10 @@ describe('leadExtractor cost logging', () => {
         // Access the private method via the service instance (intentional: we
         // want to verify the LLM-call code path, not the gating in maybeCaptureLead).
         const callExtractionAI = (leadExtractorService as unknown as {
-            callExtractionAI: (c: string, p: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
+            callExtractionAI: (c: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
         }).callExtractionAI.bind(leadExtractorService);
 
-        await callExtractionAI('Customer: hi', '+1234', { userId: 'user-1', pageId: 'page-1' });
+        await callExtractionAI('Customer: hi', { userId: 'user-1', pageId: 'page-1' });
 
         expect(logAiUsageMock).toHaveBeenCalledTimes(1);
         expect(logAiUsageMock).toHaveBeenCalledWith({
@@ -90,10 +90,10 @@ describe('leadExtractor cost logging', () => {
         });
 
         const callExtractionAI = (leadExtractorService as unknown as {
-            callExtractionAI: (c: string, p: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
+            callExtractionAI: (c: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
         }).callExtractionAI.bind(leadExtractorService);
 
-        await callExtractionAI('Customer: hi', '+1234', { userId: 'u-override', pageId: 'p1' });
+        await callExtractionAI('Customer: hi', { userId: 'u-override', pageId: 'p1' });
 
         expect(openaiCreateMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4o-mini' }));
         expect(logAiUsageMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4o-mini' }));
@@ -112,10 +112,10 @@ describe('leadExtractor cost logging', () => {
         });
 
         const callExtractionAI = (leadExtractorService as unknown as {
-            callExtractionAI: (c: string, p: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
+            callExtractionAI: (c: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
         }).callExtractionAI.bind(leadExtractorService);
 
-        await callExtractionAI('Customer: hi', '+1234', { userId: 'u-claude', pageId: 'p1' });
+        await callExtractionAI('Customer: hi', { userId: 'u-claude', pageId: 'p1' });
 
         expect(openaiCreateMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4.1-mini' }));
         expect(logAiUsageMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4.1-mini' }));
@@ -128,10 +128,10 @@ describe('leadExtractor cost logging', () => {
         });
 
         const callExtractionAI = (leadExtractorService as unknown as {
-            callExtractionAI: (c: string, p: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
+            callExtractionAI: (c: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
         }).callExtractionAI.bind(leadExtractorService);
 
-        await callExtractionAI('Customer: hi', '+1234', { userId: 'user-1', pageId: 'page-1' });
+        await callExtractionAI('Customer: hi', { userId: 'user-1', pageId: 'page-1' });
 
         expect(logAiUsageMock).not.toHaveBeenCalled();
     });
