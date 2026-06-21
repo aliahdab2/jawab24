@@ -6,6 +6,8 @@ interface SelectOption {
   value: string;
   label: string;
   badge?: string;
+  /** Badge tone. Defaults to the brand (teal) look; 'muted' for neutral states like "paused". */
+  badgeTone?: 'brand' | 'muted';
 }
 
 interface SelectProps {
@@ -22,12 +24,15 @@ interface SelectProps {
   compact?: boolean;
 }
 
-function LabelWithBadge({ label, badge }: { label: string; badge?: string }) {
+function LabelWithBadge({ label, badge, badgeTone = 'brand' }: { label: string; badge?: string; badgeTone?: 'brand' | 'muted' }) {
   return (
     <span className="flex-1 flex items-center gap-2 min-w-0">
       <span className="truncate">{label}</span>
       {badge && (
-        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full status-brand flex-shrink-0">
+        <span className={clsx(
+          'text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0',
+          badgeTone === 'muted' ? 'bg-muted text-foreground/70' : 'status-brand',
+        )}>
           {badge}
         </span>
       )}
@@ -113,6 +118,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
         <LabelWithBadge
           label={selectedOption ? selectedOption.label : (placeholder ?? '')}
           badge={selectedOption?.badge}
+          badgeTone={selectedOption?.badgeTone}
         />
         <ChevronDown 
           className={clsx(
@@ -129,7 +135,9 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
           className={clsx(
             "absolute z-[100] rounded-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150",
             compact
-              ? "end-0 min-w-[200px] bg-card border-2 border-brand-500/30 shadow-2xl shadow-black/30 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5"
+              // Anchor to the trigger's start edge and grow inward, capped to the viewport,
+              // so a trigger near the screen edge never pushes the menu off-screen.
+              ? "start-0 min-w-[200px] max-w-[calc(100vw-2rem)] bg-card border-2 border-brand-500/30 shadow-2xl shadow-black/30 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5"
               : "inset-x-0 bg-card border border-theme-border shadow-xl"
           )}
         >
@@ -151,7 +159,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
                   idx > 0 && "border-t border-theme-border/50"
                 )}
               >
-                <LabelWithBadge label={option.label} badge={option.badge} />
+                <LabelWithBadge label={option.label} badge={option.badge} badgeTone={option.badgeTone} />
                 {option.value === value && (
                   <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                 )}
