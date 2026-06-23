@@ -675,7 +675,13 @@ export {
 // (electronics delivery-to-Jeddah probe passes). Necessary-but-insufficient note:
 // the rule is strongest when the KB enumerates the attribute; a structured offerings
 // index with explicit flags remains the durable fix for loosely-written KBs.
-export const PROMPT_VERSION = 'v43';
+// v44: removed the hardcoded dialect demonstration examples (Maghrebi answer +
+// Maghrebi deflection) and the gratuitous Egyptian reply on a dialect-neutral
+// customer message. Hardcoded dialects in few-shot examples get parroted onto
+// customers from other countries; the dialect-MIRRORING rule (kept, reinforced
+// per-call) is what should drive this. Examples now show FORMAT/tone only and
+// mirror the customer's own dialect — not a fixed dialect to copy.
+export const PROMPT_VERSION = 'v44';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
