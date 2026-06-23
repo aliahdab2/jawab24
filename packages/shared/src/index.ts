@@ -58,7 +58,7 @@ export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
 export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
-export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
+export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
 export type { ExtractedPhone } from './utils/validation';
 
 // --- SSE Event Types ---

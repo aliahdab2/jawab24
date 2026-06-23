@@ -26,7 +26,7 @@
  *   function extractPhoneFromText(text: string, opts?: { defaultCountry?: string }): string | null; // first raw
  */
 import { describe, it, expect } from 'vitest';
-import { extractPhones, extractPhoneFromText } from '../validation';
+import { extractPhones, extractPhoneFromText, extractCustomerPhones } from '../validation';
 
 // NOTE: countryFromTimezone (merchant region inference) lives in the BACKEND
 // (backend/src/utils/phoneRegion.ts), backed by the full IANA dataset — it is
@@ -187,5 +187,45 @@ describe('extractPhoneFromText — back-compat first-raw accessor (used by the c
     expect(extractPhoneFromText('رقمي 050 123 4567', { defaultCountry: 'SA' })).toBe('0501234567');
     expect(extractPhoneFromText('+963 968 271 162')).toBe('+963968271162');
     expect(extractPhoneFromText('شكراً جزيلاً')).toBeNull();
+  });
+});
+
+describe('extractCustomerPhones — exclude the business\'s OWN number echoed back', () => {
+  const SY = { defaultCountry: 'SY' };
+
+  it('REGRESSION: a customer who pastes our reply (carrying the business line) yields NO customer phone', () => {
+    // Real prod case: the customer copy-pasted our ICDL auto-reply verbatim to ask
+    // for a translation. That reply ends with the business's own "+963937549674".
+    const ourReply =
+      'The ICDL course is 8 sessions over a month, costing 35,000 L.S. ' +
+      'You can reach us at +963937549674 for more details!';
+    const customerPaste = ourReply + '\nترجمها للعربي';
+    expect(extractCustomerPhones(customerPaste, [ourReply], SY)).toEqual([]);
+  });
+
+  it('matches across formats: business "+963…" excludes the customer\'s "0…" paste of the same line', () => {
+    expect(extractCustomerPhones('رقمكم 0937549674', ['تواصلوا معنا على +963937549674'], SY)).toEqual([]);
+  });
+
+  it('keeps the customer\'s OWN number even when the business number is also present', () => {
+    const out = extractCustomerPhones(
+      'رقمي 0991234567 وشكراً',
+      ['أرقامنا: 0935924472 0937549674'],
+      SY,
+    );
+    expect(out.map(p => p.e164)).toEqual(['+963991234567']);
+  });
+
+  it('excludes EVERY business number when the merchant published several', () => {
+    const out = extractCustomerPhones(
+      'أرقامكم 0935924472 و 0937549674',
+      ['أرقامنا على الصفحة: 0935924472 0112124472 0937549674'],
+      SY,
+    );
+    expect(out).toEqual([]);
+  });
+
+  it('no business texts → behaves exactly like extractPhones', () => {
+    expect(extractCustomerPhones('رقمي 0991234567', [], SY)).toEqual(extractPhones('رقمي 0991234567', SY));
   });
 });
