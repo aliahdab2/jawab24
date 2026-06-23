@@ -8,7 +8,7 @@ import {
     stripTagsByOffsets,
     type FacebookMessageTag,
 } from '../../utils/commentText';
-import { detectCommentLanguage, detectLanguageCode } from '../../utils/language';
+import { detectCommentLanguage, detectLanguage, detectLanguageCode } from '../../utils/language';
 import { hasExternalPromoUrl } from './spamPatterns';
 
 /** Threshold below which a @mention comment is treated as friend-tagging
@@ -94,11 +94,34 @@ export function preprocessCommentText(opts: {
 }
 
 /**
- * Resolve the reply language for a comment. Ambiguous short Latin-only inputs
- * ("ICDL", "Excel", product names typed by Arabic speakers) against an Arabic KB
- * are treated as Arabic so the reply doesn't drift to English. All other cases
- * defer to `detectCommentLanguage`, which already falls back to post language
- * when the comment has no language signal.
+ * Resolve the reply language for a comment.
+ *
+ * A bare Latin token ("ICDL", "Excel", "iPhone" — product names and acronyms)
+ * carries no real language signal: an Arabic / French / Turkish speaker typing a
+ * product name on their own post shouldn't flip the reply to English. For those,
+ * mirror the customer's actual language from the surrounding context — whatever it
+ * is, NOT a hardcoded Arabic. All other comments defer to `detectCommentLanguage`,
+ * which already falls back to post language when the comment is script-less.
+ *
+ * "No language signal" is decided by the detector's CONFIDENCE, not word count: a
+ * Latin comment that matched zero English function words sits at the 0.5 floor
+ * (acronyms, lone product names like "course"/"iPhone"), whereas a genuine English
+ * phrase matches words like the/what/how/which and scores ≥0.6. Keying off
+ * confidence keeps real short questions ("which course", "how much") in English
+ * while still catching bare tokens — the old word-count+ASCII gate flipped
+ * "which course" to Arabic yet kept "what course?" English purely because of the
+ * trailing "?", which was accidental. The ASCII + ≤3-word checks remain only as a
+ * safety cap so a long English sentence that happens to dodge function words can't
+ * be misread as a token.
+ *
+ * Context priority is POST first, then KB. The post is the strongest signal (the
+ * customer literally commented on it) and — unlike the KB — is ALWAYS present
+ * regardless of RAG mode. `kbText` is `effectiveKB`, which the generator sets to
+ * `undefined` whenever RAG retrieval returns chunks (the chunks carry the KB
+ * content instead). Keying the override on the KB alone silently no-ops on any
+ * RAG-active page: the KB-language signal goes blank ('unknown'), the override
+ * never fires, and a bare token like "Icdl" on an Arabic post wrongly resolves to
+ * English. Reading the post first makes the rule RAG-independent.
  */
 export function resolveCommentLanguage(
     commentForAI: string,
@@ -106,13 +129,38 @@ export function resolveCommentLanguage(
     kbText: string | undefined,
 ): string {
     const effectiveLang = detectCommentLanguage(commentForAI, postMessage);
-    const kbLang = detectLanguageCode(kbText || '');
     const trimmed = commentForAI.trim();
-    const isAmbiguousLatin = effectiveLang === 'en'
-        && trimmed.split(/\s+/).length <= 3
+    const commentDet = detectLanguage(trimmed);
+    const isLowSignalLatin = commentDet.language === 'en'
+        && commentDet.confidence <= 0.5
         && /^[a-zA-Z0-9\s]+$/.test(trimmed)
-        && kbLang === 'ar';
-    return isAmbiguousLatin ? 'ar' : effectiveLang;
+        && trimmed.split(/\s+/).length <= 3;
+    if (!isLowSignalLatin) return effectiveLang;
+
+    // Mirror the context language, post first (always present, RAG-independent),
+    // KB second. General across ALL languages:
+    //   • a language the detector can name (ar, fr, tr, sv, …) → reply in it
+    //   • a script the backend detector doesn't name (Thai, Cyrillic, CJK, …) →
+    //     return 'unknown' so the generator omits the explicit override and the
+    //     ai-worker's Unicode-based resolveInputLanguage names the post language
+    //   • English / no detectable context → keep the token's English
+    for (const ctx of [postMessage, kbText]) {
+        if (!ctx) continue;
+        const lang = detectLanguageCode(ctx);
+        if (lang !== 'unknown' && lang !== 'en') return lang;
+        if (lang === 'unknown' && hasNonLatinScript(ctx)) return 'unknown';
+    }
+    return effectiveLang;
+}
+
+/**
+ * True when the text contains a letter outside the Latin script (Arabic, Thai,
+ * Cyrillic, CJK, …). Used to tell "no language signal" (Latin/punctuation/empty)
+ * apart from a real foreign script the backend's named-language detector can't
+ * classify, so the latter can defer to the ai-worker's full Unicode resolver.
+ */
+function hasNonLatinScript(text: string): boolean {
+    return /\p{L}/u.test(text.replace(/\p{Script=Latin}/gu, ''));
 }
 
 /**

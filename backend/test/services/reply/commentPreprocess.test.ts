@@ -172,6 +172,56 @@ describe('resolveCommentLanguage', () => {
         expect(resolveCommentLanguage('Excel', undefined, 'دورات تدريبية متنوعة')).toBe('ar');
     });
 
+    it('flips short Latin-only comment to Arabic from the POST when the KB is absent (RAG active)', () => {
+        // Production regression: under RAG_MODE=on the generator passes effectiveKB=undefined
+        // (the KB content lives in retrievedChunks instead), so the KB-language signal is blank.
+        // The Arabic post the customer commented on must still drive the reply language.
+        const arabicPost = '#عروض على دورات #الكومبيوتر مع الأستاذ أنس الأشقر دورة icdl';
+        expect(resolveCommentLanguage('Icdl', arabicPost, undefined)).toBe('ar');
+        expect(resolveCommentLanguage('Icdl', arabicPost, '')).toBe('ar');
+    });
+
+    it('mirrors the post language for a Latin token in ANY detector-named language (not just Arabic)', () => {
+        // French post → French reply
+        expect(resolveCommentLanguage('iPhone', 'Découvrez les nouvelles offres à prix réduit', undefined)).toBe('fr');
+        // Turkish post → Turkish reply
+        expect(resolveCommentLanguage('iPhone', 'Yeni ürünlerimizi mağazamızda görebilirsiniz', undefined)).toBe('tr');
+        // Swedish post → Swedish reply
+        expect(resolveCommentLanguage('iPhone', 'Vi har öppet hela veckan välkommen', undefined)).toBe('sv');
+    });
+
+    it('defers (returns "unknown") for a foreign script the backend cannot name, so the worker resolves it', () => {
+        // Thai / Russian aren't in the backend SupportedLanguage set → detectLanguageCode = "unknown".
+        // Returning "unknown" makes the generator omit the explicit override; the ai-worker's
+        // Unicode-based resolveInputLanguage then names the post language downstream.
+        expect(resolveCommentLanguage('iPhone', 'ยินดีต้อนรับสู่ร้านของเรา', undefined)).toBe('unknown');
+        expect(resolveCommentLanguage('iPhone', 'Добро пожаловать в наш магазин', undefined)).toBe('unknown');
+    });
+
+    it('keeps English when the context is English or absent', () => {
+        expect(resolveCommentLanguage('Icdl', 'Check out our new computer courses', undefined)).toBe('en');
+        expect(resolveCommentLanguage('Icdl', undefined, undefined)).toBe('en');
+    });
+
+    it('keeps a genuine short English question English on an Arabic post (not just a bare token)', () => {
+        // These carry real English function words (which/how/the) → confidence ≥ 0.6,
+        // so they must NOT be mistaken for a signal-less brand token and flipped to Arabic.
+        // Regression for the old gate, which flipped "which course" (no punctuation) to Arabic
+        // while keeping "what course?" English only by accident of the trailing "?".
+        const arabicPost = '#عروض على دورات #الكومبيوتر مع الأستاذ أنس الأشقر دورة icdl';
+        expect(resolveCommentLanguage('which course', arabicPost, undefined)).toBe('en');
+        expect(resolveCommentLanguage('what course?', arabicPost, undefined)).toBe('en');
+        expect(resolveCommentLanguage('how much?', arabicPost, undefined)).toBe('en');
+        expect(resolveCommentLanguage('what is the course?', arabicPost, undefined)).toBe('en');
+    });
+
+    it('still mirrors a signal-less bare token to the Arabic post', () => {
+        const arabicPost = '#عروض على دورات #الكومبيوتر مع الأستاذ أنس الأشقر دورة icdl';
+        // Acronym / product name — zero English function words (confidence floor) → Arabic.
+        expect(resolveCommentLanguage('Icdl', arabicPost, undefined)).toBe('ar');
+        expect(resolveCommentLanguage('iPhone', arabicPost, undefined)).toBe('ar');
+    });
+
     it('keeps English for long English comments even when KB is Arabic', () => {
         expect(
             resolveCommentLanguage('can you send me the full price list please', undefined, 'دورات'),
