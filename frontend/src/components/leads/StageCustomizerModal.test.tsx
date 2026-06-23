@@ -21,8 +21,7 @@ vi.mock('@/i18n/hooks', () => ({
   useLanguage: () => ({ language: 'en' }),
 }));
 
-// Modal/ConfirmationModal use portals — light stand-ins keep the test on the
-// component's own logic (same approach as ConfirmationModal.test.tsx).
+// Modal uses portals — a light stand-in keeps the test on the component's own logic.
 vi.mock('@/components/ui', () => ({
   Modal: ({ children, isOpen, title, footer }: { children: React.ReactNode; isOpen: boolean; title?: string; footer?: React.ReactNode }) =>
     isOpen ? (
@@ -36,14 +35,6 @@ vi.mock('@/components/ui', () => ({
     <button onClick={onClick} disabled={disabled || loading}>{children}</button>
   ),
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-  ConfirmationModal: ({ isOpen, onConfirm, onClose, title }: { isOpen: boolean; onConfirm: () => void; onClose: () => void; title: string }) =>
-    isOpen ? (
-      <div role="alertdialog">
-        <p>{title}</p>
-        <button onClick={onConfirm}>confirm-overwrite</button>
-        <button onClick={onClose}>cancel-overwrite</button>
-      </div>
-    ) : null,
 }));
 
 const EXISTING: LeadStagesConfig = {
@@ -66,35 +57,25 @@ describe('StageCustomizerModal', () => {
     updateLeadConfig.mockResolvedValue({ data: {} });
   });
 
-  it('applying a template on an empty draft fills stages and fields without confirmation', () => {
+  it('offers templates on an empty draft and applies one in place (no overwrite prompt)', () => {
     renderModal();
+    // Empty draft → templates are visible.
+    expect(screen.getByText(en.templates)).toBeInTheDocument();
     fireEvent.click(screen.getByText(en.templateSchool));
 
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     // School template (EN): contacted stages + course field
     expect(screen.getByDisplayValue('Interested')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Enrolled')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Course')).toBeInTheDocument();
   });
 
-  it('applying a template over existing content asks for confirmation; cancel keeps the draft', () => {
+  it('hides the templates once the merchant has customized (existing stages)', () => {
     renderModal({ workspaceStages: EXISTING });
-    fireEvent.click(screen.getByText(en.templateStore));
-
-    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('cancel-overwrite'));
-
+    // Draft seeded with existing content → the templates section is gone, so a
+    // template can never overwrite the merchant's setup.
+    expect(screen.queryByText(en.templates)).not.toBeInTheDocument();
+    expect(screen.queryByText(en.templateStore)).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('My custom stage')).toBeInTheDocument();
-    expect(screen.queryByDisplayValue('Preparing')).not.toBeInTheDocument();
-  });
-
-  it('confirming the overwrite replaces the draft with the template', () => {
-    renderModal({ workspaceStages: EXISTING });
-    fireEvent.click(screen.getByText(en.templateStore));
-    fireEvent.click(screen.getByText('confirm-overwrite'));
-
-    expect(screen.getByDisplayValue('Preparing')).toBeInTheDocument();
-    expect(screen.queryByDisplayValue('My custom stage')).not.toBeInTheDocument();
   });
 
   it('save drops rows with empty labels and trims the rest', async () => {
