@@ -105,6 +105,7 @@ vi.mock('../../src/services/aiModelResolver', () => ({
 
 import { leadExtractorService } from '../../src/services/leadExtractor';
 import { notificationService } from '../../src/services/notifications';
+import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 
 function baseParams(overrides: Record<string, unknown> = {}) {
     return {
@@ -181,6 +182,25 @@ describe('maybeCaptureLead phone gate', () => {
     it('does NOT create a lead when the message has no phone number', async () => {
         await leadExtractorService.maybeCaptureLead(
             baseParams({ messageText: 'شكراً جزيلاً، بتمنالكم التوفيق' }),
+        );
+
+        expect(capturedInserts).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('REGRESSION: a slash-separated academic-year range is NOT a phone → no lead', async () => {
+        // Real Damascus prod conversation: a 66-year-old job-seeker wrote
+        // "صيدله دوره ونص بال ١٩٧٩ /١٩٨٠" (studied pharmacy in 1979/1980). The
+        // years welded into the 8-digit "19791980", which validated as a Syrian
+        // landline under the merchant's Damascus region — spawning a bogus lead
+        // whose call/WhatsApp buttons dialled "1979/1980". With a SY region the
+        // gate must now find no phone and write no row.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValueOnce({
+            timezone: 'Asia/Damascus',
+        } as Awaited<ReturnType<typeof workspaceSettingsService.getSettings>>);
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'صيدله دوره ونص بال ١٩٧٩ /١٩٨٠' }),
         );
 
         expect(capturedInserts).toHaveLength(0);

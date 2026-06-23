@@ -139,6 +139,19 @@ describe('extractPhones — VALIDATION rejects non-phone digit sequences (the wh
     expect(extractPhones('الموعد 2026-06-15', { defaultCountry: 'SA' })).toEqual([]);
   });
 
+  it('rejects a slash-separated academic-year range (REGRESSION: "1979/1980" → bogus +963 landline)', () => {
+    // Real prod lead: a 66-year-old job-seeker wrote "صيدله دوره ونص بال ١٩٧٩ /١٩٨٠"
+    // (studied pharmacy in 1979/1980). libphonenumber treated "/" as in-number
+    // punctuation, welded the years into "19791980" and validated it as a Syrian
+    // Damascus landline (+96319791980) — spawning a lead with no real contact info.
+    expect(extractPhones('1979/1980', { defaultCountry: 'SY' })).toEqual([]);
+    expect(extractPhones('صيدله دوره ونص بال ١٩٧٩ /١٩٨٠', { defaultCountry: 'SY' })).toEqual([]);
+  });
+
+  it('rejects a slash-separated date even under a region whose plan would accept the welded digits', () => {
+    expect(extractPhones('تبدأ 8/7/2026', { defaultCountry: 'SY' })).toEqual([]);
+  });
+
   it('rejects a too-short fragment even with a region', () => {
     expect(extractPhones('رقم 12345', { defaultCountry: 'SA' })).toEqual([]);
   });
@@ -163,6 +176,13 @@ describe('extractPhones — #81 anti-welding still holds', () => {
     const out = extractPhones('للتواصل 0935924472 0112124470', { defaultCountry: 'SY' });
     expect(out.map(p => p.e164)).toEqual(['+963935924472', '+963112124470']);
     expect(out.map(p => p.raw)).not.toContain('09359244720112124470');
+  });
+
+  it('splits — not drops — two real numbers a customer separates with a slash', () => {
+    // The slash→date guard must not punish a genuine "num/num" pair: split into
+    // two real numbers rather than welding or discarding both.
+    const out = extractPhones('0935924472/0112124470', { defaultCountry: 'SY' });
+    expect(out.map(p => p.e164)).toEqual(['+963935924472', '+963112124470']);
   });
 });
 

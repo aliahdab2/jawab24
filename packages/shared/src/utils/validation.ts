@@ -110,11 +110,21 @@ function digitCount(s: string): number {
 const BIDI_MARKS_REGEX = /[‎‏‪-‮⁦-⁩]/g;
 
 /** Normalise text before phone matching: drop bidi marks, Arabic-Indic→ASCII,
- *  and rewrite a leading `00<cc>` international prefix to `+<cc>` (libphonenumber's
+ *  break runs on a `/` (a date/ratio separator, never phone punctuation), and
+ *  rewrite a leading `00<cc>` international prefix to `+<cc>` (libphonenumber's
  *  findNumbers ignores a bare `00`). */
 function preNormalizeForPhones(text: string): string {
   let t = text.replace(BIDI_MARKS_REGEX, '');
   t = normalizeArabicIndic(t);
+  // A slash separates DATES / academic years / ratios ("1979/1980", "8/7/2026"),
+  // never digits inside ONE phone number. libphonenumber treats "/" as in-number
+  // punctuation and welds "1979/1980" → the 8-digit "19791980", which validates
+  // as a Syrian Damascus landline (+96319791980) and spawns a bogus lead with no
+  // real contact info. Rewriting every "/" to a newline makes the engine evaluate
+  // each side separately: a year/date range collapses to two too-short fragments
+  // that fail validation, while two genuinely-distinct numbers a customer writes
+  // as "num/num" still split into two (better than dropping both).
+  t = t.replace(/\//g, '\n');
   t = t.replace(/(?<![\d+])00(\d{7,})/g, '+$1');
   return t;
 }
