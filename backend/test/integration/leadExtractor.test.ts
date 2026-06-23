@@ -153,4 +153,42 @@ describe('leadExtractor — business-number exclusion (real Postgres)', () => {
         expect(rows[0].phone).toContain('915218888');
         expect(rows[0].phone).not.toContain('929453011');
     });
+
+    it('REGRESSION: an ad body containing a "]" is still fully stripped → no lead', async () => {
+        // The strip regex must anchor to the closing "] so a stray ] inside the ad
+        // body (e.g. "[خصم خاص]") can't truncate the match and leak the number after it.
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-bracket', senderName: 'Bracket Ad',
+            messageText: '[Shared post: "عرض [خصم خاص] Nourva 160 دينار. للحجز والاستفسار: 0929453011 👇"]\nبكم',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('REGRESSION: AI cannot lift the merchant number out of a forwarded post', async () => {
+        // Customer forwards the ad (merchant number) AND types their own number, so a
+        // lead is created. Even if the AI returns the merchant number lifted from the
+        // shared post in the conversation history, it must be rejected — the lead keeps
+        // the customer's number.
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '0929453011', summary: 'عميل', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-ai-lift', senderName: 'AI Lift',
+            messageText: `${SHARED_AD}\nرقمي 0915218888`,
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('915218888');
+        expect(rows[0].phone).not.toContain('929453011');
+    });
 });

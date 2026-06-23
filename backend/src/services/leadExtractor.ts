@@ -96,21 +96,34 @@ export interface LeadsPage {
     total: number;
 }
 
+/** The forwarded shared-post block the reply pipeline injects from the Graph API
+ *  when a customer forwards a Page post into the DM: `[Shared post: "<body>"]`
+ *  (post body or attachment title — both quoted). Anchored to the closing `"]` so a
+ *  stray `]` inside the ad body can't truncate the match. See nonTextHandler.ts /
+ *  messageProcessor.ts. */
+const SHARED_POST_BLOCK_RE = /\[Shared post: "[\s\S]*?"\]/g;
+
 /**
- * Remove forwarded shared-post markers from text before the lead phone gate.
- * `[Shared post: "…"]` (and the title/generic variants) are injected by the reply
- * pipeline from the Graph API when a customer FORWARDS a Page post into the DM
- * (see nonTextHandler.ts / messageProcessor.ts). The body is the merchant's own ad
- * — a phone inside it is the merchant's published line, not the customer's contact.
- * Stripping the whole block (replaced with a space) keeps any number the customer
- * typed OUTSIDE it. Used only for the phone gate; the AI extraction still sees the
- * original text.
+ * Remove forwarded shared-post markers from text before the lead phone gate. The
+ * body is the merchant's own ad — a phone inside it is the merchant's published
+ * line, not the customer's contact. Stripping the whole block (replaced with a
+ * space) keeps any number the customer typed OUTSIDE it.
  */
 function stripForwardedPostBlocks(text: string): string {
     return text
-        .replace(/\[Shared post:[\s\S]*?\]/g, ' ')
+        .replace(SHARED_POST_BLOCK_RE, ' ')
         .replace(/\[Customer shared a post\]/g, ' ')
         .trim();
+}
+
+/**
+ * The text of any forwarded shared-post blocks in `text` — the merchant's own ad.
+ * Fed into the business-number exclusion so the merchant's number can't be lifted
+ * back out of the conversation by the AI extractor even when the customer also
+ * shared their own number (the gate already drops it via stripForwardedPostBlocks).
+ */
+function forwardedPostText(text: string): string {
+    return (text.match(SHARED_POST_BLOCK_RE) ?? []).join(' ');
 }
 
 class LeadExtractorService {
@@ -200,6 +213,13 @@ class LeadExtractorService {
                 // Our outgoing replies publish the business's own contact number(s).
                 businessTexts = [...history.filter(m => m.role === 'assistant').map(m => m.content), ...businessPhones];
             }
+
+            // A forwarded post is the merchant's own ad — its numbers are the
+            // business's. Add them to the exclusion set so the AI extractor can't lift
+            // the merchant number back out of the conversation history (the gate text
+            // already has the block stripped, but conversationText still shows it).
+            const forwarded = forwardedPostText(messageText);
+            if (forwarded) businessTexts.push(forwarded);
 
             // Real gate: the customer must share a phone that is THEIRS, not the
             // business's own number echoed from our replies or carried in a forwarded
