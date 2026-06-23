@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReplyGenerator, shouldSkipReply } from '../../src/services/reply/generator';
+import { ReplyGenerator, shouldSkipReply, computeReplyFlags } from '../../src/services/reply/generator';
 
 // Mock all dependencies
 vi.mock('../../src/services/ai', () => ({
@@ -1161,6 +1161,66 @@ describe('ReplyGenerator - Mention/tag skip behavior', () => {
         // The comment passed to AI should be the stripped version, not the raw tag.
         const callArg = vi.mocked(aiService.generateReply).mock.calls[0][0];
         expect(callArg.comment).toBe('كيف يمكنني التسجيل في الدورة القادمة؟');
+    });
+});
+
+// --- computeReplyFlags (shared by processAiResponse + generateForPlayground) ---
+
+describe('computeReplyFlags', () => {
+    const baseOpts = {
+        aiFlags: undefined,
+        confidence: 'high' as string | undefined,
+        intent: 'QUESTION' as string | undefined,
+        queryText: 'what are your hours',
+        ragAttempted: false,
+        retrievedChunkCount: 1,
+        hasEffectiveKB: true,
+    };
+
+    it('normalizes the intent and preserves model-supplied flags', () => {
+        const { normalizedIntent, flags } = computeReplyFlags({
+            ...baseOpts, intent: 'question', aiFlags: ['price_not_in_kb'],
+        });
+        expect(normalizedIntent).toBe('QUESTION');
+        expect(flags).toEqual(['price_not_in_kb']);
+    });
+
+    it('adds low_confidence when the model returns low confidence', () => {
+        const { flags } = computeReplyFlags({ ...baseOpts, confidence: 'low' });
+        expect(flags).toContain('low_confidence');
+    });
+
+    it('adds the deterministic business-action flag from the query text', () => {
+        const { flags } = computeReplyFlags({ ...baseOpts, queryText: 'أريد إلغاء طلبي' });
+        expect(flags).toContain('cancellation_request');
+    });
+
+    it('forces info_not_in_kb + low_confidence on a hallucination (RAG ran, 0 chunks, no KB, high confidence)', () => {
+        const { flags } = computeReplyFlags({
+            ...baseOpts, ragAttempted: true, retrievedChunkCount: 0, hasEffectiveKB: false,
+        });
+        expect(flags).toEqual(expect.arrayContaining(['info_not_in_kb', 'low_confidence']));
+    });
+
+    it('does NOT force info_not_in_kb when the static KB was sent (model can self-assess)', () => {
+        const { flags } = computeReplyFlags({
+            ...baseOpts, ragAttempted: true, retrievedChunkCount: 0, hasEffectiveKB: true,
+        });
+        expect(flags).not.toContain('info_not_in_kb');
+    });
+
+    it('does NOT force info_not_in_kb for social/abuse intents even with 0 chunks', () => {
+        const { flags } = computeReplyFlags({
+            ...baseOpts, intent: 'GREETING', ragAttempted: true, retrievedChunkCount: 0, hasEffectiveKB: false,
+        });
+        expect(flags).not.toContain('info_not_in_kb');
+    });
+
+    it('does NOT force info_not_in_kb when RAG was never attempted (static-KB page)', () => {
+        const { flags } = computeReplyFlags({
+            ...baseOpts, ragAttempted: false, retrievedChunkCount: 0, hasEffectiveKB: false,
+        });
+        expect(flags).not.toContain('info_not_in_kb');
     });
 });
 

@@ -83,6 +83,9 @@ vi.mock('../../src/lib/redis', () => ({
         expire: vi.fn().mockResolvedValue(1),
         set: vi.fn().mockResolvedValue('OK'),
         del: vi.fn().mockResolvedValue(1),
+        // Default: no cached business-phone list (getBusinessPhones falls through
+        // to the DB, which the generic db stub resolves to no KB rows → []).
+        get: vi.fn().mockResolvedValue(null),
     },
 }));
 vi.mock('../../src/lib/eventBus', () => ({ publishSSEEvent: vi.fn() }));
@@ -105,6 +108,9 @@ vi.mock('../../src/services/aiModelResolver', () => ({
 
 import { leadExtractorService } from '../../src/services/leadExtractor';
 import { notificationService } from '../../src/services/notifications';
+import { messagesService } from '../../src/services/messages';
+import { workspaceSettingsService } from '../../src/services/workspaceSettings';
+import { redis } from '../../src/lib/redis';
 
 function baseParams(overrides: Record<string, unknown> = {}) {
     return {
@@ -247,6 +253,102 @@ describe('maybeCaptureLead — AI phone validation (price-as-phone guard)', () =
 
         expect(capturedInserts).toHaveLength(1);
         expect(capturedInserts[0].phone).toBe('0501234567');
+    });
+});
+
+describe('maybeCaptureLead — business own number echoed back (June 2026 regression)', () => {
+    it('REGRESSION: a customer pasting our reply (with the business line) creates NO lead', async () => {
+        // Real prod case (page "الفريق الدمشقي للتدريب والتأهيل"): the customer
+        // copy-pasted our ICDL auto-reply verbatim to ask for a translation. That
+        // reply carries the business's OWN "+963937549674". The gate must recognise
+        // it as OUR number — not a customer contact — and write no lead. Otherwise
+        // the lead's call/WhatsApp buttons dial the merchant themselves, and the
+        // fields get scraped from our own catalogue.
+        const ourReply =
+            'Awesome choice! The ICDL course is 8 sessions over a month, costing 35,000 L.S. ' +
+            'You can reach us at +963937549674 for more details!';
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValueOnce([
+            { role: 'assistant', content: ourReply },
+        ] as Awaited<ReturnType<typeof messagesService.getConversationHistory>>);
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: `${ourReply}\nترجمها للعربي` }),
+        );
+
+        expect(capturedInserts).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('captures the customer\'s OWN number while ignoring the business number in our history', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValueOnce({
+            timezone: 'Asia/Damascus',
+        } as Awaited<ReturnType<typeof workspaceSettingsService.getSettings>>);
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValueOnce([
+            { role: 'assistant', content: 'تواصلوا معنا على أرقامنا: 0935924472 0937549674' },
+            { role: 'user', content: 'رقمي 0991234567' },
+        ] as Awaited<ReturnType<typeof messagesService.getConversationHistory>>);
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'رقمي 0991234567' }),
+        );
+
+        expect(capturedInserts).toHaveLength(1);
+        expect(capturedInserts[0].phone).toBe('0991234567');
+    });
+
+    it('REGRESSION: sharing the merchant\'s ad post (KB-listed business number) creates NO lead', async () => {
+        // Real prod pattern (6 of 8 bogus leads on the institute page): the customer
+        // forwarded the merchant's OWN ad post into the DM. The ad ends with the
+        // business's published lines ("…للاستفسار والتواصل 0935924472 0112124472"),
+        // which the merchant also lists in Business Info (KB). The number appears in NO
+        // Agent turn of this conversation, so only the page-level KB exclusion catches it.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValueOnce({
+            timezone: 'Asia/Damascus',
+        } as Awaited<ReturnType<typeof workspaceSettingsService.getSettings>>);
+        // Page-level business numbers from the KB (Redis-cached list).
+        vi.mocked(redis.get).mockResolvedValueOnce(JSON.stringify(['0935924472', '0112124472', '0937549674']));
+        // The conversation's Agent turn does NOT contain the number.
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValueOnce([
+            { role: 'assistant', content: 'مرحباً! يبدو أنك مهتم بدوراتنا. كيف أقدر أساعدك؟' },
+        ] as Awaited<ReturnType<typeof messagesService.getConversationHistory>>);
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({
+                messageText: '#دورات_اون_لاين #دورة_محاسبة_الامين للاستفسار والتواصل 0935924472 0112124472',
+            }),
+        );
+
+        expect(capturedInserts).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('REGRESSION: an AI phone that is the business\'s own number falls back to the customer gate phone', async () => {
+        // The extractor feeds "Agent:" turns for context; the model can lift our
+        // published line out of them into "phone". That must be rejected — keep the
+        // customer's validated gate number.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValueOnce({
+            timezone: 'Asia/Damascus',
+        } as Awaited<ReturnType<typeof workspaceSettingsService.getSettings>>);
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValueOnce([
+            { role: 'assistant', content: 'أرقامنا: 0935924472 0937549674' },
+            { role: 'user', content: 'رقمي 0991234567' },
+        ] as Awaited<ReturnType<typeof messagesService.getConversationHistory>>);
+        openaiCreateMock.mockResolvedValueOnce({
+            choices: [{ message: { content: JSON.stringify({
+                phone: '0937549674', // the business's own line, lifted from an Agent turn
+                summary: 'العميل شارك رقمه',
+                fields: [],
+            }) } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'رقمي 0991234567' }),
+        );
+
+        expect(capturedInserts).toHaveLength(1);
+        expect(capturedInserts[0].phone).toBe('0991234567');
+        expect(capturedInserts[0].phone).not.toBe('0937549674');
     });
 });
 

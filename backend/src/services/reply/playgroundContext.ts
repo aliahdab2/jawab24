@@ -121,6 +121,11 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         workspaceId: page.workspaceId,
         question,
         channel: effectiveChannel,
+        // Preserve the channel the user actually tested. The generator keys comment
+        // preprocessing + comment-language resolution off this, so a comment test on a
+        // dual/private merchant (flattened to effectiveChannel='dm' above) still mirrors
+        // the post language instead of falling back to the raw comment's script.
+        requestedChannel: channel,
         knowledgeBase: pageKB,
         kbActiveVersion: page.kbActiveVersion,
         pageName: page.name ?? undefined,

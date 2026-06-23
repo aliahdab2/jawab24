@@ -1,0 +1,109 @@
+/**
+ * Integration test for the business-number exclusion in lead capture (real Postgres).
+ *
+ * Covers the path the unit tests can't: getBusinessPhones reading the merchant's
+ * own contact numbers from the real `pages.knowledge_base` column, and the gate
+ * excluding them so a customer who pastes/forwards the business's own line never
+ * becomes a bogus lead. The only mocked dependency is OpenAI (a third-party
+ * external); the page read, the gate, and the leads upsert all hit the test DB.
+ *
+ * Region: workspaceSettingsService.getSettings defaults to Asia/Damascus (→ SY),
+ * so national numbers like "0937549674" resolve to +963… on both sides.
+ */
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// OpenAI is the sole external — stub it so the AI-extraction step is offline and
+// deterministic. The no-lead case never reaches it (the gate returns first).
+const openaiCreateMock = vi.fn();
+vi.mock('openai', () => ({
+    default: vi.fn().mockImplementation(() => ({
+        chat: { completions: { create: openaiCreateMock } },
+    })),
+}));
+
+import { randomUUID } from 'node:crypto';
+import { leadExtractorService } from '../../src/services/leadExtractor';
+import { createTestUser, createTestWorkspace, createTestPage, testDb } from './setup';
+import { leads } from '../../src/db/schema';
+import { eq } from 'drizzle-orm';
+
+// The merchant lists their own contact lines in Business Info (the KB column).
+const BUSINESS_KB =
+    'معهد الفريق الدمشقي للتدريب. دورات ICDL والإسعافات الأولية بكلفة 25 ألف ل.س.\n' +
+    'للتواصل والاستفسار على الأرقام: 0935924472 0112124472 0937549674';
+
+describe('leadExtractor — business-number exclusion (real Postgres)', () => {
+    let userId: string;
+    let workspaceId: string;
+    let pageId: string;
+
+    beforeEach(async () => {
+        const user = await createTestUser();
+        userId = user.id;
+        const workspace = await createTestWorkspace(user.id);
+        workspaceId = workspace.id;
+        const page = await createTestPage(user.id, { workspaceId, knowledgeBase: BUSINESS_KB });
+        pageId = page.id;
+        openaiCreateMock.mockReset();
+    });
+
+    it('does NOT create a lead when the only phone is the business\'s OWN number (from the KB)', async () => {
+        // The customer forwarded our ad / pasted our reply — the one phone present
+        // is +963937549674, which lives in pages.knowledge_base. No lead may be
+        // written (its call/WhatsApp buttons would dial the merchant themselves).
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-biz', senderName: 'Pasted Ad',
+            messageText: 'دورة ICDL تتكون من 8 جلسات. للتواصل 0937549674',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(0);
+        // The gate returns before any AI extraction.
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('creates a lead with the customer\'s OWN number, never the business number', async () => {
+        // AI returns an empty phone (its "not the sender's number" signal) so the
+        // capture falls back to the validated customer gate phone.
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '', summary: 'العميل شارك رقمه', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-real', senderName: 'Real Customer',
+            messageText: 'مرحبا، حابب سجل بالدورة. رقمي 0966554433',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('966554433');
+        expect(rows[0].phone).not.toContain('935924472');
+        expect(rows[0].phone).not.toContain('937549674');
+    });
+
+    it('still excludes the business number even when the customer ALSO shares their own', async () => {
+        // A message carrying BOTH the pasted business line and the customer's real
+        // number must capture only the customer's.
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '', summary: 'عميل', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-both', senderName: 'Both Numbers',
+            messageText: 'شفت رقمكم 0937549674، رقمي أنا 0966554433',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('966554433');
+        expect(rows[0].phone).not.toContain('937549674');
+    });
+});

@@ -202,3 +202,51 @@ export function extractPhonesFromText(text: string): string[] {
 export function extractPhoneFromText(text: string, opts?: { defaultCountry?: string }): string | null {
   return extractPhones(text, opts)[0]?.raw ?? null;
 }
+
+/**
+ * Cross-format identity keys for an extracted phone, so the SAME real number
+ * written as `+963…`, `0…`, or with spaces compares equal. Prefers E.164 (set
+ * when libphonenumber validates the number under the same region on both sides);
+ * always also emits a last-significant-digits tail so a validated `+963…` matches
+ * an unvalidated paste of the same line. Module-private helper for extractCustomerPhones.
+ */
+function phoneIdentityKeys(p: ExtractedPhone): string[] {
+  const keys: string[] = [];
+  if (p.e164) keys.push(`e164:${p.e164}`);
+  // National numbers run ~9–10 significant digits; the last 9 uniquely identify
+  // a mobile line across the +CC / leading-0 / spaced representations.
+  const tail = p.raw.replace(/\D/g, '').slice(-9);
+  if (tail.length >= 9) keys.push(`tail:${tail}`);
+  return keys;
+}
+
+/**
+ * Phones the CUSTOMER genuinely shared in `text`, excluding any number that also
+ * appears in `businessTexts` — the merchant's own messages (our auto-replies,
+ * the post, the deflection lines that publish the business's contact number).
+ *
+ * Why this exists: a customer who quotes or copy-pastes our reply back (e.g. to
+ * ask us to translate it) drags the business's own published phone into their
+ * incoming message. Without this filter the lead gate captures the merchant's
+ * own line and spawns a bogus lead whose call/WhatsApp buttons dial the
+ * merchant themselves. A lead must be built only from the customer's own input,
+ * never from our answers. Match the SAME `defaultCountry` on both sides so the
+ * customer's `0…` paste and our `+963…` reply resolve to the same E.164.
+ */
+export function extractCustomerPhones(
+  text: string,
+  businessTexts: string[],
+  opts?: { defaultCountry?: string },
+): ExtractedPhone[] {
+  const businessKeys = new Set<string>();
+  for (const bt of businessTexts) {
+    if (!bt) continue;
+    for (const bp of extractPhones(bt, opts)) {
+      for (const k of phoneIdentityKeys(bp)) businessKeys.add(k);
+    }
+  }
+  if (businessKeys.size === 0) return extractPhones(text, opts);
+  return extractPhones(text, opts).filter(
+    p => !phoneIdentityKeys(p).some(k => businessKeys.has(k)),
+  );
+}

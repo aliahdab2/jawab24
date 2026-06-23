@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { db } from '../db';
-import { leads } from '../db/schema';
+import { leads, pages } from '../db/schema';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
@@ -12,7 +12,7 @@ import { logAiUsage } from './aiUsageLog';
 import { getModelForUser } from './aiModelResolver';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { noopLogger } from '../types/logger';
-import { extractPhoneFromText, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { extractPhones, extractCustomerPhones, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { LeadExtractedData, LeadStatus } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
 import { workspaceSettingsService } from './workspaceSettings';
@@ -33,13 +33,15 @@ Return ONLY valid JSON in this exact shape — no markdown, no explanation:
 }
 
 Rules:
-- Include ONLY fields you can confidently extract from the conversation
+- The conversation is labelled "Customer:" (the lead) and "Agent:" (the business's own replies). Extract the phone and EVERY field ONLY from what the Customer said. The Agent turns are the merchant's own messages — their catalogue, prices, schedules, and the business's OWN contact number — they are context to understand the Customer, NEVER a source of lead data.
+- If the Customer merely quotes, forwards, or pastes the Agent's message back (e.g. asking to translate or confirm it), that quoted text is NOT the Customer's own data — do not extract a phone or fields from it. Set "phone" to empty string when the only number present is the business's own (a number the Agent already wrote).
+- Include ONLY fields you can confidently extract from the Customer's own words
 - Examples by business type:
   - School/institute: course_of_interest, preferred_start_date, level
   - Clinic: specialty_needed, preferred_doctor, appointment_date
   - Store/service: product_interest, budget, location
-- Never invent data not explicitly stated in the conversation
-- If the phone number does not belong to the sender (e.g. they are sharing someone else's number), set "phone" to empty string
+- Never invent data not explicitly stated by the Customer
+- If the phone number does not belong to the sender (e.g. they are sharing someone else's number, or it is the business's own line), set "phone" to empty string
 - Always include a "name" field if the customer mentioned their name
 - Write the "summary" in the same language as the customer's text (Arabic if they wrote Arabic, English if English). NEVER write a meta-summary like "no conversation provided" or "not enough context" — if intent is unclear, write a short factual statement in the customer's language such as "العميل أرسل رقم هاتفه للتواصل" or "Customer shared their phone number for contact".
 
@@ -132,11 +134,51 @@ class LeadExtractorService {
             this.logger.debug('lead phone region lookup failed; using region-less extraction', { err, workspaceId });
         }
 
-        // Gate: must contain a phone number
-        const rawPhone = extractPhoneFromText(messageText, defaultCountry ? { defaultCountry } : undefined);
-        if (!rawPhone) return;
+        const phoneOpts = defaultCountry ? { defaultCountry } : undefined;
+
+        // Cheap pre-gate: skip the common no-phone message before any DB work.
+        if (extractPhones(messageText, phoneOpts).length === 0) return;
 
         try {
+            // The business's OWN published numbers — a customer who shares the merchant's
+            // ad post, pastes the number, or quotes our reply drags one of these into
+            // their message. Excluding them is what keeps a lead built only from the
+            // customer's input, never from our answers. (June 2026 prod: a customer pasted
+            // our ICDL reply to translate it; others forwarded the merchant's ad post —
+            // both spawned leads whose call/WhatsApp buttons dialled the merchant's own
+            // line.) Sourced page-wide from Business Info (KB), where the merchant lists
+            // their contact lines, PLUS the merchant-authored turns of THIS conversation.
+            const businessPhones = await this.getBusinessPhones(pageId, phoneOpts);
+
+            let conversationText: string;
+            let businessTexts: string[];
+            if (sourceType === 'comment') {
+                // Comments aren't in the messages table — fetching DM history by senderId
+                // returns nothing for a commenter who never DM'd the page, which made the AI
+                // emit a placeholder summary like "No conversation provided…". Build a
+                // single-turn exchange from the post + comment + reply instead, so the AI
+                // has real intent context even when the comment is just a phone number.
+                const lines: string[] = [];
+                if (postMessage) lines.push(`Post: ${postMessage}`);
+                lines.push(`Customer comment: ${messageText}`);
+                if (replyText) lines.push(`Agent reply: ${replyText}`);
+                conversationText = lines.join('\n');
+                // The post and our reply are merchant-authored — any number there is ours.
+                businessTexts = [postMessage, replyText, ...businessPhones].filter((t): t is string => !!t);
+            } else {
+                const history = await messagesService.getConversationHistory(pageId, senderId, 20);
+                conversationText = history
+                    .map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`)
+                    .join('\n');
+                // Our outgoing replies publish the business's own contact number(s).
+                businessTexts = [...history.filter(m => m.role === 'assistant').map(m => m.content), ...businessPhones];
+            }
+
+            // Real gate: the customer must share a phone that is THEIRS, not the
+            // business's own number echoed from our replies. Empty → no lead.
+            const rawPhone = extractCustomerPhones(messageText, businessTexts, phoneOpts)[0]?.raw ?? null;
+            if (!rawPhone) return;
+
             // Gate: daily extraction limit per workspace
             const withinLimit = await this.checkAndIncrementDailyLimit(workspaceId);
 
@@ -145,37 +187,18 @@ class LeadExtractorService {
 
             let extractedPhone = rawPhone;
 
-        if (withinLimit) {
+            if (withinLimit) {
                 try {
-                    let conversationText: string;
-                    if (sourceType === 'comment') {
-                        // Comments aren't in the messages table — fetching DM history by senderId
-                        // returns nothing for a commenter who never DM'd the page, which made the AI
-                        // emit a placeholder summary like "No conversation provided…". Build a
-                        // single-turn exchange from the post + comment + reply instead, so the AI
-                        // has real intent context even when the comment is just a phone number.
-                        const lines: string[] = [];
-                        if (postMessage) lines.push(`Post: ${postMessage}`);
-                        lines.push(`Customer comment: ${messageText}`);
-                        if (replyText) lines.push(`Agent reply: ${replyText}`);
-                        conversationText = lines.join('\n');
-                    } else {
-                        const history = await messagesService.getConversationHistory(pageId, senderId, 20);
-                        conversationText = history
-                            .map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`)
-                            .join('\n');
-                    }
-
                     const aiResult = await this.callExtractionAI(conversationText, { userId, pageId });
-                    // The extraction model occasionally drops a non-phone figure
-                    // (e.g. a course fee like "2500000") into the "phone" field.
-                    // Trust the AI's phone ONLY when it re-validates as a real phone;
-                    // otherwise keep the libphonenumber-validated gate phone, so the
-                    // merchant's call/WhatsApp buttons never dial a price. An empty AI
-                    // phone (the model's "not the sender's number" signal) also keeps
-                    // the gate phone — same as before.
+                    // Trust the AI's phone ONLY when it re-validates as a real phone AND
+                    // isn't the business's own number — the model can lift our published
+                    // line out of an "Agent:" turn, and it occasionally drops a non-phone
+                    // figure (e.g. a course fee like "2500000") into the field. Otherwise
+                    // keep the validated customer gate phone, which is guaranteed to be the
+                    // customer's own and never a price or our own number. An empty AI phone
+                    // (the model's "not the sender's number" signal) also keeps the gate phone.
                     const aiPhone = aiResult.phone
-                        ? extractPhoneFromText(aiResult.phone, defaultCountry ? { defaultCountry } : undefined)
+                        ? extractCustomerPhones(aiResult.phone, businessTexts, phoneOpts)[0]?.raw ?? null
                         : null;
                     extractedPhone = aiPhone ?? rawPhone;
                     extractedData = { summary: aiResult.summary, fields: aiResult.fields };
@@ -290,6 +313,51 @@ class LeadExtractorService {
             { leadId: p.leadId, pageId: p.pageId, deepLink: `/leads?leadId=${p.leadId}`, urgent: true },
             { gatePushBySetting: 'newLeadAlertsEnabled' },
         ).catch(err => this.logger.error('Lead re-engaged notification failed', { err }));
+    }
+
+    /**
+     * The business's own published phone numbers for a page, so lead capture never
+     * mistakes one for a customer contact. Read from `pages.knowledge_base` — the
+     * merchant's Business Info, the same source the reply pipeline uses, where they
+     * list their contact lines. Cached in Redis for an hour (the KB changes rarely
+     * and this runs on every phone-bearing message). Degrades to [] on any DB/Redis
+     * error: the conversation-scoped exclusion still applies and we never drop a lead.
+     */
+    private async getBusinessPhones(
+        pageId: string,
+        phoneOpts?: { defaultCountry?: string },
+    ): Promise<string[]> {
+        const cacheKey = `lead:bizphones:${pageId}`;
+        try {
+            const cached = await redis.get(cacheKey);
+            if (cached) return JSON.parse(cached) as string[];
+        } catch {
+            // Redis miss/down — fall through to the DB read.
+        }
+
+        let phones: string[];
+        try {
+            const [page] = await db
+                .select({ kb: pages.knowledgeBase })
+                .from(pages)
+                .where(eq(pages.id, pageId))
+                .limit(1);
+            // A KB-less page has no business numbers — cache the empty result too,
+            // so it doesn't re-query on every phone-bearing message. (extractPhones
+            // already de-duplicates within a single text.)
+            phones = page?.kb ? extractPhones(page.kb, phoneOpts).map(p => p.raw) : [];
+        } catch (err) {
+            // Transient DB error — return WITHOUT caching so the next call retries.
+            this.logger.warn('business-phone KB lookup failed; conversation-scoped exclusion only', { err, pageId });
+            return [];
+        }
+
+        try {
+            await redis.set(cacheKey, JSON.stringify(phones), 'EX', 3600);
+        } catch {
+            // Best-effort cache; correctness doesn't depend on it.
+        }
+        return phones;
     }
 
     private async checkAndIncrementDailyLimit(workspaceId: string): Promise<boolean> {
