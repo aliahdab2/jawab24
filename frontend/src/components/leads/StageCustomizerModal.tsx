@@ -19,7 +19,10 @@
  *    sees exactly what they'll get before saving.
  *  - Empty sections collapse to a single "add" row — most merchants only
  *    customize "converted", so the modal stays small by default.
- *  - Templates fill an editable draft (stages + fields) and confirm via toast.
+ *  - Business-type templates fill an editable draft (stages + fields) for a
+ *    quick start. They are shown ONLY while the draft is empty; once the
+ *    merchant has added any stage/field they're hidden, so a template can never
+ *    overwrite an existing setup (they return if the draft is cleared).
  */
 
 import React, { useEffect, useState } from 'react';
@@ -28,7 +31,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { Modal, Button, Input, ConfirmationModal } from '@/components/ui';
+import { Modal, Button, Input } from '@/components/ui';
 import {
   workspaceApi,
   pagesApi,
@@ -193,7 +196,6 @@ export function StageCustomizerModal({
   const scope: Scope = (!!selectedPageId && (!!multiPage || pageHasOverride)) ? 'page' : 'workspace';
   const [draft, setDraft] = useState<LeadStagesConfig>({});
   const [fieldsDraft, setFieldsDraft] = useState<LeadCustomFieldDef[]>([]);
-  const [pendingTemplate, setPendingTemplate] = useState<TemplateKey | null>(null);
 
   // Re-seed each time the modal opens, from the effective config for the active
   // scope: the page's own override if it has one, else the workspace default
@@ -245,16 +247,12 @@ export function StageCustomizerModal({
     toast.info(t('templateApplied'), { id: 'lead-stages' });
   };
 
-  // A template replaces the whole draft — confirm first if the merchant
-  // already has stages/fields configured so one tap can't wipe their setup.
+  // Templates are only offered on an unconfigured draft (see the render guard
+  // below), so applying one can never overwrite existing work — no confirm
+  // needed. They reappear if the merchant clears the draft back to empty.
   const draftHasContent =
     ALL_STATUSES.some((s) => (draft[s] ?? []).some((sub) => sub.label.trim())) ||
     fieldsDraft.some((f) => f.label.trim());
-
-  const requestTemplate = (key: TemplateKey) => {
-    if (draftHasContent) setPendingTemplate(key);
-    else applyTemplate(key);
-  };
 
   const handleSave = () => {
     // Drop empty labels silently — half-typed rows shouldn't block saving.
@@ -291,24 +289,30 @@ export function StageCustomizerModal({
       <div className="flex flex-col gap-5">
         <p className="text-sm text-muted-foreground leading-relaxed">{t('customizeStagesDesc')}</p>
 
-        {/* Business-type templates — quick start, fully editable afterwards */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            {t('templates')}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(TEMPLATES) as TemplateKey[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => requestTemplate(key)}
-                className="px-3 py-1.5 rounded-full text-xs font-medium border border-theme-border text-foreground/80 hover:bg-muted hover:text-foreground transition-colors"
-              >
-                {t(TEMPLATE_LABEL_KEY[key] as Parameters<typeof t>[0])}
-              </button>
-            ))}
+        {/* Business-type templates — quick start for an unconfigured workspace.
+            Hidden once the merchant has added any stage/field: a template
+            replaces the whole draft, so offering it after setup is pointless and
+            risks wiping their work. They reappear if the draft is cleared back to
+            empty. (The overwrite-confirm above stays as a secondary guard.) */}
+        {!draftHasContent && (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              {t('templates')}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(TEMPLATES) as TemplateKey[]).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => applyTemplate(key)}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium border border-theme-border text-foreground/80 hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  {t(TEMPLATE_LABEL_KEY[key] as Parameters<typeof t>[0])}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* One section per fixed main status. Empty sections collapse to a
             single "add" row so the modal stays small for the common case
@@ -487,18 +491,6 @@ export function StageCustomizerModal({
           )}
         </div>
       </div>
-
-      <ConfirmationModal
-        isOpen={pendingTemplate !== null}
-        onClose={() => setPendingTemplate(null)}
-        onConfirm={() => {
-          if (pendingTemplate) applyTemplate(pendingTemplate);
-          setPendingTemplate(null);
-        }}
-        title={t('templateOverwriteTitle')}
-        message={t('templateOverwriteMessage')}
-        variant="warning"
-      />
     </Modal>
   );
 }
