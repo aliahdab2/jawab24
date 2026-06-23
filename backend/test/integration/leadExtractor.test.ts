@@ -32,6 +32,14 @@ const BUSINESS_KB =
     'معهد الفريق الدمشقي للتدريب. دورات ICDL والإسعافات الأولية بكلفة 25 ألف ل.س.\n' +
     'للتواصل والاستفسار على الأرقام: 0935924472 0112124472 0937549674';
 
+// A Facebook "shared post" the customer FORWARDS into the DM — its body is the
+// merchant's OWN ad text (we fetch it from the Graph API and wrap it). Real Nourva
+// pattern: the ad ends with the merchant's contact number, which is NOT in the KB.
+const SHARED_AD =
+    '[Shared post: "🔴 الصور لا تكذب... نظام Nourva LiftFix للرفع والشد خلال 30 ثانية فقط. ' +
+    'باقة المناسبات المتكاملة (1+1 مجاناً) السعر 160 دينار. شحن مجاني لكل ليبيا 🚚🇱🇾\n' +
+    '📞 للحجز والاستفسار: 0929453011 👇"]';
+
 describe('leadExtractor — business-number exclusion (real Postgres)', () => {
     let userId: string;
     let workspaceId: string;
@@ -105,5 +113,44 @@ describe('leadExtractor — business-number exclusion (real Postgres)', () => {
         expect(rows).toHaveLength(1);
         expect(rows[0].phone).toContain('966554433');
         expect(rows[0].phone).not.toContain('937549674');
+    });
+
+    it('REGRESSION: a forwarded [Shared post] carrying the merchant number creates NO lead', async () => {
+        // Real Nourva pattern: the customer forwards the merchant's own FB ad. The
+        // ad body — which WE inject from the Graph API — ends with the merchant's
+        // number (0929453011). It is NOT the customer's contact and is NOT in the KB,
+        // so the only thing that catches it is stripping the shared-post block. The
+        // customer hasn't shared their own number yet ("بكم" = how much), so no lead.
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-shared', senderName: 'zoob.a5',
+            messageText: `${SHARED_AD}\nبكم`,
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('captures the customer\'s OWN number even when they forward the ad in the same message', async () => {
+        // Forwarded ad (merchant number) + the customer's own typed number → the lead
+        // must be the CUSTOMER's number, never the merchant's from the shared post.
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '', summary: 'عميل', fields: [] }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-shared-own', senderName: 'Real Plus Ad',
+            messageText: `${SHARED_AD}\nرقمي 0915218888`,
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('915218888');
+        expect(rows[0].phone).not.toContain('929453011');
     });
 });

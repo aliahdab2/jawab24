@@ -350,6 +350,28 @@ describe('maybeCaptureLead — business own number echoed back (June 2026 regres
         expect(capturedInserts[0].phone).toBe('0991234567');
         expect(capturedInserts[0].phone).not.toBe('0937549674');
     });
+
+    it('REGRESSION: a forwarded [Shared post] carrying the merchant number creates NO lead', async () => {
+        // The customer forwards the merchant's own FB ad; its body (injected by the
+        // reply pipeline from the Graph API) ends with the merchant's contact line.
+        // That block is stripped before the gate, so no lead until the customer
+        // shares THEIR own number ("بكم" = how much).
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: '[Shared post: "عرض Nourva LiftFix 160 دينار. للحجز والاستفسار: 0929453011 👇"]\nبكم' }),
+        );
+
+        expect(capturedInserts).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('captures the customer own number typed alongside a forwarded post', async () => {
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: '[Shared post: "عرض Nourva 160 دينار. للحجز: 0929453011 👇"] رقمي 0501234567' }),
+        );
+
+        expect(capturedInserts).toHaveLength(1);
+        expect(capturedInserts[0].phone).toBe('0501234567');
+    });
 });
 
 describe('lead re-engagement (re-shared number)', () => {

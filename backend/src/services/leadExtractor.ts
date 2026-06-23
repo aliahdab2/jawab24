@@ -96,6 +96,23 @@ export interface LeadsPage {
     total: number;
 }
 
+/**
+ * Remove forwarded shared-post markers from text before the lead phone gate.
+ * `[Shared post: "…"]` (and the title/generic variants) are injected by the reply
+ * pipeline from the Graph API when a customer FORWARDS a Page post into the DM
+ * (see nonTextHandler.ts / messageProcessor.ts). The body is the merchant's own ad
+ * — a phone inside it is the merchant's published line, not the customer's contact.
+ * Stripping the whole block (replaced with a space) keeps any number the customer
+ * typed OUTSIDE it. Used only for the phone gate; the AI extraction still sees the
+ * original text.
+ */
+function stripForwardedPostBlocks(text: string): string {
+    return text
+        .replace(/\[Shared post:[\s\S]*?\]/g, ' ')
+        .replace(/\[Customer shared a post\]/g, ' ')
+        .trim();
+}
+
 class LeadExtractorService {
     private logger: Logger = noopLogger;
     private client: OpenAI | null = null;
@@ -136,8 +153,18 @@ class LeadExtractorService {
 
         const phoneOpts = defaultCountry ? { defaultCountry } : undefined;
 
+        // Strip forwarded `[Shared post: "…"]` blocks before the phone gate: their
+        // body is the merchant's OWN ad text that WE inject from the Graph API
+        // (nonTextHandler.ts / messageProcessor.ts), so a number inside it is the
+        // merchant's published line, never the customer's contact. A customer who
+        // forwards our ad must not become a lead until they share THEIR own number —
+        // text they typed OUTSIDE the block is kept. Gate-only: the AI extraction
+        // below still sees the full `messageText`. (June 2026 prod: Nourva customers
+        // forwarded the ad whose body ends with the merchant line 0929453011.)
+        const gateText = stripForwardedPostBlocks(messageText);
+
         // Cheap pre-gate: skip the common no-phone message before any DB work.
-        if (extractPhones(messageText, phoneOpts).length === 0) return;
+        if (extractPhones(gateText, phoneOpts).length === 0) return;
 
         try {
             // The business's OWN published numbers — a customer who shares the merchant's
@@ -175,8 +202,9 @@ class LeadExtractorService {
             }
 
             // Real gate: the customer must share a phone that is THEIRS, not the
-            // business's own number echoed from our replies. Empty → no lead.
-            const rawPhone = extractCustomerPhones(messageText, businessTexts, phoneOpts)[0]?.raw ?? null;
+            // business's own number echoed from our replies or carried in a forwarded
+            // post (stripped above). Empty → no lead.
+            const rawPhone = extractCustomerPhones(gateText, businessTexts, phoneOpts)[0]?.raw ?? null;
             if (!rawPhone) return;
 
             // Gate: daily extraction limit per workspace
