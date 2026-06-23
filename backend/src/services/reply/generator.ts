@@ -13,7 +13,7 @@ import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, type ProductCard, type FlagMeta } from '@jawab24/shared';
 import { detectLanguage, detectLanguageCode } from '../../utils/language';
 import type { FacebookMessageTag } from '../../utils/commentText';
-import { preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
+import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
 import { detectBusinessActionFlags } from './urgentFlags';
 
 /**
@@ -108,6 +108,68 @@ export function computeNeedsAttention(flags: string[], normalizedIntent: string 
     return meaningfulFlags ||
         intent === 'COMPLAINT' ||
         intent === 'OFFENSIVE';
+}
+
+/** Intents for which a "no chunks + high confidence" state is NOT a hallucination —
+ *  social/abuse replies legitimately need no KB grounding. */
+const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
+
+/**
+ * Derive the normalized intent, flag set, and needsAttention for a generated reply.
+ *
+ * Single source of truth shared by `processAiResponse` (production) and
+ * `generateForPlayground` (test tool / eval). These two previously duplicated this
+ * logic verbatim — which is exactly how the comment-language gate drifted and shipped
+ * a bug. Keeping it here makes that class of drift impossible (Rule 14: prevention).
+ *
+ * Pure: no billing, no gap recording, no I/O. Callers layer their own side effects
+ * (quota increment, gap detection, skip/fallback) on top of the returned flags.
+ */
+export function computeReplyFlags(opts: {
+    aiFlags: string[] | undefined;
+    confidence: string | undefined;
+    intent: string | undefined;
+    /** The customer's question/comment — drives the business-action backstop flags. */
+    queryText: string | undefined;
+    /** Whether RAG retrieval ran (static-KB-only pages legitimately have 0 chunks). */
+    ragAttempted: boolean | undefined;
+    retrievedChunkCount: number;
+    /** Whether the full static KB was sent to the model (it can self-assess confidence). */
+    hasEffectiveKB: boolean;
+}): { normalizedIntent: string | undefined; flags: string[] } {
+    const { aiFlags, confidence, intent, queryText, ragAttempted, retrievedChunkCount, hasEffectiveKB } = opts;
+    const normalizedIntent = normalizeAiIntent(intent);
+
+    const flags = [...(aiFlags || [])];
+    if (confidence === 'low' && !flags.includes('low_confidence')) {
+        flags.push('low_confidence');
+    }
+    // Deterministic backstop: ensure high-stakes business-action intents
+    // (cancel/refund/exchange) are flagged even when the model misses the
+    // phrasing — these must always reach the merchant.
+    for (const f of detectBusinessActionFlags(queryText)) {
+        if (!flags.includes(f)) flags.push(f);
+    }
+
+    // Post-validation: RAG ran, found 0 chunks, no static KB fallback, yet the model
+    // claims non-low confidence on a question-like intent → force info_not_in_kb +
+    // low_confidence. Catches hallucinations where GPT invents answers for topics the
+    // KB doesn't cover. Skipped for social/abuse intents and static-KB pages.
+    if (
+        ragAttempted &&
+        retrievedChunkCount === 0 &&
+        !hasEffectiveKB &&
+        confidence !== 'low' &&
+        !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
+        !flags.includes('info_not_in_kb')
+    ) {
+        flags.push('info_not_in_kb');
+        if (!flags.includes('low_confidence')) {
+            flags.push('low_confidence');
+        }
+    }
+
+    return { normalizedIntent, flags };
 }
 
 import { t } from '../../utils/i18n';
@@ -263,8 +325,17 @@ export interface PlaygroundInput {
     userId?: string;
     workspaceId: string | null;
     question: string;
-    /** Effective channel after applying commentReplyMode (dual/private → dm) */
+    /** Effective channel after applying commentReplyMode (dual/private → dm).
+     *  Drives RAG retrieval, the dual-DM punctuation rewrite, and the AI context channel. */
     channel: 'comment' | 'dm';
+    /** The channel the user actually tested (comment/dm) BEFORE the dual/private → dm
+     *  flattening. Comment-specific steps — preprocessing (friend-tag/spam skip) and
+     *  `resolveCommentLanguage` (post-language mirroring) — must key off this, not the
+     *  effective `channel`, or they silently no-op for dual/private merchants and a bare
+     *  Latin token ("Icdl") on an Arabic post resolves to English. Mirrors production's
+     *  `generateForComment`, which always runs those steps regardless of effective channel.
+     *  Defaults to `channel` when unset (back-compat for callers that don't flatten). */
+    requestedChannel?: 'comment' | 'dm';
     knowledgeBase?: string;
     kbActiveVersion?: number | null;
     pageName?: string;
@@ -408,18 +479,9 @@ export class ReplyGenerator {
             // Build gap source context for merchant insights
             const gapSource: GapSource = { type: 'comment', context: postMessage };
 
-            // Run RAG retrieval if enabled (use stripped text for better semantic matching).
-            // Enrich the query with post context when the comment is short/vague — mirrors how
-            // the DM pipeline enriches vague follow-ups with conversation history.
-            // A comment like "شو السعر؟" on a hairstyling post should search for
-            // "hairstyling course + شو السعر؟", not just "شو السعر؟" alone.
-            // For symbol-only comments ("......", emojis), the post message IS the intent.
-            const commentText = commentForAI || text;
-            const commentWordCount = (commentForAI || '').trim().split(/\s+/).filter(w => /\p{L}/u.test(w)).length;
-            const isVagueComment = commentWordCount <= 6;
-            const ragQuery = (isVagueComment && postMessage)
-                ? `${postMessage.slice(0, 200)} ${commentText}`.trim()
-                : commentText;
+            // Run RAG retrieval if enabled. buildCommentRagQuery enriches a short/vague
+            // comment with the post context (shared with the playground/test tool).
+            const ragQuery = buildCommentRagQuery(commentForAI, text, postMessage);
             const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge({
                 pageId, query: ragQuery, staticKB: knowledgeBase, kbActiveVersion: context.kbActiveVersion,
                 channel: effectiveChannel, hasEcommerceChunks: !!context.productCatalog, userId,
@@ -670,10 +732,17 @@ export class ReplyGenerator {
 
         const ragMode = config.ragMode || 'off';
 
+        // Whether the user is testing a COMMENT, independent of the dual/private → dm
+        // channel flattening (`channel` is the effective channel; for a dual/private
+        // merchant a comment test arrives here as 'dm'). Comment preprocessing and
+        // comment-language resolution must follow the requested channel so they don't
+        // silently no-op — matching production's generateForComment.
+        const isCommentTest = (input.requestedChannel ?? channel) === 'comment';
+
         // Shared comment pre-processing — single source of truth with generateForComment.
         // Only applies to comment inputs; DM inputs skip directly to the dual-DM rewrite.
         let questionForAI = question;
-        if (channel === 'comment') {
+        if (isCommentTest) {
             const pre = preprocessCommentText({
                 text: question, messageTags, ourFacebookPageId,
                 hasPostContext: !!postMessage,
@@ -696,14 +765,21 @@ export class ReplyGenerator {
             effectiveChannel: channel,
         });
 
-        // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production)
+        // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production).
+        // Comment tests enrich a short/vague query with the post via the shared
+        // buildCommentRagQuery, so the test tool retrieves the same chunks as production
+        // (e.g. "icdl" on a courses post hits the course chunks, not the bare token).
+        // DM follow-ups are enriched from conversation history inside resolveKnowledge.
+        const ragQuery = isCommentTest
+            ? buildCommentRagQuery(questionForAI, question, postMessage)
+            : questionForAI;
         const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge({
-            pageId, query: questionForAI, staticKB: knowledgeBase, kbActiveVersion,
+            pageId, query: ragQuery, staticKB: knowledgeBase, kbActiveVersion,
             channel, conversationHistory, hasEcommerceChunks: !!productCatalog, userId,
         });
 
         // 4. Call AI
-        const resolvedLang = channel === 'comment'
+        const resolvedLang = isCommentTest
             ? resolveCommentLanguage(questionForAI, postMessage, effectiveKB)
             : detectLanguageCode(question);
 
@@ -741,34 +817,18 @@ export class ReplyGenerator {
 
         const aiResponse = await dispatchAiReply(aiRequest);
 
-        // 5. Normalize intent + process flags (mirrors processAiResponse, minus billing)
-        const normalizedIntent = normalizeAiIntent(aiResponse.intent);
-        const flags = [...(aiResponse.flags || [])];
-        if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
-            flags.push('low_confidence');
-        }
-        // Deterministic backstop: ensure high-stakes business-action intents
-        // (cancel/refund/exchange) are flagged even when the model misses the
-        // phrasing — these must always reach the merchant.
-        for (const f of detectBusinessActionFlags(questionForAI)) {
-            if (!flags.includes(f)) flags.push(f);
-        }
-
-        // Post-validation hallucination guard (same logic as processAiResponse)
-        const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
-        if (
-            ragAttempted &&
-            (retrievedChunks?.length ?? 0) === 0 &&
-            !effectiveKB &&
-            aiResponse.confidence !== 'low' &&
-            !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
-            !flags.includes('info_not_in_kb')
-        ) {
-            flags.push('info_not_in_kb');
-            if (!flags.includes('low_confidence')) {
-                flags.push('low_confidence');
-            }
-        }
+        // 5. Derive flags + intent — shared with processAiResponse (production), so the
+        // test tool/eval can't drift from production. Playground skips the billing + gap
+        // side effects that processAiResponse layers on top.
+        const { normalizedIntent, flags } = computeReplyFlags({
+            aiFlags: aiResponse.flags,
+            confidence: aiResponse.confidence,
+            intent: aiResponse.intent,
+            queryText: questionForAI,
+            ragAttempted,
+            retrievedChunkCount: retrievedChunks?.length ?? 0,
+            hasEffectiveKB: !!effectiveKB,
+        });
 
         const needsAttention = computeNeedsAttention(flags, normalizedIntent);
         // Don't skip DM replies that originated from a post comment (dual mode) —
@@ -838,43 +898,17 @@ export class ReplyGenerator {
         queryText?: string,
         gapSource?: GapSource,
     ): Promise<GenerateReplyResult> {
-        // Normalize intent: GPT sometimes invents intents (PRICE, OTHER, LOCATION)
-        // instead of using the 8 valid ones. Map them back to the standard taxonomy.
-        const normalizedIntent = normalizeAiIntent(aiResponse.intent);
-
-        const flags = [...(aiResponse.flags || [])];
-        if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
-            flags.push('low_confidence');
-        }
-        // Deterministic backstop: ensure high-stakes business-action intents
-        // (cancel/refund/exchange) are flagged even when the model misses the
-        // phrasing — these must always reach the merchant.
-        for (const f of detectBusinessActionFlags(queryText)) {
-            if (!flags.includes(f)) flags.push(f);
-        }
-
-        // Post-validation: if RAG retrieval was attempted but found 0 chunks and GPT
-        // claims high confidence on a question-like intent, force info_not_in_kb +
-        // low_confidence flags. Catches hallucinations where GPT invents answers for
-        // topics not covered by the KB.
-        // Only fires when RAG was actually attempted (ragAttempted=true). Static-KB pages
-        // (no RAG) always have 0 chunks — that's normal, not hallucination.
-        // Also skips when static KB was provided as fallback (hasStaticKB=true) — the AI
-        // had the full KB text and can assess its own confidence.
-        const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
-        if (
-            ragAttempted &&
-            retrievedChunkCount === 0 &&
-            !hasStaticKB &&
-            aiResponse.confidence !== 'low' &&
-            !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
-            !flags.includes('info_not_in_kb')
-        ) {
-            flags.push('info_not_in_kb');
-            if (!flags.includes('low_confidence')) {
-                flags.push('low_confidence');
-            }
-        }
+        // Derive flags + normalized intent — shared with generateForPlayground so the
+        // test tool/eval can't drift from this production path (see computeReplyFlags).
+        const { normalizedIntent, flags } = computeReplyFlags({
+            aiFlags: aiResponse.flags,
+            confidence: aiResponse.confidence,
+            intent: aiResponse.intent,
+            queryText,
+            ragAttempted,
+            retrievedChunkCount: retrievedChunkCount ?? 0,
+            hasEffectiveKB: !!hasStaticKB,
+        });
         const needsAttention = computeNeedsAttention(flags, normalizedIntent);
         const flagReason = flags.join(',') ||
             (normalizedIntent === 'COMPLAINT' ? 'complaint' : null) ||

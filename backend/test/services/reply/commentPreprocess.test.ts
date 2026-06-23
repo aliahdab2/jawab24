@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+    buildCommentRagQuery,
     preprocessCommentText,
     resolveCommentLanguage,
     rewritePunctuationForDualDm,
@@ -302,5 +303,41 @@ describe('rewritePunctuationForDualDm', () => {
             effectiveChannel: 'dm',
         });
         expect(out).toBe('I want the details');
+    });
+});
+
+describe('buildCommentRagQuery', () => {
+    const POST = 'دورة icdl على الكمبيوتر مع الأستاذ أنس';
+
+    it('enriches a short/vague comment with the post (so a bare token retrieves the topic)', () => {
+        expect(buildCommentRagQuery('icdl', 'icdl', POST)).toBe(`${POST} icdl`);
+    });
+
+    it('enriches a vague Arabic price question with the post', () => {
+        expect(buildCommentRagQuery('شو السعر؟', 'شو السعر؟', POST)).toBe(`${POST} شو السعر؟`);
+    });
+
+    it('leaves a long comment (>6 words) unenriched even when a post is present', () => {
+        const long = 'can you please send me the full price list and the schedule today';
+        expect(buildCommentRagQuery(long, long, POST)).toBe(long);
+    });
+
+    it('returns the comment as-is when there is no post context', () => {
+        expect(buildCommentRagQuery('icdl', 'icdl', undefined)).toBe('icdl');
+    });
+
+    it('falls back to rawText as the body when the cleaned comment is empty (symbol-only)', () => {
+        // Word-character count is 0 → vague → enriched, with rawText as the body.
+        expect(buildCommentRagQuery('', '٠٠٠', POST)).toBe(`${POST} ٠٠٠`);
+    });
+
+    it('counts only letter-words, so digits/symbols stay vague and get enriched', () => {
+        expect(buildCommentRagQuery('000', '000', POST)).toBe(`${POST} 000`);
+    });
+
+    it('caps the prepended post at 200 chars', () => {
+        const longPost = 'ا'.repeat(500);
+        const out = buildCommentRagQuery('icdl', 'icdl', longPost);
+        expect(out).toBe(`${'ا'.repeat(200)} icdl`);
     });
 });

@@ -195,3 +195,34 @@ export function rewritePunctuationForDualDm(opts: {
     const postLang = detectLanguageCode(postMessage);
     return postLang === 'ar' ? 'أريد التفاصيل' : 'I want the details';
 }
+
+/** A comment with this many word-characters or fewer carries too little semantic
+ *  signal to retrieve on its own — enrich it with the post it was made on. */
+const VAGUE_COMMENT_WORD_CAP = 6;
+/** Cap how much of the post we prepend, so a long post can't dominate the query. */
+const POST_ENRICH_CHARS = 200;
+
+/**
+ * Build the RAG retrieval query for a comment. A short/vague comment ("شو السعر؟",
+ * an emoji, "......") matches poorly on its own, so prepend the post it was made on —
+ * mirroring how the DM pipeline enriches vague follow-ups with conversation history.
+ * A comment like "شو السعر؟" on a hairstyling post should search for
+ * "hairstyling course + شو السعر؟", not "شو السعر؟" alone. Long comments search as-is.
+ *
+ * `commentText` is the cleaned comment; `rawText` is the original, used as the body
+ * when cleaning stripped the comment to empty (symbol-only). Single source of truth
+ * for both the production comment path and the playground/test tool, so the two can't
+ * drift on what gets retrieved.
+ */
+export function buildCommentRagQuery(
+    commentText: string | undefined,
+    rawText: string,
+    postMessage: string | undefined,
+): string {
+    const body = commentText || rawText;
+    const wordCount = (commentText || '').trim().split(/\s+/).filter(w => /\p{L}/u.test(w)).length;
+    const isVague = wordCount <= VAGUE_COMMENT_WORD_CAP;
+    return (isVague && postMessage)
+        ? `${postMessage.slice(0, POST_ENRICH_CHARS)} ${body}`.trim()
+        : body;
+}
