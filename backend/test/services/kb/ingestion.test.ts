@@ -13,7 +13,10 @@ vi.mock('../../../src/db', () => ({
         // userId lookup for cost-attribution: returns no row → embedding logger is skipped
         select: vi.fn(() => ({
             from: vi.fn(() => ({
-                where: vi.fn(() => ({
+                // where() is a Drizzle thenable: awaitable to rows AND chainable with .limit().
+                // fetchFacts (structured facts) awaits where() directly; the userId cost-attribution
+                // lookup uses .where().limit(). Model both: a Promise<[]> that also carries .limit().
+                where: vi.fn(() => Object.assign(Promise.resolve([]), {
                     limit: vi.fn().mockResolvedValue([]),
                 })),
             })),

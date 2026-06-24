@@ -1115,6 +1115,33 @@ export const kbChunks = pgTable('kb_chunks', {
     };
 });
 
+/**
+ * Structured facts — the durable, single-source-of-truth records behind tier-2 chunks.
+ * One row = one offering/attribute (course, product, address, hours…). Re-projected into a
+ * tier-2 kb_chunk on every ingest (chunkStructuredFacts) so it outranks raw narrative AND
+ * survives KB-text edits — the fix for the "fact buried in chat-log noise" failure. Mirrors how
+ * ecommerce_products feed tier-1 chunks. Editing one row updates the fact everywhere (no stale
+ * duplicates), which is what kills the cross-wired / stale-price bug.
+ */
+export const kbFacts = pgTable('kb_facts', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    title: varchar('title', { length: 500 }).notNull(),
+    content: text('content').notNull(),
+    type: varchar('type', { length: 50 }).notNull().default('offering'),
+    // Optional machine-readable fields (price, duration, …) for future structured lookup;
+    // `content` is the human-readable statement that gets embedded.
+    attributes: jsonb('attributes').default({}),
+    // Provenance: the kb_gaps row this fact resolved (when created via gap-fill), for audit/dedup.
+    sourceGapId: uuid('source_gap_id'),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        pageIdIdx: index('idx_kb_facts_page_id').on(table.pageId),
+    };
+});
+
 // Semantic Cache Table — vector-based reply caching for semantically similar questions
 export const semanticCache = pgTable('semantic_cache', {
     id: uuid('id').defaultRandom().primaryKey(),

@@ -9,6 +9,17 @@ export interface KbChunk {
     language: string;
     tokenCount: number;
     metadata: Record<string, unknown>;
+    /** Authority tier for retrieval ranking (see kb_chunks.source_tier). Omit → default 4
+     *  (raw narrative). Structured facts are written at tier 2 so they outrank narrative. */
+    sourceTier?: number;
+}
+
+/** A single structured fact — the durable source of truth for one offering/attribute.
+ *  Projected into one tier-2 chunk per record by chunkStructuredFacts (mirrors chunkProducts). */
+export interface StructuredFact {
+    title: string;
+    content: string;
+    type?: KbChunk['type'];
 }
 
 export interface ProductData {
@@ -37,6 +48,32 @@ function estimateTokens(text: string): number {
 function detectChunkLanguage(text: string): string {
     const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
     return arabicChars / Math.max(text.length, 1) > 0.3 ? 'ar' : 'en';
+}
+
+/**
+ * Project structured facts into ONE chunk per record at source_tier 2 (above raw narrative).
+ * The durable fact store is the source of truth; this re-projects it into kb_chunks on every
+ * ingest \u2014 exactly how chunkProducts projects e-commerce products into tier-1 chunks. Keeping
+ * each fact whole (no token-splitting) is the point: a self-contained record retrieves reliably.
+ */
+export function chunkStructuredFacts(facts: StructuredFact[]): KbChunk[] {
+    return facts
+        .filter(f => f.content && f.content.trim().length > 0)
+        .map(f => {
+            const content = f.content.trim();
+            const title = (f.title || '').trim();
+            return {
+                type: f.type ?? 'offering',
+                title,
+                contentOriginal: content,
+                contentNormalized: normalizeArabic(content),
+                titleNormalized: normalizeArabic(title),
+                language: detectChunkLanguage(content),
+                tokenCount: estimateTokens(content),
+                metadata: { source: 'structured_fact' },
+                sourceTier: 2,
+            };
+        });
 }
 
 /** Max tokens per chunk before splitting */

@@ -16,6 +16,8 @@ export interface ChunkWithEmbedding {
     metadata: Record<string, unknown>;
     embedding: number[];
     kbVersion: number;
+    /** Authority tier for retrieval ranking; omit → default 4 (raw narrative). */
+    sourceTier?: number;
 }
 
 /** A chunk returned from similarity search with its score */

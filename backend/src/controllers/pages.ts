@@ -477,6 +477,44 @@ export class PagesController {
     }
 
     /**
+     * Resolve a KB gap by adding a STRUCTURED FACT (tier-2 single-source-of-truth record)
+     * instead of appending raw Q&A to the KB text. The fact becomes a tier-2 chunk that
+     * outranks raw narrative and survives KB-text edits.
+     * POST /pages/:id/kb-gaps/:gapId/resolve-with-fact   body: { title, content, type? }
+     */
+    async resolveGapWithFact(
+        request: FastifyRequest<{ Params: { id: string; gapId: string }; Body: { title?: string; content?: string; type?: string } }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { id, gapId } = request.params;
+        const { title, content, type } = request.body ?? {};
+        if (!content || !content.trim()) {
+            return reply.status(400).send({ error: 'content is required' });
+        }
+
+        try {
+            const result = await pagesService.addFact(req.workspaceId, id, {
+                title: title && title.trim() ? title.trim() : content.trim().slice(0, 100),
+                content: content.trim(),
+                type,
+                sourceGapId: gapId,
+            });
+            if (!result) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+            await gapDetectorService.resolveGap(gapId, id);
+            return reply.send({ success: true, factId: result.id });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to resolve KB gap with fact' });
+        }
+    }
+
+    /**
      * Test smart reply generation for a page
      * POST /pages/:id/test-reply
      */

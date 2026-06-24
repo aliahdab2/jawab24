@@ -1,9 +1,9 @@
 import { db } from '../../db';
-import { pages } from '../../db/schema';
+import { pages, kbFacts } from '../../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { EmbeddingProvider, VectorStore, ChunkWithEmbedding } from './interfaces';
-import { chunkKnowledgeBase, chunkBusinessProfile, chunkProducts } from './chunker';
-import type { KbChunk, ProductData } from './chunker';
+import { chunkKnowledgeBase, chunkBusinessProfile, chunkProducts, chunkStructuredFacts } from './chunker';
+import type { KbChunk, ProductData, StructuredFact } from './chunker';
 import { gapDetectorService } from './gap-detector';
 import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
@@ -104,7 +104,10 @@ export class KbIngestionService {
     ): Promise<void> {
         const kbChunks = rawKBText?.trim() ? chunkKnowledgeBase(rawKBText) : [];
         const productChunks = chunkProducts(products);
-        const allChunks = [...kbChunks, ...productChunks];
+        // Structured facts (tier-2) are re-projected on every ingest so they outrank raw
+        // narrative AND survive KB-text edits — the durable source of truth lives in kb_facts.
+        const factChunks = chunkStructuredFacts(await this.fetchFacts(pageId));
+        const allChunks = [...kbChunks, ...productChunks, ...factChunks];
 
         if (allChunks.length === 0) {
             this.logger.debug('Full page ingestion skipped: no chunks', { pageId, kbVersion });
@@ -115,6 +118,7 @@ export class KbIngestionService {
             pageId, kbVersion,
             kbChunks: kbChunks.length,
             productChunks: productChunks.length,
+            factChunks: factChunks.length,
         });
 
         const chunksWithEmbeddings = await this.embedChunks(pageId, allChunks, kbVersion);
@@ -152,6 +156,28 @@ export class KbIngestionService {
     }
 
     /**
+     * Load the page's structured facts (the tier-2 source of truth) for re-projection into chunks.
+     */
+    private async fetchFacts(pageId: string): Promise<StructuredFact[]> {
+        // Isolate this NEW query from the critical existing ingestion path. A failure here —
+        // e.g. the kb_facts migration not yet applied during a rollout, or any transient DB
+        // error — must NEVER break ingestion of KB text + products (a shared hot path every
+        // merchant depends on). Degrade gracefully to "no facts" for this run.
+        try {
+            const rows = await db
+                .select({ title: kbFacts.title, content: kbFacts.content, type: kbFacts.type })
+                .from(kbFacts)
+                .where(eq(kbFacts.pageId, pageId));
+            return rows.map(r => ({ title: r.title, content: r.content, type: r.type as KbChunk['type'] }));
+        } catch (error) {
+            this.logger.error('fetchFacts failed — proceeding without structured facts', {
+                pageId, error: error instanceof Error ? error.message : String(error),
+            });
+            return [];
+        }
+    }
+
+    /**
      * Embed a batch of chunks, returning ChunkWithEmbedding[] ready for storage.
      */
     private async embedChunks(
@@ -183,6 +209,7 @@ export class KbIngestionService {
             metadata: chunk.metadata,
             embedding: embeddings[i],
             kbVersion,
+            sourceTier: chunk.sourceTier,
         }));
     }
 }

@@ -97,6 +97,14 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, pagesController.dismissGap);
+
+        adminRoutes.post('/pages/:id/kb-gaps/:gapId/resolve-with-fact', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Resolve a KB gap by adding a structured fact (tier-2 record)',
+                security: auth,
+            },
+        }, pagesController.resolveGapWithFact);
     });
 
     // --- Owner only: connecting pages uses the caller's Facebook token and sets

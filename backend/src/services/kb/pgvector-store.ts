@@ -61,6 +61,8 @@ export class PgVectorStore implements VectorStore {
                     tokenCount: chunk.tokenCount,
                     metadata: chunk.metadata,
                     kbVersion: chunk.kbVersion,
+                    // Omit → DB default (4, raw narrative). Structured facts pass 2 so they outrank narrative.
+                    ...(chunk.sourceTier !== undefined ? { sourceTier: chunk.sourceTier } : {}),
                 })));
 
             // Single UPDATE ... FROM (VALUES ...) sets every embedding in one

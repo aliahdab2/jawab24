@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
+import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, kbFacts } from '../db/schema';
 import { eq, and, desc, sql, count } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
@@ -568,6 +568,64 @@ export class PagesService {
         }
 
         return updatedPage;
+    }
+
+    /**
+     * Add a structured fact (tier-2 source of truth) to a page, then re-ingest so it becomes a
+     * tier-2 chunk that outranks raw narrative. This is the gap-fill write path — a clean,
+     * editable, single-source-of-truth record instead of appending raw Q&A to the KB text.
+     *
+     * The fact ROW is durable immediately; the chunk projection runs via ingestFullPage
+     * (fire-and-forget, exactly like updatePage's KB-text re-ingest). Returns null if the page
+     * isn't found in the workspace.
+     */
+    async addFact(
+        workspaceId: string,
+        pageId: string,
+        fact: { title: string; content: string; type?: string; sourceGapId?: string },
+    ): Promise<{ id: string } | null> {
+        const [page] = await db
+            .select({ knowledgeBase: pages.knowledgeBase, ecommerceStoreId: pages.ecommerceStoreId })
+            .from(pages)
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .limit(1);
+        if (!page) return null;
+
+        const [inserted] = await db
+            .insert(kbFacts)
+            .values({
+                pageId,
+                title: fact.title.slice(0, 500),
+                content: fact.content,
+                type: fact.type ?? 'offering',
+                ...(fact.sourceGapId ? { sourceGapId: fact.sourceGapId } : {}),
+            })
+            .returning({ id: kbFacts.id });
+
+        // Bump kbVersion + re-ingest so the new fact is projected into a tier-2 chunk.
+        const [updated] = await db
+            .update(pages)
+            .set({
+                kbVersion: sql`COALESCE(${pages.kbVersion}, 0) + 1`,
+                kbUpdatedAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .where(eq(pages.id, pageId))
+            .returning({ kbVersion: pages.kbVersion });
+
+        const kbVersion = updated?.kbVersion;
+        if (kbVersion) {
+            const ingestion = getIngestionService();
+            if (ingestion) {
+                this.fetchProductsForPage(page.ecommerceStoreId)
+                    .then(productData =>
+                        ingestion.ingestFullPage(pageId, page.knowledgeBase ?? undefined, productData, kbVersion)
+                    )
+                    .catch(err => captureError(err, 'Full page ingestion failed during addFact', { tags: { service: 'kb-ingestion', action: 'addFact' }, extra: { pageId } }));
+            }
+        }
+
+        return { id: inserted.id };
     }
 
     /**

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { testDb, createTestUser, createTestPage } from './setup';
 import { RetrievalService } from '../../src/services/kb/retrieval';
+import { KbIngestionService } from '../../src/services/kb/ingestion';
+import { PgVectorStore } from '../../src/services/kb/pgvector-store';
 import { gapDetectorService } from '../../src/services/kb/gap-detector';
 import * as schema from '../../src/db/schema';
 import type { EmbeddingProvider } from '../../src/services/kb/interfaces';
@@ -168,6 +170,34 @@ describe('Retrieval — Integration (real Postgres)', () => {
         expect(titles).toContain('Future');
         expect(titles).toContain('Evergreen');
         expect(titles).not.toContain('Expired');
+    });
+
+    it('projects a kb_fact into a tier-2 chunk via ingestFullPage (the gap-fill write path)', async () => {
+        // What resolveGapWithFact / pagesService.addFact persists: a structured fact row.
+        await testDb.insert(schema.kbFacts).values({
+            pageId,
+            title: 'دورة المكياج',
+            content: 'دورة المكياج: التكلفة ٤٠ ألف ل.س، المدة شهر، غير مختلطة.',
+            type: 'offering',
+        });
+
+        // Re-ingest (fake embedder → no OpenAI cost). ingestFullPage fetches kb_facts internally
+        // and projects each into one tier-2 chunk, then activates the new version.
+        const ingestion = new KbIngestionService(new FakeEmbeddingProvider(), new PgVectorStore());
+        await ingestion.ingestFullPage(pageId, 'We sell courses.', [], 2);
+
+        // The fact must now exist as a tier-2 chunk at the active version.
+        const factChunks = await testDb
+            .select()
+            .from(schema.kbChunks)
+            .where(sql`page_id = ${pageId} AND kb_version = 2 AND source_tier = 2`);
+        expect(factChunks.length).toBeGreaterThan(0);
+        expect(factChunks.some(c => c.contentOriginal.includes('٤٠'))).toBe(true);
+
+        // And retrieval surfaces it (tier-2 is boosted above the raw narrative chunk).
+        const service = new RetrievalService(new FakeEmbeddingProvider());
+        const result = await service.retrieve(pageId, 'كم سعر دورة المكياج؟', 2);
+        expect(result.chunks.some(c => c.content.includes('٤٠'))).toBe(true);
     });
 
     it('should deduplicate similar gaps via trigram similarity', async () => {

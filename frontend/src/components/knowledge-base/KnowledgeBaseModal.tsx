@@ -136,24 +136,24 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
     }
   }, [rawMode, rawText, sections, onSave]);
 
-  // Gap approved: append Q&A to "notes" section
+  // Gap approved: store the answer as a STRUCTURED FACT (tier-2 single source of truth), saved
+  // immediately via the endpoint — NOT appended as raw Q&A to the KB text. The fact survives
+  // KB-text edits, outranks raw narrative in retrieval, and editing it later updates it everywhere
+  // (which is what kills the stale/cross-wired-price bug). See backend addFact / resolveGapWithFact.
   const handleGapApproved = useCallback((gapId: string, answer: string) => {
     const gap = gaps.find(g => g.id === gapId);
     if (!gap) return;
 
-    setSections(prev => prev.map(s => {
-      if (s.id !== 'notes') return s;
-      const entry = `Q: ${gap.queryText}\nA: ${answer}`;
-      const newContent = s.content.trim()
-        ? `${s.content.trim()}\n\n${entry}`
-        : entry;
-      return { ...s, content: newContent };
-    }));
-
     setGaps(prev => prev.filter(g => g.id !== gapId));
     setExpandedGapId(null);
-    pagesApi.dismissGap(page.id, gapId).catch(() => {});
-    toast.success(tKb('gaps.addedHint'));
+    // title = the customer's question (a strong retrieval anchor); content = the merchant's answer.
+    pagesApi.resolveGapWithFact(page.id, gapId, { title: gap.queryText, content: answer })
+      .then(() => toast.success(tKb('gaps.savedAsFact')))
+      .catch(() => {
+        toast.error(tKb('gaps.saveError'));
+        // Restore the gap so the merchant can retry.
+        setGaps(prev => (prev.some(g => g.id === gapId) ? prev : [...prev, gap]));
+      });
   }, [gaps, page.id, tKb]);
 
   // Gap skipped: resolve without adding content

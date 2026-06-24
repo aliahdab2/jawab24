@@ -41,7 +41,7 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus';
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'kbshape_before' | 'kbshape_after';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -119,6 +119,11 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     electronics: /إلكترونيات|متجر|electronics/i,
     fashion: /أزياء|الخليج|fashion/i,
     damascus: /الفريق الدمشقي|دمشقي/i,
+    // KB-shape before/after fixture pages (seeded by scripts/seed-kbshape-eval.ts).
+    // Same facts, two shapes: chat-log (tier-4, reproduces the retrieval miss) vs
+    // structured one-per-record (tier-2, retrieves reliably).
+    kbshape_before: /KBShape Before/i,
+    kbshape_after: /KBShape After/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -198,6 +203,31 @@ const CALLBACK_PROMISE_PHRASES = [
 ];
 
 const TEST_CASES: TestCase[] = [
+    // ===== Category 52: KB Shape — structured facts retrieve where chat-log noise misses =====
+    // Regression guards for the structured-records fix (plan: ~/.claude/plans/can-you-check-...).
+    // These run against the STRUCTURED page (kbshape_after) and must PASS. The SAME messages run
+    // against kbshape_before (chat-log shape) reproduce the retrieval-miss / false-denial bug —
+    // that contrast IS the Phase A before/after gate. Seed both pages: scripts/seed-kbshape-eval.ts.
+    // Flagship (real prod failure, الفريق الدمشقي, 2026-06-24): the bot DENIED a women's haircut
+    // course that IS in the KB ("حالياً ما عنا دورة حلاقة نسائية"). The replyNotContains guard below
+    // is the most important assertion — a false denial turns away a high-intent customer.
+    { id: 9001, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'عندكم دورة حلاقة نسائية؟', page: 'kbshape_after', expected: { replyNotContains: ['ما عنا', 'لا يوجد', 'ما في', 'غير متوفرة', 'مش متوفرة'], flagsAbsent: ['info_not_in_kb'] }, notes: 'FLAGSHIP false-denial: women\'s haircut course exists in KB; bot must NOT deny it' },
+    { id: 9002, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'بدي دورة حلاقة لسيدات', page: 'kbshape_after', expected: { replyContainsAny: ['نعم', 'عنا', 'موجودة', 'نسائية', 'الحلاقة النسائية'], replyNotContains: ['ما عنا', 'لا يوجد'] } },
+    { id: 9003, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'في تعليم حلاقة للنساء؟', page: 'kbshape_after', expected: { replyNotContains: ['ما عنا', 'لا يوجد', 'غير متوفرة'] } },
+    { id: 9004, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'قديش سعر دورة المكياج؟', page: 'kbshape_after', expected: { replyContainsAny: ['40', '٤٠'], flagsAbsent: ['info_not_in_kb'] } },
+    { id: 9005, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'بكم دورة المكياج', page: 'kbshape_after', expected: { replyContainsAny: ['40', '٤٠'], flagsAbsent: ['info_not_in_kb'] } },
+    { id: 9006, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'دورة المكياج كم تكلفتها وكم مدتها؟', page: 'kbshape_after', expected: { replyContainsAny: ['40', '٤٠'], replyContains: ['شهر'], flagsAbsent: ['info_not_in_kb'] } },
+    { id: 9007, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'حابة اعرف تفاصيل دورة المكياج', page: 'kbshape_after', expected: { replyContainsAny: ['40', '٤٠'] } },
+    // WRONG-PRICE guard (real prod bug 2026-06-24: bot told a customer the makeup course is "100 ألف" —
+    // cross-wired from another course; the actual KB price was 35k). Must state the makeup course's own
+    // price and must NOT emit a cross-wired 100k. A deflection is safe; a confident wrong price is not.
+    { id: 9013, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'طيب كم تكلفة دورة المكياج بالضبط؟', page: 'kbshape_after', conversationHistory: [{ role: 'user', content: 'بدي اعرف عن دورة المكياج' }, { role: 'assistant', content: 'دورة المكياج متوفرة لدينا.' }], expected: { replyContainsAny: ['40', '٤٠'], replyNotContains: ['100', '١٠٠'] }, notes: 'must give makeup price, must NOT cross-wire another course\'s 100k' },
+    { id: 9008, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'وين عنوانكم؟', page: 'kbshape_after', expected: { replyContains: ['برامكة'], flagsAbsent: ['info_not_in_kb'] } },
+    { id: 9009, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'كيف اوصل لمعهدكم', page: 'kbshape_after', expected: { replyContainsAny: ['برامكة', 'الحافظ'] } },
+    { id: 9010, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'شو اوقات الدوام؟', page: 'kbshape_after', expected: { replyContainsAny: ['9', '٩'], flagsAbsent: ['info_not_in_kb'] } },
+    { id: 9011, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'دورة الاسعافات بكم؟', page: 'kbshape_after', expected: { replyContainsAny: ['30', '٣٠'], flagsAbsent: ['info_not_in_kb'] } },
+    { id: 9012, category: 52, categoryName: 'KB Shape (structured facts)', channel: 'dm', message: 'قديش مدة دورة الاسعافات', page: 'kbshape_after', expected: { replyContainsAny: ['أسبوع', 'اسبوع', 'أسبوعين'] } },
+
     // ===== Category 1: Confidence & Flag Accuracy =====
     // 1.1 — WHO vs WHAT mismatch
     { id: 1, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'مين صاحب المعهد؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'], replyNotContains: CALLBACK_PROMISE_PHRASES } },
@@ -2859,6 +2889,31 @@ const TEST_CASES: TestCase[] = [
         notes: 'Counter-test: genuine high-confidence English switch must override the Arabic assistant anchor. Locks in that the < 0.6 threshold still respects intentional switches. Verified live reply: "Sure! How can I assist you today?"',
     },
 
+    // ===== Category 53: Comment Language in Dual Mode =====
+    // Regression for the 2026-06-23 production bug — the COMMENT-channel sibling of #335.
+    // A bare Latin token ("Icdl") commented on an Arabic post, on a DUAL-mode merchant,
+    // replied in English: the playground/test-tool flattens a dual/private comment to the
+    // DM channel, and (pre-fix) the comment-language step was gated on that effective
+    // channel, so it skipped resolveCommentLanguage and detectLanguageCode("Icdl")='en'.
+    // Must reply in Arabic, anchored on the post. MUST run in dual mode (see
+    // DUAL_MODE_CATEGORIES) — in public mode the comment path always mirrored, so the bug
+    // never surfaced and this case would pass even on the buggy code (a false negative).
+    {
+        id: 338, category: 53, categoryName: 'Comment Language (Dual Mode)', channel: 'comment',
+        message: 'Icdl',
+        page: 'training',
+        postMessage: '#عروض على دورات #الكمبيوتر 🔥\nدورة ICDL والإسعافات الأولية ومحاسبة الأمين المبتدئ\nشهادات معتمدة — للتفاصيل علّق بنقطة ❤️',
+        expected: {
+            commentReplyMode: 'dual',   // guards against a false pass if dual setup didn't apply
+            replyMethod: ['ai'],
+            // Reply must be Arabic (anchored on the post), NOT English. Same exclusion
+            // pattern as the DM sibling #335 (English course-reply words an Arabic reply
+            // won't contain), plus the screenshot's English-leak phrases.
+            replyNotContains: ['session', 'available', 'schedule', 'starts', 'Hello', 'Hi ', 'Details shared', 'Syrian pounds'],
+        },
+        notes: 'Comment "Icdl" on an Arabic course post, dual mode. Pre-fix replied in English (dual→dm flattening bypassed resolveCommentLanguage); must stay Arabic. Fails on pre-#347 code, passes after.',
+    },
+
     // ===== Category 42: Brand Voice No Repetition =====
     // Verifies the AI does NOT repeat brand voice notes (offers, promotions, phrases)
     // that were already stated in a prior assistant reply within the same conversation.
@@ -3636,6 +3691,11 @@ async function runWithConcurrency<T>(items: T[], concurrency: number, fn: (item:
 // ---------------------------------------------------------------------------
 
 const NUDGE_CATEGORY = 19;
+/** Categories whose tests must run with the demo merchant in DUAL reply mode (the
+ *  comment→DM flattening path). Cat 19 = nudge variations; Cat 53 = the comment-language
+ *  regression, which only surfaces in dual mode (see #338). Both run inside the dual
+ *  setup/teardown block; everything else runs in the default public mode. */
+const DUAL_MODE_CATEGORIES = new Set([NUDGE_CATEGORY, 53]);
 
 async function updateDemoSettings(settings: Record<string, unknown>): Promise<boolean> {
     try {
@@ -3694,9 +3754,19 @@ async function main() {
     }
 
     // Filter by category if specified
-    const cases = CATEGORY_FILTER
+    const selectedCases = CATEGORY_FILTER
         ? TEST_CASES.filter(t => t.category === CATEGORY_FILTER)
         : TEST_CASES;
+
+    // Skip any case whose page alias didn't resolve to a seeded demo page, instead of
+    // failing it on "pageId required". This keeps the opt-in KB-shape fixture (Category 52,
+    // pages kbshape_before/after from scripts/seed-kbshape-eval.ts) from dragging the main
+    // suite when it hasn't been seeded.
+    const cases = selectedCases.filter(t => {
+        if (PAGE_MAP[t.page]) return true;
+        console.log(`  (skipping #${t.id} — fixture page "${t.page}" not seeded)`);
+        return false;
+    });
 
     console.log(`\nPlayground Eval — ${cases.length} tests`);
     console.log(`Backend: ${BASE_URL}`);
@@ -3708,8 +3778,10 @@ async function main() {
     const results: TestResult[] = [];
 
     // Split tests: run non-nudge tests first, then nudge tests with setup/teardown
-    const nonNudgeCases = cases.filter(t => t.category !== NUDGE_CATEGORY);
-    const nudgeCases = cases.filter(t => t.category === NUDGE_CATEGORY);
+    // Dual-mode tests (nudge variations + comment-language regression) run inside the
+    // dual setup/teardown block; everything else runs in the default public mode.
+    const nonNudgeCases = cases.filter(t => !DUAL_MODE_CATEGORIES.has(t.category));
+    const nudgeCases = cases.filter(t => DUAL_MODE_CATEGORIES.has(t.category));
 
     // Run non-nudge tests
     await runWithConcurrency(nonNudgeCases, CONCURRENCY, async (test) => {

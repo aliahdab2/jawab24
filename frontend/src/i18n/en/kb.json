@@ -15,6 +15,8 @@
     "addToKb": "Add to KB",
     "skip": "Skip",
     "addedHint": "Answer added — click Save to update your KB.",
+    "savedAsFact": "Saved — your answer is now part of your Business Info.",
+    "saveError": "Couldn't save your answer. Please try again.",
     "fromPost": "Post"
   },
   "progress": "{filled} of {total} filled",

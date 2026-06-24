@@ -152,6 +152,9 @@ export const pagesApi = {
     api.post('/pages/sync', accessToken ? { accessToken } : undefined, { timeout: LONG_RUNNING_TIMEOUT }),
   getKbGaps: (pageId: string) => api.get(`/pages/${pageId}/kb-gaps`),
   dismissGap: (pageId: string, gapId: string) => api.post(`/pages/${pageId}/kb-gaps/${gapId}/dismiss`),
+  // Resolve a gap by adding a structured tier-2 fact (single source of truth) instead of raw Q&A.
+  resolveGapWithFact: (pageId: string, gapId: string, body: { title: string; content: string; type?: string }) =>
+    api.post(`/pages/${pageId}/kb-gaps/${gapId}/resolve-with-fact`, body),
   // Per-page lead-config override. For each slice: null reverts to the workspace
   // default; an omitted key leaves it unchanged; a value is a full override.
   updateLeadConfig: (id: string, data: { leadStages?: LeadStagesConfig | null; leadFields?: LeadCustomFieldDef[] | null }) =>
