@@ -107,4 +107,61 @@ describe('kbFactExtractor.extract', () => {
         expect(logAiUsageMock).toHaveBeenCalledTimes(1);
         expect(logAiUsageMock.mock.calls[0][0]).toMatchObject({ pipeline: 'kb_fact_extraction', userId: 'u1' });
     });
+
+    it('pins the model when ctx.model is provided (the backfill uses a stronger model)', async () => {
+        openaiCreateMock.mockResolvedValue(aiReply({ facts: [{ title: 't', content: 'c', price: '' }] }));
+        await kbFactExtractor.extract('t', { userId: 'u1', model: 'gpt-4.1' });
+        expect(openaiCreateMock.mock.calls[0][0].model).toBe('gpt-4.1');
+    });
+
+    it('rejects a truncated (finish_reason=length) response → [] (cut-off JSON is unreliable)', async () => {
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: '{"facts":[{"title":"x"' }, finish_reason: 'length' }],
+            model: 'gpt-4.1-mini', usage: { prompt_tokens: 1, completion_tokens: 1 },
+        });
+        const facts = await kbFactExtractor.extract('text', { userId: 'u1' });
+        expect(facts).toEqual([]);
+    });
+});
+
+describe('kbFactExtractor.consolidate', () => {
+    it('returns the input unchanged without calling the AI when there is ≤1 fact', async () => {
+        const one = [{ title: 'a', content: 'a', price: '' }];
+        const out = await kbFactExtractor.consolidate(one, { userId: 'u1' });
+        expect(out).toEqual(one);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('returns the consolidated (merged) set the AI produces', async () => {
+        openaiCreateMock.mockResolvedValue(aiReply({ facts: [
+            { title: 'دورة الأمين - مبتدئ', content: 'مبتدئ 35000', price: '35000' },
+        ] }));
+        const input = [
+            { title: 'الأمين مبتدئ', content: 'مبتدئ 35000', price: '35000' },
+            { title: 'دورة الأمين للمحاسبة المستوى الأول', content: 'المستوى الأول 35000', price: '35000' },
+        ];
+        const out = await kbFactExtractor.consolidate(input, { userId: 'u1' });
+        expect(out).toHaveLength(1);
+        expect(out[0].title).toBe('دورة الأمين - مبتدئ');
+    });
+
+    it('NEVER loses facts: on an AI error it returns the input unchanged', async () => {
+        openaiCreateMock.mockRejectedValue(new Error('boom'));
+        const input = [
+            { title: 'a', content: 'a', price: '' },
+            { title: 'b', content: 'b', price: '' },
+        ];
+        const out = await kbFactExtractor.consolidate(input, { userId: 'u1' });
+        expect(out).toEqual(input);
+    });
+
+    it('NEVER loses facts: on an empty AI result it keeps the input', async () => {
+        openaiCreateMock.mockResolvedValue(aiReply({ facts: [] }));
+        const input = [
+            { title: 'a', content: 'a', price: '' },
+            { title: 'b', content: 'b', price: '' },
+        ];
+        const out = await kbFactExtractor.consolidate(input, { userId: 'u1' });
+        expect(out).toEqual(input);
+    });
 });
