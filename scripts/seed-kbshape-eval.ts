@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 /**
  * Phase A fixture — seed two demo pages with the SAME facts in two KB shapes, so the
- * KB-shape eval cases (Category 51 in playground-eval.ts) can be run BEFORE vs AFTER.
+ * KB-shape eval cases (Category 52 in playground-eval.ts) can be run BEFORE vs AFTER.
  *
  *   KBShape Before — chat-log shape, ingested normally → tier-4 chunks (reproduces the
  *                    retrieval-miss / false-denial bug: facts buried in conversation noise).
@@ -17,8 +17,8 @@
  *
  * ⚠️ Untested end-to-end without a live DB + OpenAI key — validate the first run (it logs the
  * KB sizes and chunk counts). After seeding, run the before/after:
- *   ADMIN_TOKEN=… CATEGORY=51 npm run eval                 # AFTER page (committed cases) → expect PASS
- *   then temporarily flip the Cat-51 cases' page to 'kbshape_before' to get the BEFORE baseline.
+ *   ADMIN_TOKEN=… CATEGORY=52 npm run eval                 # AFTER page (committed cases) → expect PASS
+ *   then temporarily flip the Cat-52 cases' page to 'kbshape_before' to get the BEFORE baseline.
  */
 import { config } from '../backend/src/config'; // MUST be first: its dotenv.config() loads env/backend.env before db reads DATABASE_URL
 import { randomUUID } from 'crypto';
@@ -34,7 +34,7 @@ const AFTER_FB_ID = 'kbshape_after_page';
 /**
  * The shared facts. Each record is the single source of truth for one offering.
  * NOTE: the makeup price (40k), the women's-hairdressing course (must exist), the first-aid
- * course (30k / 2 weeks), the address, and the hours are the assertions in Category 51.
+ * course (30k / 2 weeks), the address, and the hours are the assertions in Category 52.
  */
 interface CourseRecord { name: string; price?: string; duration?: string; schedule?: string; mixed?: string; note?: string; }
 
@@ -203,7 +203,7 @@ async function main() {
     await db.insert(kbChunks).values(rows.map(({ id, r }) => ({
         id, pageId: afterPage.id, type: 'offering', language: 'ar',
         title: r.title, contentOriginal: r.content, contentNormalized: r.content, titleNormalized: r.title,
-        tokenCount: Math.ceil(r.content.length / 3), metadata: { recordId: r.title },
+        tokenCount: Math.ceil(r.content.length / 3), metadata: { source: 'structured_fact', recordId: r.title },
         kbVersion: 1, sourceTier: 2, // ← the structured tier that retrieval boosts above narrative
     })));
     // set embeddings (pgvector can't go through Drizzle's typed insert)
@@ -213,7 +213,7 @@ async function main() {
     console.log(`AFTER: kb=${structuredText.length} chars, chunks=${rows.length} (tier-2, one per record)`);
     if (structuredText.length < 5000) console.warn('⚠️ AFTER KB < 5000 chars — RAG skipped; it will full-inject instead of testing tier-2 retrieval. Add more records.');
 
-    console.log('\nDone. Run: ADMIN_TOKEN=… CATEGORY=51 npm run eval  (AFTER → expect PASS; flip cases to kbshape_before for the BEFORE baseline)');
+    console.log('\nDone. Run: ADMIN_TOKEN=… CATEGORY=52 npm run eval  (AFTER → expect PASS; flip cases to kbshape_before for the BEFORE baseline)');
     process.exit(0);
 }
 

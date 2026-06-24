@@ -174,12 +174,12 @@ describe('Retrieval — Integration (real Postgres)', () => {
 
     it('projects a kb_fact into a tier-2 chunk via ingestFullPage (the gap-fill write path)', async () => {
         // What resolveGapWithFact / pagesService.addFact persists: a structured fact row.
-        await testDb.insert(schema.kbFacts).values({
+        const [fact] = await testDb.insert(schema.kbFacts).values({
             pageId,
             title: 'دورة المكياج',
             content: 'دورة المكياج: التكلفة ٤٠ ألف ل.س، المدة شهر، غير مختلطة.',
             type: 'offering',
-        });
+        }).returning({ id: schema.kbFacts.id });
 
         // Re-ingest (fake embedder → no OpenAI cost). ingestFullPage fetches kb_facts internally
         // and projects each into one tier-2 chunk, then activates the new version.
@@ -193,6 +193,8 @@ describe('Retrieval — Integration (real Postgres)', () => {
             .where(sql`page_id = ${pageId} AND kb_version = 2 AND source_tier = 2`);
         expect(factChunks.length).toBeGreaterThan(0);
         expect(factChunks.some(c => c.contentOriginal.includes('٤٠'))).toBe(true);
+        // The projected chunk carries factId → kb_facts.id (chunk→fact traceability).
+        expect(factChunks.some(c => (c.metadata as { factId?: string } | null)?.factId === fact.id)).toBe(true);
 
         // And retrieval surfaces it (tier-2 is boosted above the raw narrative chunk).
         const service = new RetrievalService(new FakeEmbeddingProvider());

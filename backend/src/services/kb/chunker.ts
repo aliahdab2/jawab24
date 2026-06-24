@@ -17,6 +17,8 @@ export interface KbChunk {
 /** A single structured fact — the durable source of truth for one offering/attribute.
  *  Projected into one tier-2 chunk per record by chunkStructuredFacts (mirrors chunkProducts). */
 export interface StructuredFact {
+    /** kb_facts.id — carried into chunk metadata for chunk→fact traceability (mirrors chunkProducts' platformProductId). */
+    id?: string;
     title: string;
     content: string;
     type?: KbChunk['type'];
@@ -70,7 +72,7 @@ export function chunkStructuredFacts(facts: StructuredFact[]): KbChunk[] {
                 titleNormalized: normalizeArabic(title),
                 language: detectChunkLanguage(content),
                 tokenCount: estimateTokens(content),
-                metadata: { source: 'structured_fact' },
+                metadata: { source: 'structured_fact', ...(f.id ? { factId: f.id } : {}) },
                 sourceTier: 2,
             };
         });

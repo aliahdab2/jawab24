@@ -165,10 +165,10 @@ export class KbIngestionService {
         // merchant depends on). Degrade gracefully to "no facts" for this run.
         try {
             const rows = await db
-                .select({ title: kbFacts.title, content: kbFacts.content, type: kbFacts.type })
+                .select({ id: kbFacts.id, title: kbFacts.title, content: kbFacts.content, type: kbFacts.type })
                 .from(kbFacts)
                 .where(eq(kbFacts.pageId, pageId));
-            return rows.map(r => ({ title: r.title, content: r.content, type: r.type as KbChunk['type'] }));
+            return rows.map(r => ({ id: r.id, title: r.title, content: r.content, type: r.type as KbChunk['type'] }));
         } catch (error) {
             this.logger.error('fetchFacts failed — proceeding without structured facts', {
                 pageId, error: error instanceof Error ? error.message : String(error),
