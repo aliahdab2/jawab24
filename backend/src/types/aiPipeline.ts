@@ -19,6 +19,7 @@ export type AiPipeline =
     | 'transcription'        // Voice DM transcription (whisper / gpt-4o-mini-transcribe)
     | 'lead_extraction'      // Lead extraction from conversations
     | 'kb_file_extraction'   // PDF/image OCR for KB ingestion
+    | 'kb_fact_extraction'   // Free text (gap answer / KB block) → structured facts
     | 'ecommerce_tools'      // Per-iteration call inside the e-commerce tool loop
     | 'failover'             // Fallback model after circuit breaker opened
     | 'unknown';             // Caller forgot to tag — surfaces in dashboard so we can fix it
