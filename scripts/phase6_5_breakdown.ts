@@ -41,7 +41,7 @@ import Redis from 'ioredis';
 import { config } from '../backend/src/config';
 
 const DIRECT_CALL_PIPELINES = new Set([
-    'lead_extraction', 'kb_file_extraction',
+    'lead_extraction', 'kb_file_extraction', 'operational_facts_extraction',
     'embedding_rag', 'embedding_cache', 'embedding_ingestion',
     'transcription',
 ]);

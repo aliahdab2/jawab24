@@ -1042,10 +1042,10 @@ export interface WorkspaceSettings {
 
 // --- Business Info structured prompt block (Stage 2.6) ---
 export { formatBusinessInfoPrompt } from './businessInfoPrompt';
-export { applyFbSyncToMerchant, applyMerchantEdit, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
+export { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
 export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, MigrationPlan } from './businessProfileMerge';
 // --- Business hours canonicalizer (Stage 2.6) ---
-export { canonicalizeHoursEntry, canonicalizeHoursWeek } from './businessHours';
+export { canonicalizeHoursEntry, canonicalizeHoursWeek, isValidDayKey, SHORT_DAY_KEYS, LONG_DAY_KEYS } from './businessHours';
 export type { CanonicalHoursEntry, ParseResult, ParseSuccess, ParseFailure } from './businessHours';
 // --- Activation funnel (shared BE emit/query ↔ FE admin panel) ---
 export { ACTIVATION_FUNNEL_STEPS, KB_FILLED_MIN_CHARS, isBusinessInfoProvided } from './activation';

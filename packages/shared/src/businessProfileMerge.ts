@@ -1,15 +1,18 @@
 import type { BusinessProfile, BusinessProfileContainer, StoredBusinessProfile } from './index';
 import { unwrapBusinessProfile } from './index';
 
-export type ProvenanceSource = 'fb_sync' | 'editor';
+export type ProvenanceSource = 'fb_sync' | 'editor' | 'kb_extract';
 
 export interface FieldProvenance {
     /**
      * Where this field's current value originated:
-     *   - 'fb_sync' — auto-promoted from the FB-sync `suggestions` half on
+     *   - 'fb_sync'    — auto-promoted from the FB-sync `suggestions` half on
      *     a previous sync. May be refreshed by future syncs.
-     *   - 'editor'  — merchant typed or cleared this field via the editor.
-     *     Future FB syncs MUST NOT overwrite.
+     *   - 'editor'     — merchant typed or cleared this field via the editor.
+     *     Future FB syncs / KB extractions MUST NOT overwrite.
+     *   - 'kb_extract' — auto-extracted from the merchant's free-text KB
+     *     (operationalFactsExtractor). Lowest authority: a later FB sync or a
+     *     merchant edit overrides it; a re-extraction may refresh it.
      */
     source: ProvenanceSource;
     /**
@@ -179,6 +182,54 @@ export function applyMerchantEdit(
     }
 
     return { merchant: { ...patch }, merchantProvenance: provenance };
+}
+
+/**
+ * Apply facts auto-extracted from the merchant's free-text KB
+ * (operationalFactsExtractor) into the `merchant` half. Pure function —
+ * does not mutate inputs.
+ *
+ * KB extraction is the LOWEST-authority source: a value parsed from prose is
+ * a best-effort guess, weaker than a structured Facebook value and far weaker
+ * than a merchant's manual edit. Per-field decision (in order):
+ *   1. Extractor produced no value for this field            → leave alone.
+ *   2. provenance is 'editor' OR 'fb_sync'                    → leave alone
+ *      (never overwrite a human edit or a structured FB value).
+ *   3. Otherwise (never-seen OR previously 'kb_extract')      → populate/
+ *      refresh, set provenance {source: 'kb_extract', confirmedAt: null}.
+ *
+ * "Fill-only-empty" w.r.t. editor/fb_sync; a re-extraction (KB edited) may
+ * refresh a previously kb_extract value. Legacy merchant data without
+ * provenance is treated as editor-owned (normalizeLegacyProvenance), so it is
+ * never clobbered.
+ */
+export function applyKbExtractToMerchant(
+    existingMerchant: BusinessProfile | undefined,
+    existingProvenance: MerchantProvenanceMap | undefined,
+    extracted: BusinessProfile,
+): { merchant: BusinessProfile; merchantProvenance: MerchantProvenanceMap } {
+    const startingMerchant: BusinessProfile = { ...(existingMerchant ?? {}) };
+    const provenance = normalizeLegacyProvenance(
+        startingMerchant,
+        { ...(existingProvenance ?? {}) },
+    );
+    const merchant = startingMerchant;
+
+    for (const field of TRACKED_FIELDS) {
+        const value = extracted[field];
+        // Rule 1: extractor has nothing for this field.
+        if (value === undefined) continue;
+
+        // Rule 2: a human edit or a structured FB value outranks a prose guess.
+        const src = provenance[field]?.source;
+        if (src === 'editor' || src === 'fb_sync') continue;
+
+        // Rule 3: never-seen OR previously kb_extract → populate/refresh.
+        (merchant as Record<string, unknown>)[field] = value;
+        provenance[field] = { source: 'kb_extract', confirmedAt: null };
+    }
+
+    return { merchant, merchantProvenance: provenance };
 }
 
 /**

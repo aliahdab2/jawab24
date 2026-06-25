@@ -3372,6 +3372,25 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'TIER-1 REGRESSION (#19): structured > narrative precedence. Today merchant + KB agree; the test exists to fail loudly if injection ever stops happening.',
     },
+    {
+        id: 416, category: 50, categoryName: 'Business Info — REGRESSION (Friday closed from structured hours)', channel: 'dm',
+        message: 'هل تفتحون يوم الجمعة؟',
+        page: 'training',
+        // training page seeds merchant.hours.fri = ['closed']. The institute prod bug
+        // INVERTED a closed-Friday into "Friday open almost all day" by confabulating
+        // from course-schedule chunks. With structured hours injected authoritatively,
+        // the reply MUST convey Friday is closed and never claim it's open.
+        expected: {
+            confidence: ['high'],
+            replyContainsAny: ['مغلق', 'مسكّر', 'مسكر', 'مغلقين', 'ما بنفتح', 'مابنفتح', 'مو مفتوح', 'عطلة', 'closed'],
+            replyNotContains: ['مفتوح طول', 'مفتوح تقريبا', 'مفتوح تقريباً'],
+        },
+        notes: 'TIER-1 REGRESSION: the reported bug. Friday is closed in structured hours; reply must not invert it to "open".',
+    },
+    // (No separate "hours surface" case here: #406 "وين انتم وامتى مفتوحين؟"
+    //  already covers hours-on-training, and a generic صباح/مساء + ASCII-digit
+    //  matcher false-passes on Arabic-Indic-digit replies. #416's inversion guard
+    //  is the load-bearing structured-hours assertion.)
 
     // ===== Category 25 (cont.): Dialect MIRRORING of the OUTPUT =====
     // Earlier Cat-25 cases test that we PARSE dialects; these test that we REPLY in the
