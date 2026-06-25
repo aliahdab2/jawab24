@@ -481,6 +481,20 @@ const start = async () => {
       recovered: r => ({ count: r.credited, message: `Top-up reconciliation credited ${r.credited} purchase(s) a missed webhook should have` }),
     });
 
+    // KB re-ingest reconciliation — self-heal pages whose vector chunks drifted from their KB text.
+    // A KB edit bumps kb_version then re-ingests FIRE-AND-FORGET; if that async ingest failed/lagged,
+    // kb_active_version stays behind and retrieval serves stale (or no) chunks → wrong/"not available"
+    // replies. This sweep re-ingests the current KB so retrieval converges within minutes, for every
+    // merchant, with no manual work. Gated by KB_REINGEST_RECONCILE_ENABLED (and the OpenAI key).
+    const { reingestDriftedPages } = await import('./services/kb/reingestReconciler');
+    scheduleReconcileCron({
+      label: 'KbReingestReconcile',
+      tag: 'kb_reingest_reconcile',
+      enabled: () => config.kbReingest.enabled && !!config.openai.apiKey,
+      run: () => reingestDriftedPages(),
+      recovered: r => ({ count: r.reingested, message: `KB re-ingest reconciler healed ${r.reingested} page(s) whose chunks had drifted from their KB text` }),
+    });
+
     // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms
     // Catches stock changes from sales that webhooks don't cover (inventory_levels/update)
     const { getAllActiveStores } = await import('./services/ecommerce');

@@ -140,6 +140,14 @@ export const config = {
     //              ingestion's kbActiveVersion activation — extraction never bumps it.
     opFactsExtract: (process.env.KB_OPFACTS_EXTRACT || 'off') as 'off' | 'shadow' | 'on',
 
+    // KB re-ingest reconciler: self-heals pages whose vector chunks drifted from their KB text
+    // (kb_active_version fell behind kb_version because a fire-and-forget ingest failed/lagged).
+    // Default ON; kill-switch reverts to today's behavior. batchSize caps embedding cost per sweep.
+    kbReingest: {
+        enabled: process.env.KB_REINGEST_RECONCILE_ENABLED !== 'false',
+        batchSize: parseInt(process.env.KB_REINGEST_BATCH_SIZE || '25', 10) || 25,
+    },
+
     // Shopify App
     shopify: {
         apiKey: process.env.SHOPIFY_API_KEY || '',
