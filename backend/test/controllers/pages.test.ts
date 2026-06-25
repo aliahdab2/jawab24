@@ -162,6 +162,32 @@ describe('Pages Controller', () => {
             expect(pagesService.updatePage).toHaveBeenCalledWith('test_workspace_id', 'page-1', { name: 'Updated' });
             expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ id: 'page-1', isConnected: true }));
         });
+
+        it('canonicalizes loose business hours before persisting', async () => {
+            vi.mocked(pagesService.updatePage).mockResolvedValue({ id: 'page-1', accessToken: 'tok' } as any);
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { businessProfile: { hours: { sat: ['9am-8pm'], sun: ['9-8'], fri: ['مغلق'] } } };
+
+            await pagesController.update(mockRequest as any, mockReply as FastifyReply);
+
+            const passed = vi.mocked(pagesService.updatePage).mock.calls[0][2] as any;
+            expect(passed.businessProfile.hours).toEqual({
+                sat: ['09:00-20:00'], sun: ['09:00-20:00'], fri: ['closed'],
+            });
+        });
+
+        it('rejects an unknown day key with 400', async () => {
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { businessProfile: { hours: { funday: ['9-5'] } } };
+
+            await pagesController.update(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ error: 'Invalid business hours', day: 'funday', code: 'invalid_day_key' }),
+            );
+            expect(pagesService.updatePage).not.toHaveBeenCalled();
+        });
     });
 
     // ---- delete ----

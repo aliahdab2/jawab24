@@ -54,6 +54,21 @@ const ALL_DAY_PATTERNS: RegExp[] = [
 // Range separators: ASCII hyphen, en-dash, em-dash, " to ", " إلى ", " حتى "
 const RANGE_SEPARATOR = /\s*(?:[-–—]|to|إلى|حتى)\s*/i;
 
+// ─── Day keys ──────────────────────────────────────────────────────────────
+// The canonical day-key sets accepted in `business_profile.hours`. Facebook
+// sync emits the short form (mon…sun); the KB extractor also targets short.
+// Long names are accepted for forward-compat with hand-authored / imported
+// data. Both are rendered by `formatBusinessInfoPrompt` (businessInfoPrompt.ts).
+
+export const SHORT_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+export const LONG_DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+const ALLOWED_DAY_KEYS = new Set<string>([...SHORT_DAY_KEYS, ...LONG_DAY_KEYS]);
+
+/** True if `day` is a recognized day key (short mon…sun or long monday…sunday, case-insensitive). */
+export function isValidDayKey(day: string): boolean {
+    return ALLOWED_DAY_KEYS.has(day.trim().toLowerCase());
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────
 
 /**
@@ -140,6 +155,7 @@ export function canonicalizeHoursWeek(
     const out: Record<string, string[]> = {};
     for (const [day, raw] of Object.entries(input)) {
         if (raw === undefined || raw === null) continue;
+        if (!isValidDayKey(day)) return { ok: false, day, error: 'invalid_day_key' };
         // Already-array shape (e.g. legacy FB sync data) — canonicalize each.
         const tokens = Array.isArray(raw) ? raw : [raw];
         const canonicalEntries: string[] = [];
@@ -149,7 +165,10 @@ export function canonicalizeHoursWeek(
             if (!result.ok) return { ok: false, day, error: result.error };
             canonicalEntries.push(result.value);
         }
-        if (canonicalEntries.length > 0) out[day] = canonicalEntries;
+        // Normalize the key to lowercase: isValidDayKey accepts any case, but
+        // formatBusinessInfoPrompt looks up fixed lowercase keys — a capitalized
+        // key ("Mon"/"MONDAY") would otherwise pass here yet render blank there.
+        if (canonicalEntries.length > 0) out[day.trim().toLowerCase()] = canonicalEntries;
     }
     return { ok: true, value: out };
 }

@@ -13,6 +13,7 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
 import { BusinessProfileSchema, validateSchema } from '../utils/validation';
+import { canonicalizeHoursWeek } from '@jawab24/shared';
 import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
@@ -119,6 +120,26 @@ export class PagesController {
                     return reply.status(400).send({ error: 'Invalid business profile', errors: validation.errors });
                 }
                 request.body.businessProfile = validation.data;
+
+                // Canonicalize + validate hours at the boundary so the authoritative
+                // BUSINESS_INFO prompt block never carries garbage (bad day keys,
+                // un-normalized "9am-6pm"). Accepts loose input, emits
+                // "HH:MM-HH:MM" / "closed" / "all day".
+                //
+                // Contract (deliberate): a single bad day key/value rejects the whole
+                // payload with 400. Chosen as fail-fast — surfaces a client bug rather
+                // than silently dropping data — and there is no live caller today (the
+                // frontend KB save sends only { knowledgeBase }). When a merchant-facing
+                // hours editor ships, relax this to drop-and-warn (mirror the
+                // kbWarnings pattern below) so one stray key can't block the save.
+                const bp = request.body.businessProfile as { hours?: Record<string, string[]> };
+                if (bp.hours && typeof bp.hours === 'object') {
+                    const canon = canonicalizeHoursWeek(bp.hours);
+                    if (!canon.ok) {
+                        return reply.status(400).send({ error: 'Invalid business hours', day: canon.day, code: canon.error });
+                    }
+                    bp.hours = canon.value;
+                }
             }
 
             const page = await pagesService.updatePage(req.workspaceId, id, request.body);

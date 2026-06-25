@@ -15,6 +15,9 @@ export const AI_PRICING = {
     'gpt-4.1-mini-2025-04-14': { inputPer1K: 0.0004, cachedInputPer1K: 0.0001, outputPer1K: 0.0016 },
     'gpt-4.1-nano': { inputPer1K: 0.0001, cachedInputPer1K: 0.000025, outputPer1K: 0.0004 },
     'gpt-4.1': { inputPer1K: 0.002, cachedInputPer1K: 0.0005, outputPer1K: 0.008 },
+    // Dated snapshot alias — OpenAI returns this in `response.model` even when the
+    // request used the rolling 'gpt-4.1' alias (e.g. the operational-facts backfill). Same price.
+    'gpt-4.1-2025-04-14': { inputPer1K: 0.002, cachedInputPer1K: 0.0005, outputPer1K: 0.008 },
     'gpt-5-mini': { inputPer1K: 0.00025, cachedInputPer1K: 0.000025, outputPer1K: 0.002 },
     'gpt-5-nano': { inputPer1K: 0.00005, cachedInputPer1K: 0.000005, outputPer1K: 0.0004 },
     // gpt-5.4 family — short-context prices (OpenAI's pricing page lists "-" for the

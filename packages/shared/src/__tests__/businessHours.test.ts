@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canonicalizeHoursEntry, canonicalizeHoursWeek } from '../businessHours';
+import { canonicalizeHoursEntry, canonicalizeHoursWeek, isValidDayKey } from '../businessHours';
 
 describe('canonicalizeHoursEntry — strict canonical pass-through (idempotency)', () => {
     it('passes through already-canonical HH:MM-HH:MM', () => {
@@ -214,6 +214,48 @@ describe('canonicalizeHoursWeek — full-week parsing', () => {
         if (!result.ok) {
             expect(result.day).toBe('tuesday');
             expect(result.error).toContain('out_of_range');
+        }
+    });
+
+    it('accepts short day keys (FB-sync / extractor shape)', () => {
+        const result = canonicalizeHoursWeek({
+            sat: ['09:00-20:00'],
+            sun: '9am-8pm',
+            fri: 'مغلق',
+        });
+        expect(result).toEqual({
+            ok: true,
+            value: { sat: ['09:00-20:00'], sun: ['09:00-20:00'], fri: ['closed'] },
+        });
+    });
+
+    it('normalizes capitalized/mixed-case day keys to lowercase (formatBusinessInfoPrompt reads lowercase)', () => {
+        const result = canonicalizeHoursWeek({ Monday: '9am-6pm', FRIDAY: 'closed', Sat: '10-14' });
+        expect(result).toEqual({
+            ok: true,
+            value: { monday: ['09:00-18:00'], friday: ['closed'], sat: ['10:00-14:00'] },
+        });
+    });
+
+    it('rejects an unknown day key', () => {
+        const result = canonicalizeHoursWeek({ monday: '9am-6pm', funday: '10-14' });
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.day).toBe('funday');
+            expect(result.error).toBe('invalid_day_key');
+        }
+    });
+});
+
+describe('isValidDayKey', () => {
+    it('accepts short and long keys, case-insensitively', () => {
+        for (const k of ['mon', 'fri', 'sun', 'Monday', 'FRIDAY', 'sunday']) {
+            expect(isValidDayKey(k)).toBe(true);
+        }
+    });
+    it('rejects junk keys', () => {
+        for (const k of ['funday', 'mondayyy', '', 'm', 'الأحد']) {
+            expect(isValidDayKey(k)).toBe(false);
         }
     });
 });

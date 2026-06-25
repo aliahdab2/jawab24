@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyFbSyncToMerchant, applyMerchantEdit, classifyForMigration, hasTrackedField, formatBusinessInfoPrompt } from '../index';
+import { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, classifyForMigration, hasTrackedField, formatBusinessInfoPrompt } from '../index';
 import type { BusinessProfile, BusinessProfileContainer, MerchantProvenanceMap, StoredBusinessProfile } from '../index';
 
 // The "Damascus institute" fixture — the real prod failure case that
@@ -451,5 +451,62 @@ describe('classifyForMigration', () => {
             const plan = classifyForMigration(stored);
             expect(plan.kind).toBe('wrap_legacy');
         });
+    });
+});
+
+describe('applyKbExtractToMerchant', () => {
+    const extracted: BusinessProfile = {
+        hours: { sat: ['09:00-20:00'], sun: ['09:00-20:00'], mon: ['09:00-20:00'], fri: ['closed'] },
+        address: 'برامكة سانا فوق مكتبة الحافظ الطابق الاول مدينة دمشق',
+    };
+
+    it('fills empty (never-seen) fields and marks them kb_extract, confirmedAt: null', () => {
+        const { merchant, merchantProvenance } = applyKbExtractToMerchant(undefined, undefined, extracted);
+
+        expect(merchant.hours?.fri).toEqual(['closed']);
+        expect(merchant.address).toBe(extracted.address);
+        expect(merchantProvenance.hours).toEqual({ source: 'kb_extract', confirmedAt: null });
+        expect(merchantProvenance.address).toEqual({ source: 'kb_extract', confirmedAt: null });
+    });
+
+    it('never overwrites an editor-owned field', () => {
+        const existingMerchant: BusinessProfile = { address: 'merchant typed this' };
+        const existingProvenance: MerchantProvenanceMap = {
+            address: { source: 'editor', confirmedAt: '2026-06-01T00:00:00.000Z' },
+        };
+        const { merchant, merchantProvenance } = applyKbExtractToMerchant(existingMerchant, existingProvenance, extracted);
+
+        expect(merchant.address).toBe('merchant typed this'); // unchanged
+        expect(merchantProvenance.address).toEqual({ source: 'editor', confirmedAt: '2026-06-01T00:00:00.000Z' });
+        // but a never-seen field (hours) still gets filled
+        expect(merchant.hours?.fri).toEqual(['closed']);
+        expect(merchantProvenance.hours).toEqual({ source: 'kb_extract', confirmedAt: null });
+    });
+
+    it('never overwrites a structured fb_sync value (FB outranks a prose guess)', () => {
+        const existingMerchant: BusinessProfile = { hours: { mon: ['10:00-18:00'] } };
+        const existingProvenance: MerchantProvenanceMap = {
+            hours: { source: 'fb_sync', confirmedAt: null },
+        };
+        const { merchant, merchantProvenance } = applyKbExtractToMerchant(existingMerchant, existingProvenance, extracted);
+
+        expect(merchant.hours).toEqual({ mon: ['10:00-18:00'] }); // FB value preserved
+        expect(merchantProvenance.hours).toEqual({ source: 'fb_sync', confirmedAt: null });
+    });
+
+    it('refreshes a previously kb_extract value (re-extraction after KB edit)', () => {
+        const existingMerchant: BusinessProfile = { hours: { sat: ['08:00-19:00'] } };
+        const existingProvenance: MerchantProvenanceMap = {
+            hours: { source: 'kb_extract', confirmedAt: null },
+        };
+        const { merchant } = applyKbExtractToMerchant(existingMerchant, existingProvenance, extracted);
+
+        expect(merchant.hours?.fri).toEqual(['closed']); // refreshed to the new extraction
+    });
+
+    it('treats legacy merchant data without provenance as editor-owned (does not clobber)', () => {
+        const existingMerchant: BusinessProfile = { address: 'legacy editor value' };
+        const { merchant } = applyKbExtractToMerchant(existingMerchant, undefined, extracted);
+        expect(merchant.address).toBe('legacy editor value');
     });
 });
