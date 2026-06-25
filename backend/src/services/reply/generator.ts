@@ -648,27 +648,27 @@ export class ReplyGenerator {
             return { effectiveKB: staticKB, ragAttempted: false };
         }
 
-        // Enrich vague follow-up queries with the customer's prior message.
-        // When a customer says "كم سعرها؟" after asking about AirPods Pro, the RAG query
-        // becomes "AirPods Pro كم سعرها؟" so retrieval finds the right product chunk.
+        // Enrich follow-up queries with recent conversation context so retrieval finds the right
+        // chunk. A follow-up's topic is often NOT in the immediate message — it lives an earlier
+        // turn back, or only in the assistant's reply (e.g. customer: "ممكن لمواعيد" / "تمام" / a
+        // longer "بس تعرف الوقت..." after the bot named the course). The old rule (only the last
+        // USER message, and only when ≤6 words) left the RAG query topicless → wrong course's chunk
+        // or none → cross-wire / "غير متوفرة" (the institute prod failures, eval Cat 54). We now
+        // fold the last few turns (both roles) into the query for any short-ish follow-up.
         //
-        // We use ONLY the last user message — not the assistant reply. The assistant
-        // reply is an unreliable signal: it can carry hallucinated names, post-reply
-        // marketing dumps, or AI-introduced tangents that bias retrieval toward the
-        // wrong topic (e.g. address questions after a course-price post-reply lose
-        // the address chunk because the embedding gets dragged toward "course/price").
-        // The user's own prior message is the truest signal of what they care about.
+        // Caveat: including the assistant turn can bias retrieval toward an AI-introduced name; that
+        // was the reason the original code used the user message only. The query is the customer's
+        // message FIRST (so it dominates), context appended, and the eval suite (Cat 1/11/24 + the
+        // Cat-54 repros) guards the tradeoff — recall here matters more than the rare bias case.
         let enrichedQuery = query;
         if (conversationHistory && conversationHistory.length > 0) {
-            const isVague = query.trim().split(/\s+/).length <= 6;
-            if (isVague) {
-                const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user');
-                if (lastUserMessage) {
-                    enrichedQuery = `${lastUserMessage.content.slice(0, 100)} ${query}`.slice(0, 400);
-                    this.logger.debug('[Generator] Enriched RAG query with last user message', {
-                        original: query, enriched: enrichedQuery.slice(0, 150),
-                    });
-                }
+            const isFollowUp = query.trim().split(/\s+/).length <= 12;
+            if (isFollowUp) {
+                const recentContext = conversationHistory.slice(-4).map(m => m.content).join(' ');
+                enrichedQuery = `${query} ${recentContext}`.slice(0, 500);
+                this.logger.debug('[Generator] Enriched RAG query with recent conversation context', {
+                    original: query, enriched: enrichedQuery.slice(0, 150),
+                });
             }
         }
 
