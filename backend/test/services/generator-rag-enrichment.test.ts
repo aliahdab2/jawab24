@@ -1,22 +1,33 @@
 /**
- * Tests for RAG query enrichment logic in ReplyGenerator.resolveKnowledge.
+ * Tests for RAG query enrichment logic (buildEnrichedQuery + ReplyGenerator.resolveKnowledge).
  *
- * Current design: enrichment uses ONLY the customer's last user message — never
- * the assistant tail. The assistant tail proved to be an unreliable signal that
- * caused multiple bug classes:
- *   - Hallucination self-reinforcement ("باقة الورد" incident, 2026-03-30)
- *   - Post-reply marketing dumps biasing retrieval away from off-topic follow-ups
- *     (Doaa case, 2026-04-19: address question after course-price post-reply
- *     missed the address chunk)
- *   - AI mid-reply tangents poisoning subsequent retrievals
+ * DESIGN (revised 2026-06-25, branch fix/rag-followup-retrieval):
+ * Short follow-ups (≤12 words) are enriched with the last 4 conversation turns — BOTH roles —
+ * because a follow-up's topic frequently lives NOT in the bare message but in an earlier turn or
+ * in the assistant's last reply (customer: "بس بدي اعرف الوقت" / "قديش" after the bot named the
+ * course). The previous "last USER message only, ≤6 words" rule left those queries topicless →
+ * the wrong course's chunk or none → cross-wire / "غير متوفرة" (the institute prod failures, eval
+ * Cat 54). See buildEnrichedQuery for the ordering/budget contract.
  *
- * The customer's own prior message is the truest signal of what they care about.
- * When customers do follow up on AI-introduced topics, they almost always re-name
- * the keyword explicitly — it lands in lastUserMessage on the next turn.
+ * WHY re-including the assistant tail is safe now (it was removed for these incidents):
+ *   - Hallucination self-reinforcement ("باقة الورد", 2026-03-30) and post-reply marketing dumps
+ *     biasing a topic-switch follow-up (Doaa, 2026-04-19: address asked after a course post-reply).
+ *   The two structural mitigations that did not exist then:
+ *     1. The customer's message is placed FIRST, so it dominates the embedding; appended context
+ *        adds recall without overriding the customer's own words.
+ *     2. top-K was raised 5→10, so even when appended context nudges scores, the chunk the customer
+ *        actually asked for stays in range.
+ *   Verified on the REAL institute KB (2026-06-25): "العنوان اذا سمحت" after a makeup marketing
+ *   dump still returns the ADDRESS, and the same-topic follow-up still returns the schedule. The
+ *   behavioral guarantee the old string-level guards protected now holds via these mechanisms and
+ *   is locked in by the real-retrieval eval (Doaa topic-switch + Cat 54), which a mocked unit test
+ *   cannot prove. Residual risk (a hallucinated name with no matching chunk) is bounded: no chunk
+ *   exists for it, so the customer's real query still wins — and the closed-world eval (Cat 51)
+ *   guards fabrication broadly.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReplyGenerator } from '../../src/services/reply/generator';
+import { ReplyGenerator, buildEnrichedQuery } from '../../src/services/reply/generator';
 import { aiService } from '../../src/services/ai';
 
 // ── Dependency mocks ──────────────────────────────────────────────────────────
@@ -103,6 +114,56 @@ function makeHistory(turns: { role: 'user' | 'assistant'; content: string }[]) {
     return turns;
 }
 
+// ── Pure helper: buildEnrichedQuery ─────────────────────────────────────────────
+
+describe('buildEnrichedQuery', () => {
+    it('returns the query unchanged when there is no history', () => {
+        expect(buildEnrichedQuery('بكم سعرها')).toBe('بكم سعرها');
+        expect(buildEnrichedQuery('بكم سعرها', [])).toBe('بكم سعرها');
+    });
+
+    it('does NOT enrich a long (non-follow-up) query', () => {
+        const longQuery = 'عندكم باقات للاشتراك الشهري وكم تكون التكلفة الإجمالية مع كل الخدمات والميزات المتوفرة لدى متجركم';
+        expect(longQuery.trim().split(/\s+/).length).toBeGreaterThan(12);
+        const out = buildEnrichedQuery(longQuery, [{ content: 'مرحبا' }, { content: 'أهلاً بك' }]);
+        expect(out).toBe(longQuery);
+    });
+
+    it('puts the customer message FIRST and folds in recent context', () => {
+        const out = buildEnrichedQuery('كم سعره؟', [
+            { content: 'عندكم AirPods Pro؟' },
+            { content: 'نعم عندنا AirPods Pro' },
+        ]);
+        expect(out.startsWith('كم سعره؟')).toBe(true);
+        expect(out).toContain('AirPods Pro');
+    });
+
+    it('TRUNCATION BUG: keeps the NEWEST turn (the one that named the topic) when history exceeds the 500-char budget', () => {
+        // The old code joined oldest→newest then sliced(0,500), dropping the newest turn — exactly
+        // the one that just named the course. Reproduce a >500-char history; the newest turn names
+        // a unique topic token that MUST survive.
+        const filler = 'عندنا دورات كثيرة جداً ومتنوعة ونقدم عروضاً مستمرة طوال العام '.repeat(6); // ~360 chars
+        const history = [
+            { content: filler },
+            { content: 'حابب اعرف اكتر عن الدورات يلي عندكم بشكل عام ' + filler },
+            { content: 'دورة التصوير الفوتوغرافي سعرها 75 ألف' }, // newest, names the topic
+        ];
+        expect(history.reduce((n, t) => n + t.content.length, 0)).toBeGreaterThan(500);
+        const out = buildEnrichedQuery('بكم', history);
+        expect(out.startsWith('بكم')).toBe(true);
+        expect(out).toContain('التصوير'); // newest topic survives
+        expect(out.length).toBeLessThanOrEqual(500);
+    });
+
+    it('caps each turn so one verbose turn cannot starve the budget', () => {
+        // A single 400-char turn must be capped (~200 chars) — a marker past the cap must be absent.
+        const verbose = 'أ'.repeat(260) + ' MARKER_PAST_CAP ' + 'ب'.repeat(120);
+        const out = buildEnrichedQuery('وين', [{ content: verbose }]);
+        expect(out.startsWith('وين')).toBe(true);
+        expect(out).not.toContain('MARKER_PAST_CAP');
+    });
+});
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('ReplyGenerator - RAG query enrichment', () => {
@@ -117,8 +178,8 @@ describe('ReplyGenerator - RAG query enrichment', () => {
         generator = new ReplyGenerator();
     });
 
-    describe('enrichment uses last user message only', () => {
-        it('enriches vague follow-up with last user message (not assistant tail)', async () => {
+    describe('follow-up enrichment (last 4 turns, both roles, query-first)', () => {
+        it('enriches a vague follow-up with recent context, customer message first', async () => {
             mockGetConversationHistory.mockResolvedValue(makeHistory([
                 { role: 'user', content: 'عندكم AirPods Pro؟' },
                 { role: 'assistant', content: 'نعم عندنا AirPods Pro' },
@@ -130,8 +191,8 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             );
 
             const ragQuery: string = mockRetrieve.mock.calls[0][1];
+            expect(ragQuery.startsWith('كم سعره؟')).toBe(true);
             expect(ragQuery).toContain('AirPods Pro');
-            expect(ragQuery).toContain('كم سعره؟');
         });
 
         it('does NOT enrich when there is no conversation history', async () => {
@@ -146,13 +207,13 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             expect(ragQuery).toBe('شوفي');
         });
 
-        it('does NOT enrich when current query is long (not vague)', async () => {
+        it('does NOT enrich when current query is long (not a follow-up, >12 words)', async () => {
             mockGetConversationHistory.mockResolvedValue(makeHistory([
                 { role: 'user', content: 'مرحبا' },
                 { role: 'assistant', content: 'أهلاً' },
             ]));
 
-            const longQuery = 'عندكم باقات للاشتراك الشهري وكم تكون التكلفة';
+            const longQuery = 'عندكم باقات للاشتراك الشهري وكم تكون التكلفة الإجمالية مع كل الخدمات والميزات المتوفرة لديكم';
             await generator.generateForMessage(
                 { workspaceId: 'ws-1', userId: 'u-1', text: longQuery, pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
                 true,
@@ -162,10 +223,12 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             expect(ragQuery).toBe(longQuery);
         });
 
-        it('does NOT use assistant tail — even hallucinated content stays out', async () => {
-            // The AI hallucinated product names in the previous reply. These must NOT
-            // leak into the next retrieval embedding. Only the customer's own prior
-            // message is used for enrichment.
+        it('folds in the assistant tail, but the customer message stays first and dominant', async () => {
+            // The assistant tail IS now included (it carries the topic for same-topic follow-ups —
+            // eval Cat 54). The old guard excluded it to avoid hallucination self-reinforcement
+            // ("باقة الورد", 2026-03-30); that is now mitigated structurally — the customer message
+            // is placed FIRST so it dominates the embedding, and no chunk exists for a hallucinated
+            // name so the customer's real query still wins (closed-world eval Cat 51 guards this).
             mockGetConversationHistory.mockResolvedValue(makeHistory([
                 { role: 'user', content: 'شوفي عندكم باقات' },
                 { role: 'assistant', content: 'عنا باقة الورد الفاخرة وباقة النجوم المميزة' },
@@ -177,16 +240,19 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             );
 
             const ragQuery: string = mockRetrieve.mock.calls[0][1];
+            // Customer's own message leads the query (dominant signal); context follows.
+            expect(ragQuery.startsWith('وين ألاقيكم')).toBe(true);
             expect(ragQuery).toContain('شوفي عندكم باقات');
-            expect(ragQuery).toContain('وين ألاقيكم');
-            expect(ragQuery).not.toContain('باقة الورد');
-            expect(ragQuery).not.toContain('باقة النجوم');
         });
 
-        it('post-reply marketing dump does NOT bias retrieval (Doaa case)', async () => {
-            // Customer received a post-reply about a course, then asks for the address.
-            // The post-reply's course/price content must NOT contaminate the retrieval
-            // query — otherwise the address chunk gets missed.
+        it('Doaa topic-switch: context is folded in, but address retrieval still wins (eval-guarded)', async () => {
+            // Customer received a post-reply about a course, then switches topic to ask the address.
+            // The course content IS now part of the enriched query — but the behavioral guarantee
+            // (the address chunk still wins) no longer relies on excluding it: it holds via
+            // query-first ordering + top-K=10, VERIFIED on the real institute KB (2026-06-25, the
+            // reply returns the address, not the course) and locked in by the real-retrieval eval
+            // Cat 54 Doaa case. A mocked retrieval can only assert the query shape; the behavior is
+            // proven in the eval.
             const postReplyText = 'دورة المكياج المبتدئ مدتها شهر، سعرها 25 ألف ليرة سورية بالعملة القديمة خلال فترة العرض. الدروس تقام يومين في الأسبوع.';
             mockGetConversationHistory.mockResolvedValue(makeHistory([
                 { role: 'assistant', content: postReplyText },
@@ -198,11 +264,8 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             );
 
             const ragQuery: string = mockRetrieve.mock.calls[0][1];
-            // No prior user message exists in this thread → no enrichment at all
-            expect(ragQuery).toBe('العنوان اذا سمحت');
-            expect(ragQuery).not.toContain('المكياج');
-            expect(ragQuery).not.toContain('25 ألف');
-            expect(ragQuery).not.toContain('سعرها');
+            // The address request leads the query so it dominates retrieval.
+            expect(ragQuery.startsWith('العنوان اذا سمحت')).toBe(true);
         });
     });
 

@@ -393,6 +393,59 @@ function getRetrievalService(): RetrievalService | null {
     return _retrievalService;
 }
 
+/** Max chars of the enriched RAG query sent to the embedding model. */
+const ENRICHED_QUERY_MAX_CHARS = 500;
+/** Per-turn cap so one verbose turn (e.g. an assistant marketing dump) can't consume the whole budget. */
+const ENRICHED_QUERY_PER_TURN_CHARS = 200;
+/** A query with at most this many words is treated as a follow-up that needs conversation context. */
+const FOLLOW_UP_MAX_WORDS = 12;
+/** How many of the most-recent turns are eligible for context enrichment. */
+const ENRICHED_QUERY_HISTORY_TURNS = 4;
+
+/**
+ * Build the query used for RAG retrieval. A short follow-up's topic usually lives NOT in the bare
+ * message but in an earlier turn or in the assistant's last reply (e.g. customer: "ممكن لمواعيد" /
+ * "بس تعرف الوقت" after the bot named the course). For such follow-ups we fold the last few turns
+ * into the query so retrieval finds the right chunk instead of a topicless one (the institute prod
+ * failures, eval Cat 54).
+ *
+ * Ordering matters: the customer's message comes FIRST (it dominates the embedding), then context
+ * turns are appended NEWEST-FIRST, each capped to {@link ENRICHED_QUERY_PER_TURN_CHARS}. This
+ * guarantees the most-recent turn — the one that just named the course/price/schedule the follow-up
+ * refers to — always fits the budget, and the final length clamp can only ever trim the OLDEST
+ * (least relevant) context. The earlier version joined oldest→newest then `slice(0, 500)`, which
+ * silently dropped that newest turn whenever the history exceeded the budget, and had no per-turn
+ * cap so one verbose turn could starve the rest — reintroducing the "marketing-dump biases
+ * retrieval" failure the enrichment was meant to fix.
+ *
+ * Caveat: including the assistant turn can bias retrieval toward an AI-introduced name (the reason
+ * the original code used the user message only). The query-first ordering keeps the customer's words
+ * dominant, and the eval suite (Cat 1/11/24 + the Cat-54 repros) guards the tradeoff — recall here
+ * matters more than the rare bias case.
+ */
+export function buildEnrichedQuery(
+    query: string,
+    conversationHistory?: { content: string }[],
+): string {
+    if (!conversationHistory || conversationHistory.length === 0) return query;
+    const isFollowUp = query.trim().split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
+    if (!isFollowUp) return query;
+
+    const parts = [query];
+    let budget = ENRICHED_QUERY_MAX_CHARS - query.length;
+    const recent = conversationHistory.slice(-ENRICHED_QUERY_HISTORY_TURNS);
+    // Walk newest→oldest so the most recent turn always survives the budget.
+    for (let i = recent.length - 1; i >= 0 && budget > 1; i--) {
+        const snippet = recent[i].content.trim().slice(0, ENRICHED_QUERY_PER_TURN_CHARS);
+        if (!snippet) continue;
+        const piece = snippet.slice(0, budget - 1); // -1 reserves the joining space
+        if (!piece) break;
+        parts.push(piece);
+        budget -= piece.length + 1;
+    }
+    return parts.join(' ').slice(0, ENRICHED_QUERY_MAX_CHARS);
+}
+
 /**
  * Reply Generator Service
  * Handles the logic of generating reply text from templates or AI
@@ -648,28 +701,13 @@ export class ReplyGenerator {
             return { effectiveKB: staticKB, ragAttempted: false };
         }
 
-        // Enrich vague follow-up queries with the customer's prior message.
-        // When a customer says "كم سعرها؟" after asking about AirPods Pro, the RAG query
-        // becomes "AirPods Pro كم سعرها؟" so retrieval finds the right product chunk.
-        //
-        // We use ONLY the last user message — not the assistant reply. The assistant
-        // reply is an unreliable signal: it can carry hallucinated names, post-reply
-        // marketing dumps, or AI-introduced tangents that bias retrieval toward the
-        // wrong topic (e.g. address questions after a course-price post-reply lose
-        // the address chunk because the embedding gets dragged toward "course/price").
-        // The user's own prior message is the truest signal of what they care about.
-        let enrichedQuery = query;
-        if (conversationHistory && conversationHistory.length > 0) {
-            const isVague = query.trim().split(/\s+/).length <= 6;
-            if (isVague) {
-                const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user');
-                if (lastUserMessage) {
-                    enrichedQuery = `${lastUserMessage.content.slice(0, 100)} ${query}`.slice(0, 400);
-                    this.logger.debug('[Generator] Enriched RAG query with last user message', {
-                        original: query, enriched: enrichedQuery.slice(0, 150),
-                    });
-                }
-            }
+        // Enrich short follow-up queries with recent conversation context so retrieval finds the
+        // right chunk (see buildEnrichedQuery for the ordering/budget rationale and the bias caveat).
+        const enrichedQuery = buildEnrichedQuery(query, conversationHistory);
+        if (enrichedQuery !== query) {
+            this.logger.debug('[Generator] Enriched RAG query with recent conversation context', {
+                original: query, enriched: enrichedQuery.slice(0, 150),
+            });
         }
 
         try {

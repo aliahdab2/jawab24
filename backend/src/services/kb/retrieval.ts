@@ -25,8 +25,10 @@ export interface RetrievalResult {
 
 /** Minimum final score to include a chunk in results */
 const MIN_SCORE_THRESHOLD = 0.3;
-/** Default number of chunks to return */
-const DEFAULT_TOP_K = 5;
+/** Default number of chunks to return (env-overridable; raised 5→10). 5 was too small for
+ *  multi-course asks ("امين icdl انكليزي" — the 3rd course's chunk ranked #7, outside top-5 →
+ *  false denial). The candidate pool is re-ranked first, so this only widens what reaches the model. */
+const DEFAULT_TOP_K = Math.max(1, parseInt(process.env.RAG_TOP_K || '10', 10) || 10);
 /** Weight for vector score in hybrid fusion */
 const VECTOR_WEIGHT = 0.7;
 /** Weight for text (trigram) score in hybrid fusion */
