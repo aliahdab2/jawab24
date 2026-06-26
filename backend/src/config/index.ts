@@ -58,6 +58,13 @@ export const config = {
     // RAG mode: 'off' = static KB, 'shadow' = run RAG but use static KB, 'on' = full RAG
     ragMode: (process.env.RAG_MODE || 'on') as 'off' | 'shadow' | 'on',
 
+    // On-save operational-facts extraction (hours/phone/address → business_profile.merchant
+    // as kb_extract, feeding the authoritative BUSINESS_INFO block):
+    //   'off'    = never extract (default — safe until validated per merchant)
+    //   'shadow' = extract + log the would-be change, write nothing (stability check)
+    //   'on'     = extract + persist (fill-only-empty; never clobbers editor/fb_sync)
+    opFactsExtract: (process.env.KB_OPFACTS_EXTRACT || 'off') as 'off' | 'shadow' | 'on',
+
     // Shopify App
     shopify: {
         apiKey: process.env.SHOPIFY_API_KEY || '',

@@ -2,7 +2,8 @@ import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
 import { eq, and, desc, sql, count } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
-import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
+import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
+import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
@@ -565,9 +566,97 @@ export class PagesService {
                     )
                     .catch(err => captureError(err, 'Full page ingestion failed during updatePage', { tags: { service: 'kb-ingestion', action: 'updatePage' }, extra: { pageId } }));
             }
+            // Independent of RAG ingestion: refresh the structured operational facts
+            // (hours/phone/address) that feed the authoritative BUSINESS_INFO block,
+            // so they stay in sync with the KB the merchant just typed instead of
+            // going stale. Flag-gated (off|shadow|on), fire-and-forget, off the reply path.
+            void this.maybeExtractOperationalFacts(pageId, updatedPage.userId, kbText);
         }
 
         return updatedPage;
+    }
+
+    /**
+     * On-save refresh of structured operational facts (hours / phone / address)
+     * from the merchant's free-text KB into `business_profile.merchant` as
+     * `kb_extract`, so the authoritative BUSINESS_INFO block carries the
+     * merchant's OWN values instead of going stale or leaning on mis-chunked
+     * free text. This is the live wiring of `operationalFactsExtractor` +
+     * `applyKbExtractToMerchant` (previously only the one-time backfill called
+     * them).
+     *
+     * Flag-gated by `config.opFactsExtract`:
+     *   - 'off'    → no-op (default).
+     *   - 'shadow' → extract + log the would-be change, write nothing (used to
+     *                vet extractor stability before enabling writes).
+     *   - 'on'     → persist the merged container + bump kbActiveVersion (the
+     *                block is prompt-injected, so there's no ingestion step to
+     *                flip the cache version).
+     *
+     * Fire-and-forget, off the reply path; runs at most once per KB edit. Never
+     * throws. `applyKbExtractToMerchant` is fill-only-empty + refresh-own, so it
+     * can never clobber a merchant editor edit or an fb_sync value.
+     */
+    private async maybeExtractOperationalFacts(
+        pageId: string,
+        userId: string | null,
+        kbText: string,
+    ): Promise<void> {
+        const mode = config.opFactsExtract;
+        if (mode === 'off' || !userId) return;
+
+        try {
+            const extracted = await operationalFactsExtractor.extract(kbText, { userId, pageId });
+            if (!extracted.hours && !extracted.address && !extracted.phones) return;
+
+            // Re-read the current container (the KB save already committed).
+            const [row] = await db
+                .select({ businessProfile: pages.businessProfile })
+                .from(pages)
+                .where(eq(pages.id, pageId))
+                .limit(1);
+            const existing = unwrapBusinessProfile(row?.businessProfile as StoredBusinessProfile);
+            const { merchant, merchantProvenance } = applyKbExtractToMerchant(
+                existing.merchant,
+                existing.merchantProvenance,
+                extracted as BusinessProfile,
+            );
+
+            // applyKbExtractToMerchant is fill-only-empty + refresh-own, so a
+            // no-op is common (editor/fb_sync already own the fields, or the
+            // re-extraction matches the stored kb_extract values).
+            const changed = JSON.stringify(merchant) !== JSON.stringify(existing.merchant ?? {});
+            if (!changed) return;
+
+            if (mode === 'shadow') {
+                this.logger.info('opfacts(shadow): would refresh merchant operational facts', {
+                    pageId, extracted, before: existing.merchant, after: merchant,
+                });
+                return;
+            }
+
+            const container: BusinessProfileContainer = {
+                merchant,
+                ...(existing.suggestions ? { suggestions: existing.suggestions } : {}),
+                merchantProvenance,
+            };
+            await db
+                .update(pages)
+                .set({
+                    businessProfile: container,
+                    businessProfileUpdatedAt: new Date(),
+                    kbActiveVersion: sql`COALESCE(${pages.kbActiveVersion}, 0) + 1`,
+                })
+                .where(eq(pages.id, pageId));
+            this.logger.info('opfacts: refreshed merchant operational facts from KB', {
+                pageId, fields: Object.keys(extracted),
+            });
+        } catch (err) {
+            captureError(err, 'On-save operational-facts extraction failed', {
+                tags: { service: 'operational-facts-extraction', action: 'updatePage' },
+                extra: { pageId },
+            });
+        }
     }
 
     /**

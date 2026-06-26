@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { pagesService, buildBusinessProfile, parseBusinessHours, detectLanguageHint } from '../../src/services/pages';
 import { db } from '../../src/db';
 import { facebookService } from '../../src/services/facebook';
 import { instagramService } from '../../src/services/instagram';
+import { config } from '../../src/config';
+import { operationalFactsExtractor } from '../../src/services/kb/operationalFactsExtractor';
 import type { FacebookPage } from '../../src/types';
 
 vi.mock('../../src/db', () => ({
@@ -48,6 +50,10 @@ vi.mock('../../src/lib/redis', () => ({
         set: vi.fn().mockResolvedValue('OK'),
         del: vi.fn().mockResolvedValue(1),
     }
+}));
+
+vi.mock('../../src/services/kb/operationalFactsExtractor', () => ({
+    operationalFactsExtractor: { extract: vi.fn().mockResolvedValue({}) },
 }));
 
 describe('PR2: KB Versioning + Business Profile', () => {
@@ -549,6 +555,115 @@ describe('PR2: KB Versioning + Business Profile', () => {
             expect(insertedValues.businessProfile.merchantProvenance.name).toEqual({ source: 'fb_sync', confirmedAt: null });
             expect(insertedValues.businessProfile.merchantProvenance.phones).toBeUndefined();
             expect(insertedValues.businessProfile.merchantProvenance.address).toBeUndefined();
+        });
+    });
+
+    // =========================================
+    // On-save operational-facts extraction (KB_OPFACTS_EXTRACT flag)
+    // =========================================
+    describe('on-save operational-facts extraction', () => {
+        afterEach(() => {
+            config.opFactsExtract = 'off';
+        });
+
+        // Helper: capture every db.update().set(...) payload (the main KB-version
+        // write AND any extraction write), with a userId-bearing returning() so
+        // maybeExtractOperationalFacts doesn't early-return on a null userId.
+        function captureUpdates(): any[] {
+            const calls: any[] = [];
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((data) => {
+                    calls.push(data);
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'page-1', userId: 'user-1', kbVersion: 1, ...data }]),
+                        }),
+                    };
+                }),
+            } as any);
+            return calls;
+        }
+
+        function mockExistingContainer(container: unknown) {
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([{ businessProfile: container }]),
+                    }),
+                }),
+            } as any);
+        }
+
+        it('does NOT call the extractor when the flag is off (default)', async () => {
+            config.opFactsExtract = 'off';
+            captureUpdates();
+
+            await pagesService.updatePage('user-1', 'page-1', { knowledgeBase: 'دوامنا من ٩ صباحاً' });
+            await new Promise(r => setTimeout(r, 0)); // flush the fire-and-forget microtask
+
+            expect(operationalFactsExtractor.extract).not.toHaveBeenCalled();
+        });
+
+        it('shadow mode extracts but writes NO business_profile', async () => {
+            config.opFactsExtract = 'shadow';
+            vi.mocked(operationalFactsExtractor.extract).mockResolvedValue({ hours: { fri: ['closed'] } });
+            mockExistingContainer({ merchant: {}, suggestions: {}, merchantProvenance: {} });
+            const updates = captureUpdates();
+
+            await pagesService.updatePage('user-1', 'page-1', { knowledgeBase: 'مغلق الجمعة' });
+            await vi.waitFor(() => expect(operationalFactsExtractor.extract).toHaveBeenCalledTimes(1));
+
+            // Only the main KB-version write happened; no write carried businessProfile.
+            expect(updates.some(u => u.businessProfile !== undefined)).toBe(false);
+        });
+
+        it('on mode persists extracted facts as kb_extract + bumps kbActiveVersion', async () => {
+            config.opFactsExtract = 'on';
+            vi.mocked(operationalFactsExtractor.extract).mockResolvedValue({
+                hours: { fri: ['closed'] },
+                phones: ['0112345678'],
+            });
+            mockExistingContainer({ merchant: {}, suggestions: {}, merchantProvenance: {} });
+            const updates = captureUpdates();
+
+            await pagesService.updatePage('user-1', 'page-1', { knowledgeBase: 'مغلق الجمعة، الهاتف 0112345678' });
+            await vi.waitFor(() => expect(updates.some(u => u.businessProfile !== undefined)).toBe(true));
+
+            const write = updates.find(u => u.businessProfile !== undefined)!;
+            expect(write.businessProfile.merchant.hours).toEqual({ fri: ['closed'] });
+            expect(write.businessProfile.merchant.phones).toEqual(['0112345678']);
+            // kb_extract provenance — authoritative in the block, but never clobbers editor/fb_sync.
+            expect(write.businessProfile.merchantProvenance.hours).toEqual({ source: 'kb_extract', confirmedAt: null });
+            expect(write.businessProfile.merchantProvenance.phones).toEqual({ source: 'kb_extract', confirmedAt: null });
+            // business_profile is prompt-injected → cache-version bump required.
+            expect(write.kbActiveVersion).toBeDefined();
+            expect(write.businessProfileUpdatedAt).toBeInstanceOf(Date);
+        });
+
+        it('on mode is fill-only-empty — never clobbers an editor-owned field', async () => {
+            config.opFactsExtract = 'on';
+            // Merchant already confirmed an address via the editor; extractor finds a
+            // different one in the KB. The editor value must win.
+            vi.mocked(operationalFactsExtractor.extract).mockResolvedValue({
+                address: 'extracted-from-kb',
+                hours: { fri: ['closed'] },
+            });
+            mockExistingContainer({
+                merchant: { address: 'editor-confirmed-address' },
+                suggestions: {},
+                merchantProvenance: { address: { source: 'editor', confirmedAt: '2026-05-01T00:00:00.000Z' } },
+            });
+            const updates = captureUpdates();
+
+            await pagesService.updatePage('user-1', 'page-1', { knowledgeBase: 'مغلق الجمعة، العنوان الجديد' });
+            await vi.waitFor(() => expect(updates.some(u => u.businessProfile !== undefined)).toBe(true));
+
+            const write = updates.find(u => u.businessProfile !== undefined)!;
+            // Editor address preserved; only the empty `hours` field filled from KB.
+            expect(write.businessProfile.merchant.address).toBe('editor-confirmed-address');
+            expect(write.businessProfile.merchantProvenance.address.source).toBe('editor');
+            expect(write.businessProfile.merchant.hours).toEqual({ fri: ['closed'] });
+            expect(write.businessProfile.merchantProvenance.hours.source).toBe('kb_extract');
         });
     });
 });
