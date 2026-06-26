@@ -88,13 +88,23 @@ vi.mock('../../src/services/kb/gap-detector', () => ({
 // ── RAG retrieval mock ────────────────────────────────────────────────────────
 
 const mockRetrieve = vi.fn();
+const mockRetrieveMulti = vi.fn();
 
 vi.mock('../../src/services/kb/retrieval', () => ({
     RetrievalService: vi.fn().mockImplementation(() => ({
         setLogger: vi.fn(),
         retrieve: mockRetrieve,
+        retrieveMulti: mockRetrieveMulti,
     })),
 }));
+
+// The (enriched) RAG query passed to retrieval, regardless of path: dual-retrieve
+// (the default when enrichment changes the query) calls retrieveMulti([enriched, raw]),
+// so the enriched query is queries[0]; an unenriched query goes via retrieve().
+const lastRagQuery = (): string =>
+    mockRetrieveMulti.mock.calls.length
+        ? mockRetrieveMulti.mock.calls[0][1][0]
+        : mockRetrieve.mock.calls[0][1];
 
 vi.mock('../../src/services/kb/embedding', () => ({
     OpenAIEmbeddingProvider: vi.fn(),
@@ -173,6 +183,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
         vi.clearAllMocks();
         // Default: RAG returns no chunks (falls back to static KB)
         mockRetrieve.mockResolvedValue({ chunks: [], queryEmbedding: [] });
+        mockRetrieveMulti.mockResolvedValue({ chunks: [], queryEmbedding: [] });
         // Default: no conversation history
         mockGetConversationHistory.mockResolvedValue([]);
         generator = new ReplyGenerator();
@@ -190,7 +201,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
                 true,
             );
 
-            const ragQuery: string = mockRetrieve.mock.calls[0][1];
+            const ragQuery: string = lastRagQuery();
             expect(ragQuery.startsWith('كم سعره؟')).toBe(true);
             expect(ragQuery).toContain('AirPods Pro');
         });
@@ -203,7 +214,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
                 true,
             );
 
-            const ragQuery: string = mockRetrieve.mock.calls[0][1];
+            const ragQuery: string = lastRagQuery();
             expect(ragQuery).toBe('شوفي');
         });
 
@@ -219,7 +230,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
                 true,
             );
 
-            const ragQuery: string = mockRetrieve.mock.calls[0][1];
+            const ragQuery: string = lastRagQuery();
             expect(ragQuery).toBe(longQuery);
         });
 
@@ -239,7 +250,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
                 true,
             );
 
-            const ragQuery: string = mockRetrieve.mock.calls[0][1];
+            const ragQuery: string = lastRagQuery();
             // Customer's own message leads the query (dominant signal); context follows.
             expect(ragQuery.startsWith('وين ألاقيكم')).toBe(true);
             expect(ragQuery).toContain('شوفي عندكم باقات');
@@ -263,7 +274,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
                 true,
             );
 
-            const ragQuery: string = mockRetrieve.mock.calls[0][1];
+            const ragQuery: string = lastRagQuery();
             // The address request leads the query so it dominates retrieval.
             expect(ragQuery.startsWith('العنوان اذا سمحت')).toBe(true);
         });
@@ -317,7 +328,7 @@ describe('ReplyGenerator - RAG query enrichment', () => {
                 true,
             );
 
-            const ragQuery: string = mockRetrieve.mock.calls[0][1];
+            const ragQuery: string = lastRagQuery();
             expect(ragQuery).toBe('العنوان');
             expect(ragQuery).not.toContain('المكياج');
         });

@@ -950,6 +950,7 @@ describe('CommentProcessor', () => {
             kbActiveVersion: null,
             autoReplyEnabled: true,
             businessProfile: {
+                category: 'Footwear store',
                 phone: '+961 1 234 567',
                 address: '123 Main St',
                 city: 'Beirut',
@@ -979,9 +980,13 @@ describe('CommentProcessor', () => {
         const contextArg = generatorCall[0];
         expect(contextArg.knowledgeBase).toContain('We sell shoes.');
         expect(contextArg.knowledgeBase).toContain('--- Business Info ---');
-        expect(contextArg.knowledgeBase).toContain('Phone: +961 1 234 567');
-        expect(contextArg.knowledgeBase).toContain('Location: 123 Main St, Beirut');
-        expect(contextArg.knowledgeBase).toContain('Monday: 09:00-18:00');
+        // Descriptive fields append to the narrative…
+        expect(contextArg.knowledgeBase).toContain('Business type: Footwear store');
+        // …but operational facts (phone/address/hours) do NOT — they reach the model only
+        // via the provenance-gated BUSINESS_INFO block (D-010), never the KB narrative.
+        expect(contextArg.knowledgeBase).not.toContain('Phone:');
+        expect(contextArg.knowledgeBase).not.toContain('Location:');
+        expect(contextArg.knowledgeBase).not.toContain('Monday:');
     });
 
     it('should use business profile as sole KB when page has no knowledgeBase', async () => {
@@ -1020,7 +1025,8 @@ describe('CommentProcessor', () => {
 
         const contextArg = vi.mocked(replyGenerator.generateForComment).mock.calls[0][0];
         expect(contextArg.knowledgeBase).toContain('Business type: Restaurant');
-        expect(contextArg.knowledgeBase).toContain('Phone: +1 555 0000');
+        // Operational facts (phone) are NOT in the narrative — gated to BUSINESS_INFO (D-010).
+        expect(contextArg.knowledgeBase).not.toContain('Phone');
         // No separator when there's no preceding KB text
         expect(contextArg.knowledgeBase).not.toContain('--- Business Info ---');
     });
