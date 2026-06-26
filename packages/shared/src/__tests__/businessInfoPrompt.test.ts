@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { formatBusinessInfoPrompt } from '../businessInfoPrompt';
 import type { BusinessProfile } from '../index';
+import type { MerchantProvenanceMap } from '../businessProfileMerge';
 
 // Regression guard for the BUSINESS_INFO prompt block. Locks in current
 // formatter contract so the Option B refactor (auto-promoting FB suggestions
@@ -113,8 +114,11 @@ describe('formatBusinessInfoPrompt', () => {
             expect(formatBusinessInfoPrompt({})).toBeNull();
         });
 
-        it('returns the address block for a merchant populated from FB-sync (post-Option-B contract)', () => {
-            const promotedFromFb: BusinessProfile = {
+        it('renders a populated merchant when NO provenance map is supplied (legacy default = authoritative)', () => {
+            // No provenance → every field is treated as merchant-authored
+            // (legacy rows predating Option B could only have been editor
+            // writes). This is the back-compat path for preview / legacy callers.
+            const promoted: BusinessProfile = {
                 address: 'البرامكة سانا فوق مكتبة الحافظ الطابق الاول, Damascus, Syria',
                 phones: ['+963937549674'],
                 hours: {
@@ -127,11 +131,98 @@ describe('formatBusinessInfoPrompt', () => {
                     sun: ['08:00-20:00'],
                 },
             };
-            const block = formatBusinessInfoPrompt(promotedFromFb);
+            const block = formatBusinessInfoPrompt(promoted);
             expect(block).not.toBeNull();
             expect(block).toContain('البرامكة سانا');
             expect(block).toContain('+963937549674');
             expect(block).toContain('Monday: 08:00-20:00');
+        });
+    });
+
+    // The reported production bug: a merchant typed their real hours/phone into
+    // their KB (Business Info), but the AI replied with Facebook's values
+    // because the authoritative block was built from UNCONFIRMED FB-sync data.
+    // Provenance gating demotes fb_sync fields to the narrative fallback so
+    // the KB text governs. Contract: editor/kb_extract = authoritative;
+    // fb_sync = omitted (fallback); genuinely-absent = [NOT_PROVIDED].
+    describe('provenance gating ("KB wins, Facebook is fallback")', () => {
+        const fbSync = (...fields: (keyof BusinessProfile)[]): MerchantProvenanceMap =>
+            Object.fromEntries(fields.map(f => [f, { source: 'fb_sync', confirmedAt: null }]));
+        const editor = (...fields: (keyof BusinessProfile)[]): MerchantProvenanceMap =>
+            Object.fromEntries(fields.map(f => [f, { source: 'editor', confirmedAt: '2026-06-26T00:00:00.000Z' }]));
+
+        it('OMITS an fb_sync phone — never asserts it as authoritative over KB', () => {
+            const block = formatBusinessInfoPrompt(
+                { phones: ['+963937549674'], address: 'Damascus' },
+                fbSync('phones', 'address'),
+            );
+            // Both fields are FB-only → both omitted. No authoritative anchor,
+            // and nothing genuinely absent among the populated fields, but hours
+            // & policies are absent → guarded. The FB phone must NOT appear.
+            expect(block).not.toContain('+963937549674');
+            expect(block).not.toContain('Damascus');
+        });
+
+        it('returns null when EVERY field is fb_sync (no authoritative signal → FB via fallback)', () => {
+            const block = formatBusinessInfoPrompt(
+                {
+                    address: 'Damascus',
+                    phones: ['+963937549674'],
+                    hours: { mon: ['09:00-17:00'] },
+                    policies: { shipping: 'we ship nationwide' },
+                },
+                fbSync('address', 'city', 'country', 'phones', 'hours', 'policies'),
+            );
+            expect(block).toBeNull();
+        });
+
+        it('asserts an editor-authored value over fb_sync', () => {
+            const block = formatBusinessInfoPrompt(
+                { phones: ['0935924472'], hours: { mon: ['10:00-18:00'] } },
+                { ...editor('hours'), ...fbSync('phones') },
+            );
+            expect(block).not.toBeNull();
+            // editor hours → authoritative, shown.
+            expect(block).toContain('Monday: 10:00-18:00');
+            // fb_sync phone → omitted (fallback), NOT shown as a value...
+            expect(block).not.toContain('0935924472');
+            // ...and NOT marked [NOT_PROVIDED] either (it exists, just at fallback).
+            expect(block).not.toContain('Phones: [NOT_PROVIDED]');
+        });
+
+        it('treats kb_extract as authoritative (merchant authored it in their KB)', () => {
+            const block = formatBusinessInfoPrompt(
+                { hours: { fri: ['closed'], sat: ['09:00-17:00'] } },
+                { hours: { source: 'kb_extract', confirmedAt: null } },
+            );
+            expect(block).not.toBeNull();
+            expect(block).toContain('Friday: closed');
+            expect(block).toContain('Saturday: 09:00-17:00');
+        });
+
+        it('preserves the [NOT_PROVIDED] phone guard (#11) for an FB-only merchant with NO phone', () => {
+            // FB gave address + hours but no phone. The block must still inject
+            // so the phone guard fires — otherwise the Damascus "1234567"
+            // hallucination returns. The fb_sync address/hours are omitted.
+            const block = formatBusinessInfoPrompt(
+                { address: 'Damascus', hours: { mon: ['09:00-17:00'] } },
+                fbSync('address', 'hours'),
+            );
+            expect(block).not.toBeNull();
+            expect(block).toContain('Phones: [NOT_PROVIDED]');
+            // The fb_sync fields are demoted to fallback, not asserted here.
+            expect(block).not.toContain('Damascus');
+            expect(block).not.toContain('Monday: 09:00-17:00');
+        });
+
+        it('gates address components independently (editor city kept, fb_sync country dropped)', () => {
+            const block = formatBusinessInfoPrompt(
+                { address: 'Baramkeh', city: 'Damascus', country: 'Syria' },
+                { ...editor('address', 'city'), ...fbSync('country') },
+            );
+            expect(block).not.toBeNull();
+            expect(block).toContain('Baramkeh, Damascus');
+            expect(block).not.toContain('Syria');
         });
     });
 });

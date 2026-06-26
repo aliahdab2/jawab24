@@ -40,9 +40,12 @@ export interface GenerateRequest {
         /**
          * Stage 2.6 structured BUSINESS_INFO prompt block (pre-formatted by
          * backend's contextEnricher via `formatBusinessInfoPrompt`). Built from
-         * `business_profile.merchant` ONLY — never FB suggestions. The AI
-         * treats this as authoritative and refuses to invent values for
-         * fields marked `[NOT_PROVIDED]`. Null/absent → no block injected.
+         * `business_profile.merchant` ONLY — never FB suggestions — and further
+         * provenance-gated so only merchant-authored fields (editor/kb_extract)
+         * are asserted; unconfirmed FB-sync values are demoted to the narrative
+         * fallback so they can't override the merchant's KB text. The AI treats
+         * this block as authoritative and refuses to invent values for fields
+         * marked `[NOT_PROVIDED]`. Null/absent → no block injected.
          */
         businessInfoBlock?: string | null;
         customerContext?: string;

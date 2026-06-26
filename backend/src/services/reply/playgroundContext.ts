@@ -105,9 +105,10 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         }
     }
 
-    // 2b. Stage 2.6 structured BUSINESS_INFO block — built from merchant half only.
-    const { merchant } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
-    const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null);
+    // 2b. Stage 2.6 structured BUSINESS_INFO block — built from merchant half only,
+    //     gated by provenance so unconfirmed FB-sync values don't override KB text.
+    const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
+    const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance);
 
     // 3. When comment mode is dual or private, use DM channel for detailed reply
     const effectiveChannel: 'comment' | 'dm' = (channel === 'comment' && (commentReplyMode === 'dual' || commentReplyMode === 'private'))

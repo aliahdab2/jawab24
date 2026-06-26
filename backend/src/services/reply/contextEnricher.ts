@@ -79,8 +79,12 @@ export async function enrichPageContext(
     //     never FB suggestions. Beats stale narrative chunks via the "structured
     //     > narrative" precedence (Eval Case #19) and refuses to invent missing
     //     fields via [NOT_PROVIDED] markers (Damascus phone regression case #11).
-    const { merchant } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
-    const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null);
+    //     PROVENANCE-GATED: unconfirmed FB-sync values (Option B auto-promotes
+    //     them into `merchant` with confirmedAt: null) are demoted to the
+    //     narrative fallback above, so they can't override the hours/phone the
+    //     merchant typed into their KB ("KB wins, Facebook is fallback").
+    const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
+    const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance);
 
     // 4. Language-appropriate brand voice notes
     const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
