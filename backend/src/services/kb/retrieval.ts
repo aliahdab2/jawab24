@@ -162,4 +162,60 @@ export class RetrievalService {
 
         return { chunks, queryEmbedding };
     }
+
+    /**
+     * Dual/multi-query retrieval: run each query through `retrieve`, then UNION the
+     * candidates by chunk id (keeping the higher finalScore), re-rank by finalScore,
+     * and return the top-K. Used to combine a RAW follow-up query with its
+     * conversation-ENRICHED variant: the enriched query helps vague pronoun
+     * follow-ups, while the raw query guarantees a self-contained question still
+     * pulls its own chunk back even when enrichment poisons the embedding with an
+     * off-topic prior turn (the misspelled-topic-after-location-turn deflection).
+     *
+     * The fusion weights, MIN_SCORE_THRESHOLD, language/tier boosts, and top-K are
+     * all unchanged — this only widens the candidate pool before the final cut.
+     *
+     * `primaryEmbeddingIndex` selects which query's embedding is returned for the
+     * semantic-cache key (default 0); pass the raw-query index so the cache stays
+     * keyed on the customer's actual words.
+     */
+    async retrieveMulti(
+        pageId: string,
+        queries: string[],
+        kbActiveVersion: number,
+        topK: number = DEFAULT_TOP_K,
+        userId?: string,
+        primaryEmbeddingIndex = 0,
+    ): Promise<RetrievalResult> {
+        const uniqueQueries = [...new Set(queries.map(q => (q || '').trim()).filter(Boolean))];
+        if (uniqueQueries.length <= 1) {
+            return this.retrieve(pageId, uniqueQueries[0] ?? (queries[0] || ''), kbActiveVersion, topK, userId);
+        }
+
+        const results = await Promise.all(
+            uniqueQueries.map(q => this.retrieve(pageId, q, kbActiveVersion, topK, userId)),
+        );
+
+        const bestById = new Map<string, RetrievedChunk>();
+        for (const r of results) {
+            for (const c of r.chunks) {
+                const prev = bestById.get(c.id);
+                if (!prev || c.finalScore > prev.finalScore) bestById.set(c.id, c);
+            }
+        }
+        const merged = [...bestById.values()]
+            .sort((a, b) => b.finalScore - a.finalScore)
+            .slice(0, topK);
+
+        // Return the requested query's embedding for cache keying (raw query by convention).
+        const primaryQuery = (queries[primaryEmbeddingIndex] || '').trim();
+        const primaryIdx = Math.max(0, uniqueQueries.indexOf(primaryQuery));
+
+        this.logger.info('Multi-query retrieval completed', {
+            pageId, kbActiveVersion, queries: uniqueQueries.length,
+            merged: merged.length, topScore: merged[0]?.finalScore ?? 0,
+        });
+
+        return { chunks: merged, queryEmbedding: results[primaryIdx].queryEmbedding };
+    }
 }
