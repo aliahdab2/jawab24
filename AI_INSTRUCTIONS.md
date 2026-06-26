@@ -2,6 +2,8 @@
 
 > Read this file before making any changes. Applies to all AI tools.
 
+> **Settled decisions live in [`DECISIONS.md`](DECISIONS.md).** Before re-opening a settled architectural or product question, consult it first. When a decision is made or reversed, append a `D-NNN` entry (append-only — never edit past rulings).
+
 ## Quick Summary
 
 | Item | Value |
