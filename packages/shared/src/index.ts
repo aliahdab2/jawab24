@@ -681,7 +681,15 @@ export {
 // customers from other countries; the dialect-MIRRORING rule (kept, reinforced
 // per-call) is what should drive this. Examples now show FORMAT/tone only and
 // mirror the customer's own dialect — not a fixed dialect to copy.
-export const PROMPT_VERSION = 'v44';
+// v45: WARMED the info-missing deflection wording WITHOUT reverting the no-callback
+// rule (the #335/#341 rule — don't promise a callback on routine info_not_in_kb,
+// an empty promise at scale — STANDS). The problem was the COLD wording: a clipped
+// "I don't have it" + a wall of phone numbers. Now: acknowledge warmly in the
+// customer's OWN dialect (mirrored, never a hardcoded one), redirect to ONE contact
+// channel naturally (never a number-wall), still no callback promise. Also
+// de-Levantined the rule-level seed phrase (هالمعلومة → هذه المعلومة, MSA tone-only).
+// Bump invalidates exact + semantic caches holding the cold phone-dump replies.
+export const PROMPT_VERSION = 'v45';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
