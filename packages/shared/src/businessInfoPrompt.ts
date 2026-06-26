@@ -14,9 +14,28 @@
  * the marker, the AI's default behavior is to confabulate plausible-
  * looking data (e.g. the Damascus institute "1234567" phone hallucination
  * that originally motivated this stage).
+ *
+ * PROVENANCE GATING (the "KB wins, Facebook is fallback" contract):
+ * The block is authoritative — the model is told to prefer it over the
+ * merchant's own <business_knowledge> (KB) text. So ONLY merchant-authored
+ * facts may appear here. A value whose provenance is 'fb_sync' is an
+ * UNCONFIRMED Facebook auto-sync (Option B promotes FB suggestions into
+ * `merchant` with confirmedAt: null); presenting it as authoritative makes
+ * it override the hours/phone the merchant typed into their KB — the
+ * reported production bug. Such fields are therefore OMITTED here and reach
+ * the model only through the lower-authority narrative profile
+ * (`formatBusinessProfile`), i.e. Facebook is a fallback, never an override.
+ *
+ * A field counts as authoritative when its provenance source is 'editor' or
+ * 'kb_extract', OR when no provenance map is supplied / no entry exists for
+ * it (legacy rows predating Option B could only have been editor writes —
+ * matches normalizeLegacyProvenance's conservative default). Genuinely
+ * ABSENT fields still get [NOT_PROVIDED] so the anti-hallucination guard
+ * (#11) survives even for FB-only merchants.
  */
 
 import type { BusinessProfile } from './index';
+import type { MerchantProvenanceMap } from './businessProfileMerge';
 
 const DAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 const DAY_SHORT_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -29,9 +48,41 @@ const DAY_LABELS: Record<string, string> = {
 
 const NOT_PROVIDED = '[NOT_PROVIDED]';
 
-function joinAddress(p: BusinessProfile): string | null {
-    const parts = [p.address, p.city, p.country].filter((s): s is string => !!s && s.trim() !== '');
-    return parts.length > 0 ? parts.join(', ') : null;
+/** The three component fields that compose the single "Address" line. */
+const ADDRESS_FIELDS: ReadonlyArray<keyof BusinessProfile> = ['address', 'city', 'country'];
+
+/**
+ * True unless the field is an unconfirmed Facebook auto-sync value. No
+ * provenance map / no entry → authoritative (legacy default).
+ */
+function isAuthoritative(
+    provenance: MerchantProvenanceMap | undefined,
+    field: keyof BusinessProfile,
+): boolean {
+    return provenance?.[field]?.source !== 'fb_sync';
+}
+
+/**
+ * Build the address line from only the merchant-authored component fields.
+ * Returns both the authoritative join (what may appear in the block) and
+ * whether any component has a value at all (to tell ABSENT from FB-only).
+ */
+function joinAddress(
+    p: BusinessProfile,
+    provenance?: MerchantProvenanceMap,
+): { authoritative: string | null; hasAnyValue: boolean } {
+    const isNonEmptyStr = (s: unknown): s is string => typeof s === 'string' && s.trim() !== '';
+    const all = ADDRESS_FIELDS
+        .map(f => p[f])
+        .filter(isNonEmptyStr);
+    const authoritative = ADDRESS_FIELDS
+        .filter(f => isAuthoritative(provenance, f))
+        .map(f => p[f])
+        .filter(isNonEmptyStr);
+    return {
+        authoritative: authoritative.length > 0 ? authoritative.join(', ') : null,
+        hasAnyValue: all.length > 0,
+    };
 }
 
 function joinPhones(p: BusinessProfile): string | null {
@@ -71,20 +122,89 @@ function formatPolicies(p: BusinessProfile): string | null {
 }
 
 /**
- * Build the prompt block. Returns null when the profile is essentially
- * empty — caller should skip the block entirely in that case to save
- * tokens.
+ * Build the prompt block. Returns null when the profile carries no
+ * merchant-authored signal — caller skips the block entirely so the KB /
+ * narrative profile governs (and to save tokens).
+ *
+ * @param profile    the `merchant` half of the business_profile container.
+ * @param provenance per-field provenance for `profile`. When supplied,
+ *                   fields whose source is 'fb_sync' (unconfirmed Facebook
+ *                   auto-sync) are OMITTED so they cannot override the
+ *                   merchant's own KB text — see the file header. Omit the
+ *                   argument to treat every field as authoritative (legacy
+ *                   / preview callers without a provenance map).
+ *
+ * Per-field render (in priority order):
+ *   - authoritative value present  → emit the value line.
+ *   - genuinely absent everywhere  → emit `[NOT_PROVIDED]` (anti-hallucination).
+ *   - present but FB-only (fb_sync)→ OMIT the line (flows via fallback).
  */
-export function formatBusinessInfoPrompt(profile: BusinessProfile | null | undefined): string | null {
+export function formatBusinessInfoPrompt(
+    profile: BusinessProfile | null | undefined,
+    provenance?: MerchantProvenanceMap,
+): string | null {
     if (!profile) return null;
 
-    const address = joinAddress(profile);
-    const phones = joinPhones(profile);
-    const hours = formatHours(profile);
-    const policies = formatPolicies(profile);
+    const address = joinAddress(profile, provenance);
+    const phonesValue = joinPhones(profile);
+    const hoursValue = formatHours(profile);
+    const policiesValue = formatPolicies(profile);
 
-    // If everything is missing, no signal to add.
-    if (!address && !phones && !hours && !policies) return null;
+    // A truly-empty profile (no field has a value anywhere) → no block, as
+    // before: nothing to assert and nothing to guard, and skipping saves
+    // tokens at scale. Preserves the long-standing empty-profile → null
+    // contract. NOTE: this is distinct from the all-FB-only case below — here
+    // there is no value at all, so there's genuinely nothing to hallucinate
+    // against.
+    const anyValueAtAll =
+        address.hasAnyValue || !!phonesValue || !!hoursValue || !!policiesValue;
+    if (!anyValueAtAll) return null;
+
+    // The body lines (everything below the header + directive). A field
+    // contributes a line only when it is authoritative-present or genuinely
+    // absent; an FB-only field contributes nothing here and reaches the model
+    // through the lower-authority narrative profile instead.
+    const fieldLines: string[] = [];
+
+    // Address (composite of address/city/country, each gated independently).
+    if (address.authoritative) {
+        fieldLines.push(`- Address: ${address.authoritative}`);
+    } else if (!address.hasAnyValue) {
+        fieldLines.push(`- Address: ${NOT_PROVIDED}`);
+    } // else: FB-only → omit.
+
+    // Phones. Legacy singular `phone` is not provenance-tracked → authoritative.
+    const phonesAuthoritative = isAuthoritative(provenance, 'phones');
+    if (phonesValue && phonesAuthoritative) {
+        fieldLines.push(`- Phones: ${phonesValue}`);
+    } else if (!phonesValue) {
+        fieldLines.push(`- Phones: ${NOT_PROVIDED}`);
+    } // else: FB-only → omit.
+
+    // Hours.
+    if (hoursValue && isAuthoritative(provenance, 'hours')) {
+        fieldLines.push('- Hours (24h, "closed" if shut, "all day" if 24/7):');
+        fieldLines.push(hoursValue);
+    } else if (!hoursValue) {
+        fieldLines.push(`- Hours: ${NOT_PROVIDED}`);
+    } // else: FB-only → omit.
+
+    // Policies.
+    if (policiesValue && isAuthoritative(provenance, 'policies')) {
+        fieldLines.push('- Policies:');
+        fieldLines.push(policiesValue);
+    } else if (!policiesValue) {
+        fieldLines.push(`- Policies: ${NOT_PROVIDED}`);
+    } // else: FB-only → omit.
+
+    // Every field that has a value is FB-only (so all were omitted) and no
+    // field is genuinely absent → no line was produced. Inject nothing: the
+    // narrative profile (Facebook fallback) + the merchant's KB text govern.
+    // This is the load-bearing half of "KB wins, Facebook is fallback".
+    // (When some field IS genuinely absent, fieldLines carries its
+    // [NOT_PROVIDED] guard, so the #11 anti-hallucination protection survives
+    // even for merchants whose only data is FB-synced.)
+    if (fieldLines.length === 0) return null;
 
     // The defensive refusal instruction is placed FIRST, immediately under the
     // header, NOT last. The consumer (ai-worker/openai.ts) hard-caps the injected
@@ -102,23 +222,8 @@ export function formatBusinessInfoPrompt(profile: BusinessProfile | null | undef
         'channel if available (e.g. "we don\'t have a public phone — please visit ' +
         'us at <address>" or "I\'m here in chat — what can I help with?").',
         '',
-        `- Address: ${address ?? NOT_PROVIDED}`,
-        `- Phones: ${phones ?? NOT_PROVIDED}`,
+        ...fieldLines,
     ];
-
-    if (hours) {
-        sections.push('- Hours (24h, "closed" if shut, "all day" if 24/7):');
-        sections.push(hours);
-    } else {
-        sections.push(`- Hours: ${NOT_PROVIDED}`);
-    }
-
-    if (policies) {
-        sections.push('- Policies:');
-        sections.push(policies);
-    } else {
-        sections.push(`- Policies: ${NOT_PROVIDED}`);
-    }
 
     return sections.join('\n');
 }

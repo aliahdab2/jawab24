@@ -41,7 +41,7 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus';
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -119,6 +119,7 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     electronics: /إلكترونيات|متجر|electronics/i,
     fashion: /أزياء|الخليج|fashion/i,
     damascus: /الفريق الدمشقي|دمشقي/i,
+    clinic: /الشفاء|عيادة|clinic/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -3483,6 +3484,35 @@ const TEST_CASES: TestCase[] = [
     { id: 543, category: 54, categoryName: 'Follow-up Retrieval', channel: 'dm', message: 'امين icdl انكليزي', page: 'damascus', conversationHistory: [{ role: 'user', content: 'شو الدورات المتوفرة عندكم؟' }, { role: 'assistant', content: 'عندنا دورات كثيرة. أي دورة من الدورات المذكورة حابب تعرف تفاصيلها؟' }], expected: { replyContainsAny: ['إنجليز', 'انكليز', 'الإنكليز'], replyNotContains: ['غير متوفر', 'غير مذكور'] }, notes: 'PROD screenshot-4: three courses in one message → top-5 too small (English chunk ranks #7) → must cover English too, not deny it.' },
     { id: 544, category: 54, categoryName: 'Follow-up Retrieval', channel: 'dm', message: 'يعني بالعملة سوريا ولا بيطلعو تلاتمية وخمسين', page: 'damascus', conversationHistory: [{ role: 'user', content: 'قديش دورة المكياج؟' }, { role: 'assistant', content: 'دورة المكياج للمبتدئين تكلفتها 35 ألف ل.س بالعملة القديمة.' }], expected: { replyContainsAny: ['350', '٣٥٠'], replyNotContains: ['تواصل معنا', 'يرجى التواصل'] }, notes: 'PROD screenshot-5: 35k old = 350 new (KB has the 100:1 rule). Must confirm 350, not deflect to "contact us".' },
     { id: 545, category: 54, categoryName: 'Follow-up Retrieval', channel: 'dm', message: 'العنوان اذا سمحت', page: 'damascus', conversationHistory: [{ role: 'assistant', content: 'دورة المكياج المبتدئ مدتها شهر، سعرها 35 ألف ليرة سورية بالعملة القديمة خلال فترة العرض. الدروس تقام يومين في الأسبوع. سجّل الآن واحجز مقعدك معنا ولا تفوّت العرض!' }], expected: { flagsAbsent: ['info_not_in_kb'], replyContainsAny: ['برامكة', 'الحافظ', 'العنوان'], replyNotContains: ['تواصل معنا', 'يرجى التواصل', 'غير متوفر', 'غير مذكور'] }, notes: 'DOAA TOPIC-SWITCH GUARD (was 2026-04-19 bug): address asked right after a makeup marketing-dump post-reply. The enriched query now CONTAINS the course dump, so this proves query-first ordering + top-K=10 keep the address chunk winning (the behavioral guarantee the old unit guard protected). Must return the address, not the course / a deflection.' },
+    { id: 546, category: 54, categoryName: 'Follow-up Retrieval', channel: 'dm', message: 'لان مارح يستفاد', page: 'damascus', conversationHistory: [{ role: 'assistant', content: 'دورة الأمين المبتدئ المواعيد المتوفرة: الخميس فقط 4-6 تبدأ 25/6/2026، الخميس فقط 10-12 تبدأ 2/7/2026' }, { role: 'user', content: 'يقدر الواحد يسويها' }, { role: 'user', content: 'بدون مايسوي' }, { role: 'user', content: 'دوره محاسبه' }, { role: 'user', content: 'قال حضرا لازم يكون عامل محاسبه' }, { role: 'assistant', content: 'أكيد ممكن تسجل بالدورة بدون شروط مسبقة للدورة المبتدئة. إذا بدك أساعدك بالتسجيل؟' }], expected: { flagsAbsent: ['info_not_in_kb'], replyContainsAny: ['المبتدئة', 'للمبتدئين', 'ما عندهم خبرة', 'بدون خبرة', 'الأساس'], replyNotContains: ['تصنيع', 'المبتدئ والمتقدم', 'حضر دورتي'] }, notes: 'PROD screenshot (Meso Alganm, pre-#349 deploy): a doubt-expressing follow-up ("[someone said] he won\'t benefit [without being an accountant]") after the bot already said "no prerequisites for the beginner course". The bare message\'s "must-attend/benefit" semantics collide with the restrictive "دورة الأمين تصنيع" chunk (a SEPARATE variant that genuinely requires beginner+advanced), so the model cross-wired and answered with that prerequisite — contradicting its own prior "no prerequisites" and discouraging a valid beginner. PROVEN red-first under the old last-user-message-only enrichment (6/6 reproduce "...دورة الأمين تصنيع لازم يكون الشخص حضر دورتي الأمين المبتدئ والمتقدم..."); green 6/6 under #349 because the 4-turn window folds in "دوره محاسبه" + "بدون شروط مسبقة للدورة المبتدئة" → retrieval/generation stays on the beginner accounting course. Must reassure (beginner needs no prior accounting), NOT surface the تصنيع prerequisite.' },
+    { id: 547, category: 54, categoryName: 'Follow-up Retrieval', channel: 'dm', message: 'الكورس شامل لكلشي بالامين', page: 'damascus', conversationHistory: [{ role: 'user', content: 'ممكن سؤال' }, { role: 'assistant', content: 'أكيد، تفضل اسألني!' }], expected: { flagsAbsent: ['info_not_in_kb'], replyContainsAny: ['3 مستويات', '٣ مستويات', 'ثلاث مستويات', 'مبتدئ'], replyNotContains: ['غير متوفر', 'ما عندنا', 'لا يوجد', 'غير مذكور'] }, notes: 'PROD screenshot (Menas Maf): GREEN GUARD — this reply was already CORRECT and must stay correct. KB ground truth: "دورة الأمين للمحاسبة" IS the accounting course, with 3 levels (مبتدئ/متقدم/محترف), each one month. The bot must confirm the 3-level structure and not deny the course. Pairs with #546: when the customer\'s own message names "الأمين" the topic is explicit and retrieval is reliable; #546 is the hard case where the topic only lives in history.' },
+    { id: 548, category: 54, categoryName: 'Follow-up Retrieval', channel: 'dm', message: 'قديش؟', page: 'electronics', conversationHistory: [{ role: 'user', content: 'عندكم كفر حماية للآيفون 15؟' }, { role: 'assistant', content: 'نعم، كفر حماية iPhone 15 متوفر بألوان متعددة: أسود، أبيض، أزرق، أحمر، شفاف.' }, { role: 'user', content: 'الأسود موجود؟' }, { role: 'assistant', content: 'نعم، اللون الأسود متوفر.' }], expected: { replyContainsAny: ['120', '180', '١٢٠', '١٨٠'], replyNotContains: ['Samsung', 'جالاكسي', '2900', '3400', '3500', '3800', '4500', '5200', '6500'] }, notes: 'STORE-VERTICAL GENERALIZATION GUARD (proves #349 is NOT institute-specific — the bug class is universal). Bare "قديش؟" two turns after the topic (iPhone 15 CASE, 120-180 SAR) was named. PROVEN red-first under the old last-user-message-only enrichment: 5/5 drift to a DIFFERENT product\'s price (Samsung Galaxy S24 2900-3400) — the store equivalent of #546\'s course cross-wire. Green 5/5 under #349 (folds "كفر حماية للآيفون 15" into the query). Must quote the CASE price, never a phone\'s.' },
+
+    // ===== Category 55: Provenance Gate (KB beats Facebook-synced operational facts) =====
+    // BEHAVIORAL guard for the 2026-06-26 fix: the authoritative BUSINESS_INFO block was
+    // built from the whole business_profile.merchant half, which Option B auto-fills with
+    // UNCONFIRMED Facebook values (fb_sync) and told the model to "prefer over the KB".
+    // The `clinic` fixture's KB says Friday CLOSED + phone 0591234567, while its fb_sync
+    // merchant half wrongly says Friday OPEN 10:00-18:00 + phone 0500000000.
+    //
+    // SCOPE — read before relying on this: the *deterministic* proof of the gate is the
+    // unit suite (packages/shared/.../businessInfoPrompt.test.ts), which asserts fb_sync
+    // fields are omitted from the block. These eval cases are a behavioral smoke test:
+    // they confirm the bot returns the merchant's KB-stated facts for a page that ALSO
+    // carries conflicting fb_sync data. They do NOT cleanly fail pre-gate — the gate
+    // changes a fact's *authority* (block vs. narrative fallback), not its presence (FB
+    // values still reach the model via the appended narrative profile), and on this small
+    // full-KB page the model follows the explicit KB either way.
+    //
+    // PHASE-2 UPGRADE (the real merchant scenario): all paying merchants are large-KB/RAG.
+    // In RAG mode, on retrieval success the static KB is dropped (generator.ts ~744) and
+    // FB structured data is NOT chunked, so post-gate the FB values are UNREACHABLE while
+    // pre-gate they sit in the authoritative block — a clean fails-without-fix
+    // discriminator. Realizing it needs demo-page KB ingestion (chunks), which Phase 2
+    // wires anyway; enlarge this fixture >5000 chars + ingest it then, and flip these
+    // assertions to a strict `replyNotContains` of the fb_sync values.
+    { id: 600, category: 55, categoryName: 'Provenance Gate', channel: 'dm', message: 'هل العيادة مفتوحة يوم الجمعة؟', page: 'clinic', expected: { replyContainsAny: ['مغلق', 'مغلقة', 'مسكر', 'عطلة', 'مو فاتح', 'ما بنفتح'], replyNotContains: ['10:00', '18:00'] }, notes: 'KB: "يوم الجمعة: العيادة مغلقة". fb_sync merchant.hours wrongly says Friday 10:00-18:00. Gate demotes fb_sync → KB (closed) wins. Pre-gate the block asserted the FB open hours as authoritative.' },
+    { id: 601, category: 55, categoryName: 'Provenance Gate', channel: 'dm', message: 'شو رقم الهاتف للحجز؟', page: 'clinic', expected: { replyContains: ['0591234567'], replyNotContains: ['0500000000'] }, notes: 'KB phone = 0591234567; fb_sync merchant.phones = 0500000000. Gate demotes fb_sync → KB phone wins. Pre-gate the block asserted the FB phone as authoritative.' },
 ];
 
 // ---------------------------------------------------------------------------
