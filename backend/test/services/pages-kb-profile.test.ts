@@ -632,7 +632,8 @@ describe('PR2: KB Versioning + Business Profile', () => {
             const write = updates.find(u => u.businessProfile !== undefined)!;
             expect(write.businessProfile.merchant.hours).toEqual({ fri: ['closed'] });
             expect(write.businessProfile.merchant.phones).toEqual(['0112345678']);
-            // kb_extract provenance — authoritative in the block, but never clobbers editor/fb_sync.
+            // kb_extract provenance — authoritative in the block. Overwrites fb_sync and
+            // unconfirmed editor (D-008/D-010); only a CONFIRMED editor edit is protected.
             expect(write.businessProfile.merchantProvenance.hours).toEqual({ source: 'kb_extract', confirmedAt: null });
             expect(write.businessProfile.merchantProvenance.phones).toEqual({ source: 'kb_extract', confirmedAt: null });
             expect(write.businessProfileUpdatedAt).toBeInstanceOf(Date);

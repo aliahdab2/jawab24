@@ -128,8 +128,14 @@ export function applyFbSyncToMerchant(
         // Rule 1: FB has nothing for this field.
         if (fbValue === undefined) continue;
 
-        // Rule 2: editor-owned (set or cleared). Skip.
-        if (provenance[field]?.source === 'editor') continue;
+        // Rule 2: merchant-authored values are never overwritten by Facebook —
+        // editor-owned (set or cleared) OR extracted from the merchant's own KB
+        // (kb_extract). Decision D-008: editor > kb_extract > fb_sync, "Facebook
+        // never overrides." Skipping kb_extract keeps the KB-derived operational
+        // facts (hours/phone/address) the block asserts from being clobbered back
+        // to stale FB values on the next sync.
+        const src = provenance[field]?.source;
+        if (src === 'editor' || src === 'kb_extract') continue;
 
         // Rule 3: never seen OR previously fb_sync. Populate/refresh.
         (merchant as Record<string, unknown>)[field] = fbValue;
@@ -189,19 +195,29 @@ export function applyMerchantEdit(
  * (operationalFactsExtractor) into the `merchant` half. Pure function —
  * does not mutate inputs.
  *
- * KB extraction is the LOWEST-authority source: a value parsed from prose is
- * a best-effort guess, weaker than a structured Facebook value and far weaker
- * than a merchant's manual edit. Per-field decision (in order):
+ * The KB is the merchant's source of truth for operational facts, so a value
+ * extracted from it outranks an unconfirmed Facebook value (decision D-008:
+ * editor > kb_extract > fb_sync — "Facebook never overrides"). Only a value
+ * the merchant CONFIRMED in the editor outranks a KB extraction. Per-field
+ * decision (in order):
  *   1. Extractor produced no value for this field            → leave alone.
- *   2. provenance is 'editor' OR 'fb_sync'                    → leave alone
- *      (never overwrite a human edit or a structured FB value).
- *   3. Otherwise (never-seen OR previously 'kb_extract')      → populate/
- *      refresh, set provenance {source: 'kb_extract', confirmedAt: null}.
+ *   2. provenance is a CONFIRMED editor edit (source 'editor'
+ *      AND confirmedAt set)                                  → leave alone
+ *      (a real merchant edit beats a KB-prose extraction).
+ *   3. Otherwise — never-seen, previously 'kb_extract', 'fb_sync', OR an
+ *      UNCONFIRMED 'editor' entry (confirmedAt: null) → populate/refresh,
+ *      set provenance {source: 'kb_extract', confirmedAt: null}.
  *
- * "Fill-only-empty" w.r.t. editor/fb_sync; a re-extraction (KB edited) may
- * refresh a previously kb_extract value. Legacy merchant data without
- * provenance is treated as editor-owned (normalizeLegacyProvenance), so it is
- * never clobbered.
+ * Why unconfirmed editor (confirmedAt: null) is overwritable: a real save
+ * always stamps confirmedAt (applyMerchantEdit, "saving IS confirming"), so
+ * that state is only ever produced by normalizeLegacyProvenance — which on
+ * FB-synced-into-flat pages wrongly labels Facebook data as 'editor' (prod
+ * page 39aeab89: merchant === suggestions, Friday "00:00-23:45"). The gate
+ * (businessInfoPrompt) already treats such entries as non-authoritative; this
+ * keeps the write path consistent, so the merchant's KB hours replace the
+ * mislabeled FB values instead of being permanently shadowed by them. A
+ * field the merchant only ever typed pre-Option-B and never put in their KB
+ * is still preserved (rule 1: nothing extracted → nothing overwritten).
  */
 export function applyKbExtractToMerchant(
     existingMerchant: BusinessProfile | undefined,
@@ -220,11 +236,17 @@ export function applyKbExtractToMerchant(
         // Rule 1: extractor has nothing for this field.
         if (value === undefined) continue;
 
-        // Rule 2: a human edit or a structured FB value outranks a prose guess.
-        const src = provenance[field]?.source;
-        if (src === 'editor' || src === 'fb_sync') continue;
+        // Rule 2: only a CONFIRMED merchant edit outranks a KB extraction.
+        // Unconfirmed 'editor' (confirmedAt: null) is never a real save — it is
+        // the normalizeLegacyProvenance auto-stamp (which mislabels FB-synced-
+        // into-flat data as editor), so it is overwritable. fb_sync is also
+        // overwritable: the KB is the source of truth for operational facts
+        // (D-008: editor > kb_extract > fb_sync).
+        const entry = provenance[field];
+        if (entry?.source === 'editor' && entry.confirmedAt != null) continue;
 
-        // Rule 3: never-seen OR previously kb_extract → populate/refresh.
+        // Rule 3: never-seen, previously kb_extract/fb_sync, or unconfirmed
+        // editor → populate/refresh from the KB.
         (merchant as Record<string, unknown>)[field] = value;
         provenance[field] = { source: 'kb_extract', confirmedAt: null };
     }

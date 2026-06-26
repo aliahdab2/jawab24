@@ -52,14 +52,34 @@ const NOT_PROVIDED = '[NOT_PROVIDED]';
 const ADDRESS_FIELDS: ReadonlyArray<keyof BusinessProfile> = ['address', 'city', 'country'];
 
 /**
- * True unless the field is an unconfirmed Facebook auto-sync value. No
- * provenance map / no entry → authoritative (legacy default).
+ * True unless the field is unconfirmed (so it must not override the merchant's
+ * own KB text). No provenance map / no entry → authoritative (legacy default).
+ *
+ * A field is authoritative when:
+ *   - no provenance entry           → legacy / preview caller, can't gate (default keep)
+ *   - source 'kb_extract'           → derived FROM the KB, so it cannot contradict it
+ *   - source 'editor' AND confirmedAt set → a genuine merchant edit
+ *
+ * It is DEMOTED (flows only via the lower-authority narrative fallback) when:
+ *   - source 'fb_sync'              → unconfirmed Facebook auto-sync
+ *   - source 'editor' AND confirmedAt == null → NOT a real edit. A real editor
+ *     save always stamps confirmedAt (applyMerchantEdit: "saving IS confirming"),
+ *     so this state is only ever produced by normalizeLegacyProvenance, which
+ *     optimistically assumed pre-split merchant data was editor-typed. On pages
+ *     whose flat `business_profile` was Facebook-synced before the merchant/
+ *     suggestions split, that data is actually FB-derived (prod page 39aeab89:
+ *     `merchant` === `suggestions`, Friday "00:00-23:45" = FB "open all day"),
+ *     so it must not be allowed to override the KB hours/phone the merchant typed.
  */
 function isAuthoritative(
     provenance: MerchantProvenanceMap | undefined,
     field: keyof BusinessProfile,
 ): boolean {
-    return provenance?.[field]?.source !== 'fb_sync';
+    const entry = provenance?.[field];
+    if (!entry) return true;                       // legacy / no provenance → keep (back-compat)
+    if (entry.source === 'fb_sync') return false;  // unconfirmed FB sync → fallback only
+    if (entry.source === 'editor') return entry.confirmedAt != null; // real edit sets confirmedAt
+    return true;                                   // kb_extract → KB-derived, agrees with the KB
 }
 
 /**

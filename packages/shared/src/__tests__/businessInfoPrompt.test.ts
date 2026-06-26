@@ -200,6 +200,54 @@ describe('formatBusinessInfoPrompt', () => {
             expect(block).toContain('Saturday: 09:00-17:00');
         });
 
+        // PROD BUG (page 39aeab89 "الفريق الدمشقي للتدريب والتأهيل", 2026-06-26):
+        // a customer asked working hours; the bot answered "08:00-20:00, Friday
+        // 00:00-23:45 (open ~24h)" — Facebook's values — even though the KB plainly
+        // says "كل ايام الاسبوع من الساعة ٩ صباحا الى الساعة ٨ مساء ماعدا يوم الجمعة"
+        // (9am-8pm, CLOSED Friday). On prod, `merchant` is byte-identical to the
+        // `suggestions` (FB) half — Friday 00:00-23:45 = Facebook's "open all day"
+        // encoding — yet EVERY field's provenance is {source:'editor',confirmedAt:null}.
+        // A genuine editor save ALWAYS stamps confirmedAt (applyMerchantEdit: "saving
+        // IS confirming"), so editor+confirmedAt:null is a state a real edit can NEVER
+        // produce — it is only ever set by normalizeLegacyProvenance, which wrongly
+        // assumed pre-split merchant data was editor-typed. #351's gate trusts any
+        // non-fb_sync source, so it does NOT demote these → the FB hours reach the
+        // authoritative block and override the KB. An UNCONFIRMED value must never
+        // override the merchant's own KB text, whatever source label it carries.
+        it('OMITS editor-provenance hours that were never confirmed (confirmedAt:null) — legacy FB data mislabeled editor must not override KB', () => {
+            const block = formatBusinessInfoPrompt(
+                {
+                    hours: {
+                        mon: ['08:00-20:00'], tue: ['08:00-20:00'], wed: ['08:00-20:00'],
+                        thu: ['08:00-20:00'], fri: ['00:00-23:45'], sat: ['08:00-20:00'],
+                        sun: ['08:00-20:00'],
+                    },
+                    phones: ['+963937549674'],
+                },
+                {
+                    hours: { source: 'editor', confirmedAt: null },
+                    phones: { source: 'editor', confirmedAt: null },
+                },
+            );
+            // The FB hours must NOT be asserted as authoritative (they'd override the KB).
+            expect(block).not.toContain('08:00-20:00');
+            expect(block).not.toContain('00:00-23:45');
+            // The unconfirmed phone is demoted to the narrative fallback too — not asserted.
+            expect(block).not.toContain('+963937549674');
+        });
+
+        it('KEEPS editor hours when confirmedAt is set (a real merchant edit DOES override KB)', () => {
+            // The mirror of the case above: once the merchant opens the editor and
+            // saves (confirmedAt set), their structured hours ARE authoritative again.
+            const block = formatBusinessInfoPrompt(
+                { hours: { fri: ['closed'], sat: ['09:00-17:00'] } },
+                { hours: { source: 'editor', confirmedAt: '2026-06-26T12:00:00.000Z' } },
+            );
+            expect(block).not.toBeNull();
+            expect(block).toContain('Friday: closed');
+            expect(block).toContain('Saturday: 09:00-17:00');
+        });
+
         it('preserves the [NOT_PROVIDED] phone guard (#11) for an FB-only merchant with NO phone', () => {
             // FB gave address + hours but no phone. The block must still inject
             // so the phone guard fires — otherwise the Damascus "1234567"
