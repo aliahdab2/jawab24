@@ -589,9 +589,12 @@ export class PagesService {
      *   - 'off'    → no-op (default).
      *   - 'shadow' → extract + log the would-be change, write nothing (used to
      *                vet extractor stability before enabling writes).
-     *   - 'on'     → persist the merged container + bump kbActiveVersion (the
-     *                block is prompt-injected, so there's no ingestion step to
-     *                flip the cache version).
+     *   - 'on'     → persist the merged container (business_profile only). It
+     *                does NOT bump kbActiveVersion — the KB ingestion that
+     *                co-fires for this same save activates kbActiveVersion last
+     *                (after chunks land), which invalidates the caches and
+     *                covers this change. Bumping it here would risk landing one
+     *                past the chunk version and orphaning the new chunks.
      *
      * Fire-and-forget, off the reply path; runs at most once per KB edit. Never
      * throws. `applyKbExtractToMerchant` is fill-only-empty + refresh-own, so it
@@ -640,12 +643,21 @@ export class PagesService {
                 ...(existing.suggestions ? { suggestions: existing.suggestions } : {}),
                 merchantProvenance,
             };
+            // Write business_profile ONLY — do NOT bump kbActiveVersion here.
+            // Retrieval filters chunks by exact `kb_version = kbActiveVersion`
+            // (retrieval.ts), and the KB ingestion that co-fires for this same
+            // save (both are gated on the OpenAI key, so ingestion always runs
+            // when extraction does) atomically activates kbActiveVersion =
+            // kbVersion after storing the new chunks. That bump invalidates the
+            // reply/semantic caches (which also scope on kbActiveVersion) and
+            // covers this business_profile change. If extraction ALSO bumped
+            // kbActiveVersion it could land one past the chunk version and
+            // orphan the freshly-ingested chunks → retrieval returns nothing.
             await db
                 .update(pages)
                 .set({
                     businessProfile: container,
                     businessProfileUpdatedAt: new Date(),
-                    kbActiveVersion: sql`COALESCE(${pages.kbActiveVersion}, 0) + 1`,
                 })
                 .where(eq(pages.id, pageId));
             this.logger.info('opfacts: refreshed merchant operational facts from KB', {

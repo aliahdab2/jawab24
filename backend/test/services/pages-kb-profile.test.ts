@@ -617,7 +617,7 @@ describe('PR2: KB Versioning + Business Profile', () => {
             expect(updates.some(u => u.businessProfile !== undefined)).toBe(false);
         });
 
-        it('on mode persists extracted facts as kb_extract + bumps kbActiveVersion', async () => {
+        it('on mode persists extracted facts as kb_extract WITHOUT bumping kbActiveVersion', async () => {
             config.opFactsExtract = 'on';
             vi.mocked(operationalFactsExtractor.extract).mockResolvedValue({
                 hours: { fri: ['closed'] },
@@ -635,9 +635,11 @@ describe('PR2: KB Versioning + Business Profile', () => {
             // kb_extract provenance — authoritative in the block, but never clobbers editor/fb_sync.
             expect(write.businessProfile.merchantProvenance.hours).toEqual({ source: 'kb_extract', confirmedAt: null });
             expect(write.businessProfile.merchantProvenance.phones).toEqual({ source: 'kb_extract', confirmedAt: null });
-            // business_profile is prompt-injected → cache-version bump required.
-            expect(write.kbActiveVersion).toBeDefined();
             expect(write.businessProfileUpdatedAt).toBeInstanceOf(Date);
+            // MUST NOT bump kbActiveVersion: retrieval filters chunks by exact
+            // kb_version=kbActiveVersion, and the co-firing KB ingestion activates
+            // it last. A bump here could orphan the freshly-ingested chunks.
+            expect(write.kbActiveVersion).toBeUndefined();
         });
 
         it('on mode is fill-only-empty — never clobbers an editor-owned field', async () => {
