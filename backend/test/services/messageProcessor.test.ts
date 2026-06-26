@@ -187,12 +187,14 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         // Business profile appended
         expect(contextArg.knowledgeBase).toContain('--- Business Info ---');
         expect(contextArg.knowledgeBase).toContain('Business type: Restaurant');
-        expect(contextArg.knowledgeBase).toContain('Phone: +961 1 234 567');
         expect(contextArg.knowledgeBase).toContain('Website: https://myrestaurant.com');
-        expect(contextArg.knowledgeBase).toContain('Location: Downtown, Beirut, Lebanon');
-        expect(contextArg.knowledgeBase).toContain('Monday: 09:00-22:00');
-        expect(contextArg.knowledgeBase).toContain('Friday: 09:00-23:00');
-        expect(contextArg.knowledgeBase).toContain('Saturday: 10:00-23:00');
+        // Operational facts (phone/address/hours) are NOT in the narrative — they reach the
+        // model only via the provenance-gated BUSINESS_INFO block (D-010), never the KB text.
+        expect(contextArg.knowledgeBase).not.toContain('Phone:');
+        expect(contextArg.knowledgeBase).not.toContain('Location:');
+        expect(contextArg.knowledgeBase).not.toContain('Monday:');
+        expect(contextArg.knowledgeBase).not.toContain('Friday:');
+        expect(contextArg.knowledgeBase).not.toContain('Saturday:');
     });
 
     it('should use business profile as sole KB when no static KB exists', async () => {
@@ -206,6 +208,7 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
             kbActiveVersion: null,
             autoReplyEnabled: true,
             businessProfile: {
+                about: 'Family-run print shop.',
                 phone: '+44 20 7946 0958',
                 hours: { mon: ['08:00-17:00'] },
             },
@@ -220,8 +223,10 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         );
 
         const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
-        expect(contextArg.knowledgeBase).toContain('Phone: +44 20 7946 0958');
-        expect(contextArg.knowledgeBase).toContain('Monday: 08:00-17:00');
+        expect(contextArg.knowledgeBase).toContain('About: Family-run print shop.');
+        // Operational facts (phone/hours) are gated to BUSINESS_INFO (D-010), not the narrative KB.
+        expect(contextArg.knowledgeBase).not.toContain('Phone');
+        expect(contextArg.knowledgeBase).not.toContain('Monday');
         // No separator when profile is the only content
         expect(contextArg.knowledgeBase).not.toContain('--- Business Info ---');
     });
