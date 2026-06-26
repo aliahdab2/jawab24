@@ -66,8 +66,13 @@ export async function enrichPageContext(
         } catch { /* non-critical */ }
     }
 
-    // 3a. Narrative business profile appended to KB (merged merchant ∪ suggestions —
-    //     supports brand-new pages whose merchant never visited the editor).
+    // 3a. Narrative business profile appended to KB. DESCRIPTIVE fields only
+    //     (business type, about, website) — operational facts (hours/phone/
+    //     address/channels) are NOT emitted here (D-010): this is the merged
+    //     merchant ∪ suggestions half, i.e. unconfirmed Facebook data, and a
+    //     stale FB value stated as fact (Friday "00:00-23:45" = FB "open all
+    //     day") sent customers to a closed business. Operational facts reach the
+    //     model ONLY through the gated BUSINESS_INFO block below.
     const profileText = formatBusinessProfile(page.businessProfile as Record<string, unknown> | null | undefined);
     if (profileText) {
         knowledgeBase = knowledgeBase
@@ -79,10 +84,11 @@ export async function enrichPageContext(
     //     never FB suggestions. Beats stale narrative chunks via the "structured
     //     > narrative" precedence (Eval Case #19) and refuses to invent missing
     //     fields via [NOT_PROVIDED] markers (Damascus phone regression case #11).
-    //     PROVENANCE-GATED: unconfirmed FB-sync values (Option B auto-promotes
-    //     them into `merchant` with confirmedAt: null) are demoted to the
-    //     narrative fallback above, so they can't override the hours/phone the
-    //     merchant typed into their KB ("KB wins, Facebook is fallback").
+    //     PROVENANCE-GATED (D-008/D-010): only merchant-authored, CONFIRMED facts
+    //     are authoritative — `fb_sync` AND unconfirmed `editor`/`confirmedAt:null`
+    //     (the legacy auto-stamp that mislabels FB-synced data) are demoted, so
+    //     Facebook can never override or state the hours/phone the merchant put
+    //     in their KB. KB has it → KB wins; KB silent → deflect, never Facebook.
     const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance);
 

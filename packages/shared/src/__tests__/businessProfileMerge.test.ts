@@ -136,6 +136,22 @@ describe('applyFbSyncToMerchant', () => {
         });
     });
 
+    describe('case 5b: a kb_extract value is not clobbered by a later FB sync (D-008: kb_extract > fb_sync)', () => {
+        it('keeps the KB-extracted hours even though FB still reports its own', () => {
+            const existingMerchant: BusinessProfile = { hours: { fri: ['closed'] } };
+            const existingProvenance: MerchantProvenanceMap = {
+                hours: { source: 'kb_extract', confirmedAt: null },
+            };
+            const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+                existingMerchant,
+                existingProvenance,
+                { hours: { fri: ['00:00-23:45'] } }, // FB's "open all day" — must NOT win
+            );
+            expect(merchant.hours).toEqual({ fri: ['closed'] });
+            expect(merchantProvenance.hours).toEqual({ source: 'kb_extract', confirmedAt: null });
+        });
+    });
+
     describe('case 6: end-to-end with formatBusinessInfoPrompt (the bug closes)', () => {
         it('produces a non-null BUSINESS_INFO block for an empty-merchant prod page after FB-sync promotion', () => {
             // Simulates page 39aeab89 BEFORE Option B: merchant={}, suggestions has the data.
@@ -483,15 +499,37 @@ describe('applyKbExtractToMerchant', () => {
         expect(merchantProvenance.hours).toEqual({ source: 'kb_extract', confirmedAt: null });
     });
 
-    it('never overwrites a structured fb_sync value (FB outranks a prose guess)', () => {
+    it('OVERWRITES an unconfirmed fb_sync value (KB is the source of truth — D-008: editor > kb_extract > fb_sync)', () => {
         const existingMerchant: BusinessProfile = { hours: { mon: ['10:00-18:00'] } };
         const existingProvenance: MerchantProvenanceMap = {
             hours: { source: 'fb_sync', confirmedAt: null },
         };
         const { merchant, merchantProvenance } = applyKbExtractToMerchant(existingMerchant, existingProvenance, extracted);
 
-        expect(merchant.hours).toEqual({ mon: ['10:00-18:00'] }); // FB value preserved
-        expect(merchantProvenance.hours).toEqual({ source: 'fb_sync', confirmedAt: null });
+        // KB-extracted hours replace the unconfirmed FB hours (the reported prod bug).
+        expect(merchant.hours?.fri).toEqual(['closed']);
+        expect(merchant.hours?.mon).toEqual(['09:00-20:00']);
+        expect(merchantProvenance.hours).toEqual({ source: 'kb_extract', confirmedAt: null });
+    });
+
+    it('OVERWRITES an unconfirmed editor value (confirmedAt:null = legacy auto-stamp / mislabeled FB), but keeps a CONFIRMED editor edit', () => {
+        // Mirror of the prod page 39aeab89 state: FB hours mislabeled editor/confirmedAt:null.
+        const unconfirmed = applyKbExtractToMerchant(
+            { hours: { fri: ['00:00-23:45'], mon: ['08:00-20:00'] } },
+            { hours: { source: 'editor', confirmedAt: null } },
+            extracted,
+        );
+        expect(unconfirmed.merchant.hours?.fri).toEqual(['closed']); // KB wins
+        expect(unconfirmed.merchantProvenance.hours).toEqual({ source: 'kb_extract', confirmedAt: null });
+
+        // A genuine confirmed edit (confirmedAt set) is still protected.
+        const confirmed = applyKbExtractToMerchant(
+            { hours: { fri: ['10:00-22:00'] } },
+            { hours: { source: 'editor', confirmedAt: '2026-06-01T00:00:00.000Z' } },
+            extracted,
+        );
+        expect(confirmed.merchant.hours).toEqual({ fri: ['10:00-22:00'] }); // editor preserved
+        expect(confirmed.merchantProvenance.hours).toEqual({ source: 'editor', confirmedAt: '2026-06-01T00:00:00.000Z' });
     });
 
     it('refreshes a previously kb_extract value (re-extraction after KB edit)', () => {
@@ -504,9 +542,14 @@ describe('applyKbExtractToMerchant', () => {
         expect(merchant.hours?.fri).toEqual(['closed']); // refreshed to the new extraction
     });
 
-    it('treats legacy merchant data without provenance as editor-owned (does not clobber)', () => {
-        const existingMerchant: BusinessProfile = { address: 'legacy editor value' };
-        const { merchant } = applyKbExtractToMerchant(existingMerchant, undefined, extracted);
-        expect(merchant.address).toBe('legacy editor value');
+    it('overwrites legacy merchant data without provenance when the KB states the fact (KB is source of truth)', () => {
+        // No provenance → normalizeLegacyProvenance stamps editor/confirmedAt:null
+        // (unconfirmed). Since the KB explicitly carries the address, the KB value
+        // wins. A field the KB does NOT mention is still preserved (rule 1).
+        const existingMerchant: BusinessProfile = { address: 'legacy editor value', website: 'https://kept.example' };
+        const { merchant, merchantProvenance } = applyKbExtractToMerchant(existingMerchant, undefined, extracted);
+        expect(merchant.address).toBe(extracted.address);                       // KB wins over unconfirmed legacy
+        expect(merchantProvenance.address).toEqual({ source: 'kb_extract', confirmedAt: null });
+        expect(merchant.website).toBe('https://kept.example');                  // not in KB extract → preserved
     });
 });
