@@ -192,6 +192,49 @@ const DEMO_PAGES = [
         autoReplyEnabled: true,
         instagramUsername: null,
     },
+    {
+        // PROVENANCE-GATE fixture (playground-eval Cat 55). Reproduces the prod bug
+        // where Facebook-synced operational facts (fb_sync provenance) were surfaced
+        // by the authoritative BUSINESS_INFO block and OVERRODE the merchant's own KB.
+        // KB says Friday CLOSED + phone 0591234567; the fb_sync `merchant` half wrongly
+        // says Friday OPEN 10:00-18:00 + phone 0500000000. The provenance gate must
+        // demote the fb_sync values so the KB wins (pre-fix the block asserted the FB
+        // values → wrong reply). Small KB (<5000 chars) → full-KB-injection path.
+        // Named to avoid every other page's name pattern in playground-eval.ts.
+        facebookPageId: 'demo_page_clinic',
+        name: 'عيادة الشفاء لطب الأسنان',
+        suggestedKnowledgeBase: `🦷 عيادة الشفاء لطب الأسنان
+
+⏰ ساعات العمل:
+من السبت إلى الخميس: ٩ صباحاً حتى ٥ مساءً.
+يوم الجمعة: العيادة مغلقة.
+
+📞 للحجز والاستفسار: 0591234567
+
+🦷 خدماتنا:
+- تنظيف وتبييض الأسنان
+- حشوات وعلاج الجذور
+- تقويم الأسنان
+- زراعة الأسنان`,
+        autoReplyEnabled: true,
+        instagramUsername: null,
+        // FB-synced (fb_sync) operational facts that CONFLICT with the KB above.
+        // The gate must keep these OUT of the authoritative block so the KB governs.
+        businessProfile: {
+            merchant: {
+                hours: { fri: ['10:00-18:00'] },
+                phones: ['0500000000'],
+            },
+            suggestions: {
+                hours: { fri: ['10:00-18:00'] },
+                phones: ['0500000000'],
+            },
+            merchantProvenance: {
+                hours: { source: 'fb_sync', confirmedAt: null },
+                phones: { source: 'fb_sync', confirmedAt: null },
+            },
+        },
+    },
 ];
 
 const DEMO_POSTS = [
