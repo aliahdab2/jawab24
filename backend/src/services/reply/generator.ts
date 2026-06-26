@@ -712,7 +712,20 @@ export class ReplyGenerator {
 
         try {
             retrieval.setLogger(this.logger);
-            const { chunks, queryEmbedding } = await retrieval.retrieve(pageId, enrichedQuery, kbActiveVersion, undefined, userId);
+            // Retrieval mode (env-selectable for A/B; default 'dual' = the fix):
+            //   off      → raw query only (pre-#349 behavior — no follow-up enrichment)
+            //   enriched → enriched query only (#349 behavior — poisons misspelled/topic-switch queries)
+            //   dual     → union(enriched, raw): keeps the vague-follow-up benefit AND lets a
+            //              self-contained query recover its own chunk (primaryEmbeddingIndex=1 → raw
+            //              query's embedding for the cache key).
+            const retrievalMode = process.env.RAG_RETRIEVAL_MODE || 'dual';
+            const { chunks, queryEmbedding } = await (
+                retrievalMode === 'off'
+                    ? retrieval.retrieve(pageId, query, kbActiveVersion, undefined, userId)
+                    : retrievalMode === 'enriched' || enrichedQuery === query
+                        ? retrieval.retrieve(pageId, enrichedQuery, kbActiveVersion, undefined, userId)
+                        : retrieval.retrieveMulti(pageId, [enrichedQuery, query], kbActiveVersion, undefined, userId, 1)
+            );
 
             if (chunks.length === 0) {
                 this.logger.debug('[Generator] RAG returned no chunks, using static KB', { pageId, channel });
