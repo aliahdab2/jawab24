@@ -5,7 +5,6 @@ import { settingsApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import type { SettingsState } from './types';
-import { buildSettingsUpdatePayload } from './buildUpdatePayload';
 
 interface LanguageSelectorProps {
   settings: SettingsState;
@@ -28,25 +27,16 @@ export function LanguageSelector({
   const handleLanguageChange = async (lang: 'ar' | 'en') => {
     if (lang === settings.dashboardLanguage) return;
 
-    const newSettings = { ...settings, dashboardLanguage: lang };
-
-    // Strip non-schema fields (id/userId/pushNotifications) and validate against
-    // the SAME strict schema the backend enforces. Sending the raw `settings`
-    // object always 400'd here because the schema is `.strict()`.
-    const validation = buildSettingsUpdatePayload(newSettings);
-    if (!validation.success) {
-      captureError(validation.error, 'Invalid settings payload on language change', {
-        tags: { page: 'settings', action: 'change-language' },
-      });
-      toast.error(tc('error'));
-      return;
-    }
-
     try {
-      await settingsApi.update(validation.data as Record<string, unknown>);
-      // Only commit local state once the persist succeeds, so a failed PUT
+      // Patch ONLY the language. PUT /settings is a partial update, so we must
+      // not send the whole settings object: that would make a one-field language
+      // switch depend on the validity of EVERY other stored field — e.g. a
+      // brandVoiceNotes value that predates the 800-char cap blocks it
+      // (JAWAB24-FRONTEND-2J). A focused quick-action touches only its own field.
+      await settingsApi.update({ dashboardLanguage: lang });
+      // Commit local state only after the persist succeeds, so a failed PUT
       // doesn't leave the UI showing a language the backend never saved.
-      setSettings(newSettings);
+      setSettings({ ...settings, dashboardLanguage: lang });
       setInitialSettings({ ...initialSettings, dashboardLanguage: lang });
       setLanguage(lang);
     } catch (error) {
