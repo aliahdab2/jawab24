@@ -29,6 +29,15 @@ vi.mock('../../src/services/salla', () => ({
     isProductEvent: (...args: any[]) => mockIsProductEvent(...args),
     // Faithful to the real impl so the order-notification dispatch branch is reachable in tests.
     isOrderEvent: (event: string) => event.startsWith('order.') || event === 'abandoned.cart',
+    // Faithful to the real composeSallaPhone — normalizeSallaPhone delegates to it.
+    composeSallaPhone: (mobile?: string | number | null, mobileCode?: string | null): string | undefined => {
+        if (mobile === undefined || mobile === null || mobile === '') return undefined;
+        const m = String(mobile).trim();
+        if (m === '') return undefined;
+        if (m.startsWith('+')) return m;
+        const code = mobileCode ? String(mobileCode).trim() : '';
+        return code ? `${code}${m}` : m;
+    },
 }));
 
 vi.mock('../../src/services/customerNotifications', () => ({

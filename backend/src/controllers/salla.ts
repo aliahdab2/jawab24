@@ -126,14 +126,11 @@ interface SallaWebhookData extends SallaOrderCore {
     total?: { amount?: number; currency?: string }; // best-effort for abandoned.cart
 }
 
-/** Build a full international phone from Salla's split `mobile` + `mobile_code`. */
+/** Build a full international phone from Salla's split `mobile` + `mobile_code`.
+ *  Delegates to the shared `composeSallaPhone` (single source of truth — also used
+ *  by the order/shipment agent tools in services/salla.ts). */
 function normalizeSallaPhone(customer?: SallaCustomer): string | undefined {
-    const raw = customer?.mobile;
-    if (raw === undefined || raw === null || raw === '') return undefined;
-    const mobile = String(raw);
-    if (mobile.startsWith('+')) return mobile; // already international (order.status.updated)
-    const code = customer?.mobile_code ? String(customer.mobile_code) : '';
-    return code ? `${code}${mobile}` : mobile;
+    return sallaService.composeSallaPhone(customer?.mobile, customer?.mobile_code);
 }
 
 function sallaCustomerName(customer?: SallaCustomer): string | undefined {

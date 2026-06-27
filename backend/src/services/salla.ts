@@ -45,6 +45,30 @@ const SALLA_TOKEN_REFRESH_CONFIG: TokenRefreshConfig = {
     get clientSecret() { return config.salla.clientSecret; },
 };
 
+// --- Phone normalization (shared) ---
+
+/**
+ * Compose a full international phone from Salla's split `mobile` + `mobile_code`.
+ * Salla delivers the customer mobile as a bare local number (e.g. 555123456) plus
+ * a separate dialing code (e.g. "+966") across BOTH webhook payloads and the REST
+ * orders API. Some payloads (order.status.updated) already deliver a `+`-prefixed
+ * full number — those are returned as-is.
+ *
+ * Single source of truth: used by the webhook controller (buildSallaOrderEvent) AND
+ * the order/shipment agent tools (mapSallaOrderToOrderInfo, getShipmentTracking).
+ */
+export function composeSallaPhone(
+    mobile?: string | number | null,
+    mobileCode?: string | null,
+): string | undefined {
+    if (mobile === undefined || mobile === null || mobile === '') return undefined;
+    const m = String(mobile).trim();
+    if (m === '') return undefined;
+    if (m.startsWith('+')) return m; // already international
+    const code = mobileCode ? String(mobileCode).trim() : '';
+    return code ? `${code}${m}` : m;
+}
+
 // --- OAuth ---
 
 export function buildAuthUrl(state: string): string {
@@ -393,7 +417,9 @@ async function resolveStoreCredentials(storeId: string): Promise<string | null> 
 interface SallaOrderItem {
     name: string;
     quantity: number;
-    amounts: { price_without_tax: { amount: number }; total: { amount: number; currency: string } };
+    // Present on the order DETAIL endpoint; the orders LIST endpoint returns items
+    // as { name, quantity, thumbnail } with no per-item amounts. Hence optional.
+    amounts?: { price_without_tax?: { amount: number }; total?: { amount: number; currency: string } };
 }
 
 interface SallaShipment {
@@ -403,17 +429,26 @@ interface SallaShipment {
     shipped_at: string | null;
 }
 
+// Salla's orders LIST endpoint (/orders, /orders?keyword=) and DETAIL endpoint
+// (/orders/:id) return DIFFERENT shapes (verified against a live store 2026-06-27):
+//   • LIST item: has a top-level `total` ({amount,currency}), `items` WITHOUT prices,
+//     and NO `amounts` breakdown / NO `shipping` address.
+//   • DETAIL item: has the full `amounts` breakdown but NO `items` inline.
+// The customer's `mobile` is a bare local NUMBER plus a separate `mobile_code`
+// (e.g. 555123456 + "+966") on BOTH shapes — compose them before use.
 interface SallaOrder {
     id: number;
     reference_id: string;
     status: { slug: string; name: string };
-    payment_method: string;
-    amounts: { total: { amount: number; currency: string }; cash_on_delivery: { amount: number } };
-    customer: { first_name: string; mobile: string | null };
-    shipping: { address: { city: string; district: string } | null } | null;
-    items: SallaOrderItem[];
+    payment_method?: string;
+    amounts?: { total?: { amount: number; currency: string }; cash_on_delivery?: { amount: number } };
+    total?: { amount: number; currency: string }; // LIST endpoint top-level total
+    currency?: string;
+    customer?: { first_name?: string; mobile?: string | number | null; mobile_code?: string | null };
+    shipping?: { address: { city: string; district: string } | null } | null;
+    items?: SallaOrderItem[];
     shipments?: SallaShipment[];
-    date: { date: string };
+    date?: { date: string };
     is_refunded?: boolean;
     refund_amount?: { amount: number; currency: string };
 }
@@ -472,10 +507,10 @@ export async function getShipmentTracking(storeId: string, orderNumber: string):
     const shipment = order.shipments?.[0];
 
     return {
-        orderNumber: order.reference_id,
+        orderNumber: String(order.reference_id ?? ''),
         customerFirstName: order.customer?.first_name || '',
-        customerPhone: order.customer?.mobile || undefined,
-        status: mapSallaOrderStatus(order.status.slug),
+        customerPhone: composeSallaPhone(order.customer?.mobile, order.customer?.mobile_code),
+        status: mapSallaOrderStatus(order.status?.slug ?? ''),
         trackingNumber: shipment?.tracking_number || undefined,
         courierName: shipment?.courier_name || undefined,
         trackingUrl: shipment?.tracking_link || undefined,
@@ -538,22 +573,30 @@ export async function checkInventory(storeId: string, productName: string, varia
 // --- Mapping helpers ---
 
 function mapSallaOrderToOrderInfo(order: SallaOrder): OrderInfoFull {
-    const isRefunded = order.is_refunded || order.status.slug === 'refunded';
+    const slug = order.status?.slug ?? '';
+    const isRefunded = order.is_refunded || slug === 'refunded';
+
+    // Total lives under `amounts.total` (DETAIL) or the top-level `total` (LIST).
+    const totalObj = order.amounts?.total ?? order.total;
 
     return {
-        orderNumber: order.reference_id,
+        // Salla returns reference_id as a number on the list endpoint, a string elsewhere.
+        orderNumber: String(order.reference_id ?? ''),
         customerFirstName: order.customer?.first_name || '',
-        customerPhone: order.customer?.mobile || undefined,
-        status: mapSallaOrderStatus(order.status.slug),
-        orderDate: order.date.date,
-        items: order.items.map(item => ({
+        customerPhone: composeSallaPhone(order.customer?.mobile, order.customer?.mobile_code),
+        status: mapSallaOrderStatus(slug),
+        orderDate: order.date?.date ?? '',
+        // LIST items carry only name + quantity (no per-item amounts); guard the price.
+        items: (order.items ?? []).map(item => ({
             name: item.name,
             quantity: item.quantity,
-            price: `${item.amounts.total.amount} ${item.amounts.total.currency}`,
+            price: item.amounts?.total
+                ? `${item.amounts.total.amount} ${item.amounts.total.currency}`
+                : '',
         })),
-        totalAmount: String(order.amounts.total.amount),
-        currency: order.amounts.total.currency,
-        paymentStatus: isRefunded ? 'refunded' : (order.status.slug === 'payment_pending' ? 'pending' : 'paid'),
+        totalAmount: typeof totalObj?.amount === 'number' ? String(totalObj.amount) : '',
+        currency: totalObj?.currency ?? order.currency ?? '',
+        paymentStatus: isRefunded ? 'refunded' : (slug === 'payment_pending' ? 'pending' : 'paid'),
         refundAmount: order.refund_amount ? `${order.refund_amount.amount} ${order.refund_amount.currency}` : undefined,
         shippingCity: order.shipping?.address?.city || undefined,
         shippingDistrict: order.shipping?.address?.district || undefined,

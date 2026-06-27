@@ -108,6 +108,7 @@ import {
     lookupOrder,
     getShipmentTracking,
     checkInventory,
+    composeSallaPhone,
 } from '../../src/services/salla';
 
 // --- Helpers ---
@@ -1071,6 +1072,42 @@ describe('Salla Service', () => {
 
             expect(result).toBeNull();
         });
+
+        // Regression: the orders LIST endpoint (what lookupOrder hits) returns a
+        // LIGHTER shape than the DETAIL endpoint — verified against a live store
+        // 2026-06-27. It has a top-level `total` (NOT `amounts`), items WITHOUT
+        // per-item amounts, and a bare-number `mobile` + separate `mobile_code`.
+        // The old mapper read `order.amounts.total.amount` + `item.amounts.total`
+        // + raw `order.customer.mobile`, so every real lookup threw
+        // "Cannot read properties of undefined (reading 'total')".
+        it('maps the real LIST-endpoint shape without throwing (top-level total, split phone, item w/o amounts)', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: [{
+                        id: 1686116368,
+                        reference_id: 263215797, // live list endpoint returns this as a NUMBER
+                        status: { slug: 'under_review', name: 'بإنتظار المراجعة' },
+                        total: { amount: 174, currency: 'SAR' },          // top-level, NOT amounts
+                        customer: { first_name: 'Test', mobile: 555123456, mobile_code: '+966' },
+                        items: [{ name: 'فستان', quantity: 1 }],            // no per-item amounts
+                        date: { date: '2026-05-30 17:05:33.000000' },
+                        // no `amounts`, no `shipping` — exactly as the list endpoint returns
+                    }],
+                }),
+            });
+
+            const result = await lookupOrder('store-1', '263215797');
+
+            expect(result).not.toBeNull();
+            expect(result?.orderNumber).toBe('263215797');
+            expect(result?.totalAmount).toBe('174');
+            expect(result?.currency).toBe('SAR');
+            // mobile (555123456) + mobile_code (+966) composed into full international
+            expect(result?.customerPhone).toBe('+966555123456');
+            expect(result?.status).toBe('pending'); // under_review → pending
+            expect(result?.items).toEqual([{ name: 'فستان', quantity: 1, price: '' }]);
+        });
     });
 
     describe('getShipmentTracking', () => {
@@ -1121,6 +1158,46 @@ describe('Salla Service', () => {
             expect(result?.courierName).toBe('Aramex');
             expect(result?.trackingUrl).toBe('https://www.aramex.com/track/TRK-ARX-001');
             expect(result?.status).toBe('shipped');
+        });
+
+        // Regression: customerPhone is used for Phase-2 identity verification
+        // (phonesMatch). A bare local number would never match the customer's real
+        // international number — compose mobile + mobile_code.
+        it('composes the split mobile + mobile_code into the verification phone', async () => {
+            const orderBase = {
+                id: 5002,
+                reference_id: '67890',
+                status: { slug: 'shipped', name: 'Shipped' },
+                customer: { first_name: 'Sara', mobile: 501112222, mobile_code: '+966' },
+                date: { date: '2026-02-01 09:00:00' },
+            };
+            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: [orderBase] }) });
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ data: { ...orderBase, shipments: [{ tracking_number: 'TRK-2', courier_name: 'SMSA', tracking_link: null }] } }),
+            });
+
+            const result = await getShipmentTracking('store-1', '67890');
+
+            expect(result?.customerPhone).toBe('+966501112222');
+        });
+    });
+
+    describe('composeSallaPhone', () => {
+        it('prepends mobile_code to a bare local number', () => {
+            expect(composeSallaPhone(555123456, '+966')).toBe('+966555123456');
+            expect(composeSallaPhone('555123456', '+971')).toBe('+971555123456');
+        });
+        it('returns an already-international number unchanged', () => {
+            expect(composeSallaPhone('+966555123456', '+966')).toBe('+966555123456');
+        });
+        it('returns the bare number when no code is present', () => {
+            expect(composeSallaPhone(555123456)).toBe('555123456');
+        });
+        it('returns undefined for empty/missing mobile', () => {
+            expect(composeSallaPhone(undefined, '+966')).toBeUndefined();
+            expect(composeSallaPhone(null, '+966')).toBeUndefined();
+            expect(composeSallaPhone('', '+966')).toBeUndefined();
         });
     });
 
