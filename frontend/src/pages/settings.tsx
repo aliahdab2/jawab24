@@ -7,7 +7,6 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { useRouter } from 'next/router';
 import axios from 'axios';
-import { UpdateSettingsSchema } from '@jawab24/shared';
 import { settingsApi, api } from '@/lib/api';
 import {
   Save,
@@ -36,6 +35,7 @@ import {
   LowConfidenceHoldCard,
   DangerZone,
   CollapsibleSectionHeader,
+  buildSettingsUpdatePayload,
 } from '@/components/settings';
 import type { SettingsState } from '@/components/settings';
 
@@ -229,16 +229,12 @@ const SettingsPage: NextPageWithLayout = () => {
       return;
     }
 
-    const editableSettings = { ...(settings as unknown as Record<string, unknown>) };
-    delete editableSettings.id;
-    delete editableSettings.userId;
-    delete editableSettings.pushNotifications;
-
-    // Pre-submit validation against the SAME Zod schema the backend enforces
-    // (`@jawab24/shared`). Lets us show inline field-level errors instead of
-    // a round-trip 400 + generic toast, and stops bad payloads from ever
-    // reaching the API.
-    const validation = UpdateSettingsSchema.safeParse(editableSettings);
+    // Strip non-schema fields (id/userId/pushNotifications) and pre-validate
+    // against the SAME Zod schema the backend enforces (`@jawab24/shared`). Lets
+    // us show inline field-level errors instead of a round-trip 400 + generic
+    // toast, and stops bad payloads from ever reaching the API. Shared with the
+    // inline LanguageSelector so neither path can drift.
+    const validation = buildSettingsUpdatePayload(settings);
     if (!validation.success) {
       const nextErrors: Record<string, string> = {};
       for (const issue of validation.error.errors) {
