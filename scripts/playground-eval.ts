@@ -3525,6 +3525,18 @@ const TEST_CASES: TestCase[] = [
     // assertions to a strict `replyNotContains` of the fb_sync values.
     { id: 600, category: 55, categoryName: 'Provenance Gate', channel: 'dm', message: 'هل العيادة مفتوحة يوم الجمعة؟', page: 'clinic', expected: { replyContainsAny: ['مغلق', 'مغلقة', 'مسكر', 'عطلة', 'مو فاتح', 'ما بنفتح'], replyNotContains: ['10:00', '18:00'] }, notes: 'KB: "يوم الجمعة: العيادة مغلقة". fb_sync merchant.hours wrongly says Friday 10:00-18:00. Gate demotes fb_sync → KB (closed) wins. Pre-gate the block asserted the FB open hours as authoritative.' },
     { id: 601, category: 55, categoryName: 'Provenance Gate', channel: 'dm', message: 'شو رقم الهاتف للحجز؟', page: 'clinic', expected: { replyContains: ['0591234567'], replyNotContains: ['0500000000'] }, notes: 'KB phone = 0591234567; fb_sync merchant.phones = 0500000000. Gate demotes fb_sync → KB phone wins. Pre-gate the block asserted the FB phone as authoritative.' },
+
+    // ---- Category 57: Operational Fact From KB (no deflection) ----
+    // PROD regression (page 39aeab89, الفريق الدمشقي): a bare/short operational-fact query
+    // ("عنوان") deflected ("المعهد في دمشق، وإذا حابب العنوان بالتفصيل تواصل معنا…") even though
+    // the address IS in the KB. The fact must be answered from the KB — never deflected, never
+    // sourced from the Facebook sync. Fix-agnostic behavioral assertions: real fact present,
+    // info_not_in_kb ABSENT, no "contact us for it" deflection. (Address/hours/phone are
+    // operational facts that must answer on ANY phrasing — D-007.)
+    { id: 620, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'عنوان', page: 'damascus', expected: { replyContainsAny: ['برامكة', 'الحافظ'], flagsAbsent: ['info_not_in_kb'], replyNotContains: ['تواصل معنا', 'يرجى التواصل', 'الأرقام التالية'] }, notes: 'THE bug verbatim: bare "عنوان". Address (برامكة سانا فوق مكتبة الحافظ) is in the KB → must answer from KB, not deflect to "contact us".' },
+    { id: 621, category: 57, categoryName: 'Operational Fact From KB', channel: 'comment', message: 'العنوان', page: 'damascus', expected: { replyContainsAny: ['برامكة', 'الحافظ'], flagsAbsent: ['info_not_in_kb'] }, notes: 'Same as 620 via comment channel, definite-article form.' },
+    { id: 622, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'وين موقعكم بالضبط', page: 'damascus', expected: { replyContainsAny: ['برامكة', 'الحافظ'], flagsAbsent: ['info_not_in_kb'], replyNotContains: ['تواصل معنا', 'يرجى التواصل'] }, notes: 'Location phrased as a question. Must give the KB address, not redirect to contact.' },
+    { id: 623, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'ساعات الدوام', page: 'damascus', expected: { replyContainsAny: ['9', '٩', '8', '٨', 'صباح', 'مساء'], flagsAbsent: ['info_not_in_kb'] }, notes: 'Hours are in the KB ("9 صباحا الى 8 مساء ماعدا الجمعة"). Bare operational-fact query must answer from KB.' },
 ];
 
 // ---------------------------------------------------------------------------
