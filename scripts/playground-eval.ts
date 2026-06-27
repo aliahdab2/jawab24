@@ -3525,6 +3525,21 @@ const TEST_CASES: TestCase[] = [
     // assertions to a strict `replyNotContains` of the fb_sync values.
     { id: 600, category: 55, categoryName: 'Provenance Gate', channel: 'dm', message: 'هل العيادة مفتوحة يوم الجمعة؟', page: 'clinic', expected: { replyContainsAny: ['مغلق', 'مغلقة', 'مسكر', 'عطلة', 'مو فاتح', 'ما بنفتح'], replyNotContains: ['10:00', '18:00'] }, notes: 'KB: "يوم الجمعة: العيادة مغلقة". fb_sync merchant.hours wrongly says Friday 10:00-18:00. Gate demotes fb_sync → KB (closed) wins. Pre-gate the block asserted the FB open hours as authoritative.' },
     { id: 601, category: 55, categoryName: 'Provenance Gate', channel: 'dm', message: 'شو رقم الهاتف للحجز؟', page: 'clinic', expected: { replyContains: ['0591234567'], replyNotContains: ['0500000000'] }, notes: 'KB phone = 0591234567; fb_sync merchant.phones = 0500000000. Gate demotes fb_sync → KB phone wins. Pre-gate the block asserted the FB phone as authoritative.' },
+
+    // ---- Category 56: Price No-False-Deflection ----
+    // End-to-end mirror of ai-worker/test/replyValidator.test.ts. The value-based price
+    // guard (flagHallucinatedPrice) must NOT replace a reply whose price IS in the KB with
+    // the canned price fallback ("خليني أتأكد من تفاصيل الأسعار وبرجعلك"). THE prod incident
+    // (Damascus institute, page 39aeab89): every price question was deflected because the old
+    // string matcher mis-compared formats. Damascus KB writes prices as "35000 ألف" / "35,000"
+    // / "35 الف" and one course in USD ("10 دولار") — so these exercise the multiplier and
+    // generic-currency paths too. Each asserts: real price present, price_not_in_kb ABSENT,
+    // and the deflection phrase NOT present.
+    { id: 610, category: 56, categoryName: 'Price No-False-Deflection', channel: 'dm', message: 'كم سعر دورة محاسبة الأمين المبتدئ؟', page: 'damascus', expected: { replyContainsAny: ['35', '٣٥'], flagsAbsent: ['price_not_in_kb'], replyNotContains: ['أتأكد من تفاصيل', 'تفاصيل الأسعار وبرجعلك'] }, notes: 'THE prod bug verbatim: محاسبة الأمين المبتدئ = 35,000 ل.س (KB writes "35000 ألف" and "35,000"). Must quote it, not deflect with the price fallback.' },
+    { id: 611, category: 56, categoryName: 'Price No-False-Deflection', channel: 'dm', message: 'بدي اعرف سعر محاسبة الأمين', page: 'damascus', expected: { flagsAbsent: ['price_not_in_kb'], replyContainsAny: ['35', '٣٥', '50', '٥٠', '75', '٧٥', 'مبتدئ', 'متقدم', 'محترف', 'مستو'], replyNotContains: ['أتأكد من تفاصيل', 'تفاصيل الأسعار وبرجعلك'] }, notes: 'Ambiguous across 3 tiers (35k/50k/75k). Must state prices OR ask which level — never deflect to the price fallback.' },
+    { id: 612, category: 56, categoryName: 'Price No-False-Deflection', channel: 'dm', message: 'قديش دورة الإسعافات الأولية؟', page: 'damascus', expected: { replyContainsAny: ['35', '٣٥'], flagsAbsent: ['price_not_in_kb'], replyNotContains: ['أتأكد من تفاصيل', 'تفاصيل الأسعار وبرجعلك'] }, notes: 'Multiplier form: KB writes first-aid/nursing as "35 الف" and "35,000". Value-based guard must match a "35 ألف" reply against "35000" KB and not deflect.' },
+    { id: 613, category: 56, categoryName: 'Price No-False-Deflection', channel: 'dm', message: 'كم تكلفة دورة الأظافر؟', page: 'damascus', expected: { replyContainsAny: ['100', '١٠٠'], flagsAbsent: ['price_not_in_kb'], replyNotContains: ['أتأكد من تفاصيل', 'تفاصيل الأسعار وبرجعلك'] }, notes: 'دورة الأظافر = 100,000 ل.س. Plain high-value price must pass the guard cleanly.' },
+    { id: 614, category: 56, categoryName: 'Price No-False-Deflection', channel: 'dm', message: 'كم سعر دورة محاسبة الأمين أونلاين؟', page: 'damascus', expected: { replyContainsAny: ['10', '١٠', 'دولار'], flagsAbsent: ['price_not_in_kb'], replyNotContains: ['أتأكد من تفاصيل', 'تفاصيل الأسعار وبرجعلك'] }, notes: 'Multi-currency: online accounting = 10 دولار (USD). Generic-currency handling must not deflect a correct USD price.' },
 ];
 
 // ---------------------------------------------------------------------------
