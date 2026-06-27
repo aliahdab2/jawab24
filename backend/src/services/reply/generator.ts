@@ -688,17 +688,28 @@ export class ReplyGenerator {
             return { effectiveKB: staticKB, ragAttempted: false };
         }
 
-        // Small KB optimization: if the entire KB fits comfortably in the context window,
-        // send it as-is instead of using RAG chunking. This avoids semantic gaps where the
-        // customer uses different terminology than the KB (e.g., "باقات" vs "خدمات").
-        // Exception: ecommerce pages have product chunks with detailed specs/prices that
-        // aren't in the static KB text — always use RAG for those.
-        const KB_RAG_THRESHOLD_CHARS = 5000;
-        if (!hasEcommerceChunks && staticKB && staticKB.length < KB_RAG_THRESHOLD_CHARS) {
-            this.logger.debug('[Generator] KB is small — skipping RAG, using full static KB', {
-                pageId, kbLength: staticKB.length, threshold: KB_RAG_THRESHOLD_CHARS,
-            });
-            return { effectiveKB: staticKB, ragAttempted: false };
+        // Non-ecommerce pages ALWAYS receive the full Business Info / KB, in full — and no
+        // retrieval/embedding/chunk call runs on this path at all. The decision is deliberately
+        // size-INDEPENDENT: RAG is never used as a filter over a single-document KB, because
+        // chunking it can only DROP the answer-bearing text — a short/lexical query like
+        // "وين موقعكم" retrieves the wrong chunks and the address (which IS in the KB) never
+        // reaches the model → deflection (D-012). Any oversized KB is bounded by the
+        // KB_MAX_CHARS (16k) truncation in promptBuilder — that cap, not a gate here, limits
+        // prompt size. RAG is retained ONLY for ecommerce pages, whose product specs/prices
+        // live in chunks rather than the static KB text (handled below).
+        //
+        // KB_RAG_THRESHOLD_CHARS is an emergency rollback lever ONLY: when set, a KB LARGER
+        // than it falls back to the legacy RAG path. Unset (the default) → full KB
+        // unconditionally, at any size.
+        if (!hasEcommerceChunks && staticKB) {
+            const ragRollbackCeiling = parseInt(process.env.KB_RAG_THRESHOLD_CHARS || '', 10);
+            const forceRagForLargeKb = !Number.isNaN(ragRollbackCeiling) && staticKB.length > ragRollbackCeiling;
+            if (!forceRagForLargeKb) {
+                this.logger.debug('[Generator] Non-ecommerce page — sending full KB (RAG not used as a filter)', {
+                    pageId, kbLength: staticKB.length,
+                });
+                return { effectiveKB: staticKB, ragAttempted: false };
+            }
         }
 
         // Enrich short follow-up queries with recent conversation context so retrieval finds the
