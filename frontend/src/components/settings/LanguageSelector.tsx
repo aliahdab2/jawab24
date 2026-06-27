@@ -2,8 +2,10 @@ import { Card } from '@/components/ui';
 import { Globe } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { settingsApi } from '@/lib/api';
+import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import type { SettingsState } from './types';
+import { buildSettingsUpdatePayload } from './buildUpdatePayload';
 
 interface LanguageSelectorProps {
   settings: SettingsState;
@@ -24,13 +26,33 @@ export function LanguageSelector({
   const tc = useTranslations('common');
 
   const handleLanguageChange = async (lang: 'ar' | 'en') => {
+    if (lang === settings.dashboardLanguage) return;
+
     const newSettings = { ...settings, dashboardLanguage: lang };
-    setSettings(newSettings);
-    setInitialSettings({ ...initialSettings, dashboardLanguage: lang });
+
+    // Strip non-schema fields (id/userId/pushNotifications) and validate against
+    // the SAME strict schema the backend enforces. Sending the raw `settings`
+    // object always 400'd here because the schema is `.strict()`.
+    const validation = buildSettingsUpdatePayload(newSettings);
+    if (!validation.success) {
+      captureError(validation.error, 'Invalid settings payload on language change', {
+        tags: { page: 'settings', action: 'change-language' },
+      });
+      toast.error(tc('error'));
+      return;
+    }
+
     try {
-      await settingsApi.update(newSettings as unknown as Record<string, unknown>);
+      await settingsApi.update(validation.data as Record<string, unknown>);
+      // Only commit local state once the persist succeeds, so a failed PUT
+      // doesn't leave the UI showing a language the backend never saved.
+      setSettings(newSettings);
+      setInitialSettings({ ...initialSettings, dashboardLanguage: lang });
       setLanguage(lang);
-    } catch {
+    } catch (error) {
+      captureError(error, 'Failed to change dashboard language', {
+        tags: { page: 'settings', action: 'change-language' },
+      });
       toast.error(tc('error'));
     }
   };
