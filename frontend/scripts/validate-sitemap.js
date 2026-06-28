@@ -58,6 +58,7 @@ const EXCLUDED_ROUTES = new Map([
   ['payment/return', 'transactional (noindex)'],
   ['payment/success', 'transactional (noindex)'],
   ['pricing/scale', 'private high-volume plans (noindex — reachable only via the at-limit nudge / direct link)'],
+  ['salla/connected', 'Salla Easy Mode post-install landing (noindex — the App-URL claim page)'],
   ['salla/onboarding', 'merchant onboarding (auth-gated)'],
   ['settings', 'app workspace (auth-gated)'],
   ['shopify/onboarding', 'merchant onboarding (auth-gated)'],
