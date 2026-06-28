@@ -30,7 +30,7 @@ import {
   CheckCircle,
   Undo2,
   FileText,
-  Hash,
+  KeyRound,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -344,7 +344,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 </div>
                 {postTriggerKeyword && (
                   <div className="flex items-center gap-1.5 flex-wrap px-1">
-                    <Hash className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
+                    <KeyRound className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
                     {parseKeywords(postTriggerKeyword).map((kw, i) => (
                       <span
                         key={i}
