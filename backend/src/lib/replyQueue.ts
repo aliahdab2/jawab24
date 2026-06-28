@@ -51,6 +51,7 @@ export async function enqueueComment(data: {
     requestId?: string;
     replyDelay?: number;
     handoffRetries?: number;
+    aiRetryCount?: number;
 }): Promise<string> {
     const jobData: ReplyJobData = {
         jobType: data.jobType,
@@ -65,6 +66,7 @@ export async function enqueueComment(data: {
         requestId: data.requestId,
         receivedAt: new Date().toISOString(),
         handoffRetries: data.handoffRetries,
+        aiRetryCount: data.aiRetryCount,
     };
 
     // Use delay option if replyDelay is set (in milliseconds)
@@ -89,6 +91,7 @@ export async function enqueueMessage(data: {
     requestId?: string;
     replyDelay?: number;
     handoffRetries?: number;
+    aiRetryCount?: number;
 }): Promise<string> {
     const jobData: ReplyJobData = {
         jobType: data.jobType,
@@ -102,6 +105,7 @@ export async function enqueueMessage(data: {
         requestId: data.requestId,
         receivedAt: new Date().toISOString(),
         handoffRetries: data.handoffRetries,
+        aiRetryCount: data.aiRetryCount,
     };
 
     // Use delay option if replyDelay is set (in milliseconds)

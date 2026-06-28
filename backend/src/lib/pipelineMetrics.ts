@@ -47,6 +47,8 @@ export type Outcome =
     | 'trigger_no_match'
     | 'transient_error_retry'
     | 'ai_failed_immediate_flag'
+    | 'ai_parked'
+    | 'ai_park_exhausted'
     | 'error';
 
 const PREFIX = 'metrics:pipeline:';

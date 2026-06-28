@@ -120,6 +120,11 @@ vi.mock('../../src/config', () => ({
             port: 6379,
             password: undefined,
         },
+        ai: {
+            quotaParkSeconds: 900,
+            circuitParkSeconds: 60,
+            parkMaxRetries: 16,
+        },
     },
 }));
 
@@ -577,6 +582,127 @@ describe('Reply Worker — Handoff Re-enqueue', () => {
             jobType: 'instagram_message',
             replyDelay: 45,
             handoffRetries: 1,
+        }));
+    });
+});
+
+describe('Reply Worker — AI park-and-retry', () => {
+    let processJobFn: (job: Job<ReplyJobData>) => Promise<any>;
+    let mockEnqueueMessage: ReturnType<typeof vi.fn>;
+    let mockEnqueueComment: ReturnType<typeof vi.fn>;
+    let mockPipelineRecord: ReturnType<typeof vi.fn>;
+    let AiQuotaExhaustedError: any;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        vi.resetModules();
+
+        await import('../../src/workers/replyWorker');
+        const { Worker } = await import('bullmq');
+        const module = await import('../../src/workers/replyWorker');
+        module.startWorker();
+        const calls = vi.mocked(Worker).mock.calls;
+        processJobFn = calls[calls.length - 1][1] as any;
+
+        const replyQueueModule = await import('../../src/lib/replyQueue');
+        mockEnqueueMessage = vi.mocked(replyQueueModule.enqueueMessage);
+        mockEnqueueComment = vi.mocked(replyQueueModule.enqueueComment);
+        const metricsModule = await import('../../src/lib/pipelineMetrics');
+        mockPipelineRecord = vi.mocked(metricsModule.pipelineMetrics.record);
+        ({ AiQuotaExhaustedError } = await import('../../src/utils/fbGraphErrors'));
+    });
+
+    function createMockJob(overrides: Partial<ReplyJobData> = {}): Job<ReplyJobData> {
+        return {
+            id: 'job-1',
+            attemptsMade: 0,
+            data: {
+                jobType: 'facebook_message',
+                pageId: 'page-1',
+                messageId: 'msg-1',
+                senderId: 'sender-1',
+                text: 'Hello',
+                receivedAt: new Date().toISOString(),
+                ...overrides,
+            },
+        } as Job<ReplyJobData>;
+    }
+
+    it('parks a quota error: re-enqueues with the long delay + aiRetryCount, does not throw', async () => {
+        mockReplyService.processMessage.mockRejectedValue(new AiQuotaExhaustedError());
+
+        const job = createMockJob();
+        const result = await processJobFn(job);
+
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            jobType: 'facebook_message',
+            messageId: 'msg-1',
+            replyDelay: 900,       // config.ai.quotaParkSeconds
+            aiRetryCount: 1,
+        }));
+        // Re-enqueue must NOT carry handoffRetries (would trip stale-backlog suppression)
+        expect(mockEnqueueMessage.mock.calls[0][0]).not.toHaveProperty('handoffRetries');
+        expect(mockPipelineRecord).toHaveBeenCalledWith('facebook_message', 'ai_parked');
+        expect(result.success).toBe(false);
+    });
+
+    it('parks a circuit-open error with the shorter circuit delay', async () => {
+        const circuitErr = new Error('Circuit breaker is open');
+        circuitErr.name = 'CircuitOpenError';
+        mockReplyService.processMessage.mockRejectedValue(circuitErr);
+
+        const job = createMockJob();
+        await processJobFn(job);
+
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            replyDelay: 60,        // config.ai.circuitParkSeconds
+            aiRetryCount: 1,
+        }));
+        expect(mockPipelineRecord).toHaveBeenCalledWith('facebook_message', 'ai_parked');
+    });
+
+    it('increments aiRetryCount on each park', async () => {
+        mockReplyService.processMessage.mockRejectedValue(new AiQuotaExhaustedError());
+
+        const job = createMockJob({ aiRetryCount: 4 });
+        await processJobFn(job);
+
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({ aiRetryCount: 5 }));
+    });
+
+    it('stops parking and rethrows (→ flag) once parkMaxRetries is reached', async () => {
+        mockReplyService.processMessage.mockRejectedValue(new AiQuotaExhaustedError());
+
+        const job = createMockJob({ aiRetryCount: 16 }); // == parkMaxRetries
+        await expect(processJobFn(job)).rejects.toBeInstanceOf(AiQuotaExhaustedError);
+
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+        expect(mockPipelineRecord).toHaveBeenCalledWith('facebook_message', 'ai_park_exhausted');
+    });
+
+    it('does not park ordinary errors (rethrows for normal retry/flag)', async () => {
+        mockReplyService.processMessage.mockRejectedValue(new Error('some FB transient error'));
+
+        const job = createMockJob();
+        await expect(processJobFn(job)).rejects.toThrow('some FB transient error');
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+    });
+
+    it('parks a quota error on a comment job via enqueueComment', async () => {
+        mockReplyService.processComment.mockRejectedValue(new AiQuotaExhaustedError());
+
+        const job = createMockJob({
+            jobType: 'facebook_comment',
+            postId: 'post-1',
+            commentId: 'comment-1',
+        });
+        await processJobFn(job);
+
+        expect(mockEnqueueComment).toHaveBeenCalledWith(expect.objectContaining({
+            jobType: 'facebook_comment',
+            commentId: 'comment-1',
+            replyDelay: 900,
+            aiRetryCount: 1,
         }));
     });
 });

@@ -48,6 +48,14 @@ export const config = {
         model: DEFAULT_AI_MODEL,
         // Fallback model when primary provider (OpenAI) is unreachable
         fallbackModel: process.env.AI_FALLBACK_MODEL || 'claude-haiku-4-5-20251001',
+        // Park-and-retry: when the AI is unavailable for a recoverable-but-not-instant
+        // reason (OpenAI insufficient_quota, or the ai-worker circuit open), the reply
+        // worker re-enqueues the job with a delay instead of flagging it needs_attention.
+        // The message auto-replies once the AI recovers (e.g. OpenAI billing topped up).
+        quotaParkSeconds: parseInt(process.env.AI_QUOTA_PARK_SECONDS || '900', 10),   // 15 min — quota recovers on top-up, not in seconds
+        circuitParkSeconds: parseInt(process.env.AI_CIRCUIT_PARK_SECONDS || '60', 10), // ~2× circuit open window — skip the blip without long delay
+        parkMaxRetries: parseInt(process.env.AI_PARK_MAX_RETRIES || '16', 10),         // bound total parking; after this, flag needs_attention
+        quotaAlertCooldownSeconds: parseInt(process.env.AI_QUOTA_ALERT_COOLDOWN_SECONDS || '600', 10), // throttle the "top up OpenAI" alert (10 min)
     },
 
     // OpenAI (for KB embeddings — same key as ai-worker)

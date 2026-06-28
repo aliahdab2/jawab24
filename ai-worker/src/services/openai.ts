@@ -7,6 +7,8 @@ import {
     AiTimeoutError,
     AiRefusalError,
     AiEmptyReplyError,
+    AiQuotaExhaustedError,
+    isInsufficientQuotaError,
     AI_TYPED_ERROR_NAMES,
 } from '../lib/errors';
 import { recordAiFailedBeforeLog, withAiMetrics } from '../lib/aiMetrics';
@@ -149,19 +151,27 @@ export class OpenAIService {
                             },
                         }, { signal: controller.signal }),
                     ),
-                    // Custom classifier — timeouts get a distinct error_class so
-                    // the breakdown script can separate them from generic API errors.
-                    // Check by name (not instanceof) so tests can mock `openai`
-                    // without providing the real APIUserAbortError class.
+                    // Custom classifier — timeouts and quota exhaustion get distinct
+                    // error_classes so the breakdown script can separate them from
+                    // generic API errors. Check by name (not instanceof) so tests can
+                    // mock `openai` without providing the real APIUserAbortError class.
                     (e) => (e instanceof Error && e.name === 'APIUserAbortError'
                         ? 'AiTimeoutError'
-                        : 'OpenAIApiError'),
+                        : isInsufficientQuotaError(e)
+                            ? 'AiQuotaError'
+                            : 'OpenAIApiError'),
                 );
             } catch (e) {
-                // withAiMetrics already emitted failed_before_log. Re-throw the
-                // typed AiTimeoutError so backend BullMQ classifies it correctly.
+                // withAiMetrics already emitted failed_before_log. Re-throw typed
+                // errors so backend BullMQ classifies them correctly.
                 if (e instanceof Error && e.name === 'APIUserAbortError') {
                     throw new AiTimeoutError(config.openai.timeoutMs);
+                }
+                // 429 insufficient_quota — account out of credit. Throw the typed
+                // error so the backend PARKS the job (long-delay re-enqueue) and
+                // alerts, instead of burning fast retries and flagging the row.
+                if (isInsufficientQuotaError(e)) {
+                    throw new AiQuotaExhaustedError();
                 }
                 throw e;
             } finally {

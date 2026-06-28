@@ -580,6 +580,12 @@ export interface ReplyJobData {
   receivedAt: string;       // ISO timestamp when webhook received
   replyDelay?: number;      // Delay in seconds before processing (from user settings)
   handoffRetries?: number;  // How many times this job has been re-enqueued due to handoff pause
+  // How many times this job has been re-enqueued (parked) because the AI was
+  // temporarily unavailable (OpenAI insufficient_quota / ai-worker circuit open).
+  // Kept SEPARATE from handoffRetries so quota-parked jobs don't trip the
+  // handoff stale-backlog suppression (a 15-min-old unanswered message SHOULD
+  // still get a reply once quota returns). Bounded by config.ai.parkMaxRetries.
+  aiRetryCount?: number;
 }
 
 export interface ReplyJobResult {
