@@ -92,22 +92,39 @@ describe('LanguageSelector — change language', () => {
     vi.clearAllMocks();
   });
 
-  // Regression: the language switch sent the raw `settings` object, which
-  // carries id/userId/pushNotifications. The strict backend schema rejected it
-  // with a 400 every time → the user always saw the generic error toast.
-  it('strips non-schema fields from the PUT payload', async () => {
+  // The switch is a one-field quick-action: PUT /settings is a partial update,
+  // so it must send ONLY the language — not the whole settings blob.
+  it('sends only the dashboardLanguage field', async () => {
     mockUpdate.mockResolvedValue({ data: {} } as never);
     const { setLanguage } = renderSelector(makeSettings({ dashboardLanguage: 'ar' }));
 
     fireEvent.click(screen.getByText(/English/i));
 
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
-    const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>;
-    expect(payload).not.toHaveProperty('id');
-    expect(payload).not.toHaveProperty('userId');
-    expect(payload).not.toHaveProperty('pushNotifications');
-    expect(payload.dashboardLanguage).toBe('en');
+    expect(mockUpdate).toHaveBeenCalledWith({ dashboardLanguage: 'en' });
     await waitFor(() => expect(setLanguage).toHaveBeenCalledWith('en'));
+  });
+
+  // Regression for JAWAB24-FRONTEND-2J: a stored field that violates the strict
+  // settings schema (here a brandVoiceNotes value over the 800-char cap, which
+  // can predate the cap) must NOT block a simple language switch. Sending the
+  // whole settings object made the switch fail validation on this unrelated
+  // field; patching only the language sidesteps it entirely.
+  it('changes language even when an unrelated stored field is invalid', async () => {
+    mockUpdate.mockResolvedValue({ data: {} } as never);
+    const { setLanguage } = renderSelector(
+      makeSettings({
+        dashboardLanguage: 'ar',
+        brandVoiceNotes: 'x'.repeat(2000),
+        brandVoiceNotesMulti: { en: 'x'.repeat(2000), ar: 'ع'.repeat(2000) },
+      }),
+    );
+
+    fireEvent.click(screen.getByText(/English/i));
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith({ dashboardLanguage: 'en' }));
+    await waitFor(() => expect(setLanguage).toHaveBeenCalledWith('en'));
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it('does not commit local state or switch locale when the PUT fails', async () => {
