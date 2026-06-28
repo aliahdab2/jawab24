@@ -108,10 +108,14 @@ export function PostTriggerModal({
       footer={footer}
     >
       <div className="flex flex-col gap-4">
-        {/* What a Post Reply is — fixed, self-written message (channel-neutral copy) */}
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {t('postTriggerDescription')}
-        </p>
+        {/* What a Post Reply is — fixed, self-written message (channel-neutral copy).
+            Leads with the ⚡ Post Reply icon so the feature is recognizable on open. */}
+        <div className="flex items-start gap-2.5">
+          <Hash className="w-5 h-5 flex-shrink-0 mt-0.5 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {t('postTriggerDescription')}
+          </p>
+        </div>
 
         {/* Post preview */}
         {postMessage && (
@@ -124,8 +128,8 @@ export function PostTriggerModal({
 
         {/* Active trigger badge */}
         {hasActiveTrigger && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 text-sm font-medium">
-            <Hash className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+            <Hash className="w-4 h-4 flex-shrink-0 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
             {t('postTriggerActive')}
           </div>
         )}

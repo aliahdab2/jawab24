@@ -8,7 +8,7 @@ import { renderMessageText } from '@/utils/renderMessageText';
 import {
   Clock,
   AlertTriangle,
-  Sparkles,
+  Hash,
   CheckCircle,
   CheckCheck,
   User,
@@ -214,15 +214,14 @@ export const CommentCard = React.memo(function CommentCard({
                        className={clsx(
                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                          triggerActive
-                           // Active: brand-emphasized so it reads as an enabled status.
-                           ? 'border-brand-400 text-brand-500 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20'
-                           // Inactive: always visible but quiet (ghost) so the affordance is
-                           // discoverable on every post without shouting; brightens to brand on
-                           // hover. (Previously hidden until hover on desktop — that killed discovery.)
-                           : 'border-surface-300 dark:border-surface-600 text-muted-foreground hover:border-brand-300 dark:hover:border-brand-700 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20'
+                           // Active (configured): solid emerald so it clearly reads as "on".
+                           ? 'border-emerald-700 bg-emerald-700 text-white'
+                           // Inactive: emerald tint — always visible and recognizable as Post
+                           // Reply (emerald + ⚡ = Post Reply; distinct from Smart Reply's violet + ✨).
+                           : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
                        )}
                      >
-                       <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                       <Hash className={clsx('w-3.5 h-3.5', !triggerActive && 'text-emerald-500 dark:text-emerald-400')} aria-hidden="true" />
                        {triggerActive ? t('postTriggerActive') : t('postTrigger')}
                      </button>
                      {showNewBadge && !triggerActive && (
@@ -302,7 +301,7 @@ export const CommentCard = React.memo(function CommentCard({
                  </div>
               </div>
 
-               {/* Source Indicator (Zap/Sparkles) */}
+               {/* Source Indicator (Hash/Sparkles) */}
               <div className="flex-shrink-0 mb-1">
                  <ReplySourceIndicator />
               </div>
