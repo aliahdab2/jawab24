@@ -36,7 +36,7 @@ import { formatRelativeTime } from '@/utils/dateUtils';
 import type { NextPageWithLayout } from './_app';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
-import { useConversationActions, useLoadConversation } from '@/hooks';
+import { useConversationActions, useLoadConversation, usePostReplySetup } from '@/hooks';
 import { useWorkspaceRole } from '@/hooks';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { useIsDemoUser } from '@/features/demo';
@@ -160,6 +160,9 @@ const DashboardPage: NextPageWithLayout = () => {
 
   // Selected Comment State
   const [selectedCommentData, setSelectedCommentData] = useState<{ comment: Comment, mode: 'full' | 'quick' } | null>(null);
+
+  // Shared Post Reply setup (same flow as the Comments page).
+  const postReplySetup = usePostReplySetup();
 
   // Conversation modal actions (shared hook — reply, pause, resume, resolve, pause-status)
   const {
@@ -1005,9 +1008,13 @@ const DashboardPage: NextPageWithLayout = () => {
             mode={selectedCommentData.mode}
             pageName={commentPage?.name}
             pageUrl={commentPageUrl}
+            onSetupPostReply={async () => { if (await postReplySetup.open(selectedCommentData.comment)) setSelectedCommentData(null); }}
           />
         );
       })()}
+
+      {/* Post Reply config — opened from a comment's detail modal (shared flow) */}
+      {postReplySetup.modal}
 
       {/* Message Conversation Modal — opens inline from attention items or recent messages */}
       {selectedConversation && (

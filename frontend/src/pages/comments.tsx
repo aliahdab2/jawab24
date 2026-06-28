@@ -12,9 +12,8 @@ import { SwipeableCommentCard } from '@/components/comments';
 import { PostReplyIntroBanner } from '@/components/comments/PostReplyIntroBanner';
 
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
-const PostTriggerModal = dynamic(() => import('@/components/comments/PostTriggerModal').then(m => ({ default: m.PostTriggerModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce, usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, usePersistedBoolean } from '@/hooks';
+import { useDebounce, usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, usePersistedBoolean, usePostReplySetup } from '@/hooks';
 import { commentsApi, pagesApi, postsApi, type CommentsQueryParams } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import {
@@ -72,8 +71,8 @@ const CommentsPage: NextPageWithLayout = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  // Per-post trigger state
-  const [triggerModalComment, setTriggerModalComment] = useState<Comment | null>(null);
+  // Shared Post Reply setup (config modal state + render + safe open flow).
+  const postReplySetup = usePostReplySetup();
 
   // Fetch all posts so we can show active trigger state (⚡ green) on page load
   const { data: postsData = [] } = useQuery({
@@ -263,14 +262,6 @@ const CommentsPage: NextPageWithLayout = () => {
     syncFromUrl(router.query.page as string | undefined);
   }, [router.isReady, router.query.filter, router.query.page, syncFromUrl]);
 
-  // Stable so useModalBackHandler doesn't cleanup+re-push onClose on every parent
-  // re-render — without this, hardware back can fall through to page navigation
-  // during the microsecond gap between cleanup and re-push.
-  const closeTriggerModal = useCallback(() => setTriggerModalComment(null), []);
-  const onTriggerSaved = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['posts'] });
-  }, [queryClient]);
-
   // URL-driven detail drawer (?comment=<id>) + notification deep-link
   // (?commentId=<id>), shared with the Messages and Leads pages via
   // useUrlSelectedResource. Opening a comment first closes any open trigger modal.
@@ -293,7 +284,7 @@ const CommentsPage: NextPageWithLayout = () => {
       notFoundMessage: t('deepLinkNotFound'),
       errorTag: deepLinkErrorTag,
     },
-    onBeforeOpen: closeTriggerModal,
+    onBeforeOpen: postReplySetup.close,
   });
 
   // Prev/next navigation across the visible cards (one card = a group's latest
@@ -481,7 +472,7 @@ const CommentsPage: NextPageWithLayout = () => {
           and only when there's an eligible post to configure. */}
       {showPostReplyNewBadge && firstTriggerableGroup && (
         <PostReplyIntroBanner
-          onSetup={() => setTriggerModalComment(firstTriggerableGroup.latestComment)}
+          onSetup={() => postReplySetup.open(firstTriggerableGroup.latestComment)}
         />
       )}
 
@@ -602,7 +593,7 @@ const CommentsPage: NextPageWithLayout = () => {
                     earlierComments={earlierComments}
                     isExpanded={expandedGroups.has(group.groupKey)}
                     onToggleExpand={() => toggleExpand(group.groupKey)}
-                    onTriggerClick={comment.postId ? () => setTriggerModalComment(comment) : undefined}
+                    onTriggerClick={comment.postId ? () => postReplySetup.open(comment) : undefined}
                     triggerActive={comment.postId ? !!triggersByPostId[comment.postId] : false}
                     showNewBadge={group.groupKey === newBadgeGroupKey}
                   />
@@ -669,8 +660,8 @@ const CommentsPage: NextPageWithLayout = () => {
           postTriggerKeyword={selectedComment.postId ? triggersByPostId[selectedComment.postId]?.keyword ?? null : null}
           // Post Reply is post-scoped: rather than stack a second modal inside this
           // URL-driven detail modal (z-index + routing conflicts), transition to the
-          // shared page-level PostTriggerModal — open it, then close the detail.
-          onSetupPostReply={() => { setTriggerModalComment(selectedComment); closeComment(); }}
+          // shared config modal (usePostReplySetup) — open it, then close the detail.
+          onSetupPostReply={async () => { if (await postReplySetup.open(selectedComment)) closeComment(); }}
           onPrev={goToPrevComment}
           onNext={goToNextComment}
           hasPrev={navIndex > 0}
@@ -678,19 +669,7 @@ const CommentsPage: NextPageWithLayout = () => {
         />
       )}
 
-      {triggerModalComment?.postId && (
-        <PostTriggerModal
-          key={triggerModalComment.postId}
-          postId={triggerModalComment.postId}
-          source={triggerModalComment.source ?? 'facebook'}
-          postMessage={triggerModalComment.postMessage}
-          triggerKeyword={triggersByPostId[triggerModalComment.postId]?.keyword ?? null}
-          triggerReply={triggersByPostId[triggerModalComment.postId]?.reply ?? null}
-          isOpen={!!triggerModalComment}
-          onClose={closeTriggerModal}
-          onSaved={onTriggerSaved}
-        />
-      )}
+      {postReplySetup.modal}
     </>
   );
 };
