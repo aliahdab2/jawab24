@@ -704,7 +704,16 @@ export {
 // the prompt the model sees is reordered, so the cache is invalidated for a clean cutover.
 // v47: few-shot hardening — removed the stale "بعد العيد" (after Eid) relative-date demo, and
 // made the Example 11 clarifier vertical-neutral (خدمة/باقة → خيار, "services" → "offerings").
-export const PROMPT_VERSION = 'v47';
+// v48: a comment on a post is now answered about the item in that post instead of a generic
+// "which product?". Two minimal changes, both in the per-call block (no few-shot/static-prefix
+// edit): (1) the comment channel directive now points the model at [current_post] as
+// authoritative business info — mirroring the existing DM-on-post directive; (2) the
+// [current_post] block is emitted whenever a post is present, no longer gated on the page
+// having KB/chunks, so empty-KB merchants get the post in the system prompt (it used to survive
+// only as the thin user-prompt label). No dialect handling added — the customer's own words
+// remain the only dialect source. Bump invalidates caches holding the old "which product?"
+// comment replies.
+export const PROMPT_VERSION = 'v48';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

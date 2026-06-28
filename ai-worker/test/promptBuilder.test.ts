@@ -371,12 +371,17 @@ describe('buildSystemPrompt — knowledge block composition', () => {
         expect(out).toContain('Sale!');
     });
 
-    it('does NOT emit a system-prompt [current_post] when there is no KB and no chunks', () => {
-        // The [current_post] block is emitted only when a knowledge block exists; without KB or
-        // chunks the post reaches the model via buildUserPrompt instead.
+    it('emits a system-prompt [current_post] even when there is no KB and no chunks (empty-KB merchant)', () => {
+        // v48: a merchant who hasn't filled Business Info yet must still get the post as a
+        // trusted, labeled [current_post] source — not just the thin user-prompt label — so the
+        // model answers about the specific item in the post instead of stalling with a generic
+        // "which product?". With no KB there's no <business_knowledge> block to wrap it, so the
+        // post is emitted as its own standalone labeled block.
         const out = suffix(req('hi', { postMessage: 'UNIQUE_POST_TEXT' }));
-        expect(out).not.toContain('[current_post]');
-        expect(out).not.toContain('UNIQUE_POST_TEXT');
+        expect(out).toContain('[current_post]');
+        expect(out).toContain('UNIQUE_POST_TEXT');
+        // No KB / chunks → no business_knowledge block at all; the post stands alone.
+        expect(out).not.toContain('</business_knowledge>');
     });
 });
 
