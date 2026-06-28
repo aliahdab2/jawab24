@@ -509,3 +509,60 @@ describe('SettingsPage - Fetch failure guards (overwrite prevention)', () => {
         expect(mockedSettingsApi.get).toHaveBeenCalledTimes(2);
     });
 });
+
+// The dashboard AI-limit banner links to `/settings#limit-fallback-message`.
+// That anchor lives inside the Advanced section, which is collapsed by default,
+// so without special handling the hash jump finds nothing and the user lands at
+// the top with the fallback option hidden. These tests lock in the deep-link
+// behavior: expand Advanced + scroll the card into view, but only when the hash
+// is actually present.
+describe('SettingsPage - deep link to limit-fallback card', () => {
+    beforeEach(() => {
+        mockedSettingsApi.get.mockResolvedValue({
+            data: {
+                dashboardLanguage: 'en',
+                defaultReplyLanguage: 'ar',
+                aiEnabled: true,
+                commentsAutoReply: true,
+                messagesAutoReply: true,
+            },
+        } as unknown as Awaited<ReturnType<typeof mockedSettingsApi.get>>);
+        // jsdom doesn't implement scrollIntoView — stub it so the effect can run.
+        Element.prototype.scrollIntoView = vi.fn();
+        window.localStorage.clear();
+        window.location.hash = '';
+    });
+
+    afterEach(() => {
+        window.location.hash = '';
+        vi.clearAllMocks();
+    });
+
+    it('expands Advanced and scrolls to the fallback card when arriving with the hash', async () => {
+        window.location.hash = '#limit-fallback-message';
+        const { container } = render(<SettingsPage />);
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+        });
+
+        // The anchor only exists in the DOM once Advanced is expanded.
+        await waitFor(() => {
+            expect(container.querySelector('#limit-fallback-message')).toBeInTheDocument();
+        });
+        await waitFor(() => {
+            expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+        });
+    });
+
+    it('leaves Advanced collapsed (no scroll) without the hash', async () => {
+        const { container } = render(<SettingsPage />);
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+        });
+
+        expect(container.querySelector('#limit-fallback-message')).not.toBeInTheDocument();
+        expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    });
+});

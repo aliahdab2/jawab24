@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactElement } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -139,6 +139,14 @@ const SettingsPage: NextPageWithLayout = () => {
   const router = useRouter();
 
   const [showAdvanced, setShowAdvanced] = usePersistedBoolean('settings:advanced:expanded', false);
+  // Transient expand forced by a deep link (see the limit-fallback effect below).
+  // Kept OUT of the persisted flag so arriving via the dashboard banner doesn't
+  // silently rewrite the user's saved collapse preference.
+  const [forceAdvanced, setForceAdvanced] = useState(false);
+  // Briefly rings the fallback card after a deep-link scroll so the user can see
+  // where they landed (the option is otherwise easy to miss in a dense section).
+  const [highlightFallback, setHighlightFallback] = useState(false);
+  const advancedExpanded = showAdvanced || forceAdvanced;
   const [settings, setSettings] = useState<SettingsState>({ ...INITIAL_SETTINGS, dashboardLanguage: language });
   const [initialSettings, setInitialSettings] = useState<SettingsState>({ ...INITIAL_SETTINGS, dashboardLanguage: language });
   const [saving, setSaving] = useState(false);
@@ -219,6 +227,40 @@ const SettingsPage: NextPageWithLayout = () => {
       fetchSettings();
     }
   }, [isAuthenticated, fetchSettings]);
+
+  // Deep link from the dashboard AI-limit banner (`/settings#limit-fallback-message`).
+  // The fallback card lives inside the Advanced section, which is collapsed by
+  // default — so a bare hash jump finds no anchor in the DOM and the user lands
+  // at the top with the option hidden. Expand Advanced (transiently), then scroll
+  // to + briefly highlight the card once it has actually mounted.
+  const didDeepLinkRef = useRef(false);
+  useEffect(() => {
+    if (loading || didDeepLinkRef.current) return;
+    if (typeof window === 'undefined' || window.location.hash !== '#limit-fallback-message') return;
+    didDeepLinkRef.current = true;
+    setForceAdvanced(true);
+
+    // The card mounts a render AFTER Advanced expands, so retry across a few
+    // frames rather than racing a single rAF; bail out after ~0.5s.
+    let frames = 0;
+    let raf = requestAnimationFrame(function focus() {
+      const el = document.getElementById('limit-fallback-message');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setHighlightFallback(true);
+        return;
+      }
+      if (frames++ < 30) raf = requestAnimationFrame(focus);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [loading]);
+
+  // Fade the deep-link highlight out after it has drawn the eye.
+  useEffect(() => {
+    if (!highlightFallback) return;
+    const id = setTimeout(() => setHighlightFallback(false), 2200);
+    return () => clearTimeout(id);
+  }, [highlightFallback]);
 
   const handleSave = async () => {
     // Hard guard: if the initial fetch failed, the on-screen settings are
@@ -433,8 +475,13 @@ const SettingsPage: NextPageWithLayout = () => {
 
       {/* Advanced Settings Toggle */}
       <CollapsibleSectionHeader
-        expanded={showAdvanced}
-        onToggle={() => setShowAdvanced(!showAdvanced)}
+        expanded={advancedExpanded}
+        onToggle={() => {
+          // A manual toggle takes over from any transient deep-link expand and
+          // becomes the user's persisted preference.
+          setForceAdvanced(false);
+          setShowAdvanced(!advancedExpanded);
+        }}
         controlsId="advanced-settings-body"
         className="mb-6 landscape:mb-4"
         icon={
@@ -444,8 +491,8 @@ const SettingsPage: NextPageWithLayout = () => {
         }
       >
         <div className="flex items-center gap-2.5">
-          <span className={clsx('font-bold landscape:text-sm', showAdvanced ? 'text-foreground' : 'text-foreground/70')}>
-            {showAdvanced ? t('hideAdvanced') : t('showAdvanced')}
+          <span className={clsx('font-bold landscape:text-sm', advancedExpanded ? 'text-foreground' : 'text-foreground/70')}>
+            {advancedExpanded ? t('hideAdvanced') : t('showAdvanced')}
           </span>
           <SectionSavedFlash show={savedSections.has('advanced')} label={t('settingsSaved')} />
         </div>
@@ -455,7 +502,7 @@ const SettingsPage: NextPageWithLayout = () => {
       </CollapsibleSectionHeader>
 
       {/* Advanced Settings */}
-      {showAdvanced && (
+      {advancedExpanded && (
         <div id="advanced-settings-body" className="space-y-4 sm:space-y-6 landscape:space-y-4 animate-slide-up pb-4 sm:pb-6">
           <BusinessHoursCard settings={settings} setSettings={setSettings} currentTime={currentTime} />
 
@@ -473,7 +520,13 @@ const SettingsPage: NextPageWithLayout = () => {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4 items-stretch">
               <GreetingMessageCard settings={settings} setSettings={setSettings} />
-              <div id="limit-fallback-message" className="scroll-mt-24 h-full">
+              <div
+                id="limit-fallback-message"
+                className={clsx(
+                  'scroll-mt-24 h-full rounded-2xl transition-shadow duration-500',
+                  highlightFallback && 'ring-2 ring-brand-500 ring-offset-2 ring-offset-background',
+                )}
+              >
                 <LimitFallbackMessageCard settings={settings} setSettings={setSettings} />
               </div>
             </div>
