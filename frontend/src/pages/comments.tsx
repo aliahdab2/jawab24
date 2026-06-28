@@ -667,6 +667,10 @@ const CommentsPage: NextPageWithLayout = () => {
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
           pageUrl={selectedCommentPageUrl}
           postTriggerKeyword={selectedComment.postId ? triggersByPostId[selectedComment.postId]?.keyword ?? null : null}
+          // Post Reply is post-scoped: rather than stack a second modal inside this
+          // URL-driven detail modal (z-index + routing conflicts), transition to the
+          // shared page-level PostTriggerModal — open it, then close the detail.
+          onSetupPostReply={() => { setTriggerModalComment(selectedComment); closeComment(); }}
           onPrev={goToPrevComment}
           onNext={goToNextComment}
           hasPrev={navIndex > 0}

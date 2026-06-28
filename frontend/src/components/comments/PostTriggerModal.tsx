@@ -102,7 +102,7 @@ export function PostTriggerModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={t('postTrigger')}
+      title={hasActiveTrigger ? t('postTriggerEdit') : t('postTriggerCta')}
       titleIcon={<PostReplyIcon className={clsx('w-5 h-5', postReplyIconClass)} aria-hidden="true" />}
       size="sm"
       mobilePresentation="fullscreen"
