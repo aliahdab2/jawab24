@@ -979,6 +979,11 @@ export const pendingEcommerceInstalls = pgTable('pending_ecommerce_installs', {
     refreshTokenIv: varchar('refresh_token_iv', { length: 64 }),
     tokenExpiresAt: timestamp('token_expires_at'),      // Salla 14d / Zid ~1y; null for Shopify
     scopes: text('scopes'),
+    // Salla Easy Mode: the app.store.authorize webhook delivers tokens server-to-server
+    // with only a numeric merchant id (no browser cookie). We persist it so a logged-in
+    // merchant can later claim the install by merchant id. Null for the cookie/OAuth flow.
+    merchantId: varchar('merchant_id', { length: 64 }),
+    storeName: varchar('store_name', { length: 255 }), // shown on the claim screen ("connect your store '<name>'")
     nonce: varchar('nonce', { length: 64 }).notNull(),  // CSRF nonce for OAuth
     status: varchar('status', { length: 20 }).default('pending'), // pending|claimed|expired
     claimedByUserId: uuid('claimed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
@@ -990,6 +995,7 @@ export const pendingEcommerceInstalls = pgTable('pending_ecommerce_installs', {
         storeDomainIdx: index('idx_pending_ecommerce_store_domain').on(table.storeDomain),
         statusIdx: index('idx_pending_ecommerce_status').on(table.status),
         platformStatusExpiresIdx: index('idx_pending_ecommerce_platform_status_expires').on(table.platform, table.status, table.expiresAt),
+        platformMerchantIdx: index('idx_pending_ecommerce_platform_merchant').on(table.platform, table.merchantId),
     };
 });
 

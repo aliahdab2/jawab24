@@ -53,5 +53,23 @@
     "doneCheckProducts": "{count, plural, one {# product synced} other {# products synced}}",
     "doneCheckPage": "{name} linked",
     "doneCheckActive": "Auto-replies active"
+  },
+  "claim": {
+    "title": "Connect your Salla store",
+    "checking": "Looking for your Salla store…",
+    "foundTitle": "We found your store",
+    "foundDesc": "Connect “{store}” to start auto-replying with your product data.",
+    "yourStore": "your store",
+    "connectButton": "Connect this store",
+    "connecting": "Connecting…",
+    "needLoginTitle": "Log in to connect your store",
+    "needLoginDesc": "Log in with Facebook to finish connecting your Salla store.",
+    "login": "Log in with Facebook",
+    "notFoundTitle": "No Salla store to connect",
+    "notFoundDesc": "We couldn't find a recent Salla install. Try installing Jawab24 again from the Salla App Store, or open your integrations.",
+    "goToIntegrations": "Go to integrations",
+    "missingMerchant": "Open this page from the Salla App Store after installing Jawab24.",
+    "error": "Something went wrong connecting your store. Please try again.",
+    "retry": "Try again"
   }
 }

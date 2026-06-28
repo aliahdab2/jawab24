@@ -83,6 +83,12 @@ export const config = {
         hostName: process.env.SALLA_HOST_NAME || '',
         webhookSecret: process.env.SALLA_WEBHOOK_SECRET || '',
         scopes: 'offline_access products.read_write settings.read webhooks.read_write orders.read_write',
+        // Easy Mode post-install claim endpoints (GET /salla/store/pending, POST /salla/store/claim).
+        // OFF by default: until the merchant-id ownership binding is hardened against Salla's
+        // verified post-install redirect (live round-trip), these would let any logged-in user
+        // claim a known merchant's pending install. Flip to true ONLY after that hardening +
+        // switching the published app to Easy Mode in the Salla Partners portal.
+        easyModeClaimEnabled: process.env.SALLA_EASY_MODE_CLAIM_ENABLED === 'true',
     },
 
     // Zid App (disabled until credentials are set)

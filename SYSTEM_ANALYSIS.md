@@ -1054,8 +1054,10 @@ Top Products:
 | Platform | Status | OAuth | Token Expiry | Max Products | Webhook hardening |
 |----------|--------|-------|-------------|--------------|-------------------|
 | **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL (unlimited) | ✅ Full (retry, exhaustion flag, manual reregister, frontend recovery UI) |
-| **Salla** | Active | OAuth 2.0 | 14 days (auto-refresh, single-use refresh tokens) | REST, max 260 | ✅ Full (lifted to platform-agnostic in PR #27, 2026-05-07) |
+| **Salla** | Active | OAuth 2.0 (Custom + **Easy Mode**) | 14 days (auto-refresh, single-use refresh tokens) | REST, max 260 | ✅ Full (lifted to platform-agnostic in PR #27, 2026-05-07) |
 | **Zid** | Active | OAuth 2.0 | ~1 year (auto-refresh via Redis lock) | REST, paginated | ✅ Full (same shared infrastructure) |
+
+**Salla Easy Mode** (required for the public App Store listing): published apps receive tokens via the server-to-server `app.store.authorize` webhook (the OAuth callback is never hit). `controllers/salla.ts:handleStoreAuthorize` ingests/refreshes tokens idempotently; fresh installs stage a `merchantId`-keyed pending install (`pending_ecommerce_installs.merchant_id`, migration `0123`) that the merchant claims after login via `GET /salla/store/pending` + `POST /salla/store/claim` (landing page `frontend/src/pages/salla/connected.tsx`). Custom Mode (OAuth redirect) is retained for dev. The merchant-id source from Salla's post-install redirect is finalized at the live round-trip.
 
 **Webhook recovery infrastructure** (cross-platform, 2026-05-07):
 - Shared `registerWebhooksWithPersist` helper in `services/ecommerce.ts` — install path persists status JSONB and enqueues a BullMQ retry on partial or total failure. Install never fails because of webhook hiccups.

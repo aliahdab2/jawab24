@@ -53,5 +53,23 @@
     "doneCheckProducts": "{count, plural, zero {لا منتجات} one {تمت مزامنة منتج واحد} two {تمت مزامنة منتجين} few {تمت مزامنة # منتجات} many {تمت مزامنة # منتج} other {تمت مزامنة # منتج}}",
     "doneCheckPage": "تم ربط {name}",
     "doneCheckActive": "الردود التلقائية مفعّلة"
+  },
+  "claim": {
+    "title": "اربط متجر Salla الخاص بك",
+    "checking": "نبحث عن متجر Salla الخاص بك…",
+    "foundTitle": "وجدنا متجرك",
+    "foundDesc": "اربط متجر «{store}» لتبدأ الردود التلقائية باستخدام بيانات منتجاتك.",
+    "yourStore": "متجرك",
+    "connectButton": "اربط هذا المتجر",
+    "connecting": "جارٍ الربط…",
+    "needLoginTitle": "سجّل الدخول لربط متجرك",
+    "needLoginDesc": "سجّل الدخول عبر فيسبوك لإكمال ربط متجر Salla الخاص بك.",
+    "login": "تسجيل الدخول عبر فيسبوك",
+    "notFoundTitle": "لا يوجد متجر Salla لربطه",
+    "notFoundDesc": "لم نعثر على عملية تثبيت حديثة من Salla. جرّب تثبيت Jawab24 مرة أخرى من متجر تطبيقات Salla، أو افتح صفحة التكاملات.",
+    "goToIntegrations": "الذهاب إلى التكاملات",
+    "missingMerchant": "افتح هذه الصفحة من متجر تطبيقات Salla بعد تثبيت Jawab24.",
+    "error": "حدث خطأ أثناء ربط متجرك. حاول مرة أخرى.",
+    "retry": "حاول مرة أخرى"
   }
 }

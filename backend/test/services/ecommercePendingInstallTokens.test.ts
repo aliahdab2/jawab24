@@ -13,10 +13,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 process.env.ECOMMERCE_TOKEN_ENCRYPTION_KEY = 'test-encryption-key-must-be-32-chars-long!!';
 
-const { capturedInserts, mockSelectLimit, mockUpdateWhere } = vi.hoisted(() => ({
+const { capturedInserts, capturedDeletes, capturedSelects, mockSelectLimit, mockUpdateWhere, mockListResult } = vi.hoisted(() => ({
     capturedInserts: [] as Array<{ table: unknown; values: Record<string, unknown> }>,
+    capturedDeletes: [] as Array<{ table: unknown }>,
+    capturedSelects: [] as unknown[],
     mockSelectLimit: vi.fn().mockResolvedValue([]),
     mockUpdateWhere: vi.fn().mockResolvedValue(undefined),
+    mockListResult: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../src/config', () => ({
@@ -36,11 +39,21 @@ vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 
 vi.mock('../../src/db', () => ({
     db: {
-        select: vi.fn().mockReturnValue({
-            from: vi.fn().mockReturnValue({
-                where: vi.fn().mockReturnValue({ limit: mockSelectLimit }),
+        select: vi.fn().mockImplementation((cols?: unknown) => ({
+            from: vi.fn().mockImplementation(() => {
+                capturedSelects.push(cols);
+                return {
+                    where: vi.fn().mockReturnValue({
+                        limit: mockSelectLimit,
+                        // claimByMerchantId: where().orderBy().limit(); listPendingInstalls: where().orderBy() (awaited, no limit)
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: mockSelectLimit,
+                            then: (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => mockListResult().then(resolve, reject),
+                        }),
+                    }),
+                };
             }),
-        }),
+        })),
         insert: vi.fn().mockImplementation((table: unknown) => ({
             values: vi.fn().mockImplementation((values: Record<string, unknown>) => {
                 capturedInserts.push({ table, values });
@@ -57,8 +70,9 @@ vi.mock('../../src/db', () => ({
             }),
         })),
         update: vi.fn().mockReturnValue({ set: vi.fn().mockReturnValue({ where: mockUpdateWhere }) }),
-        delete: vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }),
+        delete: vi.fn().mockImplementation((table: unknown) => {
+            capturedDeletes.push({ table });
+            return { where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }) };
         }),
     },
 }));
@@ -73,14 +87,20 @@ vi.mock('../../src/db/schema', () => ({
     pendingEcommerceInstalls: {
         id: 'id', platform: 'platform', storeDomain: 'storeDomain', accessToken: 'accessToken',
         accessTokenIv: 'accessTokenIv', refreshToken: 'refreshToken', refreshTokenIv: 'refreshTokenIv',
-        tokenExpiresAt: 'tokenExpiresAt', scopes: 'scopes', nonce: 'nonce', status: 'status',
-        claimedByUserId: 'claimedByUserId', expiresAt: 'expiresAt',
+        tokenExpiresAt: 'tokenExpiresAt', scopes: 'scopes', merchantId: 'merchantId', storeName: 'storeName',
+        nonce: 'nonce', status: 'status', claimedByUserId: 'claimedByUserId', expiresAt: 'expiresAt',
+        createdAt: 'createdAt',
     },
     workspaceMembers: { id: 'id', workspaceId: 'workspaceId', userId: 'userId', role: 'role' },
 }));
 
 // Import after mocks
-import { createPendingInstall, claimPendingInstall } from '../../src/services/ecommerce';
+import {
+    createPendingInstall,
+    claimPendingInstall,
+    claimPendingInstallByMerchantId,
+    listPendingInstalls,
+} from '../../src/services/ecommerce';
 import { encrypt, encryptOptional, decrypt } from '../../src/services/ecommerceCrypto';
 import { pendingEcommerceInstalls, ecommerceStores } from '../../src/db/schema';
 
@@ -90,7 +110,10 @@ describe('Pending-install token persistence (Salla/Zid refresh tokens)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         capturedInserts.length = 0;
+        capturedDeletes.length = 0;
+        capturedSelects.length = 0;
         mockSelectLimit.mockResolvedValue([]);
+        mockListResult.mockResolvedValue([]);
     });
 
     it('createPendingInstall persists an encrypted refresh token + expiry', async () => {
@@ -186,5 +209,96 @@ describe('Pending-install token persistence (Salla/Zid refresh tokens)', () => {
         expect(storeInsert!.values.refreshToken).toBeUndefined();
         expect(storeInsert!.values.refreshTokenIv).toBeUndefined();
         expect(storeInsert!.values.tokenExpiresAt).toBeUndefined();
+    });
+});
+
+describe('Salla Easy Mode pending install (merchant-id keyed claim)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        capturedInserts.length = 0;
+        capturedDeletes.length = 0;
+        capturedSelects.length = 0;
+        mockSelectLimit.mockResolvedValue([]);
+        mockListResult.mockResolvedValue([]);
+    });
+
+    const pendingDeletes = () => capturedDeletes.filter(d => d.table === pendingEcommerceInstalls).length;
+
+    it('createPendingInstall persists merchantId + storeName, dedups by merchant too, and honors a custom TTL', async () => {
+        await createPendingInstall('salla', {
+            storeDomain: 'demo.salla.sa',
+            storeName: 'متجر تجريبي',
+            merchantId: '671738424',
+            accessToken: 'easy_access',
+            refreshToken: 'easy_refresh',
+            nonce: '',
+            ttlMs: 7 * 24 * 60 * 60 * 1000,
+        });
+
+        const pending = findInsert(pendingEcommerceInstalls);
+        expect(pending!.values.merchantId).toBe('671738424');
+        expect(pending!.values.storeName).toBe('متجر تجريبي');
+        // Easy Mode runs BOTH the storeDomain dedup AND the merchant dedup (2 deletes).
+        expect(pendingDeletes()).toBe(2);
+        // Custom TTL ~7 days out (not the 30-minute default).
+        expect((pending!.values.expiresAt as Date).getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
+    });
+
+    it('createPendingInstall (cookie flow, no merchantId) runs only the storeDomain dedup and stores null merchant fields', async () => {
+        await createPendingInstall('salla', { storeDomain: 'demo.salla.sa', accessToken: 'a', nonce: 'n' });
+
+        expect(pendingDeletes()).toBe(1);
+        const pending = findInsert(pendingEcommerceInstalls);
+        expect(pending!.values.merchantId).toBeNull();
+        expect(pending!.values.storeName).toBeNull();
+        // Default 30-minute TTL.
+        expect((pending!.values.expiresAt as Date).getTime()).toBeLessThan(Date.now() + 60 * 60 * 1000);
+    });
+
+    it('claimPendingInstallByMerchantId finds the row and carries the merchantId into the store platformData', async () => {
+        const accessEnc = encrypt('easy_access');
+        const refreshEnc = encryptOptional('easy_refresh');
+        mockSelectLimit
+            // 1) pending lookup by merchant (where().orderBy().limit())
+            .mockResolvedValueOnce([{
+                id: 'pending-em', platform: 'salla', storeDomain: 'demo.salla.sa', merchantId: '671738424',
+                accessToken: accessEnc.ciphertext, accessTokenIv: accessEnc.iv,
+                refreshToken: refreshEnc.ciphertext, refreshTokenIv: refreshEnc.iv,
+                tokenExpiresAt: null, status: 'pending', expiresAt: new Date(Date.now() + 300000),
+            }])
+            // 2) getStoreByDomain → none existing
+            .mockResolvedValueOnce([])
+            // 3) workspace members
+            .mockResolvedValueOnce([{ workspaceId: 'ws-1' }]);
+
+        const store = await claimPendingInstallByMerchantId('671738424', 'user-123', 'salla');
+        expect(store).toBeTruthy();
+
+        const storeInsert = findInsert(ecommerceStores);
+        expect(storeInsert!.values.platformData).toEqual({ merchantId: '671738424' });
+        // tokens round-trip through the claim
+        expect(decrypt(storeInsert!.values.refreshToken as string, storeInsert!.values.refreshTokenIv as string)).toBe('easy_refresh');
+    });
+
+    it('claimPendingInstallByMerchantId returns null when no pending row matches', async () => {
+        mockSelectLimit.mockResolvedValueOnce([]);
+        const store = await claimPendingInstallByMerchantId('999', 'user-123', 'salla');
+        expect(store).toBeNull();
+    });
+
+    it('listPendingInstalls returns NON-secret columns only (never tokens/nonce)', async () => {
+        mockListResult.mockResolvedValueOnce([
+            { id: 'p1', storeDomain: 'demo.salla.sa', storeName: 'Shop', merchantId: '671738424', createdAt: new Date() },
+        ]);
+
+        const rows = await listPendingInstalls('salla', '671738424');
+        expect(rows).toHaveLength(1);
+
+        // Assert the source selected ONLY non-secret columns (the columns-object call).
+        const colsArg = capturedSelects.find(c => c && typeof c === 'object') as Record<string, unknown>;
+        expect(Object.keys(colsArg).sort()).toEqual(['createdAt', 'id', 'merchantId', 'storeDomain', 'storeName']);
+        expect(colsArg).not.toHaveProperty('accessToken');
+        expect(colsArg).not.toHaveProperty('refreshToken');
+        expect(colsArg).not.toHaveProperty('nonce');
     });
 });

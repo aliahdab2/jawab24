@@ -22,6 +22,8 @@ vi.mock('../../src/controllers/salla', () => ({
     syncStore: vi.fn(),
     linkPage: vi.fn(),
     unlinkPage: vi.fn(),
+    listPendingHandler: vi.fn(),
+    claimStoreHandler: vi.fn(),
 }));
 
 import sallaRoutes from '../../src/routes/salla';
@@ -30,15 +32,19 @@ describe('Salla Routes', () => {
     it('should register all required routes', async () => {
         const registeredRoutes: string[] = [];
 
-        const mockFastify = {
+        const mockFastify: any = {
             get: vi.fn((path: string) => registeredRoutes.push(`GET ${path}`)),
             post: vi.fn((path: string) => registeredRoutes.push(`POST ${path}`)),
             delete: vi.fn((path: string) => registeredRoutes.push(`DELETE ${path}`)),
             patch: vi.fn((path: string) => registeredRoutes.push(`PATCH ${path}`)),
+            // sallaRoutes nests the shared route set via fastify.register — run it against
+            // the same recorder so the shared routes are captured too.
+            register: vi.fn((plugin: (f: unknown) => unknown) => plugin(mockFastify)),
         };
 
-        await sallaRoutes(mockFastify as any);
+        await sallaRoutes(mockFastify);
 
+        // Shared OAuth + CRUD set
         expect(registeredRoutes).toContain('GET /auth');
         expect(registeredRoutes).toContain('GET /auth/callback');
         expect(registeredRoutes).toContain('POST /webhooks');
@@ -49,5 +55,8 @@ describe('Salla Routes', () => {
         expect(registeredRoutes).toContain('POST /store/sync');
         expect(registeredRoutes).toContain('PATCH /store/link-page');
         expect(registeredRoutes).toContain('PATCH /store/unlink-page');
+        // Salla-only Easy Mode claim routes
+        expect(registeredRoutes).toContain('GET /store/pending');
+        expect(registeredRoutes).toContain('POST /store/claim');
     });
 });
