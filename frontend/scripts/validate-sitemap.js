@@ -47,6 +47,7 @@ const EXCLUDED_ROUTES = new Map([
   ['complete-profile', 'onboarding (auth-gated)'],
   ['dashboard', 'app workspace (auth-gated)'],
   ['ecommerce-analytics', 'app workspace (auth-gated)'],
+  ['gdpr/deletion-status', 'data-deletion status page (noindex — the URL returned by the Facebook data-deletion callback)'],
   ['integrations', 'integrations hub (noindex — the /integrations/[slug] subpages are indexable)'],
   ['invites/accept', 'invite flow (noindex)'],
   ['leads', 'app workspace (auth-gated)'],
