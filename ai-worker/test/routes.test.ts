@@ -202,6 +202,27 @@ describe('Routes', () => {
                 extra: { comment: 'Hello', language: 'en' },
             });
         });
+
+        it('serializes AiQuotaExhaustedError as a typed 500 the backend can reconstruct by name', async () => {
+            // The whole park-and-retry chain hinges on this wire contract: a quota
+            // failure must reach the backend AS a typed error, not a generic 500.
+            const { AiQuotaExhaustedError } = await import('../src/lib/errors');
+            mockGenerateReply.mockRejectedValue(new AiQuotaExhaustedError());
+
+            const res = await app.inject({
+                method: 'POST',
+                url: '/generate',
+                payload: { comment: 'بكم السعر' },
+            });
+
+            expect(res.statusCode).toBe(500);
+            expect(res.json().error).toEqual({
+                name: 'AiQuotaExhaustedError',
+                message: 'OpenAI quota exhausted (insufficient_quota)',
+            });
+            // Typed AI errors are expected outcomes — must NOT spam Sentry.
+            expect(mockCaptureException).not.toHaveBeenCalled();
+        });
     });
 
     // --- POST /generate/batch ---
