@@ -16,8 +16,9 @@ import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
 import { classifyFallbackIntent } from './reply/fallbackClassifier';
 import { getModelForUser } from './aiModelResolver';
-import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError } from '../utils/fbGraphErrors';
+import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError, AiQuotaExhaustedError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
+import { emailService } from './email';
 import type { AiPipeline } from '../types/aiPipeline';
 
 /** Context used to scope exact-cache lookups and writes. */
@@ -683,6 +684,12 @@ export class AiService {
                             // ai-worker's "no client" maps to backend's AiUnavailableError
                             // (same semantics: permanent-but-flag-via-retry-exhaustion).
                             throw new AiUnavailableError(message);
+                        case 'AiQuotaExhaustedError':
+                            // OpenAI out of credit. Fire a throttled "top up" alert,
+                            // then rethrow the typed error so the worker PARKS the job
+                            // (re-enqueue with long delay) instead of flagging it.
+                            await this.alertQuotaExhausted(pipeline, message).catch(() => {});
+                            throw new AiQuotaExhaustedError(message);
                     }
                     // Unknown name: fall through to generic rethrow below — don't
                     // over-classify by inventing a typed error we don't recognize.
@@ -699,6 +706,75 @@ export class AiService {
         }
     }
 
+
+    /**
+     * Fire a throttled, high-severity alert that OpenAI is out of quota. This is
+     * the actionable signal — billing must be topped up; until then every reply
+     * parks and retries. Deduplicated via a Redis key (default 10 min TTL) so a
+     * sustained outage doesn't flood Sentry/email with one alert per failed call.
+     * Never throws — alerting must not affect the reply path.
+     *
+     * No `recordAiFailedBeforeLog('AiQuotaError')` here on purpose: per the
+     * one-canonical-emit-site rule (AI_INSTRUCTIONS §13c), the ai-worker already
+     * emits the `AiQuotaError` failed_before_log at its OpenAI call site; the
+     * backend's only metric role on this hop is `AiWorkerUnreachable` (emitted in
+     * the generateReply catch). Emitting here too would double-count.
+     *
+     * Note on the circuit breaker: once a sustained quota outage trips the
+     * ai-worker circuit (after failureThreshold typed-500s), generateReply takes
+     * the failover branch and CircuitOpenError — not AiQuotaExhaustedError —
+     * reaches the worker, so this alert only fires for the pre-open window (the
+     * throttle means one alert is enough) and those jobs then park on the shorter
+     * circuit delay. That's acceptable: the operator has already been alerted.
+     */
+    private async alertQuotaExhausted(pipeline: AiPipeline, message?: string): Promise<void> {
+        const dedupKey = 'alert:openai_quota_exhausted';
+        let shouldAlert = true;
+        try {
+            // SET NX with TTL — only the first caller in the window gets the alert.
+            const acquired = await redis.set(dedupKey, '1', 'EX', config.ai.quotaAlertCooldownSeconds, 'NX');
+            shouldAlert = acquired === 'OK';
+        } catch {
+            // Redis unavailable — still alert (better a duplicate than silence).
+        }
+        if (!shouldAlert) return;
+
+        this.logger.error('OpenAI quota exhausted — replies are parking until billing is topped up', {
+            pipeline,
+            detail: message,
+        });
+        Sentry.captureMessage('OpenAI quota exhausted (insufficient_quota) — top up billing', {
+            level: 'error',
+            tags: { alert: 'openai_quota_exhausted' },
+            extra: { pipeline, detail: message },
+        });
+
+        // Self-contained operator alert (does NOT depend on a Sentry alert rule
+        // being configured). Goes to the platform admins — they control OpenAI
+        // billing; merchants can't act on this. Fire-and-forget, already throttled
+        // by the dedup above. `message` is our own error text, but escape it
+        // defensively before embedding in HTML.
+        const admins = config.adminEmails;
+        if (admins.length > 0) {
+            const safeDetail = (message ?? 'n/a').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string));
+            const html = `<p><b>OpenAI returned <code>insufficient_quota</code></b> — Jawab24 auto-replies are now <b>parking</b> and will not send until the OpenAI balance is topped up.</p>`
+                + `<p>Pipeline: <b>${pipeline}</b><br/>Detail: ${safeDetail}</p>`
+                + `<p><b>Action:</b> add credit / raise the usage limit in the OpenAI billing dashboard. Parked replies resume automatically once credit returns.</p>`;
+            // Fire each send WITHOUT awaiting: emailService.send hits Resend
+            // (rate-limited, network I/O) and this runs inside the reply worker's
+            // failure path — awaiting it could add latency or, on a hung send,
+            // stall the job. Alerting is best-effort; each send swallows its own
+            // error. The dedup above already bounds this to one burst per window.
+            for (const to of admins) {
+                void emailService.send({
+                    to,
+                    subject: '🚨 Jawab24: OpenAI quota exhausted — top up billing',
+                    html,
+                    type: 'transactional',
+                }).catch(() => { /* never block the reply path */ });
+            }
+        }
+    }
 
     /**
      * Get cache statistics

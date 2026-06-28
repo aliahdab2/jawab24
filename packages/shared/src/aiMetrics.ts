@@ -21,6 +21,7 @@ export type FailedBeforeLogClass =
     | 'AiEmptyReplyError'
     | 'AiRefusalError'
     | 'AiTimeoutError'
+    | 'AiQuotaError'          // OpenAI 429 insufficient_quota — account out of credit (parked + alerted)
     | 'OpenAIApiError'
     | 'AiWorkerUnreachable'   // backend → ai-worker hop failed (axios error, circuit open)
     | 'ZeroTokens'

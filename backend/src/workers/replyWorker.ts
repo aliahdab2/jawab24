@@ -13,8 +13,82 @@ import { messagesService } from '../services/messages';
 import { notificationService } from '../services/notifications';
 import { db } from '../db';
 import { messages } from '../db/schema';
+import { AiQuotaExhaustedError } from '../utils/fbGraphErrors';
 
 const MAX_HANDOFF_RETRIES = 3;
+
+/**
+ * When the AI is temporarily unavailable for a recoverable reason, decide how
+ * long to park (re-enqueue with delay) before retrying — instead of burning
+ * BullMQ's fast retries (2s/4s/8s) and flagging the row needs_attention.
+ *
+ *   - OpenAI insufficient_quota → recovers only when billing is topped up, never
+ *     in seconds. Park long (config.ai.quotaParkSeconds, default 15 min).
+ *   - ai-worker circuit open → usually a short blip; ai.ts already tried provider
+ *     failover and it didn't save the call. Park briefly past the circuit's open
+ *     window (config.ai.circuitParkSeconds, default 60s) so a routine restart
+ *     doesn't get a 15-min penalty, while a sustained quota outage still trickles
+ *     into the long-park path on the next attempt.
+ *
+ * Returns null for anything that should keep its normal retry/flag behavior.
+ */
+function planAiPark(error: unknown): { kind: 'quota' | 'circuit'; delaySeconds: number } | null {
+    if (error instanceof AiQuotaExhaustedError) {
+        return { kind: 'quota', delaySeconds: config.ai.quotaParkSeconds };
+    }
+    // Match CircuitOpenError by name (not instanceof) so the worker need not import
+    // circuitBreaker (which pulls in redis); robust to module-boundary class identity.
+    if (error instanceof Error && error.name === 'CircuitOpenError') {
+        return { kind: 'circuit', delaySeconds: config.ai.circuitParkSeconds };
+    }
+    return null;
+}
+
+/**
+ * Re-enqueue the current job with a delay, carrying an incremented aiRetryCount
+ * (kept separate from handoffRetries so quota-parked jobs are NOT treated as
+ * handoff backlog). Mirrors the handoff re-enqueue but for AI-unavailable parking.
+ * Returns false when the job lacks the ids needed to re-enqueue.
+ */
+async function reEnqueueParked(job: Job<ReplyJobData>, delaySeconds: number, nextAiRetryCount: number): Promise<boolean> {
+    const { jobType } = job.data;
+    const isComment = jobType.includes('comment');
+
+    if (isComment && job.data.postId && job.data.commentId) {
+        await enqueueComment({
+            jobType: jobType as 'facebook_comment' | 'instagram_comment',
+            pageId: job.data.pageId,
+            postId: job.data.postId,
+            commentId: job.data.commentId,
+            parentId: job.data.parentId,
+            text: job.data.text,
+            senderId: job.data.senderId,
+            senderName: job.data.senderName,
+            messageTags: job.data.messageTags,
+            requestId: job.data.requestId,
+            replyDelay: delaySeconds,
+            aiRetryCount: nextAiRetryCount,
+        });
+        return true;
+    }
+    if (!isComment && job.data.messageId && job.data.senderId) {
+        await enqueueMessage({
+            jobType: jobType as 'facebook_message' | 'instagram_message' | 'whatsapp_message',
+            pageId: job.data.pageId,
+            messageId: job.data.messageId,
+            senderId: job.data.senderId,
+            text: job.data.text,
+            sharedPostUrl: job.data.sharedPostUrl,
+            sharedPostId: job.data.sharedPostId,
+            senderName: job.data.senderName,
+            requestId: job.data.requestId,
+            replyDelay: delaySeconds,
+            aiRetryCount: nextAiRetryCount,
+        });
+        return true;
+    }
+    return false;
+}
 
 // Connection configuration for BullMQ
 const connection = {
@@ -261,6 +335,49 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
                 error: error.message,
             });
             throw error; // BullMQ will not retry
+        }
+
+        // AI temporarily unavailable (OpenAI insufficient_quota / circuit open):
+        // PARK the job instead of fast-retrying and flagging. Re-enqueue with a
+        // delay and an incremented aiRetryCount so the message auto-replies once
+        // the AI recovers (e.g. billing topped up). Bounded by parkMaxRetries so a
+        // genuinely dead account doesn't park forever — once the budget is spent
+        // we fall through to the normal rethrow → retry-exhaustion → flag path.
+        const parkPlan = planAiPark(error);
+        if (parkPlan) {
+            const aiRetryCount = job.data.aiRetryCount ?? 0;
+            const pipeline = jobType as Pipeline;
+            if (aiRetryCount < config.ai.parkMaxRetries) {
+                const reEnqueued = await reEnqueueParked(job, parkPlan.delaySeconds, aiRetryCount + 1);
+                if (reEnqueued) {
+                    pipelineMetrics.record(pipeline, 'ai_parked');
+                    logger.warn('[ReplyWorker] AI unavailable — job parked for retry', {
+                        jobId: job.id,
+                        jobType,
+                        requestId,
+                        kind: parkPlan.kind,
+                        delaySeconds: parkPlan.delaySeconds,
+                        aiRetryCount: aiRetryCount + 1,
+                        parkMaxRetries: config.ai.parkMaxRetries,
+                    });
+                    // Resolve (not throw): BullMQ marks this attempt completed and does
+                    // NOT fire 'failed', so flagStuckJobOnFinalFailure won't flag the row.
+                    // The delayed copy carries the retry forward.
+                    return { success: false, error: `AI unavailable (${parkPlan.kind}) — parked for retry` };
+                }
+                // Missing ids to re-enqueue — fall through to normal retry/flag.
+            } else {
+                // Park budget exhausted. Let it flag so the merchant can act (and so
+                // a permanently-dead account doesn't leave messages parked forever).
+                pipelineMetrics.record(pipeline, 'ai_park_exhausted');
+                logger.error('[ReplyWorker] AI park budget exhausted — letting job flag', {
+                    jobId: job.id,
+                    jobType,
+                    requestId,
+                    kind: parkPlan.kind,
+                    aiRetryCount,
+                });
+            }
         }
 
         // For other errors, log and let BullMQ retry

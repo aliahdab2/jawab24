@@ -371,6 +371,26 @@ export class AiEmptyReplyError extends Error {
 }
 
 /**
+ * Reconstructed (by name) from the ai-worker's typed 500 when OpenAI returns
+ * 429 `insufficient_quota` — the account is out of credit / hit its billing
+ * limit. Persistent (won't recover in BullMQ's 2s/4s/8s window) but self-heals
+ * the instant billing is topped up. The reply pipeline does NOT flag this as
+ * needs_attention; instead the worker PARKS the job (long-delay re-enqueue, see
+ * `planAiPark` + replyWorker park-and-retry) so the message auto-replies once
+ * credit returns, and ai.ts fires a throttled "top up OpenAI" alert.
+ *
+ * Classified transient in `isTransientAiError` so the processor rethrows it
+ * (rather than swallowing into success:false) — that's what lets it reach the
+ * worker's catch where the parking decision is made.
+ */
+export class AiQuotaExhaustedError extends Error {
+    constructor(message = 'OpenAI quota exhausted (insufficient_quota)') {
+        super(message);
+        this.name = 'AiQuotaExhaustedError';
+    }
+}
+
+/**
  * True when an error raised from `aiService.generateReply` or the e-commerce
  * tool loop should be rethrown so BullMQ retries the job. Mirrors
  * `isTransientFbError`: reply-pipeline outer catches use this alongside the
@@ -408,6 +428,12 @@ export function isTransientAiError(err: unknown): boolean {
     if (err instanceof AiToolLoopExhaustedError) return true;
     if (err instanceof AiUnavailableError) return true;
     if (err instanceof AiTimeoutError) return true;
+
+    // Quota exhaustion is permanent-until-topped-up, but classified transient
+    // here so the processor rethrows it up to the worker's catch — where
+    // `planAiPark` re-enqueues it with a long delay instead of flagging. The
+    // park budget (replyWorker) bounds how long it retries before giving up.
+    if (err instanceof AiQuotaExhaustedError) return true;
 
     // Non-transient: same input → same refusal / same empty filter result.
     // Retrying wastes API calls AND delays the needs_attention flag the merchant

@@ -9,6 +9,7 @@ import {
     AiTimeoutError,
     AiRefusalError,
     AiEmptyReplyError,
+    AiQuotaExhaustedError,
     needsImmediateAttention,
 } from '../../src/utils/fbGraphErrors';
 
@@ -319,6 +320,12 @@ describe('isTransientAiError — retry-worthy classifier for AI-side failures', 
 
     it('returns false for AiEmptyReplyError (bot-words filter is deterministic — same input → same empty)', () => {
         expect(isTransientAiError(new AiEmptyReplyError())).toBe(false);
+    });
+
+    it('returns true for AiQuotaExhaustedError (must propagate to the worker to be parked)', () => {
+        // Quota is permanent-until-topped-up, but classified transient here so the
+        // processor rethrows it up to the worker's catch where park-and-retry lives.
+        expect(isTransientAiError(new AiQuotaExhaustedError())).toBe(true);
     });
 });
 

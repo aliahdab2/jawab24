@@ -66,6 +66,45 @@ export class AiEmptyReplyError extends Error {
 }
 
 /**
+ * Thrown when OpenAI returns 429 `insufficient_quota` — the account is out of
+ * credit or has hit its billing hard limit. This is account-level and persistent:
+ * it does NOT recover within BullMQ's fast retry window (2s/4s/8s), but DOES
+ * recover the moment billing is topped up. Backend treats this specially —
+ * instead of burning retries and flagging the row needs_attention, it PARKS the
+ * job (re-enqueue with a long delay) so the message auto-replies once credit
+ * returns, and fires a throttled "top up OpenAI" alert. See backend
+ * replyWorker.ts park-and-retry and ai.ts quota alert.
+ */
+export class AiQuotaExhaustedError extends Error {
+    constructor(message = 'OpenAI quota exhausted (insufficient_quota)') {
+        super(message);
+        this.name = 'AiQuotaExhaustedError';
+    }
+}
+
+/**
+ * True when an OpenAI SDK error is a 429 `insufficient_quota` (account out of
+ * credit / billing hard limit), as opposed to a plain rate-limit 429 (which is
+ * genuinely transient and should keep its fast-retry behavior). The SDK surfaces
+ * the code on the error itself and nested under `.error` depending on version, so
+ * we check both. Exported so it can be unit-tested without a live OpenAI call.
+ */
+export function isInsufficientQuotaError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const e = err as { status?: unknown; code?: unknown; error?: { code?: unknown; type?: unknown } };
+    const status = typeof e.status === 'number' ? e.status : undefined;
+    const code = typeof e.code === 'string' ? e.code : undefined;
+    const nestedCode = typeof e.error?.code === 'string' ? e.error.code : undefined;
+    const nestedType = typeof e.error?.type === 'string' ? e.error.type : undefined;
+    const quotaMarker = code === 'insufficient_quota'
+        || nestedCode === 'insufficient_quota'
+        || nestedType === 'insufficient_quota';
+    // insufficient_quota is always reported with HTTP 429, but some SDK wrappers
+    // drop the status — accept the marker on its own to stay robust.
+    return quotaMarker && (status === undefined || status === 429);
+}
+
+/**
  * Names recognized by backend's error reconstruction in ai.ts. Anything thrown
  * with a different `name` will be caught by Fastify's default 500 handler and
  * the original (non-typed) error path on the backend side.
@@ -75,6 +114,7 @@ export const AI_TYPED_ERROR_NAMES: ReadonlySet<string> = new Set([
     'AiTimeoutError',
     'AiRefusalError',
     'AiEmptyReplyError',
+    'AiQuotaExhaustedError',
 ]);
 
 /**
