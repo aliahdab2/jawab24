@@ -195,7 +195,9 @@ function buildPerCallBlock(request: GenerateRequest): string {
         ? (request.context?.postMessage
             ? 'sending a DM to a customer who commented on a post — use the post content (in [current_post]) as authoritative business info to answer their question'
             : 'chatting with a customer via direct message on Messenger')
-        : 'replying to a customer comment on a social media post'}
+        : (request.context?.postMessage
+            ? 'replying to a comment on a post — use the post content (in [current_post]) as authoritative business info to answer about the item the customer is asking about'
+            : 'replying to a customer comment on a social media post')}
 - Reply language: ${languageName} (code: ${language})
 - Today's date: ${formatTodayForPrompt(request.context?.timezone)}. Use it to judge whether a date in the business info or post is already past or still upcoming. A date or deadline BEFORE today has already passed — never describe such an offer, registration, or event as still open, upcoming, or "starts soon". Keep answering though: if some dates have passed, give the next/still-valid one when it's available and just drop the outdated detail — do NOT refuse or deflect the whole question over a stale date.
 
@@ -257,13 +259,13 @@ ${chunkLines}${buildPoliciesBlock(request)}
 
     // Current post — the business's own published content, a trusted source for answering a
     // comment. It is per-message, so it trails the cached prefix as its own labeled block (the
-    // channel directive above references [current_post] by name). Emitted only when a knowledge
-    // block exists, matching prior behavior — a post without any KB still reaches the model via
-    // buildUserPrompt. Capped at 500 chars (same as the user-prompt post label).
-    const hasStableKb = !(retrievedChunks && retrievedChunks.length > 0)
-        && !!request.context?.knowledgeBase?.trim();
-    const hasChunks = !!(retrievedChunks && retrievedChunks.length > 0);
-    if (request.context?.postMessage && (hasStableKb || hasChunks)) {
+    // channel directive above references [current_post] by name). Emitted whenever a post is
+    // present, even with no KB / no chunks: an empty-KB merchant whose customer comments on a
+    // post must still see the post here, otherwise the model only gets the thin user-prompt
+    // label and stalls with a generic "which product?". (This also keeps the DM directive's
+    // [current_post] reference honest when an empty-KB page gets a comment-on-post DM.)
+    // Capped at 500 chars (same as the user-prompt post label).
+    if (request.context?.postMessage) {
         prompt += `\n\n[current_post]\n${sanitizeForPrompt(request.context.postMessage).slice(0, 500)}`;
     }
 

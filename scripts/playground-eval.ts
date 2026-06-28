@@ -2432,9 +2432,10 @@ const TEST_CASES: TestCase[] = [
         expected: {
             replyMethod: ['ai'],
             intent: ['QUESTION'],
-            replyNotContains: ['iPhone', 'لابتوب'],
+            replyContainsAny: ['AirPods', 'إيربود', 'ايربود', 'سماع'],
+            replyNotContains: ['iPhone', 'لابتوب', 'أي خدمة', 'أي منتج', 'منتج معين', 'خدمة معينة', 'which product'],
         },
-        notes: 'Same ambiguous price Q but post context anchors it to AirPods — must not answer about other products',
+        notes: 'Same ambiguous price Q but post context anchors it to AirPods — must engage the item, must NOT answer about other products OR ask "which product?" (v48)',
     },
 
     // 35.5 — Post has info NOT in KB — model should answer from post
@@ -2497,6 +2498,24 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['40', '٤٠', 'مكياج'],
         },
         notes: 'Dual mode: DM reply for a comment on a promo post. Post has the promo price — model should use it.',
+    },
+
+    // 35.9 — Single-item post with a contact number but NO price (not in post, not in
+    // KB). The bot must engage the specific item and point to the contact in the post —
+    // NEVER ask "which product?" (the post IS the subject). Mirrors the real car-dealer
+    // "بكام" failure that motivated the v48 fix.
+    {
+        id: 314, category: 35, categoryName: 'Comment Post Context', channel: 'comment',
+        message: 'بكام',
+        page: 'electronics',
+        postMessage: 'آيفون 15 برو ماكس 1 تيرا جديد متبرشم — للتواصل ٠١٠٠١٢٣٤٥٦٧',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyContainsAny: ['آيفون', 'iPhone', 'الآيفون', '٠١٠٠١٢٣٤٥٦٧', '01001234567'],
+            replyNotContains: ['أي خدمة', 'أي منتج', 'منتج معين', 'خدمة معينة', 'which product', 'which service'],
+        },
+        notes: 'Single-item post + contact, no price → name the item / point to the post contact; must NOT ask "which product?". The screenshot bug (v48).',
     },
 
     // ===== Category 36: Comment Sender Name =====
