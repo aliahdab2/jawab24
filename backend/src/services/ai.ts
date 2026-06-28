@@ -711,13 +711,23 @@ export class AiService {
      * Fire a throttled, high-severity alert that OpenAI is out of quota. This is
      * the actionable signal — billing must be topped up; until then every reply
      * parks and retries. Deduplicated via a Redis key (default 10 min TTL) so a
-     * sustained outage doesn't flood Sentry with one event per failed call. Never
-     * throws — alerting must not affect the reply path.
+     * sustained outage doesn't flood Sentry/email with one alert per failed call.
+     * Never throws — alerting must not affect the reply path.
+     *
+     * No `recordAiFailedBeforeLog('AiQuotaError')` here on purpose: per the
+     * one-canonical-emit-site rule (AI_INSTRUCTIONS §13c), the ai-worker already
+     * emits the `AiQuotaError` failed_before_log at its OpenAI call site; the
+     * backend's only metric role on this hop is `AiWorkerUnreachable` (emitted in
+     * the generateReply catch). Emitting here too would double-count.
+     *
+     * Note on the circuit breaker: once a sustained quota outage trips the
+     * ai-worker circuit (after failureThreshold typed-500s), generateReply takes
+     * the failover branch and CircuitOpenError — not AiQuotaExhaustedError —
+     * reaches the worker, so this alert only fires for the pre-open window (the
+     * throttle means one alert is enough) and those jobs then park on the shorter
+     * circuit delay. That's acceptable: the operator has already been alerted.
      */
     private async alertQuotaExhausted(pipeline: AiPipeline, message?: string): Promise<void> {
-        // Always bump the metric (cheap, useful for the breakdown / a metrics alert).
-        recordAiFailedBeforeLog(pipeline, config.ai.model, 'AiQuotaError');
-
         const dedupKey = 'alert:openai_quota_exhausted';
         let shouldAlert = true;
         try {
