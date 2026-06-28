@@ -46,5 +46,13 @@
   "dataRetentionTitle": "Data Retention",
   "dataRetentionText": "After deletion, your data will be permanently removed from our servers within 90 days. Some data may be retained in encrypted backups for a limited period for legal compliance.",
   "backToHome": "Back to Jawab24",
-  "footerLink": "Data Deletion"
+  "footerLink": "Data Deletion",
+  "statusTitle": "Data Deletion Status - Jawab24",
+  "statusMetaDescription": "Check the status of your Jawab24 data deletion request.",
+  "statusHeader": "Data Deletion Request Received",
+  "statusReceived": "We have received your data deletion request and removed the associated data from our systems.",
+  "statusCodeLabel": "Confirmation code:",
+  "statusProcessedNote": "Any remaining copies in encrypted backups are permanently removed within 90 days, in line with our data retention policy.",
+  "statusNoCode": "No confirmation code was provided. If you are checking a specific request, please use the link from your confirmation.",
+  "statusSupport": "If you have any questions about your request, contact us at"
 }
