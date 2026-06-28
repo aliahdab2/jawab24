@@ -5,7 +5,6 @@ import {
     stripSelfIdentification,
     validateReply,
     capContactNumbers,
-    nameTokenConfirmedAsItem,
 } from '../src/services/reply/replyValidator';
 import type { GenerateRequest, ParsedReply } from '../src/services/reply/types';
 
@@ -329,34 +328,5 @@ describe('capContactNumbers (Check 7 — never a wall of numbers)', () => {
     it('does not touch prices or dates (runs under 8 digits)', () => {
         const r = 'السعر 200 ألف وتبدأ 5/7/2026';
         expect(capContactNumbers(r, 1)).toBe(r);
-    });
-});
-
-describe('nameTokenConfirmedAsItem (Check 8 — name word confirmed as a course)', () => {
-    const ctx = (name: string) => `Customer's name is "${name}" (their NAME only — never treat any word in it as a product, course, or service they want)`;
-
-    it('flags the surname when it is confirmed as a course absent from the KB (the prod bug)', () => {
-        const tok = nameTokenConfirmedAsItem('تكرم عينك محمد، رح نتواصل معك لتأكيد التسجيل بدورة الحقوق', ctx('محمد حقوق'), 'دورة اللغة الألمانية، دورة التصوير، دورة الأمين');
-        expect(tok).toBe('حقوق');
-    });
-    it('flags an English name token framed as a course not in KB', () => {
-        const tok = nameTokenConfirmedAsItem('Thanks John, you are registered for the Law course', ctx('John Law'), 'German course, Photography course');
-        expect(tok).toBe('law');
-    });
-    it('does NOT flag a legit confirmation of a real KB course', () => {
-        const tok = nameTokenConfirmedAsItem('تمام محمد، سجّلتك بدورة اللغة الألمانية', ctx('محمد علي'), 'دورة اللغة الألمانية - المستوى الأول');
-        expect(tok).toBeNull();
-    });
-    it('does NOT flag when a name token IS a real KB course (coincidence)', () => {
-        // Customer surname "الأمين" but the KB really has "دورة الأمين" → legit, not a hallucination.
-        const tok = nameTokenConfirmedAsItem('سجّلتك بدورة الأمين', ctx('سامر الأمين'), 'دورة الأمين للمحاسبة');
-        expect(tok).toBeNull();
-    });
-    it('does NOT flag merely addressing the customer by name near a registration word', () => {
-        const tok = nameTokenConfirmedAsItem('سجّلت بياناتك يا محمد حقوق ✅', ctx('محمد حقوق'), 'دورة اللغة الألمانية');
-        expect(tok).toBeNull();
-    });
-    it('returns null when there is no customer context', () => {
-        expect(nameTokenConfirmedAsItem('سجّلتك بدورة الحقوق', undefined, 'دورة الألمانية')).toBeNull();
     });
 });

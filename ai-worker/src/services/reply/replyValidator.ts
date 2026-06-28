@@ -4,7 +4,6 @@
  * No API calls (zero extra cost). Pure functions of (parsed reply, request), so
  * each guard is unit-testable in isolation — see replyValidator.test.ts.
  */
-import { normalizeArabic } from '@jawab24/shared';
 import { detectLanguage } from '../language';
 import { getKBText, resolveLanguage, resolveChannel } from './replyContext';
 import type { GenerateRequest, ParsedReply, ValidatedReply } from './types';
@@ -253,35 +252,6 @@ export function capContactNumbers(reply: string, max = 1): string {
 }
 
 /**
- * Check 8 — a word inside the customer's NAME must never be confirmed as a course/
- * product. Narrowly scoped (low false-positive): fires ONLY when the reply frames a
- * token of the customer's own name (from `customerContext`) as a course/product AND
- * that token is absent from the KB. Catches "محمد حقوق" → "تأكيد التسجيل بدورة الحقوق"
- * without touching legitimate confirmations of real KB courses. Returns the offending
- * name token, or null. Language/vertical-agnostic: name-token vs KB membership.
- */
-export function nameTokenConfirmedAsItem(reply: string, customerContext: string | undefined, kbText: string): string | null {
-    if (!reply || !customerContext) return null;
-    const nameMatch = customerContext.match(/name is "([^"]+)"/i) || customerContext.match(/name:\s*([^.\n]+)/i);
-    if (!nameMatch) return null;
-    // normalizeTaaMarbuta so "دورة"→"دوره" (matches the regex below) and ة/ه variants fold.
-    const norm = (s: string) => normalizeArabic(s.toLowerCase(), { normalizeTaaMarbuta: true });
-    const nKb = norm(kbText);
-    const nReply = norm(reply);
-    const tokens = norm(nameMatch[1]).split(/\s+/).filter(t => t.length >= 3);
-    for (const tok of tokens) {
-        if (nKb.includes(tok)) continue; // a real KB course/product that happens to match the name is fine
-        const t = tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // The token sits in a course/product NAME slot — "دورة <tok>", "<tok> course",
-        // or "course in/for the <tok>". Position-anchored so merely addressing the
-        // customer by name near a registration word does NOT trip it.
-        const framed = new RegExp(`(?:دوره|بدوره|كورس)\\s+(?:ال)?${t}|(?:ال)?${t}\\s+course|\\bcourse\\s+(?:in\\s+|for\\s+)?(?:the\\s+)?(?:ال)?${t}\\b`, 'i');
-        if (framed.test(nReply)) return tok;
-    }
-    return null;
-}
-
-/**
  * Run all post-reply checks and return the corrected reply + flags.
  * Mutations are applied in order; Check 4 (hedging) lowers confidence which
  * Check 5 then reads, so ordering is significant — do not reorder.
@@ -370,20 +340,12 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest): Va
         finalReply = capContactNumbers(finalReply, 1);
     }
 
-    // Check 8: A token of the customer's NAME confirmed as a course/product not in the KB
-    // → neutralize the false confirmation and ask which one (the correct behavior for the
-    // ambiguous input). Deterministic backstop for the prompt's prevention (Example 13),
-    // which is probabilistic. Narrow by construction → very low false-positive surface.
-    if (finalReply && (parsed.intent === 'PURCHASE_INTENT' || parsed.intent === 'QUESTION')) {
-        const kbText = getKBText(request);
-        if (nameTokenConfirmedAsItem(finalReply, request.context?.customerContext, kbText || '')) {
-            const lang = parsed.language || request.language || 'ar';
-            finalReply = lang === 'ar'
-                ? 'تمام! خليني أتأكد — شو بالضبط حابب تسجّل فيه؟'
-                : 'Got it! Just to confirm — what exactly would you like to register for?';
-            if (!flags.includes('info_not_in_kb')) flags.push('info_not_in_kb');
-        }
-    }
+    // NOTE: item-grounding (don't confirm a course/product/service not in the KB) is handled
+    // by prevention in the system prompt — NOT a deterministic guard here. A regex can't
+    // generically extract "the confirmed item" across every vertical/language without
+    // misfiring, and a misfire ("which one?" on a clear message) reads as the bot not
+    // understanding. Prices (flagHallucinatedPrice) and phone-walls (capContactNumbers) ARE
+    // structured, so those stay deterministic. See plan: shimmering-wandering-clock.md.
 
     return { ...parsed, reply: finalReply, flags };
 }

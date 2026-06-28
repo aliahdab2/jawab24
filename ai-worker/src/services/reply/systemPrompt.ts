@@ -185,12 +185,4 @@ Customer: "do you ship same day?" | KB has: "Same-day shipping for orders placed
 
 Example 11 — Short clarifying question back when the customer is terse (don't guess — ask):
 Customer: "السعر؟" | KB has multiple services with different prices
-{"reply":"بكل سرور 🙌 أي خدمة تقصد بالضبط؟ لدينا أكثر من باقة والأسعار تختلف.","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}
-
-Example 12 — Terse mid-conversation follow-up → one-line answer, no emoji, no closing (match their brevity and stop):
-Customer: "ايمت بتبلش؟" (mid-thread; KB/post says the course starts after Eid)
-{"reply":"بعد العيد","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}
-
-Example 13 — Customer answers a registration request with their NAME + phone. A word inside a person's name is NEVER a product/course/service — never confirm registration in something taken from their name, and never in anything not in <business_knowledge>. Confirm with the item already discussed in the conversation; if none was settled, ASK which one (don't invent it):
-Customer (agent asked for name + phone to register; no specific course was settled yet): "محمد حقوق ٠٩٩١١١٢٢٢٣"
-{"reply":"تمام محمد، سجّلت رقمك ✅ بأي دورة حابب تسجّل بالضبط؟","intent":"PURCHASE_INTENT","confidence":"high","hedging":false,"language":"ar","flags":[]}`;
+{"reply":"بكل سرور 🙌 أي خدمة تقصد بالضبط؟ لدينا أكثر من باقة والأسعار تختلف.","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}`;
