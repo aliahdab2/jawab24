@@ -310,14 +310,13 @@ describe('SettingsPage - Fetch failure guards (overwrite prevention)', () => {
         expect(mockedSettingsApi.update).not.toHaveBeenCalled();
     });
 
-    it('save preserves field values loaded from fetch — never sends INITIAL_SETTINGS defaults', async () => {
-        // The exact regression: a successful fetch returns commentReplyMode='dual'.
-        // The user then edits an unrelated field (brand voice notes) and saves.
-        // The save payload MUST include commentReplyMode='dual' from the loaded
-        // settings, not 'public' from INITIAL_SETTINGS. If this assertion fires,
-        // it means the loaded settings are not being persisted into the save
-        // payload — which is exactly what happened during the offline-reload
-        // incident that motivated the loadError guard.
+    it('save sends only changed fields — untouched loaded values are never overwritten', async () => {
+        // The overwrite-with-defaults bug (loaded values flipping back to
+        // INITIAL_SETTINGS in the save payload) is now structurally impossible:
+        // Save sends ONLY the fields the user changed (a partial PUT). The user
+        // edits one unrelated field (brand voice notes); the payload must carry
+        // that edit and must NOT carry untouched fields like commentReplyMode —
+        // an omitted field can't be clobbered by the backend's partial update.
         mockedSettingsApi.get.mockResolvedValue({
             data: {
                 dashboardLanguage: 'en',
@@ -374,24 +373,22 @@ describe('SettingsPage - Fetch failure guards (overwrite prevention)', () => {
 
         const payload = mockedSettingsApi.update.mock.calls[0][0] as Record<string, unknown>;
 
-        // Critical assertions: unchanged fields from the fetched settings must
-        // round-trip through the save payload unchanged. If any of these flip
-        // to INITIAL_SETTINGS defaults, the overwrite-with-defaults bug is back.
-        expect(payload.commentReplyMode).toBe('dual');
-        expect(payload.replyStyle).toBe('casual');
-        expect(payload.holdLowConfidence).toBe(true);
-        expect(payload.timezone).toBe('Asia/Damascus');
-
-        // The edited field is also in the payload (sanity check).
+        // The edited field is sent...
         expect(payload.brandVoiceNotesMulti).toMatchObject({ en: 'New voice text' });
+        // ...and untouched fields are NOT — so they can't be overwritten with
+        // INITIAL_SETTINGS defaults (the overwrite-with-defaults bug can't recur
+        // when omitted fields are left to the backend's partial update).
+        expect(payload).not.toHaveProperty('commentReplyMode');
+        expect(payload).not.toHaveProperty('replyStyle');
+        expect(payload).not.toHaveProperty('holdLowConfidence');
+        expect(payload).not.toHaveProperty('timezone');
     });
 
-    it('keeps user edits and loaded values intact after a failed save (no state corruption)', async () => {
+    it('keeps user edits intact after a failed save (no state corruption)', async () => {
         // Scenario: user is mid-edit, presses Save, network drops, save fails.
-        // The UI must keep the user's in-progress edits AND the originally
-        // loaded settings exactly as they were — nothing reverts to defaults,
-        // nothing is silently lost. A retry must therefore send the same full
-        // payload, including unchanged fields from the original fetch.
+        // The UI must keep the user's in-progress edits — nothing reverts to
+        // defaults, nothing is silently lost. A retry sends the same diff (the
+        // edited field), and never the untouched loaded fields.
         mockedSettingsApi.get.mockResolvedValue({
             data: {
                 dashboardLanguage: 'en',
@@ -462,14 +459,15 @@ describe('SettingsPage - Fetch failure guards (overwrite prevention)', () => {
             expect(mockedSettingsApi.update).toHaveBeenCalledTimes(2);
         });
 
-        // The retry payload must carry BOTH the user's edit AND every
-        // originally-loaded field — no defaults leaked in after the failure.
+        // The retry payload carries the user's edit, and only that — untouched
+        // loaded fields are omitted (partial PUT), so the failure + retry can't
+        // leak defaults over real data.
         const retryPayload = mockedSettingsApi.update.mock.calls[1][0] as Record<string, unknown>;
         expect(retryPayload.brandVoiceNotesMulti).toMatchObject({ en: 'Edited voice' });
-        expect(retryPayload.commentReplyMode).toBe('dual');
-        expect(retryPayload.replyStyle).toBe('casual');
-        expect(retryPayload.holdLowConfidence).toBe(true);
-        expect(retryPayload.timezone).toBe('Asia/Damascus');
+        expect(retryPayload).not.toHaveProperty('commentReplyMode');
+        expect(retryPayload).not.toHaveProperty('replyStyle');
+        expect(retryPayload).not.toHaveProperty('holdLowConfidence');
+        expect(retryPayload).not.toHaveProperty('timezone');
     });
 
     it('recovers and renders the settings form when Try again succeeds', async () => {

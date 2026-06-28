@@ -35,7 +35,7 @@ import {
   LowConfidenceHoldCard,
   DangerZone,
   CollapsibleSectionHeader,
-  buildSettingsUpdatePayload,
+  buildChangedSettingsPayload,
 } from '@/components/settings';
 import type { SettingsState } from '@/components/settings';
 
@@ -271,12 +271,13 @@ const SettingsPage: NextPageWithLayout = () => {
       return;
     }
 
-    // Strip non-schema fields (id/userId/pushNotifications) and pre-validate
-    // against the SAME Zod schema the backend enforces (`@jawab24/shared`). Lets
-    // us show inline field-level errors instead of a round-trip 400 + generic
-    // toast, and stops bad payloads from ever reaching the API. Shared with the
-    // inline LanguageSelector so neither path can drift.
-    const validation = buildSettingsUpdatePayload(settings);
+    // Validate + send ONLY the fields the user changed (diff vs initialSettings).
+    // PUT /settings is a partial update, so sending the whole object made Save
+    // fail whenever ANY untouched stored field violated the strict schema — e.g.
+    // a legacy brandVoiceNotes over the 800-char cap blocking an unrelated edit
+    // (JAWAB24-FRONTEND-2J). Validating the diff still surfaces inline errors for
+    // fields the user actually edited.
+    const validation = buildChangedSettingsPayload(settings, initialSettings);
     if (!validation.success) {
       const nextErrors: Record<string, string> = {};
       for (const issue of validation.error.errors) {
@@ -288,6 +289,12 @@ const SettingsPage: NextPageWithLayout = () => {
       return;
     }
     setFieldErrors({});
+
+    // Nothing schema-relevant changed (e.g. only a non-schema field like
+    // pushNotifications differs) — no PUT to make.
+    if (Object.keys(validation.data).length === 0) {
+      return;
+    }
 
     // Snapshot which sections changed BEFORE we reset initialSettings on success,
     // so the contextual "Saved ✓" flash can target the right section header(s).
