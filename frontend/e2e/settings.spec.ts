@@ -312,26 +312,30 @@ test.describe('Settings Page', () => {
     await expect(textarea).toHaveValue('Hello! How can we help?');
   });
 
-  test('blocks PUT when pre-submit validation rejects an out-of-range field', async ({ page }) => {
-    // Mock the GET to seed state with a value that the shared schema would
-    // reject when the user clicks Save without changing it (we then bump it
-    // via the messagesAutoReply toggle to mark hasChanges = true). We force
-    // the bad value into state via a script after the page hydrates.
+  test('saves an unrelated change even when an unchanged loaded field is invalid (sends only the diff)', async ({ page }) => {
+    // Regression for JAWAB24-FRONTEND-2J: a stored field can be out-of-range for
+    // the current schema (legacy / pre-cap data). Save must send only the fields
+    // the user actually changed, so an UNCHANGED invalid field (here replyDelay
+    // above the 0-300 cap) can't block an unrelated edit — and is never sent, so
+    // it can't be clobbered either. We seed the bad value via the GET, toggle an
+    // unrelated switch, and assert the PUT fires WITHOUT replyDelay.
     let putCount = 0;
+    let putBody: Record<string, unknown> | null = null;
     await page.unroute('**/api/**');
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
       const method = route.request().method();
       if (url.includes('/settings') && method === 'PUT') {
         putCount += 1;
+        putBody = route.request().postDataJSON();
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
       }
       if (url.includes('/settings')) {
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          // Bad value: replyDelay above the 0-300 cap. The shared schema's
-          // pre-submit validator should refuse to send it.
+          // Unchanged out-of-range value: replyDelay above the 0-300 cap. It must
+          // not block the save and must be excluded from the (diff) payload.
           body: JSON.stringify({ ...MOCK_SETTINGS, replyDelay: 9999 }),
         });
       }
@@ -357,16 +361,19 @@ test.describe('Settings Page', () => {
     await expect(firstToggle).toBeVisible({ timeout: 15000 });
     await firstToggle.click();
 
-    // Click Save — pre-submit validator should refuse to PUT.
+    // Click Save — the unrelated toggle is valid, so the save goes through.
     const saveBtn = page.locator('button').filter({ hasText: t('common.save') }).first();
     await expect(saveBtn).toBeEnabled({ timeout: 5000 });
     await saveBtn.click();
 
-    // Wait briefly for the validator to short-circuit.
+    // Wait for the PUT to fire.
     await page.waitForTimeout(500);
 
-    // No PUT should have fired — the bad payload never left the client.
-    expect(putCount).toBe(0);
+    // Exactly one PUT, carrying only the changed field — the unchanged
+    // out-of-range replyDelay is neither validated nor sent.
+    expect(putCount).toBe(1);
+    expect(putBody).not.toBeNull();
+    expect(putBody).not.toHaveProperty('replyDelay');
   });
 
   test('should not crash when APIs fail', async ({ page }) => {
