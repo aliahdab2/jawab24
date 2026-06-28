@@ -20,6 +20,7 @@ import { renderMessageText } from '@/utils/renderMessageText';
 import { getCommentExternalUrl } from '@/utils/pageUrl';
 import { isKbGapFlag, getKbGapQuestion } from '@/utils/flagReason';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
+import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import {
   Sparkles,
   Bot,
@@ -30,7 +31,6 @@ import {
   CheckCircle,
   Undo2,
   FileText,
-  KeyRound,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -344,7 +344,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 </div>
                 {postTriggerKeyword && (
                   <div className="flex items-center gap-1.5 flex-wrap px-1">
-                    <KeyRound className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
+                    <PostReplyIcon className={clsx('w-3.5 h-3.5 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />
                     {parseKeywords(postTriggerKeyword).map((kw, i) => (
                       <span
                         key={i}

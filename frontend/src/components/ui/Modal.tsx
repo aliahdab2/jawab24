@@ -11,7 +11,9 @@ import { useFocusTrap } from '@/hooks/useFocusTrap';
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title: React.ReactNode;
+  title: string;
+  /** Optional icon rendered before the title in the header (e.g. a feature glyph). */
+  titleIcon?: React.ReactNode;
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   /**
@@ -44,6 +46,7 @@ export function Modal({
   isOpen,
   onClose,
   title,
+  titleIcon,
   children,
   size = 'md',
   mobilePresentation = 'sheet',
@@ -157,9 +160,12 @@ export function Modal({
         >
           {/* Header */}
           <div className="flex items-center justify-between p-5 sm:p-6 border-b border-theme-border flex-shrink-0">
-            <h3 id={titleId} className="text-xl font-bold text-foreground leading-tight">
-              {title}
-            </h3>
+            <div className="flex items-center gap-2 min-w-0">
+              {titleIcon}
+              <h3 id={titleId} className="text-xl font-bold text-foreground leading-tight">
+                {title}
+              </h3>
+            </div>
             <button
               type="button"
               onClick={onClose}

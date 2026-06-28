@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { KeyRound, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Button } from '@/components/ui';
+import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 
 // Educational intro shown on the Comments page until the merchant adopts Post Reply.
 // Strategy: show it up to MAX_SHOWS times (one impression is easy to miss) so we're
@@ -100,7 +101,7 @@ export function PostReplyIntroBanner({ onSetup }: PostReplyIntroBannerProps) {
       role="status"
       className="mb-3 sm:mb-5 p-3 sm:p-4 rounded-xl flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700"
     >
-      <KeyRound className="w-5 h-5 flex-shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+      <PostReplyIcon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${postReplyIconClass}`} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-foreground">{t('postReplyIntroTitle')}</p>
         <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">{t('postReplyIntroText')}</p>

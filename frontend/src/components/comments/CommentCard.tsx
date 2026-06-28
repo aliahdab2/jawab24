@@ -8,7 +8,6 @@ import { renderMessageText } from '@/utils/renderMessageText';
 import {
   Clock,
   AlertTriangle,
-  KeyRound,
   CheckCircle,
   CheckCheck,
   User,
@@ -19,6 +18,7 @@ import {
 import { formatMessageTime } from '@/utils/dateUtils';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
 import type { Comment } from '@jawab24/shared';
+import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 
 export interface CommentCardProps {
   comment: Comment;
@@ -221,7 +221,7 @@ export const CommentCard = React.memo(function CommentCard({
                            : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
                        )}
                      >
-                       <KeyRound className={clsx('w-3.5 h-3.5', !triggerActive && 'text-emerald-500 dark:text-emerald-400')} aria-hidden="true" />
+                       <PostReplyIcon className={clsx('w-3.5 h-3.5', !triggerActive && postReplyIconClass)} aria-hidden="true" />
                        {triggerActive ? t('postTriggerActive') : t('postTrigger')}
                      </button>
                      {showNewBadge && !triggerActive && (
@@ -301,7 +301,7 @@ export const CommentCard = React.memo(function CommentCard({
                  </div>
               </div>
 
-               {/* Source Indicator (KeyRound/Sparkles) */}
+               {/* Reply source badge (per-method icon) */}
               <div className="flex-shrink-0 mb-1">
                  <ReplySourceIndicator />
               </div>
