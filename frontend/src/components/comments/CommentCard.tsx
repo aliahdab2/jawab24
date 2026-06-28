@@ -207,23 +207,19 @@ export const CommentCard = React.memo(function CommentCard({
                    <span className="line-clamp-1 break-words" dir="auto">{comment.postMessage || t('postContext')}</span>
                  </div>
                  {onTriggerClick && (
-                   <div className={clsx(
-                     'relative self-start transition-opacity',
-                     // Declutter: hide the button until the card is hovered/focused —
-                     // but ONLY on hover-capable pointers (@media hover:hover), so
-                     // touch devices (incl. tablets ≥sm) always keep it visible.
-                     // Also kept visible when a trigger is active (status cue) or while
-                     // the one-time NEW badge is driving first-use discovery.
-                     !triggerActive && !showNewBadge && '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100',
-                   )}>
+                   <div className="relative self-start">
                      <button
                        type="button"
                        onClick={e => { e.stopPropagation(); onTriggerClick(e); }}
                        className={clsx(
                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                          triggerActive
+                           // Active: brand-emphasized so it reads as an enabled status.
                            ? 'border-brand-400 text-brand-500 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20'
-                           : 'border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/30'
+                           // Inactive: always visible but quiet (ghost) so the affordance is
+                           // discoverable on every post without shouting; brightens to brand on
+                           // hover. (Previously hidden until hover on desktop — that killed discovery.)
+                           : 'border-surface-300 dark:border-surface-600 text-muted-foreground hover:border-brand-300 dark:hover:border-brand-700 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20'
                        )}
                      >
                        <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />

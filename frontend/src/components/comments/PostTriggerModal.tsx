@@ -108,6 +108,11 @@ export function PostTriggerModal({
       footer={footer}
     >
       <div className="flex flex-col gap-4">
+        {/* What a Post Reply is — fixed, self-written message (channel-neutral copy) */}
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {t('postTriggerDescription')}
+        </p>
+
         {/* Post preview */}
         {postMessage && (
           <div className="bg-surface-50 dark:bg-surface-800 rounded-lg px-3 py-2.5">

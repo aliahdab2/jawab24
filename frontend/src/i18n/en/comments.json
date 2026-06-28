@@ -1,6 +1,6 @@
 {
   "title": "Comments",
-  "description": "Track and manage all comments from your connected pages. Use # on any post to set a post reply.",
+  "description": "Track and manage all comments from your connected pages. Set up a Post Reply on any post to auto-reply to commenters who use a keyword.",
   "allComments": "All",
   "replied": "Replied",
   "repliedDesc": "Already responded to.",
@@ -89,6 +89,7 @@
   "hideEarlier": "Hide earlier comments",
   "followUpReply": "Add a follow-up reply",
   "postTrigger": "Post Reply",
+  "postTriggerDescription": "A Post Reply is a ready-made message you write yourself, sent as-is when someone comments your keyword on this post.",
   "postTriggerKeyword": "Keywords",
   "postTriggerReply": "Reply message",
   "postTriggerKeywordPlaceholder": "Type a keyword and press Enter",
@@ -103,5 +104,9 @@
   "postTriggerReplyRequired": "Reply message is required",
   "newBadge": "NEW",
   "postTriggerClearConfirmTitle": "Remove Post Reply?",
-  "postTriggerClearConfirmMessage": "Comments matching the keyword will no longer trigger an automatic reply on this post."
+  "postTriggerClearConfirmMessage": "Comments matching the keyword will no longer trigger an automatic reply on this post.",
+  "postReplyIntroTitle": "Auto-reply to commenters",
+  "postReplyIntroText": "Set keywords on any post, and your reply is sent automatically when someone comments them — great for prices, sizes, or booking details.",
+  "postReplyIntroCta": "Set one up",
+  "postReplyIntroDismiss": "Dismiss"
 }

@@ -9,6 +9,7 @@ import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/com
 import { InboxTitle, InboxExportButton } from '@/components/inbox/InboxHeaderActions';
 import dynamic from 'next/dynamic';
 import { SwipeableCommentCard } from '@/components/comments';
+import { PostReplyIntroBanner } from '@/components/comments/PostReplyIntroBanner';
 
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const PostTriggerModal = dynamic(() => import('@/components/comments/PostTriggerModal').then(m => ({ default: m.PostTriggerModal })), { ssr: false });
@@ -169,16 +170,18 @@ const CommentsPage: NextPageWithLayout = () => {
     return filterGroupsBySearch(commentGroups, query);
   }, [commentGroups, debouncedSearch]);
 
-  // The single groupKey that should display the NEW badge — first un-configured
-  // post in the visible list. Null when the badge should not be shown anywhere.
-  const newBadgeGroupKey = useMemo(() => {
-    if (!showPostReplyNewBadge) return null;
-    const first = filteredGroups.find(g => {
+  // The first un-configured post in the visible list — anchors both the NEW badge
+  // and the first-run intro banner's "set one up" CTA.
+  const firstTriggerableGroup = useMemo(
+    () => filteredGroups.find(g => {
       const postId = g.latestComment.postId;
       return postId && !triggersByPostId[postId];
-    });
-    return first?.groupKey ?? null;
-  }, [showPostReplyNewBadge, filteredGroups, triggersByPostId]);
+    }) ?? null,
+    [filteredGroups, triggersByPostId]
+  );
+  // Show the NEW badge on that single card until the user creates their first
+  // trigger. Null when the badge should not be shown anywhere.
+  const newBadgeGroupKey = showPostReplyNewBadge ? (firstTriggerableGroup?.groupKey ?? null) : null;
 
   // Track which groups are expanded (show earlier comments)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -473,6 +476,14 @@ const CommentsPage: NextPageWithLayout = () => {
         description={t('description')}
         action={<InboxExportButton onExport={exportToCSV} exporting={exporting} />}
       />
+
+      {/* First-run education: only before the merchant has set up any Post Reply,
+          and only when there's an eligible post to configure. */}
+      {showPostReplyNewBadge && firstTriggerableGroup && (
+        <PostReplyIntroBanner
+          onSetup={() => setTriggerModalComment(firstTriggerableGroup.latestComment)}
+        />
+      )}
 
       {/* Filter Chips + Search */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-5">
