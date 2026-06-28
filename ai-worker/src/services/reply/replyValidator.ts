@@ -4,6 +4,7 @@
  * No API calls (zero extra cost). Pure functions of (parsed reply, request), so
  * each guard is unit-testable in isolation — see replyValidator.test.ts.
  */
+import { normalizeArabic } from '@jawab24/shared';
 import { detectLanguage } from '../language';
 import { getKBText, resolveLanguage, resolveChannel } from './replyContext';
 import type { GenerateRequest, ParsedReply, ValidatedReply } from './types';
@@ -222,6 +223,64 @@ export function stripSelfIdentification(reply: string, fallbackLang: string): st
     return filtered;
 }
 
+/** A run of >=8 digits (Western or Arabic-Indic) — i.e. a phone number, not a price/date. */
+const PHONE_RUN = /[\d٠-٩]{8,}/g;
+
+/**
+ * Check 7 — never a "wall of numbers". When several numbers are listed (the merchant
+ * KB often holds 2–3 contact lines), a reply that asks for a contact must surface ONE,
+ * not the whole list. The prompt rule alone doesn't hold (the model dumps every KB
+ * number when asked outright), so this deterministically keeps the first phone run and
+ * removes the rest, then tidies the separators/blank lines left behind. Generic — pure
+ * digit-run logic, no business/locale assumptions.
+ */
+export function capContactNumbers(reply: string, max = 1): string {
+    if (!reply) return reply;
+    const matches = [...reply.matchAll(PHONE_RUN)];
+    if (matches.length <= max) return reply;
+    let result = reply;
+    // Remove from last to first (beyond `max`) so earlier indices stay valid.
+    for (let i = matches.length - 1; i >= max; i--) {
+        const m = matches[i];
+        result = result.slice(0, m.index) + result.slice((m.index ?? 0) + m[0].length);
+    }
+    // Tidy dangling separators / blank lines left where numbers were removed.
+    return result
+        .replace(/[ \t]*[,،/|-]+[ \t]*(?=\n|$)/g, '')
+        .replace(/\n{2,}/g, '\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim();
+}
+
+/**
+ * Check 8 — a word inside the customer's NAME must never be confirmed as a course/
+ * product. Narrowly scoped (low false-positive): fires ONLY when the reply frames a
+ * token of the customer's own name (from `customerContext`) as a course/product AND
+ * that token is absent from the KB. Catches "محمد حقوق" → "تأكيد التسجيل بدورة الحقوق"
+ * without touching legitimate confirmations of real KB courses. Returns the offending
+ * name token, or null. Language/vertical-agnostic: name-token vs KB membership.
+ */
+export function nameTokenConfirmedAsItem(reply: string, customerContext: string | undefined, kbText: string): string | null {
+    if (!reply || !customerContext) return null;
+    const nameMatch = customerContext.match(/name is "([^"]+)"/i) || customerContext.match(/name:\s*([^.\n]+)/i);
+    if (!nameMatch) return null;
+    // normalizeTaaMarbuta so "دورة"→"دوره" (matches the regex below) and ة/ه variants fold.
+    const norm = (s: string) => normalizeArabic(s.toLowerCase(), { normalizeTaaMarbuta: true });
+    const nKb = norm(kbText);
+    const nReply = norm(reply);
+    const tokens = norm(nameMatch[1]).split(/\s+/).filter(t => t.length >= 3);
+    for (const tok of tokens) {
+        if (nKb.includes(tok)) continue; // a real KB course/product that happens to match the name is fine
+        const t = tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // The token sits in a course/product NAME slot — "دورة <tok>", "<tok> course",
+        // or "course in/for the <tok>". Position-anchored so merely addressing the
+        // customer by name near a registration word does NOT trip it.
+        const framed = new RegExp(`(?:دوره|بدوره|كورس)\\s+(?:ال)?${t}|(?:ال)?${t}\\s+course|\\bcourse\\s+(?:in\\s+|for\\s+)?(?:the\\s+)?(?:ال)?${t}\\b`, 'i');
+        if (framed.test(nReply)) return tok;
+    }
+    return null;
+}
+
 /**
  * Run all post-reply checks and return the corrected reply + flags.
  * Mutations are applied in order; Check 4 (hedging) lowers confidence which
@@ -301,7 +360,25 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest): Va
     }
 
     // Check 6: Self-identification — strip any sentence revealing the bot is automated.
-    const finalReply = stripSelfIdentification(reply, parsed.language || request.language || 'ar');
+    let finalReply = stripSelfIdentification(reply, parsed.language || request.language || 'ar');
+
+    // Check 7: Never a wall of numbers — keep at most one contact number.
+    finalReply = capContactNumbers(finalReply, 1);
+
+    // Check 8: A token of the customer's NAME confirmed as a course/product not in the KB
+    // → neutralize the false confirmation and ask which one (the correct behavior for the
+    // ambiguous input). Deterministic backstop for the prompt's prevention (Example 13),
+    // which is probabilistic. Narrow by construction → very low false-positive surface.
+    if (finalReply && (parsed.intent === 'PURCHASE_INTENT' || parsed.intent === 'QUESTION')) {
+        const kbText = getKBText(request);
+        if (nameTokenConfirmedAsItem(finalReply, request.context?.customerContext, kbText || '')) {
+            const lang = parsed.language || request.language || 'ar';
+            finalReply = lang === 'ar'
+                ? 'تمام! خليني أتأكد — شو بالضبط حابب تسجّل فيه؟'
+                : 'Got it! Just to confirm — what exactly would you like to register for?';
+            if (!flags.includes('info_not_in_kb')) flags.push('info_not_in_kb');
+        }
+    }
 
     return { ...parsed, reply: finalReply, flags };
 }

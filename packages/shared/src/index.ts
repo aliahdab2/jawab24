@@ -689,7 +689,15 @@ export {
 // channel naturally (never a number-wall), still no callback promise. Also
 // de-Levantined the rule-level seed phrase (هالمعلومة → هذه المعلومة, MSA tone-only).
 // Bump invalidates exact + semantic caches holding the cold phone-dump replies.
-export const PROMPT_VERSION = 'v45';
+//
+// v46: registration-handling — a word inside a customer's NAME is never a
+// product/course; the bot must confirm the item already in context or ask which,
+// never fabricate a course (e.g. "دورة الحقوق" from the surname "حقوق") nor confirm one
+// absent from <business_knowledge>; and a direct contact request returns ONE channel,
+// never a wall of numbers (rule 75). Few-shot Example 13 + rule 75. (Reconcile at merge
+// with the parallel fix/comment-post-context branch, which also targets v46 — whichever
+// merges second bumps to v47.)
+export const PROMPT_VERSION = 'v46';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

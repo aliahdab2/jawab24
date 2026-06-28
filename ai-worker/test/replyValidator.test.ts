@@ -4,6 +4,8 @@ import {
     isCommentTooLong,
     stripSelfIdentification,
     validateReply,
+    capContactNumbers,
+    nameTokenConfirmedAsItem,
 } from '../src/services/reply/replyValidator';
 import type { GenerateRequest, ParsedReply } from '../src/services/reply/types';
 
@@ -297,5 +299,53 @@ describe('validateReply orchestration', () => {
         const out = validateReply(base({ reply: 'Hello there, happy to help', intent: 'GREETING' }), req('hi'));
         expect(out.reply).toBe('Hello there, happy to help');
         expect(out.flags).toEqual([]);
+    });
+});
+
+describe('capContactNumbers (Check 7 — never a wall of numbers)', () => {
+    it('leaves a reply with a single number unchanged', () => {
+        expect(capContactNumbers('تواصل معنا على 0935924472', 1)).toBe('تواصل معنا على 0935924472');
+    });
+    it('keeps only the first number when several are dumped (the prod number-wall)', () => {
+        const out = capContactNumbers('أرقامنا للتواصل: 0935924472 0112124472 0937549674 تكرم عينك', 1);
+        const nums = out.match(/[\d٠-٩]{8,}/g) || [];
+        expect(nums).toEqual(['0935924472']);
+    });
+    it('trims a newline-separated list down to one number', () => {
+        const out = capContactNumbers('أرقامنا:\n0935924472\n0112124472\n0937549674', 1);
+        expect((out.match(/[\d٠-٩]{8,}/g) || []).length).toBe(1);
+    });
+    it('does not touch prices or dates (runs under 8 digits)', () => {
+        const r = 'السعر 200 ألف وتبدأ 5/7/2026';
+        expect(capContactNumbers(r, 1)).toBe(r);
+    });
+});
+
+describe('nameTokenConfirmedAsItem (Check 8 — name word confirmed as a course)', () => {
+    const ctx = (name: string) => `Customer's name is "${name}" (their NAME only — never treat any word in it as a product, course, or service they want)`;
+
+    it('flags the surname when it is confirmed as a course absent from the KB (the prod bug)', () => {
+        const tok = nameTokenConfirmedAsItem('تكرم عينك محمد، رح نتواصل معك لتأكيد التسجيل بدورة الحقوق', ctx('محمد حقوق'), 'دورة اللغة الألمانية، دورة التصوير، دورة الأمين');
+        expect(tok).toBe('حقوق');
+    });
+    it('flags an English name token framed as a course not in KB', () => {
+        const tok = nameTokenConfirmedAsItem('Thanks John, you are registered for the Law course', ctx('John Law'), 'German course, Photography course');
+        expect(tok).toBe('law');
+    });
+    it('does NOT flag a legit confirmation of a real KB course', () => {
+        const tok = nameTokenConfirmedAsItem('تمام محمد، سجّلتك بدورة اللغة الألمانية', ctx('محمد علي'), 'دورة اللغة الألمانية - المستوى الأول');
+        expect(tok).toBeNull();
+    });
+    it('does NOT flag when a name token IS a real KB course (coincidence)', () => {
+        // Customer surname "الأمين" but the KB really has "دورة الأمين" → legit, not a hallucination.
+        const tok = nameTokenConfirmedAsItem('سجّلتك بدورة الأمين', ctx('سامر الأمين'), 'دورة الأمين للمحاسبة');
+        expect(tok).toBeNull();
+    });
+    it('does NOT flag merely addressing the customer by name near a registration word', () => {
+        const tok = nameTokenConfirmedAsItem('سجّلت بياناتك يا محمد حقوق ✅', ctx('محمد حقوق'), 'دورة اللغة الألمانية');
+        expect(tok).toBeNull();
+    });
+    it('returns null when there is no customer context', () => {
+        expect(nameTokenConfirmedAsItem('سجّلتك بدورة الحقوق', undefined, 'دورة الألمانية')).toBeNull();
     });
 });
