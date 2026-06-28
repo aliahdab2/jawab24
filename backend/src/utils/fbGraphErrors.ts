@@ -376,7 +376,7 @@ export class AiEmptyReplyError extends Error {
  * limit. Persistent (won't recover in BullMQ's 2s/4s/8s window) but self-heals
  * the instant billing is topped up. The reply pipeline does NOT flag this as
  * needs_attention; instead the worker PARKS the job (long-delay re-enqueue, see
- * `isAiParkable` + replyWorker park-and-retry) so the message auto-replies once
+ * `planAiPark` + replyWorker park-and-retry) so the message auto-replies once
  * credit returns, and ai.ts fires a throttled "top up OpenAI" alert.
  *
  * Classified transient in `isTransientAiError` so the processor rethrows it
@@ -431,7 +431,7 @@ export function isTransientAiError(err: unknown): boolean {
 
     // Quota exhaustion is permanent-until-topped-up, but classified transient
     // here so the processor rethrows it up to the worker's catch — where
-    // `isAiParkable` re-enqueues it with a long delay instead of flagging. The
+    // `planAiPark` re-enqueues it with a long delay instead of flagging. The
     // park budget (replyWorker) bounds how long it retries before giving up.
     if (err instanceof AiQuotaExhaustedError) return true;
 

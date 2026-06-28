@@ -760,14 +760,19 @@ export class AiService {
             const html = `<p><b>OpenAI returned <code>insufficient_quota</code></b> — Jawab24 auto-replies are now <b>parking</b> and will not send until the OpenAI balance is topped up.</p>`
                 + `<p>Pipeline: <b>${pipeline}</b><br/>Detail: ${safeDetail}</p>`
                 + `<p><b>Action:</b> add credit / raise the usage limit in the OpenAI billing dashboard. Parked replies resume automatically once credit returns.</p>`;
-            await Promise.all(admins.map((to) =>
-                emailService.send({
+            // Fire each send WITHOUT awaiting: emailService.send hits Resend
+            // (rate-limited, network I/O) and this runs inside the reply worker's
+            // failure path — awaiting it could add latency or, on a hung send,
+            // stall the job. Alerting is best-effort; each send swallows its own
+            // error. The dedup above already bounds this to one burst per window.
+            for (const to of admins) {
+                void emailService.send({
                     to,
                     subject: '🚨 Jawab24: OpenAI quota exhausted — top up billing',
                     html,
                     type: 'transactional',
-                }).catch(() => { /* fire-and-forget — never block the reply path */ }),
-            ));
+                }).catch(() => { /* never block the reply path */ });
+            }
         }
     }
 
