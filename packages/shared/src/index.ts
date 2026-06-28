@@ -702,7 +702,8 @@ export {
 // KB sits in the cacheable prefix and is billed at the cached rate on repeat traffic instead
 // of full rate every call. No field content/sanitization changed — only assembly order — but
 // the prompt the model sees is reordered, so the cache is invalidated for a clean cutover.
-// v47: removed the stale "بعد العيد" (after Eid) relative-date few-shot from the system prompt.
+// v47: few-shot hardening — removed the stale "بعد العيد" (after Eid) relative-date demo, and
+// made the Example 11 clarifier vertical-neutral (خدمة/باقة → خيار, "services" → "offerings").
 export const PROMPT_VERSION = 'v47';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
