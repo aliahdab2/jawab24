@@ -65,6 +65,28 @@ describe('CommentDetailModal', () => {
     vi.clearAllMocks();
   });
 
+  describe('Post Reply action', () => {
+    const postComment = { ...mockComment, postMessage: 'Our latest post' };
+
+    it('renders the Set up Post Reply action and calls onSetupPostReply when clicked', () => {
+      const onSetupPostReply = vi.fn();
+      renderModal({ comment: postComment, onSetupPostReply, postTriggerKeyword: null });
+      const btn = screen.getByRole('button', { name: /set up post reply/i });
+      fireEvent.click(btn);
+      expect(onSetupPostReply).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows the Edit Post Reply action when the post already has a configured reply', () => {
+      renderModal({ comment: postComment, onSetupPostReply: vi.fn(), postTriggerKeyword: 'register' });
+      expect(screen.getByRole('button', { name: /edit post reply/i })).toBeInTheDocument();
+    });
+
+    it('does not render the Post Reply action when no handler is provided', () => {
+      renderModal({ comment: postComment });
+      expect(screen.queryByRole('button', { name: /post reply/i })).not.toBeInTheDocument();
+    });
+  });
+
   it('closes on ESC key press', () => {
     const onClose = vi.fn();
     renderModal({ onClose });
