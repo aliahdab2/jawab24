@@ -106,7 +106,7 @@
   "postTriggerClearConfirmTitle": "Remove Post Reply?",
   "postTriggerClearConfirmMessage": "Comments matching the keyword will no longer trigger an automatic reply on this post.",
   "postReplyIntroTitle": "Auto-reply to commenters",
-  "postReplyIntroText": "Set keywords on any post, and your reply is sent automatically when someone comments them — great for prices, sizes, or booking details.",
+  "postReplyIntroText": "Set keywords on any post, and your ready-made message is sent as-is when someone comments them — great for replies you send often.",
   "postReplyIntroCta": "Set one up",
   "postReplyIntroDismiss": "Dismiss"
 }
