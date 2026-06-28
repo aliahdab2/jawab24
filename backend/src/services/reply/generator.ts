@@ -212,7 +212,7 @@ function extractConversationData(history: { role: string; content: string }[]): 
     if (!customerPhone && !customerName) return null;
 
     const parts: string[] = [];
-    if (customerName) parts.push(`Customer shared their name: ${customerName}`);
+    if (customerName) parts.push(`Customer's name is "${customerName}" (their NAME only — never treat any word in it as a product, course, or service they want)`);
     if (customerPhone) parts.push(`Customer shared their phone: ${customerPhone}`);
     if (confirmed.length > 0) parts.push(`Already confirmed: "${confirmed[confirmed.length - 1]}"`);
     return parts.join('. ');

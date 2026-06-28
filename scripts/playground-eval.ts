@@ -67,6 +67,7 @@ interface TestCase {
         nudgeMaxLength?: number;        // nudgeText length must be <= this
         commentReplyMode?: string;      // expected commentReplyMode value
         replyMaxLength?: number;        // reply length must be <= this
+        replyMaxPhoneNumbers?: number;  // reply must contain <= this many phone-like digit runs (never a number-wall)
     };
     notes?: string;
 }
@@ -3537,6 +3538,25 @@ const TEST_CASES: TestCase[] = [
     { id: 621, category: 57, categoryName: 'Operational Fact From KB', channel: 'comment', message: 'العنوان', page: 'damascus', expected: { replyContainsAny: ['برامكة', 'الحافظ'], flagsAbsent: ['info_not_in_kb'] }, notes: 'Same as 620 via comment channel, definite-article form.' },
     { id: 622, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'وين موقعكم بالضبط', page: 'damascus', expected: { replyContainsAny: ['برامكة', 'الحافظ'], flagsAbsent: ['info_not_in_kb'], replyNotContains: ['تواصل معنا', 'يرجى التواصل'] }, notes: 'Location phrased as a question. Must give the KB address, not redirect to contact.' },
     { id: 623, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'ساعات الدوام', page: 'damascus', expected: { replyContainsAny: ['9', '٩', '8', '٨', 'صباح', 'مساء'], flagsAbsent: ['info_not_in_kb'], replyNotContains: ['00:00', '23:45', 'تواصل معنا', 'يرجى التواصل'] }, notes: 'Hours are in the KB ("9 صباحا الى 8 مساء ماعدا الجمعة"). Must answer from the KB — NOT deflect, and NOT state the Facebook-synced Friday hours 00:00-23:45 (the D-010 failure mode the A/B exposed).' },
+
+    // ---- Category 58: Registration handling (ambiguous course / contact request) ----
+    // PROD regression (page الفريق الدمشقي): customer answered a registration prompt with
+    // their NAME+phone ("محمد حقوق 0992031900"); "حقوق" is the surname (also = "law"). The
+    // bot CONFIRMED registration in a non-existent "law course" (دورة الحقوق), then when
+    // asked for a contact dumped a WALL of 3 numbers. The fix must never confirm a
+    // course/product absent from the KB, and must give ONE contact channel. Generic across
+    // verticals/languages — the name token is NEVER the interest.
+    //
+    // T1 — name+phone with a product-like surname, NO course anchored → must not fabricate
+    // a course. (Reproduces ~2/3 on current code; the strong-anchor form is handled.)
+    { id: 624, category: 58, categoryName: 'Registration Handling', channel: 'dm', message: 'محمد حقوق 0992031900', page: 'damascus', conversationHistory: [{ role: 'user', content: 'مرحبا بدي اسجل' }, { role: 'assistant', content: 'أهلاً! للتسجيل ممكن تعطيني اسمك ورقمك؟' }], expected: { replyMethod: ['ai'], replyNotContains: ['دورة الحقوق', 'بدورة الحقوق', 'القانون'] }, notes: 'Surname "حقوق" must NOT become a confirmed course. No course anchored → confirm receipt and ASK which course; never invent one.' },
+    // T1-EN — same failure mode, English + a name whose token = a field of study.
+    { id: 625, category: 58, categoryName: 'Registration Handling', channel: 'dm', message: 'John Law, 0599999999', page: 'training', conversationHistory: [{ role: 'user', content: 'I want to register' }, { role: 'assistant', content: 'Great! May I have your name and number to register you?' }], expected: { replyMethod: ['ai'], replyNotContains: ['Law course', 'law course', 'course in Law', 'دورة الحقوق'] }, notes: 'EN/cross-vertical: surname "Law" must NOT become a confirmed "Law course". Proves the fix is not Arabic/word-specific.' },
+    // T2 — direct contact request → ONE channel, not a wall (damascus KB has 3 numbers).
+    { id: 626, category: 58, categoryName: 'Registration Handling', channel: 'dm', message: 'ممكن رقم للتواصل', page: 'damascus', conversationHistory: [{ role: 'user', content: 'بدي اعرف عن الدورات' }, { role: 'assistant', content: 'عندنا دورات كثيرة، أي دورة تهمك؟' }], expected: { replyMethod: ['ai'], replyMaxPhoneNumbers: 1 }, notes: 'Asked for a contact number. KB lists 3 numbers; the bot must give ONE channel, never a wall. Reproduces 3/3 on current code.' },
+    // T3 — after the customer corrects the course, the bot already has name+phone → it
+    // should confirm/advance the registration using collected info, not re-explain. (Softer.)
+    { id: 627, category: 58, categoryName: 'Registration Handling', channel: 'dm', message: 'دورة الالماني', page: 'damascus', conversationHistory: [{ role: 'assistant', content: 'دورة اللغة الألمانية - المستوى الأول تكلفتها 200 ألف ل.س. للتسجيل ممكن تعطيني اسمك ورقمك؟' }, { role: 'user', content: '0992031900 محمد' }, { role: 'assistant', content: 'تكرم عينك محمد 🌸 رح نتواصل معك قريباً لتأكيد التسجيل.' }], expected: { replyMethod: ['ai'], replyContainsAny: ['سجّل', 'سجلت', 'تم', 'بياناتك', 'رقمك', 'تواصل معك'] }, notes: 'Name+phone already collected; on the course correction the bot should confirm/advance registration using that info — not re-ask for details. Softer assertion (conversation-state).' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -3633,6 +3653,15 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
     if (e.replyMaxLength && d.reply) {
         const pass = d.reply.length <= e.replyMaxLength;
         checks.push({ field: 'replyMaxLength', pass, detail: `length ${d.reply.length} vs max ${e.replyMaxLength}` });
+    }
+
+    // replyMaxPhoneNumbers — guard against a "wall of numbers". Counts runs of >=8
+    // consecutive digits (Western or Arabic-Indic), which catches phone numbers while
+    // ignoring prices/dates (those are shorter or broken by separators).
+    if (e.replyMaxPhoneNumbers !== undefined && d.reply) {
+        const nums = d.reply.match(/[\d٠-٩]{8,}/g) || [];
+        const pass = nums.length <= e.replyMaxPhoneNumbers;
+        checks.push({ field: `maxPhoneNumbers:${e.replyMaxPhoneNumbers}`, pass, detail: `found ${nums.length}${nums.length ? ` (${nums.join(', ')})` : ''}` });
     }
 
     // commentReplyMode
