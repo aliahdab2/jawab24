@@ -5,7 +5,7 @@ export { SimpleToggle } from './SimpleToggle';
 export { TitleWithInfo } from './TitleWithInfo';
 export { OrderNotificationsCard } from './OrderNotificationsCard';
 export { LanguageSelector } from './LanguageSelector';
-export { buildSettingsUpdatePayload } from './buildUpdatePayload';
+export { buildSettingsUpdatePayload, buildChangedSettingsPayload } from './buildUpdatePayload';
 export { ThemeSelector } from './ThemeSelector';
 export { CommentsAutoReplyCard } from './CommentsAutoReplyCard';
 export { BusinessHoursCard } from './BusinessHoursCard';
