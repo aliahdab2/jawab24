@@ -1,10 +1,18 @@
-import { FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyRequest, FastifyReply, FastifyBaseLogger } from 'fastify';
 import * as sallaService from '../services/salla';
 import {
     getStoreByDomain,
     getStoreByMerchantId,
     deactivateStore,
+    updateStoreTokens,
+    createPendingInstall,
+    claimPendingInstall,
+    claimPendingInstallByMerchantId,
+    listPendingInstalls,
+    saveWebhookStatus,
+    EASY_MODE_PENDING_TTL_MS,
 } from '../services/ecommerce';
+import { tryGetUserId } from '../utils/authHelpers';
 import {
     dispatchOrderNotification,
     orderConfirmedEvent,
@@ -53,6 +61,14 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
         return reply.status(200).send({ ok: true });
     }
 
+    // Easy Mode (the only mode allowed for PUBLISHED Salla apps): the OAuth callback is
+    // never hit — Salla pushes the access/refresh tokens here, server-to-server, on
+    // install and RE-fires the same event to deliver refreshed tokens.
+    if (event === 'app.store.authorize') {
+        await handleStoreAuthorize(merchant, request.body, request.log);
+        return reply.status(200).send({ ok: true });
+    }
+
     // Salla webhooks identify the store by its numeric `merchant` id, which is
     // persisted in platformData.merchantId — NOT in the storeDomain column (that
     // holds the real domain). Try domain first for safety, then fall back to the
@@ -92,6 +108,125 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
     }
 
     return reply.status(200).send({ ok: true });
+}
+
+// --- Easy Mode: app.store.authorize token receipt ---
+
+// Verified payload (docs.salla.dev): { event:'app.store.authorize', merchant:<int>,
+//   data:{ access_token, refresh_token, expires:<UNIX SECONDS>, scope, token_type } }.
+interface SallaAuthorizeData {
+    access_token?: string;
+    refresh_token?: string;
+    expires?: number; // unix timestamp in SECONDS, NOT a duration
+    scope?: string;
+}
+
+/**
+ * Handle Salla Easy Mode `app.store.authorize` (HMAC already verified by the caller).
+ *
+ *  • Re-fire for an already-connected store (Salla re-sends the event to deliver a
+ *    refreshed token) → update the store's tokens in place. Idempotent.
+ *  • Fresh install (no store yet) → stage a merchant-id-keyed PENDING install. The
+ *    merchant claims it after logging into Jawab24 (see claimStoreHandler). Webhooks
+ *    are registered at claim time (mirrors the cookie flow) — there's no linked page
+ *    to notify until then anyway.
+ */
+export async function handleStoreAuthorize(
+    merchant: number,
+    body: unknown,
+    log: FastifyBaseLogger,
+): Promise<void> {
+    const { data } = body as { data?: SallaAuthorizeData };
+    const accessToken = data?.access_token;
+    if (!accessToken) {
+        log.error({ merchant }, 'Salla app.store.authorize missing access_token — ignoring');
+        return;
+    }
+    const refreshToken = data?.refresh_token;
+    const tokenExpiresAt = typeof data?.expires === 'number' ? new Date(data.expires * 1000) : undefined;
+    const merchantId = String(merchant);
+
+    const existing = await getStoreByMerchantId('salla', merchantId);
+    if (existing) {
+        await updateStoreTokens(existing.id, { accessToken, refreshToken, tokenExpiresAt });
+        return;
+    }
+
+    // Fresh install: resolve the domain/name from the pushed token, then stage the claim.
+    const storeInfo = await sallaService.fetchStoreInfo(accessToken);
+    await createPendingInstall('salla', {
+        storeDomain: storeInfo.storeDomain,
+        storeName: storeInfo.storeName,
+        merchantId,
+        accessToken,
+        refreshToken,
+        tokenExpiresAt,
+        scopes: config.salla.scopes,
+        nonce: '', // no OAuth nonce — Easy Mode never hits the callback; claim keys off merchantId
+        ttlMs: EASY_MODE_PENDING_TTL_MS,
+    });
+}
+
+// --- Easy Mode: post-install claim (no browser cookie) ---
+
+const registerSallaWebhooks = (_storeDomain: string, accessToken: string) =>
+    sallaService.registerWebhooks(accessToken);
+
+/**
+ * GET /salla/store/pending?merchantId=<id> — list the Easy-Mode pending install(s) for a
+ * merchant so the post-install landing page can show "connect your store '<name>'".
+ *
+ * SECURITY: `merchantId` is REQUIRED — we never return an unscoped list of every
+ * merchant's pending install. Returns non-secret summary fields only (no tokens).
+ */
+export async function listPendingHandler(request: FastifyRequest, reply: FastifyReply) {
+    // Dormant until the ownership binding is hardened (see config.salla.easyModeClaimEnabled).
+    if (!config.salla.easyModeClaimEnabled) return reply.status(404).send({ error: 'Not found' });
+    const userId = tryGetUserId(request);
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
+
+    const { merchantId } = request.query as { merchantId?: string };
+    if (!merchantId) return reply.status(400).send({ error: 'merchantId is required' });
+
+    const pending = await listPendingInstalls('salla', merchantId);
+    return reply.send({ pending });
+}
+
+/**
+ * POST /salla/store/claim { pendingId } | { merchantId } — claim a staged Easy-Mode
+ * install for the logged-in user. Registers webhooks inline (claim time).
+ *
+ * SECURITY: these endpoints only ever operate on Easy-Mode pending rows, which exist
+ * solely once the published app runs in Easy Mode. The merchant-id binding (proving this
+ * user owns that store) is finalized against Salla's verified post-install redirect during
+ * the live round-trip — see the launch plan. The owner-conflict guard in finalizeClaim
+ * still blocks claiming a store already owned by another account.
+ */
+export async function claimStoreHandler(request: FastifyRequest, reply: FastifyReply) {
+    // Dormant until the ownership binding is hardened (see config.salla.easyModeClaimEnabled).
+    if (!config.salla.easyModeClaimEnabled) return reply.status(404).send({ error: 'Not found' });
+    const userId = tryGetUserId(request);
+    if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
+
+    const { pendingId, merchantId } = request.body as { pendingId?: string; merchantId?: string };
+    if (!pendingId && !merchantId) {
+        return reply.status(400).send({ error: 'pendingId or merchantId is required' });
+    }
+
+    try {
+        const store = pendingId
+            ? await claimPendingInstall(pendingId, userId, 'salla', registerSallaWebhooks, saveWebhookStatus)
+            : await claimPendingInstallByMerchantId(merchantId as string, userId, 'salla', registerSallaWebhooks, saveWebhookStatus);
+
+        if (!store) return reply.status(404).send({ error: 'No claimable Salla install found' });
+        return reply.send({ sallaOnboarding: true, ecommerceStoreId: store.id });
+    } catch (err) {
+        if (err instanceof Error && err.message.includes('already connected')) {
+            return reply.status(409).send({ error: err.message });
+        }
+        request.log.error({ err }, 'Failed to claim Salla install');
+        return reply.status(500).send({ error: 'Failed to claim Salla install' });
+    }
 }
 
 // Salla delivers TWO different order payload shapes (verified against live dev-store

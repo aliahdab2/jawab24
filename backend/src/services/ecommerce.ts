@@ -5,7 +5,7 @@
  * and DTO mapping live here. Platform-specific services (shopify.ts, salla.ts) import
  * from this module and add their own OAuth, API, and sync logic.
  */
-import { eq, and, lt, sql, desc, notInArray } from 'drizzle-orm';
+import { eq, and, lt, gt, sql, desc, isNotNull, notInArray } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, customerNotificationsLog } from '../db/schema';
 import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceCrypto';
@@ -718,6 +718,14 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
     tokenExpiresAt?: Date;
     scopes?: string;
     nonce: string;
+    // Salla Easy Mode (app.store.authorize): the install arrives server-to-server with a
+    // numeric merchant id and no browser cookie. Persisting it lets a logged-in merchant
+    // claim by merchant id. The cookie/OAuth flow passes neither.
+    merchantId?: string;
+    storeName?: string;
+    // Default 30 min (cookie claim, right after login). Easy-Mode installs may not be
+    // claimed for hours/days (the merchant lands separately), so they pass a longer TTL.
+    ttlMs?: number;
 }): Promise<string> {
     // Delete older pending records for same store + platform
     await db.delete(pendingEcommerceInstalls).where(
@@ -727,6 +735,20 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
             eq(pendingEcommerceInstalls.status, 'pending')
         )
     );
+
+    // Easy Mode keys the install by merchant id, not storeDomain. Dedup any prior pending
+    // row for the same merchant too, so a token re-fire before the merchant claims
+    // REPLACES the row (fresh tokens) rather than duplicating it. Separate statement (not
+    // an OR with the storeDomain delete) so we never over-delete an unrelated merchant.
+    if (data.merchantId) {
+        await db.delete(pendingEcommerceInstalls).where(
+            and(
+                eq(pendingEcommerceInstalls.merchantId, data.merchantId),
+                eq(pendingEcommerceInstalls.platform, platform),
+                eq(pendingEcommerceInstalls.status, 'pending')
+            )
+        );
+    }
 
     const { ciphertext, iv } = encrypt(data.accessToken);
     // Carry the refresh token + expiry through to the claim so the resulting
@@ -743,13 +765,20 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
         refreshTokenIv: refreshIv,
         tokenExpiresAt: data.tokenExpiresAt,
         scopes: data.scopes || null,
+        merchantId: data.merchantId || null,
+        storeName: data.storeName || null,
         nonce: data.nonce,
         status: 'pending',
-        expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
+        expiresAt: new Date(Date.now() + (data.ttlMs ?? 30 * 60 * 1000)),
     }).returning();
 
     return result[0].id;
 }
+
+/** Default TTL for a Salla Easy-Mode pending install (the merchant may not open Jawab24
+ *  for a while after installing from the App Store). 7 days; the carried refresh token
+ *  (30-day life) keeps the claimed store usable even near the end of this window. */
+export const EASY_MODE_PENDING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Claim a pending install: decrypt token, create ecommerce_stores row, mark as claimed.
@@ -774,6 +803,91 @@ export async function claimPendingInstall(
     if (pending.status !== 'pending' || pending.expiresAt < new Date()) return null;
     if (pending.platform !== platform) return null;
 
+    return finalizeClaim(pending, userId, platform, registerWebhooksFn, saveWebhookStatusFn);
+}
+
+/**
+ * Claim a Salla Easy-Mode pending install by its merchant id (no cookie). Used after the
+ * merchant lands on the post-install page and logs in. Picks the newest pending row for
+ * the (platform, merchantId). Returns null if none / expired.
+ *
+ * SECURITY: the caller MUST have established that this logged-in user owns the given
+ * merchant id (verified merchant id from Salla's redirect, or an explicit confirm of a
+ * detected store) — this function does not by itself prove ownership.
+ */
+export async function claimPendingInstallByMerchantId(
+    merchantId: string,
+    userId: string,
+    platform: EcommercePlatform,
+    registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<WebhookRegistrationResult | void>,
+    saveWebhookStatusFn?: (storeId: string, webhookStatus: WebhookRegistrationResult) => Promise<void>,
+) {
+    const result = await db.select().from(pendingEcommerceInstalls)
+        .where(and(
+            eq(pendingEcommerceInstalls.platform, platform),
+            eq(pendingEcommerceInstalls.merchantId, merchantId),
+            eq(pendingEcommerceInstalls.status, 'pending'),
+        ))
+        .orderBy(desc(pendingEcommerceInstalls.createdAt))
+        .limit(1);
+
+    const pending = result[0];
+    if (!pending) return null;
+    if (pending.expiresAt < new Date()) return null;
+
+    return finalizeClaim(pending, userId, platform, registerWebhooksFn, saveWebhookStatusFn);
+}
+
+/** Non-secret summary of a pending install, for the post-install claim screen. */
+export interface PendingInstallSummary {
+    id: string;
+    storeDomain: string;
+    storeName: string | null;
+    merchantId: string | null;
+    createdAt: Date | null;
+}
+
+/**
+ * List unclaimed, unexpired Easy-Mode pending installs for a platform, optionally scoped
+ * to one merchant id. Returns NON-SECRET columns only (never tokens/nonce) and only rows
+ * that carry a merchantId (Easy Mode) — cookie-flow rows are never exposed.
+ */
+export async function listPendingInstalls(
+    platform: EcommercePlatform,
+    merchantId?: string,
+): Promise<PendingInstallSummary[]> {
+    const conditions = [
+        eq(pendingEcommerceInstalls.platform, platform),
+        eq(pendingEcommerceInstalls.status, 'pending'),
+        isNotNull(pendingEcommerceInstalls.merchantId),
+        gt(pendingEcommerceInstalls.expiresAt, new Date()),
+    ];
+    if (merchantId) conditions.push(eq(pendingEcommerceInstalls.merchantId, merchantId));
+
+    return db.select({
+        id: pendingEcommerceInstalls.id,
+        storeDomain: pendingEcommerceInstalls.storeDomain,
+        storeName: pendingEcommerceInstalls.storeName,
+        merchantId: pendingEcommerceInstalls.merchantId,
+        createdAt: pendingEcommerceInstalls.createdAt,
+    }).from(pendingEcommerceInstalls)
+        .where(and(...conditions))
+        .orderBy(desc(pendingEcommerceInstalls.createdAt));
+}
+
+/**
+ * Shared tail of every pending-install claim (by id or by merchant id): owner-conflict
+ * check, token decrypt, workspace resolve, store create/update, template seed, mark
+ * claimed, and inline webhook registration. The two public claim entrypoints differ only
+ * in how they FIND the pending row.
+ */
+async function finalizeClaim(
+    pending: typeof pendingEcommerceInstalls.$inferSelect,
+    userId: string,
+    platform: EcommercePlatform,
+    registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<WebhookRegistrationResult | void>,
+    saveWebhookStatusFn?: (storeId: string, webhookStatus: WebhookRegistrationResult) => Promise<void>,
+) {
     // Check if store is already linked to another user
     const existingStore = await getStoreByDomain(platform, pending.storeDomain);
     if (existingStore && existingStore.userId !== userId && existingStore.isActive) {
@@ -799,6 +913,10 @@ export async function claimPendingInstall(
         accessToken,
         refreshToken,
         tokenExpiresAt: pending.tokenExpiresAt ?? undefined,
+        // Carry the Salla Easy-Mode merchant id so the webhook getStoreByMerchantId
+        // fallback can resolve this store. Null on the cookie/OAuth flow → undefined →
+        // createStore's jsonb merge leaves platformData untouched (identical to before).
+        platformData: pending.merchantId ? { merchantId: pending.merchantId } : undefined,
         workspaceId,
     });
 
@@ -814,7 +932,7 @@ export async function claimPendingInstall(
     await db.update(pendingEcommerceInstalls).set({
         status: 'claimed',
         claimedByUserId: userId,
-    }).where(eq(pendingEcommerceInstalls.id, pendingId));
+    }).where(eq(pendingEcommerceInstalls.id, pending.id));
 
     // Register webhooks INLINE (must complete before we return). The previous
     // fire-and-forget pattern lost registrations whenever the calling process

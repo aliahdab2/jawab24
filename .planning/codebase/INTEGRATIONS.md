@@ -241,6 +241,14 @@
   - Request scopes: `offline_access`, `products.read_write`, `settings.read` (verify against `config.salla.scopes`)
   - Access token (14 days) + refresh token (single-use; Redis distributed lock prevents concurrent-refresh races)
 
+- **Authorization Modes** (Salla supports two; we implement BOTH):
+  - **Custom Mode** (dev/testing): the standard OAuth redirect → `/salla/auth/callback` exchanges the code for tokens. Used locally.
+  - **Easy Mode** (REQUIRED for published App Store apps): the callback is never hit. Salla pushes tokens server-to-server via the **`app.store.authorize`** webhook (`data: {access_token, refresh_token, expires (unix seconds), scope}`), and re-fires the same event to deliver refreshed tokens.
+    - Handler: `controllers/salla.ts:handleStoreAuthorize` (HMAC-verified). Existing store (re-fire) → `updateStoreTokens` (idempotent). Fresh install → `fetchStoreInfo` for domain/name → `createPendingInstall` keyed by `merchantId` (7-day TTL) — no browser cookie exists.
+    - **Claim**: the install is claimed after the merchant logs into Jawab24, via `GET /salla/store/pending?merchantId=` (scoped, non-secret summary) + `POST /salla/store/claim {pendingId|merchantId}` → `claimPendingInstallByMerchantId`. Frontend landing: `frontend/src/pages/salla/connected.tsx` (the portal "App URL"). The exact merchant-id source from Salla's post-install redirect is confirmed at the live round-trip.
+    - **Claim endpoints are FLAG-GATED** by `SALLA_EASY_MODE_CLAIM_ENABLED` (`config.salla.easyModeClaimEnabled`, default OFF → both return 404). Until the merchant-id ownership binding is hardened, an un-gated claim would let any logged-in user claim a known merchant's pending install. Flip ON only after that hardening + the portal Easy-Mode switch. Webhook ingestion (`handleStoreAuthorize`) is not gated (staging tokens is harmless without the claim path).
+    - Schema: `pending_ecommerce_installs.merchant_id` + `store_name` (migration `0123`).
+
 - **API Endpoints Used**:
   - `/products` - list products
   - `/orders` - order data

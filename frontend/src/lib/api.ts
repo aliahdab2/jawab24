@@ -923,6 +923,17 @@ export const sallaApi = {
     const response = await api.patch('/salla/store/unlink-page', { pageId });
     return response.data;
   },
+  // Easy Mode (App Store install): list the pending install(s) staged by the
+  // app.store.authorize webhook for a merchant, so the post-install page can
+  // confirm "connect your store '<name>'". merchantId is required (scoped).
+  getPendingInstalls: async (merchantId: string): Promise<{ pending: Array<{ id: string; storeDomain: string; storeName: string | null; merchantId: string | null; createdAt: string | null }> }> => {
+    const response = await api.get('/salla/store/pending', { params: { merchantId } });
+    return response.data;
+  },
+  claimInstall: async (payload: { pendingId?: string; merchantId?: string }) => {
+    const response = await api.post('/salla/store/claim', payload, { timeout: LONG_RUNNING_TIMEOUT });
+    return response.data;
+  },
 };
 
 // Zid E-commerce API

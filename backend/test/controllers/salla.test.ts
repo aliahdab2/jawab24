@@ -56,6 +56,11 @@ const mockLinkStoreToPage = vi.fn().mockResolvedValue(undefined);
 const mockGetProducts = vi.fn().mockResolvedValue([]);
 const mockMapToEcommerceStore = vi.fn((store) => ({ id: store.id, storeDomain: store.storeDomain }));
 const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-salla-123');
+const mockUpdateStoreTokens = vi.fn().mockResolvedValue(undefined);
+const mockClaimPendingInstall = vi.fn();
+const mockClaimPendingInstallByMerchantId = vi.fn();
+const mockListPendingInstalls = vi.fn().mockResolvedValue([]);
+const mockSaveWebhookStatus = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreByDomain: (...args: any[]) => mockGetStoreByDomain(...args),
@@ -69,6 +74,12 @@ vi.mock('../../src/services/ecommerce', () => ({
     getProducts: (...args: any[]) => mockGetProducts(...args),
     mapToEcommerceStore: (...args: any[]) => mockMapToEcommerceStore(...args),
     createPendingInstall: (...args: any[]) => mockCreatePendingInstall(...args),
+    updateStoreTokens: (...args: any[]) => mockUpdateStoreTokens(...args),
+    claimPendingInstall: (...args: any[]) => mockClaimPendingInstall(...args),
+    claimPendingInstallByMerchantId: (...args: any[]) => mockClaimPendingInstallByMerchantId(...args),
+    listPendingInstalls: (...args: any[]) => mockListPendingInstalls(...args),
+    saveWebhookStatus: (...args: any[]) => mockSaveWebhookStatus(...args),
+    EASY_MODE_PENDING_TTL_MS: 7 * 24 * 60 * 60 * 1000,
     // Pass-through wrapper — calls registerFn so existing mockRegisterWebhooks
     // assertions still apply. Real helper also persists status + enqueues
     // retries; tested separately in webhookHardening tests.
@@ -104,6 +115,7 @@ vi.mock('../../src/config', () => ({
             hostName: 'jawab24.com',
             webhookSecret: 'test_salla_webhook_secret',
             scopes: 'offline_access products.read_write settings.read',
+            easyModeClaimEnabled: true,
         },
     },
 }));
@@ -142,7 +154,10 @@ import {
     syncStore,
     getStoreProducts,
     linkPage,
+    listPendingHandler,
+    claimStoreHandler,
 } from '../../src/controllers/salla';
+import { config } from '../../src/config';
 
 function mockRequest(overrides: Partial<any> = {}): any {
     return {
@@ -806,6 +821,209 @@ describe('Salla Controller', () => {
 
             expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
             expect(rep.status).toHaveBeenCalledWith(200);
+        });
+    });
+
+    // --- Easy Mode: app.store.authorize (token receipt) ---
+
+    describe('webhookHandler — app.store.authorize (Easy Mode)', () => {
+        const authorizeBody = (overrides: Record<string, unknown> = {}) => ({
+            event: 'app.store.authorize',
+            merchant: 671738424,
+            data: {
+                access_token: 'easy_access_token',
+                refresh_token: 'easy_refresh_token',
+                expires: 1893456000, // unix SECONDS
+                scope: 'offline_access products.read_write',
+                token_type: 'bearer',
+                ...overrides,
+            },
+        });
+
+        it('fresh install → stages a merchant-id-keyed pending install (no store yet)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByMerchantId.mockResolvedValue(null); // no store yet
+            const body = authorizeBody();
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockFetchStoreInfo).toHaveBeenCalledWith('easy_access_token');
+            expect(mockCreatePendingInstall).toHaveBeenCalledWith('salla', expect.objectContaining({
+                merchantId: '671738424',
+                storeDomain: 'my-salla-store.salla.sa',
+                storeName: 'My Salla Store',
+                accessToken: 'easy_access_token',
+                refreshToken: 'easy_refresh_token',
+                ttlMs: 7 * 24 * 60 * 60 * 1000,
+            }));
+            // expires (unix seconds) → Date
+            expect(mockCreatePendingInstall.mock.calls[0][1].tokenExpiresAt).toEqual(new Date(1893456000 * 1000));
+            expect(mockUpdateStoreTokens).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('re-fire for an existing store → refreshes tokens in place (no new pending install)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByMerchantId.mockResolvedValue({ id: 'store-existing' });
+            const body = authorizeBody({ access_token: 'rotated_access', refresh_token: 'rotated_refresh' });
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockUpdateStoreTokens).toHaveBeenCalledWith('store-existing', expect.objectContaining({
+                accessToken: 'rotated_access',
+                refreshToken: 'rotated_refresh',
+            }));
+            expect(mockCreatePendingInstall).not.toHaveBeenCalled();
+            expect(mockFetchStoreInfo).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('missing access_token → no-op 200 (never throws on a malformed payload)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            const body = { event: 'app.store.authorize', merchant: 671738424, data: { expires: 1893456000 } };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockCreatePendingInstall).not.toHaveBeenCalled();
+            expect(mockUpdateStoreTokens).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('rejects an invalid HMAC before any token handling', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(false);
+            const body = authorizeBody();
+            const req = mockRequest({ headers: { 'x-salla-signature': 'bad' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockGetStoreByMerchantId).not.toHaveBeenCalled();
+            expect(mockCreatePendingInstall).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(401);
+        });
+    });
+
+    // --- Easy Mode: post-install claim handlers ---
+
+    describe('listPendingHandler', () => {
+        const authedReq = (overrides: Record<string, unknown> = {}) => mockRequest({
+            headers: { authorization: 'Bearer tok' }, ...overrides,
+        });
+
+        beforeEach(() => mockVerifyToken.mockReturnValue({ userId: 'user-123' }));
+
+        it('requires merchantId — never returns an unscoped list of all merchants', async () => {
+            const req = authedReq({ query: {} });
+            const rep = mockReply();
+            await listPendingHandler(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(400);
+            expect(mockListPendingInstalls).not.toHaveBeenCalled();
+        });
+
+        it('returns the scoped pending summary for a merchant', async () => {
+            mockListPendingInstalls.mockResolvedValue([{ id: 'p1', storeDomain: 'd', storeName: 'Shop', merchantId: '671738424', createdAt: new Date() }]);
+            const req = authedReq({ query: { merchantId: '671738424' } });
+            const rep = mockReply();
+            await listPendingHandler(req, rep);
+            expect(mockListPendingInstalls).toHaveBeenCalledWith('salla', '671738424');
+            expect(rep.send).toHaveBeenCalledWith({ pending: expect.any(Array) });
+        });
+
+        it('401 when unauthenticated', async () => {
+            mockVerifyToken.mockReturnValue(null);
+            const req = mockRequest({ headers: { authorization: 'Bearer tok' }, query: { merchantId: 'x' } });
+            const rep = mockReply();
+            await listPendingHandler(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(401);
+        });
+
+        it('404 (dormant) when the Easy-Mode claim flag is off', async () => {
+            config.salla.easyModeClaimEnabled = false;
+            try {
+                const req = authedReq({ query: { merchantId: '671738424' } });
+                const rep = mockReply();
+                await listPendingHandler(req, rep);
+                expect(rep.status).toHaveBeenCalledWith(404);
+                expect(mockListPendingInstalls).not.toHaveBeenCalled();
+            } finally {
+                config.salla.easyModeClaimEnabled = true;
+            }
+        });
+    });
+
+    describe('claimStoreHandler', () => {
+        const authedReq = (body: Record<string, unknown>) => mockRequest({
+            headers: { authorization: 'Bearer tok' }, body,
+        });
+
+        beforeEach(() => mockVerifyToken.mockReturnValue({ userId: 'user-123' }));
+
+        it('claims by merchantId and returns the onboarding payload', async () => {
+            mockClaimPendingInstallByMerchantId.mockResolvedValue({ id: 'store-new' });
+            const req = authedReq({ merchantId: '671738424' });
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            expect(mockClaimPendingInstallByMerchantId).toHaveBeenCalledWith('671738424', 'user-123', 'salla', expect.any(Function), expect.any(Function));
+            expect(rep.send).toHaveBeenCalledWith({ sallaOnboarding: true, ecommerceStoreId: 'store-new' });
+        });
+
+        it('claims by pendingId when provided', async () => {
+            mockClaimPendingInstall.mockResolvedValue({ id: 'store-pid' });
+            const req = authedReq({ pendingId: 'pending-1' });
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            expect(mockClaimPendingInstall).toHaveBeenCalledWith('pending-1', 'user-123', 'salla', expect.any(Function), expect.any(Function));
+            expect(rep.send).toHaveBeenCalledWith({ sallaOnboarding: true, ecommerceStoreId: 'store-pid' });
+        });
+
+        it('400 when neither pendingId nor merchantId is supplied', async () => {
+            const req = authedReq({});
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(400);
+        });
+
+        it('404 when nothing is claimable', async () => {
+            mockClaimPendingInstallByMerchantId.mockResolvedValue(null);
+            const req = authedReq({ merchantId: '999' });
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(404);
+        });
+
+        it('409 when the store is already owned by another account', async () => {
+            mockClaimPendingInstallByMerchantId.mockRejectedValue(new Error('This salla store is already connected to another account'));
+            const req = authedReq({ merchantId: '671738424' });
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(409);
+        });
+
+        it('401 when unauthenticated', async () => {
+            mockVerifyToken.mockReturnValue(null);
+            const req = mockRequest({ headers: { authorization: 'Bearer tok' }, body: { merchantId: 'x' } });
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(401);
+        });
+
+        it('404 (dormant) when the Easy-Mode claim flag is off — never reaches the claim logic', async () => {
+            config.salla.easyModeClaimEnabled = false;
+            try {
+                const req = authedReq({ merchantId: '671738424' });
+                const rep = mockReply();
+                await claimStoreHandler(req, rep);
+                expect(rep.status).toHaveBeenCalledWith(404);
+                expect(mockClaimPendingInstallByMerchantId).not.toHaveBeenCalled();
+            } finally {
+                config.salla.easyModeClaimEnabled = true;
+            }
         });
     });
 
