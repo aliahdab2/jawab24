@@ -11,7 +11,14 @@ vi.mock('axios');
 vi.mock('@sentry/node', () => ({
     startSpan: vi.fn((_opts: unknown, fn: () => unknown) => fn()),
     captureException: vi.fn(),
+    captureMessage: vi.fn(),
     addBreadcrumb: vi.fn(),
+    setTag: vi.fn(),
+}));
+
+// Mock email service — quota alert emails admins; never hit the real provider in tests
+vi.mock('../../src/services/email', () => ({
+    emailService: { send: vi.fn().mockResolvedValue({ success: true }) },
 }));
 
 // Mock database
@@ -88,7 +95,10 @@ vi.mock('../../src/config', () => ({
             cacheEnabled: true,
             serviceUrl: 'http://localhost:3002',
             defaultModel: 'gpt-4-mini',
+            model: 'gpt-4.1-mini',
+            quotaAlertCooldownSeconds: 600,
         },
+        adminEmails: ['ops@jawab24.com'],
     },
 }));
 
@@ -182,6 +192,66 @@ describe('AI Service', () => {
 
             await expect(service.generateReply({ comment: '👋👋👋', language: 'ar' }))
                 .rejects.toThrow('Service unavailable');
+        });
+
+        it('reconstructs AiQuotaExhaustedError from the ai-worker 500 and alerts admins (drives park-and-retry)', async () => {
+            const { AiQuotaExhaustedError } = await import('../../src/utils/fbGraphErrors');
+            const { emailService } = await import('../../src/services/email');
+            const { redis } = await import('../../src/lib/redis');
+
+            // Dedup gate must pass so the alert actually fires.
+            vi.mocked(redis.set).mockResolvedValue('OK' as any);
+            // The wire failure arrives as an axios 500 carrying the typed error body.
+            const isAxErr = vi.mocked(axios.isAxiosError);
+            isAxErr.mockReturnValue(true as any);
+            vi.mocked(axios.post).mockRejectedValue({
+                response: { data: { error: { name: 'AiQuotaExhaustedError', message: '429 insufficient_quota' } } },
+            });
+
+            try {
+                // Must throw the typed error so the worker can PARK it (not a generic error).
+                await expect(
+                    service.generateReply({ comment: 'بكم السعر', context: { userId: 'u1' } }),
+                ).rejects.toBeInstanceOf(AiQuotaExhaustedError);
+
+                // Operator alerts fired (Sentry event + admin email), both behind the throttle.
+                expect(sentry.captureMessage).toHaveBeenCalledWith(
+                    'OpenAI quota exhausted (insufficient_quota) — top up billing',
+                    expect.objectContaining({ tags: { alert: 'openai_quota_exhausted' } }),
+                );
+                expect(emailService.send).toHaveBeenCalledWith(expect.objectContaining({
+                    to: 'ops@jawab24.com',
+                    type: 'transactional',
+                }));
+            } finally {
+                isAxErr.mockReturnValue(false as any); // don't leak into sibling tests
+            }
+        });
+
+        it('does NOT re-alert while throttled (Redis dedup returns non-OK)', async () => {
+            const { AiQuotaExhaustedError } = await import('../../src/utils/fbGraphErrors');
+            const { emailService } = await import('../../src/services/email');
+            const { redis } = await import('../../src/lib/redis');
+
+            // SET NX returns null when the key already exists → within cooldown window.
+            vi.mocked(redis.set).mockResolvedValue(null as any);
+            const isAxErr = vi.mocked(axios.isAxiosError);
+            isAxErr.mockReturnValue(true as any);
+            vi.mocked(axios.post).mockRejectedValue({
+                response: { data: { error: { name: 'AiQuotaExhaustedError', message: '429 insufficient_quota' } } },
+            });
+
+            try {
+                // Still throws the typed error (parking is unaffected) ...
+                await expect(
+                    service.generateReply({ comment: 'بكم', context: { userId: 'u2' } }),
+                ).rejects.toBeInstanceOf(AiQuotaExhaustedError);
+                // ... but the alert is suppressed by the throttle.
+                expect(sentry.captureMessage).not.toHaveBeenCalled();
+                expect(emailService.send).not.toHaveBeenCalled();
+            } finally {
+                isAxErr.mockReturnValue(false as any);
+            }
         });
 
         it('should respect language parameter', async () => {

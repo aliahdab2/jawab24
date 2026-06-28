@@ -18,6 +18,7 @@ import { classifyFallbackIntent } from './reply/fallbackClassifier';
 import { getModelForUser } from './aiModelResolver';
 import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError, AiQuotaExhaustedError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
+import { emailService } from './email';
 import type { AiPipeline } from '../types/aiPipeline';
 
 /** Context used to scope exact-cache lookups and writes. */
@@ -737,6 +738,27 @@ export class AiService {
             tags: { alert: 'openai_quota_exhausted' },
             extra: { pipeline, detail: message },
         });
+
+        // Self-contained operator alert (does NOT depend on a Sentry alert rule
+        // being configured). Goes to the platform admins — they control OpenAI
+        // billing; merchants can't act on this. Fire-and-forget, already throttled
+        // by the dedup above. `message` is our own error text, but escape it
+        // defensively before embedding in HTML.
+        const admins = config.adminEmails;
+        if (admins.length > 0) {
+            const safeDetail = (message ?? 'n/a').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string));
+            const html = `<p><b>OpenAI returned <code>insufficient_quota</code></b> — Jawab24 auto-replies are now <b>parking</b> and will not send until the OpenAI balance is topped up.</p>`
+                + `<p>Pipeline: <b>${pipeline}</b><br/>Detail: ${safeDetail}</p>`
+                + `<p><b>Action:</b> add credit / raise the usage limit in the OpenAI billing dashboard. Parked replies resume automatically once credit returns.</p>`;
+            await Promise.all(admins.map((to) =>
+                emailService.send({
+                    to,
+                    subject: '🚨 Jawab24: OpenAI quota exhausted — top up billing',
+                    html,
+                    type: 'transactional',
+                }).catch(() => { /* fire-and-forget — never block the reply path */ }),
+            ));
+        }
     }
 
     /**
