@@ -3,10 +3,12 @@ import { Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 
-// Effectively permanent once acknowledged. The caller only renders this before
-// the merchant's first Post Reply exists, so it never reappears after the
-// feature has been used — the long duration just covers the dismiss button.
-const DISMISS_DURATION_MS = 365 * 24 * 60 * 60 * 1000;
+// Dismiss is temporary so the intro re-appears and gives repeat exposure until
+// the merchant actually sets up a Post Reply (one impression is easy to miss).
+// The caller stops rendering it once the first Post Reply exists (see
+// showPostReplyNewBadge), so it never nags after the feature has been used — this
+// window only governs how long a manual ✕ dismiss lasts before it surfaces again.
+const DISMISS_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 
 interface PostReplyIntroBannerProps {
   /** Open Post Reply setup for the first eligible post. */

@@ -27,6 +27,14 @@ describe('PostReplyIntroBanner', () => {
     expect(screen.getByRole('status').textContent || '').not.toMatch(/\bDM\b/i);
   });
 
+  it('re-appears after the dismiss window has elapsed (shown more than once)', () => {
+    // An old dismissal (epoch) is far past the 30-day window → the intro surfaces
+    // again so a merchant who missed it gets repeat exposure.
+    localStorage.setItem('postReplyIntroDismissedAt', JSON.stringify({ dismissedAt: 0, count: 0 }));
+    render(<PostReplyIntroBanner onSetup={vi.fn()} />);
+    expect(screen.getByText('Auto-reply to commenters')).toBeInTheDocument();
+  });
+
   it('hides itself and persists dismissal across remounts', () => {
     const { unmount } = render(<PostReplyIntroBanner onSetup={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
