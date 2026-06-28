@@ -18,7 +18,7 @@ import {
 import { formatMessageTime } from '@/utils/dateUtils';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
 import type { Comment } from '@jawab24/shared';
-import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
+import { PostReplyIcon } from '@/utils/postReply';
 
 export interface CommentCardProps {
   comment: Comment;
@@ -152,12 +152,12 @@ export const CommentCard = React.memo(function CommentCard({
           {/* Avatar */}
           <div className="flex-shrink-0">
              <div className={clsx(
-               "w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 border-card shadow-sm",
+               "w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold",
                needsAttention
                  ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
-                 : "bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400"
+                 : "bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400"
              )}>
-                {initials || <User className="w-5 h-5" />}
+                {initials || <User className="w-4 h-4" />}
              </div>
           </div>
 
@@ -199,38 +199,11 @@ export const CommentCard = React.memo(function CommentCard({
                 ) : null}
              </div>
 
-             {/* Post Context + Trigger Button */}
+             {/* Post Context */}
              {comment.postId && (
-               <div className="flex flex-col gap-1 w-full">
-                 <div className="flex items-start gap-1 px-2 py-1 text-[11px] text-muted-foreground w-full">
-                   <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted mt-0.5" aria-hidden="true" />
-                   <span className="line-clamp-1 break-words" dir="auto">{comment.postMessage || t('postContext')}</span>
-                 </div>
-                 {onTriggerClick && (
-                   <div className="relative self-start">
-                     <button
-                       type="button"
-                       onClick={e => { e.stopPropagation(); onTriggerClick(e); }}
-                       className={clsx(
-                         'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors',
-                         triggerActive
-                           // Active (configured): solid emerald so it clearly reads as "on".
-                           ? 'border-emerald-700 bg-emerald-700 text-white'
-                           // Inactive: emerald tint — always visible and recognizable as Post
-                           // Reply (emerald + ⚡ = Post Reply; distinct from Smart Reply's violet + ✨).
-                           : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
-                       )}
-                     >
-                       <PostReplyIcon className={clsx('w-3.5 h-3.5', !triggerActive && postReplyIconClass)} aria-hidden="true" />
-                       {triggerActive ? t('postTriggerActive') : t('postTrigger')}
-                     </button>
-                     {showNewBadge && !triggerActive && (
-                       <span className="absolute -top-2 -end-2 px-1.5 py-0.5 rounded-full bg-brand-500 text-white text-[9px] font-bold leading-none shadow-sm pointer-events-none">
-                         {t('newBadge')}
-                       </span>
-                     )}
-                   </div>
-                 )}
+               <div className="flex items-start gap-1 px-2 py-1 text-[11px] text-muted-foreground w-full">
+                 <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted mt-0.5" aria-hidden="true" />
+                 <span className="line-clamp-1 break-words" dir="auto">{comment.postMessage || t('postContext')}</span>
                </div>
              )}
 
@@ -306,6 +279,46 @@ export const CommentCard = React.memo(function CommentCard({
                  <ReplySourceIndicator />
               </div>
            </div>
+        )}
+
+        {/* Card footer — Post Reply action.
+            NOTE: this trigger is POST-scoped (triggerActive = "this post has a keyword set"),
+            but it renders on every comment of that post. Ideally lifted to a per-post group
+            header so it isn't repeated; kept on the card for now to preserve the shipped
+            Post Reply discoverability behaviour. */}
+        {comment.postId && onTriggerClick && (
+          <div className="flex items-center justify-end gap-2 pt-3 mt-1 border-t border-theme-border/60">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onTriggerClick(e); }}
+                title={triggerActive ? t('postTriggerActiveAria') : t('postTriggerAria')}
+                aria-label={triggerActive ? t('postTriggerActiveAria') : t('postTriggerAria')}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm border transition-all',
+                  triggerActive
+                    // Configured ("on"): quiet, settled confirmation — nothing left to do here,
+                    // so it recedes rather than competing for attention.
+                    ? 'font-medium border-transparent bg-emerald-50/70 dark:bg-emerald-900/15 text-emerald-700/90 dark:text-emerald-300/90'
+                    // Not configured: medium-emphasis invite. Emerald is the Post Reply identity
+                    // colour, kept tinted (not a saturated fill) so a list of mostly-unconfigured
+                    // posts doesn't become a wall of green — the red "needs attention" state stays
+                    // the loudest signal on the card. Discovery punch comes from the NEW badge.
+                    : 'font-semibold border-emerald-600/30 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 hover:border-emerald-600/50 dark:hover:bg-emerald-900/30'
+                )}
+              >
+                {triggerActive
+                  ? <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                  : <PostReplyIcon className="w-3.5 h-3.5" aria-hidden="true" />}
+                {triggerActive ? t('postTriggerActive') : t('postTriggerCta')}
+              </button>
+              {showNewBadge && !triggerActive && (
+                <span className="absolute -top-2 -end-2 px-1.5 py-0.5 rounded-full bg-brand-500 text-white text-[9px] font-bold leading-none shadow-sm pointer-events-none">
+                  {t('newBadge')}
+                </span>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
