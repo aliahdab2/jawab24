@@ -3,12 +3,20 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PostReplyIntroBanner } from './PostReplyIntroBanner';
 
+const KEY = 'postReplyIntro';
+const TITLE = 'Auto-reply to commenters';
+const FAR_FUTURE = 9_999_999_999_999; // ~year 2286
+const PAST = 1; // epoch+1ms
+
 describe('PostReplyIntroBanner', () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
 
   it('renders the intro text and an accessible CTA', () => {
     render(<PostReplyIntroBanner onSetup={vi.fn()} />);
-    expect(screen.getByText('Auto-reply to commenters')).toBeInTheDocument();
+    expect(screen.getByText(TITLE)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Set one up' })).toBeInTheDocument();
   });
 
@@ -20,29 +28,37 @@ describe('PostReplyIntroBanner', () => {
   });
 
   it('keeps the intro copy channel-neutral — must not promise a delivery channel', () => {
-    // The reply channel (public comment vs DM) is governed by the merchant's
-    // commentReplyMode setting (default 'public'), so the copy must NOT claim "DM".
-    // Regression guard: this wording was wrong twice before.
+    // The reply channel (public comment vs DM) is governed by commentReplyMode
+    // (default 'public'), so the copy must NOT claim "DM". Regression guard.
     render(<PostReplyIntroBanner onSetup={vi.fn()} />);
     expect(screen.getByRole('status').textContent || '').not.toMatch(/\bDM\b/i);
   });
 
-  it('re-appears after the dismiss window has elapsed (shown more than once)', () => {
-    // An old dismissal (epoch) is far past the 30-day window → the intro surfaces
-    // again so a merchant who missed it gets repeat exposure.
-    localStorage.setItem('postReplyIntroDismissedAt', JSON.stringify({ dismissedAt: 0, count: 0 }));
+  it('still shows while under the 3-view cap', () => {
+    localStorage.setItem(KEY, JSON.stringify({ count: 2, postponedUntil: null }));
     render(<PostReplyIntroBanner onSetup={vi.fn()} />);
-    expect(screen.getByText('Auto-reply to commenters')).toBeInTheDocument();
+    expect(screen.getByText(TITLE)).toBeInTheDocument();
   });
 
-  it('hides itself and persists dismissal across remounts', () => {
+  it('postpones (hides) after 3 views until the cooldown elapses', () => {
+    localStorage.setItem(KEY, JSON.stringify({ count: 3, postponedUntil: FAR_FUTURE }));
+    render(<PostReplyIntroBanner onSetup={vi.fn()} />);
+    expect(screen.queryByText(TITLE)).not.toBeInTheDocument();
+  });
+
+  it('re-appears for another round once the ~6-month postpone has elapsed', () => {
+    localStorage.setItem(KEY, JSON.stringify({ count: 3, postponedUntil: PAST }));
+    render(<PostReplyIntroBanner onSetup={vi.fn()} />);
+    expect(screen.getByText(TITLE)).toBeInTheDocument();
+  });
+
+  it('hides on manual dismiss and stays hidden across remounts (postponed)', () => {
     const { unmount } = render(<PostReplyIntroBanner onSetup={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    expect(screen.queryByText('Auto-reply to commenters')).not.toBeInTheDocument();
+    expect(screen.queryByText(TITLE)).not.toBeInTheDocument();
 
-    // Fresh mount reads the persisted dismissal from localStorage.
     unmount();
     render(<PostReplyIntroBanner onSetup={vi.fn()} />);
-    expect(screen.queryByText('Auto-reply to commenters')).not.toBeInTheDocument();
+    expect(screen.queryByText(TITLE)).not.toBeInTheDocument();
   });
 });
