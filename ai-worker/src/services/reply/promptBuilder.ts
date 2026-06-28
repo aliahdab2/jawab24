@@ -70,23 +70,98 @@ function sanitizeUserField(text: string, maxChars: number): string {
 /**
  * Build system prompt for the AI.
  *
- * Structure (designed for OpenAI prompt caching — https://platform.openai.com/docs/guides/prompt-caching):
- *   [STATIC_SYSTEM_PREFIX]  — identical every call; cached across all requests (~3k tokens)
- *   [DYNAMIC SUFFIX]        — page name, style, channel, language, KB, catalog, etc.
+ * Layered for OpenAI prompt caching (https://platform.openai.com/docs/guides/prompt-caching),
+ * which discounts the longest IDENTICAL leading token span across calls (75% off input on
+ * gpt-4.1-mini for cached tokens). The order is static → per-page-stable → per-call so the
+ * cacheable prefix is as LONG as possible:
  *
- * Having the static prefix first maximizes cache hit rate: OpenAI caches matching
- * prefixes ≥1024 tokens, giving 50% input-cost discount + lower latency on hits.
- * Changing anything in STATIC_SYSTEM_PREFIX (even whitespace) invalidates the cache.
+ *   [STATIC_SYSTEM_PREFIX]  — byte-identical every call.
+ *   [STABLE PAGE BLOCK]     — business info + full KB + product catalog. Byte-identical across
+ *                             every reply for the same page until its KB / settings change, so
+ *                             it EXTENDS the cached prefix. The full KB is the biggest single
+ *                             block (~4.6k tokens at the 16k-char cap); having it here means
+ *                             repeat traffic to a page is billed at the cached rate instead of
+ *                             full rate on every reply.
+ *   [PER-CALL BLOCK]        — page name, style, channel, language, date, dialect, greeting,
+ *                             brand voice, customer context, RAG chunks, post: all vary per
+ *                             message (or per query), so they trail the cached prefix.
+ *
+ * The KB previously sat at the very END of the system prompt, after per-call text (language
+ * directive, date, customer context). Because OpenAI caches by prefix, anything per-call placed
+ * before the KB broke the cache for it, so the KB was re-billed at full rate on every reply —
+ * the cost regression this layering fixes. Keep ALL per-call interpolation in buildPerCallBlock;
+ * put only per-page-stable content in buildStablePageBlock.
+ *
+ * Changing STATIC_SYSTEM_PREFIX (even whitespace), or this ordering, must bump PROMPT_VERSION.
  */
 export function buildSystemPrompt(request: GenerateRequest): string {
-    return STATIC_SYSTEM_PREFIX + '\n\n' + buildDynamicSystemSuffix(request);
+    const stable = buildStablePageBlock(request);
+    const perCall = buildPerCallBlock(request);
+    return STATIC_SYSTEM_PREFIX + '\n\n' + (stable ? stable + '\n\n' : '') + perCall;
 }
 
 /**
- * Build the per-call dynamic portion of the system prompt.
- * This concatenates after STATIC_SYSTEM_PREFIX. Keep ALL call-specific interpolation here.
+ * Cap and sanitize store policies for embedding next to a knowledge block.
+ * Capped at 2000 chars so oversized merchant text can't crowd out history/chunks.
  */
-function buildDynamicSystemSuffix(request: GenerateRequest): string {
+function buildPoliciesBlock(request: GenerateRequest): string {
+    const rawPolicies = request.context?.storePolicies;
+    const storePolicies = rawPolicies ? rawPolicies.slice(0, 2000) : undefined;
+    return storePolicies ? `\n\n[store_policies]\n${sanitizeForPrompt(storePolicies)}` : '';
+}
+
+/**
+ * Build the per-PAGE-stable portion of the system prompt — the cacheable prefix extension.
+ * Everything here MUST be byte-identical across every reply for a given page (until its KB /
+ * settings change): no per-message or per-query interpolation. The RAG-chunk path is per-query,
+ * so chunks live in buildPerCallBlock, NOT here.
+ */
+function buildStablePageBlock(request: GenerateRequest): string {
+    const parts: string[] = [];
+
+    // Stage 2.6 structured BUSINESS_INFO block — merchant-confirmed only. Placed ABOVE the
+    // narrative <business_knowledge> so the model treats structured fields as authoritative and
+    // refuses to invent values for [NOT_PROVIDED] fields. Eval cases #11 (Damascus phone
+    // hallucination) and #19 (structured-beats-stale-KB) gate this precedence.
+    if (request.context?.businessInfoBlock) {
+        parts.push(sanitizeUserField(request.context.businessInfoBlock, BUSINESS_INFO_MAX_CHARS));
+    }
+
+    // Full static KB — the non-ecommerce / no-chunks path. Stable per page → cacheable.
+    // (Oversized KBs are truncated at KB_MAX_CHARS.) The RAG-chunk path is per-query and is
+    // rendered in buildPerCallBlock instead, so it never pollutes this cached prefix.
+    const retrievedChunks = request.context?.retrievedChunks;
+    const knowledgeBase = request.context?.knowledgeBase;
+    if (!(retrievedChunks && retrievedChunks.length > 0) && knowledgeBase && knowledgeBase.trim().length > 0) {
+        const kbTruncated = knowledgeBase.length > KB_MAX_CHARS;
+        const rawKB = kbTruncated
+            ? knowledgeBase.slice(0, KB_MAX_CHARS) + '\n[...]'
+            : knowledgeBase;
+        const effectiveKB = sanitizeForPrompt(rawKB);
+        parts.push(`<business_knowledge>\n${effectiveKB}${buildPoliciesBlock(request)}\n</business_knowledge>`);
+    }
+
+    // Product catalog — compact, always-present store summary. Stable per page → cacheable.
+    const productCatalog = request.context?.productCatalog;
+    if (productCatalog && productCatalog.trim().length > 0) {
+        const safeProductCatalog = sanitizeForPrompt(productCatalog);
+        parts.push(`<product_catalog>
+${safeProductCatalog}
+</product_catalog>
+
+The <product_catalog> lists the actual products/items this business sells in their store. When a customer asks about products, what is available, what you sell, or pricing, refer to <product_catalog>.
+When a customer asks "where can I buy", "give me the link", or wants to purchase — share the store URL or specific product URL from <product_catalog> if available. NEVER invent or guess URLs.`);
+    }
+
+    return parts.join('\n\n');
+}
+
+/**
+ * Build the per-call portion of the system prompt — trails the cached prefix.
+ * Everything here either interpolates call-specific values, appears conditionally, or (RAG
+ * chunks, post) varies per query/message.
+ */
+function buildPerCallBlock(request: GenerateRequest): string {
     const rawPageName = request.context?.pageName || 'our page';
     // Sanitize to prevent prompt injection via page name
     const pageName = rawPageName.replace(/["\n\r\t\\]/g, '').slice(0, 100);
@@ -98,7 +173,6 @@ function buildDynamicSystemSuffix(request: GenerateRequest): string {
     const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
     const languageName = languageNames[language] || 'English';
     const retrievedChunks = request.context?.retrievedChunks;
-    const knowledgeBase = request.context?.knowledgeBase;
     const isDM = resolveChannel(request) === 'dm';
 
     // Reply style — maps setting to prompt personality directive.
@@ -112,7 +186,7 @@ function buildDynamicSystemSuffix(request: GenerateRequest): string {
     const replyStyle = request.context?.replyStyle;
     const styleDirective = styleMap[replyStyle || ''] || styleMap.professional;
 
-    // DYNAMIC SUFFIX — follows STATIC_SYSTEM_PREFIX in the final prompt.
+    // PER-CALL BLOCK — follows the cacheable [STATIC_SYSTEM_PREFIX][STABLE PAGE BLOCK] prefix.
     // Everything here either interpolates call-specific values or appears conditionally.
     let prompt = `CONTEXT FOR THIS REPLY:
 - Business name: "${pageName}"
@@ -133,7 +207,8 @@ ${isDM
 
     if (language === 'ar') {
         // Per-call reinforcement of the dialect-mirroring rule in STATIC_SYSTEM_PREFIX.
-        // High-salience reminder near the language directive; cache-safe (dynamic suffix).
+        // High-salience reminder next to the language directive; lives in the per-call block,
+        // after the cached prefix, so it never affects KB caching.
         prompt += `\n- ARABIC DIALECT: mirror the customer's dialect exactly — Maghrebi/Darija (واش، شحال، تاع، بزّاف، شكون) → reply in Maghrebi; Egyptian → Egyptian; Gulf → Gulf; Levantine → Levantine. NEVER reply in a dialect different from theirs (e.g. Levantine مو/بدك/هلق to a Maghrebi customer reads as a foreign bot). If their message is too short or dialect-neutral to tell, use light Modern Standard Arabic — do NOT default to Levantine or Gulf.`;
     }
 
@@ -151,15 +226,6 @@ ${isDM
         prompt += `\n\nBRAND VOICE NOTES (${voiceHeader}):\n${sanitizeUserField(request.context.brandVoiceNotes, MAX_BRAND_VOICE_LENGTH)}`;
     }
 
-    // Stage 2.6 structured BUSINESS_INFO block — merchant-confirmed only.
-    // Injected verbatim above the narrative <business_knowledge> tag below,
-    // so the model treats structured fields as authoritative and refuses to
-    // invent values for [NOT_PROVIDED] fields. Eval cases #11 (Damascus
-    // phone hallucination) and #19 (structured-beats-stale-KB) gate this.
-    if (request.context?.businessInfoBlock) {
-        prompt += `\n\n${sanitizeUserField(request.context.businessInfoBlock, BUSINESS_INFO_MAX_CHARS)}`;
-    }
-
     // Customer context goes into the user prompt (next to the message) when conversation
     // history is present — that's where the model's attention is strongest and the data
     // matters most (preventing re-asks). For single-message scenarios (comments, first DM),
@@ -168,18 +234,10 @@ ${isDM
         prompt += `\n\nCUSTOMER CONTEXT: ${sanitizeUserField(request.context.customerContext, 300)}`;
     }
 
-    // Add business knowledge: prefer retrieved chunks, fall back to static KB
-    const rawPolicies = request.context?.storePolicies;
-    // Cap policies at 2000 chars to prevent oversized merchant text from crowding out history/chunks
-    const storePolicies = rawPolicies ? rawPolicies.slice(0, 2000) : undefined;
-
-    // Inject post content inside KB tags so the model treats it as a trusted source.
-    // The post is the business's own published content — valid for answering comments.
-    // Capped at 500 chars (same as the user-prompt post label).
-    const postBlock = request.context?.postMessage
-        ? `\n\n[current_post]\n${sanitizeForPrompt(request.context.postMessage).slice(0, 500)}`
-        : '';
-
+    // RAG chunks — the per-QUERY knowledge path (ecommerce, or the KB_RAG_THRESHOLD_CHARS
+    // rollback). Chunks vary per message, so they stay here in the per-call block; the full
+    // static KB and product catalog are hoisted into the cacheable stable block instead
+    // (see buildStablePageBlock).
     if (retrievedChunks && retrievedChunks.length > 0) {
         const chunkLines = retrievedChunks.map(c => {
             const safeTitle = c.title ? sanitizeForPrompt(c.title) : null;
@@ -188,54 +246,25 @@ ${isDM
             return `${label}\n${safeContent}`;
         }).join('\n\n');
 
-        // Always include store policies alongside RAG chunks so the AI
-        // can answer warranty, return, delivery, and payment questions
-        // even when the RAG chunks only cover product-specific data.
-        const policiesBlock = storePolicies
-            ? `\n\n[store_policies]\n${sanitizeForPrompt(storePolicies)}`
-            : '';
-
+        // Always include store policies alongside RAG chunks so the AI can answer warranty,
+        // return, delivery, and payment questions even when chunks only cover product data.
         prompt += `
 
 <business_knowledge>
-${chunkLines}${policiesBlock}${postBlock}
-</business_knowledge>
-
-`;
-    } else if (knowledgeBase && knowledgeBase.trim().length > 0) {
-        // Backward-compatible: static KB for pages without chunks
-        const kbTruncated = knowledgeBase.length > KB_MAX_CHARS;
-        const rawKB = kbTruncated
-            ? knowledgeBase.slice(0, KB_MAX_CHARS) + '\n[...]'
-            : knowledgeBase;
-        const effectiveKB = sanitizeForPrompt(rawKB);
-
-        // Include store policies alongside static KB too
-        const policiesBlock = storePolicies
-            ? `\n\n[store_policies]\n${sanitizeForPrompt(storePolicies)}`
-            : '';
-
-        prompt += `
-
-<business_knowledge>
-${effectiveKB}${policiesBlock}${postBlock}
-</business_knowledge>
-
-`;
+${chunkLines}${buildPoliciesBlock(request)}
+</business_knowledge>`;
     }
 
-    // Add product catalog when available (always-present compact summary from e-commerce store)
-    const productCatalog = request.context?.productCatalog;
-    if (productCatalog && productCatalog.trim().length > 0) {
-        const safeProductCatalog = sanitizeForPrompt(productCatalog);
-        prompt += `
-
-<product_catalog>
-${safeProductCatalog}
-</product_catalog>
-
-The <product_catalog> lists the actual products/items this business sells in their store. When a customer asks about products, what is available, what you sell, or pricing, refer to <product_catalog>.
-When a customer asks "where can I buy", "give me the link", or wants to purchase — share the store URL or specific product URL from <product_catalog> if available. NEVER invent or guess URLs.`;
+    // Current post — the business's own published content, a trusted source for answering a
+    // comment. It is per-message, so it trails the cached prefix as its own labeled block (the
+    // channel directive above references [current_post] by name). Emitted only when a knowledge
+    // block exists, matching prior behavior — a post without any KB still reaches the model via
+    // buildUserPrompt. Capped at 500 chars (same as the user-prompt post label).
+    const hasStableKb = !(retrievedChunks && retrievedChunks.length > 0)
+        && !!request.context?.knowledgeBase?.trim();
+    const hasChunks = !!(retrievedChunks && retrievedChunks.length > 0);
+    if (request.context?.postMessage && (hasStableKb || hasChunks)) {
+        prompt += `\n\n[current_post]\n${sanitizeForPrompt(request.context.postMessage).slice(0, 500)}`;
     }
 
     return prompt;

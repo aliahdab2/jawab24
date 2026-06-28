@@ -695,7 +695,14 @@ export {
 // channel naturally (never a number-wall), still no callback promise. Also
 // de-Levantined the rule-level seed phrase (هالمعلومة → هذه المعلومة, MSA tone-only).
 // Bump invalidates exact + semantic caches holding the cold phone-dump replies.
-export const PROMPT_VERSION = 'v45';
+//
+// v46: re-layered the system prompt for OpenAI prompt caching (promptBuilder.ts) — the full
+// KB / business-info / catalog are hoisted into a per-page-stable block right after
+// STATIC_SYSTEM_PREFIX, ahead of the per-call content (language, date, chunks, post), so the
+// KB sits in the cacheable prefix and is billed at the cached rate on repeat traffic instead
+// of full rate every call. No field content/sanitization changed — only assembly order — but
+// the prompt the model sees is reordered, so the cache is invalidated for a clean cutover.
+export const PROMPT_VERSION = 'v46';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
