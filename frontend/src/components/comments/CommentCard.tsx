@@ -8,7 +8,6 @@ import { renderMessageText } from '@/utils/renderMessageText';
 import {
   Clock,
   AlertTriangle,
-  Sparkles,
   CheckCircle,
   CheckCheck,
   User,
@@ -19,6 +18,7 @@ import {
 import { formatMessageTime } from '@/utils/dateUtils';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
 import type { Comment } from '@jawab24/shared';
+import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 
 export interface CommentCardProps {
   comment: Comment;
@@ -207,26 +207,21 @@ export const CommentCard = React.memo(function CommentCard({
                    <span className="line-clamp-1 break-words" dir="auto">{comment.postMessage || t('postContext')}</span>
                  </div>
                  {onTriggerClick && (
-                   <div className={clsx(
-                     'relative self-start transition-opacity',
-                     // Declutter: hide the button until the card is hovered/focused —
-                     // but ONLY on hover-capable pointers (@media hover:hover), so
-                     // touch devices (incl. tablets ≥sm) always keep it visible.
-                     // Also kept visible when a trigger is active (status cue) or while
-                     // the one-time NEW badge is driving first-use discovery.
-                     !triggerActive && !showNewBadge && '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-within:opacity-100',
-                   )}>
+                   <div className="relative self-start">
                      <button
                        type="button"
                        onClick={e => { e.stopPropagation(); onTriggerClick(e); }}
                        className={clsx(
                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors',
                          triggerActive
-                           ? 'border-brand-400 text-brand-500 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20'
-                           : 'border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/30'
+                           // Active (configured): solid emerald so it clearly reads as "on".
+                           ? 'border-emerald-700 bg-emerald-700 text-white'
+                           // Inactive: emerald tint — always visible and recognizable as Post
+                           // Reply (emerald + ⚡ = Post Reply; distinct from Smart Reply's violet + ✨).
+                           : 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
                        )}
                      >
-                       <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                       <PostReplyIcon className={clsx('w-3.5 h-3.5', !triggerActive && postReplyIconClass)} aria-hidden="true" />
                        {triggerActive ? t('postTriggerActive') : t('postTrigger')}
                      </button>
                      {showNewBadge && !triggerActive && (
@@ -306,7 +301,7 @@ export const CommentCard = React.memo(function CommentCard({
                  </div>
               </div>
 
-               {/* Source Indicator (Zap/Sparkles) */}
+               {/* Reply source badge (per-method icon) */}
               <div className="flex-shrink-0 mb-1">
                  <ReplySourceIndicator />
               </div>

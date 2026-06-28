@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import clsx from 'clsx';
-import { Hash } from 'lucide-react';
+import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
@@ -103,11 +103,18 @@ export function PostTriggerModal({
       isOpen={isOpen}
       onClose={onClose}
       title={t('postTrigger')}
+      titleIcon={<PostReplyIcon className={clsx('w-5 h-5', postReplyIconClass)} aria-hidden="true" />}
       size="sm"
       mobilePresentation="fullscreen"
       footer={footer}
     >
       <div className="flex flex-col gap-4">
+        {/* What a Post Reply is — fixed, self-written message (channel-neutral copy).
+            The Post Reply icon already appears in the modal title (the feature's identity). */}
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {t('postTriggerDescription')}
+        </p>
+
         {/* Post preview */}
         {postMessage && (
           <div className="bg-surface-50 dark:bg-surface-800 rounded-lg px-3 py-2.5">
@@ -119,8 +126,8 @@ export function PostTriggerModal({
 
         {/* Active trigger badge */}
         {hasActiveTrigger && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 text-sm font-medium">
-            <Hash className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+            <PostReplyIcon className={clsx('w-4 h-4 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />
             {t('postTriggerActive')}
           </div>
         )}

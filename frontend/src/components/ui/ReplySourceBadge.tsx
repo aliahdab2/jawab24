@@ -1,7 +1,8 @@
 import React from 'react';
 import clsx from 'clsx';
-import { MessageSquare, Sparkles, UserCheck, Zap } from 'lucide-react';
+import { MessageSquare, Sparkles, UserCheck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { PostReplyIcon } from '@/utils/postReply';
 
 export type ReplyMethod = 'ai' | 'manual' | 'template' | 'post_reply';
 
@@ -31,7 +32,7 @@ export const ReplySourceBadge = React.memo(function ReplySourceBadge({
     ai: { Icon: Sparkles, label: tDashboard('aiReply'), colorClass: 'reply-source-ai' },
     manual: { Icon: UserCheck, label: tc('manual'), colorClass: 'reply-source-manual' },
     // 'post_reply' = per-post keyword trigger (Post Reply feature).
-    post_reply: { Icon: Zap, label: tDashboard('postReply'), colorClass: 'reply-source-template' },
+    post_reply: { Icon: PostReplyIcon, label: tDashboard('postReply'), colorClass: 'reply-source-template' },
     // 'template' = canned fallback (AI fallback when quota out, greeting, away message).
     // Visually distinct from post_reply so merchants don't confuse a generic
     // "thanks for your comment!" with a configured trigger reply.
