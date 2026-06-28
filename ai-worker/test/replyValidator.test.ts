@@ -256,6 +256,17 @@ describe('validateReply orchestration', () => {
         expect(out.flags).toContain('info_not_in_kb');
     });
 
+    it('Check 7: caps a number-wall to one when the customer asked for "a number" (singular)', () => {
+        const out = validateReply(base({ reply: 'أرقامنا للتواصل: 0935924472 0112124472 0937549674', language: 'ar' }), req('ممكن رقم للتواصل'));
+        expect((out.reply.match(/[\d٠-٩]{8,}/g) || []).length).toBe(1);
+    });
+
+    it('Check 7: does NOT cap when the customer explicitly asked for multiple numbers', () => {
+        const out = validateReply(base({ reply: 'أرقامنا: 0112345678 و 0501112233', language: 'ar' }), req('عندكم أكثر من رقم؟'));
+        expect(out.reply).toContain('0112345678');
+        expect(out.reply).toContain('0501112233');
+    });
+
     it('Check 4: hedging is ignored for non-question intents', () => {
         const out = validateReply(base({ reply: 'thanks so much', intent: 'COMPLIMENT', hedging: true }), req('great job'));
         expect(out.flags).not.toContain('info_not_in_kb');

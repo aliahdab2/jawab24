@@ -362,8 +362,13 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest): Va
     // Check 6: Self-identification — strip any sentence revealing the bot is automated.
     let finalReply = stripSelfIdentification(reply, parsed.language || request.language || 'ar');
 
-    // Check 7: Never a wall of numbers — keep at most one contact number.
-    finalReply = capContactNumbers(finalReply, 1);
+    // Check 7: Never a wall of numbers — keep at most one contact number, UNLESS the
+    // customer explicitly asked for multiple/all numbers (then listing several is the
+    // correct answer, e.g. "عندكم أكثر من رقم؟" / "what are all your numbers?").
+    const askedForMultipleNumbers = /أكثر من رقم|أرقام|كل الأرقام|other numbers|all (?:your )?numbers|both numbers|more numbers/i.test(request.comment || '');
+    if (!askedForMultipleNumbers) {
+        finalReply = capContactNumbers(finalReply, 1);
+    }
 
     // Check 8: A token of the customer's NAME confirmed as a course/product not in the KB
     // → neutralize the false confirmation and ask which one (the correct behavior for the
