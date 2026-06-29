@@ -42,6 +42,15 @@ export interface SmartTranslateOptions {
     supportedLanguages: string[];
     /** Default per-language text restored when the source language is cleared. */
     defaults?: Record<string, string>;
+    /**
+     * Optional per-language cap. When set, machine translations are clamped to it.
+     * A translation can expand past its source (notably AR→EN); for a field whose
+     * schema caps each language (e.g. brandVoiceNotesMulti), an over-cap value
+     * silently stored here later fails the settings-save validation when the diff
+     * resends the whole multilingual object — blocking ALL future saves. Clamping
+     * at the source keeps every stored language within the cap by construction.
+     */
+    maxLength?: number;
     /** Inject the actual translation call (kept out of this module). */
     translate: (text: string, sourceLanguage: 'ar' | 'en', targetLanguage: 'ar' | 'en') => Promise<string>;
     /** Optional failure hook (logging). Translation failures are swallowed so a save never fails. */
@@ -59,7 +68,7 @@ export async function smartTranslateMultiLang(
     fieldName: string,
     opts: SmartTranslateOptions,
 ): Promise<Record<string, string>> {
-    const { supportedLanguages, defaults, translate, onError } = opts;
+    const { supportedLanguages, defaults, maxLength, translate, onError } = opts;
 
     if (!updateMulti) return coerceMultiLang(currentMulti);
 
@@ -124,7 +133,11 @@ export async function smartTranslateMultiLang(
 
         if (isTargetEmpty || isTargetUnchanged) {
             try {
-                result[targetLang] = await translate(sourceText, sourceLang as 'ar' | 'en', targetLang as 'ar' | 'en');
+                const translated = await translate(sourceText, sourceLang as 'ar' | 'en', targetLang as 'ar' | 'en');
+                // Clamp to the field cap — a translation can expand past its source
+                // (notably AR→EN), and an over-cap value stored here later blocks the
+                // whole settings save (see maxLength docs above). No-op when unset.
+                result[targetLang] = maxLength ? translated.slice(0, maxLength) : translated;
             } catch (error) {
                 onError?.({ fieldName, sourceLang, targetLang, error });
             }

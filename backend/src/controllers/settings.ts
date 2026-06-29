@@ -2,7 +2,7 @@ import { FastifyReply } from 'fastify';
 import { settingsService } from '../services/settings';
 import { smartTranslateMultiLang } from '../services/multiLangTranslation';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { UpdateSettingsSchema } from '@jawab24/shared';
+import { UpdateSettingsSchema, MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import { validateSchema } from '../utils/validation';
 import { translateText, generateNudgeVariations } from '../services/translation';
 import type { UpdateSettingsDTO } from '../types/settings';
@@ -32,6 +32,19 @@ const DEFAULT_MESSAGES: Record<string, Record<string, string>> = {
         ar: '',
         en: '',
     },
+};
+
+/**
+ * Per-field max length, mirroring the `.max()` caps in
+ * packages/shared/src/schemas/settings.ts. Passed into smartTranslateMultiLang so
+ * machine translations are clamped to the cap. Only brandVoiceNotesMulti is
+ * schema-capped today; away/greeting/nudge `*Multi` fields are uncapped, so they
+ * need no clamp. Without this, an AR→EN translation that expands past the cap is
+ * stored over-cap and later blocks ALL settings saves (the diff resends it and Zod
+ * rejects it).
+ */
+const FIELD_MAX_LENGTHS: Record<string, number | undefined> = {
+    brandVoiceNotes: MAX_BRAND_VOICE_LENGTH,
 };
 
 export class SettingsController {
@@ -97,6 +110,7 @@ export class SettingsController {
                 smartTranslateMultiLang(updateMulti, currentMulti, fieldName, {
                     supportedLanguages,
                     defaults: DEFAULT_MESSAGES[fieldName],
+                    maxLength: FIELD_MAX_LENGTHS[fieldName],
                     translate: async (text, sourceLanguage, targetLanguage) =>
                         (await translateText({ text, sourceLanguage, targetLanguage, userId })).translatedText,
                     onError: ({ fieldName, sourceLang, targetLang, error }) =>

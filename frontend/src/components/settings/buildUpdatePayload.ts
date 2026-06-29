@@ -1,4 +1,4 @@
-import { UpdateSettingsSchema } from '@jawab24/shared';
+import { UpdateSettingsSchema, MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import type { SettingsState } from './types';
 
 /**
@@ -53,5 +53,25 @@ export function changedSettingsFields(
  * diff to send. An empty `.data` means nothing schema-relevant changed.
  */
 export function buildChangedSettingsPayload(current: SettingsState, baseline: SettingsState) {
-  return UpdateSettingsSchema.safeParse(changedSettingsFields(current, baseline));
+  const changed = changedSettingsFields(current, baseline);
+
+  // Heal a stale over-cap brandVoiceNotesMulti language. The textarea caps the
+  // language being edited, but a previously machine-translated OTHER language can
+  // exceed the cap (older data, before the backend clamp). Editing one language
+  // resends the WHOLE object in the diff, so that stale value would fail schema
+  // validation and dead-end the save. Clamp it here so the save proceeds; the
+  // backend re-translates + re-clamps the edited language anyway. Backend
+  // prevention (smartTranslateMultiLang maxLength) stops new over-cap values; this
+  // is the client-side heal for rows that predate it.
+  const multi = changed.brandVoiceNotesMulti;
+  if (multi && typeof multi === 'object') {
+    changed.brandVoiceNotesMulti = Object.fromEntries(
+      Object.entries(multi as Record<string, unknown>).map(([lang, val]) => [
+        lang,
+        typeof val === 'string' ? val.slice(0, MAX_BRAND_VOICE_LENGTH) : val,
+      ]),
+    );
+  }
+
+  return UpdateSettingsSchema.safeParse(changed);
 }

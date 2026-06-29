@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import {
   changedSettingsFields,
   buildChangedSettingsPayload,
@@ -98,6 +99,29 @@ describe('buildChangedSettingsPayload', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.errors[0].path).toContain('brandVoiceNotes');
+    }
+  });
+
+  it('clamps a stale over-cap brandVoiceNotesMulti language so editing another language still saves', () => {
+    // The textarea caps the language being edited, but a previously machine-
+    // translated OTHER language can exceed the cap (data predating the backend
+    // clamp). Editing one language resends the WHOLE object in the diff, so that
+    // stale value would fail schema validation and dead-end the save. The heal
+    // clamps it so the save proceeds.
+    const overCapEn = 'x'.repeat(MAX_BRAND_VOICE_LENGTH + 200);
+    const baseline = makeSettings({
+      brandVoiceNotesMulti: { ar: 'قديم', en: overCapEn, sourceLang: 'ar' },
+    });
+    const current = makeSettings({
+      brandVoiceNotesMulti: { ar: 'تعليمات جديدة', en: overCapEn, sourceLang: 'ar' }, // edited AR
+    });
+
+    const result = buildChangedSettingsPayload(current, baseline);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const multi = result.data.brandVoiceNotesMulti as Record<string, string>;
+      expect(multi.en.length).toBe(MAX_BRAND_VOICE_LENGTH); // clamped to the cap
+      expect(multi.ar).toBe('تعليمات جديدة'); // edited language preserved
     }
   });
 
