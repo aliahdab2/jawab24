@@ -1,7 +1,9 @@
 import OpenAI, { APIError, toFile } from 'openai';
+import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { logAiUsage } from './aiUsageLog';
 
 /** Maximum time to download audio from Facebook/Instagram CDN */
 const DOWNLOAD_TIMEOUT_MS = 10_000;
@@ -25,6 +27,26 @@ export type TranscriptionQuality = 'fast' | 'accurate';
 
 export interface TranscriptionResult {
     text: string;
+}
+
+/**
+ * Who to bill the transcription call to. Optional so internal/utility callers
+ * can transcribe without attribution, but the real callers (DM voice handler,
+ * KB voice route) always pass it so the OpenAI cost lands in `ai_usage_log`.
+ */
+export interface TranscriptionLogContext {
+    userId: string;
+    /** Internal pages.id (FK) — omit for workspace-level KB voice input. */
+    pageId?: string;
+}
+
+/**
+ * Token usage returned by gpt-4o-mini-transcribe (default `response_format: json`).
+ * Typed locally because the call is billed per token, not per minute.
+ */
+interface TranscriptionUsage {
+    input_tokens?: number;
+    output_tokens?: number;
 }
 
 /**
@@ -102,6 +124,64 @@ class TranscriptionService {
     }
 
     /**
+     * Record the transcription's OpenAI cost in `ai_usage_log`. Called once per
+     * successful API return (the call is billed even when the transcript is empty).
+     * Fire-and-forget — never blocks or fails the transcription. Until this was
+     * wired up, voice transcription was the one OpenAI call site with zero cost
+     * rows, so its spend was invisible to per-page cost tracking.
+     */
+    private logUsage(
+        logCtx: TranscriptionLogContext | undefined,
+        transcription: { usage?: unknown },
+    ): void {
+        // Hard guarantee: cost logging must NEVER disturb the transcription result.
+        // This runs synchronously inside transcribe()'s try block, so any throw here
+        // would be caught as a transcription failure and discard an already-successful
+        // transcript. Wrap the whole body so the voice path is isolated from it.
+        try {
+            if (!logCtx) {
+                // No attribution context — real callers always pass one; guard so a
+                // new unattributed code path is visible rather than silently uncosted.
+                Sentry.addBreadcrumb({
+                    category: 'ai_usage_log',
+                    level: 'warning',
+                    message: 'transcription usage skipped: no logCtx',
+                    data: { model: MODEL_TRANSCRIBE },
+                });
+                return;
+            }
+            // The SDK types `usage` as a Tokens | Duration union (whisper returns a
+            // duration; the gpt-4o-*-transcribe models return tokens). Narrow to the
+            // token shape — that's what gpt-4o-mini-transcribe sends and what we bill on.
+            const raw = transcription.usage;
+            const usage = (raw && typeof raw === 'object' && 'input_tokens' in raw)
+                ? (raw as TranscriptionUsage)
+                : undefined;
+            if (!usage) {
+                // gpt-4o-mini-transcribe returns token usage by default; absence means
+                // an OpenAI/SDK change — surface it instead of silently logging $0.
+                Sentry.addBreadcrumb({
+                    category: 'ai_usage_log',
+                    level: 'warning',
+                    message: 'transcription returned no usage tokens',
+                    data: { model: MODEL_TRANSCRIBE },
+                });
+            }
+            logAiUsage({
+                userId: logCtx.userId,
+                pageId: logCtx.pageId,
+                model: MODEL_TRANSCRIBE,
+                tokensIn: usage?.input_tokens ?? 0,
+                tokensOut: usage?.output_tokens ?? 0,
+                cached: false,
+                pipeline: 'transcription',
+            }).catch(() => { /* breadcrumb emitted inside logAiUsage on failure */ });
+        } catch (err) {
+            captureError(err instanceof Error ? err : new Error(String(err)), 'transcription usage log failed', { tags: { service: 'transcription' } });
+        }
+    }
+
+    /**
      * Transcribe an audio file from a URL using OpenAI transcription.
      * Returns the transcription text or null on any failure.
      *
@@ -112,6 +192,7 @@ class TranscriptionService {
         audioUrl: string,
         languageHint?: string,
         _quality?: TranscriptionQuality,
+        logCtx?: TranscriptionLogContext,
     ): Promise<TranscriptionResult | null> {
         const client = this.getClient();
         if (!client) return null;
@@ -186,6 +267,9 @@ class TranscriptionService {
                     { signal: transcribeController.signal },
                 );
                 recordAiReturn('transcription', MODEL_TRANSCRIBE);
+                // Log the cost BEFORE the empty-text check — OpenAI billed the call
+                // regardless of whether the transcript came back empty.
+                this.logUsage(logCtx, transcription);
 
                 const text = transcription.text?.trim();
                 if (!text) return null;
@@ -230,6 +314,7 @@ class TranscriptionService {
         mimeType: string = 'audio/webm',
         languageHint?: string,
         _quality?: TranscriptionQuality,
+        logCtx?: TranscriptionLogContext,
     ): Promise<TranscriptionResult | null> {
         const client = this.getClient();
         if (!client) return null;
@@ -249,6 +334,7 @@ class TranscriptionService {
                 { signal: controller.signal },
             );
             recordAiReturn('transcription', MODEL_TRANSCRIBE);
+            this.logUsage(logCtx, transcription);
 
             const text = transcription.text?.trim();
             if (!text) return null;

@@ -99,7 +99,13 @@ export async function handleNonTextMessage(
 
         // 4. Attempt Whisper transcription for audio messages
         if (attachmentType === 'audio' && attachmentUrl) {
-            const result = await transcriptionService.transcribe(attachmentUrl, lang);
+            // Attribute the transcription cost to the page owner so it shows up in
+            // per-page AI cost tracking. page.userId is nullable; skip attribution
+            // (not the transcription) if a legacy page has no owner row.
+            const result = await transcriptionService.transcribe(
+                attachmentUrl, lang, undefined,
+                page.userId ? { userId: page.userId, pageId: page.id } : undefined,
+            );
 
             if (result) {
                 logger.info(`[${platform}] Voice message transcribed`, {

@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { authenticate } from '../middleware/auth';
+import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import { transcriptionService, MAX_AUDIO_BYTES } from '../services/transcription';
 import { auth } from '../utils/swagger';
 
@@ -50,11 +50,15 @@ export default async function voiceRoutes(fastify: FastifyInstance) {
 
             try {
                 const startTime = Date.now();
+                // Attribute KB-voice transcription cost to the logged-in user (no
+                // pageId — this is workspace-level KB input, not a page conversation).
+                const userId = (request as AuthenticatedRequest).user?.userId;
                 const result = await transcriptionService.transcribeFromBuffer(
                     audioBuffer,
                     mimeType,
                     languageHint,
                     quality,
+                    userId ? { userId } : undefined,
                 );
 
                 if (!result) {

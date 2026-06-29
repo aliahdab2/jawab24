@@ -78,6 +78,7 @@ vi.mock('drizzle-orm', () => ({
     and: vi.fn(),
     gte: vi.fn(),
     lte: vi.fn(),
+    lt: vi.fn(),
     sql: Object.assign(vi.fn(), {
         // tagged-template usage in admin.ts uses sql`...`
         raw: vi.fn(),
@@ -104,6 +105,7 @@ vi.mock('../../src/db/schema', () => ({
     workspaceMembers: { workspaceId: 'workspaceId', userId: 'userId', role: 'role' },
     leads: { id: 'id', pageId: 'pageId', status: 'status', createdAt: 'createdAt' },
     settings: { id: 'id', userId: 'userId', aiModel: 'aiModel' },
+    aiUsageLog: { userId: 'userId', pageId: 'pageId', pipeline: 'pipeline', model: 'model', cached: 'cached', tokensIn: 'tokensIn', cachedInputTokens: 'cachedInputTokens', tokensOut: 'tokensOut', costUsd: 'costUsd', createdAt: 'createdAt' },
 }));
 
 vi.mock('../../src/services/aiModelResolver', () => ({
@@ -360,6 +362,102 @@ describe('Admin Routes', () => {
             });
 
             expect(response.statusCode).toBe(401);
+        });
+
+        it('GET /admin/ai-cost/consumption returns 401 without authorization header', async () => {
+            const response = await app.inject({
+                method: 'GET',
+                url: '/admin/ai-cost/consumption',
+            });
+
+            expect(response.statusCode).toBe(401);
+        });
+
+        it('GET /admin/ai-cost/billing returns 401 without authorization header', async () => {
+            const response = await app.inject({ method: 'GET', url: '/admin/ai-cost/billing' });
+            expect(response.statusCode).toBe(401);
+        });
+
+        it('GET /admin/ai-cost/reconciliation returns 401 without authorization header', async () => {
+            const response = await app.inject({ method: 'GET', url: '/admin/ai-cost/reconciliation' });
+            expect(response.statusCode).toBe(401);
+        });
+
+        it('GET /admin/ai-cost/runway returns 401 without authorization header', async () => {
+            const response = await app.inject({ method: 'GET', url: '/admin/ai-cost/runway' });
+            expect(response.statusCode).toBe(401);
+        });
+
+        it('PUT /admin/ai-cost/balance returns 401 without authorization header', async () => {
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/admin/ai-cost/balance',
+                headers: { 'content-type': 'application/json' },
+                payload: { balanceUsd: 100, anchoredAt: '2026-06-29' },
+            });
+            expect(response.statusCode).toBe(401);
+        });
+    });
+
+    describe('PUT /admin/ai-cost/balance validation', () => {
+        it('rejects a negative balance with 400 (schema validation)', async () => {
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/admin/ai-cost/balance',
+                headers: { authorization: 'Bearer admin-token', 'content-type': 'application/json' },
+                payload: { balanceUsd: -5, anchoredAt: '2026-06-29' },
+            });
+            expect(response.statusCode).toBe(400);
+        });
+
+        it('rejects a missing anchoredAt with 400 (schema validation)', async () => {
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/admin/ai-cost/balance',
+                headers: { authorization: 'Bearer admin-token', 'content-type': 'application/json' },
+                payload: { balanceUsd: 100 },
+            });
+            expect(response.statusCode).toBe(400);
+        });
+    });
+
+    describe('GET /admin/ai-cost/consumption', () => {
+        it('returns a global consumption report for an admin (empty when no usage)', async () => {
+            const response = await app.inject({
+                method: 'GET',
+                url: '/admin/ai-cost/consumption?period=7d',
+                headers: { authorization: 'Bearer admin-token' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.body);
+            expect(body.success).toBe(true);
+            expect(body.data.period).toBe('7d');
+            expect(body.data.byPipeline).toEqual([]);
+            expect(body.data.byModel).toEqual([]);
+            expect(body.data.totals.calls).toBe(0);
+        });
+
+        it('defaults to 30d when no period is provided', async () => {
+            const response = await app.inject({
+                method: 'GET',
+                url: '/admin/ai-cost/consumption',
+                headers: { authorization: 'Bearer admin-token' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.body);
+            expect(body.data.period).toBe('30d');
+        });
+
+        it('rejects an out-of-enum period with 400 (schema validation)', async () => {
+            const response = await app.inject({
+                method: 'GET',
+                url: '/admin/ai-cost/consumption?period=bogus',
+                headers: { authorization: 'Bearer admin-token' },
+            });
+
+            expect(response.statusCode).toBe(400);
         });
     });
 

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, numeric, date, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
@@ -1278,6 +1278,47 @@ export const aiUsageLog = pgTable('ai_usage_log', {
     createdAtIdx: index('idx_ai_usage_log_created_at').on(table.createdAt),
     userDateIdx: index('idx_ai_usage_log_user_date').on(table.userId, table.createdAt),
 }));
+
+/**
+ * Daily snapshot of OpenAI's AUTHORITATIVE cost (from the org Costs API), grain =
+ * usage_date × api_key_id × model × line_item. Powers the admin AI Cost panel's
+ * "what OpenAI bills us" section + the org-total burn used for credit runway.
+ * Distinct from ai_usage_log (our per-reply estimate, prod-only, no api_key_id).
+ * Money is `numeric` (not `real`) to keep the authoritative figures exact.
+ * The unique grain makes the daily upsert idempotent (re-running a day overwrites).
+ */
+export const aiCostSnapshots = pgTable('ai_cost_snapshots', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    usageDate: date('usage_date').notNull(),                         // UTC day bucket from the Costs API
+    apiKeyId: varchar('api_key_id', { length: 64 }).notNull().default(''), // '' when not key-attributed
+    model: varchar('model', { length: 100 }).notNull().default(''),
+    lineItem: varchar('line_item', { length: 100 }).notNull().default(''), // e.g. "gpt-4.1-mini, input"
+    amountUsd: numeric('amount_usd', { precision: 14, scale: 6 }).notNull(),
+    // Optional token overlay from /usage/completions (nullable; filled when available).
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    cachedInputTokens: integer('cached_input_tokens'),
+    source: varchar('source', { length: 32 }).notNull().default('openai_costs'),
+    fetchedAt: timestamp('fetched_at').defaultNow().notNull(),
+}, (table) => ({
+    grainIdx: uniqueIndex('uq_ai_cost_snapshots_grain').on(table.usageDate, table.apiKeyId, table.model, table.lineItem),
+    dateIdx: index('idx_ai_cost_snapshots_date').on(table.usageDate),
+}));
+
+/**
+ * Admin-entered OpenAI credit balance anchor ("balance $X as of date Y"). Single
+ * logical row (latest wins). Remaining credit = balanceUsd − Costs-API org spend
+ * since anchoredAt; runway = remaining ÷ rolling daily org rate. Needed because
+ * OpenAI exposes no remaining-balance API.
+ */
+export const aiCreditBalance = pgTable('ai_credit_balance', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    balanceUsd: numeric('balance_usd', { precision: 14, scale: 2 }).notNull(),
+    anchoredAt: date('anchored_at').notNull(),
+    note: text('note'),
+    updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
 
 // ============================================
 // ADMIN TABLES

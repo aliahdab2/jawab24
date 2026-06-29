@@ -349,6 +349,39 @@ const start = async () => {
       });
     }, 60_000);
 
+    // OpenAI cost snapshot + credit-runway alert — once per day. Pulls the
+    // AUTHORITATIVE Costs API (trailing window so late OpenAI adjustments overwrite
+    // via the idempotent upsert), then evaluates credit runway and fires the
+    // proactive "credits low" alert BEFORE the wallet hits zero (the 2026-06-28
+    // outage had no early warning). No-ops when no org admin key is configured.
+    const { fetchCostRows, isOpenAiCostsConfigured } = await import("./services/openaiCosts");
+    const { upsertSnapshots } = await import("./services/aiCostSnapshots");
+    const { evaluateAndAlert } = await import("./services/aiCostMonitor");
+    const COST_SNAPSHOT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+    const COST_SNAPSHOT_TRAILING_DAYS = 3;
+    const runCostSnapshot = async () => {
+      if (!config.aiCostMonitoring.enabled || !isOpenAiCostsConfigured()) return;
+      const endTime = Math.floor(Date.now() / 1000);
+      const startTime = endTime - COST_SNAPSHOT_TRAILING_DAYS * 24 * 60 * 60;
+      const rows = await fetchCostRows({ startTime, endTime });
+      const upserted = await upsertSnapshots(rows);
+      server.log.info({ upserted }, '[CostSnapshot] Synced OpenAI cost snapshots');
+      await evaluateAndAlert();
+    };
+    setInterval(() => {
+      runCostSnapshot().catch(err => {
+        server.log.error(err, '[CostSnapshot] Scheduled run failed');
+        captureError(err, '[CostSnapshot] Scheduled run failed', { tags: { cron: 'ai_cost_snapshot' }, level: 'error' });
+      });
+    }, COST_SNAPSHOT_INTERVAL_MS);
+    // First run delayed 90s after boot so DB connections settle.
+    setTimeout(() => {
+      runCostSnapshot().catch(err => {
+        server.log.error(err, '[CostSnapshot] Initial run failed');
+        captureError(err, '[CostSnapshot] Initial run failed', { tags: { cron: 'ai_cost_snapshot' }, level: 'error' });
+      });
+    }, 90_000);
+
     // Shared scaffold for the Stripe reconciliation sweeps (top-up credits +
     // admin collect-payment). Both poll Stripe every 15 min to recover rows a
     // missed webhook left `pending`, log only when something was scanned, raise

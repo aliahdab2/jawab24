@@ -308,20 +308,107 @@ export interface AiUsageReport {
 
 export type AdminUserAiCostPeriod = '7d' | '30d' | '90d' | 'this_month' | 'last_month';
 
+/** Preset periods for the admin AI-cost views (shared by AiSection + the AI Cost panel). */
+export const AI_COST_PERIODS: readonly AdminUserAiCostPeriod[] = ['7d', '30d', '90d', 'this_month', 'last_month'];
+
 export interface AdminUserAiCostReport {
   period: AdminUserAiCostPeriod;
   rangeStart: string;
   rangeEnd: string;
-  totals: { calls: number; cacheHits: number; tokensIn: number; tokensOut: number; costUsd: number };
+  totals: { calls: number; billedCalls: number; cacheHits: number; tokensIn: number; tokensOut: number; costUsd: number };
   byPage: Array<{
     pageId: string | null;
     pageName: string | null;
     calls: number;
+    // Real OpenAI calls (calls − cacheHits); cache hits cost $0 but still count as calls.
+    billedCalls: number;
     cacheHits: number;
     tokensIn: number;
     tokensOut: number;
     costUsd: number;
   }>;
+  // Cost split by source pipeline (Smart Reply vs lead extraction vs embeddings …).
+  byPipeline: Array<{
+    pipeline: string;
+    calls: number;
+    billedCalls: number;
+    cacheHits: number;
+    costUsd: number;
+  }>;
+}
+
+// Global (all-workspace) AI consumption + caching for the admin AI Cost panel.
+// NOTE: this is OUR estimate from ai_usage_log (prod traffic only) — NOT the
+// OpenAI authoritative bill (that comes from the billing endpoints).
+export interface AdminGlobalAiCostReport {
+  period: AdminUserAiCostPeriod;
+  rangeStart: string;
+  rangeEnd: string;
+  totals: {
+    calls: number;
+    billedCalls: number;
+    cacheHits: number;
+    internalCacheHitRate: number;
+    tokensIn: number;
+    cachedInputTokens: number;
+    tokensOut: number;
+    costUsd: number;
+    promptCacheSavingsUsd: number;
+  };
+  byPipeline: Array<{
+    pipeline: string;
+    calls: number;
+    billedCalls: number;
+    cacheHits: number;
+    costUsd: number;
+  }>;
+  byModel: Array<{
+    model: string;
+    calls: number;
+    billedCalls: number;
+    cacheHits: number;
+    tokensIn: number;
+    cachedInputTokens: number;
+    tokensOut: number;
+    costUsd: number;
+    promptCacheSavingsUsd: number;
+  }>;
+}
+
+// Authoritative OpenAI billing (from daily Costs-API snapshots).
+export interface AdminAiBillingReport {
+  period: AdminUserAiCostPeriod;
+  rangeStart: string;
+  rangeEnd: string;
+  totalUsd: number;
+  byMonth: Array<{ month: string; costUsd: number }>;
+  byModel: Array<{ model: string; costUsd: number }>;
+  byApiKey: Array<{ apiKeyId: string; label: 'production' | 'eval_dev' | 'other'; costUsd: number }>;
+  empty: boolean;
+}
+
+// OpenAI prod-key spend vs our ai_usage_log estimate (like-for-like) + org total.
+export interface AdminAiReconciliation {
+  period: AdminUserAiCostPeriod;
+  openaiProdUsd: number;
+  ourEstimateUsd: number;
+  deltaUsd: number;
+  deltaPct: number | null;
+  openaiOrgUsd: number;
+  prodKeyUnknown: boolean;
+}
+
+// OpenAI credit runway + early-warning severity.
+export interface AdminAiRunway {
+  configured: boolean;
+  balanceUsd: number | null;
+  anchoredAt: string | null;
+  orgSpentSinceAnchorUsd: number;
+  remainingUsd: number | null;
+  rollingDailyRateUsd: number;
+  runwayDays: number | null;
+  severity: 'ok' | 'warning' | 'critical';
+  currentlyParking: boolean;
 }
 
 export interface SystemHealthReport {
@@ -583,6 +670,45 @@ export const adminApi = {
       `/admin/users/${userId}/ai-cost`,
       { params: { period } },
     );
+    return response.data.data;
+  },
+
+  // Global AI consumption + caching across all workspaces (admin AI Cost panel)
+  getGlobalAiCost: async (period: AdminUserAiCostPeriod = '30d') => {
+    const response = await api.get<{ success: boolean; data: AdminGlobalAiCostReport }>(
+      `/admin/ai-cost/consumption`,
+      { params: { period } },
+    );
+    return response.data.data;
+  },
+
+  // Authoritative OpenAI billing (from snapshots) for the AI Cost panel
+  getAiBilling: async (period: AdminUserAiCostPeriod = '30d') => {
+    const response = await api.get<{ success: boolean; data: AdminAiBillingReport }>(
+      `/admin/ai-cost/billing`,
+      { params: { period } },
+    );
+    return response.data.data;
+  },
+
+  // OpenAI prod-key spend vs our estimate (reconciliation) for the AI Cost panel
+  getAiReconciliation: async (period: AdminUserAiCostPeriod = '30d') => {
+    const response = await api.get<{ success: boolean; data: AdminAiReconciliation }>(
+      `/admin/ai-cost/reconciliation`,
+      { params: { period } },
+    );
+    return response.data.data;
+  },
+
+  // OpenAI credit runway + early-warning severity
+  getAiRunway: async () => {
+    const response = await api.get<{ success: boolean; data: AdminAiRunway }>(`/admin/ai-cost/runway`);
+    return response.data.data;
+  },
+
+  // Set the OpenAI credit-balance anchor; returns the recomputed runway
+  setAiCreditBalance: async (body: { balanceUsd: number; anchoredAt: string; note?: string }) => {
+    const response = await api.put<{ success: boolean; data: AdminAiRunway }>(`/admin/ai-cost/balance`, body);
     return response.data.data;
   },
 

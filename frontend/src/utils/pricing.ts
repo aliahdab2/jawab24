@@ -50,6 +50,16 @@ export function getSarMonthlyEquivalent(
   return Math.round((getMonthlyEquivalent(monthlyCents, interval, yearlyCents) / 100) * USD_TO_SAR);
 }
 
+/**
+ * Format a raw USD amount (already in dollars, not cents) for the AI-cost admin
+ * panels. Defaults to 4 decimals because per-reply costs are sub-cent (~$0.0015);
+ * pass `digits: 2` for large aggregate totals. Shared by AiSection and the AI
+ * Cost dashboard so the `$x.xxxx` formatting lives in one place.
+ */
+export function formatCostUsd(usd: number, digits: number = 4): string {
+  return `$${usd.toFixed(digits)}`;
+}
+
 /** Format a USD price (in cents) with the locale's currency style, no decimals.
  *  Arabic uses Latin numerals (`ar-u-nu-latn`) to match the rest of the pricing UI. */
 export function formatUsd(cents: number, locale?: string): string {

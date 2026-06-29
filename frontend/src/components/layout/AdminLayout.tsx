@@ -2,7 +2,7 @@ import { useRouter } from 'next/router';
 import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { Shield, Users, ArrowLeft, FlaskConical, Bell, BarChart3 } from 'lucide-react';
+import { Shield, Users, ArrowLeft, FlaskConical, Bell, BarChart3, DollarSign } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import clsx from 'clsx';
@@ -18,6 +18,7 @@ const adminNavItems = [
     { href: '/admin/waitlist', icon: Bell, labelKey: 'nav.waitlist' as const },
     { href: '/admin/playground', icon: FlaskConical, labelKey: 'nav.playground' as const },
     { href: '/admin/observability', icon: BarChart3, labelKey: 'nav.observability' as const },
+    { href: '/admin/ai-cost', icon: DollarSign, labelKey: 'nav.aiCost' as const },
 ];
 
 /**

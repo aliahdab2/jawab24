@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, ConfirmationModal, Modal } from '@/components/ui';
+import { StatCard } from '@/components/admin/StatCard';
 import { analyticsApi, adminApi } from '@/lib/api';
 import type { AiUsageReport, AnalyticsOverview, SystemHealthReport, CacheStats } from '@/lib/api';
 import type { ActivationFunnel, ActivationEvent } from '@jawab24/shared';
@@ -27,28 +28,6 @@ import {
   Play,
   Filter,
 } from 'lucide-react';
-
-function StatCard({ icon: Icon, label, value, sub }: {
-  icon: typeof DollarSign;
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-3">
-        <div className="icon-bg-brand p-2 rounded-lg">
-          <Icon className="w-4 h-4" aria-hidden="true" />
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="text-lg font-bold text-foreground">{value}</p>
-          {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
-        </div>
-      </div>
-    </Card>
-  );
-}
 
 function BreakdownTable({ title, data }: { title: string; data: Record<string, number> }) {
   const entries = Object.entries(data).sort(([, a], [, b]) => b - a);

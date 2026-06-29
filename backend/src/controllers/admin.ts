@@ -29,6 +29,7 @@ import type {
     ListAllUsersQuery,
     AiModelBody,
     AiCostQuery,
+    AiCreditBalanceBody,
     ActivationFunnelQuery,
     PaymentRequestBody,
     KbUpdateBody,
@@ -46,6 +47,13 @@ import type {
  * thrown domain errors to the exact response shapes the existing tests assert.
  * Business logic lives in src/services/admin/*.
  */
+/** Validate the `period` querystring against the allowed presets; default 30d. */
+function resolveAiCostPeriod(periodParam: string | undefined): AdminUserAiCostPeriod {
+    return periodParam && (AI_COST_PERIODS as readonly string[]).includes(periodParam)
+        ? periodParam as AdminUserAiCostPeriod
+        : '30d';
+}
+
 export class AdminController {
     // ============================================
     // Users
@@ -145,10 +153,7 @@ export class AdminController {
     /** GET /admin/users/:userId/ai-cost */
     async getUserAiCost(request: FastifyRequest<{ Params: { userId: string }; Querystring: AiCostQuery }>, reply: FastifyReply) {
         const { userId } = request.params;
-        const periodParam = request.query.period;
-        const period: AdminUserAiCostPeriod = (periodParam && (AI_COST_PERIODS as readonly string[]).includes(periodParam))
-            ? periodParam as AdminUserAiCostPeriod
-            : '30d';
+        const period = resolveAiCostPeriod(request.query.period);
 
         try {
             const data = await adminMetricsService.getUserAiCost(userId, period);
@@ -156,6 +161,68 @@ export class AdminController {
         } catch (error) {
             request.log.error(error, 'Admin get user AI cost failed');
             return reply.status(500).send({ success: false, error: 'Failed to get AI cost' });
+        }
+    }
+
+    /** GET /admin/ai-cost/consumption — global consumption + caching across all workspaces. */
+    async getGlobalAiCost(request: FastifyRequest<{ Querystring: AiCostQuery }>, reply: FastifyReply) {
+        const period = resolveAiCostPeriod(request.query.period);
+
+        try {
+            const data = await adminMetricsService.getGlobalAiCost(period);
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin get global AI cost failed');
+            return reply.status(500).send({ success: false, error: 'Failed to get AI cost' });
+        }
+    }
+
+    /** GET /admin/ai-cost/billing — authoritative OpenAI billing from snapshots. */
+    async getAiBilling(request: FastifyRequest<{ Querystring: AiCostQuery }>, reply: FastifyReply) {
+        const period = resolveAiCostPeriod(request.query.period);
+        try {
+            const data = await adminMetricsService.getAiBilling(period);
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin get AI billing failed');
+            return reply.status(500).send({ success: false, error: 'Failed to get AI billing' });
+        }
+    }
+
+    /** GET /admin/ai-cost/reconciliation — OpenAI prod-key vs our estimate + org total. */
+    async getAiReconciliation(request: FastifyRequest<{ Querystring: AiCostQuery }>, reply: FastifyReply) {
+        const period = resolveAiCostPeriod(request.query.period);
+        try {
+            const data = await adminMetricsService.getAiReconciliation(period);
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin get AI reconciliation failed');
+            return reply.status(500).send({ success: false, error: 'Failed to get AI reconciliation' });
+        }
+    }
+
+    /** GET /admin/ai-cost/runway — OpenAI credit runway + early-warning severity. */
+    async getAiRunway(request: FastifyRequest, reply: FastifyReply) {
+        try {
+            const data = await adminMetricsService.getAiRunway();
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin get AI runway failed');
+            return reply.status(500).send({ success: false, error: 'Failed to get AI runway' });
+        }
+    }
+
+    /** PUT /admin/ai-cost/balance — set the OpenAI credit-balance anchor. */
+    async setAiCreditBalance(request: FastifyRequest<{ Body: AiCreditBalanceBody }>, reply: FastifyReply) {
+        const { balanceUsd, anchoredAt, note } = request.body;
+        const updatedBy = (request as AuthenticatedRequest).user?.userId;
+        try {
+            const data = await adminMetricsService.setAiCreditBalance({ balanceUsd, anchoredAt, note, updatedBy });
+            request.log.info({ adminUserId: updatedBy, balanceUsd, anchoredAt }, 'Admin set OpenAI credit balance anchor');
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin set AI credit balance failed');
+            return reply.status(500).send({ success: false, error: 'Failed to set credit balance' });
         }
     }
 

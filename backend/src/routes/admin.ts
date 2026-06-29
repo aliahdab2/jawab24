@@ -74,6 +74,87 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             adminController.getUserAiCost,
         );
 
+        adminProtected.get(
+            '/ai-cost/consumption',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Global AI consumption + caching across all workspaces, scoped to a preset period',
+                    security: auth,
+                    querystring: {
+                        type: 'object',
+                        properties: { period: { type: 'string', enum: [...AI_COST_PERIODS] } },
+                    },
+                },
+            },
+            adminController.getGlobalAiCost,
+        );
+
+        adminProtected.get(
+            '/ai-cost/billing',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Authoritative OpenAI billing (from daily Costs-API snapshots), by month/model/api-key',
+                    security: auth,
+                    querystring: {
+                        type: 'object',
+                        properties: { period: { type: 'string', enum: [...AI_COST_PERIODS] } },
+                    },
+                },
+            },
+            adminController.getAiBilling,
+        );
+
+        adminProtected.get(
+            '/ai-cost/reconciliation',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'OpenAI production-key spend vs our ai_usage_log estimate, with org total for context',
+                    security: auth,
+                    querystring: {
+                        type: 'object',
+                        properties: { period: { type: 'string', enum: [...AI_COST_PERIODS] } },
+                    },
+                },
+            },
+            adminController.getAiReconciliation,
+        );
+
+        adminProtected.get(
+            '/ai-cost/runway',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'OpenAI credit runway + early-warning severity (org-total burn)',
+                    security: auth,
+                },
+            },
+            adminController.getAiRunway,
+        );
+
+        adminProtected.put(
+            '/ai-cost/balance',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Set the OpenAI credit-balance anchor ("balance $X as of date Y")',
+                    security: auth,
+                    body: {
+                        type: 'object',
+                        required: ['balanceUsd', 'anchoredAt'],
+                        properties: {
+                            balanceUsd: { type: 'number', minimum: 0 },
+                            anchoredAt: { type: 'string', format: 'date' },
+                            note: { type: 'string', maxLength: 500 },
+                        },
+                    },
+                },
+            },
+            adminController.setAiCreditBalance,
+        );
+
         adminProtected.post(
             '/users/:userId/upgrade',
             { schema: { tags: ['Admin'], summary: 'Manual subscription upgrade for a user', security: auth, params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] } } },

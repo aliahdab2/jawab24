@@ -33,6 +33,7 @@ const SPECIAL_FILES = new Set(['_app', '_document', '_error', '404', '500']);
 // Keep this explicit: adding a new public page forces a decision — list it in the
 // sitemap, or add it here with a reason. A stale entry here is also flagged.
 const EXCLUDED_ROUTES = new Map([
+  ['admin/ai-cost', 'admin panel (auth-gated)'],
   ['admin/customers', 'admin panel (auth-gated)'],
   ['admin/customers/[userId]', 'admin panel (auth-gated)'],
   ['admin/observability', 'admin panel (auth-gated)'],
