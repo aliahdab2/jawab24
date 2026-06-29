@@ -80,6 +80,24 @@ export default function AdminAiCostPage() {
   });
   const balanceValid = balanceInput !== '' && Number(balanceInput) >= 0 && dateInput !== '';
 
+  // On-demand OpenAI cost sync (server-side; the admin key stays in backend env).
+  const syncCosts = useMutation({
+    mutationFn: () => adminApi.syncAiCosts(),
+    onSuccess: (res) => {
+      if (!res.configured) {
+        toast.error(t('aiCost.syncNotConfigured'));
+        return;
+      }
+      toast.success(t('aiCost.syncDone', { count: res.synced }));
+      // Refresh every ai-cost query (billing, reconciliation, runway, consumption).
+      queryClient.invalidateQueries({ queryKey: ['admin', 'ai-cost'] });
+    },
+    onError: (err: unknown) => {
+      toast.error(t('aiCost.syncError'));
+      captureError(err, 'Failed to sync OpenAI costs', { tags: { page: 'admin-ai-cost' } });
+    },
+  });
+
   const totals = consumption.data?.totals;
   const cacheRatePct = totals && totals.calls > 0 ? Math.round(totals.internalCacheHitRate * 100) : 0;
   const apiKeyLabel = (label: string) => t(`aiCost.apiKey_${label}` as Parameters<typeof t>[0]);
@@ -165,9 +183,14 @@ export default function AdminAiCostPage() {
 
         {/* ── What OpenAI bills us (authoritative) ───────────────────── */}
         <section>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Receipt className="w-4 h-4" aria-hidden="true" /> {t('aiCost.billingTitle')}
-          </h2>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <Receipt className="w-4 h-4" aria-hidden="true" /> {t('aiCost.billingTitle')}
+            </h2>
+            <Button variant="secondary" size="sm" onClick={() => syncCosts.mutate()} disabled={syncCosts.isPending}>
+              {syncCosts.isPending ? t('aiCost.syncing') : t('aiCost.syncNow')}
+            </Button>
+          </div>
           {billing.isLoading ? (
             <div className="text-sm text-muted-foreground py-4">{t('customer.loading')}</div>
           ) : !billing.data || billing.data.empty ? (

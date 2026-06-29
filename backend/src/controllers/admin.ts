@@ -226,6 +226,17 @@ export class AdminController {
         }
     }
 
+    /** POST /admin/ai-cost/sync — on-demand OpenAI cost sync (admin "Sync now"). */
+    async syncAiCosts(request: FastifyRequest, reply: FastifyReply) {
+        try {
+            const data = await adminMetricsService.syncOpenAiCosts();
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin AI cost sync failed');
+            return reply.status(500).send({ success: false, error: 'Failed to sync AI costs' });
+        }
+    }
+
     /** POST /admin/users/:userId/upgrade */
     async manualUpgrade(request: FastifyRequest<{ Params: { userId: string }; Body: ManualUpgradeBody }>, reply: FastifyReply) {
         const { userId } = request.params;
