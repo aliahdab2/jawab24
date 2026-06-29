@@ -167,6 +167,42 @@ describe('ReplyStyleCard', () => {
     });
   });
 
+  it('defaults the test page to the first CONNECTED page, not the most-recent disconnected one', async () => {
+    // Backend returns pages most-recent-first (orderBy createdAt desc). The newest
+    // page here is disconnected; the default must skip it and land on the connected
+    // one — a disconnected page can't generate a test reply. Regression for the
+    // `fetched[0]` default that picked whatever page was created last.
+    vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+      data: [
+        { id: 'p2', name: 'New Disconnected Page', isConnected: false },
+        { id: 'p1', name: 'Connected Page', isConnected: true },
+      ],
+    } as never);
+
+    const current = makeSettings();
+    render(<ReplyStyleCard settings={current} setSettings={vi.fn()} hasChanges={false} />);
+
+    // With more than one page the card renders a page-picker <select>; its value is
+    // the defaulted selection. It must be the connected page, not the newest one.
+    const select = (await screen.findByRole('combobox')) as HTMLSelectElement;
+    expect(select.value).toBe('p1');
+  });
+
+  it('falls back to the first page when none are connected', async () => {
+    vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+      data: [
+        { id: 'p2', name: 'Disconnected A', isConnected: false },
+        { id: 'p1', name: 'Disconnected B', isConnected: false },
+      ],
+    } as never);
+
+    const current = makeSettings();
+    render(<ReplyStyleCard settings={current} setSettings={vi.fn()} hasChanges={false} />);
+
+    const select = (await screen.findByRole('combobox')) as HTMLSelectElement;
+    expect(select.value).toBe('p2');
+  });
+
   it('shows hold-relocation notice only when holdLowConfidence is on and not yet seen', () => {
     // localStorage clean — notice should appear.
     window.localStorage.removeItem('hold_relocation_seen');
