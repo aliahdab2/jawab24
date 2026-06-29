@@ -42,7 +42,10 @@ function utcDateStr(d: Date): string { return d.toISOString().slice(0, 10); }
 /** Latest balance anchor row (most recently set wins), or null if never set. */
 export async function getBalanceAnchor(): Promise<{ balanceUsd: number; anchoredAt: string; note: string | null } | null> {
     const [row] = await db
-        .select({ balanceUsd: aiCreditBalance.balanceUsd, anchoredAt: aiCreditBalance.anchoredAt, note: aiCreditBalance.note })
+        // anchoredAt cast date → text so it's a 'YYYY-MM-DD' string (the pg driver
+        // would otherwise return a JS Date) — it's compared as a date string in
+        // sumSnapshots and surfaced verbatim in the runway API response + UI.
+        .select({ balanceUsd: aiCreditBalance.balanceUsd, anchoredAt: sql<string>`${aiCreditBalance.anchoredAt}::text`, note: aiCreditBalance.note })
         .from(aiCreditBalance)
         .orderBy(desc(aiCreditBalance.updatedAt))
         .limit(1);

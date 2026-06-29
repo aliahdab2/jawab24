@@ -79,7 +79,10 @@ export async function getBilling(period: AdminUserAiCostPeriod = '30d'): Promise
     const endDateInclusive = utcDateStr(new Date(rangeEnd.getTime() - 1));
     const rows = await db
         .select({
-            usageDate: aiCostSnapshots.usageDate,
+            // Cast date → text so the pg driver returns 'YYYY-MM-DD' strings, not JS
+            // Date objects (which would be local-tz midnight and break .slice + month
+            // bucketing). Timezone-safe vs reading the Date and re-formatting.
+            usageDate: sql<string>`${aiCostSnapshots.usageDate}::text`,
             apiKeyId: aiCostSnapshots.apiKeyId,
             model: aiCostSnapshots.model,
             amountUsd: aiCostSnapshots.amountUsd,
