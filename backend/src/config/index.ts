@@ -44,6 +44,14 @@ export const config = {
         serviceUrl: process.env.AI_SERVICE_URL || 'http://localhost:3002',
         enabled: process.env.AI_ENABLED === 'true',
         cacheEnabled: process.env.AI_CACHE_ENABLED !== 'false',
+        // Semantic (embedding-similarity) cache. Default ON. The layer is confirmed
+        // dormant in prod (~0 real hits — the exact cache shadows it, thresholds are
+        // strict, and high-value intents are skipped), yet every exact-cache MISS still
+        // pays a text-embedding-3-small call (~$0.00002 + ~200ms) to probe it. Set
+        // AI_SEMANTIC_CACHE_ENABLED=false to skip the probe entirely and go straight to
+        // the OpenAI call — saves the embedding cost + latency with no impact on the
+        // exact-cache path. Flip off ONLY after the cost breakdown confirms ~0 hits.
+        semanticCacheEnabled: process.env.AI_SEMANTIC_CACHE_ENABLED !== 'false',
         // Always use DEFAULT_AI_MODEL for cost efficiency - not configurable by users
         model: DEFAULT_AI_MODEL,
         // Fallback model when primary provider (OpenAI) is unreachable
