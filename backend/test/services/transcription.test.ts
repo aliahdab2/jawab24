@@ -58,11 +58,20 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
     captureError: vi.fn(),
 }));
 
+// Mock the cost logger so we can assert on it without pulling in db/redis.
+vi.mock('../../src/services/aiUsageLog', () => ({
+    logAiUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { logAiUsage } from '../../src/services/aiUsageLog';
+const mockLogAiUsage = vi.mocked(logAiUsage);
+
 describe('TranscriptionService', () => {
     let transcriptionService: Awaited<typeof import('../../src/services/transcription')>['transcriptionService'];
 
     beforeEach(async () => {
         mockCreate.mockReset();
+        mockLogAiUsage.mockClear();
         // Re-import to get fresh instance
         const mod = await import('../../src/services/transcription');
         transcriptionService = mod.transcriptionService;
@@ -229,6 +238,7 @@ describe('TranscriptionService.transcribeFromBuffer', () => {
 
     beforeEach(async () => {
         mockCreate.mockReset();
+        mockLogAiUsage.mockClear();
         const mod = await import('../../src/services/transcription');
         transcriptionService = mod.transcriptionService;
     });
@@ -292,5 +302,79 @@ describe('TranscriptionService.transcribeFromBuffer', () => {
 
         const { toFile } = await import('openai');
         expect(toFile).toHaveBeenCalledWith(buffer, 'voice.ogg', { type: 'audio/ogg' });
+    });
+
+    describe('cost logging', () => {
+        it('logs OpenAI cost with token usage and page attribution (URL path)', async () => {
+            vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
+            mockCreate.mockResolvedValueOnce({
+                text: 'كم سعر المنتج؟',
+                usage: { type: 'tokens', input_tokens: 1500, output_tokens: 12, total_tokens: 1512 },
+            });
+
+            await transcriptionService.transcribe(
+                'https://example.com/voice.mp4', 'ar', undefined,
+                { userId: 'user-1', pageId: 'page-1' },
+            );
+
+            expect(mockLogAiUsage).toHaveBeenCalledTimes(1);
+            expect(mockLogAiUsage).toHaveBeenCalledWith(expect.objectContaining({
+                userId: 'user-1',
+                pageId: 'page-1',
+                model: 'gpt-4o-mini-transcribe',
+                tokensIn: 1500,
+                tokensOut: 12,
+                cached: false,
+                pipeline: 'transcription',
+            }));
+        });
+
+        it('logs the billed call even when the transcript is empty', async () => {
+            vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
+            mockCreate.mockResolvedValueOnce({
+                text: '  ',
+                usage: { type: 'tokens', input_tokens: 800, output_tokens: 0, total_tokens: 800 },
+            });
+
+            const result = await transcriptionService.transcribe(
+                'https://example.com/silence.mp4', 'ar', undefined,
+                { userId: 'user-1', pageId: 'page-1' },
+            );
+
+            expect(result).toBeNull();
+            expect(mockLogAiUsage).toHaveBeenCalledTimes(1);
+        });
+
+        it('does NOT log when no attribution context is passed', async () => {
+            vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
+            mockCreate.mockResolvedValueOnce({
+                text: 'hello',
+                usage: { type: 'tokens', input_tokens: 100, output_tokens: 5, total_tokens: 105 },
+            });
+
+            await transcriptionService.transcribe('https://example.com/voice.mp4', 'ar');
+
+            expect(mockLogAiUsage).not.toHaveBeenCalled();
+        });
+
+        it('logs userId without pageId for KB-voice buffer path, defaulting tokens to 0 when usage is absent', async () => {
+            // Older models / whisper return no token usage — we still record the call.
+            mockCreate.mockResolvedValueOnce({ text: 'business hours are 9 to 5' });
+
+            await transcriptionService.transcribeFromBuffer(
+                Buffer.from('fake-audio'), 'audio/webm', 'en', 'accurate',
+                { userId: 'user-2' },
+            );
+
+            expect(mockLogAiUsage).toHaveBeenCalledTimes(1);
+            expect(mockLogAiUsage).toHaveBeenCalledWith(expect.objectContaining({
+                userId: 'user-2',
+                pageId: undefined,
+                model: 'gpt-4o-mini-transcribe',
+                tokensIn: 0,
+                tokensOut: 0,
+                pipeline: 'transcription',
+            }));
+        });
     });
 });

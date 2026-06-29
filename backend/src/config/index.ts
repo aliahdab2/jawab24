@@ -71,6 +71,31 @@ export const config = {
         apiKey: process.env.OPENAI_API_KEY || '',
     },
 
+    // OpenAI ORG ADMIN key (sk-admin-…) — used ONLY by the read-only Costs/Usage
+    // API that powers the admin AI Cost panel's billing snapshot. Distinct from the
+    // project key above (project keys can't read org costs). Never sent to the
+    // frontend, never logged; the snapshot cron no-ops when this is absent.
+    openaiAdmin: {
+        apiKey: process.env.OPENAI_ADMIN_API_KEY || '',
+        // Map known api_key_ids to human labels so the panel can split prod vs eval/dev.
+        prodKeyId: process.env.OPENAI_PROD_KEY_ID || '',
+        evalKeyId: process.env.OPENAI_EVAL_KEY_ID || '',
+    },
+
+    // Proactive AI-spend monitoring: credit runway + early-warning alert thresholds
+    // for the admin AI Cost panel. The org credit wallet is drained by ALL keys, so
+    // burn/runway are computed from the OpenAI Costs API org total, not ai_usage_log.
+    aiCostMonitoring: {
+        enabled: process.env.AI_COST_MONITORING_ENABLED !== 'false',
+        warnRunwayDays: parseInt(process.env.AI_COST_WARN_RUNWAY_DAYS || '7', 10),
+        criticalRunwayDays: parseInt(process.env.AI_COST_CRITICAL_RUNWAY_DAYS || '3', 10),
+        warnRemainingUsd: parseFloat(process.env.AI_COST_WARN_REMAINING_USD || '30'),
+        // Throttle the proactive "credits low" email (24h) — separate from the
+        // reactive insufficient_quota alert so neither suppresses the other.
+        creditLowAlertCooldownSeconds: parseInt(process.env.AI_COST_ALERT_COOLDOWN_SECONDS || '86400', 10),
+        rollingRateDays: parseInt(process.env.AI_COST_ROLLING_RATE_DAYS || '7', 10),
+    },
+
     // RAG mode: 'off' = static KB, 'shadow' = run RAG but use static KB, 'on' = full RAG
     ragMode: (process.env.RAG_MODE || 'on') as 'off' | 'shadow' | 'on',
 

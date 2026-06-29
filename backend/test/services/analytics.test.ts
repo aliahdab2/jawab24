@@ -360,4 +360,133 @@ describe('AnalyticsService', () => {
             expect(diffDays).toBe(7);
         });
     });
+
+    describe('getUserAiCostByPage', () => {
+        // Query chains .from().leftJoin().where().groupBy() and resolves the grouped
+        // (page, pipeline) rows. The service folds them into byPage + byPipeline in JS.
+        function setupAiCostMock(rows: any[]) {
+            const mockGroupBy = vi.fn().mockResolvedValue(rows);
+            const mockWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
+            const mockLeftJoin = vi.fn().mockReturnValue({ where: mockWhere });
+            const mockFrom = vi.fn().mockReturnValue({ leftJoin: mockLeftJoin });
+            vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
+        }
+
+        it('returns empty breakdowns and zeroed totals when no rows exist', async () => {
+            setupAiCostMock([]);
+
+            const result = await service.getUserAiCostByPage('user-1', '30d');
+
+            expect(result.byPage).toEqual([]);
+            expect(result.byPipeline).toEqual([]);
+            expect(result.totals).toEqual({ calls: 0, billedCalls: 0, cacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 });
+        });
+
+        it('folds (page, pipeline) rows into per-page and per-pipeline breakdowns', async () => {
+            setupAiCostMock([
+                { pageId: 'pA', pageName: 'Page A', pipeline: 'dm_reply', calls: 100, cacheHits: 40, tokensIn: 5000, tokensOut: 2000, costUsd: 0.20 },
+                { pageId: 'pA', pageName: 'Page A', pipeline: 'lead_extraction', calls: 10, cacheHits: 0, tokensIn: 800, tokensOut: 300, costUsd: 0.05 },
+                { pageId: 'pB', pageName: 'Page B', pipeline: 'dm_reply', calls: 30, cacheHits: 5, tokensIn: 1500, tokensOut: 600, costUsd: 0.30 },
+                { pageId: null, pageName: null, pipeline: 'embedding_rag', calls: 500, cacheHits: 0, tokensIn: 100000, tokensOut: 0, costUsd: 0.02 },
+            ]);
+
+            const result = await service.getUserAiCostByPage('user-1', '30d');
+
+            // Totals: billed = calls − cacheHits (cache hits cost $0 but still count).
+            expect(result.totals.calls).toBe(640);
+            expect(result.totals.billedCalls).toBe(595);
+            expect(result.totals.cacheHits).toBe(45);
+            expect(result.totals.costUsd).toBeCloseTo(0.57, 6);
+
+            // byPage sorted by cost desc; Page A's two pipelines are summed.
+            expect(result.byPage.map(p => p.pageId)).toEqual(['pB', 'pA', null]);
+            const pageA = result.byPage.find(p => p.pageId === 'pA')!;
+            expect(pageA.calls).toBe(110);
+            expect(pageA.billedCalls).toBe(70);
+            expect(pageA.cacheHits).toBe(40);
+            expect(pageA.costUsd).toBeCloseTo(0.25, 6);
+
+            // byPipeline sorted by cost desc; dm_reply summed across both pages.
+            expect(result.byPipeline.map(p => p.pipeline)).toEqual(['dm_reply', 'lead_extraction', 'embedding_rag']);
+            const dm = result.byPipeline.find(p => p.pipeline === 'dm_reply')!;
+            expect(dm.calls).toBe(130);
+            expect(dm.billedCalls).toBe(85);
+            expect(dm.cacheHits).toBe(45);
+            expect(dm.costUsd).toBeCloseTo(0.50, 6);
+        });
+
+        it('buckets rows with a null pipeline under "unknown"', async () => {
+            setupAiCostMock([
+                { pageId: 'pA', pageName: 'Page A', pipeline: null, calls: 3, cacheHits: 0, tokensIn: 100, tokensOut: 50, costUsd: 0.001 },
+            ]);
+
+            const result = await service.getUserAiCostByPage('user-1', '30d');
+
+            expect(result.byPipeline).toHaveLength(1);
+            expect(result.byPipeline[0].pipeline).toBe('unknown');
+        });
+    });
+
+    describe('getGlobalAiCostByPipeline', () => {
+        // Global query chains .from().where().groupBy() (NO leftJoin, NO userId filter)
+        // and resolves grouped (pipeline, model) rows. Uses the REAL aiPricing so the
+        // prompt-cache-savings math is genuinely exercised.
+        function setupGlobalMock(rows: any[]) {
+            const mockGroupBy = vi.fn().mockResolvedValue(rows);
+            const mockWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
+            const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
+        }
+
+        it('returns empty breakdowns and zeroed totals when no rows exist', async () => {
+            setupGlobalMock([]);
+
+            const result = await service.getGlobalAiCostByPipeline('30d');
+
+            expect(result.byPipeline).toEqual([]);
+            expect(result.byModel).toEqual([]);
+            expect(result.totals.calls).toBe(0);
+            expect(result.totals.internalCacheHitRate).toBe(0);
+            expect(result.totals.promptCacheSavingsUsd).toBe(0);
+        });
+
+        it('aggregates totals, billed/cached split, and prompt-cache savings across models', async () => {
+            setupGlobalMock([
+                { pipeline: 'dm_reply', model: 'gpt-4.1-mini', calls: 100, cacheHits: 40, tokensIn: 50000, cachedInputTokens: 30000, tokensOut: 10000, costUsd: 0.20 },
+                { pipeline: 'dm_reply', model: 'gpt-4o-mini', calls: 50, cacheHits: 10, tokensIn: 20000, cachedInputTokens: 5000, tokensOut: 4000, costUsd: 0.05 },
+                { pipeline: 'embedding_rag', model: 'text-embedding-3-small', calls: 500, cacheHits: 0, tokensIn: 100000, cachedInputTokens: 0, tokensOut: 0, costUsd: 0.02 },
+                { pipeline: null, model: 'gpt-4.1-mini', calls: 5, cacheHits: 0, tokensIn: 1000, cachedInputTokens: 0, tokensOut: 200, costUsd: 0.001 },
+            ]);
+
+            const result = await service.getGlobalAiCostByPipeline('30d');
+
+            expect(result.totals.calls).toBe(655);
+            expect(result.totals.cacheHits).toBe(50);
+            expect(result.totals.billedCalls).toBe(605);
+            expect(result.totals.costUsd).toBeCloseTo(0.271, 6);
+            expect(result.totals.cachedInputTokens).toBe(35000);
+            expect(result.totals.internalCacheHitRate).toBeCloseTo(50 / 655, 6);
+            // gpt-4.1-mini: 30000/1000 × (0.0004 − 0.0001) = 0.009
+            // gpt-4o-mini: 5000/1000 × (0.00015 − 0.000075) = 0.000375
+            // text-embedding-3-small: no cached rate → 0
+            expect(result.totals.promptCacheSavingsUsd).toBeCloseTo(0.009375, 6);
+
+            // byPipeline sorted by cost desc; dm_reply summed across its two models.
+            expect(result.byPipeline.map(p => p.pipeline)).toEqual(['dm_reply', 'embedding_rag', 'unknown']);
+            const dm = result.byPipeline.find(p => p.pipeline === 'dm_reply')!;
+            expect(dm.calls).toBe(150);
+            expect(dm.billedCalls).toBe(100);
+            expect(dm.cacheHits).toBe(50);
+            expect(dm.costUsd).toBeCloseTo(0.25, 6);
+
+            // byModel sorted by cost desc; gpt-4.1-mini summed across pipelines.
+            expect(result.byModel.map(m => m.model)).toEqual(['gpt-4.1-mini', 'gpt-4o-mini', 'text-embedding-3-small']);
+            const mini = result.byModel.find(m => m.model === 'gpt-4.1-mini')!;
+            expect(mini.calls).toBe(105);
+            expect(mini.billedCalls).toBe(65);
+            expect(mini.cachedInputTokens).toBe(30000);
+            expect(mini.promptCacheSavingsUsd).toBeCloseTo(0.009, 6);
+            expect(mini.costUsd).toBeCloseTo(0.201, 6);
+        });
+    });
 });

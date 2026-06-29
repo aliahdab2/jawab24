@@ -36,6 +36,14 @@ export interface AiCostQuery {
     period?: string;
 }
 
+export interface AiCreditBalanceBody {
+    /** Remaining OpenAI credit in USD as of `anchoredAt`. */
+    balanceUsd: number;
+    /** ISO date (YYYY-MM-DD) the balance was read. */
+    anchoredAt: string;
+    note?: string;
+}
+
 export interface ActivationFunnelQuery {
     /** Cohort window in days (querystring, coerced to int by Fastify schema). Default 30. */
     days?: number;

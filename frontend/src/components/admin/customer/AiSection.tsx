@@ -3,13 +3,13 @@ import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { toast } from 'sonner';
 import { Card, Button } from '@/components/ui';
-import { adminApi, type AdminUserAiCostReport, type AdminUserAiCostPeriod } from '@/lib/api';
+import { adminApi, AI_COST_PERIODS, type AdminUserAiCostReport, type AdminUserAiCostPeriod } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { AiModelOptions } from '@/components/admin/AiModelOptions';
+import { useAiPipelineLabel } from '@/hooks';
+import { formatCostUsd } from '@/utils/pricing';
 import { type CustomerDetail, type IntlLocale, FIELD_CLASS } from './types';
-
-const AI_COST_PERIODS: readonly AdminUserAiCostPeriod[] = ['7d', '30d', '90d', 'this_month', 'last_month'];
 
 interface Props {
     customer: CustomerDetail;
@@ -56,12 +56,14 @@ export function AiSection({ customer, userId, intlLocale, onUpdated }: Props) {
         return () => { cancelled = true; };
     }, [userId, aiCostPeriod]);
 
-    // Show 4 decimals to make sub-cent costs readable (typical reply costs $0.0015).
-    const formatCost = (usd: number) => `$${usd.toFixed(4)}`;
+    // Sub-cent costs need 4 decimals (typical reply costs ~$0.0015). Shared formatter.
+    const formatCost = (usd: number) => formatCostUsd(usd);
     const formatRange = (startIso: string, endIso: string) => {
         const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
         return `${new Date(startIso).toLocaleDateString(intlLocale, opts)} – ${new Date(endIso).toLocaleDateString(intlLocale, { ...opts, year: 'numeric' })}`;
     };
+    // Shared pipeline-tag → human label mapping (falls back to the raw tag).
+    const pipelineLabel = useAiPipelineLabel();
 
     const handleSaveAiModel = async () => {
         const currentValue = customer.aiModel ?? '';
@@ -179,7 +181,7 @@ export function AiSection({ customer, userId, intlLocale, onUpdated }: Props) {
                             <thead>
                                 <tr className="border-b border-theme-border">
                                     <th className="text-start pb-2 text-muted-foreground font-medium">{t('customer.aiCostColPage')}</th>
-                                    <th className="text-end pb-2 text-muted-foreground font-medium">{t('customer.aiCostColCalls')}</th>
+                                    <th className="text-end pb-2 text-muted-foreground font-medium">{t('customer.aiCostColBilled')}</th>
                                     <th className="text-end pb-2 text-muted-foreground font-medium">{t('customer.aiCostColCacheHits')}</th>
                                     <th className="text-end pb-2 text-muted-foreground font-medium">{t('customer.aiCostColCost')}</th>
                                 </tr>
@@ -187,8 +189,8 @@ export function AiSection({ customer, userId, intlLocale, onUpdated }: Props) {
                             <tbody>
                                 {aiCost.byPage.map((row) => (
                                     <tr key={row.pageId ?? '__none__'} className="border-b border-theme-border last:border-0">
-                                        <td className="py-2 text-foreground">{row.pageName ?? '—'}</td>
-                                        <td className="py-2 text-end text-foreground">{row.calls.toLocaleString()}</td>
+                                        <td className="py-2 text-foreground">{row.pageName ?? t('customer.aiCostNoPage')}</td>
+                                        <td className="py-2 text-end text-foreground">{row.billedCalls.toLocaleString()}</td>
                                         <td className="py-2 text-end text-foreground">{row.cacheHits.toLocaleString()}</td>
                                         <td className="py-2 text-end font-medium text-foreground">{formatCost(row.costUsd)}</td>
                                     </tr>
@@ -199,7 +201,41 @@ export function AiSection({ customer, userId, intlLocale, onUpdated }: Props) {
                         <p className="text-sm text-muted-foreground py-4">{t('customer.aiCostEmpty')}</p>
                     )}
                 </div>
+                <p className="text-xs text-muted-foreground mt-3">{t('customer.aiCostBilledHint')}</p>
             </Card>
+
+            {/* Cost by feature (pipeline) — a page's cost blends Smart Reply with lead
+                extraction, translation, and RAG embeddings; this splits it so the total
+                is interpretable instead of a single mystery number. */}
+            {aiCost && aiCost.byPipeline.length > 0 && (
+                <Card>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">
+                        {t('customer.aiCostByFeature')}
+                    </h3>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-theme-border">
+                                    <th className="text-start pb-2 text-muted-foreground font-medium">{t('customer.aiCostColFeature')}</th>
+                                    <th className="text-end pb-2 text-muted-foreground font-medium">{t('customer.aiCostColBilled')}</th>
+                                    <th className="text-end pb-2 text-muted-foreground font-medium">{t('customer.aiCostColCacheHits')}</th>
+                                    <th className="text-end pb-2 text-muted-foreground font-medium">{t('customer.aiCostColCost')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {aiCost.byPipeline.map((row) => (
+                                    <tr key={row.pipeline} className="border-b border-theme-border last:border-0">
+                                        <td className="py-2 text-foreground">{pipelineLabel(row.pipeline)}</td>
+                                        <td className="py-2 text-end text-foreground">{row.billedCalls.toLocaleString()}</td>
+                                        <td className="py-2 text-end text-foreground">{row.cacheHits.toLocaleString()}</td>
+                                        <td className="py-2 text-end font-medium text-foreground">{formatCost(row.costUsd)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
         </div>
     );
 }

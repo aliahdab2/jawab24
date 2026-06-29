@@ -72,6 +72,19 @@ export function estimateCostUsd(
     return inputCost + outputCost;
 }
 
+/**
+ * USD saved by OpenAI prompt caching for a given model and cached-token count:
+ * the cached input tokens are billed at the model's discounted `cachedInputPer1K`
+ * instead of the full `inputPer1K`, so savings = cachedTokens × (full − cached) rate.
+ * Returns 0 for unknown models or models without a cached rate.
+ */
+export function cacheSavingsUsd(model: string, cachedTokensIn: number): number {
+    const pricing = AI_PRICING[model as ModelName];
+    if (!pricing || !('cachedInputPer1K' in pricing)) return 0;
+    const cached = Math.max(cachedTokensIn, 0);
+    return (cached / 1000) * (pricing.inputPer1K - pricing.cachedInputPer1K);
+}
+
 /** Whisper speech-to-text pricing: $0.006 per minute of audio */
 const WHISPER_COST_PER_MINUTE = 0.006;
 

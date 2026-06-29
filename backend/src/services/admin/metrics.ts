@@ -2,6 +2,8 @@ import { db } from '../../db';
 import { users, plans, adminAuditLogs, leadDigestSends, emailSends } from '../../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { analyticsService, type AdminUserAiCostPeriod } from '../analytics';
+import { getBilling, getReconciliation } from '../aiCostSnapshots';
+import { computeRunway, setBalanceAnchor } from '../aiCostMonitor';
 import { runDailyLeadDigest } from '../leadDigest';
 
 /**
@@ -16,6 +18,32 @@ class AdminMetricsService {
     /** AI cost by page for a single user, scoped to a preset period (default 30d). */
     async getUserAiCost(userId: string, period: AdminUserAiCostPeriod) {
         return analyticsService.getUserAiCostByPage(userId, period);
+    }
+
+    /** Global AI consumption + caching across all workspaces, scoped to a period. */
+    async getGlobalAiCost(period: AdminUserAiCostPeriod) {
+        return analyticsService.getGlobalAiCostByPipeline(period);
+    }
+
+    /** Authoritative OpenAI billing (from snapshots) — by month/model/api-key. */
+    async getAiBilling(period: AdminUserAiCostPeriod) {
+        return getBilling(period);
+    }
+
+    /** OpenAI prod-key spend vs our ai_usage_log estimate (like-for-like) + org total. */
+    async getAiReconciliation(period: AdminUserAiCostPeriod) {
+        return getReconciliation(period);
+    }
+
+    /** Current OpenAI credit runway + severity (org-total burn). */
+    async getAiRunway() {
+        return computeRunway();
+    }
+
+    /** Set the credit-balance anchor, then return the recomputed runway. */
+    async setAiCreditBalance(opts: { balanceUsd: number; anchoredAt: string; note?: string | null; updatedBy?: string | null }) {
+        await setBalanceAnchor(opts);
+        return computeRunway();
     }
 
     /** All plans, for the admin dropdown (ordered by sortOrder). */

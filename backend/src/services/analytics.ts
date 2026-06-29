@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { comments, posts, instagramComments, instagramMedia, messages, pages, aiUsageLog } from '../db/schema';
 import { eq, and, gte, lt, isNotNull, sql } from 'drizzle-orm';
+import { cacheSavingsUsd } from '../config/aiPricing';
 
 interface AnalyticsOverview {
     period: { from: string; to: string; days: number };
@@ -402,10 +403,17 @@ export class AnalyticsService {
     async getUserAiCostByPage(userId: string, period: AdminUserAiCostPeriod = '30d'): Promise<AdminUserAiCostReport> {
         const { rangeStart, rangeEnd } = resolvePeriodRange(period);
 
+        // One scan grouped by (page, pipeline). We fold it into two breakdowns in JS:
+        //   - byPage:     "which page costs the most" (sum over pipelines)
+        //   - byPipeline: "what is the cost — replies vs lead extraction vs embeddings"
+        //                 (sum over pages) — answers the recurring "this number can't be
+        //                 right" confusion where a page's cost silently blends Smart Reply
+        //                 with lead extraction, translation, and RAG embeddings.
         const rows = await db
             .select({
                 pageId: aiUsageLog.pageId,
                 pageName: pages.name,
+                pipeline: aiUsageLog.pipeline,
                 calls: sql<number>`count(*)`,
                 cacheHits: sql<number>`count(*) filter (where ${aiUsageLog.cached} = true)`,
                 tokensIn: sql<number>`COALESCE(SUM(${aiUsageLog.tokensIn}), 0)`,
@@ -419,32 +427,71 @@ export class AnalyticsService {
                 gte(aiUsageLog.createdAt, rangeStart),
                 lt(aiUsageLog.createdAt, rangeEnd),
             ))
-            .groupBy(aiUsageLog.pageId, pages.name);
+            .groupBy(aiUsageLog.pageId, pages.name, aiUsageLog.pipeline);
 
         const roundCost = (v: number) => Math.round(v * 1_000_000) / 1_000_000;
-        const totals = { calls: 0, cacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
 
-        const byPage = rows.map(row => {
+        // billedCalls = real OpenAI calls (cache hits cost $0 but still count as calls,
+        // so a high call count with a tiny cost is correct, not a bug — surface the split).
+        const totals = { calls: 0, billedCalls: 0, cacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
+        const pageMap = new Map<string, AdminUserAiCostPageRow>();
+        const pipelineMap = new Map<string, AdminUserAiCostPipelineRow>();
+
+        for (const row of rows) {
             const calls = Number(row.calls);
             const cacheHits = Number(row.cacheHits);
+            const billedCalls = calls - cacheHits;
             const tokensIn = Number(row.tokensIn);
             const tokensOut = Number(row.tokensOut);
             const costUsd = Number(row.costUsd);
+
             totals.calls += calls;
+            totals.billedCalls += billedCalls;
             totals.cacheHits += cacheHits;
             totals.tokensIn += tokensIn;
             totals.tokensOut += tokensOut;
             totals.costUsd += costUsd;
-            return {
-                pageId: row.pageId,
-                pageName: row.pageName ?? null,
-                calls,
-                cacheHits,
-                tokensIn,
-                tokensOut,
-                costUsd: roundCost(costUsd),
-            };
-        }).sort((a, b) => b.costUsd - a.costUsd);
+
+            const pageKey = row.pageId ?? '__no_page__';
+            const page = pageMap.get(pageKey);
+            if (page) {
+                page.calls += calls;
+                page.billedCalls += billedCalls;
+                page.cacheHits += cacheHits;
+                page.tokensIn += tokensIn;
+                page.tokensOut += tokensOut;
+                page.costUsd += costUsd;
+            } else {
+                pageMap.set(pageKey, {
+                    pageId: row.pageId,
+                    pageName: row.pageName ?? null,
+                    calls, billedCalls, cacheHits, tokensIn, tokensOut, costUsd,
+                });
+            }
+
+            // pipeline is nullable on legacy rows — bucket those under 'unknown' so cost
+            // still reconciles with the totals instead of vanishing.
+            const pipelineKey = row.pipeline ?? 'unknown';
+            const pipe = pipelineMap.get(pipelineKey);
+            if (pipe) {
+                pipe.calls += calls;
+                pipe.billedCalls += billedCalls;
+                pipe.cacheHits += cacheHits;
+                pipe.costUsd += costUsd;
+            } else {
+                pipelineMap.set(pipelineKey, {
+                    pipeline: pipelineKey,
+                    calls, billedCalls, cacheHits, costUsd,
+                });
+            }
+        }
+
+        const byPage = Array.from(pageMap.values())
+            .map(p => ({ ...p, costUsd: roundCost(p.costUsd) }))
+            .sort((a, b) => b.costUsd - a.costUsd);
+        const byPipeline = Array.from(pipelineMap.values())
+            .map(p => ({ ...p, costUsd: roundCost(p.costUsd) }))
+            .sort((a, b) => b.costUsd - a.costUsd);
 
         totals.costUsd = roundCost(totals.costUsd);
 
@@ -454,6 +501,116 @@ export class AnalyticsService {
             rangeEnd: rangeEnd.toISOString(),
             totals,
             byPage,
+            byPipeline,
+        };
+    }
+
+    /**
+     * Global (all-workspace) AI consumption for a period, grouped by pipeline and
+     * model — powers the admin AI Cost panel's "consumption + caching" view.
+     *
+     * Distinct from getUserAiCostByPage (per-user) and getAiUsage (model+day). Adds
+     * the caching dimension the panel needs:
+     *   - internalCacheHits: our exact/semantic cache hits (cached=true rows, $0 cost)
+     *   - promptCacheSavingsUsd: $ saved by OpenAI prompt caching (cached_input_tokens
+     *     billed at the discounted rate) — see cacheSavingsUsd() in aiPricing.ts
+     *
+     * NOTE: this reads `ai_usage_log`, which only captures *our* (prod) traffic and
+     * has no api_key_id — so it is NOT the OpenAI authoritative bill (that comes from
+     * the Costs API / snapshots) and excludes eval/dev. Reconciliation is shown
+     * separately in the panel.
+     */
+    async getGlobalAiCostByPipeline(period: AdminUserAiCostPeriod = '30d'): Promise<AdminGlobalAiCostReport> {
+        const { rangeStart, rangeEnd } = resolvePeriodRange(period);
+
+        const rows = await db
+            .select({
+                pipeline: aiUsageLog.pipeline,
+                model: aiUsageLog.model,
+                calls: sql<number>`count(*)`,
+                cacheHits: sql<number>`count(*) filter (where ${aiUsageLog.cached} = true)`,
+                tokensIn: sql<number>`COALESCE(SUM(${aiUsageLog.tokensIn}), 0)`,
+                cachedInputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.cachedInputTokens}), 0)`,
+                tokensOut: sql<number>`COALESCE(SUM(${aiUsageLog.tokensOut}), 0)`,
+                costUsd: sql<number>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
+            })
+            .from(aiUsageLog)
+            .where(and(
+                gte(aiUsageLog.createdAt, rangeStart),
+                lt(aiUsageLog.createdAt, rangeEnd),
+            ))
+            .groupBy(aiUsageLog.pipeline, aiUsageLog.model);
+
+        const roundCost = (v: number) => Math.round(v * 1_000_000) / 1_000_000;
+        const totals = {
+            calls: 0, billedCalls: 0, cacheHits: 0,
+            tokensIn: 0, cachedInputTokens: 0, tokensOut: 0,
+            costUsd: 0, promptCacheSavingsUsd: 0,
+        };
+        const pipelineMap = new Map<string, AdminGlobalAiCostPipelineRow>();
+        const modelMap = new Map<string, AdminGlobalAiCostModelRow>();
+
+        for (const row of rows) {
+            const calls = Number(row.calls);
+            const cacheHits = Number(row.cacheHits);
+            const billedCalls = calls - cacheHits;
+            const tokensIn = Number(row.tokensIn);
+            const cachedInputTokens = Number(row.cachedInputTokens);
+            const tokensOut = Number(row.tokensOut);
+            const costUsd = Number(row.costUsd);
+            // model is NOT NULL in the schema, but guard anyway; pipeline is nullable.
+            const model = row.model ?? 'unknown';
+            const savings = cacheSavingsUsd(model, cachedInputTokens);
+
+            totals.calls += calls;
+            totals.billedCalls += billedCalls;
+            totals.cacheHits += cacheHits;
+            totals.tokensIn += tokensIn;
+            totals.cachedInputTokens += cachedInputTokens;
+            totals.tokensOut += tokensOut;
+            totals.costUsd += costUsd;
+            totals.promptCacheSavingsUsd += savings;
+
+            const pipelineKey = row.pipeline ?? 'unknown';
+            const pipe = pipelineMap.get(pipelineKey);
+            if (pipe) {
+                pipe.calls += calls; pipe.billedCalls += billedCalls;
+                pipe.cacheHits += cacheHits; pipe.costUsd += costUsd;
+            } else {
+                pipelineMap.set(pipelineKey, { pipeline: pipelineKey, calls, billedCalls, cacheHits, costUsd });
+            }
+
+            const mdl = modelMap.get(model);
+            if (mdl) {
+                mdl.calls += calls; mdl.billedCalls += billedCalls; mdl.cacheHits += cacheHits;
+                mdl.tokensIn += tokensIn; mdl.cachedInputTokens += cachedInputTokens;
+                mdl.tokensOut += tokensOut; mdl.costUsd += costUsd; mdl.promptCacheSavingsUsd += savings;
+            } else {
+                modelMap.set(model, {
+                    model, calls, billedCalls, cacheHits,
+                    tokensIn, cachedInputTokens, tokensOut, costUsd, promptCacheSavingsUsd: savings,
+                });
+            }
+        }
+
+        const byPipeline = Array.from(pipelineMap.values())
+            .map(p => ({ ...p, costUsd: roundCost(p.costUsd) }))
+            .sort((a, b) => b.costUsd - a.costUsd);
+        const byModel = Array.from(modelMap.values())
+            .map(m => ({ ...m, costUsd: roundCost(m.costUsd), promptCacheSavingsUsd: roundCost(m.promptCacheSavingsUsd) }))
+            .sort((a, b) => b.costUsd - a.costUsd);
+
+        totals.costUsd = roundCost(totals.costUsd);
+        totals.promptCacheSavingsUsd = roundCost(totals.promptCacheSavingsUsd);
+        const internalCacheHitRate = totals.calls > 0 ? totals.cacheHits / totals.calls : 0;
+
+        return {
+            period,
+            rangeStart: rangeStart.toISOString(),
+            rangeEnd: rangeEnd.toISOString(),
+            totals: { ...totals, internalCacheHitRate },
+            byPipeline,
+            byModel,
         };
     }
 
@@ -461,23 +618,82 @@ export class AnalyticsService {
 
 export type AdminUserAiCostPeriod = '7d' | '30d' | '90d' | 'this_month' | 'last_month';
 
+export interface AdminUserAiCostPageRow {
+    pageId: string | null;
+    pageName: string | null;
+    calls: number;
+    /** Real OpenAI calls (calls − cacheHits); cache hits are billed at $0. */
+    billedCalls: number;
+    cacheHits: number;
+    tokensIn: number;
+    tokensOut: number;
+    costUsd: number;
+}
+
+export interface AdminUserAiCostPipelineRow {
+    /** AiPipeline tag, or 'unknown' for legacy untagged rows. */
+    pipeline: string;
+    calls: number;
+    billedCalls: number;
+    cacheHits: number;
+    costUsd: number;
+}
+
 export interface AdminUserAiCostReport {
     period: AdminUserAiCostPeriod;
     rangeStart: string;
     rangeEnd: string;
-    totals: { calls: number; cacheHits: number; tokensIn: number; tokensOut: number; costUsd: number };
-    byPage: Array<{
-        pageId: string | null;
-        pageName: string | null;
-        calls: number;
-        cacheHits: number;
-        tokensIn: number;
-        tokensOut: number;
-        costUsd: number;
-    }>;
+    totals: { calls: number; billedCalls: number; cacheHits: number; tokensIn: number; tokensOut: number; costUsd: number };
+    byPage: AdminUserAiCostPageRow[];
+    /** Cost split by source pipeline (Smart Reply vs lead extraction vs embeddings …). */
+    byPipeline: AdminUserAiCostPipelineRow[];
 }
 
-function resolvePeriodRange(period: AdminUserAiCostPeriod): { rangeStart: Date; rangeEnd: Date } {
+export interface AdminGlobalAiCostPipelineRow {
+    pipeline: string;
+    calls: number;
+    billedCalls: number;
+    cacheHits: number;
+    costUsd: number;
+}
+
+export interface AdminGlobalAiCostModelRow {
+    model: string;
+    calls: number;
+    billedCalls: number;
+    cacheHits: number;
+    tokensIn: number;
+    cachedInputTokens: number;
+    tokensOut: number;
+    costUsd: number;
+    /** USD saved by OpenAI prompt caching on this model's cached input tokens. */
+    promptCacheSavingsUsd: number;
+}
+
+export interface AdminGlobalAiCostReport {
+    period: AdminUserAiCostPeriod;
+    rangeStart: string;
+    rangeEnd: string;
+    totals: {
+        calls: number;
+        /** Real OpenAI calls (calls − internal cache hits). */
+        billedCalls: number;
+        cacheHits: number;
+        /** cacheHits / calls (0..1). */
+        internalCacheHitRate: number;
+        tokensIn: number;
+        cachedInputTokens: number;
+        tokensOut: number;
+        /** Our estimated cost (prod traffic only — NOT the OpenAI authoritative bill). */
+        costUsd: number;
+        /** USD saved by OpenAI prompt caching across all models. */
+        promptCacheSavingsUsd: number;
+    };
+    byPipeline: AdminGlobalAiCostPipelineRow[];
+    byModel: AdminGlobalAiCostModelRow[];
+}
+
+export function resolvePeriodRange(period: AdminUserAiCostPeriod): { rangeStart: Date; rangeEnd: Date } {
     const now = new Date();
     if (period === 'this_month') {
         const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
