@@ -98,14 +98,24 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
         : (Array.isArray(response.data?.data) ? response.data.data : []);
       const fetched = data as Page[];
       setPages(fetched);
-      setSelectedPageId((prev) => prev ?? fetched[0]?.id ?? null);
+      // Default to the first CONNECTED page — a disconnected page can't generate
+      // a test reply. Mirrors the test-reply selection in pages.tsx (the canonical
+      // `isConnected !== false` predicate); falls back to the first page only when
+      // none are connected. `fetched[0]` alone defaulted to the most recently
+      // created page, which is often a stale/disconnected one.
+      const defaultPage = fetched.find((p) => p.isConnected !== false) ?? fetched[0];
+      setSelectedPageId((prev) => prev ?? defaultPage?.id ?? null);
     }).catch(() => {
       // Silent — the test button itself will surface a real error if invoked.
     });
     return () => { cancelled = true; };
   }, []);
 
-  const selectedPage = pages.find((p) => p.id === selectedPageId) ?? pages[0] ?? null;
+  const selectedPage =
+    pages.find((p) => p.id === selectedPageId) ??
+    pages.find((p) => p.isConnected !== false) ??
+    pages[0] ??
+    null;
 
   const openTestModal = () => {
     setTestError(null);
