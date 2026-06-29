@@ -134,43 +134,51 @@ class TranscriptionService {
         logCtx: TranscriptionLogContext | undefined,
         transcription: { usage?: unknown },
     ): void {
-        if (!logCtx) {
-            // No attribution context — real callers always pass one; guard so a
-            // new unattributed code path is visible rather than silently uncosted.
-            Sentry.addBreadcrumb({
-                category: 'ai_usage_log',
-                level: 'warning',
-                message: 'transcription usage skipped: no logCtx',
-                data: { model: MODEL_TRANSCRIBE },
-            });
-            return;
+        // Hard guarantee: cost logging must NEVER disturb the transcription result.
+        // This runs synchronously inside transcribe()'s try block, so any throw here
+        // would be caught as a transcription failure and discard an already-successful
+        // transcript. Wrap the whole body so the voice path is isolated from it.
+        try {
+            if (!logCtx) {
+                // No attribution context — real callers always pass one; guard so a
+                // new unattributed code path is visible rather than silently uncosted.
+                Sentry.addBreadcrumb({
+                    category: 'ai_usage_log',
+                    level: 'warning',
+                    message: 'transcription usage skipped: no logCtx',
+                    data: { model: MODEL_TRANSCRIBE },
+                });
+                return;
+            }
+            // The SDK types `usage` as a Tokens | Duration union (whisper returns a
+            // duration; the gpt-4o-*-transcribe models return tokens). Narrow to the
+            // token shape — that's what gpt-4o-mini-transcribe sends and what we bill on.
+            const raw = transcription.usage;
+            const usage = (raw && typeof raw === 'object' && 'input_tokens' in raw)
+                ? (raw as TranscriptionUsage)
+                : undefined;
+            if (!usage) {
+                // gpt-4o-mini-transcribe returns token usage by default; absence means
+                // an OpenAI/SDK change — surface it instead of silently logging $0.
+                Sentry.addBreadcrumb({
+                    category: 'ai_usage_log',
+                    level: 'warning',
+                    message: 'transcription returned no usage tokens',
+                    data: { model: MODEL_TRANSCRIBE },
+                });
+            }
+            logAiUsage({
+                userId: logCtx.userId,
+                pageId: logCtx.pageId,
+                model: MODEL_TRANSCRIBE,
+                tokensIn: usage?.input_tokens ?? 0,
+                tokensOut: usage?.output_tokens ?? 0,
+                cached: false,
+                pipeline: 'transcription',
+            }).catch(() => { /* breadcrumb emitted inside logAiUsage on failure */ });
+        } catch (err) {
+            captureError(err instanceof Error ? err : new Error(String(err)), 'transcription usage log failed', { tags: { service: 'transcription' } });
         }
-        // The SDK types `usage` as a Tokens | Duration union (whisper returns a
-        // duration; the gpt-4o-*-transcribe models return tokens). Narrow to the
-        // token shape — that's what gpt-4o-mini-transcribe sends and what we bill on.
-        const raw = transcription.usage;
-        const usage = (raw && typeof raw === 'object' && 'input_tokens' in raw)
-            ? (raw as TranscriptionUsage)
-            : undefined;
-        if (!usage) {
-            // gpt-4o-mini-transcribe returns token usage by default; absence means
-            // an OpenAI/SDK change — surface it instead of silently logging $0.
-            Sentry.addBreadcrumb({
-                category: 'ai_usage_log',
-                level: 'warning',
-                message: 'transcription returned no usage tokens',
-                data: { model: MODEL_TRANSCRIBE },
-            });
-        }
-        logAiUsage({
-            userId: logCtx.userId,
-            pageId: logCtx.pageId,
-            model: MODEL_TRANSCRIBE,
-            tokensIn: usage?.input_tokens ?? 0,
-            tokensOut: usage?.output_tokens ?? 0,
-            cached: false,
-            pipeline: 'transcription',
-        }).catch(() => { /* breadcrumb emitted inside logAiUsage on failure */ });
     }
 
     /**
