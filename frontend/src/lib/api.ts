@@ -712,6 +712,12 @@ export const adminApi = {
     return response.data.data;
   },
 
+  // On-demand OpenAI cost sync ("Sync now"); { configured:false } when no admin key
+  syncAiCosts: async () => {
+    const response = await api.post<{ success: boolean; data: { configured: boolean; synced: number } }>(`/admin/ai-cost/sync`);
+    return response.data.data;
+  },
+
   // Manual upgrade user subscription
   upgradeUser: async (userId: string, data: {
     planId: string;

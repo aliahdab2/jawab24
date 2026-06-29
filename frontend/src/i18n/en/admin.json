@@ -31,6 +31,11 @@
     "consumptionTitle": "Our consumption (logged)",
     "billingTitle": "What OpenAI bills us",
     "billingEmpty": "No billing snapshots yet — the daily sync hasn't run, or the OpenAI admin key isn't configured.",
+    "syncNow": "Sync now",
+    "syncing": "Syncing…",
+    "syncDone": "Synced {count} cost rows from OpenAI",
+    "syncNotConfigured": "Set OPENAI_ADMIN_API_KEY first — nothing to sync.",
+    "syncError": "Sync failed — check the logs.",
     "billingTotal": "OpenAI total",
     "reconcTitle": "Reconciliation",
     "reconcOpenaiProd": "OpenAI (prod key)",
@@ -57,6 +62,8 @@
     "runwayCriticalTitle": "OpenAI credit critically low",
     "runwayWarningTitle": "OpenAI credit running low",
     "runwayBannerDetail": "Estimated {remaining} left — about {days} days at {rate}/day. Top up before it reaches zero.",
+    "runwayBannerDetailNoRate": "Estimated {remaining} left. Top up before it reaches zero — the days-of-runway estimate appears once billing data syncs.",
+    "runwayBannerParking": "Replies are parked until OpenAI credit is added. Top up now to resume.",
     "autoRechargeHint": "Tip: enable auto-recharge in the OpenAI billing dashboard so credit never hits zero — this panel is the backup warning."
   },
   "customers": {

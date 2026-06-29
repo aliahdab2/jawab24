@@ -13,7 +13,6 @@ import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
 import clsx from 'clsx';
 import {
-  DollarSign,
   Zap,
   Database,
   Clock,
@@ -265,7 +264,6 @@ export default function AdminObservabilityPage() {
   });
 
   const formatCost = (usd: number) => `$${usd.toFixed(4)}`;
-  const formatPct = (n: number) => `${Math.round(n)}%`;
   const formatUptime = (s: number) => {
     const d = Math.floor(s / 86400);
     const h = Math.floor((s % 86400) / 3600);
@@ -274,12 +272,6 @@ export default function AdminObservabilityPage() {
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
   };
-
-  const cacheHitRate = aiUsage?.totals
-    ? aiUsage.totals.calls > 0
-      ? (aiUsage.totals.cacheHits / aiUsage.totals.calls) * 100
-      : 0
-    : 0;
 
   return (
     <AdminLayout title={t('observability.title')}>
@@ -345,62 +337,9 @@ export default function AdminObservabilityPage() {
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                 {t('observability.aiCost')}
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <StatCard
-                  icon={DollarSign}
-                  label={t('observability.totalCost')}
-                  value={aiUsage ? formatCost(aiUsage.totals.costUsd) : '—'}
-                />
-                <StatCard
-                  icon={Zap}
-                  label={t('observability.llmCalls')}
-                  value={aiUsage?.totals.llmCalls.toLocaleString() ?? '—'}
-                />
-                <StatCard
-                  icon={Database}
-                  label={t('observability.cacheHits')}
-                  value={aiUsage?.totals.cacheHits.toLocaleString() ?? '—'}
-                  sub={aiUsage ? formatPct(cacheHitRate) : undefined}
-                />
-                <StatCard
-                  icon={Activity}
-                  label={t('observability.totalCalls')}
-                  value={aiUsage?.totals.calls.toLocaleString() ?? '—'}
-                />
-              </div>
-
-              {/* Cost by model */}
-              {aiUsage && Object.keys(aiUsage.byModel).length > 0 && (
-                <Card className="mt-3 p-4">
-                  <h3 className="text-sm font-semibold text-foreground mb-3">{t('observability.costByModel')}</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-theme-border">
-                          <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.model')}</th>
-                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.calls')}</th>
-                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.cacheHits')}</th>
-                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.tokensIn')}</th>
-                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.tokensOut')}</th>
-                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.cost')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.entries(aiUsage.byModel).map(([model, stats]) => (
-                          <tr key={model} className="border-b border-theme-border last:border-0">
-                            <td className="py-2 font-mono text-xs text-foreground">{model}</td>
-                            <td className="py-2 text-end text-foreground">{stats.calls.toLocaleString()}</td>
-                            <td className="py-2 text-end text-foreground">{stats.cacheHits.toLocaleString()}</td>
-                            <td className="py-2 text-end text-muted-foreground">{stats.tokensIn.toLocaleString()}</td>
-                            <td className="py-2 text-end text-muted-foreground">{stats.tokensOut.toLocaleString()}</td>
-                            <td className="py-2 text-end font-medium text-foreground">{formatCost(stats.costUsd)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              )}
+              {/* Headline cost/calls/cache-hit + cost-by-model now live on the dedicated
+                  /admin/ai-cost panel. This section keeps only the analytics that panel
+                  doesn't cover: cost-by-intent and the daily-spend trend. */}
 
               {/* Cost by intent — surfaces which intents drive cost; informs cheaper-model routing */}
               {aiUsage && Object.keys(aiUsage.byIntent).length > 0 && (

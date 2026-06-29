@@ -397,6 +397,11 @@ describe('Admin Routes', () => {
             });
             expect(response.statusCode).toBe(401);
         });
+
+        it('POST /admin/ai-cost/sync returns 401 without authorization header', async () => {
+            const response = await app.inject({ method: 'POST', url: '/admin/ai-cost/sync' });
+            expect(response.statusCode).toBe(401);
+        });
     });
 
     describe('PUT /admin/ai-cost/balance validation', () => {

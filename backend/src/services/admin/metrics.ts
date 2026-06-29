@@ -4,6 +4,7 @@ import { eq, desc } from 'drizzle-orm';
 import { analyticsService, type AdminUserAiCostPeriod } from '../analytics';
 import { getBilling, getReconciliation } from '../aiCostSnapshots';
 import { computeRunway, setBalanceAnchor } from '../aiCostMonitor';
+import { runOpenAiCostSync } from '../aiCostSync';
 import { runDailyLeadDigest } from '../leadDigest';
 
 /**
@@ -44,6 +45,11 @@ class AdminMetricsService {
     async setAiCreditBalance(opts: { balanceUsd: number; anchoredAt: string; note?: string | null; updatedBy?: string | null }) {
         await setBalanceAnchor(opts);
         return computeRunway();
+    }
+
+    /** On-demand OpenAI cost sync (admin "Sync now"); wide backfill so the panel fills immediately. */
+    async syncOpenAiCosts() {
+        return runOpenAiCostSync(95);
     }
 
     /** All plans, for the admin dropdown (ordered by sortOrder). */

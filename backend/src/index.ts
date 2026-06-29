@@ -354,19 +354,15 @@ const start = async () => {
     // via the idempotent upsert), then evaluates credit runway and fires the
     // proactive "credits low" alert BEFORE the wallet hits zero (the 2026-06-28
     // outage had no early warning). No-ops when no org admin key is configured.
-    const { fetchCostRows, isOpenAiCostsConfigured } = await import("./services/openaiCosts");
-    const { upsertSnapshots } = await import("./services/aiCostSnapshots");
-    const { evaluateAndAlert } = await import("./services/aiCostMonitor");
+    const { runOpenAiCostSync } = await import("./services/aiCostSync");
     const COST_SNAPSHOT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
-    const COST_SNAPSHOT_TRAILING_DAYS = 3;
     const runCostSnapshot = async () => {
-      if (!config.aiCostMonitoring.enabled || !isOpenAiCostsConfigured()) return;
-      const endTime = Math.floor(Date.now() / 1000);
-      const startTime = endTime - COST_SNAPSHOT_TRAILING_DAYS * 24 * 60 * 60;
-      const rows = await fetchCostRows({ startTime, endTime });
-      const upserted = await upsertSnapshots(rows);
-      server.log.info({ upserted }, '[CostSnapshot] Synced OpenAI cost snapshots');
-      await evaluateAndAlert();
+      // Daily incremental: trailing 3-day window (idempotent upsert absorbs late
+      // OpenAI cost adjustments). The admin "Sync now" button uses a wider backfill.
+      const result = await runOpenAiCostSync(3);
+      if (result.configured) {
+        server.log.info({ synced: result.synced }, '[CostSnapshot] Synced OpenAI cost snapshots');
+      }
     };
     setInterval(() => {
       runCostSnapshot().catch(err => {

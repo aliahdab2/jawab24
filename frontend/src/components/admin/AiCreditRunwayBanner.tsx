@@ -27,6 +27,20 @@ export function AiCreditRunwayBanner({ runway }: { runway: AdminAiRunway }) {
         ? t('aiCost.runwayParkingTitle')
         : critical ? t('aiCost.runwayCriticalTitle') : t('aiCost.runwayWarningTitle');
 
+    // Detail line varies by state so we never print "about — days at $0.00/day":
+    //  - parking: action-focused (credit is out; remaining/runway aren't meaningful)
+    //  - no burn rate yet (runwayDays null — billing snapshots haven't synced): remaining only
+    //  - full: remaining + runway days + daily rate
+    const detail = runway.currentlyParking
+        ? t('aiCost.runwayBannerParking')
+        : runway.runwayDays === null
+            ? t('aiCost.runwayBannerDetailNoRate', { remaining: formatCostUsd(runway.remainingUsd ?? 0, 2) })
+            : t('aiCost.runwayBannerDetail', {
+                remaining: formatCostUsd(runway.remainingUsd ?? 0, 2),
+                days: String(runway.runwayDays),
+                rate: formatCostUsd(runway.rollingDailyRateUsd, 2),
+            });
+
     return (
         <Card className={clsx('overflow-hidden border border-s-4', palette)} padding="none" data-severity={runway.severity}>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4">
@@ -35,13 +49,7 @@ export function AiCreditRunwayBanner({ runway }: { runway: AdminAiRunway }) {
                 </div>
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm sm:text-base leading-tight">{title}</p>
-                    <p className="text-xs sm:text-sm opacity-80 mt-1">
-                        {t('aiCost.runwayBannerDetail', {
-                            remaining: formatCostUsd(runway.remainingUsd ?? 0, 2),
-                            days: runway.runwayDays === null ? '—' : String(runway.runwayDays),
-                            rate: formatCostUsd(runway.rollingDailyRateUsd, 2),
-                        })}
-                    </p>
+                    <p className="text-xs sm:text-sm opacity-80 mt-1">{detail}</p>
                 </div>
             </div>
         </Card>

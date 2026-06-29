@@ -31,6 +31,11 @@
     "consumptionTitle": "استهلاكنا (المُسجَّل)",
     "billingTitle": "ما تفوتره OpenAI علينا",
     "billingEmpty": "لا توجد لقطات فوترة بعد — لم تُشغَّل المزامنة اليومية أو لم يُضبط مفتاح مشرف OpenAI.",
+    "syncNow": "مزامنة الآن",
+    "syncing": "جارٍ المزامنة…",
+    "syncDone": "تمت مزامنة {count} سجل تكلفة من OpenAI",
+    "syncNotConfigured": "اضبط مفتاح مشرف OpenAI أولاً — لا شيء لمزامنته.",
+    "syncError": "فشلت المزامنة — راجع السجلات.",
     "billingTotal": "إجمالي OpenAI",
     "reconcTitle": "المطابقة",
     "reconcOpenaiProd": "OpenAI (مفتاح الإنتاج)",
@@ -57,6 +62,8 @@
     "runwayCriticalTitle": "رصيد OpenAI منخفض جداً",
     "runwayWarningTitle": "رصيد OpenAI يقترب من النفاد",
     "runwayBannerDetail": "المتبقي تقريباً {remaining} — أي نحو {days} يوم بمعدل {rate} يومياً. أعد الشحن قبل أن يصل إلى الصفر.",
+    "runwayBannerDetailNoRate": "المتبقي تقريباً {remaining}. أعد الشحن قبل أن يصل إلى الصفر — تظهر المدة المتبقية بالأيام عند مزامنة بيانات الفوترة.",
+    "runwayBannerParking": "الردود متوقفة حتى تُضاف رصيد إلى OpenAI. أعد الشحن الآن لاستئنافها.",
     "autoRechargeHint": "نصيحة: فعّل إعادة الشحن التلقائي في لوحة فوترة OpenAI كي لا يصل الرصيد إلى الصفر — هذه اللوحة هي التحذير الاحتياطي."
   },
   "customers": {

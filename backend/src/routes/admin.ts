@@ -156,6 +156,18 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         );
 
         adminProtected.post(
+            '/ai-cost/sync',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'On-demand OpenAI cost sync (pull Costs API → snapshots → re-evaluate runway)',
+                    security: auth,
+                },
+            },
+            adminController.syncAiCosts,
+        );
+
+        adminProtected.post(
             '/users/:userId/upgrade',
             { schema: { tags: ['Admin'], summary: 'Manual subscription upgrade for a user', security: auth, params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] } } },
             adminController.manualUpgrade,
