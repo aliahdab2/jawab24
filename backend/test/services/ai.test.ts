@@ -93,6 +93,7 @@ vi.mock('../../src/config', () => ({
         ai: {
             enabled: true,
             cacheEnabled: true,
+            semanticCacheEnabled: true,
             serviceUrl: 'http://localhost:3002',
             defaultModel: 'gpt-4-mini',
             model: 'gpt-4.1-mini',
@@ -1082,6 +1083,7 @@ describe('AI Service - Semantic Cache Integration', () => {
         axiosReply?: Record<string, unknown>;
         semanticCacheHit?: { reply: string; intent: string; confidence?: string; flags?: string[] } | null;
         openaiApiKey?: string;
+        semanticCacheEnabled?: boolean;
     } = {}) {
         vi.doMock('../../src/lib/redis', () => ({
             redis: {
@@ -1129,7 +1131,7 @@ describe('AI Service - Semantic Cache Integration', () => {
 
         vi.doMock('../../src/config', () => ({
             config: {
-                ai: { enabled: true, cacheEnabled: true, serviceUrl: 'http://localhost:3002', model: 'gpt-4.1-mini' },
+                ai: { enabled: true, cacheEnabled: true, semanticCacheEnabled: overrides.semanticCacheEnabled ?? true, serviceUrl: 'http://localhost:3002', model: 'gpt-4.1-mini' },
                 openai: { apiKey: overrides.openaiApiKey ?? 'test-key' },
             },
         }));
@@ -1271,6 +1273,36 @@ describe('AI Service - Semantic Cache Integration', () => {
         expect(saveArgs.kbActiveVersion).toBe(2);
         // Intent should be pre-GPT classified (PRICE normalized to QUESTION via classifyFallbackIntent)
         expect(saveArgs.intent).toBe('QUESTION');
+    });
+
+    it('should skip the semantic cache entirely (read + write + embed) when semanticCacheEnabled=false', async () => {
+        // Even with pageId + kbActiveVersion + a pre-computed embedding present
+        // (the conditions that normally trigger a semantic check), the flag-off
+        // path must not probe, must not embed, and must not write — it goes
+        // straight to the AI worker. This is the dormant-layer cost/latency saver.
+        const preComputed = new Array(512).fill(0.3);
+        const { mockSemCache, mockEmbed } = setupMocks({
+            semanticCacheEnabled: false,
+            axiosReply: { reply: 'Fresh AI reply', language: 'en', intent: 'QUESTION', confidence: 'high', flags: [] },
+        });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        const result = await service.generateReply({
+            comment: 'How much is this?',
+            context: { pageId: 'page-1', kbActiveVersion: 1, queryEmbedding: preComputed },
+        });
+
+        // Falls through to the AI worker
+        expect(result.reply).toBe('Fresh AI reply');
+        expect(result.cached).toBe(false);
+        // No semantic read, no embedding probe
+        expect(mockSemCache.check).not.toHaveBeenCalled();
+        expect(mockEmbed).not.toHaveBeenCalled();
+        // No semantic write either (would store rows nothing reads)
+        await new Promise(r => setTimeout(r, 50));
+        expect(mockSemCache.save).not.toHaveBeenCalled();
     });
 
     it('should gracefully continue to AI when semantic cache check throws', async () => {

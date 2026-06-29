@@ -389,7 +389,7 @@ export class AiService {
         let queryEmbedding: number[] | null = request.context?.queryEmbedding || null;
         let detectedPreGptIntent: string | null = null;
 
-        if (pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches) {
+        if (config.ai.semanticCacheEnabled && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches) {
             try {
                 // Use full fallback classifier (covers COMPLIMENT, SPAM, BUSINESS_INQUIRY etc.)
                 // instead of basic detectIntent() which only handles GREETING/PRICE/HOURS/etc.
@@ -528,7 +528,7 @@ export class AiService {
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
             // Model is stored in metadata so check-time can filter to same-model entries.
             // Eval pipeline never writes (see `bypassAllCaches` above).
-            if (!bypassAllCaches && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+            if (config.ai.semanticCacheEnabled && !bypassAllCaches && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,
