@@ -91,7 +91,7 @@ We appreciate your patience,
 The Jawab24 team
 ```
 
-> Adjust the help/privacy URLs if they differ. If `jawab24.com/help` doesn't exist yet, point both lines to `/privacy` + a contact line, or create a minimal help page before submission.
+> ✅ **`jawab24.com/help` now exists** (bilingual AR/EN Help Center — setup, Salla-store connection, Smart Replies, controls, plans, privacy, `support@jawab24.com`; linked from the landing footer). Auto-responder URLs are live. Adjust only if the support address differs.
 
 ---
 

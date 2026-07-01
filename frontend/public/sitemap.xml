@@ -134,6 +134,28 @@
     <priority>0.5</priority>
   </url>
 
+  <!-- Help Center - Arabic -->
+  <url>
+    <loc>https://jawab24.com/help</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/help"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/help"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/help"/>
+    <lastmod>2026-07-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- Help Center - English -->
+  <url>
+    <loc>https://jawab24.com/en/help</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/help"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/help"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/help"/>
+    <lastmod>2026-07-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
   <!-- What is Jawab24 - Arabic -->
   <url>
     <loc>https://jawab24.com/what-is-jawab24</loc>
