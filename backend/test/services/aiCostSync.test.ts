@@ -6,12 +6,16 @@ vi.mock('../../src/services/openaiCosts', () => ({
     fetchCostRows: vi.fn(),
 }));
 vi.mock('../../src/services/aiCostSnapshots', () => ({ upsertSnapshots: vi.fn() }));
-vi.mock('../../src/services/aiCostMonitor', () => ({ evaluateAndAlert: vi.fn() }));
+vi.mock('../../src/services/aiCostMonitor', () => ({
+    evaluateAndAlert: vi.fn().mockResolvedValue(undefined),
+    evaluateSpendSpikeAndAlert: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 
 import { runOpenAiCostSync } from '../../src/services/aiCostSync';
 import { isOpenAiCostsConfigured, fetchCostRows } from '../../src/services/openaiCosts';
 import { upsertSnapshots } from '../../src/services/aiCostSnapshots';
-import { evaluateAndAlert } from '../../src/services/aiCostMonitor';
+import { evaluateAndAlert, evaluateSpendSpikeAndAlert } from '../../src/services/aiCostMonitor';
 
 const NOW = new Date('2026-06-29T00:00:00Z');
 
@@ -45,5 +49,6 @@ describe('runOpenAiCostSync', () => {
         expect(fetchCostRows).toHaveBeenCalledWith({ startTime: endTime - 95 * 86400, endTime });
         expect(upsertSnapshots).toHaveBeenCalledOnce();
         expect(evaluateAndAlert).toHaveBeenCalledWith(NOW);
+        expect(evaluateSpendSpikeAndAlert).toHaveBeenCalledWith(NOW);
     });
 });

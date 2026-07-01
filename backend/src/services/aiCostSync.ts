@@ -8,9 +8,10 @@
  * when the org admin key isn't set — the admin key only ever lives in backend env.
  */
 import { config } from '../config';
+import { captureError } from '../utils/sentryHelpers';
 import { fetchCostRows, isOpenAiCostsConfigured } from './openaiCosts';
 import { upsertSnapshots } from './aiCostSnapshots';
-import { evaluateAndAlert } from './aiCostMonitor';
+import { evaluateAndAlert, evaluateSpendSpikeAndAlert } from './aiCostMonitor';
 
 export interface OpenAiCostSyncResult {
     /** False when no org admin key is configured (nothing was fetched). */
@@ -27,6 +28,9 @@ export async function runOpenAiCostSync(trailingDays = 3, now: Date = new Date()
     const startTime = endTime - trailingDays * 24 * 60 * 60;
     const rows = await fetchCostRows({ startTime, endTime });
     const synced = await upsertSnapshots(rows);
-    await evaluateAndAlert(now);
+    // Alerts are best-effort — snapshots are already persisted, and one alert
+    // failing must not fail the sync or skip the other alert.
+    await evaluateAndAlert(now).catch(e => captureError(e, 'credit-runway alert failed', { tags: { cron: 'ai_cost_snapshot' } }));
+    await evaluateSpendSpikeAndAlert(now).catch(e => captureError(e, 'spend-spike alert failed', { tags: { cron: 'ai_cost_snapshot' } }));
     return { configured: true, synced };
 }

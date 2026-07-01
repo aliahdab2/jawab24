@@ -138,6 +138,16 @@ export default function AdminAiCostPage() {
           <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
             <Fuel className="w-4 h-4" aria-hidden="true" /> {t('aiCost.runwaySectionTitle')}
           </h2>
+          {runway.data?.spendSpike?.spike && (
+            <div className="mb-3 rounded-md border border-s-4 bg-amber-50 text-amber-900 border-amber-200 border-s-amber-500 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700/60 px-3 py-2 text-xs">
+              {t('aiCost.spikeNotice', {
+                day: runway.data.spendSpike.day ?? '—',
+                dayUsd: formatCostUsd(runway.data.spendSpike.dayUsd, 2),
+                baseline: formatCostUsd(runway.data.spendSpike.baselineDailyUsd, 2),
+                ratio: runway.data.spendSpike.ratio === null ? '—' : `${runway.data.spendSpike.ratio}×`,
+              })}
+            </div>
+          )}
           {runway.data?.configured ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3">
               <div><p className="text-xs text-muted-foreground">{t('aiCost.runwayRemaining')}</p><p className="font-bold text-foreground">{formatCostUsd(runway.data.remainingUsd ?? 0, 2)}</p></div>

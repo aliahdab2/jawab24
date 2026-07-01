@@ -10,6 +10,10 @@ vi.mock('../../src/config', () => ({
             warnRemainingUsd: 30,
             creditLowAlertCooldownSeconds: 86400,
             rollingRateDays: 7,
+            spendSpikeMultiplier: 3,
+            spendSpikeMinDailyUsd: 5,
+            spendSpikeBaselineDays: 7,
+            spendSpikeAlertCooldownSeconds: 86400,
         },
     },
 }));
@@ -21,6 +25,7 @@ vi.mock('../../src/db/schema', () => ({
 }));
 vi.mock('drizzle-orm', () => ({
     and: vi.fn((...a: unknown[]) => a), gte: vi.fn((...a: unknown[]) => a),
+    lt: vi.fn((...a: unknown[]) => a), eq: vi.fn((...a: unknown[]) => a),
     desc: vi.fn((x: unknown) => x), sql: Object.assign(vi.fn(), { raw: vi.fn() }),
 }));
 vi.mock('../../src/lib/redis', () => ({ redis: { get: vi.fn(), set: vi.fn() } }));
@@ -31,7 +36,7 @@ import { db } from '../../src/db';
 import { redis } from '../../src/lib/redis';
 import { emailService } from '../../src/services/email';
 import * as Sentry from '@sentry/node';
-import { computeRunway, evaluateAndAlert } from '../../src/services/aiCostMonitor';
+import { computeRunway, evaluateAndAlert, detectSpendSpike, evaluateSpendSpikeAndAlert } from '../../src/services/aiCostMonitor';
 
 const NOW = new Date('2026-06-29T00:00:00Z');
 
@@ -161,5 +166,58 @@ describe('aiCostMonitor.evaluateAndAlert', () => {
         );
         await evaluateAndAlert(NOW);
         expect(emailService.send).not.toHaveBeenCalled();
+    });
+});
+
+describe('aiCostMonitor.detectSpendSpike', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+    // detectSpendSpike issues 2 selects: [yesterday total], [baseline-window total].
+
+    it('flags a spike when the latest day far exceeds the baseline', async () => {
+        queueSelects([{ total: '40' }], [{ total: '70' }]); // day $40 vs baseline 70/7 = $10/day → 4×
+        const r = await detectSpendSpike(NOW);
+        expect(r.dayUsd).toBeCloseTo(40, 2);
+        expect(r.baselineDailyUsd).toBeCloseTo(10, 2);
+        expect(r.ratio).toBeCloseTo(4, 1);
+        expect(r.spike).toBe(true);
+    });
+
+    it('does NOT flag when the day is within the multiplier of the baseline', async () => {
+        queueSelects([{ total: '20' }], [{ total: '70' }]); // $20 vs $10/day = 2× (< 3×)
+        const r = await detectSpendSpike(NOW);
+        expect(r.spike).toBe(false);
+    });
+
+    it('does NOT flag below the min-daily floor even at a high ratio', async () => {
+        queueSelects([{ total: '4' }], [{ total: '3.5' }]); // $4 vs $0.5/day = 8× but < $5 floor
+        const r = await detectSpendSpike(NOW);
+        expect(r.spike).toBe(false);
+    });
+
+    it('does NOT flag on ramp-up (zero baseline)', async () => {
+        queueSelects([{ total: '50' }], [{ total: '0' }]); // baseline 0 → not a spike
+        const r = await detectSpendSpike(NOW);
+        expect(r.ratio).toBeNull();
+        expect(r.spike).toBe(false);
+    });
+});
+
+describe('aiCostMonitor.evaluateSpendSpikeAndAlert', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('alerts (email + Sentry, own dedup key) on a spike when the slot is free', async () => {
+        vi.mocked(redis.set).mockResolvedValue('OK');
+        queueSelects([{ total: '40' }], [{ total: '70' }]);
+        await evaluateSpendSpikeAndAlert(NOW);
+        expect(redis.set).toHaveBeenCalledWith('alert:openai_spend_spike', '1', 'EX', 86400, 'NX');
+        expect(Sentry.captureMessage).toHaveBeenCalledTimes(1);
+        expect(emailService.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT alert when there is no spike', async () => {
+        queueSelects([{ total: '20' }], [{ total: '70' }]);
+        await evaluateSpendSpikeAndAlert(NOW);
+        expect(emailService.send).not.toHaveBeenCalled();
+        expect(Sentry.captureMessage).not.toHaveBeenCalled();
     });
 });
