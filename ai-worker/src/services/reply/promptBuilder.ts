@@ -269,6 +269,19 @@ ${chunkLines}${buildPoliciesBlock(request)}
         prompt += `\n\n[current_post]\n${sanitizeForPrompt(request.context.postMessage).slice(0, 500)}`;
     }
 
+    // Recency reinforcement of the single most-violated rule (the #1 "you're a bot" tell:
+    // replies ending with an offer-to-help / availability / "register when you want" sign-off).
+    // The full rule lives in STATIC_SYSTEM_PREFIX, but it sits mid-prompt and the model drifts
+    // back into closings deep in long threads. Restating it here — at the very END of the system
+    // block, the last thing before the conversation turns — keeps it salient exactly when drift
+    // happens. Language-general (applies to whatever language the reply is in); per-call, ~2 dozen
+    // tokens, and it does NOT touch the cached STATIC_SYSTEM_PREFIX.
+    const historyTurns = request.context?.conversationHistory?.length ?? 0;
+    prompt += `\n\nFINAL: end on the answer — no sign-off, no "I'm here to help" / "let me know" / "أنا هنا" / "إذا بدك خبرني", no invitation to keep asking or to register.`;
+    if (historyTurns >= 6) {
+        prompt += ` You're several turns into this chat — that's exactly when replies drift into a bot-like closing. Just answer and stop.`;
+    }
+
     return prompt;
 }
 

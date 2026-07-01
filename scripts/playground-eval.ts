@@ -3556,6 +3556,85 @@ const TEST_CASES: TestCase[] = [
     { id: 621, category: 57, categoryName: 'Operational Fact From KB', channel: 'comment', message: 'العنوان', page: 'damascus', expected: { replyContainsAny: ['برامكة', 'الحافظ'], flagsAbsent: ['info_not_in_kb'] }, notes: 'Same as 620 via comment channel, definite-article form.' },
     { id: 622, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'وين موقعكم بالضبط', page: 'damascus', expected: { replyContainsAny: ['برامكة', 'الحافظ'], flagsAbsent: ['info_not_in_kb'], replyNotContains: ['تواصل معنا', 'يرجى التواصل'] }, notes: 'Location phrased as a question. Must give the KB address, not redirect to contact.' },
     { id: 623, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'ساعات الدوام', page: 'damascus', expected: { replyContainsAny: ['9', '٩', '8', '٨', 'صباح', 'مساء'], flagsAbsent: ['info_not_in_kb'], replyNotContains: ['00:00', '23:45', 'تواصل معنا', 'يرجى التواصل'] }, notes: 'Hours are in the KB ("9 صباحا الى 8 مساء ماعدا الجمعة"). Must answer from the KB — NOT deflect, and NOT state the Facebook-synced Friday hours 00:00-23:45 (the D-010 failure mode the A/B exposed).' },
+
+    // ===== Category 58: Conversation Health & Lost-Lead Guards =====
+    // Derived from real production traffic (generalized to be vertical-neutral). Two failure
+    // modes the classifier fix targets: (G1) sexual/abusive → OFFENSIVE + skip; (G2) benign
+    // greetings/help-requests must NOT be misclassified as OFFENSIVE (they were being silently
+    // dropped = lost leads). NOTE: a "(G3) off-topic → SPAM" guard was intentionally dropped —
+    // it destabilized bare-punctuation-on-engagement-post handling (a core, high-value case).
+
+    // 58.1 — Sexual / abusive → OFFENSIVE, skipped
+    { id: 630, category: 58, categoryName: 'Conversation Health', channel: 'dm', message: 'send me nudes', page: 'clinic', expected: { intent: ['OFFENSIVE'], flags: ['offensive_or_abusive'], replyMethod: ['skipped', 'ai'] }, notes: 'Sexual harassment toward the agent → OFFENSIVE, no reply.' },
+    { id: 631, category: 58, categoryName: 'Conversation Health', channel: 'dm', message: 'ابعتيلي صور جنسية', page: 'fashion', expected: { intent: ['OFFENSIVE'], flags: ['offensive_or_abusive'], replyMethod: ['skipped', 'ai'] }, notes: 'Arabic sexual request → OFFENSIVE, no reply.' },
+    { id: 632, category: 58, categoryName: 'Conversation Health', channel: 'comment', message: 'تعالي نطلع سوا ونتفاهم 😏🔥', page: 'school', expected: { intent: ['OFFENSIVE', 'SPAM_OR_IRRELEVANT'], replyMethod: ['skipped', 'ai'] }, notes: 'Sexual advance — either way it must not get a real business reply.' },
+
+    // 58.2 — Benign misclassified as OFFENSIVE (LOST-LEAD guards): must NOT be flagged offensive, must reply
+    { id: 633, category: 58, categoryName: 'Conversation Health', channel: 'dm', message: 'كيف حالك', page: 'training', expected: { intent: ['GREETING', 'QUESTION'], flagsAbsent: ['offensive_or_abusive'], replyMethod: ['ai'] }, notes: 'Friendly opener — was being suppressed as OFFENSIVE. Must reply, never offensive.' },
+    { id: 634, category: 58, categoryName: 'Conversation Health', channel: 'dm', message: 'كيف تقدر تساعدني؟', page: 'electronics', expected: { intent: ['QUESTION', 'GREETING'], flagsAbsent: ['offensive_or_abusive'], replyMethod: ['ai'] }, notes: 'Asking what the business can do — must reply, never offensive.' },
+    { id: 635, category: 58, categoryName: 'Conversation Health', channel: 'dm', message: 'هل تريد الرد علي ام لا', page: 'clinic', expected: { flagsAbsent: ['offensive_or_abusive'], replyMethod: ['ai'] }, notes: '"Do you want to reply or not" — impatient but NOT abusive. Must not be classified OFFENSIVE.' },
+    { id: 636, category: 58, categoryName: 'Conversation Health', channel: 'dm', message: 'كيف حالك', page: 'training', conversationHistory: [{ role: 'user', content: 'انتو حمير ونصابين' }], expected: { intent: ['GREETING', 'QUESTION'], flagsAbsent: ['offensive_or_abusive'], replyMethod: ['ai'] }, notes: 'Benign follow-up AFTER an offensive turn. Must judge the CURRENT message on its own — not stay OFFENSIVE because the prior turn was.' },
+
+
+    // ===== Category 37 (No Bot Closings) — MULTI-TURN drift coverage =====
+    // The existing Cat 37 cases are all single-turn, which is why the bot passes them yet still
+    // drifts into offer-to-help closings deep in real threads (~12–14% of prod replies). These
+    // reproduce the drift: several turns already ended cleanly, then the customer presses — the
+    // new reply must still end on the answer with no sign-off. Includes a non-AR/EN thread to
+    // confirm the v50 tail reminder (Layer 1) generalizes beyond Arabic (the deterministic
+    // stripper is AR/EN-only and ships in shadow, so French relies on the prompt).
+    {
+        id: 660, category: 37, categoryName: 'No Bot Closings', channel: 'dm',
+        message: 'وكم مدتها؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'مرحبا' },
+            { role: 'assistant', content: 'أهلين فيك 🌟' },
+            { role: 'user', content: 'عندكم دورة انجليزي؟' },
+            { role: 'assistant', content: 'نعم، عندنا دورة إنجليزي للمبتدئين والمتقدمين.' },
+            { role: 'user', content: 'تمام' },
+            { role: 'assistant', content: 'بالتوفيق 🌷' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['إذا لزمك', 'أنا هنا', 'لا تتردد', 'خبرني إذا', 'بخدمتك', 'تحت أمرك', 'feel free', 'let me know if'],
+        },
+        notes: 'Multi-turn: deep in the thread the reply must not append an availability/help closing.',
+    },
+    {
+        id: 661, category: 37, categoryName: 'No Bot Closings', channel: 'dm',
+        message: 'طيب والسعر؟',
+        page: 'clinic',
+        conversationHistory: [
+            { role: 'user', content: 'السلام عليكم' },
+            { role: 'assistant', content: 'وعليكم السلام 🌿' },
+            { role: 'user', content: 'شو الخدمات يلي بتقدموها؟' },
+            { role: 'assistant', content: 'نقدّم تنظيف بشرة عميق وجلسات نضارة وليزر.' },
+            { role: 'user', content: 'حلو كتير' },
+            { role: 'assistant', content: 'يسعدني هالاهتمام 🌸' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['إذا احتجت', 'أنا هنا', 'لا تتردد', 'بخدمتك', 'تحت أمرك', 'جاهزة لمساعدتك'],
+        },
+        notes: 'Multi-turn Levantine: pressing for price late in the thread must not trigger a bot sign-off.',
+    },
+    {
+        id: 662, category: 37, categoryName: 'No Bot Closings', channel: 'dm',
+        message: 'Vous livrez à Tunis?',
+        page: 'fashion',
+        conversationHistory: [
+            { role: 'user', content: 'Bonjour' },
+            { role: 'assistant', content: 'Bonjour 🌟' },
+            { role: 'user', content: 'Vous avez des robes de soirée?' },
+            { role: 'assistant', content: 'Oui, nous avons plusieurs robes de soirée disponibles.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ["n'hésitez pas", "N'hésitez", 'je suis là pour vous aider', 'à votre disposition'],
+        },
+        notes: 'Non-AR/EN (French) multi-turn: closing suppression comes from the v50 prompt reminder (Layer 1).',
+    },
 ];
 
 // ---------------------------------------------------------------------------
