@@ -12,6 +12,7 @@ import { aiCostSnapshots } from '../db/schema';
 import { and, gte, lte, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { resolvePeriodRange, analyticsService, type AdminUserAiCostPeriod } from './analytics';
+import { round2, utcDateStr } from './aiCostShared';
 import type { OpenAiCostRow } from './openaiCosts';
 
 /** Human label for a known api_key_id (prod vs eval/dev), else 'other'. */
@@ -21,13 +22,6 @@ export function apiKeyLabel(apiKeyId: string): ApiKeyLabel {
     if (apiKeyId && apiKeyId === config.openaiAdmin.evalKeyId) return 'eval_dev';
     return 'other';
 }
-
-/** UTC YYYY-MM-DD for a Date (snapshot rows are keyed by UTC day). */
-function utcDateStr(d: Date): string {
-    return d.toISOString().slice(0, 10);
-}
-
-const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /**
  * Idempotent bulk upsert keyed on the natural grain (usage_date, api_key_id, model,

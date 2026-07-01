@@ -12,10 +12,11 @@
 import * as Sentry from '@sentry/node';
 import { db } from '../db';
 import { aiCreditBalance, aiCostSnapshots } from '../db/schema';
-import { and, eq, gte, lt, desc, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, desc, sql, type SQL } from 'drizzle-orm';
 import { config } from '../config';
 import { redis } from '../lib/redis';
 import { emailService } from './email';
+import { round2, utcDateStr } from './aiCostShared';
 
 export type AiCostSeverity = 'ok' | 'warning' | 'critical';
 
@@ -35,9 +36,6 @@ export interface AiCreditRunway {
     /** True when the reactive insufficient_quota alert is currently active (already out). */
     currentlyParking: boolean;
 }
-
-const round2 = (v: number) => Math.round(v * 100) / 100;
-function utcDateStr(d: Date): string { return d.toISOString().slice(0, 10); }
 
 /** Latest balance anchor row (most recently set wins), or null if never set. */
 export async function getBalanceAnchor(): Promise<{ balanceUsd: number; anchoredAt: string; note: string | null } | null> {
@@ -63,11 +61,16 @@ export async function setBalanceAnchor(opts: { balanceUsd: number; anchoredAt: s
     });
 }
 
-async function sumSnapshots(fromDate: string): Promise<number> {
+/**
+ * Sum snapshot amount_usd over an arbitrary WHERE condition. The SUM projection is
+ * identical across every rollup (runway, rolling rate, spike day/baseline); only
+ * the filter differs — so callers pass the condition and this stays the one query.
+ */
+async function sumSnapshots(where: SQL | undefined): Promise<number> {
     const [row] = await db
         .select({ total: sql<string>`COALESCE(SUM(${aiCostSnapshots.amountUsd}), 0)` })
         .from(aiCostSnapshots)
-        .where(gte(aiCostSnapshots.usageDate, fromDate));
+        .where(where);
     return Number(row?.total ?? 0);
 }
 
@@ -87,7 +90,7 @@ export async function computeRunway(now: Date = new Date()): Promise<AiCreditRun
 
     // Rolling daily org rate over the last N days (independent of the anchor).
     const rollingStart = utcDateStr(new Date(now.getTime() - cfg.rollingRateDays * 86400_000));
-    const rollingSpent = await sumSnapshots(rollingStart);
+    const rollingSpent = await sumSnapshots(gte(aiCostSnapshots.usageDate, rollingStart));
     const rollingDailyRateUsd = round2(rollingSpent / cfg.rollingRateDays);
 
     if (!anchor) {
@@ -101,7 +104,7 @@ export async function computeRunway(now: Date = new Date()): Promise<AiCreditRun
         };
     }
 
-    const orgSpentSinceAnchorUsd = round2(await sumSnapshots(anchor.anchoredAt));
+    const orgSpentSinceAnchorUsd = round2(await sumSnapshots(gte(aiCostSnapshots.usageDate, anchor.anchoredAt)));
     const remainingUsd = round2(anchor.balanceUsd - orgSpentSinceAnchorUsd);
     const runwayDays = rollingDailyRateUsd > 0 ? Math.round((remainingUsd / rollingDailyRateUsd) * 10) / 10 : null;
 
@@ -126,51 +129,63 @@ export async function computeRunway(now: Date = new Date()): Promise<AiCreditRun
 }
 
 /**
- * Evaluate runway and fire a throttled proactive alert when warning/critical.
- * Reuses the alertQuotaExhausted pattern (Redis SET-NX dedup + Sentry + admin
- * email) but on a SEPARATE key so it never collides with the reactive alert.
- * Called by the daily snapshot cron after snapshots are upserted.
+ * Fire a throttled admin alert: Redis SET-NX dedup (per `dedupKey`), one Sentry
+ * message, and a fire-and-forget email to every admin. Shared by the credit-low
+ * and spend-spike alerts so the dispatch shape lives in one place. Mirrors the
+ * reactive `alertQuotaExhausted` in ai.ts (left separate — it's on the reply path).
+ */
+async function sendThrottledAdminAlert(opts: {
+    dedupKey: string;
+    cooldownSeconds: number;
+    level: 'warning' | 'error';
+    message: string;
+    tags: Record<string, string>;
+    extra: Record<string, unknown>;
+    subject: string;
+    html: string;
+}): Promise<void> {
+    let shouldAlert = true;
+    try {
+        const acquired = await redis.set(opts.dedupKey, '1', 'EX', opts.cooldownSeconds, 'NX');
+        shouldAlert = acquired === 'OK';
+    } catch {
+        // Redis unavailable — still alert (a duplicate beats silence before an outage).
+    }
+    if (!shouldAlert) return;
+
+    Sentry.captureMessage(opts.message, { level: opts.level, tags: opts.tags, extra: opts.extra });
+    for (const to of config.adminEmails) {
+        void emailService.send({ to, subject: opts.subject, html: opts.html, type: 'transactional' })
+            .catch(() => { /* best-effort; never throw from the cron */ });
+    }
+}
+
+/**
+ * Evaluate runway and fire the throttled proactive "credits low" alert when
+ * warning/critical, on a SEPARATE dedup key from the reactive insufficient_quota
+ * alert. Called by the daily snapshot cron after snapshots are upserted.
  */
 export async function evaluateAndAlert(now: Date = new Date()): Promise<AiCreditRunway> {
     const runway = await computeRunway(now);
     if (runway.severity === 'ok') return runway;
 
-    const dedupKey = 'alert:openai_credit_low';
-    let shouldAlert = true;
-    try {
-        const acquired = await redis.set(dedupKey, '1', 'EX', config.aiCostMonitoring.creditLowAlertCooldownSeconds, 'NX');
-        shouldAlert = acquired === 'OK';
-    } catch {
-        // Redis unavailable — still alert (a duplicate beats silence before an outage).
-    }
-    if (!shouldAlert) return runway;
-
     const remaining = runway.remainingUsd ?? 0;
-    const days = runway.runwayDays;
-    Sentry.captureMessage('OpenAI credit low — top up before the wallet hits zero', {
+    const daysText = runway.runwayDays === null ? 'unknown' : `~${runway.runwayDays}`;
+    await sendThrottledAdminAlert({
+        dedupKey: 'alert:openai_credit_low',
+        cooldownSeconds: config.aiCostMonitoring.creditLowAlertCooldownSeconds,
         level: runway.severity === 'critical' ? 'error' : 'warning',
+        message: 'OpenAI credit low — top up before the wallet hits zero',
         tags: { alert: 'openai_credit_low', severity: runway.severity },
-        extra: { remainingUsd: remaining, runwayDays: days, rollingDailyRateUsd: runway.rollingDailyRateUsd, currentlyParking: runway.currentlyParking },
-    });
-
-    const admins = config.adminEmails;
-    if (admins.length > 0) {
-        const daysText = days === null ? 'unknown' : `~${days}`;
-        const html = `<p><b>OpenAI credit is running low.</b> Top up before it hits zero — at zero, all auto-replies stop (the 2026-06-28 outage).</p>`
+        extra: { remainingUsd: remaining, runwayDays: runway.runwayDays, rollingDailyRateUsd: runway.rollingDailyRateUsd, currentlyParking: runway.currentlyParking },
+        subject: runway.severity === 'critical'
+            ? '🚨 Jawab24: OpenAI credit critically low — top up now'
+            : '⚠️ Jawab24: OpenAI credit running low',
+        html: `<p><b>OpenAI credit is running low.</b> Top up before it hits zero — at zero, all auto-replies stop (the 2026-06-28 outage).</p>`
             + `<p>Estimated remaining: <b>$${remaining.toFixed(2)}</b><br/>Runway at current rate: <b>${daysText} days</b> ($${runway.rollingDailyRateUsd.toFixed(2)}/day)</p>`
             + (runway.currentlyParking ? `<p><b>⚠️ Replies are ALREADY parking on insufficient_quota right now.</b></p>` : '')
-            + `<p><b>Action:</b> add credit / enable auto-recharge in the OpenAI billing dashboard, then update the balance in the admin AI Cost panel.</p>`;
-        for (const to of admins) {
-            void emailService.send({
-                to,
-                subject: runway.severity === 'critical'
-                    ? '🚨 Jawab24: OpenAI credit critically low — top up now'
-                    : '⚠️ Jawab24: OpenAI credit running low',
-                html,
-                type: 'transactional',
-            }).catch(() => { /* best-effort; never throw from the cron */ });
-        }
-    }
+            + `<p><b>Action:</b> add credit / enable auto-recharge in the OpenAI billing dashboard, then update the balance in the admin AI Cost panel.</p>`,
+    });
 
     return runway;
 }
@@ -186,22 +201,6 @@ export interface SpendSpike {
     ratio: number | null;
 }
 
-async function sumSnapshotsBetween(fromInclusive: string, toExclusive: string): Promise<number> {
-    const [row] = await db
-        .select({ total: sql<string>`COALESCE(SUM(${aiCostSnapshots.amountUsd}), 0)` })
-        .from(aiCostSnapshots)
-        .where(and(gte(aiCostSnapshots.usageDate, fromInclusive), lt(aiCostSnapshots.usageDate, toExclusive)));
-    return Number(row?.total ?? 0);
-}
-
-async function sumSnapshotsForDay(day: string): Promise<number> {
-    const [row] = await db
-        .select({ total: sql<string>`COALESCE(SUM(${aiCostSnapshots.amountUsd}), 0)` })
-        .from(aiCostSnapshots)
-        .where(eq(aiCostSnapshots.usageDate, day));
-    return Number(row?.total ?? 0);
-}
-
 /**
  * Detect an org spend spike: the latest complete day (yesterday, UTC) vs the
  * average of the `spendSpikeBaselineDays` days before it. A spike requires the day
@@ -215,9 +214,11 @@ export async function detectSpendSpike(now: Date = new Date()): Promise<SpendSpi
     const day = utcDateStr(new Date(now.getTime() - dayMs)); // yesterday = latest complete day
     const baselineStart = utcDateStr(new Date(now.getTime() - (cfg.spendSpikeBaselineDays + 1) * dayMs));
 
-    const dayUsd = round2(await sumSnapshotsForDay(day));
+    const dayUsd = round2(await sumSnapshots(eq(aiCostSnapshots.usageDate, day)));
     // Baseline = [baselineStart, day) — the N days immediately before `day`.
-    const baselineDailyUsd = round2((await sumSnapshotsBetween(baselineStart, day)) / cfg.spendSpikeBaselineDays);
+    const baselineDailyUsd = round2(
+        (await sumSnapshots(and(gte(aiCostSnapshots.usageDate, baselineStart), lt(aiCostSnapshots.usageDate, day)))) / cfg.spendSpikeBaselineDays,
+    );
     const ratio = baselineDailyUsd > 0 ? Math.round((dayUsd / baselineDailyUsd) * 10) / 10 : null;
 
     const spike = dayUsd >= cfg.spendSpikeMinDailyUsd
@@ -236,36 +237,19 @@ export async function evaluateSpendSpikeAndAlert(now: Date = new Date()): Promis
     const result = await detectSpendSpike(now);
     if (!result.spike) return result;
 
-    let shouldAlert = true;
-    try {
-        const acquired = await redis.set('alert:openai_spend_spike', '1', 'EX', config.aiCostMonitoring.spendSpikeAlertCooldownSeconds, 'NX');
-        shouldAlert = acquired === 'OK';
-    } catch {
-        // Redis down — alert anyway (a duplicate beats missing a runaway spend).
-    }
-    if (!shouldAlert) return result;
-
-    Sentry.captureMessage('OpenAI spend spike — daily cost well above baseline', {
+    const ratioText = result.ratio === null ? 'n/a' : `${result.ratio}×`;
+    await sendThrottledAdminAlert({
+        dedupKey: 'alert:openai_spend_spike',
+        cooldownSeconds: config.aiCostMonitoring.spendSpikeAlertCooldownSeconds,
         level: 'warning',
+        message: 'OpenAI spend spike — daily cost well above baseline',
         tags: { alert: 'openai_spend_spike' },
         extra: { day: result.day, dayUsd: result.dayUsd, baselineDailyUsd: result.baselineDailyUsd, ratio: result.ratio },
-    });
-
-    const admins = config.adminEmails;
-    if (admins.length > 0) {
-        const ratioText = result.ratio === null ? 'n/a' : `${result.ratio}×`;
-        const html = `<p><b>OpenAI spend spiked on ${result.day}.</b></p>`
+        subject: '⚠️ Jawab24: OpenAI spend spike detected',
+        html: `<p><b>OpenAI spend spiked on ${result.day}.</b></p>`
             + `<p>That day: <b>$${result.dayUsd.toFixed(2)}</b> vs a ${config.aiCostMonitoring.spendSpikeBaselineDays}-day baseline of <b>$${result.baselineDailyUsd.toFixed(2)}/day</b> (<b>${ratioText}</b>).</p>`
-            + `<p><b>Check:</b> a runaway loop, a model misconfig, or unusual traffic. See /admin/ai-cost for the by-feature/by-model breakdown.</p>`;
-        for (const to of admins) {
-            void emailService.send({
-                to,
-                subject: '⚠️ Jawab24: OpenAI spend spike detected',
-                html,
-                type: 'transactional',
-            }).catch(() => { /* best-effort */ });
-        }
-    }
+            + `<p><b>Check:</b> a runaway loop, a model misconfig, or unusual traffic. See /admin/ai-cost for the by-feature/by-model breakdown.</p>`,
+    });
 
     return result;
 }

@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, ConfirmationModal, Modal } from '@/components/ui';
 import { StatCard } from '@/components/admin/StatCard';
+import { formatCostUsd } from '@/utils/pricing';
 import { analyticsApi, adminApi } from '@/lib/api';
 import type { AiUsageReport, AnalyticsOverview, SystemHealthReport, CacheStats } from '@/lib/api';
 import type { ActivationFunnel, ActivationEvent } from '@jawab24/shared';
@@ -263,7 +264,6 @@ export default function AdminObservabilityPage() {
     },
   });
 
-  const formatCost = (usd: number) => `$${usd.toFixed(4)}`;
   const formatUptime = (s: number) => {
     const d = Math.floor(s / 86400);
     const h = Math.floor((s % 86400) / 3600);
@@ -365,9 +365,9 @@ export default function AdminObservabilityPage() {
                               <td className="py-2 text-end text-foreground">{stats.calls.toLocaleString()}</td>
                               <td className="py-2 text-end text-foreground">{stats.cacheHits.toLocaleString()}</td>
                               <td className="py-2 text-end text-muted-foreground">
-                                {stats.calls > 0 ? formatCost(stats.costUsd / stats.calls) : '—'}
+                                {stats.calls > 0 ? formatCostUsd(stats.costUsd / stats.calls) : '—'}
                               </td>
-                              <td className="py-2 text-end font-medium text-foreground">{formatCost(stats.costUsd)}</td>
+                              <td className="py-2 text-end font-medium text-foreground">{formatCostUsd(stats.costUsd)}</td>
                             </tr>
                           ))}
                       </tbody>
@@ -388,7 +388,7 @@ export default function AdminObservabilityPage() {
                           key={day.date}
                           className="flex-1 bg-brand-500 dark:bg-brand-400 rounded-t transition-all hover:bg-brand-600 dark:hover:bg-brand-300 min-w-[2px]"
                           style={{ height: `${Math.max((day.costUsd / maxCost) * 100, 2)}%` }}
-                          title={`${day.date}: ${formatCost(day.costUsd)} (${day.calls} ${t('observability.calls').toLowerCase()})`}
+                          title={`${day.date}: ${formatCostUsd(day.costUsd)} (${day.calls} ${t('observability.calls').toLowerCase()})`}
                         />
                       ));
                     })()}
