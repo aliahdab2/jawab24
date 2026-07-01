@@ -5,9 +5,8 @@ import { useTranslations } from 'next-intl';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, ConfirmationModal, Modal } from '@/components/ui';
 import { StatCard } from '@/components/admin/StatCard';
-import { formatCostUsd } from '@/utils/pricing';
 import { analyticsApi, adminApi } from '@/lib/api';
-import type { AiUsageReport, AnalyticsOverview, SystemHealthReport, CacheStats } from '@/lib/api';
+import type { AnalyticsOverview, SystemHealthReport, CacheStats } from '@/lib/api';
 import type { ActivationFunnel, ActivationEvent } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
 import { makeGetStaticProps } from '@/i18n/getMessages';
@@ -180,17 +179,6 @@ export default function AdminObservabilityPage() {
     meta: { onError: (err: unknown) => captureError(err, 'Failed to load system health', { tags: { page: 'observability' } }) },
   });
 
-  const { data: aiUsage, isLoading: aiLoading } = useQuery<AiUsageReport>({
-    queryKey: ['admin', 'ai-usage-global', days],
-    queryFn: async () => {
-      const res = await analyticsApi.getAiUsageGlobal(days);
-      return res.data;
-    },
-    staleTime: 60_000,
-    retry: false,
-    meta: { onError: (err: unknown) => captureError(err, 'Failed to load AI usage', { tags: { page: 'observability' } }) },
-  });
-
   const { data: overview, isLoading: overviewLoading } = useQuery<AnalyticsOverview>({
     queryKey: ['admin', 'overview', days],
     queryFn: async () => {
@@ -202,7 +190,7 @@ export default function AdminObservabilityPage() {
     meta: { onError: (err: unknown) => captureError(err, 'Failed to load overview', { tags: { page: 'observability' } }) },
   });
 
-  const isLoading = aiLoading || overviewLoading;
+  const isLoading = overviewLoading;
 
   const { data: funnel } = useQuery<ActivationFunnel>({
     queryKey: ['admin', 'activation-funnel', days],
@@ -332,74 +320,9 @@ export default function AdminObservabilityPage() {
               </section>
             )}
 
-            {/* AI Cost Section */}
-            <section>
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                {t('observability.aiCost')}
-              </h2>
-              {/* Headline cost/calls/cache-hit + cost-by-model now live on the dedicated
-                  /admin/ai-cost panel. This section keeps only the analytics that panel
-                  doesn't cover: cost-by-intent and the daily-spend trend. */}
-
-              {/* Cost by intent — surfaces which intents drive cost; informs cheaper-model routing */}
-              {aiUsage && Object.keys(aiUsage.byIntent).length > 0 && (
-                <Card className="mt-3 p-4">
-                  <h3 className="text-sm font-semibold text-foreground mb-3">{t('observability.costByIntent')}</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-theme-border">
-                          <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.intent')}</th>
-                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.calls')}</th>
-                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.cacheHits')}</th>
-                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.avgCostPerCall')}</th>
-                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.cost')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.entries(aiUsage.byIntent)
-                          .sort(([, a], [, b]) => b.costUsd - a.costUsd)
-                          .map(([intent, stats]) => (
-                            <tr key={intent} className="border-b border-theme-border last:border-0">
-                              <td className="py-2 font-mono text-xs text-foreground">{intent}</td>
-                              <td className="py-2 text-end text-foreground">{stats.calls.toLocaleString()}</td>
-                              <td className="py-2 text-end text-foreground">{stats.cacheHits.toLocaleString()}</td>
-                              <td className="py-2 text-end text-muted-foreground">
-                                {stats.calls > 0 ? formatCostUsd(stats.costUsd / stats.calls) : '—'}
-                              </td>
-                              <td className="py-2 text-end font-medium text-foreground">{formatCostUsd(stats.costUsd)}</td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              )}
-
-              {/* Daily cost chart (simple bar representation) */}
-              {aiUsage && aiUsage.byDay.length > 0 && (
-                <Card className="mt-3 p-4">
-                  <h3 className="text-sm font-semibold text-foreground mb-3">{t('observability.costByDay')}</h3>
-                  <div className="flex items-end gap-0.5 h-24">
-                    {(() => {
-                      const maxCost = Math.max(...aiUsage.byDay.map(d => d.costUsd), 0.0001);
-                      return aiUsage.byDay.map((day) => (
-                        <div
-                          key={day.date}
-                          className="flex-1 bg-brand-500 dark:bg-brand-400 rounded-t transition-all hover:bg-brand-600 dark:hover:bg-brand-300 min-w-[2px]"
-                          style={{ height: `${Math.max((day.costUsd / maxCost) * 100, 2)}%` }}
-                          title={`${day.date}: ${formatCostUsd(day.costUsd)} (${day.calls} ${t('observability.calls').toLowerCase()})`}
-                        />
-                      ));
-                    })()}
-                  </div>
-                  <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
-                    <span>{aiUsage.byDay[0]?.date}</span>
-                    <span>{aiUsage.byDay[aiUsage.byDay.length - 1]?.date}</span>
-                  </div>
-                </Card>
-              )}
-            </section>
+            {/* AI cost now lives entirely on /admin/ai-cost (consumption + billing +
+                reconciliation + runway + by-intent + daily trend). Observability is
+                ops-only: system health, activation funnel, cache management, digests. */}
 
             {/* Reply Pipeline Section */}
             {overview && (
@@ -694,7 +617,7 @@ export default function AdminObservabilityPage() {
               ) : null}
             </section>
 
-            {!aiUsage && !overview && !health && (
+            {!overview && !health && (
               <div className="text-center py-12 text-muted-foreground">
                 {t('observability.noData')}
               </div>

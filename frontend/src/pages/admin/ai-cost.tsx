@@ -326,6 +326,61 @@ export default function AdminAiCostPage() {
                   </table>
                 </div>
               </Card>
+
+              {/* Cost by intent — surfaces which intents drive cost (informs cheaper-model routing). */}
+              {consumption.data!.byIntent.length > 0 && (
+                <Card>
+                  <h3 className="text-lg font-semibold text-foreground mb-4">{t('aiCost.secByIntent')}</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-theme-border">
+                          <th className="text-start pb-2 text-muted-foreground font-medium">{t('aiCost.colIntent')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('aiCost.colBilled')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('aiCost.colCached')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('aiCost.colAvgPerCall')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('aiCost.colCost')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {consumption.data!.byIntent.map((row) => (
+                          <tr key={row.intent} className="border-b border-theme-border last:border-0">
+                            <td className="py-2 text-foreground">{row.intent}</td>
+                            <td className="py-2 text-end text-foreground">{(row.calls - row.cacheHits).toLocaleString()}</td>
+                            <td className="py-2 text-end text-foreground">{row.cacheHits.toLocaleString()}</td>
+                            <td className="py-2 text-end text-muted-foreground">{formatCostUsd(row.avgCostPerCallUsd)}</td>
+                            <td className="py-2 text-end font-medium text-foreground">{formatCostUsd(row.costUsd)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
+              {/* Daily spend trend (simple bars) — spot spikes at a glance. */}
+              {consumption.data!.byDay.length > 0 && (
+                <Card>
+                  <h3 className="text-lg font-semibold text-foreground mb-4">{t('aiCost.secByDay')}</h3>
+                  <div className="flex items-end gap-0.5 h-24">
+                    {(() => {
+                      const maxCost = Math.max(...consumption.data!.byDay.map(d => d.costUsd), 0.0001);
+                      return consumption.data!.byDay.map((day) => (
+                        <div
+                          key={day.date}
+                          className="flex-1 bg-brand-500 dark:bg-brand-400 rounded-t transition-all hover:bg-brand-600 dark:hover:bg-brand-300 min-w-[2px]"
+                          style={{ height: `${Math.max((day.costUsd / maxCost) * 100, 2)}%` }}
+                          title={`${day.date}: ${formatCostUsd(day.costUsd)}`}
+                        />
+                      ));
+                    })()}
+                  </div>
+                  <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
+                    <span dir="ltr">{consumption.data!.byDay[0]?.date}</span>
+                    <span dir="ltr">{consumption.data!.byDay[consumption.data!.byDay.length - 1]?.date}</span>
+                  </div>
+                </Card>
+              )}
             </div>
           )}
         </section>
