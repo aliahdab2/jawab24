@@ -5,7 +5,6 @@ import analyticsRoutes from '../../src/routes/analytics';
 vi.mock('../../src/controllers/analytics', () => ({
     analyticsController: {
         getAiUsage: vi.fn((_req: unknown, reply: { send: (data: unknown) => unknown }) => reply.send({ ok: true })),
-        getAiUsageGlobal: vi.fn((_req: unknown, reply: { send: (data: unknown) => unknown }) => reply.send({ ok: true })),
         getOverview: vi.fn((_req: unknown, reply: { send: (data: unknown) => unknown }) => reply.send({ ok: true })),
     },
 }));
@@ -35,7 +34,6 @@ vi.mock('../../src/utils/healthChecks', () => ({
 vi.mock('../../src/services/analytics', () => ({
     analyticsService: {
         getAiUsage: vi.fn(),
-        getAiUsageGlobal: vi.fn(),
         getOverview: vi.fn(),
     },
 }));

@@ -428,14 +428,20 @@ describe('AnalyticsService', () => {
     });
 
     describe('getGlobalAiCostByPipeline', () => {
-        // Global query chains .from().where().groupBy() (NO leftJoin, NO userId filter)
-        // and resolves grouped (pipeline, model) rows. Uses the REAL aiPricing so the
-        // prompt-cache-savings math is genuinely exercised.
-        function setupGlobalMock(rows: any[]) {
-            const mockGroupBy = vi.fn().mockResolvedValue(rows);
-            const mockWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
-            const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
-            vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
+        // Runs THREE parallel grouped scans: (pipeline,model), by-intent, by-day.
+        // Queue a resolved chain per db.select() call in that order. Uses the REAL
+        // aiPricing so the prompt-cache-savings math is genuinely exercised.
+        function chain(rows: any[]) {
+            const groupBy = vi.fn().mockResolvedValue(rows);
+            const where = vi.fn().mockReturnValue({ groupBy });
+            const from = vi.fn().mockReturnValue({ where });
+            return { from };
+        }
+        function setupGlobalMock(mainRows: any[], intentRows: any[] = [], dayRows: any[] = []) {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(chain(mainRows) as any)
+                .mockReturnValueOnce(chain(intentRows) as any)
+                .mockReturnValueOnce(chain(dayRows) as any);
         }
 
         it('returns empty breakdowns and zeroed totals when no rows exist', async () => {
@@ -451,12 +457,24 @@ describe('AnalyticsService', () => {
         });
 
         it('aggregates totals, billed/cached split, and prompt-cache savings across models', async () => {
-            setupGlobalMock([
-                { pipeline: 'dm_reply', model: 'gpt-4.1-mini', calls: 100, cacheHits: 40, tokensIn: 50000, cachedInputTokens: 30000, tokensOut: 10000, costUsd: 0.20 },
-                { pipeline: 'dm_reply', model: 'gpt-4o-mini', calls: 50, cacheHits: 10, tokensIn: 20000, cachedInputTokens: 5000, tokensOut: 4000, costUsd: 0.05 },
-                { pipeline: 'embedding_rag', model: 'text-embedding-3-small', calls: 500, cacheHits: 0, tokensIn: 100000, cachedInputTokens: 0, tokensOut: 0, costUsd: 0.02 },
-                { pipeline: null, model: 'gpt-4.1-mini', calls: 5, cacheHits: 0, tokensIn: 1000, cachedInputTokens: 0, tokensOut: 200, costUsd: 0.001 },
-            ]);
+            setupGlobalMock(
+                [
+                    { pipeline: 'dm_reply', model: 'gpt-4.1-mini', calls: 100, cacheHits: 40, tokensIn: 50000, cachedInputTokens: 30000, tokensOut: 10000, costUsd: 0.20 },
+                    { pipeline: 'dm_reply', model: 'gpt-4o-mini', calls: 50, cacheHits: 10, tokensIn: 20000, cachedInputTokens: 5000, tokensOut: 4000, costUsd: 0.05 },
+                    { pipeline: 'embedding_rag', model: 'text-embedding-3-small', calls: 500, cacheHits: 0, tokensIn: 100000, cachedInputTokens: 0, tokensOut: 0, costUsd: 0.02 },
+                    { pipeline: null, model: 'gpt-4.1-mini', calls: 5, cacheHits: 0, tokensIn: 1000, cachedInputTokens: 0, tokensOut: 200, costUsd: 0.001 },
+                ],
+                // intent rows
+                [
+                    { intent: 'GREETING', calls: 80, cacheHits: 30, costUsd: 0.10 },
+                    { intent: null, calls: 20, cacheHits: 0, costUsd: 0.05 },
+                ],
+                // day rows (out of order → service sorts ascending)
+                [
+                    { day: '2026-06-29', calls: 55, costUsd: 0.15 },
+                    { day: '2026-06-28', calls: 100, costUsd: 0.12 },
+                ],
+            );
 
             const result = await service.getGlobalAiCostByPipeline('30d');
 
@@ -487,6 +505,17 @@ describe('AnalyticsService', () => {
             expect(mini.cachedInputTokens).toBe(30000);
             expect(mini.promptCacheSavingsUsd).toBeCloseTo(0.009, 6);
             expect(mini.costUsd).toBeCloseTo(0.201, 6);
+
+            // byIntent sorted by cost desc; null intent → 'unknown'; avg = cost/calls.
+            expect(result.byIntent.map(i => i.intent)).toEqual(['GREETING', 'unknown']);
+            const greeting = result.byIntent.find(i => i.intent === 'GREETING')!;
+            expect(greeting.cacheHits).toBe(30);
+            expect(greeting.costUsd).toBeCloseTo(0.10, 6);
+            expect(greeting.avgCostPerCallUsd).toBeCloseTo(0.00125, 6);
+
+            // byDay sorted ascending by date.
+            expect(result.byDay.map(d => d.date)).toEqual(['2026-06-28', '2026-06-29']);
+            expect(result.byDay[0].costUsd).toBeCloseTo(0.12, 6);
         });
     });
 });

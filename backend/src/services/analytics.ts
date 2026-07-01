@@ -268,16 +268,11 @@ export class AnalyticsService {
         return this.queryAiUsage(days, userId);
     }
 
-    /** Platform-wide AI usage across all users — admin observability only. */
-    async getAiUsageGlobal(days: number = 30): Promise<AiUsageReport> {
-        return this.queryAiUsage(days, null);
-    }
-
-    private async queryAiUsage(days: number, userId: string | null): Promise<AiUsageReport> {
+    private async queryAiUsage(days: number, userId: string): Promise<AiUsageReport> {
         const now = new Date();
         const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
-        const userFilter = userId ? eq(aiUsageLog.userId, userId) : undefined;
+        const userFilter = eq(aiUsageLog.userId, userId);
 
         const [rows, intentRows] = await Promise.all([
             db
@@ -522,9 +517,13 @@ export class AnalyticsService {
      */
     async getGlobalAiCostByPipeline(period: AdminUserAiCostPeriod = '30d'): Promise<AdminGlobalAiCostReport> {
         const { rangeStart, rangeEnd } = resolvePeriodRange(period);
+        const inRange = and(gte(aiUsageLog.createdAt, rangeStart), lt(aiUsageLog.createdAt, rangeEnd));
 
-        const rows = await db
-            .select({
+        // Three grouped scans in parallel: (pipeline, model) for the by-feature/by-model
+        // rollups + totals, by-intent, and by-day (the daily-spend trend). All from the
+        // same ai_usage_log window so /admin/ai-cost is the single home for cost analytics.
+        const [rows, intentRows, dayRows] = await Promise.all([
+            db.select({
                 pipeline: aiUsageLog.pipeline,
                 model: aiUsageLog.model,
                 calls: sql<number>`count(*)`,
@@ -533,13 +532,19 @@ export class AnalyticsService {
                 cachedInputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.cachedInputTokens}), 0)`,
                 tokensOut: sql<number>`COALESCE(SUM(${aiUsageLog.tokensOut}), 0)`,
                 costUsd: sql<number>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
-            })
-            .from(aiUsageLog)
-            .where(and(
-                gte(aiUsageLog.createdAt, rangeStart),
-                lt(aiUsageLog.createdAt, rangeEnd),
-            ))
-            .groupBy(aiUsageLog.pipeline, aiUsageLog.model);
+            }).from(aiUsageLog).where(inRange).groupBy(aiUsageLog.pipeline, aiUsageLog.model),
+            db.select({
+                intent: aiUsageLog.intent,
+                calls: sql<number>`count(*)`,
+                cacheHits: sql<number>`count(*) filter (where ${aiUsageLog.cached} = true)`,
+                costUsd: sql<number>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
+            }).from(aiUsageLog).where(inRange).groupBy(aiUsageLog.intent),
+            db.select({
+                day: sql<string>`DATE(${aiUsageLog.createdAt})::text`,
+                calls: sql<number>`count(*)`,
+                costUsd: sql<number>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
+            }).from(aiUsageLog).where(inRange).groupBy(sql`DATE(${aiUsageLog.createdAt})`),
+        ]);
 
         const roundCost = (v: number) => Math.round(v * 1_000_000) / 1_000_000;
         const totals = {
@@ -604,6 +609,24 @@ export class AnalyticsService {
         totals.promptCacheSavingsUsd = roundCost(totals.promptCacheSavingsUsd);
         const internalCacheHitRate = totals.calls > 0 ? totals.cacheHits / totals.calls : 0;
 
+        const byIntent = intentRows.map(r => {
+            const calls = Number(r.calls);
+            const costUsd = Number(r.costUsd);
+            return {
+                intent: r.intent ?? 'unknown',
+                calls,
+                cacheHits: Number(r.cacheHits),
+                costUsd: roundCost(costUsd),
+                avgCostPerCallUsd: calls > 0 ? roundCost(costUsd / calls) : 0,
+            };
+        }).sort((a, b) => b.costUsd - a.costUsd);
+
+        const byDay = dayRows.map(r => ({
+            date: r.day,
+            calls: Number(r.calls),
+            costUsd: roundCost(Number(r.costUsd)),
+        })).sort((a, b) => a.date.localeCompare(b.date));
+
         return {
             period,
             rangeStart: rangeStart.toISOString(),
@@ -611,6 +634,8 @@ export class AnalyticsService {
             totals: { ...totals, internalCacheHitRate },
             byPipeline,
             byModel,
+            byIntent,
+            byDay,
         };
     }
 
@@ -691,6 +716,10 @@ export interface AdminGlobalAiCostReport {
     };
     byPipeline: AdminGlobalAiCostPipelineRow[];
     byModel: AdminGlobalAiCostModelRow[];
+    /** Cost by classified intent (GREETING, COMPLAINT, …) — informs cheaper-model routing. */
+    byIntent: Array<{ intent: string; calls: number; cacheHits: number; costUsd: number; avgCostPerCallUsd: number }>;
+    /** Daily spend trend over the period (ascending by date). */
+    byDay: Array<{ date: string; calls: number; costUsd: number }>;
 }
 
 export function resolvePeriodRange(period: AdminUserAiCostPeriod): { rangeStart: Date; rangeEnd: Date } {
