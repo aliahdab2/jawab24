@@ -3,7 +3,7 @@ import { users, plans, adminAuditLogs, leadDigestSends, emailSends } from '../..
 import { eq, desc } from 'drizzle-orm';
 import { analyticsService, type AdminUserAiCostPeriod } from '../analytics';
 import { getBilling, getReconciliation } from '../aiCostSnapshots';
-import { computeRunway, setBalanceAnchor } from '../aiCostMonitor';
+import { computeRunway, setBalanceAnchor, detectSpendSpike } from '../aiCostMonitor';
 import { runOpenAiCostSync } from '../aiCostSync';
 import { runDailyLeadDigest } from '../leadDigest';
 
@@ -36,9 +36,10 @@ class AdminMetricsService {
         return getReconciliation(period);
     }
 
-    /** Current OpenAI credit runway + severity (org-total burn). */
+    /** Current OpenAI credit runway + severity + latest spend-spike status. */
     async getAiRunway() {
-        return computeRunway();
+        const [runway, spendSpike] = await Promise.all([computeRunway(), detectSpendSpike()]);
+        return { ...runway, spendSpike };
     }
 
     /** Set the credit-balance anchor, then return the recomputed runway. */

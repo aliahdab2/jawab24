@@ -409,6 +409,14 @@ export interface AdminAiRunway {
   runwayDays: number | null;
   severity: 'ok' | 'warning' | 'critical';
   currentlyParking: boolean;
+  // Latest-complete-day spend spike vs the trailing baseline.
+  spendSpike?: {
+    spike: boolean;
+    day: string | null;
+    dayUsd: number;
+    baselineDailyUsd: number;
+    ratio: number | null;
+  };
 }
 
 export interface SystemHealthReport {

@@ -94,6 +94,14 @@ export const config = {
         // reactive insufficient_quota alert so neither suppresses the other.
         creditLowAlertCooldownSeconds: parseInt(process.env.AI_COST_ALERT_COOLDOWN_SECONDS || '86400', 10),
         rollingRateDays: parseInt(process.env.AI_COST_ROLLING_RATE_DAYS || '7', 10),
+        // Spend-spike guardrail: alert when the latest complete day's org spend
+        // exceeds `multiplier`× the trailing `baselineDays` average (and clears the
+        // min-daily floor, so low-volume noise doesn't page). Catches runaway usage
+        // — a bad prompt loop, abuse, a model misconfig — on day one.
+        spendSpikeMultiplier: parseFloat(process.env.AI_COST_SPIKE_MULTIPLIER || '3'),
+        spendSpikeMinDailyUsd: parseFloat(process.env.AI_COST_SPIKE_MIN_DAILY_USD || '5'),
+        spendSpikeBaselineDays: parseInt(process.env.AI_COST_SPIKE_BASELINE_DAYS || '7', 10),
+        spendSpikeAlertCooldownSeconds: parseInt(process.env.AI_COST_SPIKE_COOLDOWN_SECONDS || '86400', 10),
     },
 
     // RAG mode: 'off' = static KB, 'shadow' = run RAG but use static KB, 'on' = full RAG

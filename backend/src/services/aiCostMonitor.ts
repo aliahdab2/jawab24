@@ -12,7 +12,7 @@
 import * as Sentry from '@sentry/node';
 import { db } from '../db';
 import { aiCreditBalance, aiCostSnapshots } from '../db/schema';
-import { gte, desc, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, desc, sql } from 'drizzle-orm';
 import { config } from '../config';
 import { redis } from '../lib/redis';
 import { emailService } from './email';
@@ -173,4 +173,99 @@ export async function evaluateAndAlert(now: Date = new Date()): Promise<AiCredit
     }
 
     return runway;
+}
+
+export interface SpendSpike {
+    spike: boolean;
+    /** The latest COMPLETE day evaluated (UTC, yesterday), or null if unavailable. */
+    day: string | null;
+    dayUsd: number;
+    /** Avg org $/day over the baseline window preceding `day`. */
+    baselineDailyUsd: number;
+    /** dayUsd ÷ baselineDailyUsd; null when baseline is 0. */
+    ratio: number | null;
+}
+
+async function sumSnapshotsBetween(fromInclusive: string, toExclusive: string): Promise<number> {
+    const [row] = await db
+        .select({ total: sql<string>`COALESCE(SUM(${aiCostSnapshots.amountUsd}), 0)` })
+        .from(aiCostSnapshots)
+        .where(and(gte(aiCostSnapshots.usageDate, fromInclusive), lt(aiCostSnapshots.usageDate, toExclusive)));
+    return Number(row?.total ?? 0);
+}
+
+async function sumSnapshotsForDay(day: string): Promise<number> {
+    const [row] = await db
+        .select({ total: sql<string>`COALESCE(SUM(${aiCostSnapshots.amountUsd}), 0)` })
+        .from(aiCostSnapshots)
+        .where(eq(aiCostSnapshots.usageDate, day));
+    return Number(row?.total ?? 0);
+}
+
+/**
+ * Detect an org spend spike: the latest complete day (yesterday, UTC) vs the
+ * average of the `spendSpikeBaselineDays` days before it. A spike requires the day
+ * to clear the min-daily floor AND exceed `spendSpikeMultiplier`× the baseline.
+ * Baseline-zero (fresh usage) is intentionally NOT a spike — ramp-up shouldn't page.
+ * Uses the Costs-API org total (all keys), same wallet the credit runway tracks.
+ */
+export async function detectSpendSpike(now: Date = new Date()): Promise<SpendSpike> {
+    const cfg = config.aiCostMonitoring;
+    const dayMs = 86_400_000;
+    const day = utcDateStr(new Date(now.getTime() - dayMs)); // yesterday = latest complete day
+    const baselineStart = utcDateStr(new Date(now.getTime() - (cfg.spendSpikeBaselineDays + 1) * dayMs));
+
+    const dayUsd = round2(await sumSnapshotsForDay(day));
+    // Baseline = [baselineStart, day) — the N days immediately before `day`.
+    const baselineDailyUsd = round2((await sumSnapshotsBetween(baselineStart, day)) / cfg.spendSpikeBaselineDays);
+    const ratio = baselineDailyUsd > 0 ? Math.round((dayUsd / baselineDailyUsd) * 10) / 10 : null;
+
+    const spike = dayUsd >= cfg.spendSpikeMinDailyUsd
+        && baselineDailyUsd > 0
+        && dayUsd > cfg.spendSpikeMultiplier * baselineDailyUsd;
+
+    return { spike, day, dayUsd, baselineDailyUsd, ratio };
+}
+
+/**
+ * Evaluate the spend spike and fire a throttled alert on a SEPARATE dedup key from
+ * the credit-low / insufficient_quota alerts. Called by the daily sync after
+ * snapshots are upserted. Returns the spike result for the caller/UI.
+ */
+export async function evaluateSpendSpikeAndAlert(now: Date = new Date()): Promise<SpendSpike> {
+    const result = await detectSpendSpike(now);
+    if (!result.spike) return result;
+
+    let shouldAlert = true;
+    try {
+        const acquired = await redis.set('alert:openai_spend_spike', '1', 'EX', config.aiCostMonitoring.spendSpikeAlertCooldownSeconds, 'NX');
+        shouldAlert = acquired === 'OK';
+    } catch {
+        // Redis down — alert anyway (a duplicate beats missing a runaway spend).
+    }
+    if (!shouldAlert) return result;
+
+    Sentry.captureMessage('OpenAI spend spike — daily cost well above baseline', {
+        level: 'warning',
+        tags: { alert: 'openai_spend_spike' },
+        extra: { day: result.day, dayUsd: result.dayUsd, baselineDailyUsd: result.baselineDailyUsd, ratio: result.ratio },
+    });
+
+    const admins = config.adminEmails;
+    if (admins.length > 0) {
+        const ratioText = result.ratio === null ? 'n/a' : `${result.ratio}×`;
+        const html = `<p><b>OpenAI spend spiked on ${result.day}.</b></p>`
+            + `<p>That day: <b>$${result.dayUsd.toFixed(2)}</b> vs a ${config.aiCostMonitoring.spendSpikeBaselineDays}-day baseline of <b>$${result.baselineDailyUsd.toFixed(2)}/day</b> (<b>${ratioText}</b>).</p>`
+            + `<p><b>Check:</b> a runaway loop, a model misconfig, or unusual traffic. See /admin/ai-cost for the by-feature/by-model breakdown.</p>`;
+        for (const to of admins) {
+            void emailService.send({
+                to,
+                subject: '⚠️ Jawab24: OpenAI spend spike detected',
+                html,
+                type: 'transactional',
+            }).catch(() => { /* best-effort */ });
+        }
+    }
+
+    return result;
 }

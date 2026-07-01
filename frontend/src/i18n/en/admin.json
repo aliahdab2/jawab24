@@ -64,7 +64,8 @@
     "runwayBannerDetail": "Estimated {remaining} left — about {days} days at {rate}/day. Top up before it reaches zero.",
     "runwayBannerDetailNoRate": "Estimated {remaining} left. Top up before it reaches zero — the days-of-runway estimate appears once billing data syncs.",
     "runwayBannerParking": "Replies are parked until OpenAI credit is added. Top up now to resume.",
-    "autoRechargeHint": "Tip: enable auto-recharge in the OpenAI billing dashboard so credit never hits zero — this panel is the backup warning."
+    "autoRechargeHint": "Tip: enable auto-recharge in the OpenAI billing dashboard so credit never hits zero — this panel is the backup warning.",
+    "spikeNotice": "⚠ Spend spike on {day}: {dayUsd} vs a {baseline}/day baseline ({ratio}). Check for a runaway loop, model misconfig, or unusual traffic."
   },
   "customers": {
     "title": "Customers",
