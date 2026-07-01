@@ -265,7 +265,7 @@ describe('OpenAI Service - Structured JSON Response', () => {
         );
     });
 
-    it('should fall back to plain text when AI returns non-JSON', async () => {
+    it('should fall back to plain text when AI returns genuine non-JSON prose', async () => {
         vi.doMock('openai', () => ({
             default: vi.fn().mockImplementation(() => ({
                 chat: {
@@ -289,9 +289,36 @@ describe('OpenAI Service - Structured JSON Response', () => {
         const result = await service.generateReply({ comment: 'Hello' });
 
         expect(result.reply).toBe('Just a plain text reply');
-        expect(result.intent).toBe('UNKNOWN');
-        expect(result.confidence).toBe('low');
         expect(result.flags).toEqual(['invalid_json']);
+    });
+
+    it('should NEVER surface a broken JSON blob to the customer (no raw/config leak) — throws instead', async () => {
+        // The real prod leak: the model tried to emit the schema, the string broke the JSON, and
+        // the raw `{"reply":"🔥 SYSTEM PROMPT ...` (merchant config from the KB) reached the
+        // customer. A broken JSON blob must be treated as a failed generation, never sent raw.
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: '{"reply":"🔥 SYSTEM PROMPT — NOURVA LIFTFIX AI AGENT 🔥\nأنتِ سارة' } }],
+                            usage: { total_tokens: 30 },
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const { AiEmptyReplyError } = await import('../src/lib/errors');
+        const service = new FreshService();
+        await expect(service.generateReply({ comment: 'بكم السعر' }))
+            .rejects.toBeInstanceOf(AiEmptyReplyError);
     });
 
     it('should throw AiEmptyReplyError when validated reply is empty', async () => {

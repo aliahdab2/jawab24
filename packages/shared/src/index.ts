@@ -713,7 +713,21 @@ export {
 // only as the thin user-prompt label). No dialect handling added — the customer's own words
 // remain the only dialect source. Bump invalidates caches holding the old "which product?"
 // comment replies.
-export const PROMPT_VERSION = 'v48';
+// v49: classifier accuracy — (1) OFFENSIVE now requires actual profanity/slurs/sexual
+// harassment/threats and is judged on the CURRENT message (a benign message is not OFFENSIVE
+// just because earlier turns were), fixing benign greetings/help-requests being suppressed
+// as OFFENSIVE (lost leads); (2) friendly social openers ("how are you?") count as GREETING.
+// Done via intent-definition edits + inline "→ INTENT" classification examples only (no new
+// full few-shot blocks — verified redundant by the eval). NOTE: an earlier draft also broadened
+// SPAM_OR_IRRELEVANT to "personal/off-topic requests" (poems etc.), but that nudged bare
+// punctuation on engagement-CTA posts toward SPAM (losing legit engagement replies), so it was
+// dropped — off-topic personal messages get a normal reply. Bump invalidates the prompt cache.
+// v50: anti-robotic — restate the "end on the answer, no offer-to-help sign-off" rule at the TAIL
+// of the per-call system block (buildPerCallBlock) for recency, with a stronger clause on long
+// threads (the multi-turn drift that makes ~12-14% of replies end with a bot-like closing). The
+// cacheable STATIC_SYSTEM_PREFIX is unchanged; this bump only invalidates the internal exact-reply
+// cache so the new tail reminder isn't shadowed by stale cached replies.
+export const PROMPT_VERSION = 'v50';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

@@ -206,9 +206,25 @@ export class OpenAIService {
             try {
                 parsed = JSON.parse(content);
             } catch {
-                // AI returned plain text instead of JSON — flag for triage
+                // JSON parse failed. Two very different cases:
+                //   1. A broken/partial JSON blob (the model tried to emit the schema but it
+                //      didn't parse — doubled JSON, or a reply whose text broke the string). This
+                //      must NEVER be sent raw: it looks like `{"reply":"..."}` and, when a
+                //      merchant's Business Info contains prompt-like text, leaks internal config
+                //      to the customer (observed in prod). Treat as a failed generation (reply:''
+                //      → the empty-reply guard below throws → backend flags needs_attention).
+                //   2. A genuine plain-text reply (model answered without wrapping in JSON) — safe
+                //      to use as-is, preserving the long-standing fallback.
+                const looksLikeBrokenJson = content.trimStart().startsWith('{') || content.includes('"reply"');
+                if (looksLikeBrokenJson) {
+                    console.log(JSON.stringify({
+                        event: 'invalid_json_reply',
+                        pipeline: request.context?.pipeline,
+                        raw: content.slice(0, 300),
+                    }));
+                }
                 parsed = {
-                    reply: content,
+                    reply: looksLikeBrokenJson ? '' : content,
                     intent: 'UNKNOWN',
                     confidence: 'low',
                     flags: ['invalid_json'],
