@@ -387,6 +387,16 @@ Voice-to-text for KB content via microphone:
 
 ---
 
+### OpenAI Organization Costs API (billing observability)
+- **Purpose**: Reconcile what OpenAI actually bills the org against our per-call `ai_usage_log`, and power the admin AI Cost & Quota panel (`/admin/ai-cost`)
+- **Endpoint**: `GET https://api.openai.com/v1/organization/costs` — `bucket_width=1d`, `group_by` project_id/line_item/api_key_id. Gotchas: `amount.value` is a high-precision **string** (parseFloat + NaN-guard); paginate `has_more`/`next_page`; unix timestamps → **UTC** day
+- **API Key**: `OPENAI_ADMIN_API_KEY` — an **admin** key (`sk-admin-…`, read-only org scope; a project key cannot read `/v1/organization/*`). Never sent to the frontend; `Authorization` stripped from any captured error. `OPENAI_PROD_KEY_ID` / `OPENAI_EVAL_KEY_ID` label the prod-vs-eval spend split (both keys drain one wallet, so runway uses the **org total**, never prod-only)
+- **Sync**: daily backend cron `runOpenAiCostSync(trailingDays=3)` (re-fetches a trailing window so late OpenAI adjustments overwrite; no-ops if the admin key is absent) → idempotent upsert into `ai_cost_snapshots`. A single-row `ai_credit_balance` holds the admin-entered balance anchor
+- **Alerts**: `aiCostMonitor.ts` fires throttled admin email + Sentry on credit-low (`alert:openai_credit_low`) and spend-spike (`alert:openai_spend_spike`); OpenAI auto-recharge is the primary protection, these are the backstop
+- **Implementation**: `backend/src/services/openaiCosts.ts` (fetch/paginate/parse), `aiCostSnapshots.ts` (upsert + `getBilling` + `getReconciliation`), `aiCostMonitor.ts` (runway + alerts), `aiCostSync.ts` (cron entry), shared helpers in `aiCostShared.ts`
+
+---
+
 ### Anthropic (Claude - Tier-2 Failover / Playground)
 - **Purpose**: Tier-2 failover LLM when OpenAI circuit breaker opens, plus playground testing
 - **SDK**: Anthropic SDK 0.78.0
@@ -450,6 +460,8 @@ Voice-to-text for KB content via microphone:
   - `invoice.payment_failed` - payment failed
   - `charge.refunded` - logs refund and notifies the customer (does not cancel the subscription)
   - All handlers invalidate the Redis `sub:active:<userId>` cache so a status change is visible to the reply pipeline immediately, not after the 60s TTL.
+
+- **API-version resilience** (fixed #334): the SDK is pinned to `apiVersion: '2023-10-16'` (governs only *outbound* calls), but the webhook endpoint renders payloads at the Dashboard-configured version (`2025-12-15.clover`), where two fields moved: `invoice.subscription` → `invoice.parent.subscription_details.subscription`, and `subscription.current_period_*` → `subscription.items.data[].current_period_*`. `backend/src/utils/stripeCompat.ts` (`getInvoiceSubscriptionId` / `getSubscriptionPeriod`) reads BOTH paths (`legacy ?? new`), so renewals sync regardless of which version serializes. Reading only the legacy path silently null'd on renewal → the period never advanced and paid subs flipped to `past_due`. If the SDK `apiVersion` is ever bumped, align it with the endpoint version and re-test (the compat layer keeps that from being urgent).
 
 - **Verification**:
   - Signature via `X-Stripe-Signature` header
