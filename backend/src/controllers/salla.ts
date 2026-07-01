@@ -196,11 +196,14 @@ export async function listPendingHandler(request: FastifyRequest, reply: Fastify
  * POST /salla/store/claim { pendingId } | { merchantId } — claim a staged Easy-Mode
  * install for the logged-in user. Registers webhooks inline (claim time).
  *
- * SECURITY: these endpoints only ever operate on Easy-Mode pending rows, which exist
- * solely once the published app runs in Easy Mode. The merchant-id binding (proving this
- * user owns that store) is finalized against Salla's verified post-install redirect during
- * the live round-trip — see the launch plan. The owner-conflict guard in finalizeClaim
- * still blocks claiming a store already owned by another account.
+ * SECURITY — DORMANT (flag off → 404) until the ownership binding is built. A raw
+ * client-supplied `merchantId` is NOT proof of ownership: on its own this path would let
+ * any logged-in user claim another merchant's store + token. The binding is deferred
+ * pending ONE unconfirmed Salla behaviour — can a published Easy-Mode app initiate the
+ * OAuth authorize redirect for identity? — which bifurcates the design (OAuth-round-trip
+ * proof vs. owner-email match). See DECISIONS.md D-012 for the two branches + the exact
+ * question to Salla. NOTE: `finalizeClaim`'s owner-conflict guard only blocks re-claiming
+ * an already-ACTIVE store; it does NOT prove the claimer owns THIS pending row.
  */
 export async function claimStoreHandler(request: FastifyRequest, reply: FastifyReply) {
     // Dormant until the ownership binding is hardened (see config.salla.easyModeClaimEnabled).
