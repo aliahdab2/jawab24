@@ -2331,14 +2331,26 @@ Dynamic competitor comparison pages for SEO:
 
 ### Admin Observability Dashboard
 
-Internal dashboard for monitoring system health and AI costs:
+Internal **ops-only** dashboard — system health, not cost (all AI cost visibility moved to the AI Cost & Quota panel below):
 
 - **Route**: `/admin/observability` (protected, admin+ access)
 - **Metrics displayed**:
-  - AI cost breakdown (by model, by day, cache hit rate)
+  - System health (DB/Redis/ai-worker circuit, process metrics, external-API latencies)
   - Reply pipeline stats (reply rate, response times, flagged count)
   - Breakdowns by method, intent, platform
+  - Activation funnel, cache management, lead-digest tooling
 - **Data source**: Existing backend analytics endpoints
+
+### Admin AI Cost & Quota Panel
+
+The single home for AI cost visibility and quota-runway monitoring (built to prevent a repeat of the 2026-06-28 `insufficient_quota` outage):
+
+- **Route**: `/admin/ai-cost` (protected, admin+ access)
+- **Consumption**: cost by feature (pipeline), by model, by intent, plus a daily-spend trend — with a billed-vs-cached split and prompt-cache savings, from `ai_usage_log` via `getGlobalAiCostByPipeline`
+- **OpenAI billing (authoritative)**: pulled daily from the OpenAI org **Costs API** into `ai_cost_snapshots`, split prod vs eval/dev by API key, with a reconciliation view against `ai_usage_log` (prod key matched the DB within 0.6%)
+- **Credit runway**: admin-entered balance anchor (OpenAI has no balance API) → remaining ÷ rolling org burn; surfaced by a `AiCreditRunwayBanner` (not dismissible at critical)
+- **Proactive alerts**: throttled admin email + Sentry on credit-low (`alert:openai_credit_low`) and spend-spike (`alert:openai_spend_spike`). OpenAI **auto-recharge** (enabled in the OpenAI dashboard) is the primary outage protection; these alerts are the backstop
+- **Endpoints**: `GET /admin/ai-cost/{consumption,billing,reconciliation,runway}`, `POST /admin/ai-cost/sync`, `PUT /admin/ai-cost/balance`
 
 ### SEO Infrastructure
 
