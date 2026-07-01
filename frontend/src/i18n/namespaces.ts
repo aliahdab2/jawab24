@@ -22,6 +22,7 @@ export const PAGE_NAMESPACES = {
   compare:            ['compare'],
   blog:               ['blog', 'landing'],
   ecommerce:          ['ecommerce'],
+  help:               ['help'],
 
   unsubscribe:        ['unsubscribe'],
 

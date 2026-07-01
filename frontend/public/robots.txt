@@ -9,6 +9,7 @@ Allow: /privacy
 Allow: /terms
 Allow: /data-deletion
 Allow: /contact
+Allow: /help
 Allow: /what-is-jawab24
 Allow: /compare/
 Allow: /blog
@@ -25,6 +26,7 @@ Allow: /en/privacy
 Allow: /en/terms
 Allow: /en/data-deletion
 Allow: /en/contact
+Allow: /en/help
 Allow: /en/what-is-jawab24
 Allow: /en/compare/
 Allow: /en/blog

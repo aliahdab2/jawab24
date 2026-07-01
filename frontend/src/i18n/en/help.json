@@ -1,0 +1,56 @@
+{
+  "title": "Help Center",
+  "seoTitle": "Help Center — Jawab24",
+  "metaDescription": "Learn how to set up Jawab24: connect your Salla store and your Facebook and Instagram pages, configure Smart Replies, and reach support.",
+  "backToHome": "Back to Jawab24",
+
+  "aboutTitle": "What is Jawab24?",
+  "aboutText": "Jawab24 is an AI sales assistant that answers your customers on Facebook and Instagram, in Arabic and English, around the clock. It replies from the business information you provide and the products and prices in your connected store, so its answers stay accurate.",
+
+  "startTitle": "Getting started",
+  "startText": "You can be up and running in a few minutes:",
+  "startItem1": "Create your Jawab24 account and sign in.",
+  "startItem2": "Connect the Facebook or Instagram page you want Jawab24 to answer on.",
+  "startItem3": "Add your Business Info — products, prices, working hours, and common questions.",
+  "startItem4": "Optionally connect your online store to sync products and prices automatically.",
+  "startItem5": "Turn on auto-reply and send a test message to see it in action.",
+
+  "sallaTitle": "Connecting your Salla store",
+  "sallaText": "Connecting Salla lets Jawab24 read your products and prices so it can answer customers accurately. Shopify stores connect the same way from the Stores page. To connect your Salla store:",
+  "sallaItem1": "Open the Stores page in your Jawab24 dashboard.",
+  "sallaItem2": "Choose Salla and authorize the connection with your store.",
+  "sallaItem3": "Your products, prices, and stock are imported automatically.",
+  "sallaItem4": "Jawab24 refreshes the catalog periodically, so new products and price changes are picked up on their own.",
+
+  "metaTitle": "Connecting Facebook and Instagram",
+  "metaText": "Jawab24 answers comments and messages on the pages you connect:",
+  "metaItem1": "Go to My Pages and connect your Facebook page.",
+  "metaItem2": "Grant the requested permissions so Jawab24 can read and reply to messages and comments.",
+  "metaItem3": "To answer on Instagram, link your Instagram professional account to that Facebook page.",
+
+  "repliesTitle": "How Smart Replies work",
+  "repliesText": "A Smart Reply is generated from your Business Info and your store catalog, and is written in the same language and dialect your customer used. Jawab24 will not invent prices or products it does not know — if something is not in your information, it hands the conversation to you instead of guessing.",
+
+  "postReplyTitle": "Post Replies",
+  "postReplyText": "A Post Reply is a keyword you set on a specific post. When a customer comments with that keyword, Jawab24 automatically sends them the reply you configured as a direct message. You set this up per post from the comments view.",
+
+  "controlTitle": "Greeting, away messages, and working hours",
+  "controlText": "You stay in control of every conversation:",
+  "controlItem1": "Set a Greeting Message that welcomes new customers automatically.",
+  "controlItem2": "Set an Away Message for when auto-reply is off or outside your working hours.",
+  "controlItem3": "Define your working hours so replies match your availability.",
+  "controlItem4": "Pause auto-reply at any time and take over the conversation yourself.",
+
+  "businessInfoTitle": "Business Info",
+  "businessInfoText": "Your Business Info is the knowledge Jawab24 replies from — your products, prices, working hours, policies, and frequently asked questions. The more complete and up to date it is, the more accurate your replies. You can edit it any time from your dashboard.",
+
+  "plansTitle": "Plans and billing",
+  "plansText": "Jawab24 offers a free plan so you can start at no cost, plus paid plans for higher reply volumes. You can review the available plans and what each one includes on the Pricing page.",
+
+  "privacyTitle": "Data and privacy",
+  "privacyText": "We protect your data and your customers' data and never sell it. For full details, see our Privacy Policy at jawab24.com/privacy. To request deletion of your data, visit jawab24.com/data-deletion.",
+
+  "contactTitle": "Contact support",
+  "contactText": "Still need help? Our team usually replies within one business day. Email us at:",
+  "contactEmail": "support@jawab24.com"
+}
