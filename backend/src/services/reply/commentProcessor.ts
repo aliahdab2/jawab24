@@ -6,7 +6,7 @@ import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isUrgentNotification, buildNotificationReason } from './urgentFlags';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
-import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag } from '../../utils/commentText';
+import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag, isContentFree } from '../../utils/commentText';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
@@ -489,8 +489,15 @@ export class CommentProcessor {
                 generatedText = PRICE_FALLBACK[lang];
             }
 
-            // 8c. Skip reply — silent for spam/tags, flagged for offensive content
-            if (shouldSkipReply(flagReason, aiIntent)) {
+            // 8c. Skip reply — silent for spam/tags, flagged for offensive content.
+            // Exception: never SPAM-skip a content-free comment on a post — "٠٠٠" / "."
+            // is the customer following the post's CTA (in any reply mode). The
+            // rewriteContentFreeCta input fix normally prevents the spam verdict; this
+            // is the deterministic backstop so a model quirk can't silently drop a
+            // solicited lead (eval #324, لامار الشام regression). OFFENSIVE is NOT
+            // bypassed — shouldSilentlySkip is true only for SPAM_OR_IRRELEVANT.
+            const solicitedCta = !!content.message && isContentFree(commentMessage.trim());
+            if (shouldSkipReply(flagReason, aiIntent) && !(solicitedCta && shouldSilentlySkip(aiIntent))) {
                 if (shouldSilentlySkip(aiIntent)) {
                     // Spam/irrelevant (tagging someone, emoji-only, etc.) — no flag, no
                     // notification. `friend_tag` skips are handled upstream in step 3a, so
