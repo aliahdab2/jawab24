@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { db } from '../db';
 import { leads, pages } from '../db/schema';
-import { eq, and, desc, count, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, desc, count, sql } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { redis } from '../lib/redis';
@@ -13,13 +13,40 @@ import { getModelForUser } from './aiModelResolver';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { noopLogger } from '../types/logger';
 import { extractPhones, extractCustomerPhones, DEFAULT_AI_MODEL } from '@jawab24/shared';
-import type { LeadExtractedData, LeadStatus } from '@jawab24/shared';
+import type { LeadExtractedData, LeadField, LeadStatus } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
 import { workspaceSettingsService } from './workspaceSettings';
 import { countryFromTimezone } from '../utils/phoneRegion';
+import { escapeLike } from '../utils/sqlLike';
+import { envNumberPerCall } from '../utils/envNumber';
 
 // Daily AI extraction limit per workspace (prevents runaway costs on high-traffic pages)
 const DAILY_EXTRACTION_LIMIT = 50;
+
+// ─── Follow-up re-extraction (post-phone order details) ─────────────────────
+// Customers naturally send their phone first and the order details after
+// (final size, recipient name, address). Re-extraction keeps the card current
+// while the lead is still fresh and unhandled. All caps are cost guards.
+const REEXTRACT_DEFAULT_WINDOW_HOURS = 24;
+// Per lead, DB-backed (extractionAttempts). Sized by replaying the motivating
+// prod transcript (2026-07-02 Nourva): a chatty order flow sent ~10 detail
+// messages after the phone — a cap of 5 exhausted BEFORE the final size
+// correction arrived. 10 + the cooldown lets such flows converge (~$0.01/lead
+// worst case).
+const REEXTRACT_ATTEMPT_CAP = 10;
+const REEXTRACT_COOLDOWN_SECONDS = 180; // per lead, Redis-backed burst coalescing
+// Separate budget from DAILY_EXTRACTION_LIMIT so re-extraction can never starve
+// first-time lead capture. ~30 leads/day at ~5 re-reads each; ceiling ≈ $0.15/day.
+const DAILY_REEXTRACTION_LIMIT = 150;
+
+/**
+ * Re-extraction window in hours from LEAD_REEXTRACT_WINDOW_HOURS (default 24,
+ * 0 disables the feature). Read per call so it doubles as a no-redeploy
+ * kill-switch — same convention as COMMENT_DEBOUNCE_WINDOW_SECONDS.
+ */
+function reextractWindowHours(): number {
+    return envNumberPerCall('LEAD_REEXTRACT_WINDOW_HOURS', REEXTRACT_DEFAULT_WINDOW_HOURS);
+}
 
 export const EXTRACTION_PROMPT = `You are a lead-capture assistant. Analyze the conversation below and extract structured contact information.
 
@@ -126,6 +153,73 @@ function forwardedPostText(text: string): string {
     return (text.match(SHARED_POST_BLOCK_RE) ?? []).join(' ');
 }
 
+/**
+ * The transcript format fed to EXTRACTION_PROMPT — part of the prompt contract.
+ * Single builder shared by first capture and follow-up re-extraction so the AI
+ * always sees the same shape for the same lead.
+ */
+function transcriptFromHistory(history: Array<{ role: string; content: string }>): string {
+    return history
+        .map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`)
+        .join('\n');
+}
+
+/**
+ * Runtime normalization for a stored extracted_data value. Legacy rows are
+ * double-encoded (a jsonb string containing JSON) — Drizzle's jsonb read path
+ * usually unwraps that, but this stays defensive so the merge can never crash
+ * on a malformed or string-typed row. Unrecognizable input → empty card.
+ */
+export function normalizeExtractedData(raw: unknown): LeadExtractedData {
+    let value = raw;
+    if (typeof value === 'string') {
+        try {
+            value = JSON.parse(value);
+        } catch {
+            return { fields: [] };
+        }
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return { fields: [] };
+    const obj = value as { summary?: unknown; fields?: unknown };
+    const fields: LeadField[] = Array.isArray(obj.fields)
+        ? obj.fields
+            .filter((f): f is Record<string, unknown> =>
+                !!f && typeof f === 'object' && typeof (f as { key?: unknown }).key === 'string')
+            .map(f => ({
+                key: f.key as string,
+                label_en: String(f.label_en ?? f.key),
+                label_ar: String(f.label_ar ?? f.key),
+                // Coerce: legacy/malformed rows may carry non-string values; every
+                // consumer (merge .trim, UI render, CSV) expects strings.
+                value: String(f.value ?? ''),
+            }))
+        : [];
+    return typeof obj.summary === 'string' ? { summary: obj.summary, fields } : { fields };
+}
+
+/**
+ * Non-destructive merge of a fresh extraction into the existing card:
+ * - per field key, the fresh value wins (the AI reads the full history, so its
+ *   value reflects the customer's LATEST statement);
+ * - keys missing from the fresh extraction are KEPT — a re-read may drop a
+ *   field it confidently found last time, and captured data is never lost;
+ * - empty fresh values never overwrite anything;
+ * - fresh non-empty summary wins, else the existing one stays.
+ * Existing field order is preserved (stable card layout); new keys append.
+ */
+export function mergeExtractedData(existing: LeadExtractedData, fresh: LeadExtractedData): LeadExtractedData {
+    const mergedFields = existing.fields.map(f => {
+        const updated = fresh.fields.find(x => x.key === f.key);
+        return updated && updated.value?.trim() ? updated : f;
+    });
+    for (const f of fresh.fields) {
+        if (!f.value?.trim()) continue;
+        if (!mergedFields.some(x => x.key === f.key)) mergedFields.push(f);
+    }
+    const summary = fresh.summary?.trim() ? fresh.summary : existing.summary;
+    return summary !== undefined ? { summary, fields: mergedFields } : { fields: mergedFields };
+}
+
 class LeadExtractorService {
     private logger: Logger = noopLogger;
     private client: OpenAI | null = null;
@@ -176,8 +270,16 @@ class LeadExtractorService {
         // forwarded the ad whose body ends with the merchant line 0929453011.)
         const gateText = stripForwardedPostBlocks(messageText);
 
-        // Cheap pre-gate: skip the common no-phone message before any DB work.
-        if (extractPhones(gateText, phoneOpts).length === 0) return;
+        // Cheap pre-gate: the common no-phone message creates no lead — but it may
+        // CONTINUE one. Customers naturally send their phone first and the order
+        // details after (final size, recipient name, address); without this the
+        // card stays a snapshot taken too early (July 2026 prod: Nourva orders
+        // arrived with a stale size / missing recipient name). Fire-and-forget,
+        // same contract as the caller.
+        if (extractPhones(gateText, phoneOpts).length === 0) {
+            await this.maybeReextractLead(params);
+            return;
+        }
 
         try {
             // The business's OWN published numbers — a customer who shares the merchant's
@@ -207,9 +309,7 @@ class LeadExtractorService {
                 businessTexts = [postMessage, replyText, ...businessPhones].filter((t): t is string => !!t);
             } else {
                 const history = await messagesService.getConversationHistory(pageId, senderId, 20);
-                conversationText = history
-                    .map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`)
-                    .join('\n');
+                conversationText = transcriptFromHistory(history);
                 // Our outgoing replies publish the business's own contact number(s).
                 businessTexts = [...history.filter(m => m.role === 'assistant').map(m => m.content), ...businessPhones];
             }
@@ -223,9 +323,15 @@ class LeadExtractorService {
 
             // Real gate: the customer must share a phone that is THEIRS, not the
             // business's own number echoed from our replies or carried in a forwarded
-            // post (stripped above). Empty → no lead.
+            // post (stripped above). Empty → no NEW lead — but the message may still
+            // CONTINUE an existing one: order details quoting the merchant's own line
+            // ("العنوان شارع الوادي، وهذا رقمكم 09... صح؟") land here, and dropping
+            // them would lose exactly the follow-up data re-extraction exists for.
             const rawPhone = extractCustomerPhones(gateText, businessTexts, phoneOpts)[0]?.raw ?? null;
-            if (!rawPhone) return;
+            if (!rawPhone) {
+                await this.maybeReextractLead(params);
+                return;
+            }
 
             // Gate: daily extraction limit per workspace
             const withinLimit = await this.checkAndIncrementDailyLimit(workspaceId);
@@ -364,6 +470,135 @@ class LeadExtractorService {
     }
 
     /**
+     * Follow-up re-extraction: a no-phone message from a sender whose lead is
+     * still fresh (status 'new', within the window) re-runs the AI over the full
+     * 20-turn history and MERGES the result into the card — so details sent
+     * after the phone (final size, recipient name, address) land on the lead
+     * instead of being lost (July 2026 prod: Nourva orders shipped from cards
+     * with a stale size / no recipient name).
+     *
+     * Deliberately narrow blast radius: only extractedData, extractionStatus,
+     * extractionAttempts and updatedAt are ever written — never phone (that
+     * changes only via the phone-bearing gate path), status, senderName, or the
+     * follow-up flags. Merchant-handled leads (status != 'new') are never
+     * touched: once the merchant moved the card, it is theirs.
+     */
+    private async maybeReextractLead(params: MaybeCaptureLeadParams): Promise<void> {
+        const { pageId, userId, workspaceId, sourceType, senderId, messageText } = params;
+
+        // Comment path: extraction context is a synthetic single-turn exchange —
+        // there is no accumulating history to re-read. Message path only.
+        if (sourceType !== 'message') return;
+        if (!messageText || messageText.trim().length === 0) return;
+
+        const windowHours = reextractWindowHours();
+        if (windowHours === 0) return; // kill-switch
+
+        try {
+            const [lead] = await db
+                .select({
+                    id: leads.id,
+                    status: leads.status,
+                    createdAt: leads.createdAt,
+                    extractionAttempts: leads.extractionAttempts,
+                    extractedData: leads.extractedData,
+                })
+                .from(leads)
+                .where(and(eq(leads.senderId, senderId), eq(leads.pageId, pageId)))
+                .limit(1);
+            if (!lead) return;
+
+            if (lead.status !== 'new') return;
+            if (lead.extractionAttempts >= REEXTRACT_ATTEMPT_CAP) return;
+            const createdAt = lead.createdAt ? new Date(lead.createdAt).getTime() : 0;
+            if (Date.now() - createdAt > windowHours * 3_600_000) return;
+
+            // Burst coalescing: several detail messages in a row cost one AI call.
+            // Armed BEFORE the call (SET NX) so concurrent messages can't
+            // double-extract; each run reads the full history, so anything sent
+            // during a cooldown is picked up by the next qualifying message.
+            // Redis down → fail-open like the daily limiter; the DB-backed
+            // attempt cap still bounds cost.
+            let fresh: string | null = null;
+            try {
+                fresh = await redis.set(`lead:reextract:${lead.id}`, '1', 'EX', REEXTRACT_COOLDOWN_SECONDS, 'NX');
+            } catch {
+                fresh = 'OK';
+            }
+            if (fresh !== 'OK') return;
+
+            const withinLimit = await this.checkAndIncrementReextractionLimit(workspaceId);
+            if (!withinLimit) {
+                this.logger.warn('[leadExtractor] Daily re-extraction limit reached', { workspaceId });
+                return;
+            }
+
+            const history = await messagesService.getConversationHistory(pageId, senderId, 20);
+            if (history.length === 0) return;
+            const conversationText = transcriptFromHistory(history);
+
+            const aiResult = await this.callExtractionAI(conversationText, { userId, pageId });
+            const merged = mergeExtractedData(
+                normalizeExtractedData(lead.extractedData),
+                { summary: aiResult.summary, fields: aiResult.fields },
+            );
+
+            // Guard on status IN THE WHERE, not just the pre-AI check: the merchant
+            // can flip the lead to contacted/converted during the multi-second AI
+            // call, and a handled card must not be mutated underneath them.
+            await db
+                .update(leads)
+                .set({
+                    extractedData: merged,
+                    extractionStatus: 'completed',
+                    extractionAttempts: sql`${leads.extractionAttempts} + 1`,
+                    updatedAt: new Date(),
+                })
+                .where(and(eq(leads.id, lead.id), eq(leads.status, 'new')));
+
+            this.logger.info('[leadExtractor] Lead re-extracted after follow-up', {
+                leadId: lead.id,
+                pageId,
+                senderId,
+                attempt: lead.extractionAttempts + 1,
+            });
+        } catch (error) {
+            // AI/DB failure: leave the lead exactly as it was — never flip a
+            // completed card back to pending from this path.
+            captureError(error, 'Lead re-extraction failed', {
+                tags: { service: 'leadExtractor', pageId },
+                extra: { senderId },
+            });
+        }
+    }
+
+    /**
+     * Shared daily-budget counter: incr, arm a 24h TTL on first hit, compare to
+     * the cap. Fail-open on Redis errors — availability over budget precision.
+     * Used by both the first-capture and re-extraction budgets so their
+     * semantics can never drift.
+     */
+    private async checkAndIncrementBudget(key: string, cap: number): Promise<boolean> {
+        try {
+            const current = await redis.incr(key);
+            if (current === 1) await redis.expire(key, 86400);
+            return current <= cap;
+        } catch (error) {
+            this.logger.warn('[leadExtractor] Budget check failed, allowing', { error, key });
+            return true;
+        }
+    }
+
+    /**
+     * Daily re-extraction budget per workspace — its own key/cap so follow-up
+     * re-reads never consume the first-time capture budget.
+     */
+    private async checkAndIncrementReextractionLimit(workspaceId: string): Promise<boolean> {
+        const today = new Date().toISOString().split('T')[0];
+        return this.checkAndIncrementBudget(`leads:reextraction:${workspaceId}:${today}`, DAILY_REEXTRACTION_LIMIT);
+    }
+
+    /**
      * The business's own published phone numbers for a page, so lead capture never
      * mistakes one for a customer contact. Read from `pages.knowledge_base` — the
      * merchant's Business Info, the same source the reply pipeline uses, where they
@@ -409,18 +644,8 @@ class LeadExtractorService {
     }
 
     private async checkAndIncrementDailyLimit(workspaceId: string): Promise<boolean> {
-        try {
-            const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-            const key = `leads:extraction:${workspaceId}:${today}`;
-            const current = await redis.incr(key);
-            if (current === 1) {
-                await redis.expire(key, 86400); // TTL 24h
-            }
-            return current <= DAILY_EXTRACTION_LIMIT;
-        } catch {
-            // Redis unavailable — allow extraction rather than silently losing leads
-            return true;
-        }
+        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        return this.checkAndIncrementBudget(`leads:extraction:${workspaceId}:${today}`, DAILY_EXTRACTION_LIMIT);
     }
 
     private async callExtractionAI(
@@ -479,13 +704,27 @@ class LeadExtractorService {
             fields?: LeadExtractedData['fields'];
         };
 
+        // Sanitize field elements at the boundary: JSON-mode models routinely emit
+        // numeric-looking values as bare numbers ({"key":"size","value":38}) and
+        // occasionally malformed elements. Coerce values/labels to strings and drop
+        // keyless entries so downstream code (merge, UI, CSV export) never sees a
+        // non-string value.
+        const fields: LeadExtractedData['fields'] = (Array.isArray(parsed.fields) ? parsed.fields : [])
+            .filter((f): f is NonNullable<typeof f> => !!f && typeof f === 'object' && typeof f.key === 'string' && f.key.length > 0)
+            .map(f => ({
+                key: f.key,
+                label_en: String(f.label_en ?? f.key),
+                label_ar: String(f.label_ar ?? f.key),
+                value: String(f.value ?? ''),
+            }));
+
         return {
             // Raw AI phone (empty when the model omits it or judges it isn't the
             // sender's). Coerced to a string in case the model emits a bare number.
             // The caller re-validates this before trusting it over the gate phone.
             phone: String(parsed.phone ?? ''),
-            summary: parsed.summary,
-            fields: Array.isArray(parsed.fields) ? parsed.fields : [],
+            summary: typeof parsed.summary === 'string' ? parsed.summary : undefined,
+            fields,
         };
     }
 
@@ -499,14 +738,32 @@ class LeadExtractorService {
         extractedData: LeadExtractedData;
         extractionStatus: 'completed' | 'pending';
     }): Promise<{ upserted: LeadRecord; isNew: boolean }> {
-        // Check if lead already exists for this sender+page
+        // Check if lead already exists for this sender+page. The card + status are
+        // read too so a re-capture MERGES into the existing card (below) instead
+        // of replacing it. Read-modify-write is safe: the reply pipeline holds a
+        // per-sender lock (reply_lock:{pageId}:{senderId}), so card writes for one
+        // customer are serialized.
         const existing = await db
-            .select({ id: leads.id })
+            .select({ id: leads.id, extractedData: leads.extractedData, extractionStatus: leads.extractionStatus })
             .from(leads)
             .where(and(eq(leads.senderId, data.senderId), eq(leads.pageId, data.pageId)))
             .limit(1);
 
         const isNew = existing.length === 0;
+
+        // Same non-destructive semantics as the follow-up re-extract path: fresh
+        // values win per key, existing keys are never dropped. Critically, a
+        // re-share while over the daily limit or on AI failure arrives with an
+        // EMPTY pending card — merging (not replacing) keeps the populated card,
+        // and a card that was 'completed' is never demoted to 'pending'.
+        const mergedData = isNew
+            ? data.extractedData
+            : mergeExtractedData(normalizeExtractedData(existing[0].extractedData), data.extractedData);
+        const mergedStatus = isNew
+            ? data.extractionStatus
+            : (data.extractionStatus === 'completed' || existing[0].extractionStatus === 'completed'
+                ? 'completed'
+                : 'pending');
 
         const [upserted] = await db
             .insert(leads)
@@ -529,8 +786,8 @@ class LeadExtractorService {
                     senderName: data.senderName ?? null,
                     sourceId: data.sourceId,
                     sourceType: data.sourceType,
-                    extractedData: data.extractedData,
-                    extractionStatus: data.extractionStatus,
+                    extractedData: mergedData,
+                    extractionStatus: mergedStatus,
                     extractionAttempts: sql`${leads.extractionAttempts} + 1`,
                     // Re-engagement (non-destructive): flag for follow-up ONLY when the
                     // merchant already moved this lead past 'new' (contacted/converted)
@@ -553,13 +810,33 @@ class LeadExtractorService {
 
     async getLeadsByPage(
         pageId: string,
-        options: { status?: LeadStatus; needsFollowUp?: boolean; limit?: number; offset?: number },
+        options: { status?: LeadStatus; needsFollowUp?: boolean; search?: string; limit?: number; offset?: number },
     ): Promise<LeadsPage> {
-        const { status, needsFollowUp, limit = 50, offset = 0 } = options;
+        const { status, needsFollowUp, search, limit = 50, offset = 0 } = options;
 
         const conditions = [eq(leads.pageId, pageId)];
         if (status) conditions.push(eq(leads.status, status));
         if (needsFollowUp !== undefined) conditions.push(eq(leads.needsFollowUp, needsFollowUp));
+        if (search && search.trim().length > 0) {
+            const term = `%${escapeLike(search.trim())}%`;
+            // extracted_data matching is scoped to the summary and field VALUES —
+            // never the JSON structure. A whole-document ::text ILIKE would match
+            // field keys and the bilingual label_en/label_ar strings present on
+            // every card ("الاسم", "size", …), returning the entire list for common
+            // words. Legacy rows are double-encoded (a jsonb string holding JSON) —
+            // the CASE normalizes both encodings to an object before navigating;
+            // values compared via ->> are unescaped, so quotes/backslashes in a
+            // value match exactly as shown on the card. Page-scoped over at most a
+            // few thousand rows; no trigram index needed.
+            const normalized = sql`(CASE WHEN jsonb_typeof(${leads.extractedData}) = 'string' THEN (${leads.extractedData} #>> '{}')::jsonb ELSE ${leads.extractedData} END)`;
+            const searchOr = or(
+                ilike(leads.senderName, term),
+                ilike(leads.phone, term),
+                sql`(${normalized} ->> 'summary') ILIKE ${term}`,
+                sql`EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(${normalized} -> 'fields') = 'array' THEN ${normalized} -> 'fields' ELSE '[]'::jsonb END) AS fld WHERE (fld ->> 'value') ILIKE ${term})`,
+            );
+            if (searchOr) conditions.push(searchOr);
+        }
         const whereClause = and(...conditions);
 
         const [rows, [{ value: total }]] = await Promise.all([

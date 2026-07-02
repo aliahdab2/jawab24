@@ -1190,7 +1190,7 @@ export interface LeadsPaginatedResponse {
 }
 
 export const leadsApi = {
-  getByPage: (pageId: string, params?: { status?: LeadStatus; needsFollowUp?: boolean; limit?: number; offset?: number }) =>
+  getByPage: (pageId: string, params?: { status?: LeadStatus; needsFollowUp?: boolean; search?: string; limit?: number; offset?: number }) =>
     api.get<LeadsPaginatedResponse>('/leads', { params: { pageId, ...params } }),
 
   /** Fetch a single lead by id — used by the notification deep-link to open the exact lead. */
