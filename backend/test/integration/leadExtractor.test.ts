@@ -24,7 +24,7 @@ vi.mock('openai', () => ({
 import { randomUUID } from 'node:crypto';
 import { leadExtractorService } from '../../src/services/leadExtractor';
 import { createTestUser, createTestWorkspace, createTestPage, testDb } from './setup';
-import { leads } from '../../src/db/schema';
+import { leads, messages } from '../../src/db/schema';
 import { eq } from 'drizzle-orm';
 
 // The merchant lists their own contact lines in Business Info (the KB column).
@@ -190,5 +190,162 @@ describe('leadExtractor — business-number exclusion (real Postgres)', () => {
         expect(rows).toHaveLength(1);
         expect(rows[0].phone).toContain('915218888');
         expect(rows[0].phone).not.toContain('929453011');
+    });
+});
+
+describe('getLeadsByPage — server-side search (real Postgres)', () => {
+    let pageId: string;
+
+    beforeEach(async () => {
+        const user = await createTestUser();
+        const workspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, { workspaceId: workspace.id, knowledgeBase: BUSINESS_KB });
+        pageId = page.id;
+
+        await testDb.insert(leads).values([
+            {
+                pageId, senderId: 'search-s1', senderName: 'Mona Albriki', phone: '+218910000001',
+                sourceType: 'message', sourceId: randomUUID(),
+                extractedData: { summary: 'طلب جديد', fields: [{ key: 'location', label_en: 'Location', label_ar: 'الموقع', value: 'صبراته' }] },
+            },
+            {
+                pageId, senderId: 'search-s2', senderName: 'Grace Okafor', phone: '+218910000002',
+                sourceType: 'message', sourceId: randomUUID(),
+                extractedData: { summary: 'order', fields: [{ key: 'size', label_en: 'Size', label_ar: 'المقاس', value: 'A32' }] },
+            },
+            {
+                pageId, senderId: 'search-s3', senderName: 'Quote Tester', phone: '+218910000003',
+                sourceType: 'message', sourceId: randomUUID(),
+                // A value containing a double-quote — must match exactly as shown
+                // on the card (jsonb ->> unescapes; a raw ::text match would not).
+                extractedData: { summary: 'measurement', fields: [{ key: 'height', label_en: 'Height', label_ar: 'الطول', value: `5'6"` }] },
+            },
+        ]);
+    });
+
+    it('matches by sender name', async () => {
+        const { data, total } = await leadExtractorService.getLeadsByPage(pageId, { search: 'albriki' });
+        expect(total).toBe(1);
+        expect(data[0].senderName).toBe('Mona Albriki');
+    });
+
+    it('matches by phone fragment', async () => {
+        const { data } = await leadExtractorService.getLeadsByPage(pageId, { search: '910000002' });
+        expect(data).toHaveLength(1);
+        expect(data[0].senderName).toBe('Grace Okafor');
+    });
+
+    it('matches inside the AI-extracted data (Arabic value + latin size)', async () => {
+        const ar = await leadExtractorService.getLeadsByPage(pageId, { search: 'صبراته' });
+        expect(ar.data.map(l => l.senderName)).toEqual(['Mona Albriki']);
+
+        const en = await leadExtractorService.getLeadsByPage(pageId, { search: 'a32' });
+        expect(en.data.map(l => l.senderName)).toEqual(['Grace Okafor']);
+    });
+
+    it('treats LIKE wildcards literally (a bare % matches nothing, not everything)', async () => {
+        const { total } = await leadExtractorService.getLeadsByPage(pageId, { search: '%%%' });
+        expect(total).toBe(0);
+    });
+
+    it('does NOT match JSON structure: field keys and bilingual labels are invisible to search', async () => {
+        // "المقاس" is the label_ar on Grace's size field (and "size" its key) —
+        // present in the stored JSON of the card but NOT a value. Matching labels
+        // would return every lead for common words, making search useless.
+        for (const structuralTerm of ['المقاس', 'size', 'label_en', 'summary']) {
+            const { total } = await leadExtractorService.getLeadsByPage(pageId, { search: structuralTerm });
+            expect(total, `structural term "${structuralTerm}" must not match`).toBe(0);
+        }
+    });
+
+    it('matches a value containing a double-quote exactly as it appears on the card', async () => {
+        const { data } = await leadExtractorService.getLeadsByPage(pageId, { search: `5'6"` });
+        expect(data.map(l => l.senderName)).toEqual(['Quote Tester']);
+    });
+
+    it('no search term returns the full page list', async () => {
+        const { total } = await leadExtractorService.getLeadsByPage(pageId, {});
+        expect(total).toBe(3);
+    });
+});
+
+describe('follow-up re-extraction end-to-end (real Postgres)', () => {
+    let userId: string;
+    let workspaceId: string;
+    let pageId: string;
+
+    beforeEach(async () => {
+        const user = await createTestUser();
+        userId = user.id;
+        const workspace = await createTestWorkspace(user.id);
+        workspaceId = workspace.id;
+        const page = await createTestPage(user.id, { workspaceId, knowledgeBase: BUSINESS_KB });
+        pageId = page.id;
+        openaiCreateMock.mockReset();
+    });
+
+    it('phone message creates the lead; a later detail message merges into the card (prod A32 case)', async () => {
+        // The re-extract path reads the REAL conversation history (in production
+        // every processed message is stored before maybeCaptureLead fires), so
+        // seed the messages table with the conversation.
+        await testDb.insert(messages).values([
+            {
+                pageId, workspaceId, platformMessageId: `mid-${randomUUID()}`,
+                senderId: 'cust-reextract', senderName: 'Souad K',
+                message: 'رقمي 0915217777', direction: 'incoming', createdAt: new Date(Date.now() - 60_000),
+            },
+            {
+                pageId, workspaceId, platformMessageId: `mid-${randomUUID()}`,
+                senderId: 'cust-reextract', senderName: 'Souad K',
+                message: 'A32', direction: 'incoming', createdAt: new Date(),
+            },
+        ]);
+
+        // 1st extraction — at the phone message: vague size, no address yet.
+        openaiCreateMock.mockResolvedValueOnce({
+            choices: [{ message: { content: JSON.stringify({
+                phone: '', summary: 'العميلة تريد الطلب',
+                fields: [
+                    { key: 'name', label_en: 'Name', label_ar: 'الاسم', value: 'سعاد' },
+                    { key: 'size', label_en: 'Size', label_ar: 'المقاس', value: 'مقاس أصغر بكثير' },
+                ],
+            }) } }],
+            usage: { prompt_tokens: 50, completion_tokens: 10, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-reextract', senderName: 'Souad K',
+            messageText: 'رقمي 0915217777',
+        });
+
+        // 2nd extraction — the no-phone follow-up: concrete size + address. The
+        // fresh run "forgets" the name; the merge must keep it.
+        openaiCreateMock.mockResolvedValueOnce({
+            choices: [{ message: { content: JSON.stringify({
+                phone: '', summary: 'العميلة أكدت مقاس A32 وأعطت العنوان',
+                fields: [
+                    { key: 'size', label_en: 'Size', label_ar: 'المقاس', value: 'A32' },
+                    { key: 'address', label_en: 'Address', label_ar: 'العنوان', value: 'شارع الوادي' },
+                ],
+            }) } }],
+            usage: { prompt_tokens: 60, completion_tokens: 12, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+        await leadExtractorService.maybeCaptureLead({
+            pageId, userId, workspaceId,
+            sourceId: randomUUID(), sourceType: 'message',
+            senderId: 'cust-reextract', senderName: 'Souad K',
+            messageText: 'A32',
+        });
+
+        const rows = await testDb.select().from(leads).where(eq(leads.pageId, pageId));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].phone).toContain('915217777'); // phone untouched by re-extract
+        const card = rows[0].extractedData as { summary?: string; fields: Array<{ key: string; value: string }> };
+        const byKey = Object.fromEntries(card.fields.map(f => [f.key, f.value]));
+        expect(byKey.size).toBe('A32');            // stale value replaced
+        expect(byKey.name).toBe('سعاد');           // dropped-by-AI field kept
+        expect(byKey.address).toBe('شارع الوادي'); // late detail added
+        expect(rows[0].status).toBe('new');
     });
 });

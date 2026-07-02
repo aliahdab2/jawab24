@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, type ReactElement } from 'react';
+import React, { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
 import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, useDebounce } from '@/hooks';
 import { toast } from 'sonner';
@@ -626,7 +626,7 @@ const LeadsPage: NextPageWithLayout = () => {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['leads', selectedPageId, statusFilter],
+    queryKey: ['leads', selectedPageId, statusFilter, debouncedSearch.trim()],
     queryFn: ({ pageParam }) =>
       leadsApi.getByPage(selectedPageId, {
         // 'returning' filters by the follow-up flag (any status); 'all' = no filter.
@@ -635,6 +635,10 @@ const LeadsPage: NextPageWithLayout = () => {
           : statusFilter === 'all'
             ? {}
             : { status: statusFilter }),
+        // Server-side search (name / phone / extracted data). The list paginates,
+        // so filtering only the loaded rows made older leads unfindable — a lead
+        // beyond the first page returned nothing for its own name (2026-07-02).
+        ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
         limit: LEADS_PER_PAGE,
         offset: pageParam,
       }).then((r) => r.data),
@@ -677,21 +681,10 @@ const LeadsPage: NextPageWithLayout = () => {
     staleTime: 30_000,
   });
 
-  // Client-side search over the loaded leads (name / phone / summary / extracted
-  // fields), mirroring the Messages page. Status filtering stays server-side.
-  const filteredLeads = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
-    if (!q) return leads;
-    return leads.filter((l) =>
-      (l.senderName ?? '').toLowerCase().includes(q) ||
-      l.phone.toLowerCase().includes(q) ||
-      (l.extractedData?.summary ?? '').toLowerCase().includes(q) ||
-      // Also match the AI-extracted detail fields: when several people share one
-      // FB account, each name/phone they leave lives here (not in l.phone), so
-      // without this their names/numbers are unsearchable.
-      (l.extractedData?.fields ?? []).some((f) => (f.value ?? '').toLowerCase().includes(q)),
-    );
-  }, [leads, debouncedSearch]);
+  // Search runs server-side (part of the query key above) — the server matches
+  // senderName, phone, AND the AI-extracted data (summary + field values, which
+  // hold e.g. the names/numbers of several people sharing one FB account), so
+  // the loaded pages ARE the filtered result.
 
   // Open the related message thread for a (message-sourced) lead. messageId
   // deep-links reliably regardless of the inbox filter; senderId is the fallback.
@@ -1088,7 +1081,12 @@ const LeadsPage: NextPageWithLayout = () => {
       ) : isError ? (
         <EmptyState icon={Users} title={t('loadFailed')} variant="search" />
       ) : leads.length === 0 ? (
-        statusFilter === 'all' ? (
+        debouncedSearch.trim() ? (
+          // Search (server-side) found nothing — say so. Never show the onboarding
+          // or filter copy here: a merchant with hundreds of leads whose search
+          // misses must not read "no leads captured yet".
+          <EmptyState icon={Search} title={tc('noData')} variant="search" />
+        ) : statusFilter === 'all' ? (
           // No leads captured yet — the onboarding empty state.
           <EmptyState icon={Users} title={t('empty')} description={t('emptySub')} />
         ) : (
@@ -1109,13 +1107,11 @@ const LeadsPage: NextPageWithLayout = () => {
             }
           />
         )
-      ) : filteredLeads.length === 0 ? (
-        <EmptyState icon={Search} title={tc('noData')} variant="search" />
       ) : (
         <>
           {/* Mobile: card list */}
           <div className="flex flex-col gap-3 md:hidden">
-            {filteredLeads.map((lead) => (
+            {leads.map((lead) => (
               <LeadCard
                 key={lead.id}
                 lead={lead}
@@ -1144,7 +1140,7 @@ const LeadsPage: NextPageWithLayout = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredLeads.map((lead) => (
+                {leads.map((lead) => (
                   <LeadRow
                     key={lead.id}
                     lead={lead}

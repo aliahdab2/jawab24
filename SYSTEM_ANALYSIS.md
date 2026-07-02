@@ -2410,6 +2410,8 @@ The single home for AI cost visibility and quota-runway monitoring (built to pre
 
 Automatically captures structured lead records whenever a customer shares a phone number in an AI conversation (DM or comment). AI analyzes the full conversation to extract dynamic, context-specific fields — e.g., course of interest for an institute, specialty needed for a clinic.
 
+**Follow-up re-extraction (July 2026):** customers naturally send the phone first and the order details after (final size, recipient name, address). While a DM-sourced lead is still `new` and within `LEAD_REEXTRACT_WINDOW_HOURS` (default 24h, `0` = kill-switch), each further customer message — including one whose only phone-like number fails the customer-phone gate (e.g. the merchant's own quoted line) — re-runs the extraction over the full history and **merges** the result into the card (`mergeExtractedData`: fresh value wins per field key, existing keys are never dropped, phone/status/follow-up flags never touched; the UPDATE re-checks `status='new'` so a card the merchant flips mid-call is never mutated). **Both** card-write paths merge: the phone-re-share upsert uses the same semantics, so an over-limit or AI-failed re-share can never wipe a populated card, and a `completed` card is never demoted to `pending`. Bounded by a 3-min per-lead Redis cooldown, an `extractionAttempts` cap of 10 (a **shared counter across all extraction runs for the lead** — first capture, phone re-shares, and follow-up re-reads all increment it), and a separate 150/day workspace budget so re-extraction can never starve first-time capture. Root cause fixed: 2026-07-02 Nourva orders shipped from cards with a stale size / missing recipient name because extraction ran exactly once, at the phone message.
+
 ### Pipeline Position
 
 Runs fire-and-forget after `reply_sent` in both `messageProcessor.ts` and `commentProcessor.ts`. Never blocks the reply pipeline.
@@ -2454,9 +2456,11 @@ The three main statuses are fixed (the system depends on `new` for counters/dige
 
 `/leads` page — page selector, status filter tabs (All/New/Contacted/Converted), dynamic table columns from `extractedData.fields`, CSV export (incl. sub-stage + custom-field columns), real-time SSE updates via `lead:captured` event, new-leads badge in sidebar. Detail panel ordered by merchant workflow: AI intent summary + extracted details first, then contact actions, status + sub-stage picker, custom data fields. "Customize leads" opens `StageCustomizerModal`.
 
+**Search is server-side (July 2026):** `GET /leads?search=` matches senderName, phone, and the extracted data's **summary + field values only** (never JSON keys or the bilingual labels — a whole-document text match would return every lead for common words like "الاسم"/"size"). Legacy double-encoded rows (jsonb strings) are normalized to objects in SQL before navigating; wildcards are escaped via `escapeLike`. Previously search filtered only the client-loaded rows, so any lead beyond the first page (50) was unfindable by name — the 2026-07-02 "Jawab24 didn't catch the lead" complaint was partly this.
+
 ### Rate Limiting
 
-Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per workspace, TTL 86400s. Prevents runaway OpenAI costs on high-traffic pages.
+Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per workspace, TTL 86400s. Prevents runaway OpenAI costs on high-traffic pages. Follow-up re-extraction has its own budget: `leads:reextraction:{workspaceId}:{YYYY-MM-DD}`, 150/day, plus a `lead:reextract:{leadId}` 180s cooldown.
 
 ---
 
@@ -2469,6 +2473,8 @@ Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per 
 ### الموقع في خط الإنتاج
 
 تعمل بأسلوب "أطلق وانسَ" (fire-and-forget) بعد إرسال الرد في `messageProcessor.ts` و`commentProcessor.ts`. لا تعيق خط الرد أبدًا.
+
+**إعادة الاستخلاص عند رسائل المتابعة (يوليو 2026):** يرسل العميل رقمه أولًا ثم تفاصيل الطلب بعده (المقاس النهائي، اسم المستلم، العنوان). ما دام العميل المحتمل (من الرسائل الخاصة) في حالة `new` وخلال نافذة `LEAD_REEXTRACT_WINDOW_HOURS` (افتراضيًا 24 ساعة، والقيمة `0` توقف الميزة)، تعيد كل رسالة لاحقة من العميل تشغيل الاستخلاص على كامل المحادثة **وتدمج** النتيجة في البطاقة (القيمة الأحدث تفوز لكل حقل، الحقول القديمة لا تُحذف أبدًا، ولا يُمَسّ الرقم أو الحالة أو أعلام المتابعة). **كلا مساري الكتابة يدمجان**: إعادة مشاركة الرقم تدمج أيضًا ولا تستبدل، فلا يمكن لبطاقة ممتلئة أن تُمسح عند تجاوز الحد اليومي أو فشل الذكاء الاصطناعي. محكومة بمهلة تهدئة 3 دقائق لكل عميل، وعدّاد `extractionAttempts` بحد 10 (عدّاد مشترك لكل عمليات الاستخلاص للعميل الواحد: الالتقاط الأول وإعادة مشاركة الرقم وإعادات القراءة)، وميزانية يومية منفصلة (150/يوم لكل مساحة عمل) حتى لا تزاحم الالتقاط الأول.
 
 ### المخطط في قاعدة البيانات
 
@@ -2490,6 +2496,8 @@ Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per 
 ### الواجهة الأمامية
 
 صفحة `/leads` — تحديد الصفحة، تصفية بالحالة، أعمدة ديناميكية من `extractedData.fields`، تصدير CSV (يشمل المرحلة الفرعية والحقول المخصصة)، تحديثات فورية عبر SSE، شارة عملاء جدد في الشريط الجانبي. لوحة التفاصيل مرتبة حسب سير عمل التاجر: ملخص الطلب أولًا، ثم أزرار التواصل، ثم الحالة والمراحل، ثم حقول البيانات.
+
+**البحث من الخادم (يوليو 2026):** `GET /leads?search=` يطابق اسم المرسل والرقم والبيانات المستخلصة. سابقًا كان البحث يصفّي الصفوف المحمّلة في المتصفح فقط، فأي عميل بعد الصفحة الأولى (50) لا يظهر عند البحث باسمه.
 
 ---
 
