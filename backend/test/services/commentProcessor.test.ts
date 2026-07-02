@@ -765,9 +765,11 @@ describe('CommentProcessor', () => {
         });
         const adapter = createMockAdapter();
 
+        // Lettered spam — content-free tokens ('.') are exempt from the spam skip
+        // when post context exists (solicited CTA engagement, step 8c exception).
         await commentProcessor.processComment(
             adapter, 'fb-page-1', 'content-1', 'comment-1',
-            '.', 'from-1', 'Commenter',
+            'تابعوني على قناتي للربح السريع', 'from-1', 'Commenter',
         );
 
         expect(publishSSEEvent).toHaveBeenCalledWith(
@@ -1966,8 +1968,9 @@ describe('CommentProcessor — template reply mode behavior', () => {
                 needsAttention: false,
             });
 
+            // Lettered spam — content-free tokens are exempt (see next test).
             const result = await commentProcessor.processComment(
-                adapter, 'page-1', 'content-1', 'comment-1', '.', 'user-1', 'Walaa',
+                adapter, 'page-1', 'content-1', 'comment-1', 'تابعوني على قناتي للربح', 'user-1', 'Walaa',
             );
 
             expect(result.success).toBe(true);
@@ -1975,6 +1978,51 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
             // Should NOT flag it — silent skip means no merchant notification
             expect(adapter.flagComment).not.toHaveBeenCalled();
+        });
+
+        // Regression for eval #324 (لامار الشام on the PUBLIC channel): a content-free
+        // comment ("٠٠٠", ".") on a post is the customer following the post's CTA.
+        // A model SPAM_OR_IRRELEVANT quirk must NOT silently drop it — the step-8c
+        // exception bypasses the silent skip and the reply is sent.
+        it('does NOT silently skip a content-free CTA comment despite a spam verdict', async () => {
+            const adapter = createMockAdapter();
+
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: 'دورات ICDL بكلفة 25 ألف — سجّل الآن',
+                replyMethod: 'ai',
+                aiIntent: 'SPAM_OR_IRRELEVANT',
+                needsAttention: false,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', '٠٠٠', 'user-1', 'Walaa',
+            );
+
+            expect(result.success).toBe(true);
+            // NOT resolved-as-spam; the reply goes out instead
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(result.replyText).toBe('دورات ICDL بكلفة 25 ألف — سجّل الآن');
+        });
+
+        it('still skips+flags OFFENSIVE even when the comment is content-free', async () => {
+            const adapter = createMockAdapter();
+
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: null,
+                replyMethod: 'ai',
+                aiIntent: 'OFFENSIVE',
+                flagReason: 'offensive_or_abusive',
+                needsAttention: true,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', '🖕', 'user-1', 'Walaa',
+            );
+
+            expect(result.success).toBe(true);
+            // Offensive content is flagged for merchant attention, never auto-replied
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'offensive_or_abusive', 'OFFENSIVE');
         });
     });
 

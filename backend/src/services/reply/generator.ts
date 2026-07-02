@@ -12,8 +12,8 @@ import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, type ProductCard, type FlagMeta } from '@jawab24/shared';
 import { detectLanguage, detectLanguageCode } from '../../utils/language';
-import type { FacebookMessageTag } from '../../utils/commentText';
-import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
+import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
+import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
 import { detectBusinessActionFlags } from './urgentFlags';
 
 /**
@@ -525,8 +525,8 @@ export class ReplyGenerator {
             // instead of the brief "message us" comment-style reply.
             const effectiveChannel: 'comment' | 'dm' = (commentReplyMode === 'dual' || commentReplyMode === 'private') ? 'dm' : 'comment';
 
-            commentForAI = rewritePunctuationForDualDm({
-                commentForAI, rawText: text, postMessage, effectiveChannel,
+            commentForAI = rewriteContentFreeCta({
+                commentForAI, rawText: text, postMessage,
             });
 
             // Build gap source context for merchant insights
@@ -820,11 +820,11 @@ export class ReplyGenerator {
             questionForAI = pre.commentForAI;
         }
 
-        // Dual-mode DM with punctuation-only input (e.g. "." on a CTA post): replace with
-        // a synthetic question so the AI has something meaningful to answer.
-        questionForAI = rewritePunctuationForDualDm({
+        // Content-free CTA input (e.g. "." / "٠٠٠" on a CTA post): replace with a
+        // synthetic question so the AI has something meaningful to answer — on any
+        // channel (see rewriteContentFreeCta for the public-mode rationale).
+        questionForAI = rewriteContentFreeCta({
             commentForAI: questionForAI, rawText: question, postMessage,
-            effectiveChannel: channel,
         });
 
         // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production).
@@ -894,10 +894,18 @@ export class ReplyGenerator {
 
         const needsAttention = computeNeedsAttention(flags, normalizedIntent);
         // Don't skip DM replies that originated from a post comment (dual mode) —
-        // the customer engaged with a CTA post and deserves a response
+        // the customer engaged with a CTA post and deserves a response.
+        // Likewise never SPAM-skip a content-free comment on a post, on ANY channel:
+        // "٠٠٠" / "." is the customer following the post's CTA. rewriteContentFreeCta
+        // normally prevents the spam verdict at the input; this is the deterministic
+        // backstop so a model quirk about one Unicode script can't silence solicited
+        // engagement (eval #324). OFFENSIVE is NOT bypassed — shouldSilentlySkip is
+        // true only for SPAM_OR_IRRELEVANT, so an offensive emoji still skips+flags.
+        const solicitedCta = !!postMessage && isContentFree(question.trim());
         const skipped = (channel === 'dm' && postMessage)
             ? false
-            : shouldSkipReply(flags.join(','), normalizedIntent);
+            : shouldSkipReply(flags.join(','), normalizedIntent)
+                && !(solicitedCta && shouldSilentlySkip(normalizedIntent));
         const useFallback = shouldUseFallback(flags.join(','));
 
         // Gap recording (fire-and-forget, same triggers as processAiResponse)
