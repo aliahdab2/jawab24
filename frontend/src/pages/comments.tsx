@@ -85,10 +85,12 @@ const CommentsPage: NextPageWithLayout = () => {
     staleTime: 30_000,
   });
   const triggersByPostId = useMemo(() => {
-    const map: Record<string, { keyword: string; reply: string } | null> = {};
+    // A rule is active whenever a reply is set — keyword mode carries keyword+reply,
+    // any-comment mode carries a reply only (keyword null).
+    const map: Record<string, { keyword: string | null; reply: string } | null> = {};
     for (const post of postsData as Array<{ id: string; triggerKeyword?: string | null; triggerReply?: string | null }>) {
-      map[post.id] = post.triggerKeyword && post.triggerReply
-        ? { keyword: post.triggerKeyword, reply: post.triggerReply }
+      map[post.id] = post.triggerReply
+        ? { keyword: post.triggerKeyword ?? null, reply: post.triggerReply }
         : null;
     }
     return map;

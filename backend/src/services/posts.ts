@@ -174,6 +174,7 @@ export class PostsService {
         triggerKeyword: string | null,
         triggerReply: string | null,
         workspaceId: string,
+        triggerType: 'keyword' | 'all' = 'keyword',
     ): Promise<boolean> {
         if (source === 'instagram') {
             const owned = await db
@@ -185,7 +186,7 @@ export class PostsService {
 
             await db
                 .update(instagramMedia)
-                .set({ triggerKeyword, triggerReply, updatedAt: new Date() })
+                .set({ triggerKeyword, triggerReply, triggerType, updatedAt: new Date() })
                 .where(eq(instagramMedia.id, contentId));
         } else {
             const owned = await db
@@ -197,7 +198,7 @@ export class PostsService {
 
             await db
                 .update(posts)
-                .set({ triggerKeyword, triggerReply, updatedAt: new Date() })
+                .set({ triggerKeyword, triggerReply, triggerType, updatedAt: new Date() })
                 .where(eq(posts.id, contentId));
         }
 

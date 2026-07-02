@@ -8,12 +8,15 @@ import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
 
+type TriggerMode = 'keyword' | 'all';
+
 interface PostTriggerModalProps {
   postId: string;
   source: 'facebook' | 'instagram';
   postMessage?: string | null;
   triggerKeyword?: string | null;
   triggerReply?: string | null;
+  triggerType?: string | null;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -25,12 +28,14 @@ export function PostTriggerModal({
   postMessage,
   triggerKeyword: initialKeyword,
   triggerReply: initialReply,
+  triggerType: initialType,
   isOpen,
   onClose,
   onSaved,
 }: PostTriggerModalProps) {
   const t = useTranslations('comments');
 
+  const [mode, setMode] = useState<TriggerMode>(() => (initialType === 'all' ? 'all' : 'keyword'));
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
   const [reply, setReply] = useState(initialReply ?? '');
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -38,10 +43,11 @@ export function PostTriggerModal({
   // Sync when modal opens with fresh values
   useEffect(() => {
     if (isOpen) {
+      setMode(initialType === 'all' ? 'all' : 'keyword');
       setKeywords(parseKeywords(initialKeyword));
       setReply(initialReply ?? '');
     }
-  }, [isOpen, initialKeyword, initialReply]);
+  }, [isOpen, initialKeyword, initialReply, initialType]);
 
   const onSaveSuccess = useCallback(() => { onSaved(); onClose(); }, [onSaved, onClose]);
   const { handle: runSave, saving: savingSave } = useSaveHandler({
@@ -57,7 +63,7 @@ export function PostTriggerModal({
   const saving = savingSave || savingClear;
 
   async function handleSave() {
-    if (keywords.length === 0) {
+    if (mode === 'keyword' && keywords.length === 0) {
       toast.error(t('postTriggerKeywordRequired'));
       return;
     }
@@ -65,7 +71,8 @@ export function PostTriggerModal({
       toast.error(t('postTriggerReplyRequired'));
       return;
     }
-    await runSave(() => postsApi.updateTrigger(postId, source, keywords.join(', '), reply.trim()));
+    const keywordArg = mode === 'all' ? null : keywords.join(', ');
+    await runSave(() => postsApi.updateTrigger(postId, source, keywordArg, reply.trim(), mode));
   }
 
   function requestClear() {
@@ -77,7 +84,9 @@ export function PostTriggerModal({
     await runClear(() => postsApi.updateTrigger(postId, source, null, null));
   }
 
-  const hasActiveTrigger = !!(initialKeyword && initialReply);
+  // A rule is active whenever a reply is set — keyword mode carries keyword+reply,
+  // any-comment mode carries a reply only.
+  const hasActiveTrigger = !!initialReply;
 
   const footer = (
     <div className={clsx('flex items-center gap-3', hasActiveTrigger ? 'justify-between' : 'justify-end')}>
@@ -132,21 +141,53 @@ export function PostTriggerModal({
           </div>
         )}
 
-        {/* Keyword chip input */}
-        <FormField
-          label={t('postTriggerKeyword')}
-          htmlFor="trigger-keyword"
-          helper={t('postTriggerKeywordHelp')}
-        >
-          <KeywordChipInput
-            id="trigger-keyword"
-            value={keywords}
-            onChange={setKeywords}
-            placeholder={t('postTriggerKeywordPlaceholder')}
-            maxKeywords={10}
-            maxLength={100}
-          />
+        {/* Trigger mode: match keywords vs reply to any comment */}
+        <FormField label={t('postTriggerMode')} htmlFor="trigger-mode">
+          <div id="trigger-mode" role="radiogroup" aria-label={t('postTriggerMode')} className="grid grid-cols-2 gap-2">
+            {(['keyword', 'all'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={mode === m}
+                onClick={() => setMode(m)}
+                className={clsx(
+                  'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                  mode === m
+                    ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300'
+                    : 'border-surface-200 dark:border-surface-700 text-muted-foreground hover:bg-surface-50 dark:hover:bg-surface-800',
+                )}
+              >
+                {m === 'keyword' ? t('postTriggerModeKeyword') : t('postTriggerModeAll')}
+              </button>
+            ))}
+          </div>
         </FormField>
+
+        {/* Keyword chip input — only in keyword mode */}
+        {mode === 'keyword' && (
+          <FormField
+            label={t('postTriggerKeyword')}
+            htmlFor="trigger-keyword"
+            helper={t('postTriggerKeywordHelp')}
+          >
+            <KeywordChipInput
+              id="trigger-keyword"
+              value={keywords}
+              onChange={setKeywords}
+              placeholder={t('postTriggerKeywordPlaceholder')}
+              maxKeywords={10}
+              maxLength={100}
+            />
+          </FormField>
+        )}
+
+        {/* Any-comment caution */}
+        {mode === 'all' && (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg alert-warning text-sm leading-relaxed" role="note">
+            <span>{t('postTriggerAllCaution')}</span>
+          </div>
+        )}
 
         {/* Reply textarea */}
         <FormField label={t('postTriggerReply')} htmlFor="trigger-reply">
@@ -154,7 +195,7 @@ export function PostTriggerModal({
             id="trigger-reply"
             value={reply}
             onChange={e => setReply(e.target.value)}
-            placeholder={t('postTriggerReplyPlaceholder')}
+            placeholder={mode === 'all' ? t('postTriggerAllReplyPlaceholder') : t('postTriggerReplyPlaceholder')}
             dir="auto"
             rows={4}
             maxLength={1000}

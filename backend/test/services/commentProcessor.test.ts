@@ -4,7 +4,7 @@ import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
 import { commentsService } from '../../src/services/comments';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../../src/services/reply/generator';
-import { rateLimiter, commentDebounce } from '../../src/services/protection';
+import { rateLimiter, commentDebounce, postReplyCap } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { notificationService } from '../../src/services/notifications';
 import { publishSSEEvent } from '../../src/lib/eventBus';
@@ -36,6 +36,11 @@ vi.mock('../../src/services/protection', () => ({
     commentDebounce: {
         isCoolingDown: vi.fn().mockResolvedValue(false),
         arm: vi.fn().mockResolvedValue(undefined),
+        setLogger: vi.fn(),
+    },
+    postReplyCap: {
+        isOverCap: vi.fn().mockResolvedValue(false),
+        increment: vi.fn().mockResolvedValue(undefined),
         setLogger: vi.fn(),
     },
 }));
@@ -1747,6 +1752,79 @@ describe('CommentProcessor — template reply mode behavior', () => {
             const call = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
             expect(call[7]).toBe('content-uuid');
         });
+    });
+
+    describe('Post Reply — any-comment mode (triggerType "all")', () => {
+        const anyCommentContent = {
+            id: 'content-uuid',
+            autoReplyEnabled: true,
+            message: 'Post body',
+            triggerKeyword: null,
+            triggerReply: 'تم إرسال الكود على الخاص 📩',
+            triggerType: 'all',
+        };
+
+        it('sends the template on any benign comment (no keyword needed)', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كيف أطلب؟', 'user-1', 'Ali',
+            );
+
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+            expect(result.replyText).toBe('تم إرسال الكود على الخاص 📩');
+            // Successful any-comment send counts toward the per-post cap
+            expect(postReplyCap.increment).toHaveBeenCalledWith('page-uuid', 'content-uuid');
+        });
+
+        it('skips spam (emoji-only) without sending — guardrail', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', '😂😂😂', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            expect(result.success).toBe(true);
+        });
+
+        it('flags a refund request for attention instead of sending the template', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'بدي استرجاع فلوسي', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'refund_request', undefined);
+            expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('does not send once the per-post cap is reached', async () => {
+            vi.mocked(postReplyCap.isOverCap).mockResolvedValueOnce(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كيف أطلب؟', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            expect(result.success).toBe(true);
+        });
+
     });
 
     describe('Friend-tag silent skip — runs before trigger-keyword branch', () => {

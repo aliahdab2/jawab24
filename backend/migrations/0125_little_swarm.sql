@@ -1,0 +1,2 @@
+ALTER TABLE "instagram_media" ADD COLUMN "trigger_type" varchar(20) DEFAULT 'keyword' NOT NULL;--> statement-breakpoint
+ALTER TABLE "posts" ADD COLUMN "trigger_type" varchar(20) DEFAULT 'keyword' NOT NULL;

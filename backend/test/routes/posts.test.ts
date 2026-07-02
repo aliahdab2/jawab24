@@ -143,7 +143,7 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id');
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id', 'keyword');
         });
 
         it('should clear trigger when both values are null', async () => {
@@ -156,7 +156,7 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id');
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id', 'keyword');
         });
 
         it('should return 400 for invalid source', async () => {

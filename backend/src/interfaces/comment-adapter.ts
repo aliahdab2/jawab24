@@ -24,6 +24,8 @@ export interface ContentEntity {
     triggerKeyword?: string | null;
     /** Per-post engagement trigger: reply sent when triggerKeyword is matched */
     triggerReply?: string | null;
+    /** How the per-post trigger fires: 'keyword' (match triggerKeyword) | 'all' (any comment). */
+    triggerType?: string | null;
 }
 
 /** Context passed to replyGenerator.generateForComment */

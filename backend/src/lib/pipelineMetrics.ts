@@ -45,6 +45,7 @@ export type Outcome =
     | 'subscription_inactive'
     | 'lock_contention'
     | 'trigger_no_match'
+    | 'post_reply_capped'
     | 'transient_error_retry'
     | 'ai_failed_immediate_flag'
     | 'ai_parked'

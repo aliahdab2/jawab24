@@ -83,6 +83,16 @@ vi.mock('../../src/services/protection', () => ({
         check: vi.fn(),
         setLogger: vi.fn(),
     },
+    commentDebounce: {
+        isCoolingDown: vi.fn().mockResolvedValue(false),
+        arm: vi.fn().mockResolvedValue(undefined),
+        setLogger: vi.fn(),
+    },
+    postReplyCap: {
+        isOverCap: vi.fn().mockResolvedValue(false),
+        increment: vi.fn().mockResolvedValue(undefined),
+        setLogger: vi.fn(),
+    },
 }));
 
 vi.mock('../../src/services/notifications', () => ({
