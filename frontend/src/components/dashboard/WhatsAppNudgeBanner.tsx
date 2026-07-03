@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Button, WhatsAppIcon } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
+import { isWhatsAppEnabled } from '@/lib/featureFlags';
 import type { Page } from '@jawab24/shared';
 
 /**
@@ -20,11 +21,10 @@ export function WhatsAppNudgeBanner({ pages, isOwner }: { pages: Page[]; isOwner
         durationMs: 365 * 24 * 60 * 60 * 1000,
     });
 
-    const configured = !!process.env.NEXT_PUBLIC_FB_APP_ID && !!process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID;
     const hasConnectedPage = pages.some(p => p.isConnected !== false);
     const hasWhatsApp = pages.some(p => p.whatsappConnected);
 
-    if (dismissed || !isOwner || !configured || !hasConnectedPage || hasWhatsApp) return null;
+    if (dismissed || !isOwner || !isWhatsAppEnabled() || !hasConnectedPage || hasWhatsApp) return null;
 
     return (
         <div className="flex items-start gap-3 p-4 rounded-2xl border bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 transition-all">

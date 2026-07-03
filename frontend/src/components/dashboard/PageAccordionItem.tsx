@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { ChannelBadges } from '@/components/ui';
+import { isWhatsAppEnabled } from '@/lib/featureFlags';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { getPageAvatarUrl } from '@/utils/pageUrl';
 import type { Page } from '@jawab24/shared';
@@ -123,8 +124,12 @@ export function PageAccordionItem({
           </div>
         </div>
 
-        {/* Channel fingerprint — colored = replying, muted = connected but off */}
-        <ChannelBadges page={page} labels={badgeLabels} />
+        {/* Channel fingerprint — colored = replying, muted = connected but off.
+            Master-switch gated: no badges until WhatsApp is live (or this page
+            already has a number), so a dark deploy looks like today. */}
+        {(isWhatsAppEnabled() || page.whatsappConnected) && (
+          <ChannelBadges page={page} labels={badgeLabels} />
+        )}
 
         {/* Chevron */}
         <ChevronRight

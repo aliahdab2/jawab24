@@ -544,3 +544,66 @@ describe('PagesPage - WhatsApp-only cards', () => {
         expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
     });
 });
+
+describe('PagesPage - WhatsApp master switch OFF (dark deploy)', () => {
+    // Flag off: the page must look exactly like the pre-WhatsApp product for a
+    // normal Facebook page — no WhatsApp row, legacy "My Pages" title, no picker.
+    const FB_PAGE = {
+        id: 'page_fb',
+        facebookPageId: 'fb_1',
+        name: 'Falafel House',
+        autoReplyEnabled: true,
+        instagramAutoReplyEnabled: false,
+        instagramUsername: 'falafel',
+        commentsCount: 5,
+        knowledgeBase: 'We sell falafel.',
+        isConnected: true,
+        whatsappConnected: false,
+    };
+
+    beforeEach(() => {
+        mockToastError.mockClear();
+        vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [FB_PAGE] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        vi.clearAllMocks();
+    });
+
+    it('hides the WhatsApp row on a Facebook page and keeps the legacy title', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Falafel House')[0]).toBeInTheDocument();
+        });
+
+        // No WhatsApp surface at all
+        expect(screen.queryByText('WhatsApp')).not.toBeInTheDocument();
+        expect(screen.queryByText('WhatsApp not connected')).not.toBeInTheDocument();
+        // Legacy title, not "Channels"
+        expect(screen.getByText('My Pages')).toBeInTheDocument();
+        expect(screen.queryByText('Channels')).not.toBeInTheDocument();
+        // Facebook row still present (unchanged experience)
+        expect(screen.getByText('Facebook')).toBeInTheDocument();
+    });
+
+    it('still shows the WhatsApp row for an already-connected number even when the flag is off', async () => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...FB_PAGE, whatsappConnected: true, whatsappDisplayPhoneNumber: '+966 55 000 0000', whatsappAutoReplyEnabled: true }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Falafel House')[0]).toBeInTheDocument();
+        });
+
+        // The whatsappConnected OR keeps a live number visible regardless of the flag
+        expect(screen.getByText('+966 55 000 0000')).toBeInTheDocument();
+    });
+});

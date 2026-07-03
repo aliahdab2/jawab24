@@ -31,6 +31,7 @@ import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, AiUsageWarningBanner, SetupChecklistCard, type NeedsAttentionItem } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
+import { isWhatsAppEnabled } from '@/lib/featureFlags';
 import { getPageExternalUrl } from '@/utils/pageUrl';
 import { isKbFilled } from '@/utils/kb';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -956,8 +957,8 @@ const DashboardPage: NextPageWithLayout = () => {
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">
             <div className="p-5 sm:p-6 border-b border-theme-border bg-background/50">
-              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{t('topPages')}</h2>
-              <p className="text-sm font-medium text-muted-foreground mt-1">{t('topPagesDesc')}</p>
+              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{isWhatsAppEnabled() ? t('topPagesChannels') : t('topPages')}</h2>
+              <p className="text-sm font-medium text-muted-foreground mt-1">{isWhatsAppEnabled() ? t('topPagesChannelsDesc') : t('topPagesDesc')}</p>
             </div>
             <div className={clsx(
               'divide-y divide-theme-border',
