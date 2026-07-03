@@ -71,7 +71,7 @@ vi.mock('@/components/ui', () => ({
         <button role="switch" aria-checked={enabled} onClick={() => onChange(!enabled)}>{enabled ? 'ON' : 'OFF'}</button>
     ),
     EmptyState: ({ title }: { title: string }) => <div>{title}</div>,
-    PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
+    PageHeader: ({ title, action }: { title: string; action?: React.ReactNode }) => <div><h1>{title}</h1>{action}</div>,
     PageSkeleton: () => <div data-testid="page-skeleton">Loading...</div>,
     ConfirmationModal: ({ isOpen, onClose, onConfirm, title, message, confirmText }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; title?: string; message?: string; confirmText?: string }) =>
         isOpen ? (
@@ -84,6 +84,14 @@ vi.mock('@/components/ui', () => ({
         ) : null,
     InfoPopover: ({ children }: { children: React.ReactNode; label?: string }) => <>{children}</>,
     WhatsAppIcon: () => <svg data-testid="whatsapp-icon" />,
+    FacebookIcon: () => <svg data-testid="facebook-icon" />,
+    Modal: ({ isOpen, title, children }: { isOpen: boolean; title: string; children: React.ReactNode }) =>
+        isOpen ? (
+            <div data-testid="channel-picker-modal">
+                <p>{title}</p>
+                {children}
+            </div>
+        ) : null,
 }));
 
 vi.mock('@/components/knowledge-base/KnowledgeBaseModal', () => ({
@@ -478,7 +486,7 @@ describe('PagesPage - WhatsApp-only cards', () => {
         });
     });
 
-    it('"Add WhatsApp number" card runs signup and appends the created card', async () => {
+    it('channel picker: WhatsApp option runs signup and appends the created card', async () => {
         mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_new', wabaId: 'w' });
         mockedApi.post.mockResolvedValue({
             data: { ...WA_ONLY_PAGE, id: 'wa_new', name: 'Second Branch', whatsappDisplayPhoneNumber: '+966 50 999 8877' },
@@ -490,8 +498,13 @@ describe('PagesPage - WhatsApp-only cards', () => {
             expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument();
         });
 
+        // Header "Connect channel" opens the picker
+        fireEvent.click(screen.getByText('Connect channel'));
+        expect(screen.getByTestId('channel-picker-modal')).toBeInTheDocument();
+        expect(screen.getByText('Which channel do you want to connect?')).toBeInTheDocument();
+
         await act(async () => {
-            fireEvent.click(screen.getByText('Add WhatsApp number'));
+            fireEvent.click(screen.getByText('WhatsApp number'));
         });
 
         expect(mockLaunchWhatsAppSignup).toHaveBeenCalled();
@@ -501,5 +514,33 @@ describe('PagesPage - WhatsApp-only cards', () => {
         await waitFor(() => {
             expect(screen.getAllByText('Second Branch')[0]).toBeInTheDocument();
         });
+    });
+
+    it('channel picker: Facebook option opens the FB connect dialog', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Connect channel'));
+        fireEvent.click(screen.getByText('Facebook Page'));
+
+        expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+        expect(screen.getByText('Connect a Page')).toBeInTheDocument();
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+    });
+
+    it('without Embedded Signup config the header button skips the picker (FB dialog directly)', async () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Connect New Page'));
+        expect(screen.queryByTestId('channel-picker-modal')).not.toBeInTheDocument();
+        expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
     });
 });

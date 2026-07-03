@@ -35,6 +35,7 @@ import dynamic from 'next/dynamic';
 
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
+import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { captureError } from '@/lib/sentryHelpers';
 import { useWorkspaceRole, useSaveKnowledgeBase } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
@@ -82,6 +83,7 @@ const PagesPage: NextPageWithLayout = () => {
     (pageId, text) => setPages((prev) => prev.map(p => (p.id === pageId ? { ...p, knowledgeBase: text } : p))),
   );
   const [showConnectDialog, setShowConnectDialog] = useState(false);
+  const [showChannelPicker, setShowChannelPicker] = useState(false);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
   const [testSmartReplyPage, setTestSmartReplyPage] = useState<Page | null>(null);
@@ -461,6 +463,16 @@ const PagesPage: NextPageWithLayout = () => {
   // (both env vars are inlined at build time).
   const whatsappSignupConfigured = !!process.env.NEXT_PUBLIC_FB_APP_ID && !!process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID;
 
+  // Single "Connect channel" entry point. With WhatsApp not yet configured the
+  // picker would have one option, so it collapses to the Facebook dialog directly.
+  const handleOpenConnect = () => {
+    if (whatsappSignupConfigured) {
+      setShowChannelPicker(true);
+    } else {
+      setShowConnectDialog(true);
+    }
+  };
+
   const formatTime = (epochMs: number) => {
     if (!epochMs) return tc('noData');
     return formatRelativeTime(new Date(epochMs), tTime);
@@ -507,11 +519,11 @@ const PagesPage: NextPageWithLayout = () => {
         description={t('description')}
         action={isOwner
           ? <Button
-              onClick={() => setShowConnectDialog(true)}
+              onClick={handleOpenConnect}
               disabled={syncing}
               icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
             >
-              {syncing ? t('syncing') : t('connectPage')}
+              {syncing ? t('syncing') : (whatsappSignupConfigured ? t('connectChannel') : t('connectPage'))}
             </Button>
           : undefined
         }
@@ -923,28 +935,6 @@ const PagesPage: NextPageWithLayout = () => {
                 {renderSection(activePages, t('sectionActive'), false)}
                 {renderSection(inactivePages, t('sectionInactive'), true)}
                 {renderSection(disconnectedPages, t('sectionDisconnected'), true)}
-                {/* Add WhatsApp number — creates a WhatsApp-only card (a branch,
-                    a department, or a merchant with no Facebook page at all) */}
-                {isOwner && whatsappSignupConfigured && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <button
-                      type="button"
-                      onClick={() => handleConnectWhatsApp(null)}
-                      disabled={connectingWhatsApp === 'new'}
-                      className="flex flex-col items-center justify-center gap-3 min-h-[200px] p-6 rounded-3xl border-2 border-dashed border-theme-border text-center hover:border-emerald-300 dark:hover:border-emerald-700 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 transition-colors"
-                    >
-                      <span className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center" aria-hidden="true">
-                        <WhatsAppIcon className="w-6 h-6" />
-                      </span>
-                      <span className="text-base font-bold text-foreground">
-                        {connectingWhatsApp === 'new' ? t('whatsappConnecting') : t('addWhatsAppNumber')}
-                      </span>
-                      <span className="text-xs text-muted-foreground max-w-[32ch]">
-                        {t('addWhatsAppNumberDesc')}
-                      </span>
-                    </button>
-                  </div>
-                )}
               </>
             );
           })()}
@@ -956,21 +946,9 @@ const PagesPage: NextPageWithLayout = () => {
             title={t('noPages')}
             description={t('noPagesDesc')}
             action={isOwner
-              ? <div className="flex flex-col items-center gap-3">
-                  <Button onClick={() => setShowConnectDialog(true)}>
-                    {t('connectPage')}
-                  </Button>
-                  {whatsappSignupConfigured && (
-                    <button
-                      type="button"
-                      onClick={() => handleConnectWhatsApp(null)}
-                      disabled={connectingWhatsApp === 'new'}
-                      className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
-                    >
-                      {connectingWhatsApp === 'new' ? t('whatsappConnecting') : t('noPagesWhatsAppCta')}
-                    </button>
-                  )}
-                </div>
+              ? <Button onClick={handleOpenConnect}>
+                  {whatsappSignupConfigured ? t('connectChannel') : t('connectPage')}
+                </Button>
               : undefined
             }
           />
@@ -996,6 +974,22 @@ const PagesPage: NextPageWithLayout = () => {
           onClose={() => { setTestSmartReplyPage(null); setTestReplyPrefillSample(false); }}
         />
       )}
+
+      {/* Channel picker — the single global "connect" entry point */}
+      <ChannelPickerModal
+        isOpen={showChannelPicker}
+        onClose={() => setShowChannelPicker(false)}
+        onPickFacebook={() => {
+          setShowChannelPicker(false);
+          setShowConnectDialog(true);
+        }}
+        onPickWhatsApp={() => {
+          setShowChannelPicker(false);
+          handleConnectWhatsApp(null);
+        }}
+        whatsappAvailable={whatsappSignupConfigured}
+        whatsappConnecting={connectingWhatsApp === 'new'}
+      />
 
       {/* Connect Page confirmation dialog */}
       <ConfirmationModal
