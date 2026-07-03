@@ -9,6 +9,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { ChannelBadges } from '@/components/ui';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { getPageAvatarUrl } from '@/utils/pageUrl';
 import type { Page } from '@jawab24/shared';
@@ -58,7 +59,14 @@ export function PageAccordionItem({
 
   const headerId = `page-header-${page.id}`;
   const panelId = `page-panel-${page.id}`;
-  const isActive = page.autoReplyEnabled || page.instagramAutoReplyEnabled;
+  const isActive = page.autoReplyEnabled || page.instagramAutoReplyEnabled || page.whatsappAutoReplyEnabled;
+
+  // Channel fingerprint labels: "<platform>: <enabled|disabled>"
+  const badgeLabels = {
+    facebook: `${tComments('platformFacebook')}: ${page.autoReplyEnabled ? tc('enabled') : tc('disabled')}`,
+    instagram: `${tComments('platformInstagram')}: ${page.instagramAutoReplyEnabled ? tc('enabled') : tc('disabled')}`,
+    whatsapp: `${tComments('platformWhatsApp')}: ${page.whatsappAutoReplyEnabled ? tc('enabled') : tc('disabled')}`,
+  };
 
   return (
     <div
@@ -114,6 +122,9 @@ export function PageAccordionItem({
             )}
           </div>
         </div>
+
+        {/* Channel fingerprint — colored = replying, muted = connected but off */}
+        <ChannelBadges page={page} labels={badgeLabels} />
 
         {/* Chevron */}
         <ChevronRight

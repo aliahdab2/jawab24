@@ -75,6 +75,8 @@ interface PlatformIconProps {
   platform: 'instagram' | 'facebook' | 'whatsapp';
   /** sm = w-4/h-4 container (w-2.5 icon), md = w-5/h-5 container (w-3.5 icon) */
   size?: 'sm' | 'md';
+  /** Grey rendering — "connected but auto-reply off" in badge clusters */
+  muted?: boolean;
   ariaLabel?: string;
   className?: string;
 }
@@ -85,14 +87,16 @@ const PLATFORM_STYLES = {
   whatsapp: { path: WHATSAPP_PATH, classes: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' },
 } as const;
 
-export function PlatformIcon({ platform, size = 'sm', ariaLabel, className }: PlatformIconProps) {
+const MUTED_CLASSES = 'bg-surface-100 text-icon-muted dark:bg-surface-800';
+
+export function PlatformIcon({ platform, size = 'sm', muted = false, ariaLabel, className }: PlatformIconProps) {
   const style = PLATFORM_STYLES[platform] ?? PLATFORM_STYLES.facebook;
   return (
     <span
       className={clsx(
         'inline-flex items-center justify-center rounded-full flex-shrink-0',
         size === 'sm' ? 'w-4 h-4' : 'w-5 h-5',
-        style.classes,
+        muted ? MUTED_CLASSES : style.classes,
         className,
       )}
       aria-label={ariaLabel}
@@ -104,6 +108,49 @@ export function PlatformIcon({ platform, size = 'sm', ariaLabel, className }: Pl
       >
         <path d={style.path} />
       </svg>
+    </span>
+  );
+}
+
+/**
+ * Compact channel fingerprint for SUMMARY surfaces (dashboard lists, page
+ * pickers): colored = connected & replying, muted = connected but auto-reply
+ * off, absent = channel not connected. Detail views (the Channels cards)
+ * keep their full rows — never render both in one component.
+ */
+export function ChannelBadges({
+  page,
+  labels,
+}: {
+  page: {
+    facebookPageId?: string | null;
+    autoReplyEnabled?: boolean | null;
+    instagramAccountId?: string | null;
+    instagramUsername?: string | null;
+    instagramAutoReplyEnabled?: boolean | null;
+    whatsappConnected?: boolean;
+    whatsappAutoReplyEnabled?: boolean | null;
+  };
+  /** Localized "<platform>: <state>" aria labels, keyed by platform */
+  labels: { facebook: string; instagram: string; whatsapp: string };
+}) {
+  const channels: Array<{ platform: 'facebook' | 'instagram' | 'whatsapp'; on: boolean; label: string }> = [];
+  if (page.facebookPageId) {
+    channels.push({ platform: 'facebook', on: !!page.autoReplyEnabled, label: labels.facebook });
+  }
+  if (page.instagramAccountId || page.instagramUsername) {
+    channels.push({ platform: 'instagram', on: !!page.instagramAutoReplyEnabled, label: labels.instagram });
+  }
+  if (page.whatsappConnected) {
+    channels.push({ platform: 'whatsapp', on: !!page.whatsappAutoReplyEnabled, label: labels.whatsapp });
+  }
+  if (channels.length === 0) return null;
+
+  return (
+    <span className="inline-flex items-center gap-1 flex-shrink-0" role="group">
+      {channels.map(({ platform, on, label }) => (
+        <PlatformIcon key={platform} platform={platform} size="md" muted={!on} ariaLabel={label} />
+      ))}
     </span>
   );
 }
