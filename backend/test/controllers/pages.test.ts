@@ -36,6 +36,14 @@ vi.mock('../../src/services/auth', () => ({
     },
 }));
 
+vi.mock('../../src/services/channelTrial', () => ({
+    channelTrialService: {
+        evaluate: vi.fn().mockResolvedValue({ blocked: false }),
+        record: vi.fn().mockResolvedValue(undefined),
+        channelsForPage: vi.fn().mockReturnValue([{ type: 'facebook', id: 'fb-1' }]),
+    },
+}));
+
 // Import after mocks
 import { pagesController } from '../../src/controllers/pages';
 import { pagesService } from '../../src/services/pages';
@@ -66,7 +74,7 @@ describe('Pages Controller', () => {
     // ---- create ----
     describe('create', () => {
         it('should create a page successfully', async () => {
-            const newPage = { id: 'page-1', name: 'Test Page', accessToken: 'tok' };
+            const newPage = { id: 'page-1', name: 'Test Page', facebookPageId: 'fb-page-1', accessToken: 'tok' };
             vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 1 } as any);
             vi.mocked(pagesService.createPage).mockResolvedValue(newPage as any);
             mockRequest.body = { facebookPageId: 'fb-page-1', name: 'Test Page', accessToken: 'tok' };
@@ -111,7 +119,7 @@ describe('Pages Controller', () => {
     // ---- getAll ----
     describe('getAll', () => {
         it('should return all pages for the user with isConnected flag', async () => {
-            const pages = [{ id: 'page-1', accessToken: 'tok' }, { id: 'page-2', accessToken: '' }];
+            const pages = [{ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok' }, { id: 'page-2', facebookPageId: 'fb-2', accessToken: '' }];
             vi.mocked(pagesService.getPages).mockResolvedValue(pages as any);
 
             await pagesController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -128,7 +136,7 @@ describe('Pages Controller', () => {
     // ---- getOne ----
     describe('getOne', () => {
         it('should return a single page with isConnected flag', async () => {
-            const page = { id: 'page-1', name: 'My Page', accessToken: 'tok' };
+            const page = { id: 'page-1', name: 'My Page', facebookPageId: 'fb-1', accessToken: 'tok' };
             vi.mocked(pagesService.getPage).mockResolvedValue(page as any);
             mockRequest.params = { id: 'page-1' };
 
@@ -152,7 +160,7 @@ describe('Pages Controller', () => {
     // ---- update ----
     describe('update', () => {
         it('should update a page successfully', async () => {
-            const updated = { id: 'page-1', name: 'Updated', accessToken: 'tok' };
+            const updated = { id: 'page-1', name: 'Updated', facebookPageId: 'fb-1', accessToken: 'tok' };
             vi.mocked(pagesService.updatePage).mockResolvedValue(updated as any);
             mockRequest.params = { id: 'page-1' };
             mockRequest.body = { name: 'Updated' };
@@ -164,7 +172,7 @@ describe('Pages Controller', () => {
         });
 
         it('canonicalizes loose business hours before persisting', async () => {
-            vi.mocked(pagesService.updatePage).mockResolvedValue({ id: 'page-1', accessToken: 'tok' } as any);
+            vi.mocked(pagesService.updatePage).mockResolvedValue({ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok' } as any);
             mockRequest.params = { id: 'page-1' };
             mockRequest.body = { businessProfile: { hours: { sat: ['9am-8pm'], sun: ['9-8'], fri: ['مغلق'] } } };
 
@@ -207,8 +215,8 @@ describe('Pages Controller', () => {
     // ---- toggleAutoReply ----
     describe('toggleAutoReply', () => {
         it('should toggle auto-reply successfully', async () => {
-            const toggled = { id: 'page-1', autoReplyEnabled: true, accessToken: 'tok' };
-            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', accessToken: 'tok' } as any);
+            const toggled = { id: 'page-1', autoReplyEnabled: true, facebookPageId: 'fb-1', accessToken: 'tok' };
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok' } as any);
             vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 0, remaining: 5 } as any);
             vi.mocked(pagesService.toggleAutoReply).mockResolvedValue(toggled as any);
             mockRequest.params = { id: 'page-1' };
@@ -235,7 +243,7 @@ describe('Pages Controller', () => {
     // ---- sync ----
     describe('sync', () => {
         it('should sync pages from Facebook successfully', async () => {
-            const syncedPages = [{ id: 'page-1', accessToken: 'tok' }];
+            const syncedPages = [{ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok' }];
             vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 1, remaining: 4 } as any);
             vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages, skippedCount: 0, takenCount: 0, revokedCount: 0 } as any);
             mockRequest.body = { accessToken: 'fb-token-abc' };

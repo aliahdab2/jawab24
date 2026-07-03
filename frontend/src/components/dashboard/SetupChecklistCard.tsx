@@ -49,7 +49,7 @@ export function SetupChecklistCard({ pages, usage }: SetupChecklistCardProps) {
 
   const pageConnected = connectedPages.length > 0;
   const kbFilled = connectedPages.some(isKbFilled);
-  const autoReplyOn = connectedPages.some((p) => p.autoReplyEnabled || p.instagramAutoReplyEnabled);
+  const autoReplyOn = connectedPages.some((p) => p.autoReplyEnabled || p.instagramAutoReplyEnabled || p.whatsappAutoReplyEnabled);
   // A reply has been sent (per-page joined count), with monthly usage as a fallback.
   const firstReplySent =
     connectedPages.some((p) => (p.repliesCount ?? 0) > 0) || (usage?.aiReplies?.used ?? 0) > 0;

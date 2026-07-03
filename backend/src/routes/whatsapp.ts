@@ -28,6 +28,11 @@ export default async function whatsappRoutes(fastify: FastifyInstance) {
             config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
         }, whatsappController.connect);
 
+        ownerRoutes.post('/pages/connect-whatsapp', {
+            schema: { tags: ['WhatsApp'], summary: 'Connect a WhatsApp-only number — creates a page card with no Facebook page (owner only)', security: auth },
+            config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+        }, whatsappController.connectNew);
+
         ownerRoutes.delete('/pages/:id/whatsapp', {
             schema: { tags: ['WhatsApp'], summary: 'Disconnect WhatsApp from a page (owner only)', security: auth },
         }, whatsappController.disconnect);

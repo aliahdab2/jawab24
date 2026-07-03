@@ -18,13 +18,18 @@ import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
 
-/** Add isConnected flag and strip both access tokens from page response */
-export function serializePage<T extends { accessToken?: string | null; whatsappAccessToken?: string | null }>(page: T) {
+/** Add isConnected flag and strip both access tokens from page response.
+ *  isConnected means "the page's primary channel credential is valid": the
+ *  Facebook token for Facebook-backed pages, the WABA token for WhatsApp-only
+ *  pages (facebookPageId null) — otherwise WhatsApp-only cards would render
+ *  as broken Facebook pages (reconnect banner, disabled card body). */
+export function serializePage<T extends { accessToken?: string | null; whatsappAccessToken?: string | null; facebookPageId?: string | null }>(page: T) {
     const { accessToken, whatsappAccessToken, ...rest } = page;
+    const whatsappConnected = !!whatsappAccessToken && whatsappAccessToken !== '';
     return {
         ...rest,
-        isConnected: !!accessToken && accessToken !== '',
-        whatsappConnected: !!whatsappAccessToken && whatsappAccessToken !== '',
+        isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : whatsappConnected,
+        whatsappConnected,
     };
 }
 

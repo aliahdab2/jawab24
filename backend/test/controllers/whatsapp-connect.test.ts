@@ -10,6 +10,7 @@ vi.mock('../../src/services/pages', () => ({
         connectWhatsApp: vi.fn(),
         disconnectWhatsApp: vi.fn(),
         toggleWhatsAppAutoReply: vi.fn(),
+        createWhatsAppOnlyPage: vi.fn(),
     },
     isPageDisconnected: vi.fn((page: { accessToken: string } | null) => !!page && page.accessToken === ''),
 }));
@@ -268,5 +269,118 @@ describe('WhatsAppController.disconnect', () => {
         await whatsappController.disconnect(buildRequest({ body: undefined }) as never, reply);
 
         expect(reply.status).toHaveBeenCalledWith(404);
+    });
+});
+
+describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
+    const waOnlyPage = {
+        id: 'wa-page-1',
+        workspaceId: 'ws-1',
+        facebookPageId: null,
+        name: 'Noor Store',
+        accessToken: '',
+        whatsappPhoneNumberId: 'phone-1',
+        whatsappBusinessAccountId: 'waba-1',
+        whatsappDisplayPhoneNumber: '+966 50 111 2233',
+        whatsappAccessToken: 'enc-wa-token',
+        whatsappAutoReplyEnabled: false,
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(null as never);
+        vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue('wa-business-token');
+        vi.mocked(whatsappService.subscribeAppToWaba).mockResolvedValue(undefined);
+        vi.mocked(whatsappService.registerPhoneNumber).mockResolvedValue(undefined);
+        vi.mocked(whatsappService.getPhoneNumberInfo).mockResolvedValue({
+            displayPhoneNumber: '+966 50 111 2233',
+            verifiedName: 'Noor Store',
+        });
+        vi.mocked(pagesService.createWhatsAppOnlyPage).mockResolvedValue(waOnlyPage as never);
+    });
+
+    function newRequest(overrides: Record<string, unknown> = {}) {
+        return buildRequest({ params: {}, ...overrides });
+    }
+
+    it('creates a WhatsApp-only page named after the verified business name', async () => {
+        const reply = buildReply();
+        await whatsappController.connectNew(newRequest() as never, reply);
+
+        expect(pagesService.createWhatsAppOnlyPage).toHaveBeenCalledWith('ws-1', 'user-1', {
+            phoneNumberId: 'phone-1',
+            businessAccountId: 'waba-1',
+            displayPhoneNumber: '+966 50 111 2233',
+            accessToken: 'wa-business-token',
+            verifiedName: 'Noor Store',
+        });
+        expect(reply.status).toHaveBeenCalledWith(201);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({
+            whatsappPhoneNumberId: 'phone-1',
+            whatsappConnected: true,
+            // WA-only page: primary credential is the WABA token, so it reads connected
+            isConnected: true,
+        }));
+    });
+
+    it('never returns tokens in the response', async () => {
+        const reply = buildReply();
+        await whatsappController.connectNew(newRequest() as never, reply);
+
+        const sent = vi.mocked(reply.send).mock.calls[0][0] as Record<string, unknown>;
+        expect(sent).not.toHaveProperty('whatsappAccessToken');
+        expect(sent).not.toHaveProperty('accessToken');
+    });
+
+    it('409s when the number is already connected anywhere', async () => {
+        vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(waOnlyPage as never);
+        const reply = buildReply();
+        await whatsappController.connectNew(newRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(409);
+        expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
+    });
+
+    it('422s with WHATSAPP_PIN_MISMATCH on Meta error 133005', async () => {
+        vi.mocked(whatsappService.registerPhoneNumber).mockRejectedValue({
+            response: { data: { error: { code: 133005 } } },
+        });
+        const reply = buildReply();
+        await whatsappController.connectNew(newRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(422);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PIN_MISMATCH' }));
+        expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
+    });
+
+    it('400s when body fields are missing', async () => {
+        const reply = buildReply();
+        await whatsappController.connectNew(newRequest({ body: { code: 'x' } }) as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(400);
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+    });
+
+    it('502s when a Meta step fails', async () => {
+        vi.mocked(whatsappService.subscribeAppToWaba).mockRejectedValue(new Error('waba error'));
+        const reply = buildReply();
+        await whatsappController.connectNew(newRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(502);
+        expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
+    });
+});
+
+describe('serializePage isConnected semantics', () => {
+    it('Facebook-backed page: isConnected follows the FB token', async () => {
+        const { serializePage } = await import('../../src/controllers/pages');
+        expect(serializePage({ facebookPageId: 'fb-1', accessToken: 'tok', whatsappAccessToken: null }).isConnected).toBe(true);
+        expect(serializePage({ facebookPageId: 'fb-1', accessToken: '', whatsappAccessToken: 'wa' }).isConnected).toBe(false);
+    });
+
+    it('WhatsApp-only page: isConnected follows the WABA token', async () => {
+        const { serializePage } = await import('../../src/controllers/pages');
+        expect(serializePage({ facebookPageId: null, accessToken: '', whatsappAccessToken: 'wa' }).isConnected).toBe(true);
+        expect(serializePage({ facebookPageId: null, accessToken: '', whatsappAccessToken: null }).isConnected).toBe(false);
     });
 });

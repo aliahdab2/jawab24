@@ -11,7 +11,7 @@ export { DetailSheet } from './DetailSheet';
 export { SidePanel } from './SidePanel';
 export { EmptyState } from './EmptyState';
 export { PageHeader } from './PageHeader';
-export { FacebookIcon, InstagramIcon, PlatformIcon } from './BrandIcons';
+export { FacebookIcon, InstagramIcon, WhatsAppIcon, PlatformIcon } from './BrandIcons';
 export { BrandLogo } from './BrandLogo';
 export { Toggle } from './Toggle';
 export { VersionBadge } from './VersionBadge';

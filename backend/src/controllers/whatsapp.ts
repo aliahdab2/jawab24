@@ -10,6 +10,11 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 /** Meta error code: two-step-verification PIN mismatch on /register. */
 const META_PIN_MISMATCH = 133005;
 
+const PIN_MISMATCH_RESPONSE = {
+    error: 'This number has two-step verification enabled with a different PIN. Disable it in the WhatsApp Business app, then reconnect.',
+    code: 'WHATSAPP_PIN_MISMATCH',
+} as const;
+
 function metaErrorCode(error: unknown): number | undefined {
     const axiosErr = error as { response?: { data?: { error?: { code?: number } } } };
     return axiosErr.response?.data?.error?.code;
@@ -24,13 +29,13 @@ export class WhatsAppController {
      * `phoneNumberId` / `wabaId` delivered in the WA_EMBEDDED_SIGNUP
      * session-info message event.
      */
-    async connect(
+    connect = async (
         request: FastifyRequest<{
             Params: { id: string };
             Body: { code: string; phoneNumberId: string; wabaId: string };
         }>,
         reply: FastifyReply,
-    ) {
+    ) => {
         const req = request as ResolvedWorkspaceRequest;
         if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
@@ -59,37 +64,20 @@ export class WhatsAppController {
                 });
             }
 
-            const accessToken = await whatsappService.exchangeCodeForToken(code);
-
-            // Deliver this WABA's message webhooks to our /webhook endpoint.
-            await whatsappService.subscribeAppToWaba(wabaId, accessToken);
-
-            // Enable Cloud API messaging for the number. Re-registration with the
-            // same PIN is idempotent at Meta, so a reconnect passes through; a
-            // number carrying a foreign two-step PIN is the one actionable failure.
-            try {
-                await whatsappService.registerPhoneNumber(phoneNumberId, accessToken);
-            } catch (error) {
-                if (metaErrorCode(error) === META_PIN_MISMATCH) {
-                    return reply.status(422).send({
-                        error: 'This number has two-step verification enabled with a different PIN. Disable it in the WhatsApp Business app, then reconnect.',
-                        code: 'WHATSAPP_PIN_MISMATCH',
-                    });
-                }
-                throw error;
+            const signup = await this.runEmbeddedSignup(code, phoneNumberId, wabaId);
+            if (!signup.ok) {
+                return reply.status(422).send(PIN_MISMATCH_RESPONSE);
             }
-
-            const info = await whatsappService.getPhoneNumberInfo(phoneNumberId, accessToken);
 
             const updated = await pagesService.connectWhatsApp(workspaceId, id, {
                 phoneNumberId,
                 businessAccountId: wabaId,
-                displayPhoneNumber: info.displayPhoneNumber,
-                accessToken,
+                displayPhoneNumber: signup.info.displayPhoneNumber,
+                accessToken: signup.accessToken,
             });
 
             request.log.info(
-                { pageId: id, phoneNumberId, wabaId, displayPhoneNumber: info.displayPhoneNumber },
+                { pageId: id, phoneNumberId, wabaId, displayPhoneNumber: signup.info.displayPhoneNumber },
                 '[WhatsApp] Number connected',
             );
             return reply.send(serializePage(updated));
@@ -100,6 +88,107 @@ export class WhatsAppController {
                 code: 'WHATSAPP_CONNECT_FAILED',
             });
         }
+    };
+
+    /**
+     * Connect a WhatsApp Business number WITHOUT a Facebook page — creates a
+     * WhatsApp-only page card (facebookPageId null) that carries the number,
+     * its own Business Info and stats.
+     * POST /pages/connect-whatsapp
+     *
+     * Serves WhatsApp-only merchants (Shopify/Salla/Zid sellers with no FB
+     * page) and additional numbers for existing merchants: each number is its
+     * own card. Created with auto-reply OFF; enabling goes through the same
+     * billing + channel-trial gates as any page, so an active card consumes a
+     * page slot.
+     */
+    connectNew = async (
+        request: FastifyRequest<{
+            Body: { code: string; phoneNumberId: string; wabaId: string };
+        }>,
+        reply: FastifyReply,
+    ) => {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.user || !req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { workspaceId } = req;
+        const { userId } = req.user;
+        const { code, phoneNumberId, wabaId } = request.body ?? {};
+
+        if (!code || !phoneNumberId || !wabaId
+            || typeof code !== 'string' || typeof phoneNumberId !== 'string' || typeof wabaId !== 'string') {
+            return reply.status(400).send({ error: 'code, phoneNumberId and wabaId are required' });
+        }
+
+        try {
+            // One WhatsApp number belongs to exactly one page across the platform.
+            const holder = await pagesService.getPageByWhatsAppPhoneNumberId(phoneNumberId);
+            if (holder) {
+                return reply.status(409).send({
+                    error: 'This WhatsApp number is already connected to another page',
+                    code: 'WHATSAPP_NUMBER_TAKEN',
+                });
+            }
+
+            const signup = await this.runEmbeddedSignup(code, phoneNumberId, wabaId);
+            if (!signup.ok) {
+                return reply.status(422).send(PIN_MISMATCH_RESPONSE);
+            }
+
+            const newPage = await pagesService.createWhatsAppOnlyPage(workspaceId, userId, {
+                phoneNumberId,
+                businessAccountId: wabaId,
+                displayPhoneNumber: signup.info.displayPhoneNumber,
+                accessToken: signup.accessToken,
+                verifiedName: signup.info.verifiedName,
+            });
+
+            request.log.info(
+                { pageId: newPage.id, phoneNumberId, wabaId, displayPhoneNumber: signup.info.displayPhoneNumber },
+                '[WhatsApp] WhatsApp-only page created',
+            );
+            return reply.status(201).send(serializePage(newPage));
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(502).send({
+                error: 'Failed to connect WhatsApp. Please try again.',
+                code: 'WHATSAPP_CONNECT_FAILED',
+            });
+        }
+    };
+
+    /**
+     * The Embedded Signup sequence shared by both connect paths:
+     * code → business token, WABA webhook subscribe, Cloud API registration
+     * (re-registration with the same PIN is idempotent at Meta; a number
+     * carrying a foreign two-step PIN is the one actionable failure), then
+     * phone display info.
+     */
+    private async runEmbeddedSignup(
+        code: string,
+        phoneNumberId: string,
+        wabaId: string,
+    ): Promise<
+        | { ok: true; accessToken: string; info: { displayPhoneNumber: string; verifiedName: string } }
+        | { ok: false }
+    > {
+        const accessToken = await whatsappService.exchangeCodeForToken(code);
+
+        // Deliver this WABA's message webhooks to our /webhook endpoint.
+        await whatsappService.subscribeAppToWaba(wabaId, accessToken);
+
+        try {
+            await whatsappService.registerPhoneNumber(phoneNumberId, accessToken);
+        } catch (error) {
+            if (metaErrorCode(error) === META_PIN_MISMATCH) {
+                return { ok: false };
+            }
+            throw error;
+        }
+
+        const info = await whatsappService.getPhoneNumberInfo(phoneNumberId, accessToken);
+        return { ok: true, accessToken, info };
     }
 
     /**

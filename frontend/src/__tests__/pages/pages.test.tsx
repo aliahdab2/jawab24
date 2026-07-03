@@ -37,7 +37,18 @@ vi.mock('@/lib/api', () => ({
         patch: vi.fn(),
         post: vi.fn(),
         put: vi.fn(),
+        delete: vi.fn(),
     },
+}));
+
+const mockOpenExternalUrl = vi.fn();
+vi.mock('@/lib/openExternalUrl', () => ({
+    openExternalUrl: (...args: unknown[]) => mockOpenExternalUrl(...args),
+}));
+
+const mockLaunchWhatsAppSignup = vi.fn();
+vi.mock('@/lib/whatsappSignup', () => ({
+    launchWhatsAppSignup: (...args: unknown[]) => mockLaunchWhatsAppSignup(...args),
 }));
 
 vi.mock('@/components/layout/DashboardLayout', () => ({
@@ -72,6 +83,7 @@ vi.mock('@/components/ui', () => ({
             </div>
         ) : null,
     InfoPopover: ({ children }: { children: React.ReactNode; label?: string }) => <>{children}</>,
+    WhatsAppIcon: () => <svg data-testid="whatsapp-icon" />,
 }));
 
 vi.mock('@/components/knowledge-base/KnowledgeBaseModal', () => ({
@@ -290,6 +302,204 @@ describe('PagesPage - Toggle Error Handling', () => {
 
         await waitFor(() => {
             expect(mockToastError).toHaveBeenCalledWith('Page limit reached. Disable another page or upgrade your plan.');
+        });
+    });
+});
+
+describe('PagesPage - WhatsApp', () => {
+    const WA_PAGE = {
+        id: 'page_wa',
+        facebookPageId: 'fb_789',
+        name: 'WA Page',
+        autoReplyEnabled: false,
+        instagramAutoReplyEnabled: false,
+        commentsCount: 0,
+        knowledgeBase: 'We sell things.',
+        whatsappConnected: true,
+        whatsappPhoneNumberId: 'pn_1',
+        whatsappDisplayPhoneNumber: '+966 55 000 0000',
+        whatsappAutoReplyEnabled: false,
+    };
+
+    beforeEach(() => {
+        mockToastError.mockClear();
+        vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [WA_PAGE] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        vi.clearAllMocks();
+    });
+
+    it('disconnect: unlink -> confirm -> DELETE -> row shows not connected', async () => {
+        mockedApi.delete.mockResolvedValue({
+            data: {
+                whatsappConnected: false,
+                whatsappPhoneNumberId: null,
+                whatsappDisplayPhoneNumber: null,
+                whatsappAutoReplyEnabled: false,
+            },
+        } as unknown as Awaited<ReturnType<typeof mockedApi.delete>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+        expect(screen.getByText('+966 55 000 0000')).toBeInTheDocument();
+
+        // Owner-only unlink affordance on the connected row
+        fireEvent.click(screen.getByLabelText('Disconnect WhatsApp - WA Page'));
+
+        // ConfirmationModal (danger) opens; confirm
+        expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+        await act(async () => {
+            fireEvent.click(screen.getByText('Disconnect', { selector: 'button' }));
+        });
+
+        expect(mockedApi.delete).toHaveBeenCalledWith('/pages/page_wa/whatsapp');
+        await waitFor(() => {
+            expect(screen.getByText('WhatsApp not connected')).toBeInTheDocument();
+        });
+        expect(screen.queryByText('+966 55 000 0000')).not.toBeInTheDocument();
+    });
+
+    it('cancelling the disconnect dialog makes no API call', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByLabelText('Disconnect WhatsApp - WA Page'));
+        fireEvent.click(screen.getByText('common.cancel'));
+
+        expect(mockedApi.delete).not.toHaveBeenCalled();
+        expect(screen.getByText('+966 55 000 0000')).toBeInTheDocument();
+    });
+
+    it('mobile: Connect hands off to the web dashboard instead of the popup', async () => {
+        const { Capacitor } = await import('@capacitor/core');
+        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
+        });
+
+        await waitFor(() => {
+            expect(mockOpenExternalUrl).toHaveBeenCalledWith('https://jawab24.com/en/pages');
+        });
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+
+        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+    });
+});
+
+describe('PagesPage - WhatsApp-only cards', () => {
+    const WA_ONLY_PAGE = {
+        id: 'wa_only_1',
+        facebookPageId: null,
+        name: 'Noor Store',
+        autoReplyEnabled: false,
+        instagramAutoReplyEnabled: false,
+        whatsappAutoReplyEnabled: false,
+        commentsCount: 0,
+        knowledgeBase: 'We sell abayas.',
+        isConnected: true,
+        whatsappConnected: true,
+        whatsappPhoneNumberId: 'pn_9',
+        whatsappDisplayPhoneNumber: '+966 50 111 2233',
+    };
+
+    beforeEach(() => {
+        mockToastError.mockClear();
+        vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [WA_ONLY_PAGE] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        vi.clearAllMocks();
+    });
+
+    it('renders without Facebook/Instagram rows and without the reconnect banner', async () => {
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('+966 50 111 2233')).toBeInTheDocument();
+        // No Facebook / Instagram channel rows on a WhatsApp-only card
+        expect(screen.queryByText('Facebook')).not.toBeInTheDocument();
+        expect(screen.queryByText('Instagram')).not.toBeInTheDocument();
+        // No "reconnect Facebook" banner — there is no Facebook credential
+        expect(screen.queryByText('Reconnect Required')).not.toBeInTheDocument();
+        // The WhatsApp toggle is present and interactive
+        expect(screen.getAllByRole('switch').length).toBe(1);
+    });
+
+    it('removing the card confirms then deletes the page row', async () => {
+        mockedApi.delete.mockResolvedValue({ data: { success: true } } as unknown as Awaited<ReturnType<typeof mockedApi.delete>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByLabelText('Disconnect WhatsApp - Noor Store'));
+        expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+        expect(screen.getByText('Remove this number?')).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByText('Remove', { selector: 'button' }));
+        });
+
+        expect(mockedApi.delete).toHaveBeenCalledWith('/pages/wa_only_1');
+        await waitFor(() => {
+            expect(screen.queryByText('Noor Store')).not.toBeInTheDocument();
+        });
+    });
+
+    it('"Add WhatsApp number" card runs signup and appends the created card', async () => {
+        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_new', wabaId: 'w' });
+        mockedApi.post.mockResolvedValue({
+            data: { ...WA_ONLY_PAGE, id: 'wa_new', name: 'Second Branch', whatsappDisplayPhoneNumber: '+966 50 999 8877' },
+        } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument();
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByText('Add WhatsApp number'));
+        });
+
+        expect(mockLaunchWhatsAppSignup).toHaveBeenCalled();
+        expect(mockedApi.post).toHaveBeenCalledWith('/pages/connect-whatsapp', {
+            code: 'c', phoneNumberId: 'pn_new', wabaId: 'w',
+        });
+        await waitFor(() => {
+            expect(screen.getAllByText('Second Branch')[0]).toBeInTheDocument();
         });
     });
 });
