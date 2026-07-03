@@ -504,7 +504,7 @@ describe('PagesPage - WhatsApp-only cards', () => {
         expect(screen.getByText('Which channel do you want to connect?')).toBeInTheDocument();
 
         await act(async () => {
-            fireEvent.click(screen.getByText('WhatsApp number'));
+            fireEvent.click(screen.getByText('WhatsApp only'));
         });
 
         expect(mockLaunchWhatsAppSignup).toHaveBeenCalled();
