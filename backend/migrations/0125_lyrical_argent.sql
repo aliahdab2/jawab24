@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ADD COLUMN "whatsapp_access_token" text;

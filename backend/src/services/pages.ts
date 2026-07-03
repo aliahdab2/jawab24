@@ -1164,8 +1164,74 @@ export class PagesService {
             .where(eq(pages.whatsappPhoneNumberId, phoneNumberId));
 
         const page = result[0] || null;
-        if (page) page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
+        if (page) {
+            page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
+            page.whatsappAccessToken = safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null;
+        }
         return page;
+    }
+
+    /**
+     * Store the WhatsApp Business fields from Embedded Signup on a page.
+     * The business token is encrypted at rest (same scheme as the FB page token).
+     */
+    async connectWhatsApp(
+        workspaceId: string,
+        pageId: string,
+        data: {
+            phoneNumberId: string;
+            businessAccountId: string;
+            displayPhoneNumber: string;
+            accessToken: string;
+        },
+    ) {
+        const [updatedPage] = await db
+            .update(pages)
+            .set({
+                whatsappPhoneNumberId: data.phoneNumberId,
+                whatsappBusinessAccountId: data.businessAccountId,
+                whatsappDisplayPhoneNumber: data.displayPhoneNumber,
+                whatsappAccessToken: maybeEncryptToken(data.accessToken),
+                updatedAt: new Date(),
+            })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return updatedPage;
+    }
+
+    /** Clear all WhatsApp fields (disconnect). The page row itself is kept. */
+    async disconnectWhatsApp(workspaceId: string, pageId: string) {
+        const [updatedPage] = await db
+            .update(pages)
+            .set({
+                whatsappPhoneNumberId: null,
+                whatsappBusinessAccountId: null,
+                whatsappDisplayPhoneNumber: null,
+                whatsappAccessToken: null,
+                whatsappAutoReplyEnabled: false,
+                updatedAt: new Date(),
+            })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return updatedPage;
+    }
+
+    /**
+     * Toggle WhatsApp auto-reply for a page
+     */
+    async toggleWhatsAppAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
+        const [updatedPage] = await db
+            .update(pages)
+            .set({
+                whatsappAutoReplyEnabled: enabled,
+                updatedAt: new Date(),
+            })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return updatedPage;
     }
 }
 

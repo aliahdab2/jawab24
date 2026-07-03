@@ -37,13 +37,14 @@ const mockDbPage = {
     userId: 'user-uuid',
     workspaceId: 'ws-uuid',
     name: 'Test Store',
-    accessToken: 'wa-access-token',
+    accessToken: 'fb-page-token',
     facebookPageId: null,
     autoReplyEnabled: true,
     whatsappPhoneNumberId: 'phone-number-id-123',
     whatsappBusinessAccountId: 'waba-123',
     whatsappDisplayPhoneNumber: '+966 55 000 0000',
     whatsappAutoReplyEnabled: true,
+    whatsappAccessToken: 'wa-business-token',
     instagramAccountId: null,
     instagramUsername: null,
     instagramProfilePicUrl: null,
@@ -72,9 +73,27 @@ describe('WhatsAppMessageAdapter.getPage', () => {
 
         expect(page).not.toBeNull();
         expect(page!.id).toBe('page-uuid');
-        expect(page!.accessToken).toBe('wa-access-token');
         expect(page!.platformAccountId).toBe('phone-number-id-123');
         expect(page!.autoReplyEnabled).toBe(true);
+    });
+
+    it('carries the WhatsApp business token, NOT the Facebook page token', async () => {
+        vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(mockDbPage);
+
+        const page = await adapter.getPage('phone-number-id-123');
+
+        expect(page!.accessToken).toBe('wa-business-token');
+    });
+
+    it('surfaces an empty token when WhatsApp token is missing (send must fail, not fall back to FB token)', async () => {
+        vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue({
+            ...mockDbPage,
+            whatsappAccessToken: null,
+        });
+
+        const page = await adapter.getPage('phone-number-id-123');
+
+        expect(page!.accessToken).toBe('');
     });
 
     it('returns null when page not found', async () => {

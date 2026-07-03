@@ -185,6 +185,9 @@ export const pages = pgTable('pages', {
     whatsappBusinessAccountId: varchar('whatsapp_business_account_id', { length: 255 }),
     whatsappDisplayPhoneNumber: varchar('whatsapp_display_phone_number', { length: 30 }),
     whatsappAutoReplyEnabled: boolean('whatsapp_auto_reply_enabled').default(false),
+    // Embedded Signup business token for the merchant's WABA — separate from the
+    // Facebook page token in access_token. AES-256-GCM encrypted (enc:v1: prefix).
+    whatsappAccessToken: text('whatsapp_access_token'),
     // E-commerce store linked to this page (for product-aware AI replies)
     ecommerceStoreId: uuid('ecommerce_store_id').references(() => ecommerceStores.id, { onDelete: 'set null' }),
     // Knowledge base for AI context - business info, products, FAQ

@@ -18,10 +18,14 @@ import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
 
-/** Add isConnected flag and strip accessToken from page response */
-export function serializePage<T extends { accessToken?: string | null }>(page: T) {
-    const { accessToken, ...rest } = page;
-    return { ...rest, isConnected: !!accessToken && accessToken !== '' };
+/** Add isConnected flag and strip both access tokens from page response */
+export function serializePage<T extends { accessToken?: string | null; whatsappAccessToken?: string | null }>(page: T) {
+    const { accessToken, whatsappAccessToken, ...rest } = page;
+    return {
+        ...rest,
+        isConnected: !!accessToken && accessToken !== '',
+        whatsappConnected: !!whatsappAccessToken && whatsappAccessToken !== '',
+    };
 }
 
 export class PagesController {

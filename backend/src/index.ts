@@ -22,6 +22,7 @@ import commentsRoutes from "./routes/comments";
 import settingsRoutes from "./routes/settings";
 import messagesRoutes from "./routes/messages";
 import instagramRoutes from "./routes/instagram";
+import whatsappRoutes from "./routes/whatsapp";
 import versionRoutes from "./routes/version";
 import plansRoutes from "./routes/plans";
 import subscriptionsRoutes from "./routes/subscriptions";
@@ -236,6 +237,7 @@ const start = async () => {
     await server.register(messagesRoutes);
     await server.register(leadsRoutes);
     await server.register(instagramRoutes);
+    await server.register(whatsappRoutes);
     await server.register(plansRoutes, { prefix: "/plans" });
     await server.register(subscriptionsRoutes, { prefix: "/subscription" });
     await server.register(paymentRoutes, { prefix: "/payment" });

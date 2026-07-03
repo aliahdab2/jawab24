@@ -2,6 +2,7 @@ import { pagesService } from '../pages';
 import { messagesService } from '../messages';
 import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
+import { whatsappService } from '../whatsapp';
 import { transcriptionService } from '../transcription';
 import { redis } from '../../lib/redis';
 import { enqueueMessage } from '../../lib/replyQueue';
@@ -204,16 +205,147 @@ export async function handleNonTextMessage(
     }
 }
 
+/** Non-text WhatsApp webhook message, normalized by the webhook controller. */
+export interface WhatsAppNonTextEvent {
+    senderId: string;
+    messageId: string;
+    /** WhatsApp webhook message type: audio | image | video | document | sticker */
+    attachmentType: string;
+    /** Cloud API media ID — resolved to a short-lived authorized URL on demand */
+    mediaId?: string;
+    mimeType?: string;
+    senderName?: string;
+    /** Epoch millis from the webhook `timestamp` (seconds) — see NonTextMessageEvent */
+    platformTimestamp?: number;
+}
+
+/**
+ * WhatsApp variant of handleNonTextMessage. Separate function because media
+ * access differs structurally from FB/IG: the webhook carries a media ID, not
+ * a URL, and the download requires the WABA bearer token (so the generic
+ * transcribe-from-URL path can't be reused).
+ */
+export async function handleWhatsAppNonTextMessage(
+    phoneNumberId: string,
+    event: WhatsAppNonTextEvent,
+    logger: Logger,
+): Promise<void> {
+    const { senderId, messageId, attachmentType, mediaId, mimeType, senderName, platformTimestamp } = event;
+
+    try {
+        const page = await pagesService.getPageByWhatsAppPhoneNumberId(phoneNumberId);
+        if (!page?.whatsappAccessToken) return;
+
+        if (!page.workspaceId) {
+            logger.warn('[whatsapp] Page missing workspace_id — skipping non-text handler', { pageId: page.id, messageId });
+            return;
+        }
+        const workspaceId = page.workspaceId;
+
+        // Stickers carry no conversational intent — store silently (same as FB/IG).
+        if (attachmentType === 'sticker') {
+            const { message: stored, isNew } = await messagesService.findOrCreateFromWebhook(
+                page.id, workspaceId, messageId, senderId, '[Sticker]', senderName, 'sticker',
+            );
+            if (isNew && typeof platformTimestamp === 'number') {
+                await messagesService.setCreatedTime(stored.id, new Date(platformTimestamp));
+            }
+            if (isNew) {
+                await messagesService.markAsResolved(stored.id);
+            }
+            logger.debug('[whatsapp] Sticker ignored (no nudge)', { senderId, messageId });
+            return;
+        }
+
+        // Detect language from sender's previous text messages (default: Arabic)
+        let lang: 'ar' | 'en' = 'ar';
+        try {
+            const lastText = await messagesService.getLastIncomingTextFromSender(page.id, senderId);
+            if (lastText) {
+                const detected = detectLanguageCode(lastText);
+                if (detected === 'en') lang = 'en';
+            }
+        } catch { /* default to Arabic */ }
+
+        // Voice note → download with the WABA token → Whisper → normal AI pipeline
+        if (attachmentType === 'audio' && mediaId) {
+            try {
+                const media = await whatsappService.getMediaInfo(mediaId, page.whatsappAccessToken);
+                const buffer = media.url
+                    ? await whatsappService.downloadMedia(media.url, page.whatsappAccessToken)
+                    : null;
+
+                if (buffer) {
+                    // Whisper rejects codec suffixes like "audio/ogg; codecs=opus"
+                    const cleanMime = (mimeType ?? media.mimeType).split(';')[0].trim();
+                    const result = await transcriptionService.transcribeFromBuffer(
+                        buffer, cleanMime, lang, undefined,
+                        page.userId ? { userId: page.userId, pageId: page.id } : undefined,
+                    );
+
+                    if (result) {
+                        logger.info('[whatsapp] Voice message transcribed', {
+                            senderId, textLength: result.text.length,
+                        });
+
+                        const { message: storedAudio, isNew: isNewAudio } = await messagesService.findOrCreateFromWebhook(
+                            page.id, workspaceId, messageId, senderId, result.text, senderName, 'audio',
+                        );
+                        if (isNewAudio && typeof platformTimestamp === 'number') {
+                            await messagesService.setCreatedTime(storedAudio.id, new Date(platformTimestamp));
+                        }
+
+                        await enqueueMessage({
+                            jobType: 'whatsapp_message',
+                            pageId: phoneNumberId,
+                            messageId,
+                            senderId,
+                            text: result.text,
+                            senderName,
+                        });
+                        return; // AI pipeline handles the reply from here
+                    }
+                }
+            } catch (error) {
+                logger.warn('[whatsapp] Voice media fetch failed, falling back to nudge', {
+                    senderId, messageId, error: String(error),
+                });
+            }
+            logger.warn('[whatsapp] Voice transcription failed, falling back to nudge', { senderId, messageId });
+        }
+
+        // Everything else (or failed transcription): placeholder + text-only nudge.
+        // WhatsApp `document` maps onto the existing `file` placeholder label.
+        const placeholderType = attachmentType === 'document' ? 'file' : attachmentType;
+        const placeholder = getAttachmentPlaceholder(placeholderType, lang);
+        const { message: storedAtt, isNew: isNewAtt } = await messagesService.findOrCreateFromWebhook(
+            page.id, workspaceId, messageId, senderId, placeholder, senderName, attachmentType,
+        );
+        if (isNewAtt && typeof platformTimestamp === 'number') {
+            await messagesService.setCreatedTime(storedAtt.id, new Date(platformTimestamp));
+        }
+        await sendNudge(
+            { id: page.id, accessToken: page.whatsappAccessToken, whatsappPhoneNumberId: phoneNumberId },
+            workspaceId, senderId, getTextOnlyNudge(lang), 'whatsapp', logger,
+        );
+    } catch (error) {
+        logger.error('[whatsapp] Failed to handle non-text message', {
+            messageId, error: String(error),
+        });
+    }
+}
+
 /**
  * Send a nudge reply with cooldown (1 per sender per page per hour).
  * Shared by all non-text handlers to avoid duplicating cooldown + send + store logic.
+ * For WhatsApp, `accessToken` carries the WABA business token.
  */
 async function sendNudge(
-    page: { id: string; accessToken: string; instagramAccountId?: string | null },
+    page: { id: string; accessToken: string; instagramAccountId?: string | null; whatsappPhoneNumberId?: string | null },
     workspaceId: string,
     senderId: string,
     nudgeText: string,
-    platform: 'facebook' | 'instagram',
+    platform: 'facebook' | 'instagram' | 'whatsapp',
     logger: Logger,
 ): Promise<void> {
     const cooldownKey = `nontext_nudge:${page.id}:${senderId}`;
@@ -232,6 +364,12 @@ async function sendNudge(
 
     if (platform === 'facebook') {
         await facebookService.sendPrivateMessage(page.accessToken, senderId, nudgeText);
+    } else if (platform === 'whatsapp') {
+        if (page.whatsappPhoneNumberId) {
+            await whatsappService.sendTextMessage(
+                page.whatsappPhoneNumberId, senderId, nudgeText, page.accessToken,
+            );
+        }
     } else {
         if (page.instagramAccountId) {
             await instagramService.sendDirectMessage(
