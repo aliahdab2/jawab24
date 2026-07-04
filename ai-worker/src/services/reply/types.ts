@@ -49,6 +49,17 @@ export interface GenerateRequest {
          */
         businessInfoBlock?: string | null;
         customerContext?: string;
+        /**
+         * Customer's display name from the platform profile (FB display name,
+         * WhatsApp profile name, or IG username). The backend already fetches this
+         * (adapter.fetchSenderName); here it is used only for DM addressing and, in
+         * Arabic, to infer grammatical gender (see promptBuilder). It lives in the
+         * per-call block AFTER the cached prefix, so it never affects the OpenAI
+         * prompt-prefix cache. Cache correctness for the exact-reply cache is handled
+         * backend-side (buildCacheKey buckets DMs by first name). Absent → no name
+         * line and gender falls back to message self-reference, then neutral.
+         */
+        senderName?: string;
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
         /**

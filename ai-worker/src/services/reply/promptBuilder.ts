@@ -175,6 +175,17 @@ function buildPerCallBlock(request: GenerateRequest): string {
     const retrievedChunks = request.context?.retrievedChunks;
     const isDM = resolveChannel(request) === 'dm';
 
+    // Customer's first name from the platform profile — the first whitespace token,
+    // sanitized. Used for DM addressing and, in Arabic, as the primary grammatical-gender
+    // cue (see the GENDER directive below). Comments stay gender-neutral, so this only
+    // feeds the DM path. Empty when no name arrived (e.g. IG restricted, WhatsApp with no
+    // profile name) — the model then falls back to message self-reference, then neutral.
+    const rawSenderName = request.context?.senderName?.trim();
+    // First token only (split already drops any whitespace); strip quotes/backslashes like the
+    // page-name handling since it's interpolated into a quoted "..." label, then run the shared
+    // marker/tag sanitizer and 40-char cap.
+    const firstName = rawSenderName ? sanitizeUserField(rawSenderName.split(/\s+/)[0].replace(/["\\]/g, ''), 40) : '';
+
     // Reply style — maps setting to prompt personality directive.
     // Each directive covers: sentence-length variation, contraction use, clarifying-question permission,
     // emoji cadence, and one concrete anti-pattern. Changes here bump PROMPT_VERSION.
@@ -212,6 +223,19 @@ ${isDM
         // High-salience reminder next to the language directive; lives in the per-call block,
         // after the cached prefix, so it never affects KB caching.
         prompt += `\n- ARABIC DIALECT: mirror the customer's dialect exactly — Maghrebi/Darija (واش، شحال، تاع، بزّاف، شكون) → reply in Maghrebi; Egyptian → Egyptian; Gulf → Gulf; Levantine → Levantine. NEVER reply in a dialect different from theirs (e.g. Levantine مو/بدك/هلق to a Maghrebi customer reads as a foreign bot). If their message is too short or dialect-neutral to tell, use light Modern Standard Arabic — do NOT default to Levantine or Gulf.`;
+
+        // Arabic DMs ONLY: gender-matched addressing. Arabic verbs, pronouns, and adjectives are
+        // gendered, and getting it wrong is an obvious bot tell. This whole block is deliberately
+        // scoped to `language === 'ar' && isDM` — every other language, and every comment, gets a
+        // prompt byte-identical to before this feature, so no other vertical/language is touched.
+        // The name (surfaced here, only when present) feeds gender inference; when the signal is
+        // unclear the model stays neutral rather than guessing.
+        if (isDM) {
+            if (firstName) {
+                prompt += `\n- Customer's first name: "${firstName}" — use it naturally where it helps; don't force it into every reply.`;
+            }
+            prompt += `\n- ARABIC GENDER: address the customer in their correct grammatical gender. Decide in this order: (1) how the customer refers to THEMSELVES is authoritative ("أنا مهتم" masculine vs "أنا مهتمة" feminine) — follow it even if the name suggests otherwise; (2) otherwise use the first name ONLY when it is clearly gendered — a unisex name (نور، سما، جود، رهف), a username/handle, or a transliteration you're unsure of is NOT a clear signal. When the customer is FEMALE, ACTIVELY use the marked feminine forms — the feminine kaf ـكِ (بكِ، لكِ، يهمّكِ، أنصحكِ) and feminine verb/adjective endings (تفضّلي، تحبّين، مهتمّة); do NOT leave the address in the unmarked default (بك، يهمك، تفضّل), which reads as masculine. Contrast — female: "أهلاً بكِ! أي مجال يهمّكِ؟" · male: "أهلاً بك! أي مجال يهمّك؟". When gender is genuinely unclear, use gender-neutral / light-MSA phrasing that avoids gendered forms — do NOT default to masculine, and do NOT guess. Never state, ask about, or comment on the customer's gender.`;
+        }
     }
 
     if (request.context?.suppressGreeting) {
