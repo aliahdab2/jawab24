@@ -15,12 +15,46 @@ export interface WhatsAppMediaInfo {
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 
 /**
+ * Sanitized WhatsApp Cloud API error. Carries only Meta's error code + message
+ * — never the axios `config`/`headers`/`request`, which hold the FB app secret
+ * (code-exchange `client_secret`) and the WABA bearer token. Throwing this
+ * instead of the raw AxiosError makes it impossible to leak those into logs
+ * (pino's default `err` serializer walks enumerable props). See callers'
+ * `metaCode` reads for the 133005 / 131047 branch logic.
+ */
+export class WhatsAppApiError extends Error {
+    readonly metaCode?: number;
+    constructor(message: string, metaCode?: number) {
+        super(message);
+        this.name = 'WhatsAppApiError';
+        this.metaCode = metaCode;
+    }
+}
+
+function sanitizeWhatsAppError(error: unknown): WhatsAppApiError {
+    const ax = error as { response?: { data?: { error?: { code?: number; message?: string } } }; message?: string };
+    const meta = ax?.response?.data?.error;
+    return new WhatsAppApiError(meta?.message || ax?.message || 'WhatsApp API request failed', meta?.code);
+}
+
+/**
  * WhatsApp Cloud API Service
  *
  * Thin wrapper around the Meta WhatsApp Cloud API.
  * Uses the same Graph API version and auth as Facebook/Instagram.
+ * Every outbound call routes through `request()` so a failure throws a
+ * secret-free WhatsAppApiError rather than the raw (secret-bearing) AxiosError.
  */
 class WhatsAppService {
+    /** Run an axios call, converting any failure to a secret-free error. */
+    private async request<T>(fn: () => Promise<T>): Promise<T> {
+        try {
+            return await fn();
+        } catch (error) {
+            throw sanitizeWhatsAppError(error);
+        }
+    }
+
     /**
      * Send a text message to a WhatsApp user.
      * @returns The WhatsApp message ID (wamid)
@@ -31,7 +65,7 @@ class WhatsAppService {
         text: string,
         accessToken: string,
     ): Promise<string> {
-        const res = await axios.post(
+        const res = await this.request(() => axios.post(
             `${WHATSAPP_API}/${phoneNumberId}/messages`,
             {
                 messaging_product: 'whatsapp',
@@ -40,7 +74,7 @@ class WhatsAppService {
                 text: { body: text },
             },
             { headers: { Authorization: `Bearer ${accessToken}` } },
-        );
+        ));
         return res.data?.messages?.[0]?.id ?? '';
     }
 
@@ -74,15 +108,15 @@ class WhatsAppService {
      * exchanged without a redirect_uri.
      */
     async exchangeCodeForToken(code: string): Promise<string> {
-        const res = await axios.get(`${WHATSAPP_API}/oauth/access_token`, {
+        const res = await this.request(() => axios.get(`${WHATSAPP_API}/oauth/access_token`, {
             params: {
                 client_id: config.facebook.appId,
                 client_secret: config.facebook.appSecret,
                 code,
             },
-        });
+        }));
         const token = res.data?.access_token;
-        if (!token) throw new Error('Embedded Signup code exchange returned no access_token');
+        if (!token) throw new WhatsAppApiError('Embedded Signup code exchange returned no access_token');
         return token;
     }
 
@@ -91,11 +125,11 @@ class WhatsAppService {
      * delivered to our /webhook endpoint.
      */
     async subscribeAppToWaba(wabaId: string, accessToken: string): Promise<void> {
-        await axios.post(
+        await this.request(() => axios.post(
             `${WHATSAPP_API}/${wabaId}/subscribed_apps`,
             {},
             { headers: { Authorization: `Bearer ${accessToken}` } },
-        );
+        ));
     }
 
     /**
@@ -105,14 +139,14 @@ class WhatsAppService {
      * after a disconnect uses the same PIN without storing it.
      */
     async registerPhoneNumber(phoneNumberId: string, accessToken: string): Promise<void> {
-        await axios.post(
+        await this.request(() => axios.post(
             `${WHATSAPP_API}/${phoneNumberId}/register`,
             {
                 messaging_product: 'whatsapp',
                 pin: this.derivePin(phoneNumberId),
             },
             { headers: { Authorization: `Bearer ${accessToken}` } },
-        );
+        ));
     }
 
     /**
@@ -131,10 +165,10 @@ class WhatsAppService {
         phoneNumberId: string,
         accessToken: string,
     ): Promise<{ displayPhoneNumber: string; verifiedName: string }> {
-        const res = await axios.get(`${WHATSAPP_API}/${phoneNumberId}`, {
+        const res = await this.request(() => axios.get(`${WHATSAPP_API}/${phoneNumberId}`, {
             params: { fields: 'display_phone_number,verified_name' },
             headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        }));
         return {
             displayPhoneNumber: res.data?.display_phone_number ?? '',
             verifiedName: res.data?.verified_name ?? '',
@@ -149,9 +183,9 @@ class WhatsAppService {
      * token to download (unlike FB/IG public CDN URLs).
      */
     async getMediaInfo(mediaId: string, accessToken: string): Promise<WhatsAppMediaInfo> {
-        const res = await axios.get(`${WHATSAPP_API}/${mediaId}`, {
+        const res = await this.request(() => axios.get(`${WHATSAPP_API}/${mediaId}`, {
             headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        }));
         return {
             url: res.data?.url ?? '',
             mimeType: res.data?.mime_type ?? 'application/octet-stream',
@@ -161,12 +195,12 @@ class WhatsAppService {
 
     /** Download media content with the bearer token. Returns null if oversized. */
     async downloadMedia(url: string, accessToken: string): Promise<Buffer | null> {
-        const res = await axios.get<ArrayBuffer>(url, {
+        const res = await this.request(() => axios.get<ArrayBuffer>(url, {
             headers: { Authorization: `Bearer ${accessToken}` },
             responseType: 'arraybuffer',
             maxContentLength: MAX_MEDIA_BYTES,
             timeout: 15_000,
-        });
+        }));
         const buf = Buffer.from(res.data);
         if (buf.length === 0 || buf.length > MAX_MEDIA_BYTES) return null;
         return buf;

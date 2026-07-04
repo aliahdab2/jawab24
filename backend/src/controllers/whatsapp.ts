@@ -9,15 +9,29 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
 /** Meta error code: two-step-verification PIN mismatch on /register. */
 const META_PIN_MISMATCH = 133005;
+/** Postgres unique_violation — the whatsapp_phone_number_id unique index. */
+const PG_UNIQUE_VIOLATION = '23505';
 
 const PIN_MISMATCH_RESPONSE = {
     error: 'This number has two-step verification enabled with a different PIN. Disable it in the WhatsApp Business app, then reconnect.',
     code: 'WHATSAPP_PIN_MISMATCH',
 } as const;
 
+const NUMBER_TAKEN_RESPONSE = {
+    error: 'This WhatsApp number is already connected to another page',
+    code: 'WHATSAPP_NUMBER_TAKEN',
+} as const;
+
+/** True when a DB write lost the race to the whatsapp_phone_number_id unique index. */
+function isDuplicateNumberError(error: unknown): boolean {
+    return (error as { code?: string })?.code === PG_UNIQUE_VIOLATION;
+}
+
 function metaErrorCode(error: unknown): number | undefined {
-    const axiosErr = error as { response?: { data?: { error?: { code?: number } } } };
-    return axiosErr.response?.data?.error?.code;
+    // whatsappService now throws a sanitized WhatsAppApiError carrying `metaCode`;
+    // fall back to the raw axios shape for safety (and mocked tests).
+    const e = error as { metaCode?: number; response?: { data?: { error?: { code?: number } } } };
+    return e.metaCode ?? e.response?.data?.error?.code;
 }
 
 export class WhatsAppController {
@@ -56,12 +70,11 @@ export class WhatsAppController {
             }
 
             // One WhatsApp number belongs to exactly one page across the platform.
+            // Fast pre-check for a clear message; the DB unique index is the real
+            // guarantee (catch below) against a concurrent double-connect.
             const holder = await pagesService.getPageByWhatsAppPhoneNumberId(phoneNumberId);
             if (holder && holder.id !== id) {
-                return reply.status(409).send({
-                    error: 'This WhatsApp number is already connected to another page',
-                    code: 'WHATSAPP_NUMBER_TAKEN',
-                });
+                return reply.status(409).send(NUMBER_TAKEN_RESPONSE);
             }
 
             const signup = await this.runEmbeddedSignup(code, phoneNumberId, wabaId);
@@ -82,6 +95,9 @@ export class WhatsAppController {
             );
             return reply.send(serializePage(updated));
         } catch (error) {
+            if (isDuplicateNumberError(error)) {
+                return reply.status(409).send(NUMBER_TAKEN_RESPONSE);
+            }
             request.log.error(error);
             return reply.status(502).send({
                 error: 'Failed to connect WhatsApp. Please try again.',
@@ -123,12 +139,11 @@ export class WhatsAppController {
 
         try {
             // One WhatsApp number belongs to exactly one page across the platform.
+            // Fast pre-check; the DB unique index (catch below) is the real guard
+            // against a concurrent double-connect that both pass this check.
             const holder = await pagesService.getPageByWhatsAppPhoneNumberId(phoneNumberId);
             if (holder) {
-                return reply.status(409).send({
-                    error: 'This WhatsApp number is already connected to another page',
-                    code: 'WHATSAPP_NUMBER_TAKEN',
-                });
+                return reply.status(409).send(NUMBER_TAKEN_RESPONSE);
             }
 
             const signup = await this.runEmbeddedSignup(code, phoneNumberId, wabaId);
@@ -150,6 +165,9 @@ export class WhatsAppController {
             );
             return reply.status(201).send(serializePage(newPage));
         } catch (error) {
+            if (isDuplicateNumberError(error)) {
+                return reply.status(409).send(NUMBER_TAKEN_RESPONSE);
+            }
             request.log.error(error);
             return reply.status(502).send({
                 error: 'Failed to connect WhatsApp. Please try again.',

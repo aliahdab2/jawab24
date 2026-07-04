@@ -225,7 +225,13 @@ export const pages = pgTable('pages', {
         workspaceIdIdx: index('idx_pages_workspace_id').on(table.workspaceId),
         facebookPageIdIdx: index('idx_pages_facebook_page_id').on(table.facebookPageId),
         instagramAccountIdIdx: index('idx_pages_instagram_account_id').on(table.instagramAccountId),
-        whatsappPhoneNumberIdIdx: index('idx_pages_whatsapp_phone_number_id').on(table.whatsappPhoneNumberId),
+        // UNIQUE: one WhatsApp number belongs to exactly one page across the
+        // platform. Makes the "number taken" invariant structural (a concurrent
+        // double-connect gets 23505 → 409) instead of relying only on the
+        // check-then-insert in controllers/whatsapp.ts. Postgres treats NULLs as
+        // distinct, so the many WhatsApp-less rows (whatsapp_phone_number_id NULL)
+        // never collide — uniqueness applies only to real numbers.
+        whatsappPhoneNumberIdIdx: uniqueIndex('idx_pages_whatsapp_phone_number_id').on(table.whatsappPhoneNumberId),
         ecommerceStoreIdIdx: index('idx_pages_ecommerce_store_id').on(table.ecommerceStoreId),
     };
 });

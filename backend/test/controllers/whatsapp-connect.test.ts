@@ -182,6 +182,16 @@ describe('WhatsAppController.connect', () => {
         expect(pagesService.connectWhatsApp).not.toHaveBeenCalled();
     });
 
+    it('409s WHATSAPP_NUMBER_TAKEN when the DB unique index rejects a race (23505)', async () => {
+        // Both concurrent connects passed the pre-check; the DB index catches the loser.
+        vi.mocked(pagesService.connectWhatsApp).mockRejectedValue({ code: '23505' });
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(409);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_NUMBER_TAKEN' }));
+    });
+
     it('502s when the code exchange fails', async () => {
         vi.mocked(whatsappService.exchangeCodeForToken).mockRejectedValue(new Error('bad code'));
         const reply = buildReply();

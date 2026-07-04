@@ -24,18 +24,21 @@ function resolveDmPlatform(platform: string | null | undefined): DmPlatform {
 /** Meta error code: outside the 24h customer-service window (re-engagement needed). */
 const META_WA_WINDOW_EXPIRED = 131047;
 
-/** Map a WhatsApp Cloud API send failure to an AppError (axios error shape, not DmSendError). */
+/** Map a WhatsApp send failure to an AppError. whatsappService throws a
+ *  sanitized WhatsAppApiError (metaCode + message, no secrets); fall back to the
+ *  raw axios shape for safety. */
 function mapWhatsAppSendError(error: unknown): AppError {
-    const axiosErr = error as { response?: { data?: { error?: { code?: number; message?: string } } } };
-    const meta = axiosErr.response?.data?.error;
-    if (meta?.code === META_WA_WINDOW_EXPIRED) {
+    const e = error as { metaCode?: number; message?: string; response?: { data?: { error?: { code?: number; message?: string } } } };
+    const code = e.metaCode ?? e.response?.data?.error?.code;
+    if (code === META_WA_WINDOW_EXPIRED) {
         return new AppError(
             'More than 24 hours have passed since the customer\'s last message — WhatsApp only allows template messages now.',
             409,
             'DM_WINDOW_EXPIRED'
         );
     }
-    return new AppError(meta?.message || 'Failed to send WhatsApp message', 502, 'DM_UNKNOWN', false);
+    const detail = e.message || e.response?.data?.error?.message || 'Failed to send WhatsApp message';
+    return new AppError(detail, 502, 'DM_UNKNOWN', false);
 }
 
 // Map a classified DM-send failure to an AppError with a proper status code.
