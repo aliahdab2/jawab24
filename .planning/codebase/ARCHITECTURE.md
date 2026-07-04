@@ -205,7 +205,7 @@ Each service is independently deployable but shares:
        - `nonTextHandler.ts` — handles non-text DMs (voice → Whisper transcription, shared posts → smart nudge, photos/videos → nudge)
        - `sender.ts` — Facebook comment reply logic (public/private/dual modes with fallback)
        - `nudge.ts` — dual mode nudge variation picker (avoids Facebook spam detection)
-       - `adapters/` — platform-specific adapters (Facebook, Instagram) implementing `CommentPlatformAdapter`
+       - `adapters/` — per-platform adapters: message adapters (Facebook, Instagram, WhatsApp) implementing `MessagePlatformAdapter`, comment adapters (Facebook, Instagram) implementing `CommentPlatformAdapter`. **Intentional design (D-016):** the reply pipeline (`messageProcessor`/`commentProcessor`) and the single `replyQueue` are shared across all channels; channel differences (send, fetch, media, 24h window, future templates/receipts) live ONLY in the adapter. When a channel needs different behavior, add an adapter method — never a `platform === 'x'` branch in the core. Separate by JOB (a future *outbound* pipeline for template broadcasts), never by channel.
      - `protection/` — Safety rules (price hallucination detection, angry customer alerts)
    - Backend i18n: `utils/i18n.ts` — centralized customer-facing strings (nudges, fallbacks, placeholders). Add new languages by extending the `Locale` type.
 
