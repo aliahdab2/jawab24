@@ -781,6 +781,8 @@ After OpenAI returns, the system runs **6 automated checks**:
 | **v21** | 2026-03-15 | Prompt tuning for eval accuracy and edge case handling. Workspace-scoped context. | 99.6% |
 | **v22–v26** | 2026-03-29 – 2026-04-03 | Iterative prompt refinements and edge case tuning. | 99.6% (last measured at v19) |
 | **v27–v30** | 2026-04-03 – 2026-04-15 | Continued prompt refinements, edge case coverage, and tuning. | 97.6% (226 test cases) |
+| **v31–v50** | 2026-04-15 – 2026-06-28 | Iterative refinements (see the per-version comments above `PROMPT_VERSION` in `packages/shared/src/index.ts`): dialect mirroring, stale-date guard, comment-on-post context, KB prompt-cache hoist, anti-robotic sign-off rule. | ~96–97% |
+| **v51** | 2026-07-04 | Gender-aware Arabic addressing, scoped to **Arabic DMs only** (per-call block under `language === 'ar' && isDM`, NOT the shared static prefix — every other language/comment/business gets a v50-identical prompt). Name surfaced + `ARABIC GENDER` directive matching masculine/feminine from name + self-reference, neutral when unclear. Exact cache name-bucketed for DMs; semantic cache bypassed for DMs. See [`DECISIONS.md` D-015](DECISIONS.md). | no-regression vs v50 |
 
 ### Fallback Classifier (when AI Worker is down)
 

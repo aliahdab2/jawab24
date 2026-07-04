@@ -729,7 +729,14 @@ export {
 // threads (the multi-turn drift that makes ~12-14% of replies end with a bot-like closing). The
 // cacheable STATIC_SYSTEM_PREFIX is unchanged; this bump only invalidates the internal exact-reply
 // cache so the new tail reminder isn't shadowed by stale cached replies.
-export const PROMPT_VERSION = 'v50';
+// v51: gender-aware Arabic addressing, scoped to ARABIC DMs ONLY. The per-call block gains a name
+// line + an ARABIC GENDER directive that matches masculine/feminine forms inferred from the name +
+// the customer's self-reference, falling back to neutral phrasing when unclear. Deliberately NOT in
+// the cacheable STATIC_SYSTEM_PREFIX: every other language, every comment, and every business gets a
+// byte-identical prompt to v50 (guarded by blast-radius unit tests). Comments stay neutral. The exact
+// cache is name-bucketed for DMs and the semantic cache is bypassed for DMs (see ai.ts) so a reply
+// gendered for one customer is never served to another — flush caches on deploy.
+export const PROMPT_VERSION = 'v51';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

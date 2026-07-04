@@ -53,6 +53,8 @@ interface TestCase {
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
     brandVoiceNotes?: string;
     customerContext?: string;
+    /** Customer display name (DM only) — exercises name-based gender inference (category 59). */
+    senderName?: string;
     expected: {
         replyMethod?: string[];
         intent?: string[];
@@ -196,6 +198,30 @@ const CALLBACK_PROMISE_PHRASES = [
     'سيتواصلون معك', 'يتواصلو معاك', 'سأحوّلها للفريق', 'نوصّلها للفريق',
     'بسأل الفريق', 'يردّوا عليك',
     'contact you', "they'll contact", 'check with the team',
+];
+
+/**
+ * Distinctly-FEMININE second-person address forms (category 59, gender addressing).
+ *
+ * Substring grading of Arabic gender is asymmetric: feminine forms are the masculine base + a
+ * suffix (تفضّل→تفضّلي) or carry a kasra (بك→بكِ), so feminine forms are NOT substrings of the
+ * masculine ones — but the reverse IS true. That gives us ONE reliable direction:
+ *  - For a MASCULINE- or NEUTRAL-expected reply → `replyNotContains: FEMININE_ADDRESS` is
+ *    bulletproof: a correct reply never contains these; only a wrongly-feminine reply does.
+ *  - For a FEMININE-expected reply → `replyContainsAny: FEMININE_ADDRESS` is a SOFT signal: it
+ *    passes when the bot addresses her femininely, but a correct reply that phrases neutrally
+ *    (no 2nd-person address) will also miss — so a miss is not proof of a bug.
+ * Only 2nd-person ADDRESS forms are listed (not feminine adjectives that could agree with a
+ * feminine KB noun like "الخدمة متاحة"), so they fire only when the bot addresses the customer.
+ */
+const FEMININE_ADDRESS = [
+    // The single most reliable marker: the feminine 2nd-person kaf ـكِ (kaf + kasra). It catches
+    // بكِ، لكِ، أنصحكِ، يهمّكِ، مستواكِ, etc. in one entry. Undiacritized bot output otherwise omits
+    // the kasra, so its PRESENCE is a strong positive feminine signal — and in the masculine/unisex
+    // `replyNotContains` cases it also flags a wrongly-feminized reply.
+    'كِ',
+    'تفضلي', 'تفضّلي', 'عزيزتي', 'حبيبتي', 'أنتِ', 'إنتِ',
+    'تقدرين', 'تبغين', 'تحبين', 'تريدين', 'تحتاجين', 'ترغبين', 'حابّة',
 ];
 
 const TEST_CASES: TestCase[] = [
@@ -3635,6 +3661,22 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Non-AR/EN (French) multi-turn: closing suppression comes from the v50 prompt reminder (Layer 1).',
     },
+
+    // ===== Category 59: Gender Addressing (Arabic DM) — v51 =====
+    // Feature is Arabic-DM-only (see DECISIONS.md D-015). Grading is asymmetric (see FEMININE_ADDRESS):
+    // masculine/neutral/unisex cases assert `replyNotContains: FEMININE_ADDRESS` (bulletproof — catches
+    // any wrongly-feminine addressing); feminine cases assert `replyContainsAny: FEMININE_ADDRESS` (soft
+    // positive signal). NOT part of the Tier-1 must-pass set.
+    // 59.1 — Masculine SELF-REFERENCE ("خريج"/"متحمس") → must not address him with feminine forms.
+    { id: 640, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'أنا خريج جديد ومتحمس أطور نفسي، أي دورة تنصحوني فيها؟', page: 'training', expected: { replyMethod: ['ai'], replyNotContains: FEMININE_ADDRESS }, notes: 'Male self-reference — reply must be masculine/neutral, never feminine address.' },
+    // 59.2 — Feminine SELF-REFERENCE ("خريجة"/"متحمسة") → should address her with feminine forms.
+    { id: 641, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'أنا خريجة جديدة ومتحمسة أطور نفسي، أي دورة تنصحوني فيها؟', page: 'training', expected: { replyMethod: ['ai'], replyContainsAny: FEMININE_ADDRESS }, notes: 'Female self-reference (authoritative signal). SOFT: passes on feminine address; a fully-neutral reply also misses.' },
+    // 59.3 — Masculine NAME, neutral message (no self-reference) → gender comes from the name.
+    { id: 642, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'السلام عليكم، ممكن تساعدوني أختار الدورة المناسبة لي؟', page: 'training', senderName: 'أحمد', expected: { replyMethod: ['ai'], replyNotContains: FEMININE_ADDRESS }, notes: 'Clearly-masculine name (أحمد) + no self-reference — must not address as feminine.' },
+    // 59.4 — Feminine NAME, neutral message → gender comes from the name.
+    { id: 643, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'السلام عليكم، ممكن تساعدوني أختار الدورة المناسبة لي؟', page: 'training', senderName: 'فاطمة', expected: { replyMethod: ['ai'], replyContainsAny: FEMININE_ADDRESS }, notes: 'Clearly-feminine name (فاطمة) + no self-reference. SOFT positive signal (see 59.2).' },
+    // 59.5 — UNISEX name, neutral message → must NOT guess; stay neutral (no feminine address). Tests the D-015 precedence rule.
+    { id: 644, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'السلام عليكم، ممكن تساعدوني أختار الدورة المناسبة لي؟', page: 'training', senderName: 'نور', expected: { replyMethod: ['ai'], replyNotContains: FEMININE_ADDRESS }, notes: 'Unisex name (نور) + no self-reference → the model must not confidently pick feminine; neutral/masculine both pass.' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -3771,6 +3813,7 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
     if (test.replyStyle) body.replyStyle = test.replyStyle;
     if (test.brandVoiceNotes) body.brandVoiceNotes = test.brandVoiceNotes;
     if (test.customerContext) body.customerContext = test.customerContext;
+    if (test.senderName) body.senderName = test.senderName;
     if (EVAL_MODEL) body.model = EVAL_MODEL;
 
     const start = Date.now();

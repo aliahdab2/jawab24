@@ -57,6 +57,22 @@ interface CacheContext {
      * existing cache entries stay valid.
      */
     suppressGreeting?: boolean;
+    /**
+     * Reply channel. Only the DM path personalizes gendered Arabic addressing
+     * (comments stay neutral), so it drives the two gender-cache guards: the exact
+     * key is bucketed by `senderName` for DMs (below), and the semantic cache is
+     * bypassed for DMs (see generateReply). Absent → treated as non-DM.
+     */
+    channel?: 'comment' | 'dm';
+    /**
+     * Customer's display name (DM only). Gendered Arabic replies vary by the
+     * customer's gender, which the model infers largely from this name — so a reply
+     * cached for one customer must NOT be served to another with a different name.
+     * buildCacheKey appends a hashed first-name bucket for DMs so identical-message
+     * first-DMs from different customers get separate buckets. Excluded for comments
+     * (neutral, and name-bucketing would fragment the high-volume comment cache).
+     */
+    senderName?: string;
 }
 
 /** Shape returned by a successful exact-cache hit. */
@@ -166,6 +182,17 @@ export class AiService {
         // storePolicies). Conditional append: workspaces without brand voice keep
         // byte-identical keys, so only voice-having entries re-warm on rollout.
         if (ctx.brandVoiceHash) key.push(`bv:${ctx.brandVoiceHash}`);
+
+        // DM only: bucket by the customer's first name. DM Arabic replies are gendered
+        // and the model infers gender largely from the name, so two customers with
+        // different names (hence possibly different gender) sending an identical
+        // history-less first message must NOT share a cached reply. First whitespace
+        // token, hashed. Comments and nameless DMs skip this, so their keys — and the
+        // high-volume comment cache — stay byte-identical to before this change.
+        if (ctx.channel === 'dm' && ctx.senderName) {
+            const firstName = ctx.senderName.trim().split(/\s+/)[0];
+            if (firstName) key.push(`n:${crypto.createHash('md5').update(firstName).digest('hex').slice(0, 8)}`);
+        }
 
         return crypto.createHash('sha256').update(key.join(':')).digest('hex');
     }
@@ -338,6 +365,8 @@ export class AiService {
             model: resolvedModel,
             suppressGreeting: request.context?.suppressGreeting,
             brandVoiceHash,
+            channel: request.context?.channel,
+            senderName: request.context?.senderName,
         };
 
         // DM conversations with history → skip all caches.
@@ -389,7 +418,13 @@ export class AiService {
         let queryEmbedding: number[] | null = request.context?.queryEmbedding || null;
         let detectedPreGptIntent: string | null = null;
 
-        if (config.ai.semanticCacheEnabled && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches) {
+        // DMs bypass the semantic cache entirely (channel !== 'dm' below): DM Arabic replies are
+        // gender-personalized but the semantic cache has no gender/name dimension, so a fuzzy match
+        // would serve one customer's gendered reply to another. Only history-less first-DMs would
+        // reach it anyway (history/customerContext are skipped below), and it yields ~0 real hits —
+        // gating here (not inside the block) also skips the throwaway embedding call for those DMs.
+        // The exact cache still serves DMs, name-bucketed (see buildCacheKey).
+        if (config.ai.semanticCacheEnabled && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches && request.context?.channel !== 'dm') {
             try {
                 // Use full fallback classifier (covers COMPLIMENT, SPAM, BUSINESS_INQUIRY etc.)
                 // instead of basic detectIntent() which only handles GREETING/PRICE/HOURS/etc.
@@ -528,7 +563,7 @@ export class AiService {
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
             // Model is stored in metadata so check-time can filter to same-model entries.
             // Eval pipeline never writes (see `bypassAllCaches` above).
-            if (config.ai.semanticCacheEnabled && !bypassAllCaches && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+            if (config.ai.semanticCacheEnabled && !bypassAllCaches && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,

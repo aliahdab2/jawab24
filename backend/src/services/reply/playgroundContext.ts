@@ -41,6 +41,8 @@ interface PlaygroundContextOptions {
     replyStyle?: string;
     brandVoiceNotes?: string;
     customerContext?: string;
+    /** Customer display name (DM only) — feeds gender-aware Arabic DM addressing. */
+    senderName?: string;
     model?: string;
     /** 'eval' for the batch eval script, 'playground' (default) for interactive admin testing.
      *  Set as the pipeline tag on ai_usage_log so eval cost is queryable separately. */
@@ -58,7 +60,7 @@ export interface PlaygroundContext {
  * Shared between the admin playground route and the customer-facing test-reply endpoint.
  */
 export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Promise<PlaygroundContext> {
-    const { page, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model, source } = opts;
+    const { page, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, senderName, model, source } = opts;
 
     // 1. Fetch owner settings for comment reply mode + workspace settings for language fallback
     let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
@@ -134,6 +136,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         storePolicies,
         postMessage: channel === 'comment' ? postMessage : undefined,
         conversationHistory: channel === 'dm' ? conversationHistory : undefined,
+        senderName: channel === 'dm' ? senderName : undefined,
         replyStyle,
         brandVoiceNotes,
         businessInfoBlock,
