@@ -315,7 +315,19 @@ export interface AdminUserAiCostReport {
   period: AdminUserAiCostPeriod;
   rangeStart: string;
   rangeEnd: string;
-  totals: { calls: number; billedCalls: number; cacheHits: number; tokensIn: number; tokensOut: number; costUsd: number };
+  totals: {
+    calls: number;
+    billedCalls: number;
+    cacheHits: number;
+    // Scoped to the reply pipelines (comment_reply + dm_reply) — the only
+    // cacheable traffic, so this is the meaningful cache-hit rate.
+    replyCalls: number;
+    replyCacheHits: number;
+    replyCacheHitRate: number;
+    tokensIn: number;
+    tokensOut: number;
+    costUsd: number;
+  };
   byPage: Array<{
     pageId: string | null;
     pageName: string | null;
@@ -348,7 +360,14 @@ export interface AdminGlobalAiCostReport {
     calls: number;
     billedCalls: number;
     cacheHits: number;
+    // Blended across ALL pipelines (incl. never-cacheable ones — embeddings,
+    // translation, …) so it understates the cache; use replyCacheHitRate.
     internalCacheHitRate: number;
+    // Scoped to the reply pipelines (comment_reply + dm_reply) — the only
+    // cacheable traffic, so this is the meaningful cache-hit rate.
+    replyCalls: number;
+    replyCacheHits: number;
+    replyCacheHitRate: number;
     tokensIn: number;
     cachedInputTokens: number;
     tokensOut: number;

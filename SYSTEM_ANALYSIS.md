@@ -2357,7 +2357,7 @@ Internal **ops-only** dashboard — system health, not cost (all AI cost visibil
 The single home for AI cost visibility and quota-runway monitoring (built to prevent a repeat of the 2026-06-28 `insufficient_quota` outage):
 
 - **Route**: `/admin/ai-cost` (protected, admin+ access)
-- **Consumption**: cost by feature (pipeline), by model, by intent, plus a daily-spend trend — with a billed-vs-cached split and prompt-cache savings, from `ai_usage_log` via `getGlobalAiCostByPipeline`
+- **Consumption**: cost by feature (pipeline), by model, by intent, plus a daily-spend trend — with a billed-vs-cached split, a per-pipeline hit-rate column, and prompt-cache savings, from `ai_usage_log` via `getGlobalAiCostByPipeline`. The headline "Reply cache hit rate" card is scoped to `REPLY_PIPELINES` (`comment_reply` + `dm_reply`) — the only cacheable traffic; the blended all-pipeline rate counts never-cacheable calls (embeddings, translation, …) and once made a healthy 54% comment-reply cache read as "12%"
 - **OpenAI billing (authoritative)**: pulled daily from the OpenAI org **Costs API** into `ai_cost_snapshots`, split prod vs eval/dev by API key, with a reconciliation view against `ai_usage_log` (prod key matched the DB within 0.6%)
 - **Credit runway**: admin-entered balance anchor (OpenAI has no balance API) → remaining ÷ rolling org burn; surfaced by a `AiCreditRunwayBanner` (not dismissible at critical)
 - **Proactive alerts**: throttled admin email + Sentry on credit-low (`alert:openai_credit_low`) and spend-spike (`alert:openai_spend_spike`). OpenAI **auto-recharge** (enabled in the OpenAI dashboard) is the primary outage protection; these alerts are the backstop

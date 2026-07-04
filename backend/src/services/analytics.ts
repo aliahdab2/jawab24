@@ -2,6 +2,7 @@ import { db } from '../db';
 import { comments, posts, instagramComments, instagramMedia, messages, pages, aiUsageLog } from '../db/schema';
 import { eq, and, gte, lt, isNotNull, sql } from 'drizzle-orm';
 import { cacheSavingsUsd } from '../config/aiPricing';
+import { isReplyPipeline } from '../types/aiPipeline';
 
 interface AnalyticsOverview {
     period: { from: string; to: string; days: number };
@@ -428,7 +429,7 @@ export class AnalyticsService {
 
         // billedCalls = real OpenAI calls (cache hits cost $0 but still count as calls,
         // so a high call count with a tiny cost is correct, not a bug — surface the split).
-        const totals = { calls: 0, billedCalls: 0, cacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
+        const totals = { calls: 0, billedCalls: 0, cacheHits: 0, replyCalls: 0, replyCacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
         const pageMap = new Map<string, AdminUserAiCostPageRow>();
         const pipelineMap = new Map<string, AdminUserAiCostPipelineRow>();
 
@@ -446,6 +447,10 @@ export class AnalyticsService {
             totals.tokensIn += tokensIn;
             totals.tokensOut += tokensOut;
             totals.costUsd += costUsd;
+            if (isReplyPipeline(row.pipeline)) {
+                totals.replyCalls += calls;
+                totals.replyCacheHits += cacheHits;
+            }
 
             const pageKey = row.pageId ?? '__no_page__';
             const page = pageMap.get(pageKey);
@@ -489,12 +494,13 @@ export class AnalyticsService {
             .sort((a, b) => b.costUsd - a.costUsd);
 
         totals.costUsd = roundCost(totals.costUsd);
+        const replyCacheHitRate = totals.replyCalls > 0 ? totals.replyCacheHits / totals.replyCalls : 0;
 
         return {
             period,
             rangeStart: rangeStart.toISOString(),
             rangeEnd: rangeEnd.toISOString(),
-            totals,
+            totals: { ...totals, replyCacheHitRate },
             byPage,
             byPipeline,
         };
@@ -549,6 +555,7 @@ export class AnalyticsService {
         const roundCost = (v: number) => Math.round(v * 1_000_000) / 1_000_000;
         const totals = {
             calls: 0, billedCalls: 0, cacheHits: 0,
+            replyCalls: 0, replyCacheHits: 0,
             tokensIn: 0, cachedInputTokens: 0, tokensOut: 0,
             costUsd: 0, promptCacheSavingsUsd: 0,
         };
@@ -575,6 +582,10 @@ export class AnalyticsService {
             totals.tokensOut += tokensOut;
             totals.costUsd += costUsd;
             totals.promptCacheSavingsUsd += savings;
+            if (isReplyPipeline(row.pipeline)) {
+                totals.replyCalls += calls;
+                totals.replyCacheHits += cacheHits;
+            }
 
             const pipelineKey = row.pipeline ?? 'unknown';
             const pipe = pipelineMap.get(pipelineKey);
@@ -608,6 +619,7 @@ export class AnalyticsService {
         totals.costUsd = roundCost(totals.costUsd);
         totals.promptCacheSavingsUsd = roundCost(totals.promptCacheSavingsUsd);
         const internalCacheHitRate = totals.calls > 0 ? totals.cacheHits / totals.calls : 0;
+        const replyCacheHitRate = totals.replyCalls > 0 ? totals.replyCacheHits / totals.replyCalls : 0;
 
         const byIntent = intentRows.map(r => {
             const calls = Number(r.calls);
@@ -631,7 +643,7 @@ export class AnalyticsService {
             period,
             rangeStart: rangeStart.toISOString(),
             rangeEnd: rangeEnd.toISOString(),
-            totals: { ...totals, internalCacheHitRate },
+            totals: { ...totals, internalCacheHitRate, replyCacheHitRate },
             byPipeline,
             byModel,
             byIntent,
@@ -668,7 +680,12 @@ export interface AdminUserAiCostReport {
     period: AdminUserAiCostPeriod;
     rangeStart: string;
     rangeEnd: string;
-    totals: { calls: number; billedCalls: number; cacheHits: number; tokensIn: number; tokensOut: number; costUsd: number };
+    totals: {
+        calls: number; billedCalls: number; cacheHits: number;
+        /** Calls / hits / rate scoped to REPLY_PIPELINES — see AdminGlobalAiCostReport.totals. */
+        replyCalls: number; replyCacheHits: number; replyCacheHitRate: number;
+        tokensIn: number; tokensOut: number; costUsd: number;
+    };
     byPage: AdminUserAiCostPageRow[];
     /** Cost split by source pipeline (Smart Reply vs lead extraction vs embeddings …). */
     byPipeline: AdminUserAiCostPipelineRow[];
@@ -704,8 +721,19 @@ export interface AdminGlobalAiCostReport {
         /** Real OpenAI calls (calls − internal cache hits). */
         billedCalls: number;
         cacheHits: number;
-        /** cacheHits / calls (0..1). */
+        /**
+         * cacheHits / calls (0..1) — blended across ALL pipelines, including
+         * ones that can never hit the cache (embeddings, translation, …), so it
+         * understates cache effectiveness. Kept for context; the headline
+         * cache metric is replyCacheHitRate.
+         */
         internalCacheHitRate: number;
+        /** Calls in REPLY_PIPELINES (comment_reply + dm_reply) — the only cacheable traffic. */
+        replyCalls: number;
+        /** Internal cache hits within REPLY_PIPELINES. */
+        replyCacheHits: number;
+        /** replyCacheHits / replyCalls (0..1) — the meaningful reply-cache hit rate. */
+        replyCacheHitRate: number;
         tokensIn: number;
         cachedInputTokens: number;
         tokensOut: number;

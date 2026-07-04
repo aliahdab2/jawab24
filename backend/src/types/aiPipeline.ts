@@ -26,3 +26,20 @@ export type AiPipeline =
 
 /** Sources accepted by the playground HTTP endpoint; mapped 1:1 to a pipeline tag. */
 export type PlaygroundSource = Extract<AiPipeline, 'playground' | 'eval'>;
+
+/**
+ * Production reply pipelines — the only traffic that flows through the internal
+ * reply cache (exact + semantic). A cache-hit rate is only meaningful measured
+ * over these: every other pipeline (embeddings, translation, transcription,
+ * lead extraction, …) can never produce a `cached=true` row, so blending them
+ * into the denominator dilutes the rate into an uninterpretable number
+ * (prod 2026-07: 54% on comment_reply read as "12%" blended).
+ * 'playground' also passes through the cache but is admin test traffic, not
+ * production replies, so it is deliberately excluded.
+ */
+export const REPLY_PIPELINES: readonly AiPipeline[] = ['comment_reply', 'dm_reply'];
+
+/** True for rows whose pipeline participates in the internal reply cache. */
+export function isReplyPipeline(pipeline: string | null): boolean {
+    return (REPLY_PIPELINES as readonly string[]).includes(pipeline ?? '');
+}
