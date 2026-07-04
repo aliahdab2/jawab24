@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Button, WhatsAppIcon } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
-import { isWhatsAppEnabled } from '@/lib/featureFlags';
+import { isWhatsAppVisible } from '@/lib/featureFlags';
 import type { Page } from '@jawab24/shared';
 
 /**
@@ -14,7 +14,7 @@ import type { Page } from '@jawab24/shared';
  * setup-checklist step — WhatsApp is optional, and an eternally-incomplete
  * step would keep the checklist nagging.
  */
-export function WhatsAppNudgeBanner({ pages, isOwner }: { pages: Page[]; isOwner: boolean }) {
+export function WhatsAppNudgeBanner({ pages, isOwner, isAdmin }: { pages: Page[]; isOwner: boolean; isAdmin: boolean }) {
     const t = useTranslations('dashboard');
     const { dismissed, dismiss } = useTimedDismiss({
         key: 'whatsappNudgeDismissedAt',
@@ -24,7 +24,9 @@ export function WhatsAppNudgeBanner({ pages, isOwner }: { pages: Page[]; isOwner
     const hasConnectedPage = pages.some(p => p.isConnected !== false);
     const hasWhatsApp = pages.some(p => p.whatsappConnected);
 
-    if (dismissed || !isOwner || !isWhatsAppEnabled() || !hasConnectedPage || hasWhatsApp) return null;
+    // Canary-aware: during admin-only rollout the CTA (which deep-links to the
+    // connect flow) must not show to non-admins.
+    if (dismissed || !isOwner || !isWhatsAppVisible(isAdmin) || !hasConnectedPage || hasWhatsApp) return null;
 
     return (
         <div className="flex items-start gap-3 p-4 rounded-2xl border bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 transition-all">

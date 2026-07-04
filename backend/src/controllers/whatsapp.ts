@@ -1,4 +1,8 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
+import { eq } from 'drizzle-orm';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { config } from '../config';
 import { pagesService } from '../services/pages';
 import { whatsappService } from '../services/whatsapp';
 import { subscriptionsService } from '../services/subscriptions';
@@ -20,6 +24,25 @@ const PIN_MISMATCH_RESPONSE = {
 const NUMBER_TAKEN_RESPONSE = {
     error: 'This WhatsApp number is already connected to another page',
     code: 'WHATSAPP_NUMBER_TAKEN',
+} as const;
+
+/**
+ * Canary gate: while `WHATSAPP_ALLOWLIST` is non-empty, only those accounts may
+ * connect a WhatsApp number (staged rollout — founder first). Empty allowlist =
+ * open to everyone (full launch). Enforced server-side by email (fetched from
+ * the DB, like the admin check) so it holds regardless of the client. Returns
+ * true when the acting user is allowed to connect.
+ */
+async function isWhatsAppConnectAllowed(userId: string): Promise<boolean> {
+    if (config.whatsappAllowlist.length === 0) return true;
+    const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
+    const email = user?.email?.trim().toLowerCase();
+    return !!email && config.whatsappAllowlist.includes(email);
+}
+
+const NOT_ALLOWLISTED_RESPONSE = {
+    error: 'WhatsApp isn\'t available on your account yet.',
+    code: 'WHATSAPP_NOT_ALLOWLISTED',
 } as const;
 
 /** True when a DB write lost the race to the whatsapp_phone_number_id unique index. */
@@ -55,12 +78,17 @@ export class WhatsAppController {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { workspaceId } = req;
+        const { userId } = req.user;
         const { id } = request.params;
         const { code, phoneNumberId, wabaId } = request.body ?? {};
 
         if (!code || !phoneNumberId || !wabaId
             || typeof code !== 'string' || typeof phoneNumberId !== 'string' || typeof wabaId !== 'string') {
             return reply.status(400).send({ error: 'code, phoneNumberId and wabaId are required' });
+        }
+
+        if (!(await isWhatsAppConnectAllowed(userId))) {
+            return reply.status(403).send(NOT_ALLOWLISTED_RESPONSE);
         }
 
         try {
@@ -135,6 +163,10 @@ export class WhatsAppController {
         if (!code || !phoneNumberId || !wabaId
             || typeof code !== 'string' || typeof phoneNumberId !== 'string' || typeof wabaId !== 'string') {
             return reply.status(400).send({ error: 'code, phoneNumberId and wabaId are required' });
+        }
+
+        if (!(await isWhatsAppConnectAllowed(userId))) {
+            return reply.status(403).send(NOT_ALLOWLISTED_RESPONSE);
         }
 
         try {

@@ -951,8 +951,8 @@ const DashboardPage: NextPageWithLayout = () => {
             );
           })()}
 
-          {/* WhatsApp launch announcement — env-gated inside the component */}
-          <WhatsAppNudgeBanner pages={pages} isOwner={isOwner} />
+          {/* WhatsApp launch announcement — env-gated + canary-aware inside the component */}
+          <WhatsAppNudgeBanner pages={pages} isOwner={isOwner} isAdmin={user?.isAdmin ?? false} />
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">

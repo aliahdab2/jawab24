@@ -36,7 +36,7 @@ import dynamic from 'next/dynamic';
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
-import { isWhatsAppEnabled } from '@/lib/featureFlags';
+import { isWhatsAppVisible } from '@/lib/featureFlags';
 import { captureError } from '@/lib/sentryHelpers';
 import { useWorkspaceRole, useSaveKnowledgeBase } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
@@ -74,7 +74,12 @@ const PagesPage: NextPageWithLayout = () => {
   const tTest = useTranslations('testSmartReply');
   const tOnboarding = useTranslations('onboarding');
   const { language } = useLanguage();
-  const { isAuthenticated, fbToken } = useAuthStore();
+  const { isAuthenticated, fbToken, user } = useAuthStore();
+  // Canary: while NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY is on, the WhatsApp
+  // surface shows only to platform admins (the founder). Otherwise governed by
+  // the master switch. Actionable surfaces (picker, connect, add-card) gate on
+  // this so no non-founder can reach the Meta signup during the canary window.
+  const whatsappVisible = isWhatsAppVisible(user?.isAdmin ?? false);
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const { canEdit, isOwner } = useWorkspaceRole();
   const queryClient = useQueryClient();
@@ -463,7 +468,7 @@ const PagesPage: NextPageWithLayout = () => {
   // Single "Connect channel" entry point. With WhatsApp not yet configured the
   // picker would have one option, so it collapses to the Facebook dialog directly.
   const handleOpenConnect = () => {
-    if (isWhatsAppEnabled()) {
+    if (whatsappVisible) {
       setShowChannelPicker(true);
     } else {
       setShowConnectDialog(true);
@@ -512,15 +517,15 @@ const PagesPage: NextPageWithLayout = () => {
     <>
       {/* Header */}
       <PageHeader
-        title={isWhatsAppEnabled() ? t('titleChannels') : t('title')}
-        description={isWhatsAppEnabled() ? t('descriptionChannels') : t('description')}
+        title={whatsappVisible ? t('titleChannels') : t('title')}
+        description={whatsappVisible ? t('descriptionChannels') : t('description')}
         action={isOwner
           ? <Button
               onClick={handleOpenConnect}
               disabled={syncing}
               icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
             >
-              {syncing ? t('syncing') : (isWhatsAppEnabled() ? t('connectChannel') : t('connectPage'))}
+              {syncing ? t('syncing') : (whatsappVisible ? t('connectChannel') : t('connectPage'))}
             </Button>
           : undefined
         }
@@ -734,7 +739,7 @@ const PagesPage: NextPageWithLayout = () => {
                   {/* WhatsApp row — master-switch gated so a dark deploy shows
                       no WhatsApp surface; the whatsappConnected OR never hides
                       an already-connected number. */}
-                  {(isWhatsAppEnabled() || page.whatsappConnected) && (
+                  {(whatsappVisible || page.whatsappConnected) && (
                   <div
                     className={clsx(
                       'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
@@ -801,7 +806,7 @@ const PagesPage: NextPageWithLayout = () => {
                           />
                         </span>
                       </div>
-                    ) : (isOwner && isWhatsAppEnabled() && (
+                    ) : (isOwner && whatsappVisible && (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -945,10 +950,10 @@ const PagesPage: NextPageWithLayout = () => {
           <EmptyState
             icon={FileText}
             title={t('noPages')}
-            description={isWhatsAppEnabled() ? t('noPagesDescChannels') : t('noPagesDesc')}
+            description={whatsappVisible ? t('noPagesDescChannels') : t('noPagesDesc')}
             action={isOwner
               ? <Button onClick={handleOpenConnect}>
-                  {isWhatsAppEnabled() ? t('connectChannel') : t('connectPage')}
+                  {whatsappVisible ? t('connectChannel') : t('connectPage')}
                 </Button>
               : undefined
             }
@@ -988,7 +993,7 @@ const PagesPage: NextPageWithLayout = () => {
           setShowChannelPicker(false);
           handleConnectWhatsApp(null);
         }}
-        whatsappAvailable={isWhatsAppEnabled()}
+        whatsappAvailable={whatsappVisible}
         whatsappConnecting={connectingWhatsApp === 'new'}
       />
 
