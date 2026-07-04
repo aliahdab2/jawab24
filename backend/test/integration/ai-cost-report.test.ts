@@ -16,6 +16,14 @@ import { createTestUser, testDb } from './setup';
 import * as schema from '../../src/db/schema';
 import { analyticsService } from '../../src/services/analytics';
 
+// Stamp fixtures an hour in the past. The reports filter `createdAt < rangeEnd`
+// where rangeEnd = now() computed in JS at query time; a row defaulted to the
+// DB's now() sits on that exact boundary, and under deploy-time contention
+// (integration tests run WHILE Docker images build) clock skew between Postgres
+// and Node can push it just past rangeEnd → excluded → flaky zero counts. An
+// hour's headroom keeps every fixture unambiguously inside the 7d window.
+const FIXTURE_CREATED_AT = new Date(Date.now() - 60 * 60 * 1000);
+
 async function seedUsage(userId: string, pipeline: string, calls: number, cachedCalls: number) {
     const rows = Array.from({ length: calls }, (_, i) => ({
         userId,
@@ -25,6 +33,7 @@ async function seedUsage(userId: string, pipeline: string, calls: number, cached
         tokensIn: i < cachedCalls ? 0 : 1000,
         tokensOut: i < cachedCalls ? 0 : 100,
         costUsd: i < cachedCalls ? 0 : 0.002,
+        createdAt: FIXTURE_CREATED_AT,
     }));
     await testDb.insert(schema.aiUsageLog).values(rows);
 }
