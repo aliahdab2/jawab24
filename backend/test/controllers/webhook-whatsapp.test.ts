@@ -15,12 +15,24 @@ const {
     mockGetPageByInstagramId,
     mockGetPageByWhatsAppPhoneNumberId,
     mockFindOrCreateFromWebhook,
+    mockMarkAsResolved,
+    mockSetCreatedTime,
+    mockTranscribeFromBuffer,
+    mockWaGetMediaInfo,
+    mockWaDownloadMedia,
+    mockWaSendTextMessage,
 } = vi.hoisted(() => ({
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
     mockGetPageByFacebookId: vi.fn().mockResolvedValue(null),
     mockGetPageByInstagramId: vi.fn().mockResolvedValue(null),
     mockGetPageByWhatsAppPhoneNumberId: vi.fn().mockResolvedValue(null),
     mockFindOrCreateFromWebhook: vi.fn().mockResolvedValue({ message: { id: 'msg-1' }, isNew: true }),
+    mockMarkAsResolved: vi.fn().mockResolvedValue(undefined),
+    mockSetCreatedTime: vi.fn().mockResolvedValue(undefined),
+    mockTranscribeFromBuffer: vi.fn().mockResolvedValue(null),
+    mockWaGetMediaInfo: vi.fn().mockResolvedValue({ url: 'https://lookaside.example/media', mimeType: 'audio/ogg; codecs=opus', fileSize: 1024 }),
+    mockWaDownloadMedia: vi.fn().mockResolvedValue(Buffer.from('fake-audio')),
+    mockWaSendTextMessage: vi.fn().mockResolvedValue('wamid.nudge'),
 }));
 
 vi.mock('../../src/lib/replyQueue', () => ({
@@ -58,6 +70,17 @@ vi.mock('../../src/services/messages', () => ({
         storeOutgoingMessage: vi.fn().mockResolvedValue({}),
         getLastIncomingTextFromSender: vi.fn().mockResolvedValue(null),
         getSenderNameBySenderId: vi.fn().mockResolvedValue(null),
+        markAsResolved: mockMarkAsResolved,
+        setCreatedTime: mockSetCreatedTime,
+    },
+}));
+
+vi.mock('../../src/services/whatsapp', () => ({
+    whatsappService: {
+        getMediaInfo: mockWaGetMediaInfo,
+        downloadMedia: mockWaDownloadMedia,
+        sendTextMessage: mockWaSendTextMessage,
+        markAsRead: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -70,7 +93,10 @@ vi.mock('../../src/services/instagram', () => ({
 }));
 
 vi.mock('../../src/services/transcription', () => ({
-    transcriptionService: { transcribe: vi.fn().mockResolvedValue(null) },
+    transcriptionService: {
+        transcribe: vi.fn().mockResolvedValue(null),
+        transcribeFromBuffer: mockTranscribeFromBuffer,
+    },
 }));
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -216,31 +242,157 @@ describe('WhatsApp Webhook — routing', () => {
     });
 });
 
-describe('WhatsApp Webhook — non-text messages skipped', () => {
+describe('WhatsApp Webhook — media messages', () => {
     let app: Awaited<ReturnType<typeof buildApp>>;
+
+    const waPage = {
+        id: 'page-uuid',
+        userId: 'user-uuid',
+        workspaceId: 'ws-uuid',
+        name: 'Test Store',
+        accessToken: 'fb-page-token',
+        whatsappPhoneNumberId: 'phone-number-id-123',
+        whatsappAccessToken: 'wa-business-token',
+        whatsappAutoReplyEnabled: true,
+    };
 
     beforeEach(async () => {
         app = await buildApp();
         vi.clearAllMocks();
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(waPage);
+        mockFindOrCreateFromWebhook.mockResolvedValue({ message: { id: 'msg-1' }, isNew: true });
+        mockWaGetMediaInfo.mockResolvedValue({ url: 'https://lookaside.example/media', mimeType: 'audio/ogg; codecs=opus', fileSize: 1024 });
+        mockWaDownloadMedia.mockResolvedValue(Buffer.from('fake-audio'));
     });
 
-    it.each(['image', 'audio', 'video', 'document', 'sticker', 'location'])(
-        'skips %s message without enqueueing',
-        async (type) => {
-            const payload = buildWhatsAppPayload({ type });
+    async function post(payload: object) {
+        await app.inject({
+            method: 'POST',
+            url: '/webhook',
+            headers: { 'x-hub-signature-256': generateSignature(payload) },
+            payload,
+        });
+        await new Promise(r => setTimeout(r, 50));
+    }
 
-            await app.inject({
-                method: 'POST',
-                url: '/webhook',
-                headers: { 'x-hub-signature-256': generateSignature(payload) },
-                payload,
-            });
+    it('voice note: downloads with the WABA token, transcribes, and enqueues the transcript', async () => {
+        mockTranscribeFromBuffer.mockResolvedValue({ text: 'كم سعر الشنطة؟' });
+        const payload = buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: 'wamid.voice', type: 'audio', timestamp: '1700000000', audio: { id: 'media-1', mime_type: 'audio/ogg; codecs=opus', voice: true } }],
+        });
 
-            await new Promise(r => setTimeout(r, 50));
+        await post(payload);
 
-            expect(mockEnqueueMessage).not.toHaveBeenCalled();
-        },
-    );
+        expect(mockWaGetMediaInfo).toHaveBeenCalledWith('media-1', 'wa-business-token');
+        expect(mockWaDownloadMedia).toHaveBeenCalledWith('https://lookaside.example/media', 'wa-business-token');
+        // Codec suffix stripped for Whisper
+        expect(mockTranscribeFromBuffer).toHaveBeenCalledWith(
+            expect.any(Buffer), 'audio/ogg', expect.any(String), undefined,
+            { userId: 'user-uuid', pageId: 'page-uuid' },
+        );
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            jobType: 'whatsapp_message',
+            pageId: 'phone-number-id-123',
+            messageId: 'wamid.voice',
+            text: 'كم سعر الشنطة؟',
+        }));
+        expect(mockWaSendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('voice note: falls back to nudge when transcription fails', async () => {
+        mockTranscribeFromBuffer.mockResolvedValue(null);
+        const payload = buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: 'wamid.voice', type: 'audio', timestamp: '1700000000', audio: { id: 'media-1', mime_type: 'audio/ogg' } }],
+        });
+
+        await post(payload);
+
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+        // Placeholder stored + nudge sent with the WABA token
+        expect(mockFindOrCreateFromWebhook).toHaveBeenCalled();
+        expect(mockWaSendTextMessage).toHaveBeenCalledWith(
+            'phone-number-id-123', '+966500000000', expect.any(String), 'wa-business-token',
+        );
+    });
+
+    it('image without caption: stores placeholder and sends text-only nudge', async () => {
+        const payload = buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: 'wamid.img', type: 'image', timestamp: '1700000000', image: { id: 'media-2', mime_type: 'image/jpeg' } }],
+        });
+
+        await post(payload);
+
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+        expect(mockFindOrCreateFromWebhook).toHaveBeenCalled();
+        expect(mockWaSendTextMessage).toHaveBeenCalledWith(
+            'phone-number-id-123', '+966500000000', expect.any(String), 'wa-business-token',
+        );
+    });
+
+    it('image WITH caption: enqueues the caption as a marked text message', async () => {
+        const payload = buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: 'wamid.img', type: 'image', timestamp: '1700000000', image: { id: 'media-2', mime_type: 'image/jpeg', caption: 'عندكم مثل هذي؟' } }],
+        });
+
+        await post(payload);
+
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            jobType: 'whatsapp_message',
+            text: '[Image] عندكم مثل هذي؟',
+        }));
+        expect(mockWaSendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('sticker: stores silently, no nudge, no enqueue', async () => {
+        const payload = buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: 'wamid.stk', type: 'sticker', timestamp: '1700000000', sticker: { id: 'media-3', mime_type: 'image/webp' } }],
+        });
+
+        await post(payload);
+
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+        expect(mockWaSendTextMessage).not.toHaveBeenCalled();
+        expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
+            'page-uuid', 'ws-uuid', 'wamid.stk', '+966500000000', '[Sticker]', undefined, 'sticker',
+        );
+        expect(mockMarkAsResolved).toHaveBeenCalled();
+    });
+
+    it('quick-reply button tap: enqueues the button text', async () => {
+        const payload = buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: 'wamid.btn', type: 'button', timestamp: '1700000000', button: { text: 'نعم أريد الطلب' } }],
+        });
+
+        await post(payload);
+
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            text: 'نعم أريد الطلب',
+        }));
+    });
+
+    it('location message: skipped entirely (no enqueue, no nudge)', async () => {
+        const payload = buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: 'wamid.loc', type: 'location', timestamp: '1700000000', location: { latitude: 24.7, longitude: 46.7 } }],
+        });
+
+        await post(payload);
+
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+        expect(mockWaSendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('media message for a page without a WhatsApp token: does nothing', async () => {
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue({ ...waPage, whatsappAccessToken: null });
+        const payload = buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: 'wamid.img', type: 'image', timestamp: '1700000000', image: { id: 'media-2' } }],
+        });
+
+        await post(payload);
+
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+        expect(mockWaSendTextMessage).not.toHaveBeenCalled();
+        expect(mockFindOrCreateFromWebhook).not.toHaveBeenCalled();
+    });
 });
 
 describe('WhatsApp Webhook — status callbacks skipped', () => {

@@ -65,7 +65,7 @@ describe('Pages Routes', () => {
 
     describe('GET /pages', () => {
         it('should get all pages for user with isConnected flag', async () => {
-            const pagesList = [{ id: 'page_1', name: 'My Store', accessToken: 'tok' }];
+            const pagesList = [{ id: 'page_1', name: 'My Store', facebookPageId: 'fb_1', accessToken: 'tok' }];
             vi.mocked(pagesService.getPages).mockResolvedValue(pagesList as any);
 
             const response = await app.inject({
@@ -83,7 +83,7 @@ describe('Pages Routes', () => {
 
     describe('GET /pages/:id', () => {
         it('should get a single page with isConnected flag', async () => {
-            const page = { id: 'page_1', name: 'My Store', accessToken: 'tok' };
+            const page = { id: 'page_1', name: 'My Store', facebookPageId: 'fb_1', accessToken: 'tok' };
             vi.mocked(pagesService.getPage).mockResolvedValue(page as any);
 
             const response = await app.inject({
@@ -125,7 +125,7 @@ describe('Pages Routes', () => {
 
     describe('PATCH /pages/:id/auto-reply', () => {
         it('should toggle auto-reply', async () => {
-            const updatedPage = { id: 'page_1', autoReplyEnabled: false, accessToken: 'tok' };
+            const updatedPage = { id: 'page_1', autoReplyEnabled: false, facebookPageId: 'fb_1', accessToken: 'tok' };
             vi.mocked(pagesService.toggleAutoReply).mockResolvedValue(updatedPage as any);
 
             const response = await app.inject({
@@ -140,7 +140,7 @@ describe('Pages Routes', () => {
     });
 
     describe('PATCH /pages/:id/lead-config', () => {
-        const PAGE = { id: 'page_1', name: 'Nourva', accessToken: 'tok' };
+        const PAGE = { id: 'page_1', name: 'Nourva', facebookPageId: 'fb_1', accessToken: 'tok' };
 
         it('saves a sanitized per-page override and returns the serialized page', async () => {
             vi.mocked(pagesService.updateLeadConfig).mockResolvedValue({

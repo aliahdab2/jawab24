@@ -8,7 +8,7 @@ import { authService } from '../services/auth';
 import { auditLog } from '../services/auditLog';
 import { captureError } from '../utils/sentryHelpers';
 import * as Sentry from '@sentry/node';
-import { handleNonTextMessage } from '../services/reply/nonTextHandler';
+import { handleNonTextMessage, handleWhatsAppNonTextMessage } from '../services/reply/nonTextHandler';
 import { isSharedPostType } from '../utils/instagram';
 import { Logger, noopLogger, createRequestLogger } from '../types';
 import { db } from '../db';
@@ -80,6 +80,16 @@ interface WhatsAppWebhookEntry {
                 timestamp: string;
                 type: string;
                 text?: { body: string };
+                audio?: { id: string; mime_type?: string; voice?: boolean };
+                image?: { id: string; mime_type?: string; caption?: string };
+                video?: { id: string; mime_type?: string; caption?: string };
+                document?: { id: string; mime_type?: string; caption?: string; filename?: string };
+                sticker?: { id: string; mime_type?: string };
+                button?: { text?: string };
+                interactive?: {
+                    button_reply?: { title?: string };
+                    list_reply?: { title?: string };
+                };
             }>;
             statuses?: Array<unknown>;
         };
@@ -632,36 +642,79 @@ export class WebhookController {
                 }
 
                 for (const msg of waMessages) {
-                    // Phase 1: only handle text messages
-                    if (msg.type !== 'text' || !msg.text?.body) {
-                        this.log().debug('[WhatsApp] Skipping non-text message', {
-                            messageId: msg.id, type: msg.type,
-                        });
+                    const senderName = contactNames.get(msg.from);
+
+                    // Anything that carries customer-authored text goes straight to the
+                    // AI pipeline: plain text, quick-reply buttons, list/button replies,
+                    // and media captions (marked so the AI knows an attachment came with it).
+                    const textBody = this.extractWhatsAppText(msg);
+                    if (textBody) {
+                        try {
+                            const jobId = await enqueueMessage({
+                                jobType: 'whatsapp_message',
+                                pageId: phoneNumberId,
+                                messageId: msg.id,
+                                senderId: msg.from,
+                                text: textBody,
+                                senderName,
+                                requestId: this.requestId,
+                            });
+
+                            this.log().info('[WhatsApp] Message enqueued', { messageId: msg.id, jobId });
+                        } catch (error) {
+                            this.log().error('[WhatsApp] Failed to enqueue message', {
+                                messageId: msg.id, error: String(error),
+                            });
+                        }
                         continue;
                     }
 
-                    const senderName = contactNames.get(msg.from);
-
-                    try {
-                        const jobId = await enqueueMessage({
-                            jobType: 'whatsapp_message',
-                            pageId: phoneNumberId,
-                            messageId: msg.id,
+                    // Caption-less media: voice notes get transcribed into the AI
+                    // pipeline; other attachments store a placeholder + text-only nudge.
+                    const media = msg.audio ?? msg.image ?? msg.video ?? msg.document ?? msg.sticker;
+                    if (media) {
+                        await handleWhatsAppNonTextMessage(phoneNumberId, {
                             senderId: msg.from,
-                            text: msg.text.body,
+                            messageId: msg.id,
+                            attachmentType: msg.type,
+                            mediaId: media.id,
+                            mimeType: media.mime_type,
                             senderName,
-                            requestId: this.requestId,
-                        });
-
-                        this.log().info('[WhatsApp] Message enqueued', { messageId: msg.id, jobId });
-                    } catch (error) {
-                        this.log().error('[WhatsApp] Failed to enqueue message', {
-                            messageId: msg.id, error: String(error),
-                        });
+                            platformTimestamp: Number(msg.timestamp) * 1000 || undefined,
+                        }, this.log());
+                        continue;
                     }
+
+                    // location / contacts / reaction / order / unsupported — no reply path yet
+                    this.log().debug('[WhatsApp] Skipping unsupported message type', {
+                        messageId: msg.id, type: msg.type,
+                    });
                 }
             }
         }
+    }
+
+    /**
+     * Pull customer-authored text out of a WhatsApp webhook message: plain
+     * text, quick-reply button taps, interactive replies, or media captions.
+     * Returns null when the message carries no text (pure media → non-text path).
+     */
+    private extractWhatsAppText(
+        msg: NonNullable<WhatsAppWebhookEntry['changes'][number]['value']['messages']>[number],
+    ): string | null {
+        if (msg.type === 'text' && msg.text?.body) return msg.text.body;
+        if (msg.button?.text) return msg.button.text;
+        const interactiveTitle = msg.interactive?.button_reply?.title ?? msg.interactive?.list_reply?.title;
+        if (interactiveTitle) return interactiveTitle;
+
+        // Captioned media: keep the caption as the message, marked with the
+        // attachment kind so the AI knows an attachment came with it.
+        const captioned = msg.image ?? msg.video ?? msg.document;
+        if (captioned?.caption) {
+            const label = msg.type === 'image' ? 'Image' : msg.type === 'video' ? 'Video' : 'Document';
+            return `[${label}] ${captioned.caption}`;
+        }
+        return null;
     }
 
     // ================== GDPR Data Deletion ==================

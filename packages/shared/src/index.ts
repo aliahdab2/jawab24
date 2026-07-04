@@ -314,6 +314,8 @@ export interface Page {
   leadFields?: LeadCustomFieldDef[] | null;
   // Connection status (true if Facebook access token is valid)
   isConnected?: boolean;
+  // True when a WhatsApp business token is stored (Embedded Signup completed)
+  whatsappConnected?: boolean;
   // Defensive auto-pause: set to 'send_rejected' when the bot was paused after
   // hitting the consecutive-send-failure threshold (Page restricted/unpublished
   // by Meta, permission lost mid-flight). Cleared when the customer re-enables

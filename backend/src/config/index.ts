@@ -201,6 +201,16 @@ export const config = {
     // Admin emails (comma-separated)
     adminEmails: (process.env.ADMIN_EMAILS || '').split(',').filter(Boolean),
 
+    // WhatsApp canary allowlist (comma-separated emails, case-insensitive).
+    // EMPTY = WhatsApp connect open to everyone (full launch); non-empty =
+    // only these accounts may connect a WhatsApp number (founder canary).
+    // Independent of NEXT_PUBLIC_WHATSAPP_CONFIG_ID (which must also be set for
+    // the Embedded Signup popup to function at all).
+    whatsappAllowlist: (process.env.WHATSAPP_ALLOWLIST || '')
+        .split(',')
+        .map(e => e.trim().toLowerCase())
+        .filter(Boolean),
+
     // Cleanup endpoint secret token
     cleanupSecretToken: process.env.CLEANUP_SECRET_TOKEN || '',
 

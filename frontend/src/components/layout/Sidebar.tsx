@@ -27,7 +27,7 @@ import { BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui'
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 import { isNativePlatform } from '@/lib/capacitor';
-import { PHONE_AUTH_ENABLED } from '@/lib/featureFlags';
+import { PHONE_AUTH_ENABLED, isWhatsAppEnabled } from '@/lib/featureFlags';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -124,6 +124,10 @@ export function resolveNavKey(
     tNav: (k: string) => string,
     tPricing: (k: string) => string,
 ): string {
+    // "My Pages" becomes "Channels" only once WhatsApp is live (the screen then
+    // holds a channel beyond Facebook pages). Master-switch gated so a dark
+    // deploy keeps the current label. Covers sidebar + mobile nav (both callers).
+    if (key === 'nav.pages') return tNav(isWhatsAppEnabled() ? 'channels' : 'pages');
     if (key.startsWith('nav.')) return tNav(key.replace('nav.', ''));
     if (key.startsWith('pricing.')) return tPricing(key.replace('pricing.', ''));
     return key;

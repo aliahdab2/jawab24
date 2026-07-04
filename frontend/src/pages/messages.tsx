@@ -616,6 +616,7 @@ const MessagesPage: NextPageWithLayout = () => {
           pageUrl={selectedPageUrl}
           facebookPageId={selectedFacebookPageId}
           isInstagram={selectedConversation.lastMessage.platform === 'instagram'}
+          platform={selectedConversation.lastMessage.platform ?? 'facebook'}
         />
       )}
     </>

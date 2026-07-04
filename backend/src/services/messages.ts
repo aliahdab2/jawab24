@@ -30,7 +30,9 @@ export class MessagesService {
     private scopeConditions(workspaceId: string, pageId?: string) {
         const conds = [
             eq(messages.workspaceId, workspaceId),
-            sql`(${pages.autoReplyEnabled} = true OR ${pages.instagramAutoReplyEnabled} = true)`,
+            // Any-channel gate: a WhatsApp-only page has both FB toggles false,
+            // so omitting the whatsapp toggle here would hide its entire inbox.
+            sql`(${pages.autoReplyEnabled} = true OR ${pages.instagramAutoReplyEnabled} = true OR ${pages.whatsappAutoReplyEnabled} = true)`,
         ];
         if (pageId) conds.push(eq(messages.pageId, pageId));
         return conds;

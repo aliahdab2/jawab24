@@ -298,7 +298,7 @@ export class PagesService {
         const emptyStats: PageStats & { replyRate: number } = {
             commentsCount: 0, repliesCount: 0, breakdown: emptyBreakdown, replyRate: 0, lastActivity: null,
         };
-        if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: safeDecryptToken(p.accessToken, { entity: 'page', id: p.id }), ...emptyStats }));
+        if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: safeDecryptToken(p.accessToken, { entity: 'page', id: p.id }), whatsappAccessToken: safeDecryptToken(p.whatsappAccessToken, { entity: 'page', id: p.id }) || null, ...emptyStats }));
 
         // Stats are best-effort — if the query fails, pages still load with zeroed stats
         // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id
@@ -407,6 +407,7 @@ export class PagesService {
             return {
                 ...page,
                 accessToken: safeDecryptToken(page.accessToken, { entity: 'page', id: page.id }),
+                whatsappAccessToken: safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null,
                 ...stats,
                 replyRate: stats.commentsCount > 0
                     ? Math.round((stats.repliesCount / stats.commentsCount) * 100)
@@ -425,7 +426,10 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
 
         const page = result[0] || null;
-        if (page) page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
+        if (page) {
+            page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
+            page.whatsappAccessToken = safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null;
+        }
         return page;
     }
 
@@ -1164,8 +1168,112 @@ export class PagesService {
             .where(eq(pages.whatsappPhoneNumberId, phoneNumberId));
 
         const page = result[0] || null;
-        if (page) page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
+        if (page) {
+            page.accessToken = safeDecryptToken(page.accessToken, { entity: 'page', id: page.id });
+            page.whatsappAccessToken = safeDecryptToken(page.whatsappAccessToken, { entity: 'page', id: page.id }) || null;
+        }
         return page;
+    }
+
+    /**
+     * Create a WhatsApp-only page row (no Facebook page behind it).
+     * Backs both WhatsApp-only merchants (Shopify/Salla/Zid sellers with no FB
+     * page) and additional numbers for existing merchants — each number gets
+     * its own card with its own Business Info. accessToken stays '' (there is
+     * no Facebook credential); the WABA token is the card's primary credential.
+     */
+    async createWhatsAppOnlyPage(
+        workspaceId: string,
+        userId: string,
+        data: {
+            phoneNumberId: string;
+            businessAccountId: string;
+            displayPhoneNumber: string;
+            accessToken: string;
+            verifiedName?: string;
+        },
+    ) {
+        const [newPage] = await db
+            .insert(pages)
+            .values({
+                workspaceId,
+                userId,
+                facebookPageId: null,
+                name: data.verifiedName || data.displayPhoneNumber,
+                accessToken: '',
+                autoReplyEnabled: false,
+                whatsappPhoneNumberId: data.phoneNumberId,
+                whatsappBusinessAccountId: data.businessAccountId,
+                whatsappDisplayPhoneNumber: data.displayPhoneNumber,
+                whatsappAccessToken: maybeEncryptToken(data.accessToken),
+                whatsappAutoReplyEnabled: false,
+            })
+            .returning();
+
+        return newPage;
+    }
+
+    /**
+     * Store the WhatsApp Business fields from Embedded Signup on a page.
+     * The business token is encrypted at rest (same scheme as the FB page token).
+     */
+    async connectWhatsApp(
+        workspaceId: string,
+        pageId: string,
+        data: {
+            phoneNumberId: string;
+            businessAccountId: string;
+            displayPhoneNumber: string;
+            accessToken: string;
+        },
+    ) {
+        const [updatedPage] = await db
+            .update(pages)
+            .set({
+                whatsappPhoneNumberId: data.phoneNumberId,
+                whatsappBusinessAccountId: data.businessAccountId,
+                whatsappDisplayPhoneNumber: data.displayPhoneNumber,
+                whatsappAccessToken: maybeEncryptToken(data.accessToken),
+                updatedAt: new Date(),
+            })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return updatedPage;
+    }
+
+    /** Clear all WhatsApp fields (disconnect). The page row itself is kept. */
+    async disconnectWhatsApp(workspaceId: string, pageId: string) {
+        const [updatedPage] = await db
+            .update(pages)
+            .set({
+                whatsappPhoneNumberId: null,
+                whatsappBusinessAccountId: null,
+                whatsappDisplayPhoneNumber: null,
+                whatsappAccessToken: null,
+                whatsappAutoReplyEnabled: false,
+                updatedAt: new Date(),
+            })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return updatedPage;
+    }
+
+    /**
+     * Toggle WhatsApp auto-reply for a page
+     */
+    async toggleWhatsAppAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
+        const [updatedPage] = await db
+            .update(pages)
+            .set({
+                whatsappAutoReplyEnabled: enabled,
+                updatedAt: new Date(),
+            })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning();
+
+        return updatedPage;
     }
 }
 
