@@ -7,6 +7,7 @@ import { instagramReplyService } from '../services/instagramReply';
 import { whatsappReplyService } from '../services/whatsappReply';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { pipelineMetrics, Pipeline } from '../lib/pipelineMetrics';
+import { computeQueueWaitMs, recordQueueWaitSample } from '../services/replyQueueHealth';
 import { Logger, noopLogger } from '../types';
 import { commentsService } from '../services/comments';
 import { messagesService } from '../services/messages';
@@ -225,11 +226,19 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
     const { jobType, requestId } = job.data;
     const startTime = Date.now();
 
+    // Queue-wait sample: first attempt only — a retry's wait is backoff, not backlog.
+    let queueWaitMs: number | undefined;
+    if (job.attemptsStarted <= 1) {
+        queueWaitMs = computeQueueWaitMs(job, startTime);
+        recordQueueWaitSample(queueWaitMs, startTime);
+    }
+
     logger.info('[ReplyWorker] Starting job processing', {
         jobId: job.id,
         jobType,
         requestId,
         attemptNumber: job.attemptsMade + 1,
+        queueWaitMs,
     });
 
     try {
@@ -317,6 +326,7 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
             success: result.success,
             skipReason: result.success ? undefined : result.error,
             duration,
+            queueWaitMs,
             replyMethod: result.replyMethod,
         });
 

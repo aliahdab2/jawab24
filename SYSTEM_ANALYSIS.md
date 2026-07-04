@@ -1939,8 +1939,17 @@ Normal operation: CLOSED
 | **Lock contention** | `lock_contention` > 50 in 5 min | Medium | Workers fighting over same sender |
 | **Usage log drops** | `ai_usage_log.dropped` > 0 | Low | DB write issues (cost tracking gap) |
 | **Cache hit rate low** | Exact cache hits < 30% of total | Low | Check if KB/products changed a lot |
-| **Queue backlog** | BullMQ waiting > 10,000 jobs | Medium | Worker concurrency too low or stuck |
+| **Queue backlog** ✅ SHIPPED 2026-07-04 | `alert:reply_queue_backlog`: waiting ≥ 25 jobs OR p95 queue-wait ≥ 15s (15-min window), on 2 consecutive 60s checks; 1h SET-NX cooldown → Sentry + admin email | High | Raise `REPLY_WORKER_CONCURRENCY` first; per-channel queue split only if persistent (D-016) |
 | **Held replies pile up** | `held_low_confidence` > 100/day | Low | KB may need updating (too many unknowns) |
+
+### Reply-Queue Wait Metric (shipped 2026-07-04)
+
+The instrument for the D-016 scaling trigger ("sustained queue wait-time"):
+
+- **Sample**: the reply worker records `queueWaitMs = pickup − enqueue − intentional delay` per job (first attempt only — retries measure backoff, not backlog). Stored newest-first in the Redis LIST `metrics:queue_wait:reply` (`ts:waitMs` entries, capped at 2,000), fire-and-forget.
+- **Surface**: `GET /analytics/system-health` (admin-guarded) returns a `queue` block — live BullMQ depth (waiting/active/delayed/failed via `getQueueStats()`) + p50/p95/max wait over the last 15 min; rendered as the "Reply Queue" card on `/admin/observability` (polls every 60s).
+- **Evaluate**: `services/replyQueueHealth.ts` cron (every 60s, `config.replyQueueHealth`) fires the Queue-backlog alert above. Alert dispatch goes through the shared `services/adminAlerts.ts` helper (SET-NX dedup + Sentry + admin email), also used by the AI cost alerts.
+- **Baseline** (measured 2026-07-04, prod): p50 wait 2 ms, p95 6 ms, worst 2.1 s in micro-bursts; ~4% worker utilization at concurrency 8 (~115 jobs/min sustained capacity).
 
 ### Structured Log Events: Complete Reference
 
@@ -1962,9 +1971,9 @@ Every pipeline step is timed with a lap timer:
 #### Reply Worker Lifecycle
 
 ```
-[ReplyWorker] Starting job     {jobId, jobType, requestId, attemptNumber}
+[ReplyWorker] Starting job     {jobId, jobType, requestId, attemptNumber, queueWaitMs}
 [ReplyWorker] Processing ...   {jobId, requestId, pageId, commentId|messageId}
-[ReplyWorker] Job completed    {jobId, jobType, duration, replyMethod}
+[ReplyWorker] Job completed    {jobId, jobType, duration, queueWaitMs, replyMethod}
 [ReplyWorker] Job failed       {jobId, jobType, duration, error, attemptsMade}
 [ReplyWorker] Job stalled      {jobId}  ← watch for these!
 ```
@@ -2003,7 +2012,7 @@ The `analytics` service computes these from live tables (30-day window):
 | ~~No frontend RUM~~ | `@sentry/nextjs` with `tracesSampleRate: 0.1` in `sentry.client.config.ts` (LCP, FCP, CLS, route changes) |
 | ~~No distributed tracing~~ | Both backend + AI worker use `@sentry/node` v10+ with tracing; trace headers auto-propagated on HTTP calls |
 
-**Admin dashboard**: `/admin/observability` shows service status (DB/Redis/AI circuit latency), process metrics (RSS, heap, uptime), and external API latency table with p50/p95/p99.
+**Admin dashboard**: `/admin/observability` shows service status (DB/Redis/AI circuit latency), reply-queue health (waiting/active/delayed depth + queue-wait p50/p95/max over 15 min), process metrics (RSS, heap, uptime), and external API latency table with p50/p95/p99.
 
 **Merchant-facing analytics** (shipped 2026-04-25): `/ecommerce-analytics` page + a summary widget inside `ConnectedStoreCard` on the integrations page. Aggregates from `customerNotificationsLog` + `messages` over a 30d/90d window. Surfaces revenue recovered (approximate — phone-window matching), carts recovered, AI reply count, notification funnel (delivered/failed/pending) and per-type breakdown. Channel-keyed funnel structure (`{ total, byChannel }`) is forward-compatible with WhatsApp + DM channels when those land. Endpoint: `GET /api/ecommerce-analytics/:storeId?range=30d|90d`. Code: `services/ecommerceAnalytics.ts` + `controllers/ecommerceAnalytics.ts` + `components/analytics/`.
 

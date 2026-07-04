@@ -26,6 +26,7 @@ import {
   Mail,
   Play,
   Filter,
+  Layers,
 } from 'lucide-react';
 
 function BreakdownTable({ title, data }: { title: string; data: Record<string, number> }) {
@@ -259,6 +260,11 @@ export default function AdminObservabilityPage() {
     if (d > 0) return `${d}d ${h}h`;
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
+  };
+
+  const formatWaitMs = (ms: number | null) => {
+    if (ms === null) return '—';
+    return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
   };
 
   return (
@@ -563,6 +569,24 @@ export default function AdminObservabilityPage() {
                       </div>
                     </div>
                   </Card>
+
+                  {/* Reply Queue — depth + queue-wait percentiles (D-016 scaling signal) */}
+                  {health.queue && (
+                    <Card className="p-4">
+                      <h3 className="text-sm font-semibold text-foreground mb-3">
+                        <Layers className="w-4 h-4 inline me-1 text-icon-muted" aria-hidden="true" />
+                        {t('observability.replyQueue')}
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <StatCard icon={Layers} label={t('observability.queueWaiting')} value={String(health.queue.waiting)} sub={t('observability.queueActiveDelayed', { active: health.queue.active, delayed: health.queue.delayed })} />
+                        <StatCard icon={Clock} label={t('observability.queueWaitP95')} value={formatWaitMs(health.queue.waitP95Ms)} sub={t('observability.queueWaitP50', { value: formatWaitMs(health.queue.waitP50Ms) })} />
+                        <StatCard icon={Clock} label={t('observability.queueWaitMax')} value={formatWaitMs(health.queue.waitMaxMs)} />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {t('observability.queueSamples', { count: health.queue.sampleCount, minutes: health.queue.windowMinutes })}
+                      </p>
+                    </Card>
+                  )}
 
                   {/* Process Metrics */}
                   <Card className="p-4">

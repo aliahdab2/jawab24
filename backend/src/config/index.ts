@@ -104,6 +104,20 @@ export const config = {
         spendSpikeAlertCooldownSeconds: parseInt(process.env.AI_COST_SPIKE_COOLDOWN_SECONDS || '86400', 10),
     },
 
+    // Reply-queue health: per-job queue-wait sampling + backlog alert (the D-016
+    // "sustained queue wait-time" scaling trigger). Breach = live waiting depth OR
+    // recent p95 wait over threshold; two consecutive breaches fire a throttled
+    // admin alert. The responses (raise REPLY_WORKER_CONCURRENCY, then split
+    // queues) are manual by design — this only provides the signal.
+    replyQueueHealth: {
+        enabled: process.env.REPLY_QUEUE_HEALTH_ENABLED !== 'false',
+        waitingThreshold: parseInt(process.env.REPLY_QUEUE_WAITING_THRESHOLD || '25', 10),
+        waitP95ThresholdMs: parseInt(process.env.REPLY_QUEUE_WAIT_P95_THRESHOLD_MS || '15000', 10),
+        // 1h — a queue incident needs faster re-alerting than the 24h cost cooldowns.
+        alertCooldownSeconds: parseInt(process.env.REPLY_QUEUE_ALERT_COOLDOWN_SECONDS || '3600', 10),
+        evalIntervalMs: parseInt(process.env.REPLY_QUEUE_EVAL_INTERVAL_MS || '60000', 10),
+    },
+
     // RAG mode: 'off' = static KB, 'shadow' = run RAG but use static KB, 'on' = full RAG
     ragMode: (process.env.RAG_MODE || 'on') as 'off' | 'shadow' | 'on',
 

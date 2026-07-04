@@ -442,6 +442,18 @@ export interface SystemHealthReport {
     p95Ms: number;
     p99Ms: number;
   }>;
+  /** Reply-queue depth + wait percentiles; null when Redis is unreachable. */
+  queue: {
+    waiting: number;
+    active: number;
+    delayed: number;
+    failed: number;
+    waitP50Ms: number | null;
+    waitP95Ms: number | null;
+    waitMaxMs: number | null;
+    sampleCount: number;
+    windowMinutes: number;
+  } | null;
 }
 
 export interface CacheStats {
