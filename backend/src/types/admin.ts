@@ -97,6 +97,9 @@ export interface PlaygroundRequestBody {
     replyStyle?: string;
     brandVoiceNotes?: string;
     customerContext?: string;
+    /** Customer display name (DM only) — lets the eval/playground exercise gender-aware
+     *  Arabic DM addressing, which infers gender partly from the first name. */
+    senderName?: string;
     model?: string;
     /** 'eval' from playground-eval.ts batch script; defaults to 'playground' for the admin UI. */
     source?: PlaygroundSource;

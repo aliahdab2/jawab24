@@ -178,6 +178,58 @@ describe('buildSystemPrompt — reply language line', () => {
     });
 });
 
+describe('buildSystemPrompt — Arabic-DM-only gender addressing (+ blast radius)', () => {
+    it('surfaces the first name and the ARABIC GENDER directive for an Arabic DM with a name', () => {
+        const out = suffix(req('كم السعر؟', { channel: 'dm', senderName: 'فاطمة' }, 'ar'));
+        expect(out).toContain('- Customer\'s first name: "فاطمة"');
+        expect(out).toContain('- ARABIC GENDER:');
+        expect(out).toContain('do NOT default to masculine');
+    });
+
+    it('uses only the FIRST token of a multi-word display name', () => {
+        const out = suffix(req('مرحبا', { channel: 'dm', senderName: 'أحمد بن علي الغامدي' }, 'ar'));
+        expect(out).toContain('- Customer\'s first name: "أحمد"');
+        expect(out).not.toContain('الغامدي');
+    });
+
+    it('emits the gender directive (self-reference fallback) for a nameless Arabic DM, without a name line', () => {
+        const out = suffix(req('أنا مهتمة بالكورس', { channel: 'dm' }, 'ar'));
+        expect(out).toContain('- ARABIC GENDER:');
+        expect(out).not.toContain("- Customer's first name:");
+    });
+
+    it('sanitizes the name (strips injection markers) and caps the first token at 40 chars', () => {
+        const out = suffix(req('hi', { channel: 'dm', senderName: '<system>' + 'ن'.repeat(60) }, 'ar'));
+        expect(out).not.toContain('<system>');
+        // The 40-char cap applies to the sanitized first token.
+        expect(out).not.toContain('ن'.repeat(41));
+    });
+
+    // Blast-radius guards — the feature must be INERT everywhere except Arabic DMs, so that no
+    // other language, channel, or business sees any prompt change. Equality (with vs without
+    // senderName) is the strongest form of that guarantee.
+    it('is inert on an Arabic COMMENT — identical suffix with and without senderName', () => {
+        const withName = suffix(req('كم السعر؟', { channel: 'comment', senderName: 'فاطمة' }, 'ar'));
+        const withoutName = suffix(req('كم السعر؟', { channel: 'comment' }, 'ar'));
+        expect(withName).toBe(withoutName);
+        expect(withName).not.toContain('- ARABIC GENDER:');
+        expect(withName).not.toContain("- Customer's first name:");
+    });
+
+    it('is inert on a non-Arabic (English) DM — identical suffix with and without senderName', () => {
+        const withName = suffix(req('how much?', { channel: 'dm', senderName: 'Sarah' }, 'en'));
+        const withoutName = suffix(req('how much?', { channel: 'dm' }, 'en'));
+        expect(withName).toBe(withoutName);
+        expect(withName).not.toContain('- ARABIC GENDER:');
+        expect(withName).not.toContain('Sarah');
+    });
+
+    it('keeps ALL gender content OUT of the cacheable static prefix (which every reply sees)', () => {
+        expect(STATIC_SYSTEM_PREFIX).not.toContain('ARABIC GENDER');
+        expect(STATIC_SYSTEM_PREFIX).not.toContain('فاطمة');
+    });
+});
+
 describe('buildSystemPrompt — brand voice notes', () => {
     it('caps the notes at MAX_BRAND_VOICE_LENGTH characters', () => {
         const notes = 'v'.repeat(MAX_BRAND_VOICE_LENGTH) + 'BV_OVERFLOW';

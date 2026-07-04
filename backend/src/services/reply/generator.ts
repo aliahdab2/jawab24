@@ -348,6 +348,8 @@ export interface PlaygroundInput {
     /** Stage 2.6 structured BUSINESS_INFO prompt block (merchant-confirmed only). */
     businessInfoBlock?: string | null;
     customerContext?: string;
+    /** Customer display name (DM only) — feeds gender-aware Arabic DM addressing. */
+    senderName?: string;
     model?: string;
     defaultReplyLanguage?: string;
     /** See GenerateReplyContext.timezone. */
@@ -788,7 +790,7 @@ export class ReplyGenerator {
         const {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
-            replyStyle, brandVoiceNotes, businessInfoBlock, customerContext, model, defaultReplyLanguage,
+            replyStyle, brandVoiceNotes, businessInfoBlock, customerContext, senderName, model, defaultReplyLanguage,
             timezone, messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
         } = input;
 
@@ -866,6 +868,7 @@ export class ReplyGenerator {
                 queryEmbedding,
                 ...(postMessage ? { postMessage } : {}),
                 ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
+                ...(channel === 'dm' && senderName ? { senderName } : {}),
                 ...(replyStyle ? { replyStyle } : {}),
                 ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
                 ...(businessInfoBlock ? { businessInfoBlock } : {}),
