@@ -77,12 +77,19 @@ describe('page token encryption at rest — integration', () => {
     });
 
     it('serializePage strips accessToken from API responses and derives isConnected', () => {
-        const connected = serializePage({ id: 'p1', accessToken: 'tok' });
+        // A real Facebook page always has a facebookPageId; isConnected tracks its FB token.
+        const connected = serializePage({ id: 'p1', facebookPageId: 'fb-p1', accessToken: 'tok' });
         expect(connected).not.toHaveProperty('accessToken');
         expect(connected.isConnected).toBe(true);
 
-        const disconnected = serializePage({ id: 'p2', accessToken: '' });
+        const disconnected = serializePage({ id: 'p2', facebookPageId: 'fb-p2', accessToken: '' });
         expect(disconnected.isConnected).toBe(false);
+
+        // WhatsApp-only card (facebookPageId null): isConnected tracks the WABA token, not the FB one.
+        const whatsappOnly = serializePage({ id: 'p3', facebookPageId: null, accessToken: '', whatsappAccessToken: 'waba-tok' });
+        expect(whatsappOnly).not.toHaveProperty('whatsappAccessToken');
+        expect(whatsappOnly.isConnected).toBe(true);
+        expect(whatsappOnly.whatsappConnected).toBe(true);
     });
 });
 
