@@ -13,6 +13,7 @@
  * without reading those gates; the sibling resolveChain.ts (ai-worker surface)
  * has a DIFFERENT, intentionally-unmerged contract.
  */
+import { maybeLatinOverride, OVERRIDE_CONFIDENCE } from './engine';
 
 // Unicode ranges for different scripts
 const HEBREW_RANGE = /[\u0590-\u05FF]/;
@@ -40,7 +41,15 @@ const ENGLISH_COMMON = [
 ];
 const SWEDISH_COMMON = ['och', 'det', 'att', 'som', 'på', 'är', 'av', 'för', 'med', 'har'];
 
-export type SupportedLanguage = 'ar' | 'en' | 'sv' | 'de' | 'fr' | 'es' | 'tr' | 'unknown';
+/**
+ * The 7 named legacy codes plus `unknown`, widened with `(string & {})` for
+ * Phase 1b: under LANG_ENGINE=tinyld the fallthrough override may pass
+ * through additional ISO codes (da, pt, vi, …). The widening is type-level
+ * only — literal autocomplete is preserved, every consumer does equality
+ * checks (`=== 'ar'`, `=== 'unknown'`) or stores the value as a string, and
+ * no exhaustive switch on this union exists (verified at introduction).
+ */
+export type SupportedLanguage = 'ar' | 'en' | 'sv' | 'de' | 'fr' | 'es' | 'tr' | 'unknown' | (string & {});
 
 export interface LanguageDetectionResult {
     language: SupportedLanguage;
@@ -243,6 +252,24 @@ export function detectLanguage(text: string): LanguageDetectionResult {
             language: 'unknown',
             confidence: 0,
             script: 'unknown',
+            isRTL: false,
+        };
+    }
+
+    // Phase 1b (LANG_ENGINE=tinyld only; inert by default): this is the exact
+    // fallthrough where every legacy branch above failed to name the language —
+    // the class that produced the "Hur kan man anmäla sig" → English@0.5 →
+    // Arabic-reply production bug. Consult the hardened tinyld override
+    // (non-ASCII + ≥2 words + allowlist + margin; see engine.ts for why the
+    // naive threshold design was rejected). ASCII input (English, Arabizi,
+    // acronyms) can never be overridden, so the English default below — and
+    // both confidence gates keyed on it — stay bit-identical in both modes.
+    const override = maybeLatinOverride(cleanText);
+    if (override) {
+        return {
+            language: override,
+            confidence: OVERRIDE_CONFIDENCE,
+            script: 'Latin',
             isRTL: false,
         };
     }
