@@ -24,6 +24,9 @@ export default [
                 // Node.js globals if needed
                 console: 'readonly',
                 process: 'readonly',
+                // CommonJS: this package compiles to CJS (tsconfig module: commonjs);
+                // require() is a legitimate runtime global (lazy dependency loading).
+                require: 'readonly',
             },
         },
         plugins: {

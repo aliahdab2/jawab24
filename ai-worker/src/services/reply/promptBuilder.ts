@@ -7,6 +7,7 @@
  * assembles the SDK message array — stays in openai.ts and imports from here.
  */
 import { MAX_BRAND_VOICE_LENGTH, safeTimezone } from '@jawab24/shared';
+import { langEngineMode, displayLanguageName } from '@jawab24/shared/dist/language/engine';
 import { STATIC_SYSTEM_PREFIX } from './systemPrompt';
 import { resolveLanguage, resolveChannel } from './replyContext';
 import type { GenerateRequest } from './types';
@@ -170,8 +171,17 @@ function buildPerCallBlock(request: GenerateRequest): string {
     // before falling back to English.
     // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
     const language = resolveLanguage(request);
+    // Language label for the reply directive. FLAG-GATED (Phase 1b): legacy mode
+    // keeps the historical 7-entry map byte-identical — codes it doesn't know
+    // (ru/ja/… from detectLanguageOrNull) render "English", matching the
+    // "unrecognized → English" rule the prompt states. In tinyld mode the
+    // resolver can pass through more ISO codes (da/pt/vi/…), so the label comes
+    // from Intl.DisplayNames instead of a hand-maintained list. Swapping
+    // unconditionally would change live prompts while the flag is off.
     const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
-    const languageName = languageNames[language] || 'English';
+    const languageName = langEngineMode() === 'tinyld'
+        ? displayLanguageName(language)
+        : (languageNames[language] || 'English');
     const retrievedChunks = request.context?.retrievedChunks;
     const isDM = resolveChannel(request) === 'dm';
 

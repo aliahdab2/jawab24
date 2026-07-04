@@ -41,9 +41,22 @@
  * that every legacy branch missed — precisely the broken class. ASCII input
  * of any kind is bit-identical in both modes.
  */
-import { detectAll } from 'tinyld';
-
 export type LangEngineMode = 'legacy' | 'tinyld';
+
+/**
+ * tinyld is loaded LAZILY on first use, not at module import. Both apps import
+ * this module at boot via the detector surfaces, but in legacy mode (the
+ * default) tinyld is never called — eagerly parsing its language-profile data
+ * would tax every cold start (and test-worker spawn) for an inert feature.
+ */
+type DetectAllFn = (text: string) => { lang: string; accuracy: number }[];
+let detectAllFn: DetectAllFn | undefined;
+function getDetectAll(): DetectAllFn {
+    if (!detectAllFn) {
+        detectAllFn = (require('tinyld') as { detectAll: DetectAllFn }).detectAll;
+    }
+    return detectAllFn;
+}
 
 /**
  * Read the mode LAZILY (per call, never at module load) so legacy-mode and
@@ -90,9 +103,9 @@ export function tinyldLatinOverride(text: string): string | null {
 
     let guesses: { lang: string; accuracy: number }[];
     try {
-        guesses = detectAll(trimmed);
+        guesses = getDetectAll()(trimmed);
     } catch {
-        return null; // detector failure must never break reply generation
+        return null; // detector failure (incl. load failure) must never break reply generation
     }
     const top = guesses[0];
     if (!top || !OVERRIDE_LANGS.has(top.lang)) return null;
@@ -120,6 +133,8 @@ export function maybeLatinOverride(text: string): string | null {
         try {
             const wouldBe = tinyldLatinOverride(text);
             if (wouldBe) {
+                // Deliberate console: this shared module has no logger; both consumers ship container logs (see docstring).
+                // eslint-disable-next-line no-console
                 console.info(JSON.stringify({
                     evt: 'lang_engine_shadow_disagreement',
                     legacy: 'en',

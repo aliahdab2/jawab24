@@ -41,3 +41,12 @@ export {
     resolveInputLanguage,
     type ResolveLanguageInput,
 } from './resolveChain';
+
+export {
+    langEngineMode,
+    tinyldLatinOverride,
+    maybeLatinOverride,
+    displayLanguageName,
+    OVERRIDE_CONFIDENCE,
+    type LangEngineMode,
+} from './engine';

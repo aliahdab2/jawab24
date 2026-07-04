@@ -12,6 +12,7 @@
  * contract from the sibling detector.ts (backend surface) — merging the two
  * alphabets/predicates would change production behavior (see plan).
  */
+import { maybeLatinOverride } from './engine';
 
 /**
  * Minimal conversation-turn shape this module needs. Kept local to avoid a
@@ -72,6 +73,17 @@ export function detectLanguageOrNull(text: string): string | null {
     if (/\p{Script=Devanagari}/u.test(text)) return 'hi';
     if (/\p{Script=Cyrillic}/u.test(text)) return 'ru';
     if (/\p{Script=Hebrew}/u.test(text)) return 'he';
+    if (/\p{Script=Latin}/u.test(text)) {
+        // Phase 1b (LANG_ENGINE=tinyld only; inert by default): consult the
+        // hardened statistical override BEFORE the å/ä/ö→sv special case, so a
+        // confident call (e.g. German "Ich möchte mich anmelden", which the
+        // umlaut quirk mislabels 'sv') wins when available. The override's
+        // non-ASCII gate means ASCII Latin text — English, Arabizi, acronyms —
+        // still falls through to the legacy branches bit-identically; when the
+        // override declines (short/ambiguous), the legacy quirk stands.
+        const override = maybeLatinOverride(text);
+        if (override) return override;
+    }
     if (/[åäöÅÄÖ]/.test(text)) return 'sv';
     if (/\p{Script=Latin}/u.test(text)) return 'en';
     return null;
