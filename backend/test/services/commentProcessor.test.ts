@@ -48,6 +48,8 @@ vi.mock('../../src/services/notifications', () => ({
 vi.mock('../../src/utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('en'),
     detectCommentLanguage: vi.fn().mockReturnValue('en'),
+    detectTemplateLanguage: vi.fn().mockReturnValue('en'),
+    isLowSignalLatinToken: vi.fn().mockReturnValue(false),
 }));
 vi.mock('../../src/services/comments', () => ({
     commentsService: {

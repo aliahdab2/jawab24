@@ -8,7 +8,7 @@ import {
     stripTagsByOffsets,
     type FacebookMessageTag,
 } from '../../utils/commentText';
-import { detectCommentLanguage, detectLanguage, detectLanguageCode } from '../../utils/language';
+import { detectCommentLanguage, detectLanguageCode, isLowSignalLatinToken } from '../../utils/language';
 import { hasExternalPromoUrl } from './spamPatterns';
 
 /** Threshold below which a @mention comment is treated as friend-tagging
@@ -129,13 +129,7 @@ export function resolveCommentLanguage(
     kbText: string | undefined,
 ): string {
     const effectiveLang = detectCommentLanguage(commentForAI, postMessage);
-    const trimmed = commentForAI.trim();
-    const commentDet = detectLanguage(trimmed);
-    const isLowSignalLatin = commentDet.language === 'en'
-        && commentDet.confidence <= 0.5
-        && /^[a-zA-Z0-9\s]+$/.test(trimmed)
-        && trimmed.split(/\s+/).length <= 3;
-    if (!isLowSignalLatin) return effectiveLang;
+    if (!isLowSignalLatinToken(commentForAI)) return effectiveLang;
 
     // Mirror the context language, post first (always present, RAG-independent),
     // KB second. General across ALL languages:

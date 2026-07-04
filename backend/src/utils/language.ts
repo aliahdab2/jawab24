@@ -262,6 +262,45 @@ export function detectLanguageCode(text: string): SupportedLanguage {
 }
 
 /**
+ * True when `text` is a bare Latin token with no real language signal — a product
+ * name / acronym like "icdl", "iPhone", "Excel", or a short "ok". The detector
+ * reports these as English at its floor confidence (0.5 = zero matched function
+ * words), which is indistinguishable from "no signal at all". Callers that pick a
+ * customer-facing language use this to defer to conversation context or the
+ * merchant's default language instead of forcing an English reply on an
+ * otherwise-Arabic thread.
+ *
+ * Gate: English at confidence ≤ 0.5, ASCII alphanumerics only, ≤ 3 words. The
+ * confidence floor is the real signal; the ASCII + word-count checks are a safety
+ * cap so a longer English sentence that happens to dodge every function word can't
+ * be misread as a token. A genuine short English question ("which course", "how
+ * much") matches a function word → confidence > 0.5 → not low-signal.
+ *
+ * Kept in sync with resolveCommentLanguage (commentPreprocess.ts), which applies
+ * the identical gate for the AI comment-reply path.
+ */
+export function isLowSignalLatinToken(text: string): boolean {
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    const det = detectLanguage(trimmed);
+    return det.language === 'en'
+        && det.confidence <= 0.5
+        && /^[a-zA-Z0-9\s]+$/.test(trimmed)
+        && trimmed.split(/\s+/).length <= 3;
+}
+
+/**
+ * Language code for choosing a customer-facing TEMPLATE (away / greeting / quota
+ * fallback) variant. Returns 'unknown' for a low-signal Latin token so the
+ * settings resolver falls back to the merchant's defaultReplyLanguage instead of
+ * sending an English template on an Arabic thread (the "icdl" bug). Otherwise
+ * identical to detectLanguageCode.
+ */
+export function detectTemplateLanguage(text: string): SupportedLanguage {
+    return isLowSignalLatinToken(text) ? 'unknown' : detectLanguageCode(text);
+}
+
+/**
  * Check if text is RTL
  */
 export function isRTL(text: string): boolean {

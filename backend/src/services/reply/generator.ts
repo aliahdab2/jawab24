@@ -11,7 +11,7 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, type ProductCard, type FlagMeta } from '@jawab24/shared';
-import { detectLanguage, detectLanguageCode } from '../../utils/language';
+import { detectLanguage, detectLanguageCode, isLowSignalLatinToken } from '../../utils/language';
 import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
 import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
 import { detectBusinessActionFlags } from './urgentFlags';
@@ -239,6 +239,12 @@ export function resolveFallbackLanguage(opts: {
     const sources = [opts.text, opts.postMessage, opts.knowledgeBase];
     for (const s of sources) {
         if (!s) continue;
+        // A bare Latin token ("icdl", a product name) carries no real language
+        // signal — the detector floors it at English. Skip it so the conversation
+        // context (post → KB → merchant default) decides the fallback language,
+        // matching resolveCommentLanguage. Without this, an "icdl" reply on an
+        // Arabic thread forces the English away/quota fallback template.
+        if (isLowSignalLatinToken(s)) continue;
         const lang = detectLanguageCode(s);
         if (lang !== 'unknown') return lang === 'ar' ? 'ar' : 'en';
     }
@@ -581,7 +587,10 @@ export class ReplyGenerator {
             if (!limitCheck.allowed) {
                 this.logger.info('[Generator] AI limit reached', { reason: limitCheck.reason });
                 const lang = resolveFallbackLanguage({
-                    text, knowledgeBase,
+                    // postMessage is present for DMs that originated from a comment
+                    // (dual/private mode) — an Arabic origin post rescues the language
+                    // when the customer's latest DM is a bare token like "icdl".
+                    text, postMessage: context.postMessage, knowledgeBase,
                     defaultReplyLanguage: context.defaultReplyLanguage,
                 });
                 // Master switch: when off, suppress the auto-reply (silent + flag).

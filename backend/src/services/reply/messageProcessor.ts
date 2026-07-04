@@ -5,7 +5,7 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
-import { detectLanguageCode } from '../../utils/language';
+import { detectTemplateLanguage } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import * as typingIndicator from './typingIndicator';
@@ -314,7 +314,7 @@ export class MessageProcessor {
             }
 
             if (!isMessagesEnabled) {
-                const customerLang = detectLanguageCode(messageText);
+                const customerLang = detectTemplateLanguage(messageText);
                 const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);
                 // Only send the away message on the customer's very first incoming message.
                 // The webhook controller pre-stores the message (see webhook.ts
@@ -395,7 +395,7 @@ export class MessageProcessor {
             if (isOpener || isFirstIncoming) {
                 const settings = await workspaceSettingsService.getSettings(workspaceId);
                 const configured = settings.greetingMessageEnabled
-                    ? await workspaceSettingsService.getGreetingMessage(workspaceId, detectLanguageCode(messageText))
+                    ? await workspaceSettingsService.getGreetingMessage(workspaceId, detectTemplateLanguage(messageText))
                     : null;
 
                 // Greet only a genuinely fresh contact. In dual/private comment-reply mode

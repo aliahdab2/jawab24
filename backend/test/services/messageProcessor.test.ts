@@ -50,6 +50,8 @@ vi.mock('../../src/services/notifications', () => ({
 }));
 vi.mock('../../src/utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('en'),
+    detectTemplateLanguage: vi.fn().mockReturnValue('en'),
+    isLowSignalLatinToken: vi.fn().mockReturnValue(false),
 }));
 vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn(), set: vi.fn(), quit: vi.fn(), incr: vi.fn(), expire: vi.fn() },

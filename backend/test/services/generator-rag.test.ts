@@ -89,6 +89,23 @@ describe('ReplyGenerator - Skip/Fallback helpers', () => {
             expect(resolveFallbackLanguage({})).toBe('en');
             expect(resolveFallbackLanguage({ text: '...' })).toBe('en');
         });
+
+        it('skips a bare Latin token ("icdl") and defers to conversation context', () => {
+            // The "icdl" bug: a bare product name carries no language signal but the
+            // detector floors it at English. It must NOT force the English fallback
+            // on an Arabic thread — the post / KB / merchant default decides instead.
+            expect(resolveFallbackLanguage({ text: 'icdl', postMessage: 'دورات الفريق الدمشقي' })).toBe('ar');
+            expect(resolveFallbackLanguage({ text: 'icdl', knowledgeBase: 'دورة ICDL ومهارات الحاسوب' })).toBe('ar');
+            expect(resolveFallbackLanguage({ text: 'icdl', defaultReplyLanguage: 'ar' })).toBe('ar');
+        });
+
+        it('still respects an English-default merchant for a bare token', () => {
+            expect(resolveFallbackLanguage({ text: 'icdl', defaultReplyLanguage: 'en' })).toBe('en');
+        });
+
+        it('keeps a genuine short English message in English', () => {
+            expect(resolveFallbackLanguage({ text: 'how much', defaultReplyLanguage: 'ar' })).toBe('en');
+        });
     });
 
     describe('Constants', () => {
