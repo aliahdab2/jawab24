@@ -1,6 +1,6 @@
 ---
-seoTitle: "When a Customer Sends a Photo Instead of Typing — Jawab24 Now Reads It"
-seoDescription: "Shoppers often send a screenshot or a product photo with no caption. Here's how Jawab24's AI reads customer images in Messenger, Instagram, and WhatsApp DMs — and replies with the right answer instead of asking them to type."
+seoTitle: "When a Customer Sends a Photo — Jawab24 Now Reads It"
+seoDescription: "Shoppers send a screenshot instead of typing. See how Jawab24's AI reads customer photos in Messenger, Instagram & WhatsApp DMs and replies with the answer."
 seoKeywords: "auto reply read images, AI read customer photos, chatbot image recognition Arabic, reply to photo messages, Messenger image auto reply, WhatsApp image auto reply, Instagram DM photo reply"
 title: "When a Customer Sends a Photo Instead of Typing"
 excerpt: "A shopper screenshots your product and sends it with no caption. Most bots freeze and ask them to 'type your question.' Here's what changed — the AI now actually reads the photo and answers it."
