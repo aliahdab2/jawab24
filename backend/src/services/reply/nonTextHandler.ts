@@ -4,9 +4,11 @@ import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
 import { whatsappService } from '../whatsapp';
 import { transcriptionService } from '../transcription';
+import { imageUnderstandingService, checkImageUnderstandingGate, incrementImageUnderstandingCounter } from '../imageUnderstanding';
 import { redis } from '../../lib/redis';
 import { enqueueMessage } from '../../lib/replyQueue';
 import { detectLanguageCode } from '../../utils/language';
+import { t } from '../../utils/i18n';
 import { getAttachmentPlaceholder, getTextOnlyNudge } from '../../utils/attachmentLabels';
 import { extractPostId, isSharedPostType } from '../../utils/instagram';
 import { facebookMessageAdapter } from './adapters/facebookAdapter';
@@ -189,7 +191,38 @@ export async function handleNonTextMessage(
             return; // AI pipeline handles the reply from here
         }
 
-        // 6. Non-audio or failed transcription: store placeholder + send generic nudge
+        // 6. Customer image: read it with AI vision → feed the description into the
+        //    normal reply pipeline (mirrors audio transcription). Gated by the env
+        //    kill switch + per-plan daily cap. Any denial or failure falls through
+        //    to the placeholder + nudge below, so behavior never regresses.
+        if (attachmentType === 'image' && attachmentUrl && page.userId) {
+            const gate = await checkImageUnderstandingGate(page.userId, workspaceId);
+            if (gate.allowed) {
+                const described = await imageUnderstandingService.describeFromUrl(
+                    attachmentUrl, lang, { userId: gate.ownerId, pageId: page.id },
+                );
+                if (described) {
+                    const body = t('attachmentImageDescribed', lang, { description: described.text });
+                    const { message: storedImg, isNew: isNewImg } = await messagesService.findOrCreateFromWebhook(
+                        page.id, workspaceId, messageId, senderId, body, senderName, 'image',
+                    );
+                    if (isNewImg && typeof platformTimestamp === 'number') {
+                        await messagesService.setCreatedTime(storedImg.id, new Date(platformTimestamp));
+                    }
+                    await incrementImageUnderstandingCounter(gate.ownerId);
+
+                    const jobType = platform === 'facebook' ? 'facebook_message' : 'instagram_message';
+                    await enqueueMessage({ jobType, pageId: platformPageId, messageId, senderId, text: body });
+                    logger.info(`[${platform}] Customer image understood`, { senderId, descriptionLength: described.text.length });
+                    return; // AI pipeline handles the reply from here
+                }
+                logger.warn(`[${platform}] Image understanding failed, falling back to nudge`, { senderId, messageId });
+            } else {
+                logger.info(`[${platform}] Image understanding gated (${gate.reason}), falling back to nudge`, { senderId, messageId });
+            }
+        }
+
+        // 7. Non-audio or failed transcription: store placeholder + send generic nudge
         const placeholder = getAttachmentPlaceholder(attachmentType, lang);
         const { message: storedAtt, isNew: isNewAtt } = await messagesService.findOrCreateFromWebhook(
             page.id, workspaceId, messageId, senderId, placeholder, senderName, attachmentType,
@@ -312,6 +345,47 @@ export async function handleWhatsAppNonTextMessage(
                 });
             }
             logger.warn('[whatsapp] Voice transcription failed, falling back to nudge', { senderId, messageId });
+        }
+
+        // Customer image → download with the WABA token → AI vision → normal pipeline.
+        // Same gate + fallback as FB/IG. Captioned WhatsApp images take the webhook's
+        // caption-as-text path and don't reach here (enriching those is a follow-up).
+        if (attachmentType === 'image' && mediaId && page.userId) {
+            const gate = await checkImageUnderstandingGate(page.userId, workspaceId);
+            if (gate.allowed) {
+                try {
+                    const media = await whatsappService.getMediaInfo(mediaId, page.whatsappAccessToken);
+                    const buffer = media.url
+                        ? await whatsappService.downloadMedia(media.url, page.whatsappAccessToken)
+                        : null;
+                    if (buffer) {
+                        const cleanMime = (mimeType ?? media.mimeType).split(';')[0].trim();
+                        const described = await imageUnderstandingService.describeFromBuffer(
+                            buffer, cleanMime, lang, { userId: gate.ownerId, pageId: page.id },
+                        );
+                        if (described) {
+                            const body = t('attachmentImageDescribed', lang, { description: described.text });
+                            const { message: storedImg, isNew: isNewImg } = await messagesService.findOrCreateFromWebhook(
+                                page.id, workspaceId, messageId, senderId, body, senderName, 'image',
+                            );
+                            if (isNewImg && typeof platformTimestamp === 'number') {
+                                await messagesService.setCreatedTime(storedImg.id, new Date(platformTimestamp));
+                            }
+                            await incrementImageUnderstandingCounter(gate.ownerId);
+                            await enqueueMessage({
+                                jobType: 'whatsapp_message', pageId: phoneNumberId, messageId, senderId, text: body, senderName,
+                            });
+                            logger.info('[whatsapp] Customer image understood', { senderId, descriptionLength: described.text.length });
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    logger.warn('[whatsapp] Image media fetch failed, falling back to nudge', { senderId, messageId, error: String(error) });
+                }
+                logger.warn('[whatsapp] Image understanding failed, falling back to nudge', { senderId, messageId });
+            } else {
+                logger.info(`[whatsapp] Image understanding gated (${gate.reason}), falling back to nudge`, { senderId, messageId });
+            }
         }
 
         // Everything else (or failed transcription): placeholder + text-only nudge.

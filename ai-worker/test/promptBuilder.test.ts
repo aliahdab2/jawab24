@@ -575,3 +575,63 @@ describe('buildUserPrompt', () => {
         expect(out).not.toContain('Noor');
     });
 });
+
+describe('IMAGE MESSAGE directive (image-marker convention)', () => {
+    const AR_IMG = '[صورة: لقطة شاشة لمنشور المتجر عن منتج مع عرض سعر]';
+    const EN_IMG = '[Image: a photo of one of the store products in its box]';
+
+    it('injects the directive when the current message is an Arabic image marker', () => {
+        const out = suffix(req(AR_IMG, { channel: 'dm' }));
+        expect(out).toContain('IMAGE MESSAGE:');
+        expect(out).toContain('implicitly asking');
+        expect(out).toContain('SPAM_OR_IRRELEVANT');
+        // Current message IS the image — no history-resolution line.
+        expect(out).not.toContain('appears in the conversation history');
+    });
+
+    it('injects the directive when the current message is an English image marker', () => {
+        const out = suffix(req(EN_IMG, { channel: 'dm' }));
+        expect(out).toContain('IMAGE MESSAGE:');
+    });
+
+    it('injects the directive for a bare [صورة] placeholder (vision failed / legacy rows)', () => {
+        const out = suffix(req('[صورة]', { channel: 'dm' }));
+        expect(out).toContain('IMAGE MESSAGE:');
+        expect(out).toContain('could not read');
+    });
+
+    it('injects the directive + history-resolution line when the marker is only in history', () => {
+        const out = suffix(req('طيب بكم؟', {
+            channel: 'dm',
+            conversationHistory: [
+                { role: 'user', content: AR_IMG },
+                { role: 'assistant', content: 'متوفر يا غالية' },
+            ],
+        }));
+        expect(out).toContain('IMAGE MESSAGE:');
+        expect(out).toContain('appears in the conversation history');
+    });
+
+    it('keeps the FINAL block last (directive precedes it)', () => {
+        const out = suffix(req(AR_IMG, { channel: 'dm' }));
+        expect(out.indexOf('IMAGE MESSAGE:')).toBeLessThan(out.indexOf('FINAL:'));
+    });
+
+    // The no-regression proof: prompts for ordinary traffic must not change at all.
+    it('adds nothing for ordinary messages — with and without history, posts, KB', () => {
+        const plainCases: GenerateRequest[] = [
+            req('بكم المنتج؟', { channel: 'dm' }),
+            req('hello', { channel: 'comment', postMessage: 'New offer today' }),
+            req('شكراً', {
+                channel: 'dm',
+                knowledgeBase: 'Product X costs 100',
+                conversationHistory: [{ role: 'user', content: 'مرحبا' }, { role: 'assistant', content: 'أهلاً!' }],
+            }),
+            // Customer text that merely mentions brackets/photos must not trigger it.
+            req('ممكن ترسلولي صورة المنتج؟', { channel: 'dm' }),
+        ];
+        for (const r of plainCases) {
+            expect(suffix(r)).not.toContain('IMAGE MESSAGE');
+        }
+    });
+});

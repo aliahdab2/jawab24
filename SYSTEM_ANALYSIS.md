@@ -1217,13 +1217,14 @@ Merchants can extract text from documents and images to populate KB content:
 | **UX** | Paperclip icon next to mic icon in each KB section + onboarding |
 | **Flow** | Upload → extract text → append to textarea → user reviews → save |
 
-### Incoming Voice Messages (Customer Side)
+### Incoming Voice & Image Messages (Customer Side)
 
-When a customer sends a voice/audio message via Facebook Messenger or Instagram:
+When a customer sends a voice/audio or image message via Facebook Messenger, Instagram, or WhatsApp:
 - **Handler**: `backend/src/services/reply/nonTextHandler.ts`
-- **Flow**: Audio URL → GPT-4o-mini-transcribe → transcribed text → fed into AI reply pipeline (same as text message)
-- **Fallback**: If transcription fails or message is non-audio (image, video, sticker) → store placeholder text + send nudge reply (e.g. "Please send a text message")
-- **Non-text types handled**: voice, image, video, file, sticker
+- **Voice flow**: Audio → GPT-4o-mini-transcribe → transcribed text → fed into AI reply pipeline (same as text message)
+- **Image flow**: Image → GPT-4.1-mini vision description (`imageUnderstanding.ts`, `image_understanding` cost pipeline) → description stored/enqueued as `[صورة: …]` / `[Image: …]` (marker protocol shared via `@jawab24/shared` `imageMessage.ts`; drift-guarded against the i18n template) → fed into AI reply pipeline (describe-then-enqueue, mirrors voice). The ai-worker injects a per-call IMAGE MESSAGE prompt directive when the marker is present (and only then — non-image prompts stay byte-identical, no PROMPT_VERSION bump), so a bare screenshot of the merchant's own product/ad is answered as an implicit "available?/price?" inquiry from the KB instead of acknowledged; receipts route to low-confidence human follow-up. Image bytes are **never stored** — only the text description. **No per-merchant toggle** (default-on, like voice); gated by the `IMAGE_UNDERSTANDING_ENABLED` env kill switch + a per-plan daily cap via shared `lib/dailyCap`: free 3 / starter 5 / business 40 / pro 75 / scale-20k 150 / scale-30k 200, **doubled when the merchant has an active top-up (PAYG) balance**. Cost ≈ $0.0015/image (~$2–3/mo).
+- **Fallback**: If transcription/vision fails or is gated, or the message is video/file/sticker → store placeholder + send nudge reply. Out-of-domain images (e.g. a legal document) are described factually and flagged by the existing low-confidence/needs-attention guard rather than answered.
+- **Non-text types handled**: voice (transcribed), image (vision), video/file (nudge), sticker (silent)
 
 ### RAG Modes
 

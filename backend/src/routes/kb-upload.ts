@@ -16,7 +16,7 @@ import {
 } from '../services/kb/file-extractor';
 import { BadRequestError } from '../services/openaiClient';
 import { auth } from '../utils/swagger';
-import { redis } from '../lib/redis';
+import { checkDailyCap, incrementDailyCap, dailyCapKey } from '../lib/dailyCap';
 import { captureError } from '../utils/sentryHelpers';
 
 /** Base64 is ~33% larger than raw bytes */
@@ -193,15 +193,14 @@ export async function checkVisionAccessAndQuota(request: FastifyRequest): Promis
         return { allowed: false, status: 403, response: { success: false, error: 'plan_upgrade_required', message: 'Image extraction requires the Business plan', requiredPlan: 'business' } };
     }
 
-    // Daily quota check via Redis
+    // Daily quota check via the shared daily-cap helper (same key + fail-closed
+    // policy as before, now shared with image understanding).
     const planSlug = sub.plan.slug || 'business';
     const dailyLimit = VISION_DAILY_LIMITS[planSlug] ?? DEFAULT_VISION_LIMIT;
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const redisKey = `vision_extract:${userId}:${today}`;
 
     try {
-        const used = parseInt(await redis.get(redisKey) || '0', 10);
-        if (used >= dailyLimit) {
+        const { allowed, used } = await checkDailyCap(dailyCapKey('vision_extract', userId), dailyLimit);
+        if (!allowed) {
             return {
                 allowed: false,
                 status: 429,
@@ -239,14 +238,5 @@ export async function checkVisionAccessAndQuota(request: FastifyRequest): Promis
 async function incrementVisionCounter(request: FastifyRequest): Promise<void> {
     const userId = (request as AuthenticatedRequest).user?.userId;
     if (!userId) return;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const redisKey = `vision_extract:${userId}:${today}`;
-
-    try {
-        await redis.incr(redisKey);
-        await redis.expire(redisKey, 86400); // 24h TTL
-    } catch {
-        // Non-critical — counter missed, user gets one extra extraction
-    }
+    await incrementDailyCap(dailyCapKey('vision_extract', userId));
 }

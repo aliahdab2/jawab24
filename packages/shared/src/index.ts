@@ -1105,3 +1105,5 @@ export type { CanonicalHoursEntry, ParseResult, ParseSuccess, ParseFailure } fro
 // --- Activation funnel (shared BE emit/query ↔ FE admin panel) ---
 export { ACTIVATION_FUNNEL_STEPS, KB_FILLED_MIN_CHARS, isBusinessInfoProvided } from './activation';
 export type { ActivationEvent, ActivationFunnel, ActivationFunnelStep } from './activation';
+// --- Image-message marker protocol (DM vision descriptions) ---
+export { IMAGE_MESSAGE_RE, IMAGE_PLACEHOLDER_RE, isImageMessageBody, extractImageDescription, isAnyImageMessage } from './imageMessage';
