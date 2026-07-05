@@ -214,6 +214,7 @@
     "aiCostPipeline_lead_extraction": "استخراج العملاء المحتملين",
     "aiCostPipeline_translation": "الترجمة",
     "aiCostPipeline_transcription": "تفريغ الرسائل الصوتية",
+    "aiCostPipeline_image_understanding": "فهم الصور",
     "aiCostPipeline_embedding_rag": "استرجاع المعرفة",
     "aiCostPipeline_embedding_cache": "بحث الذاكرة المؤقتة",
     "aiCostPipeline_embedding_ingestion": "فهرسة المعرفة",

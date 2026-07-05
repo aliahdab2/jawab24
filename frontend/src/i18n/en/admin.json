@@ -214,6 +214,7 @@
     "aiCostPipeline_lead_extraction": "Lead extraction",
     "aiCostPipeline_translation": "Translation",
     "aiCostPipeline_transcription": "Voice transcription",
+    "aiCostPipeline_image_understanding": "Image understanding",
     "aiCostPipeline_embedding_rag": "Knowledge retrieval",
     "aiCostPipeline_embedding_cache": "Cache lookup",
     "aiCostPipeline_embedding_ingestion": "Knowledge indexing",

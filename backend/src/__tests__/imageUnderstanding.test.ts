@@ -3,9 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Hoisted mocks so the vi.mock factories can close over them. Mocking
 // subscriptions + dailyCap also stops the transitive `lib/redis` import (which
 // reads real config at load) from running under the stubbed config.
-const { mockCreate, mockResolveSub, mockCheckCap, mockIncrementCap } = vi.hoisted(() => ({
+const { mockCreate, mockResolveSub, mockGetTopupBalance, mockCheckCap, mockIncrementCap } = vi.hoisted(() => ({
     mockCreate: vi.fn(),
     mockResolveSub: vi.fn(),
+    mockGetTopupBalance: vi.fn(),
     mockCheckCap: vi.fn(),
     mockIncrementCap: vi.fn(),
 }));
@@ -29,7 +30,7 @@ vi.mock('../config', () => ({ config: { openai: { apiKey: 'test-key' }, imageUnd
 vi.mock('../utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 
 vi.mock('../services/subscriptions', () => ({
-    subscriptionsService: { resolveWorkspaceSubscription: mockResolveSub },
+    subscriptionsService: { resolveWorkspaceSubscription: mockResolveSub, getTopupBalance: mockGetTopupBalance },
 }));
 
 vi.mock('../lib/dailyCap', () => ({
@@ -76,6 +77,7 @@ beforeEach(() => {
     config.openai.apiKey = 'test-key';
     (config as unknown as { imageUnderstanding: { enabled: boolean } }).imageUnderstanding.enabled = true;
     (globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = vi.fn();
+    mockGetTopupBalance.mockResolvedValue(0); // no PAYG bonus by default
 });
 
 describe('imageUnderstandingService.describeFromUrl', () => {
@@ -202,10 +204,27 @@ describe('checkImageUnderstandingGate', () => {
 
     it('allows and returns ownerId when under the daily cap; passes the plan-specific limit', async () => {
         mockResolveSub.mockResolvedValue(sub('business'));
-        mockCheckCap.mockResolvedValue({ allowed: true, used: 3, limit: 50 });
+        mockCheckCap.mockResolvedValue({ allowed: true, used: 3, limit: 40 });
         const result = await checkImageUnderstandingGate('u1', 'w1');
         expect(result).toEqual({ allowed: true, ownerId: 'owner-1' });
-        expect(mockCheckCap).toHaveBeenCalledWith('image_understanding:owner-1:2026-07-05', 50);
+        expect(mockCheckCap).toHaveBeenCalledWith('image_understanding:owner-1:2026-07-05', 40);
+    });
+
+    it('doubles the plan cap when the merchant has an active top-up (PAYG) balance', async () => {
+        mockResolveSub.mockResolvedValue(sub('pro'));
+        mockGetTopupBalance.mockResolvedValue(500); // has bought extra replies
+        mockCheckCap.mockResolvedValue({ allowed: true, used: 10, limit: 150 });
+        await checkImageUnderstandingGate('u1', 'w1');
+        // Pro base = 75 → doubled to 150 because of the top-up balance.
+        expect(mockCheckCap).toHaveBeenCalledWith('image_understanding:owner-1:2026-07-05', 150);
+    });
+
+    it('uses the base (non-doubled) cap when the top-up balance is zero', async () => {
+        mockResolveSub.mockResolvedValue(sub('pro'));
+        mockGetTopupBalance.mockResolvedValue(0);
+        mockCheckCap.mockResolvedValue({ allowed: true, used: 10, limit: 75 });
+        await checkImageUnderstandingGate('u1', 'w1');
+        expect(mockCheckCap).toHaveBeenCalledWith('image_understanding:owner-1:2026-07-05', 75);
     });
 
     it('uses the default limit for an unknown plan slug', async () => {

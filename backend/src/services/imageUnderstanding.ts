@@ -53,13 +53,21 @@ const MODEL_VISION = 'gpt-4.1-mini';
 const IMAGE_DAILY_LIMITS: Record<string, number> = {
     free: 3,
     starter: 5,
-    business: 50,
-    pro: 150,
-    'scale-20k': 300,
-    'scale-30k': 450,
+    business: 40,
+    pro: 75,
+    'scale-20k': 150,
+    'scale-30k': 200,
 };
 const DEFAULT_IMAGE_LIMIT = 5;
 const IMAGE_CAP_PREFIX = 'image_understanding';
+
+/**
+ * Merchants with an active top-up (pay-as-you-go) balance have already paid
+ * for reply capacity beyond their plan — double their image cap too, so a
+ * heavy PAYG buyer isn't throttled by the base plan number on their busiest
+ * days. Still a bounded multiplier, not unlimited.
+ */
+const PAYG_LIMIT_MULTIPLIER = 2;
 
 export interface ImageUnderstandingContext {
     userId: string;
@@ -250,10 +258,11 @@ export type ImageGateResult =
 /**
  * Decide whether a customer image may be understood for this page's workspace:
  * global env kill switch → resolve the owning subscription (team-member pages
- * share the workspace owner's plan) → per-plan daily cap. On any denial the
- * caller falls back to today's placeholder + nudge, so a denied gate never
- * regresses below the pre-feature behavior. Fails CLOSED if the cap check
- * can't run (the cap is the only per-merchant bound on the cost).
+ * share the workspace owner's plan) → per-plan daily cap, DOUBLED for merchants
+ * with an active top-up balance (they've already paid for extra reply capacity).
+ * On any denial the caller falls back to today's placeholder + nudge, so a
+ * denied gate never regresses below the pre-feature behavior. Fails CLOSED if
+ * the cap check can't run (the cap is the only per-merchant bound on the cost).
  */
 export async function checkImageUnderstandingGate(
     pageUserId: string,
@@ -272,7 +281,10 @@ export async function checkImageUnderstandingGate(
         if (!resolved) return { allowed: false, reason: 'no_subscription' };
 
         const { subscription, ownerId } = resolved;
-        const limit = IMAGE_DAILY_LIMITS[subscription.plan.slug] ?? DEFAULT_IMAGE_LIMIT;
+        const baseLimit = IMAGE_DAILY_LIMITS[subscription.plan.slug] ?? DEFAULT_IMAGE_LIMIT;
+        const topupBalance = await subscriptionsService.getTopupBalance(ownerId);
+        const limit = topupBalance > 0 ? baseLimit * PAYG_LIMIT_MULTIPLIER : baseLimit;
+
         const { allowed } = await checkDailyCap(dailyCapKey(IMAGE_CAP_PREFIX, ownerId), limit);
         if (!allowed) return { allowed: false, reason: 'cap_reached' };
 
