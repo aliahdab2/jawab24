@@ -736,7 +736,17 @@ export {
 // byte-identical prompt to v50 (guarded by blast-radius unit tests). Comments stay neutral. The exact
 // cache is name-bucketed for DMs and the semantic cache is bypassed for DMs (see ai.ts) so a reply
 // gendered for one customer is never served to another — flush caches on deploy.
-export const PROMPT_VERSION = 'v51';
+// v52: SOURCE fix for the offer-closing bot-tell — the prompt was contradicting itself, so the ban
+// lost to competing demonstrations/directives (root-caused 2026-07-05, eval Cat 61 #677). Three
+// changes, all in the cacheable STATIC_SYSTEM_PREFIX / styleMap: (1) the GENERAL RESPONSE RULES no
+// longer say "sometimes ask a question back" (which licensed the tic against the same block's
+// offer-closing ban) — a question-back is now explicitly only-when-needed; (2) the `enthusiastic`
+// style directive dropped "ask back naturally when more info would help" (a positive license the
+// model followed over the negative ban) and now matches the disciplined `professional` phrasing;
+// (3) two new few-shot examples DEMONSTRATE a clean flat ending — a warm mid-thread answer and an
+// info-not-in-KB answer that stop on the answer (demonstrations beat rules; the prompt previously
+// had no positive pattern for the common case). Prefix bytes change → cache invalidated by the bump.
+export const PROMPT_VERSION = 'v52';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
