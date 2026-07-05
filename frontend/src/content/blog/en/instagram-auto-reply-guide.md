@@ -76,6 +76,12 @@ Smart auto-reply tools like Jawab24 solve this by automatically transcribing voi
 
 This matters because every unanswered voice message is a potential lost sale. If your tool can't handle voice input, you're ignoring a significant portion of your customers' preferred communication method.
 
+## Reading Photos in DMs
+
+Even more common than voice: a customer screenshots a product and sends the image with no text. On Instagram — a visual platform — this is how a huge share of buyers start a conversation. Most auto-reply tools can't see the picture, so they ask the customer to "type your question," and the moment cools.
+
+Jawab24 now reads the photo. A product screenshot gets answered with price and availability from your business info; a follow-up like "how much?" resolves to the pictured item; a receipt or an off-topic image is routed to a human instead of guessed at. We cover exactly how this works — and its honest limits — in [When a Customer Sends a Photo Instead of Typing](/en/blog/ai-auto-reply-customer-photos).
+
 ## Handling Rapid-Fire Messages
 
 Instagram customers — especially interested buyers — often send multiple quick messages:
