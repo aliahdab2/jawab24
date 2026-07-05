@@ -74,6 +74,8 @@ The AI loads the **last 12 messages** in each conversation, so it understands co
 
 **Voice message transcription** — when a customer sends a voice message instead of typing, Jawab24 automatically transcribes the audio and processes it as a regular message. The AI understands the question and replies with a text response. Most competitors ignore voice messages entirely — Jawab24 treats them as first-class input.
 
+**Image understanding** — when a customer sends a photo instead of typing (a product screenshot, a picture from an ad), the AI reads the image and answers from your business info, in Messenger, Instagram, and WhatsApp DMs. Off-topic images (a receipt, an unrelated document) are routed to a human rather than guessed at. Details in [When a Customer Sends a Photo Instead of Typing](/en/blog/ai-auto-reply-customer-photos).
+
 **2-tier price hallucination prevention** checks every price the AI mentions against the actual product catalog before sending. If the price doesn't match, the reply is held with a safe fallback instead of sending wrong information.
 
 **Angry customer detection** identifies frustrated customers (strong words, refund demands, escalation threats) and sends instant push notifications to the merchant's phone — not just an email or dashboard flag.
@@ -95,6 +97,7 @@ Here's how the tools stack up across the features that matter most:
 | AI-powered replies | Limited | No | Yes | Yes | Yes (99.6% accuracy) |
 | Conversation context | Per flow | No | Limited | Configurable | Last 12 messages |
 | Voice message support | No | No | No | No | Yes (auto-transcribe) |
+| Photo/image understanding | No | No | No | No | Yes (AI vision) |
 | Comment replies | Basic | Basic | No | Custom | Full (public + DM) |
 | Shopify integration | Yes | No | Yes | Custom | Yes |
 | Salla integration | No | No | No | No | Yes |
