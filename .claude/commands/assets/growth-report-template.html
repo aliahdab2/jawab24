@@ -1,0 +1,582 @@
+<!--
+  GROWTH REPORT — REFERENCE TEMPLATE (filled with الفريق الدمشقي, 2026-07-05).
+  Used by /growth-report. This is a COMPLETE working example: to reuse, copy this
+  file, then replace (a) the merchant name/period in the hero, (b) every KPI/fact
+  figure, (c) the JS data objects at the bottom (before/after, `monthly`, top posts),
+  and (d) the narrative sentences + the methodology table. Keep the palette, layout,
+  RTL structure, print CSS, and chart code AS-IS — the palette is CVD-validated
+  (light surface #fffdf8, dark #14201f) via the dataviz skill's validate_palette.js.
+  Data contract & framing rules: see .claude/commands/growth-report.md.
+  Publish via the Artifact tool (which supplies <!doctype>/<head>/<body>); export PDF
+  with headless Chrome --print-to-pdf (print CSS already forces background colors).
+-->
+<title>تقرير نمو صفحة الفريق الدمشقي مع جواب24</title>
+
+<style>
+  :root {
+    --paper:      #f2ede1;
+    --surface:    #fffdf8;
+    --surface-2:  #faf6ec;
+    --ink:        #14201f;
+    --ink-2:      #54615c;
+    --muted:      #8a938d;
+    --line:       #e4ddcd;
+    --hair:       rgba(20,32,31,0.10);
+    --teal:       #077a5d;
+    --teal-deep:  #073b31;
+    --teal-band:  #0a2e28;
+    --gold:       #c0871f;
+    --blue:       #2a5d9e;
+    --rose:       #a63d57;
+    --good:       #006300;
+    --shadow:     0 1px 2px rgba(20,32,31,.05), 0 6px 24px rgba(20,32,31,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #0d1513;
+      --surface:    #14201f;
+      --surface-2:  #182825;
+      --ink:        #f3f0e8;
+      --ink-2:      #b5c0ba;
+      --muted:      #8a938d;
+      --line:       #24322f;
+      --hair:       rgba(243,240,232,0.12);
+      --teal:       #3aa58f;
+      --teal-deep:  #0c221d;
+      --teal-band:  #0a1a17;
+      --gold:       #b8862b;
+      --blue:       #5f97d6;
+      --rose:       #d76d86;
+      --good:       #0ca30c;
+      --shadow:     0 1px 2px rgba(0,0,0,.4), 0 8px 30px rgba(0,0,0,.35);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  .report {
+    direction: rtl;
+    text-align: right;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "SF Arabic", "Geeza Pro", "Noto Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+    line-height: 1.65;
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+    padding: 0 0 64px;
+    overflow-x: hidden;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* numbers stay LTR */
+  .num, .fig, .delta, tbody td.n, .axis-lbl, .barval { direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+
+  /* ---------- HERO ---------- */
+  .hero {
+    background:
+      radial-gradient(120% 140% at 90% -10%, rgba(192,135,31,.18), transparent 55%),
+      linear-gradient(180deg, var(--teal-band), var(--teal-deep));
+    color: #f6f2e6;
+    padding: 56px 0 48px;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .hero .eyebrow {
+    font-size: 13px; letter-spacing: .14em; text-transform: uppercase;
+    color: #c9b781; font-weight: 700; margin: 0 0 18px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .hero .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px rgba(192,135,31,.22); }
+  .hero h1 {
+    font-size: clamp(30px, 5vw, 46px); line-height: 1.2; margin: 0 0 10px;
+    font-weight: 800; letter-spacing: -.01em; text-wrap: balance; color: #fffdf6;
+  }
+  .hero .sub { font-size: 18px; color: #cfe0da; margin: 0 0 34px; max-width: 46ch; }
+  .hero .sub b { color: #f4d99a; font-weight: 700; }
+
+  .thesis {
+    display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap;
+    padding-top: 26px; border-top: 1px solid rgba(255,255,255,.12);
+  }
+  .thesis .big { font-size: clamp(52px, 11vw, 92px); font-weight: 850; color: #f4d99a; letter-spacing: -.02em; line-height: .9; }
+  .thesis .cap { font-size: 16px; color: #dfece7; max-width: 30ch; }
+  .thesis .cap b { color: #fff; }
+  .src-fb { font-size: 12.5px; color: #9fb8b0; margin-top: 6px; letter-spacing: .02em; }
+
+  /* ---------- KPI ROW ---------- */
+  section { padding-top: 52px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: -34px; position: relative; z-index: 2; }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--hair); border-radius: 16px;
+    padding: 20px 20px 18px; box-shadow: var(--shadow);
+  }
+  .kpi .fig { font-size: 34px; font-weight: 800; letter-spacing: -.02em; line-height: 1.05; color: var(--ink); }
+  .kpi .fig .up { color: var(--good); }
+  .kpi .lbl { font-size: 14.5px; color: var(--ink-2); margin-top: 6px; }
+  .kpi .src { font-size: 11.5px; color: var(--muted); margin-top: 10px; letter-spacing: .02em; }
+  .tag-fb, .tag-j { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; letter-spacing:.02em; }
+  .tag-fb { background: rgba(42,93,158,.12); color: var(--blue); }
+  .tag-j  { background: rgba(7,122,93,.12); color: var(--teal); }
+  @media (prefers-color-scheme: dark){
+    .tag-fb { background: rgba(95,151,214,.16); }
+    .tag-j  { background: rgba(58,165,143,.16); }
+  }
+
+  /* ---------- PERIOD STRIP ---------- */
+  .period-strip {
+    display: flex; align-items: center; gap: 22px; margin-top: 22px;
+    padding: 20px 26px; border: 1px solid var(--hair); border-radius: 16px;
+    background: linear-gradient(90deg, rgba(7,122,93,.10), rgba(192,135,31,.10));
+  }
+  .period-strip .ps-big { font-size: 44px; font-weight: 850; color: var(--teal); line-height: .95; letter-spacing: -.02em; white-space: nowrap; }
+  .period-strip .ps-big small { font-size: 15px; font-weight: 700; color: var(--ink-2); display: block; letter-spacing: 0; }
+  .period-strip .ps-div { width: 1px; align-self: stretch; background: var(--hair); flex: none; }
+  .period-strip .ps-txt { font-size: 17px; color: var(--ink); line-height: 1.55; }
+  .period-strip .ps-txt b { color: var(--teal); font-weight: 800; }
+  @media (max-width: 620px) {
+    .period-strip { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .period-strip .ps-div { display: none; }
+  }
+
+  /* ---------- SECTION HEADINGS ---------- */
+  .sec-head { margin-bottom: 22px; }
+  .sec-head .kicker { font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: var(--teal); margin: 0 0 8px; }
+  .sec-head h2 { font-size: clamp(23px, 3.4vw, 30px); font-weight: 800; margin: 0 0 8px; letter-spacing: -.01em; text-wrap: balance; }
+  .sec-head p { font-size: 16.5px; color: var(--ink-2); margin: 0; max-width: 62ch; }
+
+  /* ---------- CARDS / CHARTS ---------- */
+  .card { background: var(--surface); border: 1px solid var(--hair); border-radius: 18px; padding: 26px; box-shadow: var(--shadow); }
+  .card + .card { margin-top: 18px; }
+  .card-title { font-size: 16px; font-weight: 700; margin: 0 0 2px; }
+  .card-note { font-size: 13.5px; color: var(--muted); margin: 0 0 18px; }
+
+  .chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .grid line { stroke: var(--line); stroke-width: 1; }
+  .baseline { stroke: var(--line); stroke-width: 1.5; }
+  .bar { fill: var(--teal); }
+  .bar.emph { fill: var(--gold); }
+  .bar.ghost { fill: var(--teal); opacity: .34; }
+  .barval { fill: var(--ink); font-size: 14px; font-weight: 800; }
+  .barval.on { fill: #fff; }
+  .axis-lbl { fill: var(--ink-2); font-size: 13px; font-weight: 600; }
+  .axis-sub { fill: var(--muted); font-size: 11px; }
+
+  .beforeafter { display: grid; grid-template-columns: 1.15fr .85fr; gap: 26px; align-items: center; }
+  .ba-callout { }
+  .ba-callout .delta { font-size: clamp(44px, 8vw, 72px); font-weight: 850; color: var(--good); line-height: .95; letter-spacing: -.02em; }
+  .ba-callout .delta::before { content: "▲ "; font-size: .5em; vertical-align: middle; }
+  .ba-callout p { font-size: 15.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .ba-callout p b { color: var(--ink); }
+
+  .factgrid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-top: 20px; }
+  .fact { background: var(--surface-2); border: 1px solid var(--hair); border-radius: 13px; padding: 15px 16px; }
+  .fact .v { font-size: 24px; font-weight: 800; letter-spacing: -.01em; }
+  .fact .k { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+
+  .small-mult { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .mini { background: var(--surface-2); border: 1px solid var(--hair); border-radius: 14px; padding: 18px 18px 12px; }
+  .mini h4 { font-size: 14.5px; margin: 0 0 2px; font-weight: 700; }
+  .mini .mtot { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .mini .mtot b { color: var(--teal); font-weight: 800; }
+
+  /* ---------- PILLARS ---------- */
+  .pillars { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+  .pillar { background: var(--surface); border: 1px solid var(--hair); border-radius: 16px; padding: 22px; box-shadow: var(--shadow); }
+  .pillar .n { font-size: 13px; font-weight: 800; color: var(--gold); letter-spacing: .1em; }
+  .pillar h3 { font-size: 18px; margin: 8px 0 8px; font-weight: 800; }
+  .pillar p { font-size: 15px; color: var(--ink-2); margin: 0; }
+  .pillar .metric { margin-top: 14px; font-size: 14px; color: var(--teal); font-weight: 700; }
+
+  /* ---------- REACH ---------- */
+  .reach-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .reach-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .rstat { background: var(--surface-2); border: 1px solid var(--hair); border-radius: 14px; padding: 18px; }
+  .rstat .v { font-size: 27px; font-weight: 800; letter-spacing: -.01em; }
+  .rstat .v .up { color: var(--good); font-size: 17px; font-weight: 800; }
+  .rstat .k { font-size: 13.5px; color: var(--ink-2); margin-top: 5px; }
+  .barrow { display: flex; align-items: center; gap: 10px; margin: 9px 0; }
+  .barrow .lab { width: 92px; font-size: 13px; color: var(--ink-2); flex: none; }
+  .barrow .track { flex: 1; height: 20px; background: var(--surface-2); border-radius: 6px; overflow: hidden; border: 1px solid var(--hair); }
+  .barrow .fill { height: 100%; background: var(--teal); border-radius: 6px; }
+  .barrow .pv { width: 78px; font-size: 12.5px; color: var(--ink-2); flex: none; text-align: left; direction: ltr; }
+
+  /* ---------- METHOD / TABLE ---------- */
+  .method p { font-size: 14.5px; color: var(--ink-2); margin: 0 0 12px; }
+  .method b { color: var(--ink); }
+  .tbl-scroll { overflow-x: auto; margin-top: 8px; border: 1px solid var(--hair); border-radius: 13px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+  thead th { background: var(--surface-2); text-align: right; padding: 11px 14px; font-weight: 700; color: var(--ink); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--ink-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td.n { text-align: left; color: var(--ink); font-weight: 600; }
+  tbody tr.tot td { font-weight: 800; color: var(--ink); background: var(--surface-2); }
+
+  .footer { margin-top: 46px; padding-top: 22px; border-top: 1px solid var(--hair); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .footer .brand { font-weight: 800; font-size: 16px; letter-spacing: -.01em; }
+  .footer .brand span { color: var(--teal); }
+  .footer .meta { font-size: 13px; color: var(--muted); }
+
+  /* tooltip */
+  #tip { position: fixed; pointer-events: none; z-index: 50; background: var(--ink); color: var(--paper); font-size: 12.5px; padding: 7px 10px; border-radius: 8px; box-shadow: var(--shadow); opacity: 0; transition: opacity .12s; white-space: nowrap; direction: rtl; }
+  .bar, .bar.emph, .bar.ghost { transition: opacity .12s; cursor: default; }
+  .bar:hover { opacity: .8; }
+
+  @media (max-width: 860px) {
+    .kpis { grid-template-columns: repeat(2,1fr); }
+    .beforeafter { grid-template-columns: 1fr; }
+    .factgrid { grid-template-columns: repeat(2,1fr); }
+    .pillars { grid-template-columns: 1fr; }
+    .reach-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 520px) {
+    .small-mult { grid-template-columns: 1fr; }
+    .reach-stats { grid-template-columns: 1fr 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* ---------- PRINT / PDF ---------- */
+  @media print {
+    @page { size: A4 landscape; margin: 8mm 0; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .report { background: var(--paper) !important; padding-bottom: 0; }
+    #tip { display: none !important; }
+    .kpis { margin-top: -30px; }
+    .kpi, .pillar, .mini, .fact, .rstat, .barrow, tr,
+    .beforeafter, .reach-stats, .factgrid, .small-mult { break-inside: avoid; }
+    .sec-head { break-after: avoid; }
+    section { padding-top: 34px; }
+    .hero { break-after: avoid; }
+    .card, .pillar, .kpi { box-shadow: none; }
+  }
+</style>
+
+<div class="report" dir="rtl" lang="ar">
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow"><span class="dot"></span> تقرير النمو · صفحة الفيسبوك</p>
+      <h1>الفريق الدمشقي للتدريب والتأهيل</h1>
+      <p class="sub">كل الأرقام في هذا التقرير تحقّقت خلال <b>أول 3 أشهر فقط</b> من تشغيل <b>جواب24</b> (4 أبريل – 5 يوليو 2026) — بالأرقام، ومن مصدرَين مستقلَّين.</p>
+      <div class="thesis">
+        <div class="big num">+1,186%</div>
+        <div class="cap">
+          نموّ في <b>عدد المحادثات الجديدة على ماسنجر</b> خلال الـ90 يوماً بعد جواب24، مقارنةً بالـ90 يوماً قبله.
+          <div class="src-fb">المصدر: لوحة إحصاءات فيسبوك للصفحة · 6 أبريل – 4 يوليو 2026</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+
+    <!-- KPI ROW -->
+    <div class="kpis">
+      <div class="kpi">
+        <div class="fig num"><span class="up">+1,186%</span></div>
+        <div class="lbl">محادثات جديدة بدأها العملاء على ماسنجر <span class="num">(5,942)</span></div>
+        <div class="src"><span class="tag-fb">فيسبوك</span> آخر 90 يوماً مقابل الـ90 السابقة</div>
+      </div>
+      <div class="kpi">
+        <div class="fig num">97.41%</div>
+        <div class="lbl">نسبة الردّ على الرسائل — تقريباً كل عميل يتلقّى ردّاً</div>
+        <div class="src"><span class="tag-fb">فيسبوك</span> زمن الردّ: 3 د 14 ث</div>
+      </div>
+      <div class="kpi">
+        <div class="fig num"><span class="up">+23%</span></div>
+        <div class="lbl">نموّ المتابعين <b>خلال 90 يوماً فقط</b> — إلى <span class="num">55,550</span> متابعاً</div>
+        <div class="src"><span class="tag-fb">فيسبوك</span> +10,365 متابعاً صافياً في 90 يوماً فقط</div>
+      </div>
+      <div class="kpi">
+        <div class="fig num">4.69M <span class="up" style="font-size:19px">+35%</span></div>
+        <div class="lbl">مشاهدة للمحتوى خلال آخر 28 يوماً</div>
+        <div class="src"><span class="tag-fb">فيسبوك</span> 88.8% منها من غير المتابعين</div>
+      </div>
+    </div>
+
+    <!-- PERIOD EMPHASIS -->
+    <div class="period-strip">
+      <div class="ps-big num">~90<small>يوماً فقط</small></div>
+      <div class="ps-div"></div>
+      <div class="ps-txt">كل هذه النتائج — بما فيها <b>نموّ المتابعين +23%</b> و<b>ارتفاع المحادثات +1,186%</b> — تحقّقت خلال <b>3 أشهر فقط</b> منذ تفعيل جواب24 في 4 أبريل 2026، لا عبر سنوات.</div>
+    </div>
+
+    <!-- SECTION 1: THE PROOF -->
+    <section>
+      <div class="sec-head">
+        <p class="kicker">الدليل الأول — من فيسبوك نفسه</p>
+        <h2>المحادثات انفجرت لحظة تشغيل جواب24</h2>
+        <p>تُظهر لوحة إحصاءات فيسبوك أنّ عدد المحادثات التي بدأها العملاء على ماسنجر قفز من نحو 460 محادثة في الـ90 يوماً السابقة إلى 5,942 محادثة في الـ90 يوماً التالية لتفعيل جواب24 — وهذا أوضح أثر مباشر، لأنّ جواب24 هو ما يردّ على كل رسالة فوراً وعلى مدار الساعة.</p>
+      </div>
+      <div class="card">
+        <div class="beforeafter">
+          <div>
+            <p class="card-title">المحادثات الجديدة على ماسنجر — قبل وبعد</p>
+            <p class="card-note">فترتان متتاليتان مدّة كلٍّ منهما 90 يوماً · المصدر: فيسبوك</p>
+            <svg id="chart-ba" class="chart-svg" viewBox="0 0 520 300" role="img" aria-label="مقارنة المحادثات: نحو 460 قبل جواب24 مقابل 5,942 بعده"></svg>
+          </div>
+          <div class="ba-callout">
+            <div class="delta num">+1,186%</div>
+            <p><b>من ~460 إلى 5,942 محادثة.</b> قبل جواب24 كانت معظم الرسائل تمرّ دون ردّ سريع؛ بعده صار كل عميل يجد ردّاً خلال دقائق — فارتفع عدد من يبدأ محادثة أصلاً.</p>
+          </div>
+        </div>
+        <div class="factgrid">
+          <div class="fact"><div class="v num">5,743</div><div class="k">عميلاً راسلوا الصفحة</div></div>
+          <div class="fact"><div class="v num">89.7%</div><div class="k">منهم عملاء جدد</div></div>
+          <div class="fact"><div class="v num">100%</div><div class="k">وصلوا عضوياً (بلا إعلانات مدفوعة)</div></div>
+          <div class="fact"><div class="v num">8 ثوانٍ</div><div class="k">وسيط زمن ردّ جواب24 فعلياً</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2: MONTHLY GROWTH (Jawab24 operational) -->
+    <section>
+      <div class="sec-head">
+        <p class="kicker">النموّ شهراً بعد شهر — بيانات تشغيل جواب24</p>
+        <h2>التفاعل الذي يديره جواب24 تضاعف عبر الأشهر</h2>
+        <p>من سجلّات جواب24 التشغيلية: عدد العملاء والردود والتعليقات والعملاء المحتملين ارتفع بثبات من أول شهر كامل (أبريل) حتى يونيو. تمّت معالجة كل ذلك آلياً تقريباً، دون تدخّل بشري في 97% من الحالات.</p>
+      </div>
+
+      <div class="card">
+        <div class="small-mult">
+          <div class="mini">
+            <h4>عملاء فريدون يتفاعلون شهرياً (رسائل)</h4>
+            <p class="mtot">الإجمالي منذ البداية: <b class="num">14,552</b> عميلاً</p>
+            <svg class="chart-svg mini-chart" data-key="customers" viewBox="0 0 380 210" role="img" aria-label="عملاء فريدون شهرياً: أبريل 2,424، مايو 5,446، يونيو 6,417، يوليو جزئي 1,601"></svg>
+          </div>
+          <div class="mini">
+            <h4>ردود مُرسَلة على الرسائل شهرياً</h4>
+            <p class="mtot">الإجمالي على الرسائل: <b class="num">44,636</b> ردّاً</p>
+            <svg class="chart-svg mini-chart" data-key="replies" viewBox="0 0 380 210" role="img" aria-label="ردود شهرياً: أبريل 7,386، مايو 16,085، يونيو 17,236، يوليو جزئي 3,927"></svg>
+          </div>
+          <div class="mini">
+            <h4>تعليقات تمّ الردّ عليها شهرياً</h4>
+            <p class="mtot">إجمالي التعليقات المُجابة: <b class="num">18,788</b></p>
+            <svg class="chart-svg mini-chart" data-key="comments" viewBox="0 0 380 210" role="img" aria-label="تعليقات مُجابة شهرياً: أبريل 3,269، مايو 6,557، يونيو 7,351، يوليو جزئي 1,611"></svg>
+          </div>
+          <div class="mini">
+            <h4>عملاء محتملون (أرقام هواتف) شهرياً</h4>
+            <p class="mtot">الإجمالي المُلتقَط: <b class="num">472</b> عميلاً محتملاً</p>
+            <svg class="chart-svg mini-chart" data-key="leads" viewBox="0 0 380 210" role="img" aria-label="عملاء محتملون شهرياً: أبريل 71، مايو 170، يونيو 199، يوليو جزئي 32"></svg>
+          </div>
+        </div>
+        <p class="card-note" style="margin-top:16px">■ الأعمدة الباهتة ليوليو تغطّي 5 أيام فقط (1–5 يوليو) وليست شهراً كاملاً — ومع ذلك فإنّ وتيرتها تسير على منوال يونيو.</p>
+      </div>
+    </section>
+
+    <!-- SECTION 3: REACH & AUDIENCE -->
+    <section>
+      <div class="sec-head">
+        <p class="kicker">الوصول والجمهور — من فيسبوك</p>
+        <h2>وصول أوسع، وجمهور يتركّز في دمشق</h2>
+        <p>الردّ السريع والتفاعل النشِط على التعليقات يدفعان خوارزمية فيسبوك إلى عرض محتوى الصفحة لجمهور أوسع. النتيجة: ملايين المشاهدات، أغلبها من خارج دائرة المتابعين الحاليين.</p>
+      </div>
+      <div class="reach-grid">
+        <div class="card">
+          <p class="card-title">أرقام الوصول</p>
+          <p class="card-note">المصدر: فيسبوك · المشاهدات لآخر 28 يوماً</p>
+          <div class="reach-stats">
+            <div class="rstat"><div class="v num">55,550</div><div class="k">إجمالي المتابعين <span class="up num">+23%</span></div></div>
+            <div class="rstat"><div class="v num">4.69M</div><div class="k">مشاهدة <span class="up num">+35%</span></div></div>
+            <div class="rstat"><div class="v num">88.8%</div><div class="k">من المشاهدات من غير المتابعين</div></div>
+            <div class="rstat"><div class="v num">+273%</div><div class="k">نموّ مشاهدات الفيديو (3 ثوانٍ)</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <p class="card-title">أكثر المنشورات مشاهدةً</p>
+          <p class="card-note">المصدر: فيسبوك · عدد المشاهدات</p>
+          <div id="topposts"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <p class="card-title">أين جمهورك؟</p>
+        <p class="card-note">توزيع المتابعين — المصدر: فيسبوك</p>
+        <div class="factgrid">
+          <div class="fact"><div class="v num">93.6%</div><div class="k">من سوريا</div></div>
+          <div class="fact"><div class="v num">90.4%</div><div class="k">من دمشق</div></div>
+          <div class="fact"><div class="v num">46%</div><div class="k">الفئة 25–34 عاماً</div></div>
+          <div class="fact"><div class="v num">30%</div><div class="k">الفئة 18–24 عاماً</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 4: HOW -->
+    <section>
+      <div class="sec-head">
+        <p class="kicker">كيف يحقّق جواب24 ذلك</p>
+        <h2>ثلاث آليات تحوّل التفاعل إلى نموّ</h2>
+      </div>
+      <div class="pillars">
+        <div class="pillar">
+          <div class="n">01</div>
+          <h3>ردّ فوري 24/7</h3>
+          <p>يجيب جواب24 على كل رسالة خلال ثوانٍ، ليلاً ونهاراً، فلا يضيع عميل بسبب التأخير — وهذا ما رفع نسبة الردّ إلى مستوى شبه كامل.</p>
+          <div class="metric num">97.41% نسبة ردّ</div>
+        </div>
+        <div class="pillar">
+          <div class="n">02</div>
+          <h3>تحويل التعليقات إلى محادثات</h3>
+          <p>يردّ على المعلّقين ويحوّلهم تلقائياً إلى محادثات خاصة، فيتضاعف التفاعل النشِط الذي تكافئه خوارزمية فيسبوك بمزيد من الوصول.</p>
+          <div class="metric num">18,788 تعليقاً مُجاباً</div>
+        </div>
+        <div class="pillar">
+          <div class="n">03</div>
+          <h3>التقاط العملاء المحتملين</h3>
+          <p>يتعرّف على نيّة الشراء ويجمع اسم العميل ورقم هاتفه تلقائياً في قائمة جاهزة للمتابعة، فيتحوّل الاهتمام إلى فرص بيع حقيقية.</p>
+          <div class="metric num">472 عميلاً محتملاً</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 5: METHOD -->
+    <section>
+      <div class="sec-head">
+        <p class="kicker">المصادر والمنهجية</p>
+        <h2>من أين جاءت هذه الأرقام</h2>
+      </div>
+      <div class="card method">
+        <p><span class="tag-fb">فيسبوك</span> &nbsp; أرقام المتابعين والمشاهدات والمحادثات ونسبة الردّ مأخوذة مباشرةً من <b>لوحة إحصاءات الصفحة الاحترافية على فيسبوك</b>، بالفترات المذكورة (آخر 90 يوماً: 6 أبريل – 4 يوليو 2026؛ المشاهدات لآخر 28 يوماً).</p>
+        <p><span class="tag-j">جواب24</span> &nbsp; أرقام العملاء والردود والتعليقات والعملاء المحتملين وزمن الردّ الفعلي مأخوذة من <b>سجلّات تشغيل جواب24</b> للصفحة، للفترة 4 أبريل – 5 يوليو 2026.</p>
+        <p style="color:var(--muted)"><b style="color:var(--ink-2)">ملاحظة أمانة:</b> النموّ في المحادثات (+1,186%) ونسبة الردّ (97.41%) أثرٌ <b>مباشر</b> لجواب24 لأنّه هو من يردّ. أمّا نموّ المتابعين (+23%) والمشاهدات (+35%) فيتأثّران أيضاً بمحتوى الصفحة الذي ينشره الفريق؛ ويُسهم فيهما جواب24 عبر رفع سرعة الردّ والتفاعل. الرقم ~460 لمحادثات الفترة السابقة مُشتقّ من نسبة فيسبوك المعلنة (5,942 ÷ 12.86).</p>
+
+        <div class="tbl-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>الشهر</th>
+                <th>عملاء فريدون</th>
+                <th>ردود على الرسائل</th>
+                <th>تعليقات مُجابة</th>
+                <th>عملاء محتملون</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>أبريل 2026</td><td class="n">2,424</td><td class="n">7,386</td><td class="n">3,269</td><td class="n">71</td></tr>
+              <tr><td>مايو 2026</td><td class="n">5,446</td><td class="n">16,085</td><td class="n">6,557</td><td class="n">170</td></tr>
+              <tr><td>يونيو 2026</td><td class="n">6,417</td><td class="n">17,236</td><td class="n">7,351</td><td class="n">199</td></tr>
+              <tr><td>يوليو (1–5، جزئي)</td><td class="n">1,601</td><td class="n">3,927</td><td class="n">1,611</td><td class="n">32</td></tr>
+              <tr class="tot"><td>الإجمالي</td><td class="n">14,552*</td><td class="n">44,636</td><td class="n">18,788</td><td class="n">472</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="card-note" style="margin-top:12px">* إجمالي العملاء الفريدين لا يساوي مجموع الأشهر لأنّ العميل نفسه قد يعود في أكثر من شهر فيُحتسب مرّة واحدة في الإجمالي.</p>
+      </div>
+    </section>
+
+    <div class="footer">
+      <div class="brand">جواب<span>24</span></div>
+      <div class="meta">أُعدّ في 5 يوليو 2026 · صفحة الفريق الدمشقي للتدريب والتأهيل</div>
+    </div>
+
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+(function () {
+  var fmt = function (n) { return n.toLocaleString('en-US'); };
+  var tip = document.getElementById('tip');
+  function showTip(e, html) {
+    tip.innerHTML = html; tip.style.opacity = '1';
+    var x = e.clientX, y = e.clientY;
+    tip.style.left = Math.min(x + 12, window.innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top = (y - tip.offsetHeight - 10) + 'px';
+  }
+  function hideTip() { tip.style.opacity = '0'; }
+
+  // Generic vertical bar chart (RTL: first datum on the right)
+  function drawBars(svg, data, opts) {
+    opts = opts || {};
+    var vb = svg.viewBox.baseVal, W = vb.width, H = vb.height;
+    var padT = 34, padB = 40, padX = 10;
+    var plotH = H - padT - padB, plotW = W - padX * 2;
+    var max = Math.max.apply(null, data.map(function (d) { return d.value; }));
+    var ymax = max * 1.18;
+    var n = data.length;
+    var slot = plotW / n;
+    var bw = Math.min(opts.barWidth || 62, slot * 0.62);
+    var NS = 'http://www.w3.org/2000/svg';
+    function el(t, a) { var e = document.createElementNS(NS, t); for (var k in a) e.setAttribute(k, a[k]); return e; }
+
+    // gridlines (4)
+    var g = el('g', { 'class': 'grid' });
+    for (var i = 1; i <= 3; i++) {
+      var gy = padT + plotH * (i / 3);
+      g.appendChild(el('line', { x1: padX, y1: gy, x2: W - padX, y2: gy }));
+    }
+    svg.appendChild(g);
+    // baseline
+    svg.appendChild(el('line', { 'class': 'baseline', x1: padX, y1: padT + plotH, x2: W - padX, y2: padT + plotH }));
+
+    data.forEach(function (d, idx) {
+      // RTL: place first item on the right
+      var pos = n - 1 - idx;
+      var cx = padX + slot * pos + slot / 2;
+      var bh = Math.max(2, plotH * (d.value / ymax));
+      var by = padT + plotH - bh;
+      var cls = 'bar' + (d.ghost ? ' ghost' : (d.emph ? ' emph' : ''));
+      var rect = el('rect', { 'class': cls, x: cx - bw / 2, y: by, width: bw, height: bh, rx: 4 });
+      rect.addEventListener('mousemove', function (e) { showTip(e, d.label + ': <b class="num">' + fmt(d.value) + '</b>' + (d.tipnote ? ' · ' + d.tipnote : '')); });
+      rect.addEventListener('mouseleave', hideTip);
+      svg.appendChild(rect);
+      // value label above bar
+      var t = el('text', { 'class': 'barval', x: cx, y: by - 9, 'text-anchor': 'middle' });
+      t.textContent = opts.valfmt ? opts.valfmt(d.value) : fmt(d.value);
+      svg.appendChild(t);
+      // x label
+      var xl = el('text', { 'class': 'axis-lbl', x: cx, y: padT + plotH + 20, 'text-anchor': 'middle' });
+      xl.textContent = d.label;
+      svg.appendChild(xl);
+      if (d.sub) {
+        var xs = el('text', { 'class': 'axis-sub', x: cx, y: padT + plotH + 34, 'text-anchor': 'middle' });
+        xs.textContent = d.sub;
+        svg.appendChild(xs);
+      }
+    });
+  }
+
+  // ---- Before/after chart ----
+  drawBars(document.getElementById('chart-ba'), [
+    { label: 'قبل جواب24', sub: '90 يوماً سابقة', value: 460, tipnote: 'تقديري' },
+    { label: 'بعد جواب24', sub: '90 يوماً تالية', value: 5942, emph: true }
+  ], { barWidth: 120 });
+
+  // ---- Monthly small multiples ----
+  var monthly = {
+    customers: [
+      { label: 'أبريل', value: 2424 }, { label: 'مايو', value: 5446 },
+      { label: 'يونيو', value: 6417 }, { label: 'يوليو', value: 1601, ghost: true, tipnote: '5 أيام فقط' }
+    ],
+    replies: [
+      { label: 'أبريل', value: 7386 }, { label: 'مايو', value: 16085 },
+      { label: 'يونيو', value: 17236 }, { label: 'يوليو', value: 3927, ghost: true, tipnote: '5 أيام فقط' }
+    ],
+    comments: [
+      { label: 'أبريل', value: 3269 }, { label: 'مايو', value: 6557 },
+      { label: 'يونيو', value: 7351 }, { label: 'يوليو', value: 1611, ghost: true, tipnote: '5 أيام فقط' }
+    ],
+    leads: [
+      { label: 'أبريل', value: 71 }, { label: 'مايو', value: 170 },
+      { label: 'يونيو', value: 199 }, { label: 'يوليو', value: 32, ghost: true, tipnote: '5 أيام فقط' }
+    ]
+  };
+  document.querySelectorAll('.mini-chart').forEach(function (svg) {
+    drawBars(svg, monthly[svg.getAttribute('data-key')], { barWidth: 52 });
+  });
+
+  // ---- Top posts horizontal bars ----
+  var posts = [
+    { d: '3 يوليو', v: 1079880 }, { d: '27 يونيو', v: 986136 },
+    { d: '20 يونيو', v: 893600 }, { d: '9 يونيو', v: 296189 }
+  ];
+  var pmax = posts[0].v;
+  var host = document.getElementById('topposts');
+  posts.forEach(function (p) {
+    var row = document.createElement('div'); row.className = 'barrow';
+    row.innerHTML = '<div class="lab">' + p.d + '</div>' +
+      '<div class="track"><div class="fill" style="width:' + (p.v / pmax * 100).toFixed(1) + '%"></div></div>' +
+      '<div class="pv num">' + (p.v / 1000000).toFixed(2) + 'M</div>';
+    host.appendChild(row);
+  });
+})();
+</script>
