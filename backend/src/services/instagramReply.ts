@@ -44,9 +44,10 @@ export class InstagramReplyService {
         sharedPostUrl?: string,
         sharedPostId?: string,
         wasHandoffPaused?: boolean,
+        attachmentRetries?: number,
     ): Promise<MessageResult> {
         return messageProcessor.processMessage(
-            instagramMessageAdapter, instagramAccountId, senderId, messageText, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused,
+            instagramMessageAdapter, instagramAccountId, senderId, messageText, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused, attachmentRetries,
         );
     }
 }

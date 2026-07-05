@@ -652,8 +652,9 @@ describe('MessagesService', () => {
             const result = await messagesService.getUnrepliedFromSender('page-1', 'sender-1');
 
             expect(result).toHaveLength(2);
-            expect(result[0]).toEqual({ id: 'msg-1', message: 'Hello', platformMessageId: 'fb-msg-1' });
-            expect(result[1]).toEqual({ id: 'msg-2', message: 'Are you there?', platformMessageId: 'fb-msg-2' });
+            // enrichmentStatus + createdAt are also returned now (used by the park check).
+            expect(result[0]).toEqual(expect.objectContaining({ id: 'msg-1', message: 'Hello', platformMessageId: 'fb-msg-1', enrichmentStatus: null }));
+            expect(result[1]).toEqual(expect.objectContaining({ id: 'msg-2', message: 'Are you there?', platformMessageId: 'fb-msg-2', enrichmentStatus: null }));
         });
 
         it('should return empty array when no unreplied messages', async () => {
@@ -679,7 +680,7 @@ describe('MessagesService', () => {
     // markOlderMessagesAsReplied
     // ───────────────────────────────────────────
     describe('markOlderMessagesAsReplied', () => {
-        it('should mark older unreplied messages and exclude the current message', async () => {
+        it('should mark the consolidated messages (id-scoped) and exclude the current one', async () => {
             const mockSet = vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({
                     returning: vi.fn().mockResolvedValue([
@@ -691,7 +692,7 @@ describe('MessagesService', () => {
             vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
 
             const count = await messagesService.markOlderMessagesAsReplied(
-                'page-1', 'sender-1', 'msg-3', 'Consolidated reply', 'ai'
+                'page-1', 'sender-1', ['msg-1', 'msg-2', 'msg-3'], 'msg-3', 'Consolidated reply', 'ai'
             );
 
             expect(count).toBe(2);
@@ -703,7 +704,19 @@ describe('MessagesService', () => {
             }));
         });
 
-        it('should return 0 when no older messages to mark', async () => {
+        it('should short-circuit (no UPDATE) when the id list is empty or only the excluded id', async () => {
+            vi.mocked(db.update).mockClear();
+
+            const count = await messagesService.markOlderMessagesAsReplied(
+                'page-1', 'sender-1', ['msg-3'], 'msg-3', 'Reply', 'template'
+            );
+
+            expect(count).toBe(0);
+            // Nothing to mark → no DB round-trip.
+            expect(db.update).not.toHaveBeenCalled();
+        });
+
+        it('should return 0 when the UPDATE matches no rows', async () => {
             const mockSet = vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({
                     returning: vi.fn().mockResolvedValue([]),
@@ -712,7 +725,7 @@ describe('MessagesService', () => {
             vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
 
             const count = await messagesService.markOlderMessagesAsReplied(
-                'page-1', 'sender-1', 'msg-1', 'Reply', 'template'
+                'page-1', 'sender-1', ['msg-1', 'msg-2'], 'msg-2', 'Reply', 'template'
             );
 
             expect(count).toBe(0);

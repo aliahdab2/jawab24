@@ -571,6 +571,18 @@ export const messages = pgTable('messages', {
     aiIntent: varchar('ai_intent', { length: 50 }),
     resolved: boolean('resolved').default(false),
     attachmentType: varchar('attachment_type', { length: 20 }), // 'audio', 'image', 'video', 'file' — null for text
+    // Store-then-enrich lifecycle for attachment messages (see nonTextHandler.ts).
+    // The attachment row is stored as a placeholder the instant the webhook lands,
+    // then enriched (Whisper transcript / vision description / shared-post text) and
+    // finalized with one atomic UPDATE — so the merchant inbox shows the attachment
+    // immediately and the reply pipeline can PARK until the real content is ready
+    // (messageProcessor step 11) instead of answering the bare "[صورة]" placeholder.
+    //   NULL      = no enrichment lifecycle (text, outgoing, sticker, non-enrichable
+    //               attachment, and every legacy row — no backfill needed)
+    //   'pending' = stub stored, enrichment in flight (bounded by service timeouts)
+    //   'done'    = enrichment succeeded; `message` now holds the real content
+    //   'failed'  = enrichment failed/denied; the placeholder text is final
+    enrichmentStatus: varchar('enrichment_status', { length: 16 }),
     // Client-supplied idempotency key for outgoing manual replies. Frontend generates a UUID
     // per send attempt; if the network drops mid-flight and the client retries with the same
     // key, the controller short-circuits instead of double-sending to FB/IG. NULL on incoming

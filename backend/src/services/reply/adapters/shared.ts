@@ -90,6 +90,7 @@ export async function storeIncomingMessage(
             replied: message.replied,
             needsAttention: message.needsAttention ?? false,
             createdAt: message.createdAt ?? null,
+            enrichmentStatus: message.enrichmentStatus ?? null,
         },
         isNew,
     };

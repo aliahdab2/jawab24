@@ -66,11 +66,17 @@ vi.mock('../../src/services/pages', () => ({
         getPageByWhatsAppPhoneNumberId: mockGetPageByWhatsAppPhoneNumberId,
     },
     isPageDisconnected: vi.fn().mockReturnValue(false),
+    invalidateWorkspaceStatsCache: vi.fn(),
+}));
+
+vi.mock('../../src/lib/eventBus', () => ({
+    publishSSEEvent: vi.fn(),
 }));
 
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
         findOrCreateFromWebhook: mockFindOrCreateFromWebhook,
+        finalizeEnrichment: vi.fn().mockResolvedValue(true),
         storeOutgoingMessage: vi.fn().mockResolvedValue({}),
         getLastIncomingTextFromSender: vi.fn().mockResolvedValue(null),
         getSenderNameBySenderId: vi.fn().mockResolvedValue(null),

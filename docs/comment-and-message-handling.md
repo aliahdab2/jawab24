@@ -238,7 +238,7 @@ leaves a ghost "Waiting to reply" card.
 | `backend/src/services/reply/adapters/facebookCommentAdapter.ts` | Pick nudge language (FB comments) |
 | `backend/src/services/reply/adapters/instagramCommentAdapter.ts` | Pick nudge language (IG comments) |
 | `backend/src/services/reply/sender.ts` | Send comment reply per mode (public / private / dual) |
-| `backend/src/services/reply/nonTextHandler.ts` | DM attachments: transcribe audio, resolve shared posts, stickers, nudge |
+| `backend/src/services/reply/nonTextHandler.ts` | DM attachments: store-then-enrich stub, transcribe audio, describe images (vision), resolve shared posts, stickers, nudge (see "Store-then-enrich" below) |
 | `backend/src/services/reply/nudge.ts` | Nudge variation picker (language-scoped) |
 | `backend/src/utils/attachmentLabels.ts` | Attachment → i18n placeholder/nudge strings |
 
@@ -422,6 +422,61 @@ Key differences from comments:
 - DMs use **conversation history** (last N messages). Comments don't.
 - DMs have **nudge cooldown** (1/hour/sender) for unsupported attachments;
   comments don't have this because the friend-tag skip is silent (never nudges).
+
+---
+
+## Store-then-enrich for attachments (the text+attachment race fix)
+
+**Problem it solves.** A customer often sends a question as *text* and the disambiguating
+*attachment* (a screenshot, voice note, or shared post) as two separate webhook events
+seconds apart. Enrichment is slow — image vision 6–20s, Whisper ~3s, shared-post fetch
+up to ~12s — and historically the attachment row was only INSERTed *after* that work
+finished. So the text job's consolidation (`messageProcessor` step 11) ran first and
+answered the bare text (a wrong, stale-context guess), then the attachment produced a
+second, correct reply ~10s later. Confirmed in prod (~139 text+attachment combo sends/day).
+
+**The lifecycle.** `nonTextHandler` now stores the attachment row **immediately** at
+webhook receipt with a placeholder body (`[صورة]`, `[رسالة صوتية]`, …) and an
+`enrichment_status`:
+
+| status | meaning |
+|--------|---------|
+| `NULL` | no lifecycle — text, outgoing, sticker, non-enrichable (video/file), legacy rows |
+| `pending` | stub stored, enrichment in flight (bounded by service timeouts) |
+| `done` | enrichment succeeded; `message` now holds the real transcript/description/post text |
+| `failed` | enrichment failed/denied; the placeholder text is final |
+
+Flow: **store stub (`pending`) + publish `message:received` SSE → enrich → `finalizeEnrichment`
+(one atomic UPDATE of text + status, guarded on `pending`) → enqueue the reply job → publish
+`message:updated` SSE.** On failure the stub is finalized `failed` and the text-only nudge is
+sent (no reply job). This also fixes two older defects: the merchant inbox now shows the
+attachment instantly (previously invisible for the whole enrichment window, and lost entirely
+on a mid-enrichment crash), and consolidation no longer depends on the `setCreatedTime`
+ordering hack.
+
+**The park.** In `messageProcessor` step 11, if any unreplied row from the sender is still
+`pending` (and younger than `PENDING_ENRICHMENT_MAX_AGE_MS` = 60s — older ⇒ the enricher
+crashed, don't wait on a corpse), the reply job **parks**: it re-enqueues itself with a short
+delay (`ATTACHMENT_PARK_DELAY_MS`) via a new `attachmentRetries` counter, bounded by
+`MAX_ATTACHMENT_RETRIES` (8 → ~40s > worst-case enrichment). When the attachment finalizes
+`done`, its own reply job (or the parked text job's retry) consolidates **text + real content
+into ONE reply**. If the budget is exhausted, the job replies *without* the still-pending row
+(never a permanent no-reply) — the pending row is answered later by its own job or the orphan
+recheck.
+
+- The `attachmentRetries` counter is kept **separate** from `handoffRetries`/`aiRetryCount`:
+  a park must NEVER carry `handoffRetries`, or the resumed job would be treated as handoff
+  backlog and stale-suppressed (dropped). All three park kinds share one `reEnqueueParked`
+  helper in `replyWorker`, each bumping only its own counter.
+- `hasNewerUnrepliedMessage` (step-5 debounce) ignores `pending`/`failed` rows — it only
+  defers to a newer message whose reply job is guaranteed to exist (`NULL` text or `done`).
+- `markOlderMessagesAsReplied` is **id-scoped** to the exact rows consolidated at step 11
+  (not a blanket per-sender sweep), so an attachment that finalizes mid-generation isn't
+  silently marked replied under a reply that never saw it.
+
+Diagnostics: `pipelineMetrics` outcomes `attachment_park`, `attachment_park_requeued`,
+`attachment_park_exhausted`. A healthy fleet shows `attachment_park` ≈ the combo-send rate
+and `attachment_park_exhausted` ≈ 0.
 
 ---
 
