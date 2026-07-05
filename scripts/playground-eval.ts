@@ -21,6 +21,21 @@
  *   CATEGORY     — Run only this category number (1-21). Default: all
  *   VERBOSE      — Set to "1" for detailed output per test. Default: summary only
  *   EVAL_MODEL   — Override AI model (e.g. claude-haiku-4-5-20251001, gpt-4.1-mini). Default: server default
+ *
+ * Reliability & determinism:
+ *   - Transient 429/5xx/network failures are retried with backoff (4 attempts,
+ *     2s/8s/20s, Retry-After honored). The summary prints a TRANSIENT RETRIES
+ *     count — if it's high, the run was rate-limited: lower CONCURRENCY.
+ *     (2026-07-05: a CONCURRENCY=5 run produced 101 false "API call failed"
+ *     verdicts purely from OpenAI 429 bursts + failover; never again.)
+ *   - Scores are NOISY run-to-run at production sampling settings: the model
+ *     samples at OPENAI_TEMPERATURE=0.5, and graders check its stochastic
+ *     outputs (confidence/intent/flags/substrings), so ±5 PARTIALs between
+ *     identical runs is normal. For A/B REGRESSION comparisons (branch vs
+ *     main, flag on vs off), start the ai-worker with
+ *     OPENAI_TEMPERATURE=0 OPENAI_TOP_P=1 to minimize sampling variance —
+ *     absolute scores then differ slightly from the historical (temp 0.5)
+ *     baseline, so compare temp-0 runs only against temp-0 runs.
  */
 
 // ---------------------------------------------------------------------------
@@ -3798,6 +3813,18 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
 // API caller
 // ---------------------------------------------------------------------------
 
+/** Statuses worth retrying: OpenAI 429 bursts surface as backend 500s; plus
+ *  gateway/transient codes. 4xx client errors (bad payload, auth) are NOT
+ *  retried — those are real harness bugs and must fail loudly. */
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+/** Backoff schedule between attempts (4 attempts total). */
+const RETRY_DELAYS_MS = [2000, 8000, 20000];
+/** Total transient retries across the run — reported in the summary so
+ *  throttling is visible instead of silently absorbed. */
+let transientRetries = 0;
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
 async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundResponse | null; latencyMs: number }> {
     const pageId = PAGE_MAP[test.page];
     const body: Record<string, unknown> = {
@@ -3816,28 +3843,53 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
     if (test.senderName) body.senderName = test.senderName;
     if (EVAL_MODEL) body.model = EVAL_MODEL;
 
-    const start = Date.now();
-    try {
-        const res = await fetch(`${BASE_URL}/admin/ai/playground`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${ADMIN_TOKEN}`,
-            },
-            body: JSON.stringify(body),
-        });
-        const latencyMs = Date.now() - start;
-        if (!res.ok) {
-            console.error(`  [#${test.id}] HTTP ${res.status}: ${await res.text()}`);
-            return { resp: null, latencyMs };
+    // Transient failures are RETRIED with backoff instead of failing the case.
+    // OpenAI 429 rate-limit bursts surface here as backend 500s ("Failed to
+    // generate AI reply"); without retry, a CONCURRENCY=5 run turned 101 cases
+    // into false "API call failed" FAILs (2026-07-05) — the harness must never
+    // report infra throttling as a reply regression. Retry-After is honored
+    // when the backend provides it; latency is measured per attempt so backoff
+    // sleeps don't pollute the latency stats.
+    let lastError = '';
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+        const attemptStart = Date.now();
+        try {
+            const res = await fetch(`${BASE_URL}/admin/ai/playground`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${ADMIN_TOKEN}`,
+                },
+                body: JSON.stringify(body),
+            });
+            const latencyMs = Date.now() - attemptStart;
+            if (res.ok) {
+                const json = await res.json() as PlaygroundResponse;
+                return { resp: json, latencyMs };
+            }
+            lastError = `HTTP ${res.status}: ${await res.text()}`;
+            if (!RETRYABLE_STATUS.has(res.status) || attempt === RETRY_DELAYS_MS.length) {
+                console.error(`  [#${test.id}] ${lastError}`);
+                return { resp: null, latencyMs };
+            }
+            transientRetries++;
+            const retryAfterSec = parseFloat(res.headers.get('retry-after') || '');
+            await sleep(Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : RETRY_DELAYS_MS[attempt]);
+        } catch (err) {
+            const latencyMs = Date.now() - attemptStart;
+            lastError = `Network error: ${(err as Error).message}`;
+            if (attempt === RETRY_DELAYS_MS.length) {
+                console.error(`  [#${test.id}] ${lastError}`);
+                return { resp: null, latencyMs };
+            }
+            transientRetries++;
+            await sleep(RETRY_DELAYS_MS[attempt]);
         }
-        const json = await res.json() as PlaygroundResponse;
-        return { resp: json, latencyMs };
-    } catch (err) {
-        const latencyMs = Date.now() - start;
-        console.error(`  [#${test.id}] Network error:`, (err as Error).message);
-        return { resp: null, latencyMs };
     }
+    // Unreachable (both branches return at the last attempt), but TypeScript
+    // needs a terminal return.
+    console.error(`  [#${test.id}] ${lastError}`);
+    return { resp: null, latencyMs: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -4040,6 +4092,11 @@ async function main() {
     console.log(`  TOTAL: ${totalPass} PASS  ${totalPartial} PARTIAL  ${totalFail} FAIL  (${total} tests)`);
     console.log(`  SCORE: ${score}%`);
     console.log(`  AVG LATENCY: ${avgLatency}ms`);
+    if (transientRetries > 0) {
+        // Throttling visibility: retried-and-recovered calls are not failures,
+        // but a high count means the run was rate-limited — lower CONCURRENCY.
+        console.log(`  TRANSIENT RETRIES: ${transientRetries} (429/5xx recovered — if high, lower CONCURRENCY)`);
+    }
     console.log('═'.repeat(60));
 
     // Exit with non-zero if score below threshold
