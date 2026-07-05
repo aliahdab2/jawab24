@@ -52,6 +52,10 @@ vi.mock('../../src/config', () => ({
             appSecret: 'test_app_secret',
             graphApiVersion: 'v18.0',
         },
+        openai: { apiKey: '' },
+        // These are webhook-routing tests, not image-understanding tests — keep
+        // vision off so a caption-less image takes the placeholder + nudge path.
+        imageUnderstanding: { enabled: false },
     },
 }));
 

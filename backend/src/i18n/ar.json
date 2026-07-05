@@ -1,6 +1,7 @@
 {
     "attachmentAudio": "[رسالة صوتية]",
     "attachmentImage": "[صورة]",
+    "attachmentImageDescribed": "[صورة: {description}]",
     "attachmentVideo": "[فيديو]",
     "attachmentFile": "[ملف]",
     "attachmentFallback": "[مرفق]",

@@ -67,6 +67,11 @@
 - **Shared Post Handling (Messages)**:
   - When a customer DMs a shared post with no text → smart nudge acknowledging the post
   - When a customer DMs a shared post + text → post content fetched via Graph API and prepended to message for AI context
+  - **Note**: shared-post handling reads only the CAPTION (`message,story`), not the post IMAGE — describing shared/own post images (cache-by-post-id) is a parked follow-up (see plan). Customers who *screenshot* a post and send it as a plain image ARE covered by image understanding below.
+
+- **Customer Image Handling (Messages, FB/IG)**:
+  - Customer sends a plain image → AI vision description (`imageUnderstanding.describeFromUrl`, gpt-4.1-mini) → fed into the normal reply pipeline (describe-then-enqueue, like voice transcription). Reads Arabic text / product / screenshot content so the bot can answer.
+  - Gated by `IMAGE_UNDERSTANDING_ENABLED` env kill switch + per-plan daily cap (shared `lib/dailyCap`); default-on with no per-merchant toggle. Image bytes never stored (only the text description). On denial/failure → placeholder + text-only nudge.
 
 - **Configuration**:
   - `FACEBOOK_APP_ID` - App identifier (public)
@@ -110,7 +115,8 @@
 - **Incoming Media (implemented)**:
   - Voice notes: media ID → `GET /{media-id}` (bearer) → authorized download → Whisper `transcribeFromBuffer` → normal AI pipeline (`handleWhatsAppNonTextMessage` in `nonTextHandler.ts`)
   - Media captions, quick-reply buttons, interactive list/button replies → routed to the AI pipeline as text
-  - Caption-less image/video/document → stored placeholder + text-only nudge (1h cooldown); stickers stored silently
+  - Caption-less images: media ID → authorized download → AI vision description (`imageUnderstanding.describeFromBuffer`, gpt-4.1-mini) → normal AI pipeline, gated by env kill switch + per-plan daily cap. On denial/failure → placeholder + text-only nudge. (Captioned WhatsApp images still take the caption-as-text path — enriching those with vision is a noted follow-up.)
+  - Caption-less video/document → stored placeholder + text-only nudge (1h cooldown); stickers stored silently
   - location/contacts/reaction/order → skipped (no reply path yet)
 
 - **Webhook Setup**:

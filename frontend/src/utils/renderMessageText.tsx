@@ -7,6 +7,18 @@ import type { ReactNode } from 'react';
 const PHONE_REGEX = /(\+?\d[\d\s\-]{6,}\d)/g;
 
 /**
+ * Image messages are stored as "[Image: <description>]" / "[صورة: <description>]"
+ * — an explicit marker so the AI knows the customer sent a photo. In the UI that
+ * marker is redundant with the image icon, so strip it and show just the
+ * description. Bare placeholders (old "[Image]"/"[صورة]" with no description)
+ * pass through unchanged.
+ */
+export function stripImageDescription(text: string): string {
+  const m = text.match(/^\[[^\]:]+:\s*([\s\S]+)\]$/);
+  return m ? m[1].trim() : text;
+}
+
+/**
  * Renders message text with embedded phone numbers wrapped in LTR spans.
  * Prevents RTL reordering of digits and the + sign in Arabic context.
  */

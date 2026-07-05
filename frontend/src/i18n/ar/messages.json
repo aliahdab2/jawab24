@@ -30,6 +30,7 @@
   "replyFailedNetwork": "مشكلة في الاتصال. تحقق من الإنترنت وحاول مجدداً.",
   "replyFailedTimeout": "استغرق الطلب وقتاً طويلاً. تحقق من اتصالك وحاول مجدداً.",
   "voiceMessage": "رسالة صوتية",
+  "imageMessage": "صورة",
   "pauseSmartReply": "إيقاف الرد الذكي",
   "resumeSmartReply": "استئناف الرد الذكي",
   "smartReplyPaused": "الرد الذكي متوقف",

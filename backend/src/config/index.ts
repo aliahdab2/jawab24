@@ -71,6 +71,14 @@ export const config = {
         apiKey: process.env.OPENAI_API_KEY || '',
     },
 
+    // Customer-image understanding (vision on DM images). Global kill switch —
+    // default ON; set IMAGE_UNDERSTANDING_ENABLED=false to disable instantly
+    // without a deploy. Per-merchant control is intentionally absent (matches
+    // voice transcription); cost is bounded by the per-plan daily cap.
+    imageUnderstanding: {
+        enabled: process.env.IMAGE_UNDERSTANDING_ENABLED !== 'false',
+    },
+
     // OpenAI ORG ADMIN key (sk-admin-…) — used ONLY by the read-only Costs/Usage
     // API that powers the admin AI Cost panel's billing snapshot. Distinct from the
     // project key above (project keys can't read org costs). Never sent to the

@@ -10,9 +10,11 @@ import {
   CheckCheck,
   User,
   PauseCircle,
+  Mic,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { formatMessageTime } from '@/utils/dateUtils';
-import { renderMessageText } from '@/utils/renderMessageText';
+import { renderMessageText, stripImageDescription } from '@/utils/renderMessageText';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
 import type { Message } from '@/lib/api';
 
@@ -145,10 +147,15 @@ export const MessageCard = React.memo(function MessageCard({
           </div>
         )}
 
-        {/* Row 2: Last customer message */}
+        {/* Row 2: Last customer message. Attachment messages get a leading icon
+            (image/voice) instead of showing the bare "[Image]"/"[صورة: …]" text. */}
         {lastIncoming && (
-          <p className="text-[13px] text-foreground/75 dark:text-foreground/85 truncate leading-relaxed mt-0.5" dir="auto">
-            {renderMessageText(lastIncoming.message)}
+          <p className="flex items-center gap-1 text-[13px] text-foreground/75 dark:text-foreground/85 truncate leading-relaxed mt-0.5" dir="auto">
+            {lastIncoming.attachmentType === 'image' && <ImageIcon className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />}
+            {lastIncoming.attachmentType === 'audio' && <Mic className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />}
+            <span className="truncate">
+              {renderMessageText(lastIncoming.attachmentType === 'image' ? stripImageDescription(lastIncoming.message) : lastIncoming.message)}
+            </span>
           </p>
         )}
 

@@ -77,11 +77,25 @@ vi.mock('../services/reply/adapters/instagramAdapter', () => ({
     },
 }));
 
+// Image understanding: control the gate + describe so the branch is testable
+// (and so the real service's subscriptions→redis import chain stays out).
+const { mockGate, mockDescribeUrl, mockIncrement } = vi.hoisted(() => ({
+    mockGate: vi.fn(),
+    mockDescribeUrl: vi.fn(),
+    mockIncrement: vi.fn(),
+}));
+vi.mock('../services/imageUnderstanding', () => ({
+    checkImageUnderstandingGate: mockGate,
+    imageUnderstandingService: { describeFromUrl: mockDescribeUrl, describeFromBuffer: vi.fn() },
+    incrementImageUnderstandingCounter: mockIncrement,
+}));
+
 import { handleNonTextMessage } from '../services/reply/nonTextHandler';
 import { pagesService } from '../services/pages';
 import { messagesService } from '../services/messages';
 import { facebookService } from '../services/facebook';
 import { facebookMessageAdapter } from '../services/reply/adapters/facebookAdapter';
+import { enqueueMessage } from '../lib/replyQueue';
 
 const mockPage = {
     id: 'page-uuid-1',
@@ -228,6 +242,61 @@ describe('handleNonTextMessage — image (sender name)', () => {
             mockLogger,
         );
 
+        expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
+    });
+});
+
+describe('handleNonTextMessage — image understanding', () => {
+    const pageWithOwner = { ...mockPage, userId: 'page-owner-1' };
+    const imageEvent = {
+        senderId: 'user-1',
+        messageId: 'msg-img',
+        attachmentType: 'image',
+        attachmentUrl: 'https://cdn.fb/img.jpg',
+    };
+
+    beforeEach(() => {
+        vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(pageWithOwner as never);
+        vi.mocked(facebookService.sendPrivateMessage).mockResolvedValue(undefined as never);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue(undefined as never);
+    });
+
+    it('describes the image, stores the description, enqueues it, and does NOT nudge', async () => {
+        mockGate.mockResolvedValue({ allowed: true, ownerId: 'page-owner-1' });
+        mockDescribeUrl.mockResolvedValue({ text: 'وصف الصورة' });
+
+        await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
+
+        // Stored body + enqueued text are the same "[صورة: …]" string (ar default).
+        expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
+            'page-uuid-1', 'ws-uuid-1', 'msg-img', 'user-1', '[صورة: وصف الصورة]', 'Test User', 'image',
+        );
+        expect(enqueueMessage).toHaveBeenCalledWith(expect.objectContaining({ text: '[صورة: وصف الصورة]' }));
+        expect(mockIncrement).toHaveBeenCalledWith('page-owner-1');
+        expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+    });
+
+    it('falls back to placeholder + nudge when the description fails', async () => {
+        mockGate.mockResolvedValue({ allowed: true, ownerId: 'page-owner-1' });
+        mockDescribeUrl.mockResolvedValue(null);
+
+        await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
+
+        expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
+            'page-uuid-1', 'ws-uuid-1', 'msg-img', 'user-1', '[Image]', 'Test User', 'image',
+        );
+        expect(enqueueMessage).not.toHaveBeenCalled();
+        expect(mockIncrement).not.toHaveBeenCalled();
+        expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
+    });
+
+    it('does not call vision (and nudges) when the gate denies', async () => {
+        mockGate.mockResolvedValue({ allowed: false, reason: 'cap_reached' });
+
+        await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
+
+        expect(mockDescribeUrl).not.toHaveBeenCalled();
+        expect(enqueueMessage).not.toHaveBeenCalled();
         expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
     });
 });

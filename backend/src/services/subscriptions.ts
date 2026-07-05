@@ -420,11 +420,17 @@ export const subscriptionsService = {
     },
 
     /**
-     * Get full usage summary with limits and subscription info
+     * Resolve the effective subscription for a (user, workspace): the user's
+     * own, or — for team members with no subscription row — the workspace
+     * owner's. Returns the subscription plus the owning userId (for usage/cap
+     * attribution), or null when neither has one.
      */
-    async getUsageSummary(userId: string, workspaceId: string): Promise<UsageSummary | null> {
+    async resolveWorkspaceSubscription(
+        userId: string,
+        workspaceId: string,
+    ): Promise<{ subscription: Subscription & { plan: Plan }; ownerId: string } | null> {
         let subscription = await this.getUserSubscription(userId);
-        let subscriptionOwnerId = userId;
+        let ownerId = userId;
 
         // Team members have no subscription row — fall back to the workspace owner's plan
         if (!subscription) {
@@ -435,11 +441,20 @@ export const subscriptionsService = {
                 .limit(1);
             if (workspace?.ownerId && workspace.ownerId !== userId) {
                 subscription = await this.getUserSubscription(workspace.ownerId);
-                subscriptionOwnerId = workspace.ownerId;
+                ownerId = workspace.ownerId;
             }
         }
 
-        if (!subscription) return null;
+        return subscription ? { subscription, ownerId } : null;
+    },
+
+    /**
+     * Get full usage summary with limits and subscription info
+     */
+    async getUsageSummary(userId: string, workspaceId: string): Promise<UsageSummary | null> {
+        const resolved = await this.resolveWorkspaceSubscription(userId, workspaceId);
+        if (!resolved) return null;
+        const { subscription, ownerId: subscriptionOwnerId } = resolved;
 
         const currentUsage = await this.getCurrentUsage(subscriptionOwnerId);
         const plan = subscription.plan;
