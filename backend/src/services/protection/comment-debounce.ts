@@ -1,4 +1,5 @@
-import { redis } from '../../lib/redis';
+import { acquireMutex, releaseMutex } from '../../lib/redisMutex';
+import { randomUUID } from 'crypto';
 import { Logger, noopLogger } from '../../types';
 
 /**
@@ -11,15 +12,31 @@ import { Logger, noopLogger } from '../../types';
  * different comments from the same sender on the same post still each fire
  * a fresh AI reply.
  *
- * Window is configurable via COMMENT_DEBOUNCE_WINDOW_SECONDS (default 60).
- * Set to 0 to disable instantly without a redeploy.
+ * The slot is CLAIMED atomically at the start of processing (SET NX EX) rather
+ * than armed after the reply is sent. The old check-then-arm design had a
+ * time-of-check/time-of-use race: a burst of comments from one sender all
+ * passed the read-only "is cooling down?" check before any of them armed the
+ * key (arming happened seconds later, after AI generation + send), so each one
+ * fired its own reply. Confirmed in prod 2026-07-05 (معرض الأحمد للسيارات:
+ * عطر الشام / ابومحمد الشعاع each received the identical reply 2–3× within
+ * seconds). Claiming the slot atomically before generation closes the window —
+ * only the first comment of a burst wins the slot; the rest are debounced.
  *
  * Caller responsibilities:
- * - Skip both check and arm when fromId is unavailable (Page-as-Page comments,
- *   anonymous webhooks). Two such comments back-to-back will each fire a fresh
- *   reply — accepted as edge case, blast radius is tiny.
- * - SET NX (in arm) means a second successful reply inside the window does NOT
- *   refresh the cooldown. The window is anchored on the first reply, by design.
+ * - Skip acquire when senderId is unavailable (Page-as-Page comments, anonymous
+ *   webhooks). Two such comments back-to-back will each fire a fresh reply —
+ *   accepted as edge case, blast radius is tiny.
+ * - RELEASE the slot on any terminal outcome that did NOT send a reply (send
+ *   failure, spam/rate-limit skip, held-for-review, and — critically — the
+ *   transient-error rethrow that triggers a BullMQ retry). Otherwise the retry
+ *   of the very same comment would hit its own held key and be debounced,
+ *   silently dropping the reply. A committed successful send keeps the slot for
+ *   the full window so genuine back-to-back duplicates are suppressed.
+ * - SET NX means a second successful reply inside the window does NOT refresh
+ *   the cooldown. The window is anchored on the first claim, by design.
+ *
+ * Window is configurable via COMMENT_DEBOUNCE_WINDOW_SECONDS (default 60).
+ * Set to 0 to disable instantly without a redeploy.
  */
 const DEFAULT_WINDOW_SECONDS = 60;
 const KEY_PREFIX = 'comment:debounce:';
@@ -44,34 +61,40 @@ export class CommentDebounce {
     }
 
     /**
-     * Returns true if the (page, post, sender) tuple already received an
-     * auto-reply within the cooldown window. Read-only — does NOT set the key.
-     * Caller arms the cooldown via {@link arm} after a successful reply.
+     * Atomically claim the reply slot for this (page, post, sender). Returns a
+     * unique token when the slot is won (caller should proceed to reply, and
+     * MUST {@link release} it with this token if it ends up not sending), or
+     * `null` when the slot is already held — i.e. this sender already received
+     * (or is mid-flight receiving) an auto-reply on this post inside the window,
+     * so the caller should skip as a back-to-back duplicate.
      *
-     * Fail-open on Redis errors — service availability over dedup precision.
+     * Fail-open on Redis errors and when the window is disabled — returns a token
+     * so the reply proceeds (service availability over dedup precision). Such a
+     * token maps to no stored key, so a later {@link release} is a harmless no-op.
      */
-    async isCoolingDown(pageId: string, postId: string, senderId: string): Promise<boolean> {
-        if (getWindowSeconds() === 0) return false;
+    async tryAcquire(pageId: string, postId: string, senderId: string): Promise<string | null> {
+        // Window disabled → never debounce; return a token so the caller proceeds
+        // (it maps to no stored key, so a later release is a harmless no-op).
+        if (getWindowSeconds() === 0) return randomUUID();
         try {
-            const exists = await redis.exists(buildKey(pageId, postId, senderId));
-            return exists === 1;
+            return await acquireMutex(buildKey(pageId, postId, senderId), getWindowSeconds());
         } catch (error) {
-            this.logger.error('[CommentDebounce] Redis error on check, allowing reply', { error });
-            return false;
+            this.logger.error('[CommentDebounce] Redis error on acquire, allowing reply', { error });
+            return randomUUID(); // fail-open — availability over dedup precision
         }
     }
 
     /**
-     * Arm the cooldown after a successful reply. SET NX EX — if another
-     * worker already armed it (rare race), we don't extend the existing TTL.
+     * Release the slot only if we still hold it (compare-and-delete — prevents
+     * releasing a slot re-acquired by another worker after TTL expiry). Fail-open
+     * on Redis errors; the TTL expires the key regardless.
      */
-    async arm(pageId: string, postId: string, senderId: string): Promise<void> {
-        const window = getWindowSeconds();
-        if (window === 0) return;
+    async release(pageId: string, postId: string, senderId: string, token: string): Promise<void> {
+        if (getWindowSeconds() === 0) return;
         try {
-            await redis.set(buildKey(pageId, postId, senderId), '1', 'EX', window, 'NX');
+            await releaseMutex(buildKey(pageId, postId, senderId), token);
         } catch (error) {
-            this.logger.error('[CommentDebounce] Redis error on arm', { error });
+            this.logger.error('[CommentDebounce] Redis error on release', { error });
         }
     }
 }
