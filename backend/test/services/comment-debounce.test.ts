@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const redisMock = vi.hoisted(() => ({
-    exists: vi.fn(),
     set: vi.fn(),
+    eval: vi.fn(),
 }));
 
 vi.mock('../../src/lib/redis', () => ({ redis: redisMock }));
@@ -22,100 +22,106 @@ describe('commentDebounce', () => {
         else process.env.COMMENT_DEBOUNCE_WINDOW_SECONDS = originalWindow;
     });
 
-    describe('isCoolingDown', () => {
-        it('returns true when the Redis key exists', async () => {
-            redisMock.exists.mockResolvedValueOnce(1);
-            await expect(commentDebounce.isCoolingDown('p', 'post', 'sender'))
-                .resolves.toBe(true);
-            expect(redisMock.exists).toHaveBeenCalledWith('comment:debounce:p:post:sender');
-        });
-
-        it('returns false when the Redis key is absent', async () => {
-            redisMock.exists.mockResolvedValueOnce(0);
-            await expect(commentDebounce.isCoolingDown('p', 'post', 'sender'))
-                .resolves.toBe(false);
-        });
-
-        it('fails open and returns false on Redis errors', async () => {
-            redisMock.exists.mockRejectedValueOnce(new Error('redis down'));
-            await expect(commentDebounce.isCoolingDown('p', 'post', 'sender'))
-                .resolves.toBe(false);
-        });
-
-        it('returns false (disabled) when window is set to 0', async () => {
-            process.env.COMMENT_DEBOUNCE_WINDOW_SECONDS = '0';
-            await expect(commentDebounce.isCoolingDown('p', 'post', 'sender'))
-                .resolves.toBe(false);
-            expect(redisMock.exists).not.toHaveBeenCalled();
-        });
-    });
-
-    describe('key isolation', () => {
-        it('different senders on the same post use different keys', async () => {
-            redisMock.exists.mockResolvedValue(0);
-            await commentDebounce.isCoolingDown('p', 'post', 'sender-A');
-            await commentDebounce.isCoolingDown('p', 'post', 'sender-B');
-            expect(redisMock.exists).toHaveBeenNthCalledWith(1, 'comment:debounce:p:post:sender-A');
-            expect(redisMock.exists).toHaveBeenNthCalledWith(2, 'comment:debounce:p:post:sender-B');
-        });
-
-        it('same sender on different posts uses different keys', async () => {
-            redisMock.exists.mockResolvedValue(0);
-            await commentDebounce.isCoolingDown('p', 'post-1', 'sender-A');
-            await commentDebounce.isCoolingDown('p', 'post-2', 'sender-A');
-            expect(redisMock.exists).toHaveBeenNthCalledWith(1, 'comment:debounce:p:post-1:sender-A');
-            expect(redisMock.exists).toHaveBeenNthCalledWith(2, 'comment:debounce:p:post-2:sender-A');
-        });
-
-        it('same sender + post but different page uses different keys', async () => {
-            redisMock.exists.mockResolvedValue(0);
-            await commentDebounce.isCoolingDown('page-1', 'post', 'sender-A');
-            await commentDebounce.isCoolingDown('page-2', 'post', 'sender-A');
-            expect(redisMock.exists).toHaveBeenNthCalledWith(1, 'comment:debounce:page-1:post:sender-A');
-            expect(redisMock.exists).toHaveBeenNthCalledWith(2, 'comment:debounce:page-2:post:sender-A');
-        });
-    });
-
-    describe('arm', () => {
-        it('SET NX EX with the configured window (default 60s)', async () => {
+    describe('tryAcquire', () => {
+        it('claims the slot with SET NX EX (default 60s window) and returns a token', async () => {
             redisMock.set.mockResolvedValueOnce('OK');
-            await commentDebounce.arm('p', 'post', 'sender');
+            const token = await commentDebounce.tryAcquire('p', 'post', 'sender');
+            expect(token).toBeTypeOf('string');
             expect(redisMock.set).toHaveBeenCalledWith(
                 'comment:debounce:p:post:sender',
-                '1',
+                token,
                 'EX',
                 60,
                 'NX',
             );
         });
 
+        it('returns null when the slot is already held (SET NX returns null)', async () => {
+            redisMock.set.mockResolvedValueOnce(null);
+            await expect(commentDebounce.tryAcquire('p', 'post', 'sender')).resolves.toBeNull();
+        });
+
         it('honors a custom window via COMMENT_DEBOUNCE_WINDOW_SECONDS', async () => {
             process.env.COMMENT_DEBOUNCE_WINDOW_SECONDS = '120';
             redisMock.set.mockResolvedValueOnce('OK');
-            await commentDebounce.arm('p', 'post', 'sender');
+            const token = await commentDebounce.tryAcquire('p', 'post', 'sender');
             expect(redisMock.set).toHaveBeenCalledWith(
-                'comment:debounce:p:post:sender', '1', 'EX', 120, 'NX',
+                'comment:debounce:p:post:sender', token, 'EX', 120, 'NX',
             );
         });
 
-        it('is a no-op when window is 0', async () => {
+        it('falls back to the default window when the env var is unparseable or negative', async () => {
+            process.env.COMMENT_DEBOUNCE_WINDOW_SECONDS = 'not-a-number';
+            redisMock.set.mockResolvedValueOnce('OK');
+            const token = await commentDebounce.tryAcquire('p', 'post', 'sender');
+            expect(redisMock.set).toHaveBeenCalledWith(
+                'comment:debounce:p:post:sender', token, 'EX', 60, 'NX',
+            );
+        });
+
+        it('returns a token without touching Redis when the window is 0 (disabled)', async () => {
             process.env.COMMENT_DEBOUNCE_WINDOW_SECONDS = '0';
-            await commentDebounce.arm('p', 'post', 'sender');
+            await expect(commentDebounce.tryAcquire('p', 'post', 'sender')).resolves.toBeTypeOf('string');
             expect(redisMock.set).not.toHaveBeenCalled();
         });
 
-        it('falls back to default when env var is unparseable or negative', async () => {
-            process.env.COMMENT_DEBOUNCE_WINDOW_SECONDS = 'not-a-number';
-            redisMock.set.mockResolvedValueOnce('OK');
-            await commentDebounce.arm('p', 'post', 'sender');
-            expect(redisMock.set).toHaveBeenCalledWith(
-                'comment:debounce:p:post:sender', '1', 'EX', 60, 'NX',
+        it('fails open (returns a token) on Redis errors so replies are never blocked', async () => {
+            redisMock.set.mockRejectedValueOnce(new Error('redis down'));
+            await expect(commentDebounce.tryAcquire('p', 'post', 'sender')).resolves.toBeTypeOf('string');
+        });
+    });
+
+    describe('release', () => {
+        it('deletes only when the held token matches (compare-and-delete via Lua)', async () => {
+            redisMock.eval.mockResolvedValueOnce(1);
+            await commentDebounce.release('p', 'post', 'sender', 'the-token');
+            expect(redisMock.eval).toHaveBeenCalledWith(
+                expect.stringContaining('redis.call("del", KEYS[1])'),
+                1,
+                'comment:debounce:p:post:sender',
+                'the-token',
             );
         });
 
-        it('swallows Redis errors (fail-open)', async () => {
-            redisMock.set.mockRejectedValueOnce(new Error('redis down'));
-            await expect(commentDebounce.arm('p', 'post', 'sender')).resolves.toBeUndefined();
+        it('is a no-op when the window is 0 (disabled)', async () => {
+            process.env.COMMENT_DEBOUNCE_WINDOW_SECONDS = '0';
+            await commentDebounce.release('p', 'post', 'sender', 'the-token');
+            expect(redisMock.eval).not.toHaveBeenCalled();
+        });
+
+        it('swallows Redis errors (fail-open — TTL expires the key regardless)', async () => {
+            redisMock.eval.mockRejectedValueOnce(new Error('redis down'));
+            await expect(commentDebounce.release('p', 'post', 'sender', 'the-token')).resolves.toBeUndefined();
+        });
+    });
+
+    describe('race + key isolation', () => {
+        it('grants the slot to exactly one caller in a concurrent burst', async () => {
+            // Model SET NX: first call stores, the rest see the key and get null.
+            let held = false;
+            redisMock.set.mockImplementation(async () => {
+                if (held) return null;
+                held = true;
+                return 'OK';
+            });
+            const results = await Promise.all(
+                Array.from({ length: 8 }, () => commentDebounce.tryAcquire('p', 'post', 'sender')),
+            );
+            expect(results.filter((r) => r !== null)).toHaveLength(1);
+        });
+
+        it('scopes the key per (page, post, sender)', async () => {
+            redisMock.set.mockResolvedValue('OK');
+            await commentDebounce.tryAcquire('p', 'post', 'sender-A');
+            await commentDebounce.tryAcquire('p', 'post', 'sender-B');
+            await commentDebounce.tryAcquire('p', 'post-2', 'sender-A');
+            await commentDebounce.tryAcquire('page-2', 'post', 'sender-A');
+            const keys = redisMock.set.mock.calls.map((c) => c[0]);
+            expect(new Set(keys).size).toBe(4);
+            expect(keys).toContain('comment:debounce:p:post:sender-A');
+            expect(keys).toContain('comment:debounce:p:post:sender-B');
+            expect(keys).toContain('comment:debounce:p:post-2:sender-A');
+            expect(keys).toContain('comment:debounce:page-2:post:sender-A');
         });
     });
 });

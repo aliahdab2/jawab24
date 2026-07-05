@@ -1,31 +1,21 @@
-import { redis } from './redis';
-import { randomUUID } from 'crypto';
+import { acquireMutex, releaseMutex } from './redisMutex';
 
 /** Lock TTL in seconds — covers replyDelay + OpenAI generation + API send. */
 const LOCK_TTL = 60;
 const KEY_PREFIX = 'reply_lock:';
 
 /**
- * Acquire a per-conversation lock using Redis SET NX EX.
+ * Acquire a per-conversation lock (Redis SET NX EX).
  * Returns a unique token on success (used for safe release), or null if already held.
  */
 export async function acquireReplyLock(pageId: string, senderId: string): Promise<string | null> {
-    const token = randomUUID();
-    const key = `${KEY_PREFIX}${pageId}:${senderId}`;
-    const acquired = await redis.set(key, token, 'EX', LOCK_TTL, 'NX');
-    return acquired ? token : null;
+    return acquireMutex(`${KEY_PREFIX}${pageId}:${senderId}`, LOCK_TTL);
 }
 
 /**
- * Release lock only if we hold it (compare-and-swap via Lua for atomicity).
- * Prevents releasing a lock that was acquired by a different worker after TTL expiry.
+ * Release the lock only if we still hold it (compare-and-delete for atomicity).
+ * Prevents releasing a lock re-acquired by a different worker after TTL expiry.
  */
 export async function releaseReplyLock(pageId: string, senderId: string, token: string): Promise<void> {
-    const key = `${KEY_PREFIX}${pageId}:${senderId}`;
-    await redis.eval(
-        `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`,
-        1,
-        key,
-        token,
-    );
+    await releaseMutex(`${KEY_PREFIX}${pageId}:${senderId}`, token);
 }
