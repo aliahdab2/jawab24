@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { extractImageDescription } from '@jawab24/shared';
 
 /**
  * Regex matching international phone numbers: optional +, country code, digits/spaces/dashes.
@@ -11,11 +12,11 @@ const PHONE_REGEX = /(\+?\d[\d\s\-]{6,}\d)/g;
  * — an explicit marker so the AI knows the customer sent a photo. In the UI that
  * marker is redundant with the image icon, so strip it and show just the
  * description. Bare placeholders (old "[Image]"/"[صورة]" with no description)
- * pass through unchanged.
+ * pass through unchanged. Detection delegates to the shared marker protocol
+ * (@jawab24/shared imageMessage) so backend/ai-worker/frontend can never drift.
  */
 export function stripImageDescription(text: string): string {
-  const m = text.match(/^\[[^\]:]+:\s*([\s\S]+)\]$/);
-  return m ? m[1].trim() : text;
+  return extractImageDescription(text) ?? text;
 }
 
 /**

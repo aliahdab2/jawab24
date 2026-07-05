@@ -6,7 +6,7 @@
  * allowlist forbids it outside the real call sites), so buildMessages — which
  * assembles the SDK message array — stays in openai.ts and imports from here.
  */
-import { MAX_BRAND_VOICE_LENGTH, safeTimezone } from '@jawab24/shared';
+import { MAX_BRAND_VOICE_LENGTH, safeTimezone, isAnyImageMessage } from '@jawab24/shared';
 import { langEngineMode, displayLanguageName } from '@jawab24/shared/dist/language/engine';
 import { STATIC_SYSTEM_PREFIX } from './systemPrompt';
 import { resolveLanguage, resolveChannel } from './replyContext';
@@ -301,6 +301,30 @@ ${chunkLines}${buildPoliciesBlock(request)}
     // Capped at 500 chars (same as the user-prompt post label).
     if (request.context?.postMessage) {
         prompt += `\n\n[current_post]\n${sanitizeForPrompt(request.context.postMessage).slice(0, 500)}`;
+    }
+
+    // Image-message convention. The backend's vision step turns customer photos into
+    // "[صورة: <description>]" / "[Image: <description>]" message bodies; without this
+    // directive the model reads a bare product screenshot as small talk and punts
+    // ("thanks for sharing!") instead of answering the implicit "available? how much?"
+    // (caught live against a real merchant image + KB, 2026-07-05). Injected per-call
+    // ONLY when the current message or history actually contains an image marker, so
+    // every other prompt stays byte-identical (no PROMPT_VERSION bump, prefix cache
+    // untouched — this block trails the cached prefix like [current_post] above).
+    const hasImageMessage = isAnyImageMessage(request.comment)
+        || (request.context?.conversationHistory?.some(m => isAnyImageMessage(m.content)) ?? false);
+    if (hasImageMessage) {
+        prompt += `\n\nIMAGE MESSAGE:
+A message formatted [صورة: ...] or [Image: ...] is a PHOTO the customer sent — the bracketed text is an automatic description of it, not words the customer typed. Interpret the photo's intent and answer it; NEVER quote or repeat the bracketed description back.
+- Photo of one of the business's own products, ads, or a screenshot of the business's post → the customer is implicitly asking about it. Classify as QUESTION (or PURCHASE_INTENT if they show buying signals) and answer directly from the business knowledge: is it available, the current price/offer, and how to order. Do NOT just thank them for sharing or ask what they want to know.
+- Photo showing the customer PAID the business (their payment receipt, bank-transfer screenshot, or order confirmation for THIS business) → write a short reply acknowledging you received it, do NOT confirm the payment yourself, classify as BUSINESS_INQUIRY with confidence "low" so a person follows up.
+- Photo of a product that looks damaged or defective → treat as COMPLAINT.
+- Photo unrelated to the business (random documents or forms, memes, other businesses' content) → SPAM_OR_IRRELEVANT with an empty reply, like any irrelevant message.
+- Bare [صورة] / [Image] with no description → a photo we could not read; politely ask what they would like to know about it.
+Only SPAM_OR_IRRELEVANT or OFFENSIVE may have an empty reply — any other classification of a photo MUST include a written reply.`;
+        if (!isAnyImageMessage(request.comment)) {
+            prompt += `\nThe image marker appears in the conversation history: when the customer's current message refers to "it" or asks a follow-up, resolve it against that photo's description.`;
+        }
     }
 
     // Recency reinforcement of the single most-violated rule (the #1 "you're a bot" tell:

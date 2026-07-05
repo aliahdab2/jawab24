@@ -3677,6 +3677,46 @@ const TEST_CASES: TestCase[] = [
         notes: 'Non-AR/EN (French) multi-turn: closing suppression comes from the v50 prompt reminder (Layer 1).',
     },
 
+    // ===== Category 60: Image Messages (vision describe-then-enqueue) =====
+    // Customer photos arrive as "[صورة: <auto description>]" bodies (backend imageUnderstanding).
+    // The per-call IMAGE MESSAGE directive (promptBuilder) must make the model ANSWER the implicit
+    // inquiry on the business's own product/ad screenshots instead of punting with a thanks-for-
+    // sharing acknowledgment (live regression caught 2026-07-05: intent COMPLIMENT + "شكراً لمشاركتك").
+    {
+        id: 663, category: 60, categoryName: 'Image Messages', channel: 'dm',
+        message: '[صورة: لقطة شاشة لمنشور المعهد عن دورة اللغة الإنجليزية مع دعوة للتسجيل]',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION', 'PURCHASE_INTENT'],
+            replyNotContains: ['شكراً لمشاركتك', 'شكرا لمشاركتك', 'thanks for sharing'],
+        },
+        notes: 'Bare screenshot of the business\'s own course ad = implicit "available? price?" — must answer from KB, not acknowledge. Regression guard for the COMPLIMENT-punt failure.',
+    },
+    {
+        id: 664, category: 60, categoryName: 'Image Messages', channel: 'dm',
+        message: '[صورة: مستند ورقي قانوني فارغ (نموذج إيصال أمانة) بدون أي صلة بالمعهد أو دوراته]',
+        page: 'training',
+        expected: {
+            replyNotContains: ['سجل الآن', 'احجز مقعدك', 'دورة اللغة الإنجليزية'],
+        },
+        notes: 'Unrelated document photo — must NOT pitch courses at it. Empty reply (spam) or a short clarifying question are both acceptable; selling is the failure.',
+    },
+    {
+        id: 665, category: 60, categoryName: 'Image Messages', channel: 'dm',
+        message: 'طيب كم سعرها؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: '[صورة: لقطة شاشة لمنشور المعهد عن دورة اللغة الإنجليزية]' },
+            { role: 'assistant', content: 'نعم متوفرة دورة اللغة الإنجليزية للتسجيل.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+        },
+        notes: 'Follow-up referencing a photo earlier in the thread — the history-resolution line must let "سعرها" resolve to the pictured course.',
+    },
+
     // ===== Category 59: Gender Addressing (Arabic DM) — v51 =====
     // Feature is Arabic-DM-only (see DECISIONS.md D-015). Grading is asymmetric (see FEMININE_ADDRESS):
     // masculine/neutral/unisex cases assert `replyNotContains: FEMININE_ADDRESS` (bulletproof — catches
