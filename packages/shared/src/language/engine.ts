@@ -26,9 +26,14 @@
  * only when the text passes gates that structurally exclude the dangerous
  * classes:
  *
- *   - NON-ASCII REQUIRED: Arabizi, English, and acronyms are pure ASCII —
- *     they can never be overridden, by construction. Diacritic-bearing
- *     European/Vietnamese text (ä, ö, é, ı, đ …) is what legacy mis-floors.
+ *   - NON-ASCII LETTER REQUIRED: the gate strips every non-letter first, then
+ *     requires a non-ASCII letter. Arabizi, English, and acronyms have only
+ *     ASCII letters — they can never be overridden, by construction, EVEN when
+ *     decorated with emoji / currency signs / curly quotes (which are non-ASCII
+ *     but carry no language signal — an earlier codepoint-based gate let
+ *     "kam el se3r 😍" through to a wrong Spanish guess; review-caught). Only
+ *     diacritic-bearing European/Vietnamese text (ä, ö, é, ı, đ …) — the class
+ *     legacy mis-floors — opens the gate.
  *   - ≥2 words: bare tokens stay context-deferred (the "icdl" contract).
  *   - Allowlist: only well-resourced Latin-script languages; blocks tinyld's
  *     low-resource junk guesses (Kirundi, Esperanto, Klingon, Berber …).
@@ -37,9 +42,14 @@
  *     (accuracy >= 0.10 && >= 1.5× second place).
  *
  * Net contract (the flip-safety argument): with LANG_ENGINE=tinyld, the ONLY
- * inputs that resolve differently from legacy are non-ASCII Latin sentences
- * that every legacy branch missed — precisely the broken class. ASCII input
- * of any kind is bit-identical in both modes.
+ * DETECTOR outputs that differ from legacy are for text containing a non-ASCII
+ * letter that every legacy branch missed — precisely the broken class. ASCII
+ * input (incl. emoji/punctuation-decorated Arabizi) is bit-identical in both
+ * modes. NOTE this is about detector OUTPUT; the prompt-directive LABEL also
+ * changes at flip for already-named non-Latin scripts (ru/ja/… render
+ * "Russian"/"Japanese" instead of "English") — see promptBuilder + D-017; that
+ * is intended (all-languages) but is a separate, larger blast radius the
+ * Latin-only shadow log does not capture.
  */
 export type LangEngineMode = 'legacy' | 'tinyld';
 
@@ -95,9 +105,17 @@ export const OVERRIDE_CONFIDENCE = 0.75;
  */
 export function tinyldLatinOverride(text: string): string | null {
     const trimmed = text.trim();
-    // ASCII-only input (English, Arabizi, acronyms, prices) is never overridden.
+    // Gate on a non-ASCII LETTER — not any non-ASCII codepoint. Emoji, symbols,
+    // currency signs, curly quotes and non-ASCII punctuation are all non-ASCII
+    // but carry NO language signal; if they opened the gate, emoji-laden Arabizi
+    // ("kam el se3r 😍" — extremely common in real Arabic social traffic) would
+    // slip through to tinyld and get mislabeled Spanish. Strip everything that
+    // isn't a letter, THEN require a non-ASCII letter (ä, é, ı, đ, …). This is
+    // what makes "ASCII Arabizi/English/acronyms are never overridden" true by
+    // construction: their letters are all ASCII, so noise codepoints can't help.
+    const letters = trimmed.replace(/[^\p{L}]/gu, '');
     // eslint-disable-next-line no-control-regex
-    if (!/[^\x00-\x7F]/.test(trimmed)) return null;
+    if (!/[^\x00-\x7F]/.test(letters)) return null;
     const words = trimmed.split(/\s+/).length;
     if (words < 2) return null;
 

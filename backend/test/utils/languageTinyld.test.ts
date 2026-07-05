@@ -45,6 +45,14 @@ describe('identity table — results MUST match in both modes', () => {
         'kam el se3r',
         'salam kifak',
         'ana baddi sajjel',
+        // Arabizi WITH emoji / non-ASCII punctuation — the review-found hole.
+        // Emoji is non-ASCII but carries no language signal; the letter-gate must
+        // keep these identical (legacy en@0.5) in both modes, NOT flip to Spanish.
+        'kam el se3r 😍',
+        '3ayez a3raf el se3r 🤔',
+        '3aleena eh el prices 💰',
+        'thanks 🙏',
+        '“kam el se3r”',
         // English, incl. sentences tinyld itself scores low (en@0.13)
         'Hello, how are you doing today?',
         'i want to register',

@@ -18,8 +18,12 @@ import { join } from 'path';
  */
 describe('shared barrel does not expose the language module', () => {
     it('src/index.ts has no import/export from ./language', () => {
-        // vitest runs with cwd = packages/shared (npm workspace script cwd)
-        const barrel = readFileSync(join(process.cwd(), 'src/index.ts'), 'utf8');
+        // Resolve relative to THIS test file, not process.cwd() — the guard must
+        // assert correctly regardless of where vitest is invoked from (repo root,
+        // workspace dir, or a single-file run). Using cwd would throw ENOENT off
+        // the workspace path, or silently read the wrong index.ts, eroding the
+        // protection unnoticed. __dirname is available: this package compiles to CJS.
+        const barrel = readFileSync(join(__dirname, '../../index.ts'), 'utf8');
         expect(barrel).not.toMatch(/['"]\.\/language/);
     });
 });

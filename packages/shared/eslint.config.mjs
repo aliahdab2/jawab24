@@ -25,8 +25,10 @@ export default [
                 console: 'readonly',
                 process: 'readonly',
                 // CommonJS: this package compiles to CJS (tsconfig module: commonjs);
-                // require() is a legitimate runtime global (lazy dependency loading).
+                // require()/__dirname are legitimate runtime globals (lazy dependency
+                // loading; cwd-independent path resolution in tests).
                 require: 'readonly',
+                __dirname: 'readonly',
             },
         },
         plugins: {

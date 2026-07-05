@@ -14,8 +14,9 @@ import {
  *    structural, not statistical)
  *  - only allowlisted, well-resourced Latin-script languages can be named
  *  - the flag defaults to legacy (inert)
- * Expected values below come from probing tinyld 4.x directly (2026-07-04);
- * if a tinyld upgrade shifts its accuracy scale, these tests are the tripwire.
+ * Expected values below come from probing the pinned tinyld (1.3.4) directly
+ * (2026-07-04); if a tinyld upgrade shifts its accuracy scale, these are the
+ * tripwire.
  */
 afterEach(() => {
     delete process.env.LANG_ENGINE;
@@ -65,6 +66,21 @@ describe('tinyldLatinOverride — the hardened rule', () => {
         expect(tinyldLatinOverride('ok')).toBeNull();
         // ASCII foreign sentences are an accepted miss (defer to context, same as today):
         expect(tinyldLatinOverride('vad kostar det')).toBeNull();
+    });
+
+    it('emoji / symbols / non-ASCII punctuation do NOT open the gate (the letter-gate guard)', () => {
+        // Regression for the review finding: a non-ASCII EMOJI on ASCII Arabizi used
+        // to open the codepoint gate → tinyld → es@0.75 → the bot answered Arab
+        // customers in Spanish. The gate now requires a non-ASCII LETTER, so the
+        // emoji is stripped and these correctly decline. Extremely common traffic.
+        expect(tinyldLatinOverride('kam el se3r 😍')).toBeNull();
+        expect(tinyldLatinOverride('3ayez a3raf el se3r 🤔')).toBeNull();
+        expect(tinyldLatinOverride('3aleena eh el prices 💰')).toBeNull();
+        expect(tinyldLatinOverride('sho hal as3ar 😀')).toBeNull();
+        expect(tinyldLatinOverride('thanks 🙏')).toBeNull();
+        // Non-ASCII punctuation (curly quotes / Arabic comma) with ASCII letters, too:
+        expect(tinyldLatinOverride('habibi kifak، please')).toBeNull();
+        expect(tinyldLatinOverride('“kam el se3r”')).toBeNull();
     });
 
     it('never fires on single tokens, even with diacritics', () => {

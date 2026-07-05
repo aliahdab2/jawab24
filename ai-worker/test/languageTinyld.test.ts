@@ -42,6 +42,8 @@ describe('identity table — results MUST match in both modes', () => {
         'sho hal as3ar',                          // Arabizi — ASCII, override structurally excluded
         'bkam el course',
         'kam el se3r',
+        'kam el se3r 😍',                          // Arabizi + emoji — letter-gate keeps it identical (review-found hole)
+        '3ayez a3raf el se3r 🤔',
         'i want to register',                     // English tinyld under-scores (en@0.13)
         'ICDL', 'ok', 'hello',
         'Hur kan man anmäla sig',                 // 'sv' both modes: quirk (legacy) & override (tinyld) agree
