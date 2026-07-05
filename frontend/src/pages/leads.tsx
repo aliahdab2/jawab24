@@ -6,20 +6,19 @@ import clsx from 'clsx';
 import * as Popover from '@radix-ui/react-popover';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageHeader, EmptyState, ConfirmationModal, UpgradeCTA, Input, WhatsAppIcon } from '@/components/ui';
+import { PageHeader, EmptyState, ConfirmationModal, Input, WhatsAppIcon } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useIsDemoUser } from '@/features/demo/useDemoMode';
 import { useUIStore } from '@/lib/store';
-import { leadsApi, pagesApi, subscriptionApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
+import { leadsApi, pagesApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
-import type { Page, UsageSummary } from '@jawab24/shared';
+import type { Page } from '@jawab24/shared';
 import { resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
 import {
   Users,
   Phone,
   Trash2,
   Download,
-  Lock,
   Loader2,
   Search,
   X,
@@ -535,22 +534,6 @@ const LeadsPage: NextPageWithLayout = () => {
     staleTime: 60_000,
   });
 
-  const { data: usageData } = useQuery<UsageSummary>({
-    queryKey: ['subscription', 'usage'],
-    queryFn: async () => {
-      const res = await subscriptionApi.getUsage();
-      return (res.data?.data ?? res.data) as UsageSummary;
-    },
-    staleTime: 5 * 60_000,
-  });
-
-  // CSV export is available on Business and Pro plans (and any trialing user,
-  // so they experience the full product before deciding to pay).
-  // Default to true while loading so the button doesn't flash in for Starter users.
-  const canExport = usageData
-    ? usageData.subscription.plan.slug !== 'starter' || usageData.subscription.status === 'trialing'
-    : true;
-
   // Only connected pages belong on the leads picker: a disconnected page (missing/
   // invalid FB token, isConnected === false) captures nothing, so it shouldn't appear
   // as a choice. Its historical leads return as soon as the page is reconnected.
@@ -920,29 +903,24 @@ const LeadsPage: NextPageWithLayout = () => {
                 <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{t('customizeStages')}</span>
               </button>
+              {/* CSV export — available on every plan. (It used to be Business+ only,
+                  shown to Starter accounts as a 🔒 + "Business+" upsell chip; that read
+                  as a cryptic broken state and crowded the mobile header, so export was
+                  ungated — the backend never enforced the plan anyway.) */}
               <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
-                {canExport ? (
-                  <button
-                    onClick={handleExport}
-                    disabled={exporting}
-                    aria-label={t('exportCsv')}
-                    title={t('exportCsv')}
-                    className={clsx(HEADER_ACTION_BTN, 'disabled:opacity-50')}
-                  >
-                    {exporting
-                      ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                      : <Download className="w-4 h-4" aria-hidden="true" />
-                    }
-                    <span className="hidden sm:inline">{t('exportCsv')}</span>
-                  </button>
-                ) : (
-                  <UpgradeCTA
-                    className="flex items-center justify-center gap-1.5 min-h-[40px] px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors cursor-pointer"
-                  >
-                    <Lock className="w-4 h-4" aria-hidden="true" />
-                    <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
-                  </UpgradeCTA>
-                )}
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  aria-label={t('exportCsv')}
+                  title={t('exportCsv')}
+                  className={clsx(HEADER_ACTION_BTN, 'disabled:opacity-50')}
+                >
+                  {exporting
+                    ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                    : <Download className="w-4 h-4" aria-hidden="true" />
+                  }
+                  <span className="hidden sm:inline">{t('exportCsv')}</span>
+                </button>
               </div>
             </div>
           ) : undefined
