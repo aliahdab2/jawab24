@@ -502,6 +502,17 @@ fi
 echo ""
 echo "5️⃣  Running tests..."
 
+echo "   Testing Shared Package..."
+_TEST_LOG=$(mktemp)
+if npm test --workspace=@jawab24/shared -- --run > "$_TEST_LOG" 2>&1; then
+    echo -e "${GREEN}   ✅ Shared package tests pass${NC}"
+    rm -f "$_TEST_LOG"
+else
+    echo -e "${RED}   ❌ Shared package tests failed!${NC}"
+    cat "$_TEST_LOG"; rm -f "$_TEST_LOG"
+    exit 1
+fi
+
 echo "   Testing Backend (Unit + coverage thresholds)..."
 _TEST_LOG=$(mktemp)
 if npm run test:coverage --workspace=jawab24-backend > "$_TEST_LOG" 2>&1; then
