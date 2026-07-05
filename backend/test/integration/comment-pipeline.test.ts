@@ -88,8 +88,12 @@ vi.mock('../../src/services/protection', () => ({
         setLogger: vi.fn(),
     },
     commentDebounce: {
-        isCoolingDown: vi.fn().mockResolvedValue(false),
-        arm: vi.fn().mockResolvedValue(undefined),
+        // #400 replaced the check-then-arm (isCoolingDown/arm) design with an
+        // atomic claim: tryAcquire returns a token when the slot is won (proceed)
+        // or null when already held (debounce); release frees it on a non-send
+        // terminal outcome. Default: always win the slot.
+        tryAcquire: vi.fn().mockResolvedValue('debounce-token'),
+        release: vi.fn().mockResolvedValue(undefined),
         setLogger: vi.fn(),
     },
 }));
@@ -146,10 +150,8 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
         // Defensive reset — vi.clearAllMocks() doesn't reset implementations.
         // Tests that override the debounce mock would otherwise leak.
         const { commentDebounce } = await import('../../src/services/protection');
-        vi.mocked(commentDebounce.isCoolingDown).mockClear();
-        vi.mocked(commentDebounce.arm).mockClear();
-        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
-        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
+        vi.mocked(commentDebounce.tryAcquire).mockReset().mockResolvedValue('debounce-token');
+        vi.mocked(commentDebounce.release).mockReset().mockResolvedValue(undefined);
         mockGenerateForComment.mockResolvedValue({
             replyText: 'Mocked AI reply',
             replyMethod: 'ai' as const,
@@ -515,17 +517,17 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
 
     // =========================================================
     // Per-(page, post, sender) auto-reply debounce
-    // (real Postgres + real commentsService; isCoolingDown mocked
-    // to flip true on the second call from the same sender)
+    // (real Postgres + real commentsService; tryAcquire mocked to
+    // win the slot on the first call and return null on the second)
     // =========================================================
     describe('per-(page, post, sender) debounce', () => {
         it('first comment fires an AI reply, back-to-back duplicate from same sender is silently resolved with no AI call', async () => {
             const { commentDebounce } = await import('../../src/services/protection');
-            // Cold for the first call, hot for the second — simulates the
-            // arm() that would have fired between the two webhook deliveries.
-            vi.mocked(commentDebounce.isCoolingDown)
-                .mockResolvedValueOnce(false)
-                .mockResolvedValueOnce(true);
+            // First call wins the slot (token); second finds it held (null) — the
+            // first comment claimed it atomically at the start of processing.
+            vi.mocked(commentDebounce.tryAcquire)
+                .mockResolvedValueOnce('debounce-token')
+                .mockResolvedValueOnce(null);
 
             const adapter = createMockAdapter(platformPage);
             const platformPostId = 'post-fb-debounce-001';
@@ -564,17 +566,17 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
             expect(metrics.counters['facebook_comment.success']).toBe(1);
             expect(metrics.counters['facebook_comment.debounce_skipped']).toBe(1);
 
-            // Cooldown was armed once (after the successful reply)
-            expect(commentDebounce.arm).toHaveBeenCalledTimes(1);
-            expect(commentDebounce.arm).toHaveBeenCalledWith(pageId, expect.any(String), fromId);
+            // The slot was claimed once per comment (both webhooks tried); the
+            // second lost the claim and was debounced.
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledTimes(2);
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledWith(pageId, expect.any(String), fromId);
         });
 
-        it('a duplicate webhook for the SAME comment_id (after arm) hits already_replied, not debounce', async () => {
+        it('a duplicate webhook for the SAME comment_id hits already_replied, not debounce', async () => {
+            // Both deliveries win the debounce slot (default mock) — the second is
+            // caught earlier by comment-level idempotency (already_replied), so the
+            // debounce path is never reached.
             const { commentDebounce } = await import('../../src/services/protection');
-            // First webhook: cold, fires reply. Second webhook (same comment_id): hot.
-            vi.mocked(commentDebounce.isCoolingDown)
-                .mockResolvedValueOnce(false)
-                .mockResolvedValueOnce(true);
 
             const adapter = createMockAdapter(platformPage);
             const platformPostId = 'post-fb-dup-debounce';
@@ -600,8 +602,7 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
 
         it('different senders on the same post are NOT gated against each other', async () => {
             const { commentDebounce } = await import('../../src/services/protection');
-            // Cooldown stays cold for both — different senders, different keys.
-            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
+            // Both win their slot — different senders → different keys (default mock).
 
             const adapter = createMockAdapter(platformPage);
             const platformPostId = 'post-fb-debounce-multi';
@@ -620,9 +621,9 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
             expect(mockGenerateForComment).toHaveBeenCalledTimes(2);
             expect(adapter.sendReply).toHaveBeenCalledTimes(2);
 
-            // arm called twice with distinct sender ids
-            expect(commentDebounce.arm).toHaveBeenCalledWith(pageId, expect.any(String), 'sender-A');
-            expect(commentDebounce.arm).toHaveBeenCalledWith(pageId, expect.any(String), 'sender-B');
+            // Slot claimed for each distinct sender id (different keys → both win)
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledWith(pageId, expect.any(String), 'sender-A');
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledWith(pageId, expect.any(String), 'sender-B');
         });
     });
 });
