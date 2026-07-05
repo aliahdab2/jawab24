@@ -29,19 +29,23 @@
 - Reads Arabic first; product UI in Arabic is **table stakes**
 
 ### Positioning direction (DECIDED 2026-05-30)
-**Frame Jawab24 as an AI _sales rep_ (مندوب مبيعات), not a customer-service auto-reply tool.** It doesn't just answer — it recommends products, quotes live prices, follows up, and closes the sale. This shifts the lead verb from "يردّ" (replies) to "يبيع" (sells), pushes the category toward Marketing/Sales over Customer Service, and should propagate beyond this listing (landing page, other app-store listings) for brand consistency — tracked as a follow-up, not in this PR.
+**Frame Jawab24 as an AI _sales rep_ (مندوب مبيعات), not a customer-service auto-reply tool.** It doesn't just answer — it recommends products, quotes live prices, follows up, and drives the customer toward buying (checkout completes in the merchant's Salla store). This shifts the lead framing from "يردّ" (replies) to the sales-rep identity, pushes the category toward Marketing/Sales over Customer Service, and should propagate beyond this listing (landing page, other app-store listings) for brand consistency — tracked as a follow-up, not in this PR.
+
+> **Honesty guardrail (2026-07-03):** keep "مندوب مبيعات / sales rep" as the *identity*, but avoid transact **verbs** — the software does not itself sell or complete a purchase. Use "يقنع / يوصي / يقود للشراء" (persuade / recommend / drive to purchase), not "يبيع / يُتمّ البيع" (sells / closes the sale). Checkout always happens in the merchant's Salla store. "AI agent" is NOT the frame — see `DECISIONS.md` D-014.
 
 > Term choice: `مندوب مبيعات` (sales rep — stronger commerce resonance) vs `موظف مبيعات` (sales employee — literal). Leaning `مندوب مبيعات`; confirm with marketing.
 
-### Value proposition (one-liner, Arabic-first) — DRAFT, sales-rep reframe
-**مندوب مبيعات بالذكاء الاصطناعي يبيع منتجات متجرك في سلة عبر فيسبوك وإنستغرام، ويردّ على عملائك طوال اليوم بلا توقّف.**
+### Value proposition (one-liner, Arabic-first) — DRAFT, sales-rep reframe (honesty-checked; WhatsApp promoted 2026-07-05)
+**مندوب مبيعات بالذكاء الاصطناعي يعرّف عملاءك بمنتجات متجرك في سلة وأسعارها، ويقنعهم بالشراء عبر واتساب وفيسبوك وإنستغرام طوال اليوم بلا توقّف.**
 
-(English fallback for international merchants: *An AI sales rep that sells your Salla products on Facebook + Instagram and replies to customers 24/7.*)
+(English fallback for international merchants: *An AI sales rep that pitches your Salla products and answers customers on WhatsApp, Facebook + Instagram 24/7.*)
+
+> **⚠️ WhatsApp go-live precondition (decided 2026-07-05):** the copy claims WhatsApp as SHIPPED. WhatsApp is live on `main` (#392) but behind a founder canary (`WHATSAPP_ALLOWLIST` + `NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY`). **Before the listing goes live, the canary MUST be opened** (clear the allowlist, unset the admin-only flag, `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` set in prod) — otherwise the listing over-claims. Tracked on the submission-day checklist in `SALLA_LAUNCH_ACTIONS.md`.
 
 ### What sets Jawab24 apart from other Salla apps
 1. **Arabic-first AI** — not English translated to Arabic. Trained on Gulf + Levantine + Egyptian dialects.
 2. **Real catalog awareness** — answers reference actual product titles, prices, stock from Salla, not generic chatbot fluff.
-3. **Facebook + Instagram, not just WhatsApp** — competitors (LetsBot, Javna) focus on WhatsApp; Jawab24 owns FB/IG DMs.
+3. **WhatsApp + Facebook + Instagram in one app** — competitors (LetsBot, Javna) are WhatsApp-only; Jawab24 answers all three channels from one dashboard (WhatsApp shipped 2026-07-04, #392).
 4. **3 reply modes** — public comment reply, private DM, or both. Merchant-configurable per page.
 5. **Already shipped:** product sync, RAG-powered answers, hallucinated-price guard, multi-language detection.
 
@@ -54,39 +58,43 @@
 ### App name (شاشة العرض)
 **Jawab24 — جواب24**
 
-### Short tagline (~50 chars Arabic) — DRAFT, sales-rep reframe
-**مندوب مبيعاتك الذكي على فيسبوك وإنستغرام**
+### Short tagline (~50 chars Arabic) — DRAFT, sales-rep reframe (WhatsApp-first for the Saudi audience)
+**مندوب مبيعاتك الذكي على واتساب وفيسبوك وإنستغرام**
 
-### Short description / App description — ✅ FINAL (live in Salla app 1565152053 since 2026-06-08)
+### Short description / App description — v1 LIVE in portal; v2 (adds WhatsApp) NEEDS a portal re-save
 Sales-rep positioning; claims only what the product truly does ("answers"). It does NOT transact — the sale closes in the merchant's Salla store, so no "يبيع نيابةً عنك"/transact claim. No "رد آلي".
 
-- **Arabic (111 chars):** مندوب مبيعات بالذكاء الاصطناعي يقرأ منتجات متجرك في سلة وأسعارها، فيجيب عملاءك على فيسبوك وإنستغرام طوال اليوم.
-- **English (120 chars):** An AI sales rep that reads your Salla products and prices and answers your customers on Facebook and Instagram, all day.
+- **v1 — live in Salla app 1565152053 since 2026-06-08:**
+  - **Arabic (111 chars):** مندوب مبيعات بالذكاء الاصطناعي يقرأ منتجات متجرك في سلة وأسعارها، فيجيب عملاءك على فيسبوك وإنستغرام طوال اليوم.
+  - **English (120 chars):** An AI sales rep that reads your Salla products and prices and answers your customers on Facebook and Instagram, all day.
+- **v2 — WhatsApp promoted (2026-07-05); re-save in the portal before submission (founder action, ≤200-char limit OK):**
+  - **Arabic (120 chars):** مندوب مبيعات بالذكاء الاصطناعي يقرأ منتجات متجرك في سلة وأسعارها، فيجيب عملاءك على واتساب وفيسبوك وإنستغرام طوال اليوم.
+  - **English (130 chars):** An AI sales rep that reads your Salla products and prices and answers your customers on WhatsApp, Facebook and Instagram, all day.
 
 ### Long description (Arabic, ~250 words) — DRAFT, sales-rep frame (awaiting marketing sign-off)
 
-> ⚠️ Honesty pass before sign-off: soften any transact-implying wording to match the FINAL short description above — e.g. `ليُتمّ عملية البيع` and the bullet `يبيع بالعربية…` imply Jawab24 closes the sale. It persuades/recommends; the customer checks out in Salla. Reframe to "يقترح/يقنع/يقود للشراء", not "يبيع/يُتمّ البيع".
+> ✅ Honesty pass DONE (2026-07-03, re-applied 2026-07-05): transact verbs softened throughout — `ليُتمّ عملية البيع` → `يقود عميلك نحو إتمام الشراء في متجرك`; the bullet `يبيع…` → `يقنع ويردّ…`; closer `يرد ويبيع` → `يرد ويقنع عملاءك`. EN mirrors (sells/close the sale → persuades/guide toward buying). WhatsApp promoted to shipped (2026-07-05, founder decision — see the go-live precondition in §1). Still awaiting marketing sign-off.
 
 > Wedge: lead on Arabic-first AI depth + live Salla catalog (verified shipped). Proactive order/cart features held as "قريباً" until Phase 4.2 validates their Salla wiring (see A2/A3 in the launch plan). Arabic is canonical; English below is the translation.
 
 ```
 هل تقضي ساعاتك في الرد على نفس الأسئلة؟ "كم السعر؟"، "هل المنتج متوفر؟"، "وين وصل طلبي؟". كل رسالة يتأخر الرد عليها قد تعني عميلاً يذهب إلى متجر آخر.
 
-Jawab24 هو مندوب مبيعاتك الذكي الذي لا ينام. يربط متجرك في سلة بصفحاتك على فيسبوك وإنستغرام، ويرد على رسائل عملائك وتعليقاتهم تلقائياً — بأسعار ومنتجات متجرك الحقيقية، طوال اليوم.
+Jawab24 هو مندوب مبيعاتك الذكي الذي لا ينام. يربط متجرك في سلة برقم واتساب أعمالك وصفحاتك على فيسبوك وإنستغرام، ويرد على رسائل عملائك وتعليقاتهم تلقائياً — بأسعار ومنتجات متجرك الحقيقية، طوال اليوم.
 
-ما الذي يميّز Jawab24؟ إنه يفهم العربية كما يتحدثها عملاؤك — الفصحى واللهجات الخليجية والمصرية والشامية — لا ترجمة آلية. يقرأ منتجاتك وأسعارك مباشرة من سلة، فيجيب بمعلومات دقيقة بدل الردود العامة، ويقترح المنتج المناسب ليُتمّ عملية البيع. وإذا لم يجد الإجابة في معلومات متجرك، ينبّهك بدل أن يخمّن.
+ما الذي يميّز Jawab24؟ إنه يفهم العربية كما يتحدثها عملاؤك — الفصحى واللهجات الخليجية والمصرية والشامية — لا ترجمة آلية. يقرأ منتجاتك وأسعارك مباشرة من سلة، فيجيب بمعلومات دقيقة بدل الردود العامة، ويقترح المنتج المناسب ويقود عميلك نحو إتمام الشراء في متجرك. وإذا لم يجد الإجابة في معلومات متجرك، ينبّهك بدل أن يخمّن.
 
 أهم المزايا:
-• ردود فورية على رسائل وتعليقات فيسبوك وإنستغرام
+• ردود فورية على رسائل واتساب ورسائل وتعليقات فيسبوك وإنستغرام
 • يقرأ منتجاتك وأسعارك من سلة، ويزامنها تلقائياً عند أي تحديث
-• يبيع بالعربية الفصحى أو بلهجة عميلك
+• يقنع ويردّ بالعربية الفصحى أو بلهجة عميلك
 • يقترح المنتجات المناسبة من متجرك
 • ثلاث طرق للرد: تعليق عام، رسالة خاصة، أو الاثنان معاً
 • تأكيد الطلبات وتذكير العملاء بالعربات المتروكة (قريباً)
 
 آمن وموثوق: نشفّر بيانات الدخول إلى متجرك، ولا نشارك بيانات عملائك. متوافق مع نظام حماية البيانات الشخصية (PDPL).
 
-ابدأ مجاناً اليوم — بدون بطاقة ائتمان. دع Jawab24 يرد ويبيع، وتفرّغ أنت لتنمية متجرك.
+ابدأ مجاناً اليوم — بدون بطاقة ائتمان. دع Jawab24 يرد ويقنع عملاءك، وتفرّغ أنت لتنمية متجرك.
 ```
 
 ### Long description (English fallback, ~230 words) — DRAFT (translation of the canonical Arabic)
@@ -94,35 +102,36 @@ Jawab24 هو مندوب مبيعاتك الذكي الذي لا ينام. يرب
 ```
 Tired of answering the same questions all day? "How much is this?", "Is it in stock?", "Where's my order?" Every slow reply is a customer who might buy somewhere else.
 
-Jawab24 is your AI sales rep that never sleeps. It connects your Salla store to your Facebook and Instagram pages and replies to customer messages and comments automatically — with your store's real products and prices, around the clock.
+Jawab24 is your AI sales rep that never sleeps. It connects your Salla store to your WhatsApp Business number and your Facebook and Instagram pages, and replies to customer messages and comments automatically — with your store's real products and prices, around the clock.
 
-What makes Jawab24 different? It understands Arabic the way your customers actually speak it — Modern Standard plus Gulf, Egyptian, and Levantine dialects — not clumsy machine translation. It reads your products and prices straight from Salla, so it answers with accurate details instead of generic chatbot replies, and recommends the right product to close the sale. When it can't find an answer in your store info, it flags you instead of guessing.
+What makes Jawab24 different? It understands Arabic the way your customers actually speak it — Modern Standard plus Gulf, Egyptian, and Levantine dialects — not clumsy machine translation. It reads your products and prices straight from Salla, so it answers with accurate details instead of generic chatbot replies, and recommends the right product to guide the customer toward buying in your Salla store. When it can't find an answer in your store info, it flags you instead of guessing.
 
 Key features:
-• Instant replies to Facebook & Instagram messages and comments
+• Instant replies to WhatsApp messages and Facebook & Instagram messages and comments
 • Reads your Salla products and prices, auto-syncing on every update
-• Sells in Modern Standard Arabic or your customer's dialect
+• Persuades and replies in Modern Standard Arabic or your customer's dialect
 • Recommends the right products from your catalog
 • Three reply modes: public comment, private DM, or both
 • Order confirmations & abandoned-cart reminders (coming soon)
 
 Safe and trusted: your store credentials are encrypted and we never share your customers' data. PDPL-compliant.
 
-Start free today — no credit card required. Let Jawab24 reply and sell, so you can focus on growing your store.
+Start free today — no credit card required. Let Jawab24 reply and persuade, so you can focus on growing your store.
 ```
 
-### Feature bullets (Arabic, 5–7 items, ≤8 words each) — DRAFT, sales-rep reframe (selling verbs first)
-- ✅ يقترح المنتجات المناسبة من متجرك ويُتمّ البيع
+### Feature bullets (Arabic, 5–7 items, ≤8 words each) — DRAFT, sales-rep reframe (persuasion verbs, honesty-checked; WhatsApp promoted 2026-07-05)
+- ✅ يقترح المنتجات المناسبة من متجرك ويقود للشراء
 - ✅ يجيب فوراً عن الأسعار والتوفّر من منتجات متجرك في سلة
-- ✅ يبيع ويردّ بالعربية الفصحى أو بلهجة عملائك
+- ✅ يقنع ويردّ بالعربية الفصحى أو بلهجة عملائك
 - ✅ يتابع العربات المتروكة ويذكّر العميل بإكمال طلبه (قريباً — Phase 3)
 - ✅ يزامن منتجاتك وأسعارك من سلة تلقائياً
-- ✅ يعمل طوال اليوم دون توقّف على فيسبوك وإنستغرام
+- ✅ يعمل طوال اليوم دون توقّف على واتساب وفيسبوك وإنستغرام
 - ✅ يدعم العربية والإنجليزية، ومدعوم بفريق سعودي
 
 ### Categories / tags (Salla taxonomy)
 - Primary category: lean **Marketing / Sales (التسويق / المبيعات)** over Customer Service, to match the sales-rep positioning — pending confirmation of Salla's actual taxonomy (open question §9.1).
-- Tags: `sales`, `chatbot`, `facebook`, `instagram`, `AI`, `arabic`, `social-commerce`, `cart-recovery` — leading with sales/commerce intent over `customer-service`
+- Tags: `sales`, `chatbot`, `whatsapp`, `facebook`, `instagram`, `AI`, `ai-agent`, `arabic`, `social-commerce`, `cart-recovery` — leading with sales/commerce intent over `customer-service`
+  - `ai-agent` is an **English-side SEO keyword only** (high-intent search term) — NOT the headline framing, and NOT translated into the Arabic copy. See [`DECISIONS.md`](../DECISIONS.md) D-014.
 
 ---
 

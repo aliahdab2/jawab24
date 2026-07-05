@@ -129,7 +129,9 @@ Everything the designer needs. **These are Salla's real specs** (from the docs �
   - AR: مندوب مبيعات بالذكاء الاصطناعي يقرأ منتجات متجرك في سلة وأسعارها، فيجيب عملاءك على فيسبوك وإنستغرام طوال اليوم.
   - EN: An AI sales rep that reads your Salla products and prices and answers your customers on Facebook and Instagram, all day.
   - Honesty note: positions as a sales rep but claims only "answers" — it does NOT transact (the sale closes in the merchant's Salla store). No "رد آلي", no "يبيع نيابةً عنك".
-- ⏳ Long description + feature bullets: draft in `SALLA_LISTING_BRIEF.md` §2, **awaiting marketing sign-off** — and need an **honesty pass** to soften transact-implying wording (`ليُتمّ عملية البيع`, `يبيع…`) to persuade/recommend/drive-to-purchase, matching the final short description.
+- ✅ **Honesty pass DONE (2026-07-03, re-applied 2026-07-05)** — transact verbs (`يبيع` / `يُتمّ البيع` / "sells" / "close the sale") softened to persuade/recommend/drive-to-purchase across the one-liner, long descriptions (AR+EN), and feature bullets in `SALLA_LISTING_BRIEF.md` §1–2; "مندوب مبيعات / sales rep" kept as identity (see `DECISIONS.md` D-014 — NOT "AI agent").
+- ✅ **WhatsApp promoted to SHIPPED in the copy (founder decision 2026-07-05)** — one-liner/tagline/long-desc/bullets now claim واتساب; short description has a **v2 needing a portal re-save** (brief §2). **Hard precondition:** open the WhatsApp canary before the listing goes live (see submission checklist below).
+- ⏳ Long description + feature bullets still **awaiting marketing sign-off** — copy is otherwise submission-ready.
 
 One copy decision flagged for the team: the description hedges order-confirmation/shipped/delivered notifications as "قريباً". Phase 4.2 validated that wiring (merged #267/#268). If the in-product enable path is merchant-ready, promote those from "قريباً" to a shipped feature; keep abandoned-cart as "قريباً". Confirm feature-enabled state before changing.
 
@@ -152,12 +154,16 @@ Do **not** wait for WhatsApp. But the portal shows **no approved-but-unpublished
 - "Approve but don't launch" = **submit only when you're ready to be live**. All prep (ID verification, assets, copy, support inbox) happens now so submission is a same-day action whenever you decide.
 - If the support answer reveals a hold mechanism inside the post-verification listing flow, revert to submit-early-hold.
 
-WhatsApp is a fast-follow **v1.1** update (gated on Meta Embedded Signup, weeks out) — it slots into the same "قريباً → shipped" cadence the copy already uses. FB/IG is the launch wedge.
+~~WhatsApp is a fast-follow **v1.1** update (gated on Meta Embedded Signup, weeks out)~~ **SUPERSEDED 2026-07-05: WhatsApp SHIPPED on `main` (#392 — Embedded Signup connect, multi-number, voice notes)** and the founder decided to claim it as shipped in the listing copy. It is currently behind a founder canary (`WHATSAPP_ALLOWLIST` + `NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY`); **opening the canary is a submission-day precondition** (see critical path #6). The launch wedge is now WhatsApp + FB/IG — stronger vs the WhatsApp-only competitors (LetsBot, Javna).
 
 ## Critical path recap
 1. **Complete Partners ID verification** (gates the submission form; needs passport PDF + payout bank details — see portal recon above). Start now; verification review time unknown.
-2. Send §1 to Salla support → the publish-control answer (decides submit-when-ready vs submit-early-hold).
-3. Get marketing sign-off on §1–2 copy (brief).
-4. Hand §3 + the brief to the designer → produce assets (the long pole).
-5. Set up support inbox + paste §2 auto-responder.
-6. Submit on the Partners portal → 5–10 day review → go-live per the strategy above.
+2. ~~Send §1 to Salla support~~ **OPTIONAL (decided 2026-07-03):** docs + portal recon already settle the strategy (no hold control visible → assume auto-publish → submit-when-ready). Send the email only if you want written confirmation; do not block on it.
+3. **Easy-Mode dry-run on the DEV app (Jawab24-Dev 1565152053)** — switch it to Easy Mode in the portal, reinstall on the dev store, verify `app.store.authorize` lands, then try the OAuth authorize redirect → empirically settles DECISIONS.md D-012; engineering then ships the confirmed claim binding dormant behind the flag (go-live becomes a flag flip).
+4. Get marketing sign-off on §1–2 copy (brief — honesty pass done; WhatsApp promoted).
+5. Hand §3 + the brief to the designer → produce assets (the long pole). Consider a WhatsApp screenshot now that it's claimed in the copy.
+6. Set up support inbox + paste §2 auto-responder.
+7. Submit on the Partners portal → 5–10 day review → go-live per the strategy above. **Submission-day preconditions:**
+   - **Open the WhatsApp canary** (clear `WHATSAPP_ALLOWLIST`, unset `NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY`, confirm `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` set in prod) — the copy claims WhatsApp as shipped.
+   - **Re-save the v2 short description** (adds واتساب — brief §2) in the portal.
+   - Prod Salla creds + `SALLA_HOST_NAME=jawab24.com` + callback/scopes/webhook-secret cross-check; live OAuth validation; `SALLA_EASY_MODE_CLAIM_ENABLED=true` once the binding from step 3 is verified.
