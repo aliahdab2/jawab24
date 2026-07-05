@@ -44,6 +44,23 @@ import { extractPostId } from '../../utils/instagram';
  *  have the same issue and are out of scope for this pass. */
 const MAX_ORIGIN_POST_AGE_MS = 60 * 24 * 60 * 60 * 1000;
 
+/** Store-then-enrich park (step 11): a sibling attachment from the same sender is
+ *  stored as a 'pending' stub the instant its webhook lands, then enriched
+ *  asynchronously (vision 6–20s / Whisper / shared-post fetch). A DM whose reply
+ *  job reaches consolidation while such a stub is still 'pending' PARKS — it
+ *  re-enqueues itself so the eventual reply consolidates the real content instead
+ *  of answering the bare "[صورة]" placeholder (or the text alone, blind). */
+const ATTACHMENT_PARK_DELAY_MS = 5_000;
+/** 8 × 5s = 40s budget ≥ the ~35s worst-case enrichment (download 10s + vision 20s
+ *  + store/enqueue). After this the job proceeds and replies without the pending
+ *  row — degrading to today's "second reply", never a permanent no-reply. */
+const MAX_ATTACHMENT_RETRIES = 8;
+/** A 'pending' stub older than this is treated as NOT pending: the enricher must
+ *  have crashed (webhook already ACKed, no redelivery), so no DM should wait on a
+ *  corpse. > worst-case enrichment (~35s) with margin. The stale stub stays
+ *  replied=false and is surfaced by the escalation SLA cron. */
+const PENDING_ENRICHMENT_MAX_AGE_MS = 60_000;
+
 /**
  * Unified Message Processor
  *
@@ -96,6 +113,10 @@ export class MessageProcessor {
         // we only want to suppress messages whose lateness was *caused* by our
         // pause logic, not messages delayed by queue lag or restarts.
         wasHandoffPaused: boolean = false,
+        // How many times this job has already parked waiting for a sibling
+        // attachment to finish enriching (store-then-enrich). Bounds the wait at
+        // MAX_ATTACHMENT_RETRIES so we never block a reply forever.
+        attachmentRetries: number = 0,
     ): Promise<MessageResult> {
         const platform = adapter.platform;
         const pipeline = `${platform}_message` as Pipeline;
@@ -143,28 +164,35 @@ export class MessageProcessor {
             );
             lap('3-storeMessage');
 
-            // SSE: notify merchant that a new message arrived
-            publishSSEEvent(page.userId, 'message:received', {
-                messageId: platformMessageId,
-                pageId: page.id,
-                senderId,
-                senderName: senderName ?? null,
-                message: {
-                    id: storedMessage.id,
+            // SSE: notify merchant that a new message arrived.
+            // Skip when this row carries an enrichment lifecycle (attachment rows):
+            // nonTextHandler already published `message:received` for it at stub-store
+            // time. Re-publishing here on the enriched attachment's own reply job
+            // would double-toast and double-increment the unread badge. NULL status
+            // = every text row (today's behavior, unchanged).
+            if (!storedMessage.enrichmentStatus) {
+                publishSSEEvent(page.userId, 'message:received', {
+                    messageId: platformMessageId,
                     pageId: page.id,
-                    platformMessageId: platformMessageId,
                     senderId,
                     senderName: senderName ?? null,
-                    message: messageText,
-                    direction: 'incoming' as const,
-                    replied: false,
-                    replyText: null,
-                    replyMethod: null,
-                    createdTime: null,
-                    repliedAt: null,
-                    createdAt: new Date().toISOString(),
-                },
-            });
+                    message: {
+                        id: storedMessage.id,
+                        pageId: page.id,
+                        platformMessageId: platformMessageId,
+                        senderId,
+                        senderName: senderName ?? null,
+                        message: messageText,
+                        direction: 'incoming' as const,
+                        replied: false,
+                        replyText: null,
+                        replyMethod: null,
+                        createdTime: null,
+                        repliedAt: null,
+                        createdAt: new Date().toISOString(),
+                    },
+                });
+            }
 
             // Invalidate dashboard stats so next load reflects the new message
             invalidateWorkspaceStatsCache(page.workspaceId);
@@ -476,17 +504,67 @@ export class MessageProcessor {
             // skip would cause the newer message to be dropped: Worker 2 already bailed
             // at step 4b ("Lock held"), so nobody would process it.
             const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
-            for (const m of unrepliedMessages) handledPlatformMessageIds.add(m.platformMessageId);
+
+            // 11-pre. Attachment-enrichment PARK (store-then-enrich). A sibling
+            // attachment from this sender is stored as a 'pending' stub the instant
+            // its webhook lands, then enriched asynchronously. Replying while such a
+            // stub is still pending would answer the bare "[صورة]" placeholder — or,
+            // if the stub isn't yet in this set, the text alone (blind). So we park:
+            // re-enqueue this job with a short delay and let the attachment's own
+            // finalize→enqueue (or this job's own retry) consolidate the real content.
+            //   • Age-gated: a 'pending' stub older than PENDING_ENRICHMENT_MAX_AGE_MS
+            //     means the enricher crashed (webhook already ACKed, no redelivery) —
+            //     treat it as not-pending so no DM waits on a corpse.
+            //   • Placed BEFORE `didReachConsolidation = true` so a parked return never
+            //     arms the finally-block orphan recheck (which would inline-reprocess
+            //     and recurse).
+            //   • Cap enforced HERE (not in the worker) so exhaustion falls through to
+            //     a real reply — the customer is never stranded.
+            const now = Date.now();
+            const pendingRows = unrepliedMessages.filter(m =>
+                m.enrichmentStatus === 'pending'
+                && m.createdAt
+                && now - new Date(m.createdAt).getTime() < PENDING_ENRICHMENT_MAX_AGE_MS,
+            );
+            if (pendingRows.length > 0 && attachmentRetries < MAX_ATTACHMENT_RETRIES) {
+                pipelineMetrics.record(pipeline, 'attachment_park');
+                this.logger.info(`[${platform}] Attachment enrichment in flight — parking DM`, {
+                    senderId, pageId: page.id, attachmentRetries, pendingCount: pendingRows.length,
+                });
+                return {
+                    success: false,
+                    messageId: platformMessageId,
+                    error: 'Attachment enrichment pending',
+                    attachmentPendingDelayMs: ATTACHMENT_PARK_DELAY_MS,
+                };
+            }
+            if (pendingRows.length > 0) {
+                // Budget exhausted (enricher crashed / too slow). Reply now WITHOUT the
+                // pending rows — they stay replied=false (excluded from handledIds below)
+                // and are answered later by their own finalize→enqueue or the orphan
+                // recheck. Degrades to today's "second reply", never a wrong first one.
+                pipelineMetrics.record(pipeline, 'attachment_park_exhausted');
+                this.logger.warn(`[${platform}] Attachment wait budget exhausted — replying without pending rows`, {
+                    senderId, pageId: page.id, attachmentRetries, pendingCount: pendingRows.length,
+                });
+            }
+
+            // The rows we actually consolidate + mark replied. Excludes any still-pending
+            // stub so a cap-exhausted reply can't sweep it (see markOlderMessagesAsReplied).
+            const consolidatable = pendingRows.length > 0
+                ? unrepliedMessages.filter(m => m.enrichmentStatus !== 'pending')
+                : unrepliedMessages;
+            for (const m of consolidatable) handledPlatformMessageIds.add(m.platformMessageId);
             didReachConsolidation = true;
             lap('11-consolidate');
 
             // Use latest message for template matching (reflects current intent),
             // but full consolidation for AI context (gives conversation history).
-            const latestMessageText = unrepliedMessages.length > 0
-                ? unrepliedMessages[unrepliedMessages.length - 1].message
+            const latestMessageText = consolidatable.length > 0
+                ? consolidatable[consolidatable.length - 1].message
                 : messageText;
-            const consolidatedText = unrepliedMessages.length > 1
-                ? unrepliedMessages.map(m => m.message).join('\n')
+            const consolidatedText = consolidatable.length > 1
+                ? consolidatable.map(m => m.message).join('\n')
                 : messageText;
 
             // 11a. Silently drop emoji-only / punctuation-only mid-conversation messages.
@@ -499,7 +577,7 @@ export class MessageProcessor {
             // and no digits in any script, so real replies like "ok", "نعم", or "٠٠٠"
             // still flow through normally.
             if (isPunctuationOnly(consolidatedText.trim())) {
-                await this.markSkippedAsResolved(unrepliedMessages, storedMessage.id, workspaceId);
+                await this.markSkippedAsResolved(consolidatable, storedMessage.id, workspaceId);
                 this.logger.info(`[${platform}] Skipped emoji/punctuation-only mid-conversation message`, { senderId, platformMessageId });
                 pipelineMetrics.record(pipeline, 'skipped_spam');
                 return { success: true, messageId: platformMessageId };
@@ -576,7 +654,7 @@ export class MessageProcessor {
                     // Spam/irrelevant (incl. conversation-closers like "no thank you") —
                     // no flag, no notification. Resolve so the inbox shows "handled"
                     // instead of a false "will reply soon" badge that never clears.
-                    await this.markSkippedAsResolved(unrepliedMessages, storedMessage.id, workspaceId);
+                    await this.markSkippedAsResolved(consolidatable, storedMessage.id, workspaceId);
                     pipelineMetrics.record(pipeline, 'skipped_spam');
                     return { success: true, messageId: platformMessageId };
                 }
@@ -652,7 +730,6 @@ export class MessageProcessor {
             }
 
             // 13. Send reply
-            let deliveryFailed = false;
             try {
                 await adapter.sendReply(page, senderId, replyText);
                 // Messenger/Instagram auto-clear the typing indicator when a message
@@ -666,7 +743,6 @@ export class MessageProcessor {
                 if (isTransientFbError(error, platform)) {
                     throw error;
                 }
-                deliveryFailed = true;
                 pipelineMetrics.record(pipeline, 'send_failed');
                 this.logger.error(`[${platform}] Failed to send reply`, { error: String(error) });
                 // Defensive auto-pause: bump page-level failure counter (fire-and-forget).
@@ -733,10 +809,12 @@ export class MessageProcessor {
                     createdAt: stored.createdAt ?? new Date().toISOString(),
                 };
 
-                // 16. Mark older debounced messages as replied
-                if (unrepliedMessages.length > 1) {
+                // 16. Mark the consolidated messages as replied. Scoped to the exact
+                // ids we consolidated (not "everything unreplied") so an attachment
+                // stub that finalized mid-generation isn't swept under this reply.
+                if (consolidatable.length > 1) {
                     markedOlder = await messagesService.markOlderMessagesAsReplied(
-                        page.id, senderId, storedMessage.id, replyText, replyMethod, tx,
+                        page.id, senderId, consolidatable.map(m => m.id), storedMessage.id, replyText, replyMethod, tx,
                     );
                 }
             });
@@ -814,7 +892,7 @@ export class MessageProcessor {
                 needsAttention,
                 replyLength: replyText.length,
                 greetingPrepended: !!greetingPrefix,
-                consolidatedCount: unrepliedMessages.length,
+                consolidatedCount: consolidatable.length,
                 durationMs: Date.now() - t0,
             });
 
@@ -992,12 +1070,21 @@ export class MessageProcessor {
                 newestMessageId: newest.platformMessageId,
             });
 
+            // Pass attachmentRetries = MAX so the recheck can NEVER park: its result
+            // is discarded (nobody re-enqueues it), so a parked return would strand
+            // the orphan. Forcing it past the park gate makes it reply — consolidating
+            // any 'done' attachment, or (in the rare concurrent-enrich corner) the
+            // text alone. wasHandoffPaused stays false.
             await this.processMessage(
                 adapter,
                 platformPageId,
                 senderId,
                 newest.message,
                 newest.platformMessageId,
+                undefined,
+                undefined,
+                false,
+                MAX_ATTACHMENT_RETRIES,
             );
         } catch (err) {
             this.logger.error(`[${adapter.platform}] orphan_recheck_failed`, {

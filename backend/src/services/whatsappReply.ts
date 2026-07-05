@@ -24,9 +24,10 @@ export class WhatsAppReplyService {
         sharedPostUrl?: string,
         sharedPostId?: string,
         wasHandoffPaused?: boolean,
+        attachmentRetries?: number,
     ): Promise<MessageResult> {
         return messageProcessor.processMessage(
-            whatsappMessageAdapter, whatsappPhoneNumberId, senderId, messageText, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused,
+            whatsappMessageAdapter, whatsappPhoneNumberId, senderId, messageText, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused, attachmentRetries,
         );
     }
 }

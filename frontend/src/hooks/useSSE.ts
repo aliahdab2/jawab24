@@ -268,6 +268,21 @@ export function useSSE(): void {
             }
         });
 
+        // An attachment row's content changed in place after async enrichment
+        // (placeholder "[صورة]" → the vision description / voice transcript). Refresh
+        // the list preview and, if the thread is open, refetch it so the placeholder
+        // is replaced. No toast / no unread bump — the arrival was already announced
+        // by message:received at stub time.
+        es.addEventListener('message:updated', (e) => {
+            try {
+                const event: SSEEvent<'message:updated'> = JSON.parse(e.data);
+                invalidateListAndStats({ listKey: ['messages'], statsKey: ['messages-stats'], pageRoute: '/messages' });
+                if (isOnPage('/messages')) {
+                    debouncedInvalidate(['conversation', event.data.senderId]);
+                }
+            } catch { /* malformed event — ignore */ }
+        });
+
         // --- Usage ---
         es.addEventListener('usage:updated', () => {
             debouncedInvalidate(['subscription-usage']);

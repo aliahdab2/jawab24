@@ -2052,3 +2052,122 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('MessageProcessor — attachment-enrichment park (store-then-enrich)', () => {
+    const recentPendingRow = () => ({
+        id: 'img-stub-uuid',
+        message: '[صورة]',
+        platformMessageId: 'msg-img',
+        enrichmentStatus: 'pending',
+        createdAt: new Date(), // fresh — inside PENDING_ENRICHMENT_MAX_AGE_MS
+    });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true, messagesAutoReply: true, replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'reply-uuid', pageId: 'page-uuid', platformMessageId: 'reply_123',
+            senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
+            replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
+            createdTime: new Date(), repliedAt: new Date(),
+        } as any);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'reply', replyMethod: 'ai', needsAttention: false,
+        });
+    });
+
+    it('parks (returns attachmentPendingDelayMs, no generation) when a sibling stub is pending', async () => {
+        // Text row + a still-pending image stub from the same sender.
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'text-uuid', message: 'شو محتويات الدورة', platformMessageId: 'msg-text', enrichmentStatus: null, createdAt: new Date() } as any,
+            recentPendingRow() as any,
+        ]);
+        const adapter = createMockAdapter();
+
+        const result = await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'شو محتويات الدورة', 'msg-text');
+
+        expect(result.success).toBe(false);
+        expect(result.attachmentPendingDelayMs).toBeGreaterThan(0);
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        // Lock is released on the park path.
+        const { releaseReplyLock } = await import('../../src/lib/replyLock');
+        expect(releaseReplyLock).toHaveBeenCalled();
+    });
+
+    it('does NOT park a stub older than the crash cutoff — replies (enricher presumed dead)', async () => {
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'text-uuid', message: 'q', platformMessageId: 'msg-text', enrichmentStatus: null, createdAt: new Date() } as any,
+            { id: 'img-stub', message: '[صورة]', platformMessageId: 'msg-img', enrichmentStatus: 'pending', createdAt: new Date(Date.now() - 120_000) } as any,
+        ]);
+        const adapter = createMockAdapter();
+
+        const result = await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'q', 'msg-text');
+
+        expect(result.attachmentPendingDelayMs).toBeUndefined();
+        expect(adapter.sendReply).toHaveBeenCalled();
+    });
+
+    it('at the retry cap, replies WITHOUT the pending row (never a permanent no-reply)', async () => {
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'text-uuid', message: 'شو محتويات الدورة', platformMessageId: 'msg-text', enrichmentStatus: null, createdAt: new Date() } as any,
+            recentPendingRow() as any,
+        ]);
+        const adapter = createMockAdapter();
+
+        // attachmentRetries = 8 (MAX) → falls through.
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'شو محتويات الدورة', 'msg-text', undefined, undefined, false, 8,
+        );
+
+        expect(result.attachmentPendingDelayMs).toBeUndefined();
+        expect(adapter.sendReply).toHaveBeenCalled();
+        // The still-pending row is excluded from the consolidated ids passed to the sweep.
+        const call = vi.mocked(messagesService.markOlderMessagesAsReplied).mock.calls[0];
+        if (call) {
+            const consolidatedIds = call[2] as string[];
+            expect(consolidatedIds).not.toContain('img-stub-uuid');
+        }
+    });
+
+    it("does NOT park when the only sibling is 'done' (enrichment already finished)", async () => {
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'text-uuid', message: 'q', platformMessageId: 'msg-text', enrichmentStatus: null, createdAt: new Date() } as any,
+            { id: 'img-done', message: '[صورة: وصف]', platformMessageId: 'msg-img', enrichmentStatus: 'done', createdAt: new Date() } as any,
+        ]);
+        const adapter = createMockAdapter();
+
+        const result = await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'q', 'msg-text');
+
+        expect(result.attachmentPendingDelayMs).toBeUndefined();
+        expect(adapter.sendReply).toHaveBeenCalled();
+        // Both rows consolidated (text + done image) into one reply.
+        const generatorCall = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(generatorCall.text).toContain('[صورة: وصف]');
+    });
+
+    it('scopes markOlderMessagesAsReplied to the consolidated ids (silent-drop guard)', async () => {
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'a-uuid', message: 'first', platformMessageId: 'msg-a', enrichmentStatus: null, createdAt: new Date() } as any,
+            { id: 'msg-uuid', message: 'second', platformMessageId: 'msg-text', enrichmentStatus: null, createdAt: new Date() } as any,
+        ]);
+        const adapter = createMockAdapter();
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'second', 'msg-text');
+
+        const call = vi.mocked(messagesService.markOlderMessagesAsReplied).mock.calls[0];
+        expect(call).toBeTruthy();
+        // 3rd arg is the explicit id list (not a blanket page/sender sweep).
+        expect(call[2]).toEqual(['a-uuid', 'msg-uuid']);
+    });
+});

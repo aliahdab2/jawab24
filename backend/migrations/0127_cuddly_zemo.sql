@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ADD COLUMN "enrichment_status" varchar(16);

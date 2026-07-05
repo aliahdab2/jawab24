@@ -38,6 +38,10 @@ export interface StoredMessage {
     needsAttention?: boolean;
     /** Needed by stale-backlog suppression to measure message age. */
     createdAt?: Date | string | null;
+    /** Store-then-enrich lifecycle marker (null | 'pending' | 'done' | 'failed').
+     *  When set, this row is an attachment that nonTextHandler already announced
+     *  via SSE — messageProcessor uses it to skip a duplicate `message:received`. */
+    enrichmentStatus?: string | null;
 }
 
 export type Platform = 'facebook' | 'instagram' | 'shopify' | 'whatsapp';

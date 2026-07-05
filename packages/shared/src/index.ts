@@ -111,6 +111,9 @@ export interface Message {
   resolved?: boolean;
   platform?: 'facebook' | 'instagram' | 'whatsapp';
   attachmentType?: string | null;
+  /** Store-then-enrich lifecycle for attachment rows: null | 'pending' | 'done' | 'failed'.
+   *  See messages table schema + nonTextHandler. */
+  enrichmentStatus?: string | null;
 }
 
 // --- Comment Types ---
@@ -588,6 +591,15 @@ export interface ReplyJobData {
   // handoff stale-backlog suppression (a 15-min-old unanswered message SHOULD
   // still get a reply once quota returns). Bounded by config.ai.parkMaxRetries.
   aiRetryCount?: number;
+  // How many times this DM job has been re-enqueued (parked) while a sibling
+  // attachment from the same sender is still being enriched (vision / Whisper /
+  // shared-post fetch), so the reply consolidates the real content instead of
+  // answering the bare text first. Kept SEPARATE from handoffRetries for the same
+  // reason as aiRetryCount: parking here must NOT trip handoff stale-backlog
+  // suppression, and these jobs must NOT be promoted by "Resume Smart Reply"
+  // (promoteDelayedJobs filters on handoffRetries > 0). Bounded in messageProcessor
+  // by MAX_ATTACHMENT_RETRIES, after which it replies to the text alone.
+  attachmentRetries?: number;
 }
 
 export interface ReplyJobResult {
@@ -603,6 +615,9 @@ export interface ReplyJobResult {
   aiIntent?: string;
   /** When set, the worker should re-enqueue this job with the given delay (ms) */
   handoffDelayMs?: number;
+  /** When set, a sibling attachment is still enriching — the worker should
+   *  re-enqueue this DM job with the given delay (ms), carrying attachmentRetries+1. */
+  attachmentPendingDelayMs?: number;
 }
 
 export const REPLY_QUEUE_NAME = 'reply-processing-queue';
