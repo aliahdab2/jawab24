@@ -232,8 +232,11 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest): Va
     const reply = parsed.reply || '';
 
     // Check 1: Hallucinated prices (currency-adjacent or price-cue + number).
+    // Grounding includes the <product_catalog> block: catalog prices (manual
+    // items or store summary) are merchant content the model legitimately
+    // quotes — without them here, every correct catalog price would flag.
     if (reply && parsed.intent === 'QUESTION') {
-        const kbText = getKBText(request);
+        const kbText = getKBText(request, { includeProductCatalog: true });
         if (kbText && flagHallucinatedPrice(reply, kbText) && !flags.includes('price_not_in_kb')) {
             flags.push('price_not_in_kb');
         }

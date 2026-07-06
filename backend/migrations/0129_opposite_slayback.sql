@@ -1,3 +1,17 @@
+-- Stage 2 v1 leftover (PR #190, reverted 2026-05-24): databases that ran the v1
+-- migration still carry its catalog_items table (price_minor / metadata /
+-- archived_at shape) with orphaned rows no code has read since the revert.
+-- Without this, CREATE TABLE IF NOT EXISTS below would silently keep the wrong
+-- shape. Detect the v1 signature column and drop the dead table first.
+DO $$ BEGIN
+ IF EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'catalog_items' AND column_name = 'price_minor'
+ ) THEN
+  DROP TABLE "catalog_items";
+ END IF;
+END $$;
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "catalog_items" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"page_id" uuid NOT NULL,

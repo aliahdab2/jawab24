@@ -74,9 +74,9 @@ describe('seedDemoData', () => {
 
         await seedDemoData('user-123', 'ws-123');
 
-        // 1 settings dashboardLanguage refresh + 6 page name refreshes (DEMO_PAGES has 6:
-        // institute, school, electronics, fashion, damascus, clinic) + 2 e-commerce page link updates (Shopify + Salla)
-        expect(db.update).toHaveBeenCalledTimes(9);
+        // 1 settings dashboardLanguage refresh + 7 page name refreshes (DEMO_PAGES has 7:
+        // institute, school, electronics, fashion, damascus, clinic, motoshop) + 2 e-commerce page link updates (Shopify + Salla)
+        expect(db.update).toHaveBeenCalledTimes(10);
     });
 
     it('should create pages when no demo data exists', async () => {

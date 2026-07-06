@@ -1,6 +1,7 @@
 import { settingsService } from '../settings';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../ecommerce';
+import { catalogService } from '../catalog';
 import { pickNudgeVariation } from './nudge';
 import { detectLanguageCode } from '../../utils/language';
 import type { PlaygroundInput } from './generator';
@@ -104,6 +105,15 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
             productCatalog = storeCtx.productCatalog;
         } catch {
             // Non-critical — fall back to raw KB
+        }
+    } else {
+        // Store-less pages: manual catalog_items fill the same <product_catalog>
+        // block — mirrors contextEnricher so playground/test-reply and production
+        // stay in sync (same rule as commentPreprocess).
+        try {
+            productCatalog = await catalogService.buildCatalogPromptBlock(page.id);
+        } catch {
+            // Non-critical — test reply proceeds without the catalog block
         }
     }
 
