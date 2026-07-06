@@ -70,9 +70,7 @@ export function KnowledgeBaseSections({
         <span className="text-xs font-medium text-surface-500 flex-shrink-0">
           {filled === total
             ? tKb('progressComplete')
-            : tKb('progress')
-                .replace('{filled}', String(filled))
-                .replace('{total}', String(total))}
+            : tKb('progress', { filled, total })}
         </span>
       </div>
 
