@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, DetailSheet } from '@/components/ui';
 import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { ReplyFeedback } from './ReplyFeedback';
+import { PostContextCard } from './PostContextCard';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -13,7 +14,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
 import { parseKeywords } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
-import { useHandoffPauseDuration, useSwipe, useArrowKeyNavigation, useClampOverflow } from '@/hooks';
+import { useHandoffPauseDuration, useSwipe, useArrowKeyNavigation } from '@/hooks';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
@@ -30,7 +31,6 @@ import {
   ExternalLink,
   CheckCircle,
   Undo2,
-  FileText,
   Pencil,
   ChevronLeft,
   ChevronRight,
@@ -117,18 +117,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [replyText, setReplyText] = useState(isHeldReply ? comment.aiOriginalReply! : '');
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Post context preview: clamped to 6 lines by default with a "show more"
-  // toggle (matches the platform's own "see more" pattern, no nested scrollbox —
-  // which traps touch scrolling in the mobile WebView). The generous 6-line clamp
-  // means most posts show in full and the toggle only appears for long ones.
-  // Navigating prev/next remounts this modal (parent keys it by comment id), so
-  // postExpanded resets to its initial collapsed state automatically.
-  const [postExpanded, setPostExpanded] = useState(false);
-  const { ref: postRef, isOverflowing: postOverflows } = useClampOverflow<HTMLParagraphElement>(
-    comment.postMessage,
-    postExpanded,
-  );
 
   // Pause state
   const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
@@ -302,59 +290,37 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 post the comment was left on, distinct from the conversation
                 bubbles. Clamped (no nested scrollbox) since it's context. */}
             {comment.postMessage && (
-              <div className="rounded-xl border border-theme-border bg-card overflow-hidden shadow-sm">
-                {/* Header: POST label + the post-scoped Post Reply action (right-aligned).
-                    Keeping the action in the post's own header reads as "this post → its
-                    auto-reply" and keeps it out of the conversation thread below. */}
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-muted border-b border-theme-border">
-                  <FileText className="w-3.5 h-3.5 flex-shrink-0 text-icon-muted" aria-hidden="true" />
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{t('postContext')}</span>
-                  {comment.postId && onSetupPostReply && (
-                    <button
-                      type="button"
-                      onClick={onSetupPostReply}
-                      title={postTriggerKeyword ? t('postTriggerEdit') : t('postTriggerAria')}
-                      aria-label={postTriggerKeyword ? t('postTriggerEdit') : t('postTriggerAria')}
-                      className={clsx(
-                        // Compact, secondary-scale action that lives in the post header.
-                        'ms-auto inline-flex items-center gap-1.5 rounded-md text-xs border transition-all',
-                        postTriggerKeyword
-                          // Already configured: quiet "edit" affordance.
-                          ? 'px-2 py-0.5 font-medium border-transparent text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
-                          // Not configured: tinted invite.
-                          : 'px-2 py-0.5 font-medium border-emerald-600/30 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 hover:border-emerald-600/50 dark:hover:bg-emerald-900/30'
-                      )}
-                    >
-                      {postTriggerKeyword
-                        ? <Pencil className="w-3 h-3" aria-hidden="true" />
-                        : <PostReplyIcon className="w-3 h-3" aria-hidden="true" />}
-                      {postTriggerKeyword ? t('postTriggerEdit') : t('postTriggerCta')}
-                    </button>
-                  )}
-                </div>
-                <p
-                  ref={postRef}
-                  className={clsx(
-                    'px-3 pt-2.5 pb-2 text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed',
-                    !postExpanded && 'line-clamp-6',
-                  )}
-                  dir="auto"
-                >
-                  {comment.postMessage}
-                </p>
-                {(postOverflows || postExpanded) && (
+              <PostContextCard
+                postMessage={comment.postMessage}
+                clampLines={6}
+                // Post-scoped Post Reply action, kept in the post's own header so it
+                // reads as "this post → its auto-reply" and stays out of the thread.
+                headerAction={comment.postId && onSetupPostReply ? (
                   <button
                     type="button"
-                    onClick={() => setPostExpanded((v) => !v)}
-                    aria-expanded={postExpanded}
-                    className="block w-full px-3 pb-2.5 text-start text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+                    onClick={onSetupPostReply}
+                    title={postTriggerKeyword ? t('postTriggerEdit') : t('postTriggerAria')}
+                    aria-label={postTriggerKeyword ? t('postTriggerEdit') : t('postTriggerAria')}
+                    className={clsx(
+                      // Compact, secondary-scale action that lives in the post header.
+                      'ms-auto inline-flex items-center gap-1.5 rounded-md text-xs border transition-all',
+                      postTriggerKeyword
+                        // Already configured: quiet "edit" affordance on the emerald band.
+                        ? 'px-2 py-0.5 font-medium border-transparent text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                        // Not configured: a card-white chip so the invite stays prominent
+                        // against the emerald header band (an emerald fill would blend in).
+                        : 'px-2 py-0.5 font-medium border-emerald-600/30 dark:border-emerald-700 bg-card text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 hover:border-emerald-600/50 dark:hover:bg-emerald-900/30'
+                    )}
                   >
-                    {postExpanded ? t('postShowLess') : t('postShowMore')}
+                    {postTriggerKeyword
+                      ? <Pencil className="w-3 h-3" aria-hidden="true" />
+                      : <PostReplyIcon className="w-3 h-3" aria-hidden="true" />}
+                    {postTriggerKeyword ? t('postTriggerEdit') : t('postTriggerCta')}
                   </button>
-                )}
-                {/* Configured keywords live inside the card so the post + its post-reply
-                    read as one unit, separated from the post text by a divider. */}
-                {comment.postId && postTriggerKeyword && (
+                ) : undefined}
+                // Configured keywords live inside the card so the post + its post-reply
+                // read as one unit, separated from the post text by a divider.
+                footer={comment.postId && postTriggerKeyword ? (
                   <div className="flex items-center gap-1.5 flex-wrap px-3 pt-2 pb-2.5 border-t border-theme-border">
                     <PostReplyIcon className={clsx('w-3.5 h-3.5 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />
                     {parseKeywords(postTriggerKeyword).map((kw, i) => (
@@ -367,8 +333,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                       </span>
                     ))}
                   </div>
-                )}
-              </div>
+                ) : undefined}
+              />
             )}
 
             {/* Incoming: customer comment */}

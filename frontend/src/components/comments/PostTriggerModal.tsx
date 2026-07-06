@@ -1,14 +1,13 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import clsx from 'clsx';
-import { FileText } from 'lucide-react';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
 import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal } from '@/components/ui';
+import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
-import { useClampOverflow } from '@/hooks';
 
 interface PostTriggerModalProps {
   postId: string;
@@ -36,20 +35,12 @@ export function PostTriggerModal({
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
   const [reply, setReply] = useState(initialReply ?? '');
   const [confirmingClear, setConfirmingClear] = useState(false);
-  const [postExpanded, setPostExpanded] = useState(false);
-
-  // Show "Show more" only when the clamped post actually overflows 3 lines.
-  const { ref: postRef, isOverflowing: postOverflows } = useClampOverflow<HTMLParagraphElement>(
-    postMessage,
-    postExpanded,
-  );
 
   // Sync when modal opens with fresh values
   useEffect(() => {
     if (isOpen) {
       setKeywords(parseKeywords(initialKeyword));
       setReply(initialReply ?? '');
-      setPostExpanded(false);
     }
   }, [isOpen, initialKeyword, initialReply]);
 
@@ -125,46 +116,10 @@ export function PostTriggerModal({
           {t('postTriggerDescription')}
         </p>
 
-        {/* Post preview — a labeled "POST" card matching CommentDetailModal, so it
-            reads as the post this reply is configured for and themes correctly in dark
-            mode (bg-surface-800 is near-white in the dark scale — see globals.css).
-            Collapsed to 3 lines by default (keeps the keyword + reply fields above the
-            fold on mobile) with a show-more toggle for long posts. */}
-        {postMessage && (
-          <div className="rounded-xl border border-theme-border bg-card overflow-hidden shadow-sm">
-            {/* Emerald header band — Post Reply's identity colour (matches the KeyRound
-                title icon / keyword chips), so the card reads as part of this feature.
-                Body stays neutral so the post text is maximally readable. */}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-100 dark:border-emerald-800/50">
-              <FileText className="w-3.5 h-3.5 flex-shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-              <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                {t('postContext')}
-              </span>
-            </div>
-            {/* Collapsed to 3 lines so a long post keeps the keyword + reply fields
-                above the fold on mobile; expandable in place when it overflows. */}
-            <p
-              ref={postRef}
-              className={clsx(
-                'px-3 pt-2.5 pb-2 text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed',
-                !postExpanded && 'line-clamp-3',
-              )}
-              dir="auto"
-            >
-              {postMessage}
-            </p>
-            {(postOverflows || postExpanded) && (
-              <button
-                type="button"
-                onClick={() => setPostExpanded(v => !v)}
-                aria-expanded={postExpanded}
-                className="block w-full px-3 pb-2.5 text-start text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline"
-              >
-                {postExpanded ? t('postShowLess') : t('postShowMore')}
-              </button>
-            )}
-          </div>
-        )}
+        {/* Post preview — the post this reply is configured for. Clamped to 3 lines
+            (keeps the keyword + reply fields above the fold on mobile) with a show-more
+            toggle for long posts. */}
+        {postMessage && <PostContextCard postMessage={postMessage} clampLines={3} />}
 
         {/* Active trigger badge */}
         {hasActiveTrigger && (
