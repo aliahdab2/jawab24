@@ -19,10 +19,15 @@ vi.mock('@/i18n/hooks', () => ({
     useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), dateLocale: {}, intlLocale: 'en-US' }),
 }));
 
+// Mutable so individual tests can flip the acting user's platform-admin flag
+// (the enable-without-info soft gate is founder-first, keyed on user.isAdmin).
+// Read lazily inside useAuthStore, so assignment in a test takes effect on render.
+let mockIsAdmin = false;
 vi.mock('@/lib/store', () => ({
     useAuthStore: () => ({
         isAuthenticated: true,
         fbToken: 'mock-fb-token',
+        user: { isAdmin: mockIsAdmin },
     }),
     useUIStore: (selector: (s: Record<string, unknown>) => unknown) =>
         selector({ sidebarOpen: false }),
@@ -605,5 +610,111 @@ describe('PagesPage - WhatsApp master switch OFF (dark deploy)', () => {
 
         // The whatsappConnected OR keeps a live number visible regardless of the flag
         expect(screen.getByText('+966 55 000 0000')).toBeInTheDocument();
+    });
+});
+
+describe('PagesPage - Enable-without-info soft gate (admin canary)', () => {
+    // page_2 in MOCK_PAGES = connected FB page, empty KB, no store, FB toggle OFF
+    // → needsBusinessInfo(page_2) is true, so enabling should confirm first (admins only).
+    beforeEach(() => {
+        mockToastError.mockClear();
+        mockIsAdmin = true;
+
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: MOCK_PAGES },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockedPagesApi.toggle.mockResolvedValue({ data: {} } as unknown as Awaited<ReturnType<typeof mockedPagesApi.toggle>>);
+        mockedApi.patch.mockResolvedValue({ data: {} } as unknown as Awaited<ReturnType<typeof mockedApi.patch>>);
+    });
+
+    afterEach(() => {
+        mockIsAdmin = false;
+        vi.clearAllMocks();
+    });
+
+    const clickPage2FacebookToggle = async () => {
+        renderPage(<PagesPage />);
+        await waitFor(() => {
+            expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
+        });
+        const allSwitches = screen.getAllByRole('switch');
+        await act(async () => {
+            fireEvent.click(allSwitches[2]); // page_2 FB toggle (OFF -> ON)
+        });
+    };
+
+    it('confirms before enabling on a page with no answer source (admin)', async () => {
+        await clickPage2FacebookToggle();
+
+        expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+        expect(screen.getByText('Turn on auto-reply without Business Info?')).toBeInTheDocument();
+        // Nothing toggled yet — the confirmation intercepted the enable
+        expect(mockedPagesApi.toggle).not.toHaveBeenCalled();
+    });
+
+    it('"Turn on anyway" proceeds with the original toggle', async () => {
+        await clickPage2FacebookToggle();
+
+        await act(async () => {
+            fireEvent.click(screen.getByText('Turn on anyway'));
+        });
+
+        expect(mockedPagesApi.toggle).toHaveBeenCalledWith('page_2', true);
+    });
+
+    it('cancel leaves the toggle off and calls nothing', async () => {
+        await clickPage2FacebookToggle();
+
+        await act(async () => {
+            fireEvent.click(screen.getByText('common.cancel'));
+        });
+
+        expect(mockedPagesApi.toggle).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('confirmation-modal')).not.toBeInTheDocument();
+    });
+
+    it('does NOT gate non-admins (canary): toggle proceeds directly', async () => {
+        mockIsAdmin = false;
+        await clickPage2FacebookToggle();
+
+        expect(screen.queryByText('Turn on auto-reply without Business Info?')).not.toBeInTheDocument();
+        expect(mockedPagesApi.toggle).toHaveBeenCalledWith('page_2', true);
+    });
+
+    it('does NOT gate a store-connected page (Salla/Shopify/Zid = answer source)', async () => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...MOCK_PAGES[1], ecommerceStoreId: 'store_1' }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => {
+            expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
+        });
+        const offToggle = screen.getAllByRole('switch').find(btn => btn.getAttribute('aria-checked') === 'false');
+        await act(async () => {
+            fireEvent.click(offToggle!);
+        });
+
+        expect(screen.queryByText('Turn on auto-reply without Business Info?')).not.toBeInTheDocument();
+        expect(mockedPagesApi.toggle).toHaveBeenCalledWith('page_2', true);
+    });
+
+    it('never gates turning auto-reply OFF', async () => {
+        // A KB-less page whose FB auto-reply is ON — disabling must never confirm
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...MOCK_PAGES[1], autoReplyEnabled: true }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => {
+            expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
+        });
+        const onToggle = screen.getAllByRole('switch').find(btn => btn.getAttribute('aria-checked') === 'true');
+        await act(async () => {
+            fireEvent.click(onToggle!);
+        });
+
+        expect(screen.queryByText('Turn on auto-reply without Business Info?')).not.toBeInTheDocument();
+        expect(mockedPagesApi.toggle).toHaveBeenCalledWith('page_2', false);
     });
 });

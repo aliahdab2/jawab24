@@ -99,6 +99,9 @@ const PagesPage: NextPageWithLayout = () => {
   const [disconnectWhatsAppPage, setDisconnectWhatsAppPage] = useState<Page | null>(null);
   // WhatsApp-only card whose remove confirmation is open (removal deletes the page row)
   const [removeWhatsAppOnlyPage, setRemoveWhatsAppOnlyPage] = useState<Page | null>(null);
+  // Pending "enable auto-reply without Business Info" confirmation: the page it
+  // was requested on + the toggle to resume if the merchant confirms (null = closed)
+  const [enableWithoutInfo, setEnableWithoutInfo] = useState<{ page: Page; proceed: () => void } | null>(null);
   // Pre-fill the test-reply box with a sample question only when opened from the
   // onboarding checklist deep-link (not from the per-page "Test smart reply" button).
   const [testReplyPrefillSample, setTestReplyPrefillSample] = useState(false);
@@ -293,86 +296,96 @@ const PagesPage: NextPageWithLayout = () => {
   }, [pages]);
   useOpenOnQueryParam('openTestReply', pagesReady, openTestReply);
 
-  const handleToggle = async (pageId: string, enabled: boolean) => {
-    setPages(prev => prev.map(page =>
-      page.id === pageId ? { ...page, autoReplyEnabled: enabled } : page
-    ));
+  /**
+   * Soft gate: enabling any channel's auto-reply on a page with no answer source
+   * (no Business Info, no store — `needsBusinessInfo`) means Jawab can only greet
+   * and hand off. Confirm first; never block ("Turn on anyway" proceeds). Gated
+   * founder-first via `user.isAdmin` (canary) — remove the isAdmin condition to
+   * roll out to everyone. Returns true when the confirmation took over.
+   */
+  const gateEnableWithoutInfo = (pageId: string, enabled: boolean, proceed: () => void): boolean => {
+    if (!enabled || !(user?.isAdmin ?? false)) return false;
+    const page = pages.find(p => p.id === pageId);
+    if (!page || !needsBusinessInfo(page)) return false;
+    setEnableWithoutInfo({ page, proceed });
+    return true;
+  };
+
+  /**
+   * Shared enable/disable flow for every channel toggle (Facebook / Instagram /
+   * WhatsApp). One implementation of: the no-answer-source soft gate, the
+   * optimistic update + rollback, and the billing/trial/disconnect error → toast
+   * mapping. Channels differ only in the field flipped, the endpoint, and the
+   * "not connected" error code — passed via `cfg`. Adding a channel = one config.
+   */
+  const toggleChannel = async (
+    pageId: string,
+    enabled: boolean,
+    cfg: {
+      field: 'autoReplyEnabled' | 'instagramAutoReplyEnabled' | 'whatsappAutoReplyEnabled';
+      call: () => Promise<unknown>;
+      disconnectedCode: string;
+      disconnectedMsg: string;
+      logLabel: string;
+      action: string;
+    },
+    skipInfoGate = false,
+  ) => {
+    if (!skipInfoGate && gateEnableWithoutInfo(pageId, enabled, () => toggleChannel(pageId, enabled, cfg, true))) return;
+
+    setPages(prev => prev.map(page => page.id === pageId ? { ...page, [cfg.field]: enabled } : page));
 
     try {
-      await pagesApi.toggle(pageId, enabled);
+      await cfg.call();
     } catch (error) {
-      setPages(prev => prev.map(page =>
-        page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
-      ));
+      setPages(prev => prev.map(page => page.id === pageId ? { ...page, [cfg.field]: !enabled } : page));
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
-        toast.error(t('reconnectRequired'));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
+      const code = axiosErr.response?.data?.code;
+      const status = axiosErr.response?.status;
+      if (code === cfg.disconnectedCode) {
+        toast.error(cfg.disconnectedMsg);
+      } else if (status === 402 && code === 'SUBSCRIPTION_INACTIVE') {
         toast.error(t('subscriptionInactive'));
-      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
+      } else if (status === 403 && code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
+      } else if (status === 402 && code === 'TRIAL_ALREADY_USED') {
         toast.error(t('pageTrialUsedBlocked'));
       } else {
-        captureError(error, 'Failed to toggle auto-reply', { tags: { page: 'pages', action: 'toggle' } });
+        captureError(error, cfg.logLabel, { tags: { page: 'pages', action: cfg.action } });
         toast.error(tc('error'));
       }
     }
   };
 
-  const handleInstagramToggle = async (pageId: string, enabled: boolean) => {
-    setPages(prev => prev.map(page =>
-      page.id === pageId ? { ...page, instagramAutoReplyEnabled: enabled } : page
-    ));
+  const handleToggle = (pageId: string, enabled: boolean) =>
+    toggleChannel(pageId, enabled, {
+      field: 'autoReplyEnabled',
+      call: () => pagesApi.toggle(pageId, enabled),
+      disconnectedCode: 'PAGE_DISCONNECTED',
+      disconnectedMsg: t('reconnectRequired'),
+      logLabel: 'Failed to toggle auto-reply',
+      action: 'toggle',
+    });
 
-    try {
-      await api.patch(`/pages/${pageId}/instagram-auto-reply`, { enabled });
-    } catch (error) {
-      setPages(prev => prev.map(page =>
-        page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
-      ));
-      const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
-        toast.error(t('reconnectRequired'));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
-        toast.error(t('subscriptionInactive'));
-      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
-        toast.error(t('pageTrialUsedBlocked'));
-      } else {
-        captureError(error, 'Failed to toggle Instagram auto-reply', { tags: { page: 'pages', action: 'instagram-toggle' } });
-        toast.error(tc('error'));
-      }
-    }
-  };
+  const handleInstagramToggle = (pageId: string, enabled: boolean) =>
+    toggleChannel(pageId, enabled, {
+      field: 'instagramAutoReplyEnabled',
+      call: () => api.patch(`/pages/${pageId}/instagram-auto-reply`, { enabled }),
+      disconnectedCode: 'PAGE_DISCONNECTED',
+      disconnectedMsg: t('reconnectRequired'),
+      logLabel: 'Failed to toggle Instagram auto-reply',
+      action: 'instagram-toggle',
+    });
 
-  const handleWhatsAppToggle = async (pageId: string, enabled: boolean) => {
-    setPages(prev => prev.map(page =>
-      page.id === pageId ? { ...page, whatsappAutoReplyEnabled: enabled } : page
-    ));
-
-    try {
-      await api.patch(`/pages/${pageId}/whatsapp-auto-reply`, { enabled });
-    } catch (error) {
-      setPages(prev => prev.map(page =>
-        page.id === pageId ? { ...page, whatsappAutoReplyEnabled: !enabled } : page
-      ));
-      const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.data?.code === 'WHATSAPP_NOT_CONNECTED') {
-        toast.error(t('whatsappNotConnected'));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
-        toast.error(t('subscriptionInactive'));
-      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
-        toast.error(t('pageTrialUsedBlocked'));
-      } else {
-        captureError(error, 'Failed to toggle WhatsApp auto-reply', { tags: { page: 'pages', action: 'whatsapp-toggle' } });
-        toast.error(tc('error'));
-      }
-    }
-  };
+  const handleWhatsAppToggle = (pageId: string, enabled: boolean) =>
+    toggleChannel(pageId, enabled, {
+      field: 'whatsappAutoReplyEnabled',
+      call: () => api.patch(`/pages/${pageId}/whatsapp-auto-reply`, { enabled }),
+      disconnectedCode: 'WHATSAPP_NOT_CONNECTED',
+      disconnectedMsg: t('whatsappNotConnected'),
+      logLabel: 'Failed to toggle WhatsApp auto-reply',
+      action: 'whatsapp-toggle',
+    });
 
   const handleRemoveWhatsAppOnlyPage = async (pageId: string) => {
     setRemoveWhatsAppOnlyPage(null);
@@ -620,9 +633,11 @@ const PagesPage: NextPageWithLayout = () => {
                 )}
               </div>
 
-              {/* Business-info nudge — connected page with empty/short KB (and not an e-commerce page) */}
+              {/* Business-info nudge — connected page with empty/short KB (and not an e-commerce page).
+                  `strong` shows the honest "can only greet until you add info" copy; gated founder-first
+                  via user.isAdmin (canary) — remove the flag to roll the honest copy out to everyone. */}
               {needsBusinessInfo(page) && (
-                <BusinessInfoNudgeBanner onAdd={() => openKnowledgeBase(page)} />
+                <BusinessInfoNudgeBanner onAdd={() => openKnowledgeBase(page)} strong={user?.isAdmin ?? false} />
               )}
 
               {/* Disconnected Banner — Facebook-backed pages only; a WhatsApp-only
@@ -1049,6 +1064,21 @@ const PagesPage: NextPageWithLayout = () => {
         message={t('whatsappDisconnectMessage', { number: disconnectWhatsAppPage?.whatsappDisplayPhoneNumber ?? '' })}
         confirmText={t('whatsappDisconnectConfirm')}
         variant="danger"
+      />
+      {/* Soft gate: enabling auto-reply on a page with no answer source (no Business
+          Info, no store) — warn that Jawab can only greet; "Turn on anyway" proceeds.
+          Founder-first via user.isAdmin inside gateEnableWithoutInfo (canary). */}
+      <ConfirmationModal
+        isOpen={!!enableWithoutInfo}
+        onClose={() => setEnableWithoutInfo(null)}
+        onConfirm={() => {
+          enableWithoutInfo?.proceed();
+          setEnableWithoutInfo(null);
+        }}
+        title={t('enableWithoutInfoTitle')}
+        message={t('enableWithoutInfoMessage')}
+        confirmText={t('enableWithoutInfoConfirm')}
+        variant="warning"
       />
     </>
   );
