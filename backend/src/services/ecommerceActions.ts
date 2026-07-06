@@ -56,17 +56,22 @@ export function sanitizePhone(raw: string): string | null {
 
 // --- Verification Helpers ---
 
-/** Normalize a name for fuzzy comparison (lowercase, trim, first-name match).
- *  Requires provided name to be at least 2 chars to prevent single-char brute-force. */
+/** Compare a stored name against a customer-provided name for identity verification.
+ *  Matches on a full first-name TOKEN, not a prefix: "محمد العلي" matches "محمد", but
+ *  "mo" does NOT match "mohammed". A prefix match let an attacker who knew an order
+ *  number pass verification by guessing a 2-char prefix of a common first name and
+ *  read another customer's order PII (name+order combine with OR, so name alone is a
+ *  full bypass). Requires >=2 chars as a floor. */
 export function namesMatch(stored: string, provided: string): boolean {
     const s = stored.toLowerCase().trim();
     const p = provided.toLowerCase().trim();
     if (!s || !p || p.length < 2) return false;
-    // Exact match
+    // Exact match on the whole stored name.
     if (s === p) return true;
-    // First name match: "محمد العلي" matches "محمد"
-    if (s.startsWith(p) || p.startsWith(s)) return true;
-    return false;
+    // First-name match: the provided value equals the stored name's first token, or
+    // vice versa (customer gives only their first name, or their full name).
+    const firstToken = (name: string): string => name.split(/\s+/)[0];
+    return firstToken(s) === p || firstToken(p) === s;
 }
 
 /** Normalize phone for comparison: strip country code prefix, compare last 9 digits */

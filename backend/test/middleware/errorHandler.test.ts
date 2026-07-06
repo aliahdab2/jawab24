@@ -100,6 +100,28 @@ describe('errorHandler middleware', () => {
         expect(Sentry.captureException).not.toHaveBeenCalled();
     });
 
+    it('should redact credential-bearing body fields before sending to Sentry', () => {
+        (mockRequest as any).body = {
+            email: 'user@example.com',
+            password: 'hunter2',
+            otp: '123456',
+            code: 'oauth-code',
+            accessToken: 'ya29.secret',
+            keep: 'visible',
+        };
+        const error = new Error('server crash');
+        errorHandler(error, mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+        const call = vi.mocked(Sentry.captureException).mock.calls[0];
+        const body = (call[1] as any).extra.body;
+        expect(body.password).toBe('[REDACTED]');
+        expect(body.otp).toBe('[REDACTED]');
+        expect(body.code).toBe('[REDACTED]');
+        expect(body.accessToken).toBe('[REDACTED]'); // matches substring "token"
+        expect(body.email).toBe('user@example.com'); // non-sensitive preserved
+        expect(body.keep).toBe('visible');
+    });
+
     // ─── AppError ─────────────────────────────────────────
 
     it('should handle AppError with correct status and code', () => {

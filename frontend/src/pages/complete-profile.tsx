@@ -6,6 +6,7 @@ import { Button } from '@/components/ui';
 import { Loader2, Mail, CheckCircle2, AlertCircle, Shield, Lock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { isSafeRedirectPath } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
 import { isRTLLocale } from '@/utils/locale';
 import { isValidEmail } from '@jawab24/shared';
@@ -41,8 +42,8 @@ export default function CompleteProfilePage() {
     
     // If user already has email, redirect to dashboard
     if (user?.email) {
-      const redirect = router.query.redirect as string;
-      router.push(redirect || '/dashboard');
+      const redirect = router.query.redirect;
+      router.push(isSafeRedirectPath(redirect) ? redirect : '/dashboard');
       return;
     }
     
@@ -90,8 +91,8 @@ export default function CompleteProfilePage() {
       
       // Redirect to intended destination or dashboard
       setTimeout(() => {
-        const redirect = router.query.redirect as string;
-        router.push(redirect || '/dashboard');
+        const redirect = router.query.redirect;
+        router.push(isSafeRedirectPath(redirect) ? redirect : '/dashboard');
       }, 2000);
       
     } catch (err: unknown) {

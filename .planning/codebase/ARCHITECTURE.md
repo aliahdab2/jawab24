@@ -193,7 +193,7 @@ Each service is independently deployable but shares:
      - `instagramReplyService.sendReply()` — Instagram Graph API calls
      - `stripe.ts` — subscription management
      - `ecommerce.ts` — Shopify/Salla/Zid product sync
-     - `catalog.ts` — native catalog (Stage 2 v2): merchant-authored offerings (`catalog_items` table — generic `type` product/service/course/vehicle/custom, name, optional price/currency/description, `is_available`, per-page cap 300) for pages WITHOUT a connected store. CRUD via `/pages/:pageId/catalog` (reads = member, writes = workspace admin; Zod validation normalizes Arabic-Indic/formatted price input). **Reply-path contract:** items reach the AI as TEXT only — `renderCatalogPromptBlock` (pure, budget 12k chars, drops descriptions then truncates with an explicit non-exhaustive tail) feeds the existing `<product_catalog>` block; NO AI function-calling tools (D-004; v1 tool-based catalog was reverted). Every write calls `pagesService.invalidatePageCaches` so the next reply regenerates. Prompt wiring lands in Phase B (`contextEnricher`); until then the renderer is exported but not called by the reply path.
+     - `catalog.ts` — native catalog (Stage 2 v2): merchant-authored offerings (`catalog_items` table — generic `type` product/service/course/vehicle/custom, name, optional price/currency/description, `is_available`, per-page cap 300) for pages WITHOUT a connected store. CRUD via `/pages/:pageId/catalog` (reads = member, writes = workspace admin; Zod validation normalizes Arabic-Indic/formatted price input). **Reply-path contract:** items reach the AI as TEXT only — `renderCatalogPromptBlock` (pure, budget 12k chars, drops descriptions then truncates with an explicit non-exhaustive tail) feeds the existing `<product_catalog>` block; NO AI function-calling tools (D-004; v1 tool-based catalog was reverted). Every write runs row-op + `pagesService.invalidatePageCaches` in ONE transaction so the next reply regenerates (a committed delete without the bump would keep quoting the deleted item until cache TTL). Prompt wiring is LIVE: `contextEnricher` + `playgroundContext` fill `context.productCatalog` from `buildCatalogPromptBlock` for store-less pages (store-linked pages keep the store summary AND reject manual writes with 409 `PAGE_HAS_STORE` — a catalog write there would orphan the page's RAG chunks via the kbActiveVersion bump). UI is founder-only during canary (`isCatalogVisible` email allowlist in `featureFlags.ts`); backend CRUD is intentionally workspace-admin-gated regardless.
    - Subdomain services:
      - `kb/` — Knowledge Base (embedding, retrieval, semantic cache)
      - `reply/` — Reply generation pipeline (context, formatting, quality checks)
@@ -295,6 +295,14 @@ Each service is independently deployable but shares:
 3. **Server** (`src/server.ts`):
    - Fastify HTTP server for health checks + admin endpoints
    - Routes: `/health`, `/admin/playground` (draft + polish)
+   - **Shared-secret auth**: an `onRequest` hook requires the `X-AI-Worker-Secret`
+     header (constant-time compared to `AI_WORKER_SECRET`) on every route except
+     `/health`. The backend attaches it to all 6 call sites via
+     `backend/src/services/aiWorkerAuth.ts`. Mandatory in production (both services
+     fail-fast on a missing/short secret); in dev an unset secret disables enforcement.
+     This closes the "internet-exposed unauthenticated paid endpoints" gap — the
+     worker's generation routes call billable OpenAI/Anthropic APIs and must only be
+     driven by our backend over the internal network.
 
 4. **Worker** (`src/worker.ts`):
    - BullMQ Worker listening to `AI_QUEUE_NAME`

@@ -48,11 +48,11 @@ export class CommentsService {
     /**
      * Get all comments for a post
      */
-    async getCommentsByPost(postId: string) {
+    async getCommentsByPost(postId: string, workspaceId: string) {
         return db
             .select()
             .from(comments)
-            .where(eq(comments.postId, postId))
+            .where(and(eq(comments.postId, postId), eq(comments.workspaceId, workspaceId)))
             .orderBy(desc(comments.createdAt));
     }
 

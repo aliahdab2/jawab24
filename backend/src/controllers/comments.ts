@@ -76,10 +76,14 @@ export class CommentsController {
      * GET /posts/:postId/comments
      */
     async getByPost(request: FastifyRequest<{ Params: { postId: string } }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
         const { postId } = request.params;
-        
+
         try {
-            const comments = await commentsService.getCommentsByPost(postId);
+            // Scope by workspace: without this, any authenticated user could read
+            // another workspace's comment thread (customer names + message PII) by
+            // supplying a foreign post id (IDOR). Foreign/unknown post → empty list.
+            const comments = await commentsService.getCommentsByPost(postId, req.workspaceId);
             return reply.send(comments);
         } catch (error) {
             request.log.error(error);

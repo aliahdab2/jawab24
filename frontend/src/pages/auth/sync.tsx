@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import { captureError } from '@/lib/sentryHelpers';
-import type { WorkspaceSummary } from '@jawab24/shared';
+import { isSafeRedirectPath, type WorkspaceSummary } from '@jawab24/shared';
 
 export default function AuthSync() {
   const router = useRouter();
@@ -64,10 +64,10 @@ export default function AuthSync() {
         
         // Brief delay to ensure storage persistence
         setTimeout(() => {
-            // redirect from query is already URL-decoded by Next.js router
-            const redirectPath = (redirect && typeof redirect === 'string' && redirect.startsWith('/')) 
-              ? redirect 
-              : '/dashboard';
+            // redirect from query is already URL-decoded by Next.js router.
+            // isSafeRedirectPath rejects protocol-relative "//evil.com" that a bare
+            // startsWith('/') check would accept (open redirect).
+            const redirectPath = isSafeRedirectPath(redirect) ? redirect : '/dashboard';
             router.replace(redirectPath);
         }, 100);
 

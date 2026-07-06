@@ -4,6 +4,25 @@ import { AppError, ValidationError } from '../utils/errors';
 import { config } from '../config';
 
 /**
+ * Redact credential-bearing keys from a request body before it is attached to a
+ * Sentry event. The header sanitizer (logSanitizer.ts) does NOT cover the body, so
+ * a 500 on an auth/OTP/token-exchange route used to ship the plaintext password /
+ * OTP / access token to Sentry. Shallow by design — the sensitive routes have flat
+ * bodies; matching is case-insensitive and substring-based (mirrors the header rule).
+ */
+function redactSensitiveBody(body: unknown): unknown {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+        const k = key.toLowerCase();
+        const sensitive = k.includes('password') || k.includes('token') || k.includes('secret')
+            || k === 'otp' || k === 'code' || k === 'pin' || k === 'signed_request';
+        out[key] = sensitive ? '[REDACTED]' : value;
+    }
+    return out;
+}
+
+/**
  * Global Error Handler for Fastify
  * Handles all errors consistently across the application
  */
@@ -28,7 +47,7 @@ export function errorHandler(
                 requestId: request.id,
                 url: request.url,
                 method: request.method,
-                body: request.body,
+                body: redactSensitiveBody(request.body),
             },
         });
     }

@@ -11,11 +11,12 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users, ecommerceStores } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
+import { config } from '../config';
 import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
 import { SmsCountryUnsupportedError } from '../services/sms';
-import { isValidPhone, isValidEmail, normalizeArabic } from '@jawab24/shared';
+import { isValidPhone, isValidEmail, normalizeArabic, isSafeRedirectPath } from '@jawab24/shared';
 
 function replyOtpError(result: Exclude<OtpVerifyResult, 'valid'>, reply: FastifyReply) {
     if (result === 'expired') {
@@ -145,7 +146,10 @@ export class AuthController {
         const parts = (state ? decodeURIComponent(state) : '').split('|');
         const returnUrlRaw = parts[0] || '/dashboard';
         const locale = parts[2] || 'ar';
-        const safeReturn = returnUrlRaw.startsWith('/') ? returnUrlRaw : '/dashboard';
+        // isSafeRedirectPath rejects protocol-relative ("//evil.com") and backslash
+        // ("/\\evil.com") values that startsWith('/') would wrongly accept — this value
+        // is later reflected into the app-sync redirect URL.
+        const safeReturn = isSafeRedirectPath(returnUrlRaw) ? returnUrlRaw : '/dashboard';
 
         const errorRedirect = `com.jawab24.app://auth/error?reason=cancelled&locale=${encodeURIComponent(locale)}`;
 
@@ -448,6 +452,21 @@ export class AuthController {
             if (email) {
                 if (!isValidEmail(email)) {
                     return reply.status(400).send({ error: 'Invalid email format' });
+                }
+
+                // Anti-escalation: admin status is bootstrapped from ADMIN_EMAILS by
+                // ensureAdminUsers (email ilike-match → is_admin=true on next startup).
+                // A non-admin must not be able to claim an admin-listed address via
+                // self-service profile edit and get auto-promoted. Existing admins may
+                // still edit their own email. Compare case-insensitively to match the
+                // ilike bootstrap. Admins are legitimately seeded via OAuth email or the
+                // CLI promote script, not this endpoint.
+                const normalizedEmail = email.trim().toLowerCase();
+                const isReservedAdminEmail = config.adminEmails.some(
+                    (adminEmail) => adminEmail.trim().toLowerCase() === normalizedEmail,
+                );
+                if (isReservedAdminEmail && !request.user?.isAdmin) {
+                    return reply.status(403).send({ error: 'This email address is not allowed' });
                 }
             }
 

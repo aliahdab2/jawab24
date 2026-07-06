@@ -82,7 +82,7 @@ describe('Translation Service', () => {
                     targetLanguage: 'ar',
                     context: { pipeline: 'translation' },
                 },
-                { timeout: 30000 },
+                { timeout: 30000, headers: expect.any(Object) },
             );
         });
 
@@ -182,7 +182,7 @@ describe('Translation Service', () => {
             expect(mockedAxios.post).toHaveBeenCalledWith(
                 expect.any(String),
                 expect.any(Object),
-                { timeout: 30000 },
+                { timeout: 30000, headers: expect.any(Object) },
             );
         });
     });
@@ -200,7 +200,7 @@ describe('Translation Service', () => {
             expect(mockedAxios.post).toHaveBeenCalledWith(
                 'http://localhost:3002/generate-variations',
                 { text: 'test message', language: 'ar', count: 5, context: { pipeline: 'translation' } },
-                { timeout: 30000 },
+                { timeout: 30000, headers: expect.any(Object) },
             );
         });
 

@@ -109,7 +109,21 @@ describe('validateEnv', () => {
         REDIS_PASSWORD: 'a-strong-redis-password',
         RESEND_API_KEY: 're_test_key',
         FACEBOOK_TOKEN_ENCRYPTION_KEY: 'a-token-encryption-key-32-chars!!',
+        AI_WORKER_SECRET: 'ai-worker-shared-secret',
     };
+
+    it('should throw in production when AI_WORKER_SECRET is missing', async () => {
+        const { AI_WORKER_SECRET: _omitted, ...withoutKey } = prodEnv;
+        process.env = { ...withoutKey };
+
+        await expect(import('../../src/utils/env')).rejects.toThrow('AI_WORKER_SECRET');
+    });
+
+    it('should throw in production when AI_WORKER_SECRET is too short', async () => {
+        process.env = { ...prodEnv, AI_WORKER_SECRET: 'short' };
+
+        await expect(import('../../src/utils/env')).rejects.toThrow('AI_WORKER_SECRET');
+    });
 
     it('should throw in production when FACEBOOK_TOKEN_ENCRYPTION_KEY is missing', async () => {
         const { FACEBOOK_TOKEN_ENCRYPTION_KEY: _omitted, ...withoutKey } = prodEnv;
