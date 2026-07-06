@@ -313,7 +313,7 @@ export const CommentCard = React.memo(function CommentCard({
                 {triggerActive ? t('postTriggerActive') : t('postTriggerCta')}
               </button>
               {showNewBadge && !triggerActive && (
-                <span className="absolute -top-2 -end-2 px-1.5 py-0.5 rounded-full bg-brand-500 text-white text-[9px] font-bold leading-none shadow-sm pointer-events-none">
+                <span className="absolute -top-2 -end-2 px-1.5 py-0.5 rounded-full bg-indigo-500 text-white text-[9px] font-bold leading-none shadow-sm pointer-events-none">
                   {t('newBadge')}
                 </span>
               )}
