@@ -99,6 +99,9 @@ const PagesPage: NextPageWithLayout = () => {
   const [disconnectWhatsAppPage, setDisconnectWhatsAppPage] = useState<Page | null>(null);
   // WhatsApp-only card whose remove confirmation is open (removal deletes the page row)
   const [removeWhatsAppOnlyPage, setRemoveWhatsAppOnlyPage] = useState<Page | null>(null);
+  // Pending "enable auto-reply without Business Info" confirmation: the page it
+  // was requested on + the toggle to resume if the merchant confirms (null = closed)
+  const [enableWithoutInfo, setEnableWithoutInfo] = useState<{ page: Page; proceed: () => void } | null>(null);
   // Pre-fill the test-reply box with a sample question only when opened from the
   // onboarding checklist deep-link (not from the per-page "Test smart reply" button).
   const [testReplyPrefillSample, setTestReplyPrefillSample] = useState(false);
@@ -293,7 +296,23 @@ const PagesPage: NextPageWithLayout = () => {
   }, [pages]);
   useOpenOnQueryParam('openTestReply', pagesReady, openTestReply);
 
-  const handleToggle = async (pageId: string, enabled: boolean) => {
+  /**
+   * Soft gate: enabling any channel's auto-reply on a page with no answer source
+   * (no Business Info, no store — `needsBusinessInfo`) means Jawab can only greet
+   * and hand off. Confirm first; never block ("Turn on anyway" proceeds). Gated
+   * founder-first via `user.isAdmin` (canary) — remove the isAdmin condition to
+   * roll out to everyone. Returns true when the confirmation took over.
+   */
+  const gateEnableWithoutInfo = (pageId: string, enabled: boolean, proceed: () => void): boolean => {
+    if (!enabled || !(user?.isAdmin ?? false)) return false;
+    const page = pages.find(p => p.id === pageId);
+    if (!page || !needsBusinessInfo(page)) return false;
+    setEnableWithoutInfo({ page, proceed });
+    return true;
+  };
+
+  const handleToggle = async (pageId: string, enabled: boolean, skipInfoGate = false) => {
+    if (!skipInfoGate && gateEnableWithoutInfo(pageId, enabled, () => handleToggle(pageId, enabled, true))) return;
     setPages(prev => prev.map(page =>
       page.id === pageId ? { ...page, autoReplyEnabled: enabled } : page
     ));
@@ -320,7 +339,8 @@ const PagesPage: NextPageWithLayout = () => {
     }
   };
 
-  const handleInstagramToggle = async (pageId: string, enabled: boolean) => {
+  const handleInstagramToggle = async (pageId: string, enabled: boolean, skipInfoGate = false) => {
+    if (!skipInfoGate && gateEnableWithoutInfo(pageId, enabled, () => handleInstagramToggle(pageId, enabled, true))) return;
     setPages(prev => prev.map(page =>
       page.id === pageId ? { ...page, instagramAutoReplyEnabled: enabled } : page
     ));
@@ -347,7 +367,8 @@ const PagesPage: NextPageWithLayout = () => {
     }
   };
 
-  const handleWhatsAppToggle = async (pageId: string, enabled: boolean) => {
+  const handleWhatsAppToggle = async (pageId: string, enabled: boolean, skipInfoGate = false) => {
+    if (!skipInfoGate && gateEnableWithoutInfo(pageId, enabled, () => handleWhatsAppToggle(pageId, enabled, true))) return;
     setPages(prev => prev.map(page =>
       page.id === pageId ? { ...page, whatsappAutoReplyEnabled: enabled } : page
     ));
@@ -620,9 +641,11 @@ const PagesPage: NextPageWithLayout = () => {
                 )}
               </div>
 
-              {/* Business-info nudge — connected page with empty/short KB (and not an e-commerce page) */}
+              {/* Business-info nudge — connected page with empty/short KB (and not an e-commerce page).
+                  `strong` shows the honest "can only greet until you add info" copy; gated founder-first
+                  via user.isAdmin (canary) — remove the flag to roll the honest copy out to everyone. */}
               {needsBusinessInfo(page) && (
-                <BusinessInfoNudgeBanner onAdd={() => openKnowledgeBase(page)} />
+                <BusinessInfoNudgeBanner onAdd={() => openKnowledgeBase(page)} strong={user?.isAdmin ?? false} />
               )}
 
               {/* Disconnected Banner — Facebook-backed pages only; a WhatsApp-only
@@ -1049,6 +1072,21 @@ const PagesPage: NextPageWithLayout = () => {
         message={t('whatsappDisconnectMessage', { number: disconnectWhatsAppPage?.whatsappDisplayPhoneNumber ?? '' })}
         confirmText={t('whatsappDisconnectConfirm')}
         variant="danger"
+      />
+      {/* Soft gate: enabling auto-reply on a page with no answer source (no Business
+          Info, no store) — warn that Jawab can only greet; "Turn on anyway" proceeds.
+          Founder-first via user.isAdmin inside gateEnableWithoutInfo (canary). */}
+      <ConfirmationModal
+        isOpen={!!enableWithoutInfo}
+        onClose={() => setEnableWithoutInfo(null)}
+        onConfirm={() => {
+          enableWithoutInfo?.proceed();
+          setEnableWithoutInfo(null);
+        }}
+        title={t('enableWithoutInfoTitle')}
+        message={t('enableWithoutInfoMessage')}
+        confirmText={t('enableWithoutInfoConfirm')}
+        variant="warning"
       />
     </>
   );

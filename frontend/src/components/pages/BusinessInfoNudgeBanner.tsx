@@ -5,14 +5,23 @@ import { Button } from '@/components/ui';
 interface BusinessInfoNudgeBannerProps {
   /** Open the business-info (knowledge base) editor for this page. */
   onAdd: () => void;
+  /**
+   * Use the honest "Jawab can only greet until you add info" copy instead of the
+   * softer "replies get more accurate" line. The banner only ever renders for a
+   * page with no answer source (no KB, no store), so the stronger wording is the
+   * truthful one. Gated founder-first via `user.isAdmin` at the call site (canary)
+   * — remove the gate to roll the honest copy out to everyone.
+   */
+  strong?: boolean;
 }
 
 /**
  * Amber call-out shown on a connected page card whose knowledge base is empty or
- * too short. Prompts the merchant to add business info so replies get more
- * accurate. The caller decides when to render it (see `needsBusinessInfo`).
+ * too short (and that has no e-commerce store to answer from). Prompts the
+ * merchant to add business info. The caller decides when to render it (see
+ * `needsBusinessInfo`).
  */
-export function BusinessInfoNudgeBanner({ onAdd }: BusinessInfoNudgeBannerProps) {
+export function BusinessInfoNudgeBanner({ onAdd, strong = false }: BusinessInfoNudgeBannerProps) {
   const t = useTranslations('pages');
   return (
     <div
@@ -22,7 +31,7 @@ export function BusinessInfoNudgeBanner({ onAdd }: BusinessInfoNudgeBannerProps)
       <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" aria-hidden="true" />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-          {t('businessInfoNudgeText')}
+          {t(strong ? 'businessInfoNudgeTextStrong' : 'businessInfoNudgeText')}
         </p>
         {/* Reuse the design-system Button (teal primary) — its contrast is vetted.
             A bespoke amber-500 button fails WCAG AA (white-on-amber-500 = 2.15:1). */}
