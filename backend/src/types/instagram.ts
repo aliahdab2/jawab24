@@ -18,6 +18,9 @@ export interface InstagramMedia {
     media_type: 'IMAGE' | 'VIDEO' | 'CAROUSEL_ALBUM' | 'REELS';
     caption?: string;
     permalink?: string;
+    /** Full media URL (the image itself for IMAGE/CAROUSEL; the video file for VIDEO/REELS). */
+    media_url?: string;
+    /** Poster/thumbnail — present for VIDEO/REELS, where media_url is the video file. */
     thumbnail_url?: string;
     timestamp?: string;
     comments_count?: number;

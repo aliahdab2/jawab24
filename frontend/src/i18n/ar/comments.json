@@ -117,5 +117,20 @@
   "postReplyIntroTitle": "رد تلقائي على المعلّقين",
   "postReplyIntroText": "حدّد كلمات مفتاحية على أي منشور، فتُرسَل رسالتك الجاهزة كما هي عندما يعلّق أحدهم بها — مثالي للردود المتكررة.",
   "postReplyIntroCta": "فعّل رد البوست",
-  "postReplyIntroDismiss": "إغلاق"
+  "postReplyIntroDismiss": "إغلاق",
+  "postReplyPickerButton": "رد البوست",
+  "postPickerTitle": "اختر منشوراً",
+  "postPickerSubtitle": "يرد رد البوست تلقائياً على كل من يعلّق على المنشور الذي تختاره.",
+  "postPickerPageLabel": "الصفحة",
+  "postPickerSourceLabel": "المنصة",
+  "postPickerSourceFacebook": "فيسبوك",
+  "postPickerSourceInstagram": "إنستغرام",
+  "postPickerActive": "مفعّل",
+  "postPickerSetup": "إعداد",
+  "postPickerNoText": "منشور بدون نص",
+  "postPickerEmpty": "لا توجد منشورات حديثة على هذه الصفحة.",
+  "postPickerError": "تعذّر تحميل منشوراتك. حاول مرة أخرى.",
+  "postPickerRetry": "إعادة المحاولة",
+  "postPickerLoadMore": "عرض المزيد",
+  "postPickerCommentCount": "{count, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}}"
 }

@@ -59,6 +59,15 @@ export default async function postsRoutes(fastify: FastifyInstance) {
             },
         }, postsController.updateTrigger);
 
+        // Ensure an internal row exists for a picked published post (Post Reply picker).
+        protectedRoutes.post('/posts/ensure', {
+            schema: {
+                tags: ['Posts'],
+                summary: 'Find-or-create the internal row for a published post so its Post Reply can be configured',
+                security: auth,
+            },
+        }, postsController.ensurePost);
+
         // Posts by page
         protectedRoutes.get('/pages/:pageId/posts', {
             schema: {
@@ -67,6 +76,15 @@ export default async function postsRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, postsController.getByPage);
+
+        // Recent published posts for the Post Reply picker (Graph API + trigger state).
+        protectedRoutes.get('/pages/:pageId/published-posts', {
+            schema: {
+                tags: ['Posts'],
+                summary: 'List recent published FB/IG posts with their Post Reply trigger state',
+                security: auth,
+            },
+        }, postsController.getPublishedPosts);
 
         // Comments by post
         protectedRoutes.get('/posts/:postId/comments', {

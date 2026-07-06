@@ -292,7 +292,7 @@ export class InstagramController {
             request.log.info(`[Instagram] Starting sync for page ${pageId}`);
 
             // Fetch media from Instagram API
-            const igMedia = await instagramService.getMedia(
+            const { media: igMedia } = await instagramService.getMedia(
                 page.instagramAccountId,
                 page.accessToken
             );

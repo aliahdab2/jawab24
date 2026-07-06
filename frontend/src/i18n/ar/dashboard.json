@@ -59,6 +59,9 @@
   "whatsappNudgeTitle": "جواب صار يرد على واتساب",
   "whatsappNudgeBody": "اربط رقم واتساب للأعمال وستصل الردود الذكية لعملائك هناك أيضًا — حتى الرسائل الصوتية.",
   "whatsappNudgeCta": "اربط واتساب",
+  "postReplyNudgeTitle": "جرّب رد البوست",
+  "postReplyNudgeBody": "ردّ تلقائي على كل من يعلّق على منشورك — مثالي للمسابقات ومنشورات «علّق ليصلك الرابط». اختر منشوراً لتفعيله.",
+  "postReplyNudgeCta": "اختر منشوراً",
   "setupChecklist": {
     "titleWithProgress": "أكمل إعدادك ({done}/{total})",
     "subtitle": "خطوات بسيطة لتبدأ باستقبال الردود الذكية",

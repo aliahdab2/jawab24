@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, PageHeader, Button, PageSkeleton, UpgradeCTA, FeedSnippet, ArrowLink } from '@/components/ui';
 import { WhatsAppNudgeBanner } from '@/components/dashboard/WhatsAppNudgeBanner';
+import { PostReplyNudgeBanner } from '@/components/dashboard/PostReplyNudgeBanner';
 import { intentLabelKey } from '@/utils/feedPreview';
 import dynamic from 'next/dynamic';
 
@@ -163,9 +164,6 @@ const DashboardPage: NextPageWithLayout = () => {
   // Selected Comment State
   const [selectedCommentData, setSelectedCommentData] = useState<{ comment: Comment, mode: 'full' | 'quick' } | null>(null);
 
-  // Shared Post Reply setup (same flow as the Comments page).
-  const postReplySetup = usePostReplySetup();
-
   // Conversation modal actions (shared hook — reply, pause, resume, resolve, pause-status)
   const {
     selectedConversation,
@@ -225,6 +223,10 @@ const DashboardPage: NextPageWithLayout = () => {
     },
     enabled: isAuthenticated,
   });
+
+  // Shared Post Reply setup (same flow as the Comments page). Given `pages` so the
+  // post picker (opened from the nudge banner) can list the merchant's posts.
+  const postReplySetup = usePostReplySetup(pages);
 
   const { data: usage } = useQuery({
     queryKey: ['dashboard-usage'],
@@ -953,6 +955,11 @@ const DashboardPage: NextPageWithLayout = () => {
 
           {/* WhatsApp launch announcement — env-gated + canary-aware inside the component */}
           <WhatsAppNudgeBanner pages={pages} isOwner={isOwner} isAdmin={user?.isAdmin ?? false} />
+
+          {/* Post Reply discovery — shows once setup is done and no post has a trigger yet.
+              Opens the post picker (owned by postReplySetup) so a merchant can arm any
+              recent post, including one with no comments. Self-hides via its own gates. */}
+          <PostReplyNudgeBanner pages={pages} usage={usage ?? null} isOwner={isOwner} onTry={postReplySetup.openPicker} />
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">

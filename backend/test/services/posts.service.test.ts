@@ -14,11 +14,19 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/services/facebook', () => ({
     facebookService: {
         getPostContent: vi.fn(),
+        getPagePosts: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/services/instagram', () => ({
+    instagramService: {
+        getMedia: vi.fn(),
     },
 }));
 
 // Import after mocking
 const { facebookService } = await import('../../src/services/facebook');
+const { instagramService } = await import('../../src/services/instagram');
 
 /** Chainable mock helpers */
 function mockInsertChain(returnValue: any) {
@@ -288,6 +296,102 @@ describe('PostsService', () => {
             expect(facebookService.getPostContent).toHaveBeenCalled();
             expect(db.update).toHaveBeenCalled();
             expect(result.message).toBe('Fetched');
+        });
+    });
+
+    describe('findOrCreateInstagramMedia', () => {
+        const media = { id: 'ig-row-1', instagramMediaId: 'ig-media-1', caption: 'cap', autoReplyEnabled: true, triggerKeyword: null, triggerReply: null, triggerType: 'keyword' };
+
+        it('returns the existing media row without inserting', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([media]) as any);
+
+            const result = await postsService.findOrCreateInstagramMedia('page-1', 'ig-media-1');
+
+            expect(result).toEqual(media);
+            expect(db.insert).not.toHaveBeenCalled();
+        });
+
+        it('creates the media row when absent', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([]) as any);
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain(media) as any);
+
+            const result = await postsService.findOrCreateInstagramMedia('page-1', 'ig-media-1');
+
+            expect(result).toEqual(media);
+            expect(db.insert).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('ensureContent', () => {
+        const page = { id: 'page-1', facebookPageId: 'fb1', instagramAccountId: 'ig1', accessToken: 'tok' };
+
+        it('routes facebook through findOrCreateFromWebhook and returns trigger fields', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([{ ...samplePost, triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword' }]) as any);
+
+            const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
+
+            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword' });
+        });
+
+        it('routes instagram through findOrCreateInstagramMedia', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([{ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all' }]) as any);
+
+            const result = await postsService.ensureContent(page, 'instagram', 'ig-media-1');
+
+            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all' });
+        });
+    });
+
+    describe('listPublishedPosts', () => {
+        const page = { id: 'page-1', facebookPageId: 'fb1', instagramAccountId: 'ig1', accessToken: 'tok' };
+
+        it('merges facebook trigger state onto the Graph listing', async () => {
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({
+                posts: [
+                    { id: 'fb_A', message: 'armed post', imageUrl: 'img', createdTime: '2026-07-01', commentsCount: 3 },
+                    { id: 'fb_B', message: 'plain post', imageUrl: null, createdTime: '2026-06-01', commentsCount: 0 },
+                ],
+                nextCursor: 'CUR',
+            });
+            // Only fb_A has a stored trigger (any-comment mode).
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ fbId: 'fb_A', triggerType: 'all' }]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'facebook' });
+
+            expect(result.nextCursor).toBe('CUR');
+            expect(result.posts).toEqual([
+                { platformPostId: 'fb_A', source: 'facebook', message: 'armed post', imageUrl: 'img', createdTime: '2026-07-01', commentsCount: 3, hasTrigger: true, triggerType: 'all' },
+                { platformPostId: 'fb_B', source: 'facebook', message: 'plain post', imageUrl: null, createdTime: '2026-06-01', commentsCount: 0, hasTrigger: false, triggerType: null },
+            ]);
+        });
+
+        it('maps instagram media (thumbnail preferred) and merges trigger state', async () => {
+            vi.mocked(instagramService.getMedia).mockResolvedValue({
+                media: [
+                    { id: 'ig_A', media_type: 'VIDEO', caption: 'reel', media_url: 'video.mp4', thumbnail_url: 'poster.jpg', timestamp: '2026-07-02', comments_count: 5 },
+                ],
+                nextCursor: null,
+            } as any);
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'instagram' });
+
+            expect(result.posts[0]).toEqual({
+                platformPostId: 'ig_A', source: 'instagram', message: 'reel',
+                imageUrl: 'poster.jpg', createdTime: '2026-07-02', commentsCount: 5,
+                hasTrigger: false, triggerType: null,
+            });
+        });
+
+        it('returns an empty page when the requested source is not connected', async () => {
+            const fbOnly = { id: 'page-1', facebookPageId: 'fb1', instagramAccountId: null, accessToken: 'tok' };
+            const result = await postsService.listPublishedPosts(fbOnly, { source: 'instagram' });
+            expect(result).toEqual({ posts: [], nextCursor: null });
+            expect(instagramService.getMedia).not.toHaveBeenCalled();
         });
     });
 });

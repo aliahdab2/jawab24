@@ -84,26 +84,34 @@ describe('InstagramService', () => {
     });
 
     describe('getMedia', () => {
-        it('should return media items', async () => {
+        it('should return media items with the paging cursor', async () => {
             const media = [{ id: 'm1' }, { id: 'm2' }];
-            mockedAxios.get.mockResolvedValue({ data: { data: media } });
+            mockedAxios.get.mockResolvedValue({ data: { data: media, paging: { cursors: { after: 'CUR2' } } } });
 
-            const result = await service.getMedia('ig-123', pageAccessToken, 10);
+            const result = await service.getMedia('ig-123', pageAccessToken, { limit: 10 });
 
-            expect(result).toEqual(media);
+            expect(result).toEqual({ media, nextCursor: 'CUR2' });
             expect(mockedAxios.get).toHaveBeenCalledWith(`${BASE}/ig-123/media`, {
                 params: {
-                    fields: 'id,media_type,caption,permalink,thumbnail_url,timestamp,comments_count',
+                    fields: 'id,media_type,caption,permalink,media_url,thumbnail_url,timestamp,comments_count',
                     limit: 10,
                     access_token: pageAccessToken,
                 },
             });
         });
 
-        it('should return empty array when data is undefined', async () => {
+        it('passes the after cursor through when paginating', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { data: [] } });
+            await service.getMedia('ig-123', pageAccessToken, { limit: 5, after: 'CUR1' });
+            expect(mockedAxios.get).toHaveBeenCalledWith(`${BASE}/ig-123/media`, {
+                params: expect.objectContaining({ limit: 5, after: 'CUR1', access_token: pageAccessToken }),
+            });
+        });
+
+        it('should return an empty page (no cursor) when data is undefined', async () => {
             mockedAxios.get.mockResolvedValue({ data: {} });
             const result = await service.getMedia('ig-123', pageAccessToken);
-            expect(result).toEqual([]);
+            expect(result).toEqual({ media: [], nextCursor: null });
         });
 
         it('should throw formatted error on Axios failure', async () => {

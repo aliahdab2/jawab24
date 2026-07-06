@@ -5,7 +5,7 @@ import { CheckCircle2, Circle, ChevronRight, Rocket, X } from 'lucide-react';
 import type { Page, UsageSummary } from '@jawab24/shared';
 import { Card } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
-import { isKbFilled } from '@/utils/kb';
+import { deriveSetupState } from '@/utils/setupChecklist';
 import { isRTLLocale } from '@/utils/locale';
 
 interface SetupChecklistCardProps {
@@ -43,25 +43,18 @@ export function SetupChecklistCard({ pages, usage }: SetupChecklistCardProps) {
     durationMs: DISMISS_DURATION_MS,
   });
 
-  // Disconnected pages (Facebook access revoked) don't count toward setup — mirror
-  // the rest of the dashboard, which filters them out before deriving state.
-  const connectedPages = pages.filter((p) => p.isConnected !== false);
-
-  const pageConnected = connectedPages.length > 0;
-  const kbFilled = connectedPages.some(isKbFilled);
-  const autoReplyOn = connectedPages.some((p) => p.autoReplyEnabled || p.instagramAutoReplyEnabled || p.whatsappAutoReplyEnabled);
-  // A reply has been sent (per-page joined count), with monthly usage as a fallback.
-  const firstReplySent =
-    connectedPages.some((p) => (p.repliesCount ?? 0) > 0) || (usage?.aiReplies?.used ?? 0) > 0;
+  // Derived from the shared source of truth so this card and the Post Reply nudge
+  // banner never disagree about whether setup is finished.
+  const setup = deriveSetupState(pages, usage);
 
   const steps: ChecklistStep[] = [
-    { key: 'connect', labelKey: 'stepConnect', done: pageConnected, href: '/pages' },
-    { key: 'kb', labelKey: 'stepKb', done: kbFilled, href: '/pages?openKb=true' },
-    { key: 'enable', labelKey: 'stepEnable', done: autoReplyOn, href: '/settings' },
+    { key: 'connect', labelKey: 'stepConnect', done: setup.pageConnected, href: '/pages' },
+    { key: 'kb', labelKey: 'stepKb', done: setup.kbFilled, href: '/pages?openKb=true' },
+    { key: 'enable', labelKey: 'stepEnable', done: setup.autoReplyOn, href: '/settings' },
     // Before a real reply exists, an inbox is empty — so send them to the Test
     // Smart Reply modal where they can watch a reply generate from their own
     // Business Info on demand. The step still completes on a real reply.
-    { key: 'firstReply', labelKey: 'stepFirstReply', done: firstReplySent, href: '/pages?openTestReply=true' },
+    { key: 'firstReply', labelKey: 'stepFirstReply', done: setup.firstReplySent, href: '/pages?openTestReply=true' },
   ];
 
   const doneCount = steps.filter((s) => s.done).length;

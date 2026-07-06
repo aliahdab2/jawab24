@@ -117,5 +117,20 @@
   "postReplyIntroTitle": "Auto-reply to commenters",
   "postReplyIntroText": "Set keywords on any post, and your ready-made message is sent as-is when someone comments them — great for replies you send often.",
   "postReplyIntroCta": "Set one up",
-  "postReplyIntroDismiss": "Dismiss"
+  "postReplyIntroDismiss": "Dismiss",
+  "postReplyPickerButton": "Post Reply",
+  "postPickerTitle": "Choose a post",
+  "postPickerSubtitle": "Post Reply auto-replies to everyone who comments on the post you choose.",
+  "postPickerPageLabel": "Page",
+  "postPickerSourceLabel": "Platform",
+  "postPickerSourceFacebook": "Facebook",
+  "postPickerSourceInstagram": "Instagram",
+  "postPickerActive": "Active",
+  "postPickerSetup": "Set up",
+  "postPickerNoText": "Post without text",
+  "postPickerEmpty": "No recent posts on this page.",
+  "postPickerError": "Couldn't load your posts. Please try again.",
+  "postPickerRetry": "Try again",
+  "postPickerLoadMore": "Show more",
+  "postPickerCommentCount": "{count, plural, one {# comment} other {# comments}}"
 }

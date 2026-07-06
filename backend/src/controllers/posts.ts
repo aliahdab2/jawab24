@@ -52,6 +52,84 @@ export class PostsController {
     }
 
     /**
+     * List the page's recent published posts for the Post Reply picker, merged with
+     * their stored trigger state. Per-platform (a page with both FB + IG shows a
+     * source toggle in the picker). Newest first; `after` pages via the Graph cursor.
+     * GET /pages/:pageId/published-posts?source=facebook|instagram&after=<cursor>
+     */
+    async getPublishedPosts(
+        request: FastifyRequest<{ Params: { pageId: string }; Querystring: { source?: string; after?: string } }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+        const { pageId } = request.params;
+
+        try {
+            const page = await pagesService.getPage(req.workspaceId, pageId);
+            if (!page) return reply.status(404).send({ error: 'Page not found' });
+
+            // Resolve source: explicit param wins; otherwise default to whichever
+            // platform the page actually has (FB preferred when both exist).
+            const requested = request.query.source;
+            const source: 'facebook' | 'instagram' =
+                requested === 'instagram' ? 'instagram'
+                : requested === 'facebook' ? 'facebook'
+                : page.facebookPageId ? 'facebook' : 'instagram';
+
+            // Requested platform not connected, or no usable token → empty page, not an
+            // error (the picker simply shows nothing for that source).
+            const hasSource = source === 'facebook' ? !!page.facebookPageId : !!page.instagramAccountId;
+            if (!hasSource || !page.accessToken) return reply.send({ posts: [], nextCursor: null });
+
+            const result = await postsService.listPublishedPosts(
+                { id: page.id, facebookPageId: page.facebookPageId, instagramAccountId: page.instagramAccountId, accessToken: page.accessToken },
+                { source, after: request.query.after },
+            );
+            return reply.send(result);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to list published posts' });
+        }
+    }
+
+    /**
+     * Ensure an internal content row exists for a picked published post, so the standard
+     * trigger endpoint can configure it — lets a merchant arm a post BEFORE its first
+     * comment. Idempotent. Returns the internal id + current trigger fields.
+     * POST /posts/ensure  { pageId, source, platformPostId }
+     */
+    async ensurePost(
+        request: FastifyRequest<{ Body: { pageId?: string; source?: string; platformPostId?: string } }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+        const { pageId, source, platformPostId } = request.body;
+
+        if (source !== 'facebook' && source !== 'instagram') {
+            return reply.status(400).send({ error: 'source must be facebook or instagram' });
+        }
+        if (!pageId || !platformPostId?.trim()) {
+            return reply.status(400).send({ error: 'pageId and platformPostId are required' });
+        }
+
+        try {
+            const page = await pagesService.getPage(req.workspaceId, pageId);
+            if (!page) return reply.status(404).send({ error: 'Page not found' });
+
+            const content = await postsService.ensureContent(
+                { id: page.id, facebookPageId: page.facebookPageId, instagramAccountId: page.instagramAccountId, accessToken: page.accessToken },
+                source, platformPostId.trim(),
+            );
+            return reply.send(content);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to prepare post' });
+        }
+    }
+
+    /**
      * Get a single post
      * GET /posts/:id
      */

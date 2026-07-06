@@ -309,9 +309,12 @@ describe('InstagramController', () => {
             vi.mocked(pagesService.getPage).mockResolvedValue(page as any);
 
             // Instagram API returns 1 media item with 1 comment
-            vi.mocked(instagramService.getMedia).mockResolvedValue([
-                { id: 'ig-media-1', media_type: 'IMAGE', caption: 'Test', permalink: 'https://...', timestamp: '2024-01-01T00:00:00Z' },
-            ] as any);
+            vi.mocked(instagramService.getMedia).mockResolvedValue({
+                media: [
+                    { id: 'ig-media-1', media_type: 'IMAGE', caption: 'Test', permalink: 'https://...', timestamp: '2024-01-01T00:00:00Z' },
+                ],
+                nextCursor: null,
+            } as any);
             vi.mocked(instagramService.getComments).mockResolvedValue([
                 { id: 'ig-comment-1', text: 'Cool!', from: { id: 'u1', username: 'fan' }, timestamp: '2024-01-01T01:00:00Z' },
             ] as any);

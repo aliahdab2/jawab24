@@ -433,6 +433,50 @@ export class FacebookService {
     }
 
     /**
+     * List a page's recent published posts (newest first) for the Post Reply picker.
+     * Returns the id, text, thumbnail, timestamp, and comment count plus a Graph cursor
+     * for "load more". Fail-soft: an API error returns an empty page rather than throwing,
+     * so a token blip degrades the picker to empty instead of erroring the whole request.
+     */
+    async getPagePosts(
+        pageId: string,
+        pageAccessToken: string,
+        opts?: { limit?: number; after?: string },
+    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; createdTime: string | null; commentsCount: number | null }>; nextCursor: string | null }> {
+        try {
+            const response = await traced('getPagePosts', () =>
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/${pageId}/posts`, {
+                    params: {
+                        fields: 'id,message,full_picture,created_time,comments.summary(true).limit(0)',
+                        limit: opts?.limit ?? 5,
+                        ...(opts?.after ? { after: opts.after } : {}),
+                        access_token: pageAccessToken,
+                    },
+                }),
+            );
+            const data = (response.data?.data ?? []) as Array<Record<string, unknown>>;
+            const posts = data.map((p) => ({
+                id: String(p.id),
+                message: (p.message as string) || null,
+                imageUrl: (p.full_picture as string) || null,
+                createdTime: (p.created_time as string) || null,
+                commentsCount: ((p.comments as { summary?: { total_count?: number } })?.summary?.total_count) ?? null,
+            }));
+            const nextCursor = (response.data?.paging?.cursors?.after as string) || null;
+            return { posts, nextCursor };
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                this.logger.error('[Facebook] Error listing page posts', {
+                    pageId,
+                    error: error.response?.data?.error?.message || error.message,
+                });
+                return { posts: [], nextCursor: null };
+            }
+            return { posts: [], nextCursor: null };
+        }
+    }
+
+    /**
      * Get comment details from Facebook
      */
     async getCommentDetails(commentId: string, pageAccessToken: string): Promise<{

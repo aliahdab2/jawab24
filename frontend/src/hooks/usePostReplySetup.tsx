@@ -3,12 +3,18 @@ import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import type { Comment } from '@jawab24/shared';
+import type { Comment, Page } from '@jawab24/shared';
+import type { PickedPost } from '@/components/comments/PostPickerSheet';
 import { postsApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 
 const PostTriggerModal = dynamic(
   () => import('@/components/comments/PostTriggerModal').then((m) => ({ default: m.PostTriggerModal })),
+  { ssr: false },
+);
+
+const PostPickerSheet = dynamic(
+  () => import('@/components/comments/PostPickerSheet').then((m) => ({ default: m.PostPickerSheet })),
   { ssr: false },
 );
 
@@ -28,9 +34,13 @@ export interface PostReplySetup {
    * blank-overwritten. Returns false if the comment has no post or the fetch failed.
    */
   open: (comment: Comment) => Promise<boolean>;
+  /** Open the post picker — lets a merchant choose any recent published post
+   *  (including one with no comments yet) to configure Post Reply on. Requires the
+   *  hook to have been given `pages`. */
+  openPicker: () => void;
   /** Close the config modal (e.g. before opening a comment on top of it). */
   close: () => void;
-  /** The config modal element — render once in the page. */
+  /** The config modal + picker sheet elements — render once in the page. */
   modal: ReactNode;
 }
 
@@ -41,10 +51,35 @@ export interface PostReplySetup {
  * page. Post Reply is post-scoped: surfaces open it for a comment's post, the hook
  * loads that post's current trigger and renders the shared PostTriggerModal.
  */
-export function usePostReplySetup(): PostReplySetup {
+export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
   const queryClient = useQueryClient();
   const tc = useTranslations('common');
   const [target, setTarget] = useState<PostReplyTarget | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const openPicker = useCallback(() => setPickerOpen(true), []);
+
+  // From the picker: ensure the internal row exists (find-or-create — works even for a
+  // post with no comments yet), then open the shared config modal on it. Reuses the
+  // same modal + onSaved flow as the comment path.
+  const openForPublishedPost = useCallback(async (picked: PickedPost): Promise<void> => {
+    try {
+      const { data } = await postsApi.ensurePost(picked.pageId, picked.source, picked.platformPostId);
+      const content = data as { id: string; triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null };
+      setPickerOpen(false);
+      setTarget({
+        postId: content.id,
+        source: picked.source,
+        postMessage: picked.postMessage,
+        keyword: content.triggerKeyword ?? null,
+        reply: content.triggerReply ?? null,
+        type: content.triggerType ?? null,
+      });
+    } catch (err) {
+      captureError(err, 'usePostReplySetup.openForPublishedPost', { tags: { action: 'post-reply-setup' } });
+      toast.error(tc('error'));
+    }
+  }, [tc]);
 
   const open = useCallback(async (comment: Comment): Promise<boolean> => {
     if (!comment.postId) return false;
@@ -81,19 +116,32 @@ export function usePostReplySetup(): PostReplySetup {
     queryClient.invalidateQueries({ queryKey: ['post-trigger'] });
   }, [queryClient]);
 
-  const modal = target ? (
-    <PostTriggerModal
-      postId={target.postId}
-      source={target.source}
-      postMessage={target.postMessage}
-      triggerKeyword={target.keyword}
-      triggerReply={target.reply}
-      triggerType={target.type}
-      isOpen
-      onClose={close}
-      onSaved={onSaved}
-    />
+  // Null when neither surface is open, so hosts can render `{modal}` inertly.
+  const modal = (pickerOpen || target) ? (
+    <>
+      {pickerOpen && (
+        <PostPickerSheet
+          pages={pages}
+          isOpen
+          onClose={() => setPickerOpen(false)}
+          onPick={openForPublishedPost}
+        />
+      )}
+      {target && (
+        <PostTriggerModal
+          postId={target.postId}
+          source={target.source}
+          postMessage={target.postMessage}
+          triggerKeyword={target.keyword}
+          triggerReply={target.reply}
+          triggerType={target.type}
+          isOpen
+          onClose={close}
+          onSaved={onSaved}
+        />
+      )}
+    </>
   ) : null;
 
-  return { open, close, modal };
+  return { open, openPicker, close, modal };
 }

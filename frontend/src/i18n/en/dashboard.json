@@ -59,6 +59,9 @@
   "whatsappNudgeTitle": "Jawab now replies on WhatsApp",
   "whatsappNudgeBody": "Connect your WhatsApp Business number and Smart Replies will answer your customers there too — voice notes included.",
   "whatsappNudgeCta": "Connect WhatsApp",
+  "postReplyNudgeTitle": "Try Post Reply",
+  "postReplyNudgeBody": "Auto-reply to everyone who comments on a post — great for giveaways and 'comment for the link' posts. Pick a post to set it up.",
+  "postReplyNudgeCta": "Choose a post",
   "setupChecklist": {
     "titleWithProgress": "Finish your setup ({done}/{total})",
     "subtitle": "A few quick steps to start getting smart replies",
