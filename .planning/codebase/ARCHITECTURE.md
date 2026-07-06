@@ -193,6 +193,7 @@ Each service is independently deployable but shares:
      - `instagramReplyService.sendReply()` — Instagram Graph API calls
      - `stripe.ts` — subscription management
      - `ecommerce.ts` — Shopify/Salla/Zid product sync
+     - `catalog.ts` — native catalog (Stage 2 v2): merchant-authored offerings (`catalog_items` table — generic `type` product/service/course/vehicle/custom, name, optional price/currency/description, `is_available`, per-page cap 300) for pages WITHOUT a connected store. CRUD via `/pages/:pageId/catalog` (reads = member, writes = workspace admin; Zod validation normalizes Arabic-Indic/formatted price input). **Reply-path contract:** items reach the AI as TEXT only — `renderCatalogPromptBlock` (pure, budget 12k chars, drops descriptions then truncates with an explicit non-exhaustive tail) feeds the existing `<product_catalog>` block; NO AI function-calling tools (D-004; v1 tool-based catalog was reverted). Every write calls `pagesService.invalidatePageCaches` so the next reply regenerates. Prompt wiring lands in Phase B (`contextEnricher`); until then the renderer is exported but not called by the reply path.
    - Subdomain services:
      - `kb/` — Knowledge Base (embedding, retrieval, semantic cache)
      - `reply/` — Reply generation pipeline (context, formatting, quality checks)

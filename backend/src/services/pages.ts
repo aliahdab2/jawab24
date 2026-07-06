@@ -486,9 +486,9 @@ export class PagesService {
      *
      * If you add a new field that gets prompt-injected (not tool-fetched), wire
      * its writer through this function or your edits won't reach customers
-     * until the next semantic-cache eviction (~24h). The catalog write path is
-     * NOT a precedent here — catalog routes through tool calls, so it doesn't
-     * need this; it only bumps kbVersion for version-chain consistency.
+     * until the next semantic-cache eviction (~24h). catalog_items writes
+     * (services/catalog.ts) follow exactly this rule — items are prompt-injected
+     * via the <product_catalog> block, so every CRUD call lands here.
      *
      * Mechanism: the exact-cache key (ai.ts:buildCacheKey) and the semantic
      * cache (kb/semantic-cache.ts) both include kbActiveVersion as a scope

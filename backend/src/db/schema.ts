@@ -1108,6 +1108,40 @@ export const ecommerceProducts = pgTable('ecommerce_products', {
     };
 });
 
+// 18b. Catalog Items Table — merchant-authored offerings for pages WITHOUT a
+// connected e-commerce store (the store-less majority). One row = one thing the
+// business sells: a product, a service, a course, a vehicle. Generic `type`
+// column, not per-vertical tables (settled kb-restructure ruling).
+//
+// Reply-path contract (Stage 2 v2): rows are rendered into the existing
+// <product_catalog> prompt block as TEXT — never exposed through AI
+// function-calling tools (D-004; the v1 tool-based catalog was reverted for
+// degrading unrelated replies). kb_chunks.source_tier=2 is reserved for these
+// rows if they're ever ingested for RAG; the prompt block is the only consumer
+// today.
+export const catalogItems = pgTable('catalog_items', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    type: varchar('type', { length: 50 }).notNull().default('product'), // 'product' | 'service' | 'course' | 'vehicle' | 'custom'
+    name: varchar('name', { length: 200 }).notNull(),
+    description: text('description'),
+    // Nullable price = "price on request" — a real state, not missing data.
+    price: numeric('price', { precision: 12, scale: 2 }),
+    currency: varchar('currency', { length: 10 }),
+    // Written in Release 2 (photo upload + DM photo-card); nullable from day one
+    // so the photo rollout needs no second migration.
+    imageUrl: text('image_url'),
+    isAvailable: boolean('is_available').notNull().default(true),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        pageIdIdx: index('idx_catalog_items_page_id').on(table.pageId),
+        pageSortIdx: index('idx_catalog_items_page_sort').on(table.pageId, table.sortOrder),
+    };
+});
+
 // ============================================
 // RAG / KNOWLEDGE BASE TABLES
 // ============================================
