@@ -98,7 +98,7 @@
   "postTriggerMode": "When to reply",
   "postTriggerModeKeyword": "Comments with a keyword",
   "postTriggerModeAll": "Any comment",
-  "postTriggerAllCaution": "Replies to every comment on this post. Spam and friend-tags are skipped automatically.",
+  "postTriggerAllCaution": "Everyone who comments gets this same reply — best for giveaways and 'comment to get the link' posts. Spam, friend-tags, and dot-only comments are skipped — for a 'comment a dot' campaign, use keyword mode with '.' instead. If commenters ask varied questions, Smart Replies answer each one individually.",
   "postTriggerAllReplyPlaceholder": "Message to send to anyone who comments...",
   "postTriggerSave": "Save",
   "postTriggerClear": "Remove",
