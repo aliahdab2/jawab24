@@ -1,6 +1,8 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { catalogService, CatalogLimitError } from '../services/catalog';
 import { CatalogItemSchema, CatalogItemUpdateSchema, formatValidationErrors } from '../utils/validation';
+import { recordActivationEvent } from '../services/activation';
+import { pagesService } from '../services/pages';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
 /**
@@ -33,6 +35,12 @@ export class CatalogController {
         try {
             const item = await catalogService.createCatalogItem(req.workspaceId, request.params.pageId, parsed.data);
             if (!item) return reply.status(404).send({ error: 'Page not found' });
+            // A catalog item is a valid answer source, so it satisfies the same
+            // "kb_filled" activation milestone as filling the free-text KB (the
+            // dashboard checklist treats them equivalently — keep the funnel in
+            // step). Fire-and-forget; onConflictDoNothing dedupes repeat adds.
+            const page = await pagesService.getPage(req.workspaceId, request.params.pageId);
+            if (page?.userId) void recordActivationEvent(page.userId, 'kb_filled', { source: 'catalog' });
             return reply.status(201).send(item);
         } catch (err) {
             if (err instanceof CatalogLimitError) {

@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
+import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems } from '../db/schema';
 import { eq, and, desc, sql, count, isNotNull } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
@@ -422,6 +422,22 @@ export class PagesService {
             captureError(err, 'Pages Post Reply trigger query failed', { level: 'warning', tags: { service: 'pages' } });
         }
 
+        // Native-catalog item counts per page. A page with items counts as having
+        // an answer source (needsBusinessInfo / setup checklist) even with an empty
+        // free-text KB. Computed fresh (not in the 60s stats cache) so the KB nudge
+        // clears the moment a merchant adds their first item. Best-effort like above.
+        const catalogCountByPage = new Map<string, number>();
+        try {
+            const rows = await db.select({ pageId: catalogItems.pageId, value: count() })
+                .from(catalogItems)
+                .innerJoin(pages, eq(catalogItems.pageId, pages.id))
+                .where(eq(pages.workspaceId, workspaceId))
+                .groupBy(catalogItems.pageId);
+            for (const r of rows) catalogCountByPage.set(r.pageId, Number(r.value));
+        } catch (err) {
+            captureError(err, 'Pages catalog count query failed', { level: 'warning', tags: { service: 'pages' } });
+        }
+
         return workspacePages.map(page => {
             const stats = statsMap.get(page.id) ?? {
                 commentsCount: 0, repliesCount: 0, breakdown: { ...emptyBreakdown }, lastActivity: null,
@@ -435,6 +451,7 @@ export class PagesService {
                     ? Math.round((stats.repliesCount / stats.commentsCount) * 100)
                     : 0,
                 hasPostReplyTrigger: triggerPageIds.has(page.id),
+                catalogItemsCount: catalogCountByPage.get(page.id) ?? 0,
             };
         });
     }

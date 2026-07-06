@@ -15,6 +15,7 @@ import {
   Users,
   UsersRound,
   Store,
+  Tag,
   ChevronDown as ChevronDownIcon,
   Check
 } from 'lucide-react';
@@ -156,9 +157,14 @@ export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boo
   // Store listing, Salla/Zid backend reliability parity). Once those land
   // we'll drop the gate. Page-level guard in pages/integrations.tsx mirrors
   // this so deep-links also fail closed.
+  // Products & Services (native catalog) is admin-gated during the founder
+  // canary, same as Stores. Once dogfooded we drop the gate (Phase D).
   const overviewItems = [
     { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
     { key: 'nav.pages', href: '/pages', icon: FileText },
+    ...(options.isAdmin
+      ? [{ key: 'nav.catalog', href: '/catalog', icon: Tag }]
+      : []),
     ...(options.isAdmin
       ? [{ key: 'nav.integrations', href: '/integrations', icon: Store }]
       : []),

@@ -57,4 +57,16 @@ describe('needsBusinessInfo', () => {
       needsBusinessInfo(page({ knowledgeBase: `${LONG} real details`, suggestedKnowledgeBase: LONG })),
     ).toBe(false);
   });
+
+  it('does not flag a page with catalog items but an empty KB (catalog is an answer source)', () => {
+    expect(
+      needsBusinessInfo(page({ knowledgeBase: null, catalogItemsCount: 3 })),
+    ).toBe(false);
+  });
+
+  it('still flags a page with an empty KB and zero catalog items', () => {
+    expect(
+      needsBusinessInfo(page({ knowledgeBase: null, catalogItemsCount: 0 })),
+    ).toBe(true);
+  });
 });

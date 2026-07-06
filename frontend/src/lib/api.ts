@@ -15,7 +15,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItemType } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -159,6 +159,28 @@ export const pagesApi = {
   testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] }) =>
     api.post(`/pages/${pageId}/test-reply`, data, { timeout: LONG_RUNNING_TIMEOUT }),
 };
+
+// Native catalog API — merchant-authored offerings on a page (no store needed).
+export const catalogApi = {
+  list: (pageId: string) => api.get(`/pages/${pageId}/catalog`),
+  create: (pageId: string, data: CatalogItemInput) =>
+    api.post(`/pages/${pageId}/catalog`, data),
+  update: (pageId: string, itemId: string, data: Partial<CatalogItemInput> & { sortOrder?: number }) =>
+    api.patch(`/pages/${pageId}/catalog/${itemId}`, data),
+  remove: (pageId: string, itemId: string) =>
+    api.delete(`/pages/${pageId}/catalog/${itemId}`),
+};
+
+/** Client-side create/update payload — price is accepted as a string so the
+ *  server can normalize Arabic-Indic digits / separators (Simplicity contract §5). */
+export interface CatalogItemInput {
+  type?: CatalogItemType;
+  name: string;
+  description?: string | null;
+  price?: string | number | null;
+  currency?: string | null;
+  isAvailable?: boolean;
+}
 
 // Posts API
 export const postsApi = {

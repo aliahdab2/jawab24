@@ -1,0 +1,68 @@
+{
+  "navTitle": "Products & Services",
+  "pageTitle": "Products & Services",
+  "pageSubtitle": "Everything you offer — with type, price and availability — so Jawab answers with the exact details.",
+  "selectPage": "Choose a page",
+  "add": "Add",
+  "addItem": "Add item",
+  "editItem": "Edit item",
+  "empty": {
+    "title": "Add what you sell",
+    "body": "Add your products, services, courses or anything else you offer. Jawab uses them to answer price and availability questions accurately.",
+    "exampleName": "Front shock absorbers",
+    "examplePrice": "350",
+    "cta": "Add your first item"
+  },
+  "count": "{count, plural, zero {No items} one {# item} other {# items}}",
+  "limitLabel": "{count} of {max} items",
+  "fields": {
+    "type": "Type",
+    "name": "Name",
+    "namePlaceholder": "e.g. Front shock absorbers",
+    "price": "Price",
+    "priceOptional": "Price (optional)",
+    "pricePlaceholder": "Leave empty for “price on request”",
+    "currency": "Currency",
+    "description": "Description",
+    "descriptionOptional": "Description (optional)",
+    "descriptionPlaceholder": "Anything useful the customer should know",
+    "available": "In stock"
+  },
+  "types": {
+    "product": "Product",
+    "service": "Service",
+    "course": "Course",
+    "vehicle": "Vehicle",
+    "custom": "Other"
+  },
+  "availability": {
+    "in": "In stock",
+    "out": "Out of stock"
+  },
+  "priceOnRequest": "Price on request",
+  "actions": {
+    "save": "Save",
+    "saveAndAddAnother": "Save & add another",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "moveUp": "Move up",
+    "moveDown": "Move down"
+  },
+  "delete": {
+    "title": "Delete this item?",
+    "body": "“{name}” will be removed from your catalog. This can’t be undone.",
+    "confirm": "Delete",
+    "cancel": "Cancel"
+  },
+  "toast": {
+    "created": "Item added",
+    "updated": "Item updated",
+    "deleted": "Item deleted",
+    "saveError": "Couldn’t save the item. Please try again.",
+    "deleteError": "Couldn’t delete the item. Please try again.",
+    "loadError": "Couldn’t load your items. Please refresh.",
+    "limitReached": "You’ve reached the {max}-item limit for this page."
+  },
+  "kbChip": "Manage products & services"
+}

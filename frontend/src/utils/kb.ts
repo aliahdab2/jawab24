@@ -22,10 +22,15 @@ export function isKbFilled(page: Pick<Page, 'knowledgeBase' | 'suggestedKnowledg
 }
 
 /**
- * A connected, non-ecommerce page whose KB is empty/short should be nudged to
- * add business info. Ecommerce pages get their product data from the store
- * integration, so they're excluded (mirrors the existing /pages "Add info" chip).
+ * A connected, non-ecommerce page with no answer source should be nudged to add
+ * business info. An answer source is EITHER a filled free-text KB OR at least one
+ * native catalog item — a merchant who structured their products in the catalog
+ * has given the AI what it needs, so don't nag them to also fill the KB text.
+ * Ecommerce pages are excluded (their products come from the store integration).
  */
 export function needsBusinessInfo(page: Page): boolean {
-  return page.isConnected !== false && !page.ecommerceStoreId && !isKbFilled(page);
+  return page.isConnected !== false
+    && !page.ecommerceStoreId
+    && !isKbFilled(page)
+    && (page.catalogItemsCount ?? 0) === 0;
 }

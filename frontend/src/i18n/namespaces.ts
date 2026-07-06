@@ -59,6 +59,7 @@ export const PAGE_NAMESPACES = {
   messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'kb', 'messages', 'pages', 'settings'],
   leads:              [...DASHBOARD_LAYOUT, 'leads', 'export'],
 
+  catalog:            [...DASHBOARD_LAYOUT, 'catalog', 'pages'],
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'testSmartReply', 'time', 'onboarding'],
   settings:           [...DASHBOARD_LAYOUT, 'settings', 'testSmartReply', 'time', 'logout'],
   team:               [...DASHBOARD_LAYOUT, 'team'],
