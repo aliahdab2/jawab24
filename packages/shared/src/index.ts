@@ -332,7 +332,30 @@ export interface Page {
   breakdown?: PageReplyBreakdown;
   replyRate?: number;
   lastActivity?: number;
+  // True when at least one post/media on this page has a Post Reply configured
+  // (trigger_reply set, either mode). Powers the dashboard "try Post Reply" nudge.
+  hasPostReplyTrigger?: boolean;
   createdAt: string | Date | null;
+}
+
+// --- Post Reply picker ---
+/** A published FB post / IG media surfaced in the Post Reply picker, merged with
+ *  its stored trigger state. `platformPostId` is the Graph object id (used to
+ *  find-or-create the internal row via POST /posts/ensure before configuring). */
+export interface PublishedPost {
+  platformPostId: string;
+  source: 'facebook' | 'instagram';
+  message: string | null;
+  imageUrl: string | null;
+  createdTime: string | null;
+  commentsCount: number | null;
+  hasTrigger: boolean;
+  triggerType?: 'keyword' | 'all' | null;
+}
+
+export interface PublishedPostsResponse {
+  posts: PublishedPost[];
+  nextCursor: string | null;
 }
 
 // --- Instagram Types ---

@@ -58,7 +58,7 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
         aria-label={tc('allPages')}
         className="inline-flex items-baseline gap-1 text-muted-foreground hover:text-foreground transition-colors group"
       >
-        <span dir="auto" className="text-sm sm:text-base font-semibold max-w-[55vw] sm:max-w-[300px] truncate">
+        <span dir="auto" className="text-xs sm:text-sm font-semibold max-w-[34vw] sm:max-w-[300px] truncate">
           {selectedPage?.name ?? tc('allPages')}
         </span>
         <ChevronDown className={clsx(

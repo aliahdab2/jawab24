@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
-import { eq, and, desc, sql, count } from 'drizzle-orm';
+import { eq, and, desc, sql, count, isNotNull } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
@@ -400,6 +400,28 @@ export class PagesService {
             captureError(err, 'Pages stats query failed', { level: 'warning', tags: { service: 'pages' } });
         }
 
+        // Which pages have at least one Post Reply configured (either mode → trigger_reply
+        // set). Kept OUT of the 60s stats cache and computed fresh so the dashboard
+        // "try Post Reply" nudge disappears immediately once a merchant sets their first
+        // trigger. Cheap (two indexed existence scans); best-effort like the stats above.
+        const triggerPageIds = new Set<string>();
+        try {
+            const [fbTrig, igTrig] = await Promise.all([
+                db.selectDistinct({ pageId: posts.pageId })
+                    .from(posts)
+                    .innerJoin(pages, eq(posts.pageId, pages.id))
+                    .where(and(eq(pages.workspaceId, workspaceId), isNotNull(posts.triggerReply))),
+                db.selectDistinct({ pageId: instagramMedia.pageId })
+                    .from(instagramMedia)
+                    .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                    .where(and(eq(pages.workspaceId, workspaceId), isNotNull(instagramMedia.triggerReply))),
+            ]);
+            for (const r of fbTrig) if (r.pageId) triggerPageIds.add(r.pageId);
+            for (const r of igTrig) if (r.pageId) triggerPageIds.add(r.pageId);
+        } catch (err) {
+            captureError(err, 'Pages Post Reply trigger query failed', { level: 'warning', tags: { service: 'pages' } });
+        }
+
         return workspacePages.map(page => {
             const stats = statsMap.get(page.id) ?? {
                 commentsCount: 0, repliesCount: 0, breakdown: { ...emptyBreakdown }, lastActivity: null,
@@ -412,6 +434,7 @@ export class PagesService {
                 replyRate: stats.commentsCount > 0
                     ? Math.round((stats.repliesCount / stats.commentsCount) * 100)
                     : 0,
+                hasPostReplyTrigger: triggerPageIds.has(page.id),
             };
         });
     }

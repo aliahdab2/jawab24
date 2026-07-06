@@ -1,8 +1,21 @@
 import { db } from '../db';
 import { posts, pages, instagramMedia } from '../db/schema';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, inArray, isNotNull } from 'drizzle-orm';
 import { CreatePostDTO, UpdatePostDTO, Logger, noopLogger } from '../types';
 import { facebookService } from './facebook';
+import { instagramService } from './instagram';
+import type { PublishedPost } from '@jawab24/shared';
+
+/** Default number of published posts shown per picker page (owner: "last 5, not more").
+ *  "Load more" fetches the next page via the platform Graph cursor. */
+export const PICKER_PAGE_SIZE = 5;
+
+type PickerPage = {
+    id: string;
+    facebookPageId: string | null;
+    instagramAccountId?: string | null;
+    accessToken: string;
+};
 
 export class PostsService {
     private logger: Logger = noopLogger;
@@ -236,6 +249,135 @@ export class PostsService {
             facebookPostId,
             message: postMessage,
         });
+    }
+
+    /**
+     * Find-or-create the internal instagram_media row for a media id. Single source of
+     * truth shared by the comment pipeline (`InstagramCommentAdapter.findOrCreateContent`)
+     * and the Post Reply picker's ensure endpoint — do NOT inline this insert elsewhere.
+     */
+    async findOrCreateInstagramMedia(pageId: string, instagramMediaId: string) {
+        const existing = await db
+            .select()
+            .from(instagramMedia)
+            .where(eq(instagramMedia.instagramMediaId, instagramMediaId));
+        if (existing[0]) return existing[0];
+
+        const [created] = await db
+            .insert(instagramMedia)
+            .values({ pageId, instagramMediaId, autoReplyEnabled: true })
+            .returning();
+        return created;
+    }
+
+    /**
+     * Ensure an internal content row exists for a published post the merchant picked,
+     * so the standard `PATCH /posts/:id/trigger` can configure it. Idempotent
+     * (find-or-create) and reuses the same primitives the comment webhook path uses,
+     * so a post armed BEFORE its first comment converges with the row a later comment
+     * would have created. Returns the internal id + current trigger fields.
+     */
+    async ensureContent(
+        page: PickerPage,
+        source: 'facebook' | 'instagram',
+        platformPostId: string,
+    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all' }> {
+        if (source === 'facebook') {
+            const post = await this.findOrCreateFromWebhook(page.id, platformPostId, undefined, page.accessToken);
+            return {
+                id: post.id,
+                triggerKeyword: post.triggerKeyword ?? null,
+                triggerReply: post.triggerReply ?? null,
+                triggerType: post.triggerType === 'all' ? 'all' : 'keyword',
+            };
+        }
+        const media = await this.findOrCreateInstagramMedia(page.id, platformPostId);
+        return {
+            id: media.id,
+            triggerKeyword: media.triggerKeyword ?? null,
+            triggerReply: media.triggerReply ?? null,
+            triggerType: media.triggerType === 'all' ? 'all' : 'keyword',
+        };
+    }
+
+    /** Map platform post ids → their stored trigger type, but ONLY for rows that
+     *  actually carry a Post Reply (`trigger_reply` set). Absent id = no trigger. */
+    private async facebookTriggerMap(facebookPostIds: string[]): Promise<Map<string, 'keyword' | 'all'>> {
+        const map = new Map<string, 'keyword' | 'all'>();
+        if (facebookPostIds.length === 0) return map;
+        const rows = await db
+            .select({ fbId: posts.facebookPostId, triggerType: posts.triggerType })
+            .from(posts)
+            .where(and(inArray(posts.facebookPostId, facebookPostIds), isNotNull(posts.triggerReply)));
+        for (const r of rows) if (r.fbId) map.set(r.fbId, r.triggerType === 'all' ? 'all' : 'keyword');
+        return map;
+    }
+
+    private async instagramTriggerMap(mediaIds: string[]): Promise<Map<string, 'keyword' | 'all'>> {
+        const map = new Map<string, 'keyword' | 'all'>();
+        if (mediaIds.length === 0) return map;
+        const rows = await db
+            .select({ mid: instagramMedia.instagramMediaId, triggerType: instagramMedia.triggerType })
+            .from(instagramMedia)
+            .where(and(inArray(instagramMedia.instagramMediaId, mediaIds), isNotNull(instagramMedia.triggerReply)));
+        for (const r of rows) if (r.mid) map.set(r.mid, r.triggerType === 'all' ? 'all' : 'keyword');
+        return map;
+    }
+
+    /**
+     * List a page's recent published posts for the Post Reply picker, merged with their
+     * stored trigger state. Per-platform (FB or IG) so pagination uses one Graph cursor;
+     * the caller picks the source (a page connected to both shows a source toggle).
+     * Graph errors degrade to an empty page (getPagePosts/getMedia handle FB; IG throws,
+     * so the caller wraps). Newest first, `limit` items (default 5) + a `nextCursor`.
+     */
+    async listPublishedPosts(
+        page: PickerPage,
+        opts: { source: 'facebook' | 'instagram'; limit?: number; after?: string },
+    ): Promise<{ posts: PublishedPost[]; nextCursor: string | null }> {
+        const limit = opts.limit ?? PICKER_PAGE_SIZE;
+
+        if (opts.source === 'facebook') {
+            if (!page.facebookPageId) return { posts: [], nextCursor: null };
+            const { posts: raw, nextCursor } = await facebookService.getPagePosts(
+                page.facebookPageId, page.accessToken, { limit, after: opts.after },
+            );
+            const triggers = await this.facebookTriggerMap(raw.map(p => p.id));
+            return {
+                posts: raw.map(p => ({
+                    platformPostId: p.id,
+                    source: 'facebook' as const,
+                    message: p.message,
+                    imageUrl: p.imageUrl,
+                    createdTime: p.createdTime,
+                    commentsCount: p.commentsCount,
+                    hasTrigger: triggers.has(p.id),
+                    triggerType: triggers.get(p.id) ?? null,
+                })),
+                nextCursor,
+            };
+        }
+
+        if (!page.instagramAccountId) return { posts: [], nextCursor: null };
+        const { media, nextCursor } = await instagramService.getMedia(
+            page.instagramAccountId, page.accessToken, { limit, after: opts.after },
+        );
+        const triggers = await this.instagramTriggerMap(media.map(m => m.id));
+        return {
+            posts: media.map(m => ({
+                platformPostId: m.id,
+                source: 'instagram' as const,
+                message: m.caption ?? null,
+                // thumbnail_url is the poster for VIDEO/REELS (media_url is the video file);
+                // for IMAGE/CAROUSEL thumbnail is absent so media_url is the image.
+                imageUrl: m.thumbnail_url || m.media_url || null,
+                createdTime: m.timestamp ?? null,
+                commentsCount: m.comments_count ?? null,
+                hasTrigger: triggers.has(m.id),
+                triggerType: triggers.get(m.id) ?? null,
+            })),
+            nextCursor,
+        };
     }
 }
 

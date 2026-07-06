@@ -308,11 +308,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                       // Compact, secondary-scale action that lives in the post header.
                       'ms-auto inline-flex items-center gap-1.5 rounded-md text-xs border transition-all',
                       postTrigger
-                        // Already configured: quiet "edit" affordance on the emerald band.
-                        ? 'px-2 py-0.5 font-medium border-transparent text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                        // Already configured: quiet "edit" affordance.
+                        ? 'px-2 py-0.5 font-medium border-transparent text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'
                         // Not configured: a card-white chip so the invite stays prominent
-                        // against the emerald header band (an emerald fill would blend in).
-                        : 'px-2 py-0.5 font-medium border-emerald-600/30 dark:border-emerald-700 bg-card text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 hover:border-emerald-600/50 dark:hover:bg-emerald-900/30'
+                        // against the header band (an indigo fill would blend in).
+                        : 'px-2 py-0.5 font-medium border-indigo-600/30 dark:border-indigo-700 bg-card text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 hover:border-indigo-600/50 dark:hover:bg-indigo-900/30'
                     )}
                   >
                     {postTrigger
@@ -331,7 +331,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                     {(postTrigger.keyword ? parseKeywords(postTrigger.keyword) : [t('postTriggerModeAll')]).map((kw, i) => (
                       <span
                         key={i}
-                        className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700"
+                        className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700"
                         dir="auto"
                       >
                         {kw}

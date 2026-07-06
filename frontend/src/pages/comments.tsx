@@ -40,6 +40,7 @@ import { getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { groupComments, filterGroupsBySearch } from '@/utils/commentGrouping';
+import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 
 import { type InboxFilterType, resolveInboxFilter, inboxFilterToApiParams } from '@/utils/inboxFilters';
 type FilterType = InboxFilterType;
@@ -70,9 +71,6 @@ const CommentsPage: NextPageWithLayout = () => {
   const [listView, setListView] = usePersistedBoolean('comments:listView', false);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
-
-  // Shared Post Reply setup (config modal state + render + safe open flow).
-  const postReplySetup = usePostReplySetup();
 
   // Fetch all posts so we can show active trigger state (⚡ green) on page load
   const { data: postsData = [] } = useQuery({
@@ -121,6 +119,9 @@ const CommentsPage: NextPageWithLayout = () => {
     enabled: isAuthenticated,
   });
   const pages = pagesData as Page[];
+  // Shared Post Reply setup (config modal + picker sheet + safe open flow). Given
+  // `pages` so the header "رد البوست" button can open the post picker.
+  const postReplySetup = usePostReplySetup(pages);
   const { pageId, activePages, updatePageId, syncFromUrl } = usePageFilter(pages);
 
   // Get API params based on current filter + page
@@ -467,7 +468,25 @@ const CommentsPage: NextPageWithLayout = () => {
           />
         }
         description={t('description')}
-        action={<InboxExportButton onExport={exportToCSV} exporting={exporting} />}
+        action={
+          <div className="flex items-center gap-1">
+            {/* Lightweight ghost action — labeled on every breakpoint so the feature
+                reads clearly on mobile and web (owner call). The ghost weight (vs the
+                old filled block) keeps it from dominating the header even with the
+                label always shown; the indigo key carries the Post Reply identity,
+                distinct from the icon-only Export beside it. */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={postReplySetup.openPicker}
+              className="gap-1.5 whitespace-nowrap"
+            >
+              <PostReplyIcon className={clsx('w-4 h-4 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />
+              {t('postReplyPickerButton')}
+            </Button>
+            <InboxExportButton onExport={exportToCSV} exporting={exporting} />
+          </div>
+        }
       />
 
       {/* First-run education: only before the merchant has set up any Post Reply,

@@ -46,7 +46,8 @@ describe('ReplySourceBadge', () => {
       const { container: templateC } = render(<ReplySourceBadge method="template" variant="compact" />);
       expect(aiC.firstChild).toHaveClass('reply-source-ai');
       expect(manualC.firstChild).toHaveClass('reply-source-manual');
-      expect(postReplyC.firstChild).toHaveClass('reply-source-template');
+      // Post Reply has its own indigo identity, distinct from the fallback-template emerald.
+      expect(postReplyC.firstChild).toHaveClass('reply-source-post-reply');
       expect(templateC.firstChild).toHaveClass('reply-source-template');
     });
   });

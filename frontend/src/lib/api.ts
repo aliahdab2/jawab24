@@ -174,6 +174,16 @@ export const postsApi = {
     triggerReply: string | null,
     triggerType: 'keyword' | 'all' = 'keyword',
   ) => api.patch(`/posts/${id}/trigger`, { source, triggerKeyword, triggerReply, triggerType }),
+  // Post Reply picker: recent published posts for a page (per platform) + their
+  // trigger state, paginated via the platform Graph cursor.
+  getPublishedPosts: (pageId: string, opts?: { source?: 'facebook' | 'instagram'; after?: string }) =>
+    api.get(`/pages/${pageId}/published-posts`, {
+      params: { ...(opts?.source ? { source: opts.source } : {}), ...(opts?.after ? { after: opts.after } : {}) },
+    }),
+  // Find-or-create the internal row for a picked published post so its trigger can be
+  // configured — lets a merchant arm a post before its first comment arrives.
+  ensurePost: (pageId: string, source: 'facebook' | 'instagram', platformPostId: string) =>
+    api.post('/posts/ensure', { pageId, source, platformPostId }),
 };
 
 // Comments API Types

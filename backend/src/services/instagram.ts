@@ -64,23 +64,29 @@ export class InstagramService {
      * Get Instagram media (posts, reels) for an account
      * Requires: instagram_business_basic permission
      */
-    async getMedia(instagramAccountId: string, pageAccessToken: string, limit: number = 25): Promise<InstagramMedia[]> {
+    async getMedia(
+        instagramAccountId: string,
+        pageAccessToken: string,
+        opts: { limit?: number; after?: string } = {},
+    ): Promise<{ media: InstagramMedia[]; nextCursor: string | null }> {
         try {
             this.logger.debug('[Instagram] Fetching media', { instagramAccountId });
-            
+
             const response = await axios.get<InstagramMediaResponse>(
                 `${INSTAGRAM_GRAPH_API}/${instagramAccountId}/media`,
                 {
                     params: {
-                        fields: 'id,media_type,caption,permalink,thumbnail_url,timestamp,comments_count',
-                        limit,
+                        fields: 'id,media_type,caption,permalink,media_url,thumbnail_url,timestamp,comments_count',
+                        limit: opts.limit ?? 25,
+                        ...(opts.after ? { after: opts.after } : {}),
                         access_token: pageAccessToken,
                     },
                 }
             );
 
-            this.logger.info('[Instagram] Found media items', { count: response.data.data?.length || 0 });
-            return response.data.data || [];
+            const media = response.data.data || [];
+            this.logger.info('[Instagram] Found media items', { count: media.length });
+            return { media, nextCursor: response.data.paging?.cursors?.after || null };
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 this.logger.error('[Instagram] API Error fetching media', { error: error.response?.data?.error?.message || error.message });

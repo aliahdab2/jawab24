@@ -647,6 +647,12 @@
     @apply bg-emerald-100 text-emerald-600
            dark:bg-emerald-900/30 dark:text-emerald-400;
   }
+  /* Post Reply identity — indigo, distinct from Smart Reply's violet (reply-source-ai)
+     and the fallback-template emerald. See src/utils/postReply.ts. */
+  .reply-source-post-reply {
+    @apply bg-indigo-100 text-indigo-600
+           dark:bg-indigo-900/30 dark:text-indigo-400;
+  }
   .reply-source-manual {
     @apply bg-slate-100 text-slate-600
            dark:bg-slate-800/60 dark:text-slate-300;

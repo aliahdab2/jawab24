@@ -215,5 +215,82 @@ describe('Posts Routes', () => {
             expect(response.statusCode).toBe(404);
         });
     });
+
+    describe('GET /pages/:pageId/published-posts', () => {
+        it('lists posts via the service, defaulting source to facebook when the page has a FB id', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'p1', facebookPageId: 'fb1', instagramAccountId: null, accessToken: 'tok' } as any);
+            vi.mocked(postsService.listPublishedPosts).mockResolvedValue({ posts: [], nextCursor: null } as any);
+
+            const res = await app.inject({ method: 'GET', url: '/pages/p1/published-posts' });
+
+            expect(res.statusCode).toBe(200);
+            expect(postsService.listPublishedPosts).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'p1' }),
+                expect.objectContaining({ source: 'facebook' }),
+            );
+        });
+
+        it('returns 404 when the workspace does not own the page', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue(null as any);
+            const res = await app.inject({ method: 'GET', url: '/pages/p1/published-posts' });
+            expect(res.statusCode).toBe(404);
+        });
+
+        it('returns an empty page (not an error) when the requested source is not connected', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'p1', facebookPageId: 'fb1', instagramAccountId: null, accessToken: 'tok' } as any);
+
+            const res = await app.inject({ method: 'GET', url: '/pages/p1/published-posts?source=instagram' });
+
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.payload)).toEqual({ posts: [], nextCursor: null });
+            expect(postsService.listPublishedPosts).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('POST /posts/ensure', () => {
+        it('find-or-creates the internal row and returns its trigger fields', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'p1', facebookPageId: 'fb1', instagramAccountId: null, accessToken: 'tok' } as any);
+            vi.mocked(postsService.ensureContent).mockResolvedValue({ id: 'internal-1', triggerKeyword: null, triggerReply: null, triggerType: 'keyword' } as any);
+
+            const res = await app.inject({
+                method: 'POST',
+                url: '/posts/ensure',
+                payload: { pageId: 'p1', source: 'facebook', platformPostId: 'fb_123' },
+            });
+
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.payload)).toMatchObject({ id: 'internal-1' });
+            expect(postsService.ensureContent).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), 'facebook', 'fb_123');
+        });
+
+        it('returns 400 for an invalid source', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: '/posts/ensure',
+                payload: { pageId: 'p1', source: 'twitter', platformPostId: 'x' },
+            });
+            expect(res.statusCode).toBe(400);
+            expect(postsService.ensureContent).not.toHaveBeenCalled();
+        });
+
+        it('returns 400 when platformPostId is missing', async () => {
+            const res = await app.inject({
+                method: 'POST',
+                url: '/posts/ensure',
+                payload: { pageId: 'p1', source: 'facebook' },
+            });
+            expect(res.statusCode).toBe(400);
+        });
+
+        it('returns 404 when the workspace does not own the page', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue(null as any);
+            const res = await app.inject({
+                method: 'POST',
+                url: '/posts/ensure',
+                payload: { pageId: 'p1', source: 'facebook', platformPostId: 'x' },
+            });
+            expect(res.statusCode).toBe(404);
+        });
+    });
 });
 

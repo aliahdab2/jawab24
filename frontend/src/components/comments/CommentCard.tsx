@@ -295,25 +295,25 @@ export const CommentCard = React.memo(function CommentCard({
                 title={triggerActive ? t('postTriggerActiveAria') : t('postTriggerAria')}
                 aria-label={triggerActive ? t('postTriggerActiveAria') : t('postTriggerAria')}
                 className={clsx(
-                  'flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm border transition-all',
+                  'flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs border transition-all',
                   triggerActive
                     // Configured ("on"): quiet, settled confirmation — nothing left to do here,
                     // so it recedes rather than competing for attention.
-                    ? 'font-medium border-transparent bg-emerald-50/70 dark:bg-emerald-900/15 text-emerald-700/90 dark:text-emerald-300/90'
-                    // Not configured: medium-emphasis invite. Emerald is the Post Reply identity
+                    ? 'font-medium border-transparent bg-indigo-50/70 dark:bg-indigo-900/15 text-indigo-700/90 dark:text-indigo-300/90'
+                    // Not configured: medium-emphasis invite. Indigo is the Post Reply identity
                     // colour, kept tinted (not a saturated fill) so a list of mostly-unconfigured
-                    // posts doesn't become a wall of green — the red "needs attention" state stays
+                    // posts doesn't become a wall of colour — the red "needs attention" state stays
                     // the loudest signal on the card. Discovery punch comes from the NEW badge.
-                    : 'font-semibold border-emerald-600/30 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 hover:border-emerald-600/50 dark:hover:bg-emerald-900/30'
+                    : 'font-semibold border-indigo-600/30 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 hover:border-indigo-600/50 dark:hover:bg-indigo-900/30'
                 )}
               >
                 {triggerActive
-                  ? <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
-                  : <PostReplyIcon className="w-3.5 h-3.5" aria-hidden="true" />}
+                  ? <CheckCircle className="w-3 h-3" aria-hidden="true" />
+                  : <PostReplyIcon className="w-3 h-3" aria-hidden="true" />}
                 {triggerActive ? t('postTriggerActive') : t('postTriggerCta')}
               </button>
               {showNewBadge && !triggerActive && (
-                <span className="absolute -top-2 -end-2 px-1.5 py-0.5 rounded-full bg-brand-500 text-white text-[9px] font-bold leading-none shadow-sm pointer-events-none">
+                <span className="absolute -top-2 -end-2 px-1.5 py-0.5 rounded-full bg-indigo-500 text-white text-[9px] font-bold leading-none shadow-sm pointer-events-none">
                   {t('newBadge')}
                 </span>
               )}

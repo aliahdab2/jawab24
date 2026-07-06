@@ -1,4 +1,5 @@
 import { pagesService } from '../../pages';
+import { postsService } from '../../posts';
 import { instagramService } from '../../instagram';
 import { pickNudgeVariation } from '../nudge';
 import { detectLanguageCode, detectCommentLanguage } from '../../../utils/language';
@@ -6,7 +7,7 @@ import { stripCommentNoise } from '../../../utils/commentText';
 import { classifyDmError, type DmFailure } from '../../../utils/fbGraphErrors';
 import { t } from '../../../utils/i18n';
 import { db } from '../../../db';
-import { instagramMedia, instagramComments } from '../../../db/schema';
+import { instagramComments } from '../../../db/schema';
 import { eq } from 'drizzle-orm';
 import { mapToPlatformPage } from './shared';
 import type { ReplyMode } from '../sender';
@@ -37,38 +38,16 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
     }
 
     async findOrCreateContent(pageId: string, instagramMediaId: string): Promise<ContentEntity> {
-        const existing = await db
-            .select()
-            .from(instagramMedia)
-            .where(eq(instagramMedia.instagramMediaId, instagramMediaId));
-
-        if (existing[0]) {
-            return {
-                id: existing[0].id,
-                autoReplyEnabled: existing[0].autoReplyEnabled ?? true,
-                message: existing[0].caption,
-                triggerKeyword: existing[0].triggerKeyword ?? null,
-                triggerReply: existing[0].triggerReply ?? null,
-                triggerType: existing[0].triggerType ?? 'keyword',
-            };
-        }
-
-        const [created] = await db
-            .insert(instagramMedia)
-            .values({
-                pageId,
-                instagramMediaId,
-                autoReplyEnabled: true,
-            })
-            .returning();
-
+        // Shared with the Post Reply picker's ensure endpoint — the find-or-create lives
+        // in postsService so both paths converge on the same row (see postsService).
+        const media = await postsService.findOrCreateInstagramMedia(pageId, instagramMediaId);
         return {
-            id: created.id,
-            autoReplyEnabled: true,
-            message: created.caption,
-            triggerKeyword: null,
-            triggerReply: null,
-            triggerType: 'keyword',
+            id: media.id,
+            autoReplyEnabled: media.autoReplyEnabled ?? true,
+            message: media.caption,
+            triggerKeyword: media.triggerKeyword ?? null,
+            triggerReply: media.triggerReply ?? null,
+            triggerType: media.triggerType ?? 'keyword',
         };
     }
 
