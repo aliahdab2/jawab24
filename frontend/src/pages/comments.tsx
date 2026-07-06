@@ -470,20 +470,19 @@ const CommentsPage: NextPageWithLayout = () => {
         description={t('description')}
         action={
           <div className="flex items-center gap-1">
-            {/* Lightweight ghost action paired with the icon-only Export — labeled on
-                desktop for discovery, collapses to an icon on mobile (aria-label/title
-                keep it accessible) so the header doesn't crowd on narrow screens. The
-                emerald key carries the Post Reply identity, distinct from Export. */}
+            {/* Lightweight ghost action — labeled on every breakpoint so the feature
+                reads clearly on mobile and web (owner call). The ghost weight (vs the
+                old filled block) keeps it from dominating the header even with the
+                label always shown; the emerald key carries the Post Reply identity,
+                distinct from the icon-only Export beside it. */}
             <Button
               size="sm"
               variant="ghost"
               onClick={postReplySetup.openPicker}
-              className="gap-1.5"
-              aria-label={t('postReplyPickerButton')}
-              title={t('postReplyPickerButton')}
+              className="gap-1.5 whitespace-nowrap"
             >
               <PostReplyIcon className={clsx('w-4 h-4 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />
-              <span className="hidden sm:inline">{t('postReplyPickerButton')}</span>
+              {t('postReplyPickerButton')}
             </Button>
             <InboxExportButton onExport={exportToCSV} exporting={exporting} />
           </div>
