@@ -195,6 +195,14 @@ describe('namesMatch', () => {
         expect(namesMatch('Abdullah Mohammed Al Rashid', 'Mohammed')).toBe(false);
     });
 
+    it('does NOT match a short prefix of the first name (brute-force guard)', () => {
+        // Regression: a 2-char prefix used to pass (startsWith), letting an attacker
+        // guess "mo"/"ah" to read another customer's order. Full first-name token only.
+        expect(namesMatch('mohammed', 'mo')).toBe(false);
+        expect(namesMatch('Ahmed Ali', 'Ah')).toBe(false);
+        expect(namesMatch('fatima', 'fat')).toBe(false);
+    });
+
     it('does not match completely different names', () => {
         expect(namesMatch('محمد', 'فاطمة')).toBe(false);
     });

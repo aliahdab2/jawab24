@@ -3,7 +3,6 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { AuthenticatedRequest } from './auth';
-import { config } from '../config';
 
 export interface AdminUser {
     userId: string;
@@ -13,20 +12,23 @@ export interface AdminUser {
 }
 
 /**
- * Check if a user is an admin
+ * Check if a user is an admin.
+ *
+ * The authoritative admin signal is the `is_admin` DB column (set only by the
+ * trusted `ensureAdminUsers` startup bootstrap or the CLI promote/demote scripts) —
+ * NOT the user's email. `email` is self-settable via PATCH /auth/profile, unverified,
+ * and not unique, so comparing it against the admin allowlist here let any authed
+ * user grant themselves admin by changing their email. Reading `is_admin` fresh (vs.
+ * the JWT-cached flag) also means a demotion takes effect immediately.
  */
 export async function isUserAdmin(userId: string): Promise<boolean> {
     try {
         const [user] = await db
-            .select({ email: users.email })
+            .select({ isAdmin: users.isAdmin })
             .from(users)
             .where(eq(users.id, userId));
-        
-        if (!user || !user.email) {
-            return false;
-        }
-        
-        return config.adminEmails.includes(user.email);
+
+        return user?.isAdmin === true;
     } catch {
         return false;
     }

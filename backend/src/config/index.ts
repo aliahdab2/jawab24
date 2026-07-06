@@ -42,6 +42,8 @@ export const config = {
     // AI Service
     ai: {
         serviceUrl: process.env.AI_SERVICE_URL || 'http://localhost:3002',
+        // Shared secret presented to the ai-worker on every call (see aiWorkerAuth.ts).
+        workerSecret: process.env.AI_WORKER_SECRET || '',
         enabled: process.env.AI_ENABLED === 'true',
         cacheEnabled: process.env.AI_CACHE_ENABLED !== 'false',
         // Semantic (embedding-similarity) cache. Default ON. The layer is confirmed

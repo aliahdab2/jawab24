@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { config } from '../config';
+import { aiWorkerHeaders } from './aiWorkerAuth';
 import { tracedExternalCall } from '../utils/tracing';
 import { logAiUsage } from './aiUsageLog';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
@@ -50,7 +51,7 @@ export async function translateText(request: TranslateRequest): Promise<Translat
           targetLanguage,
           context: { pipeline: 'translation' },
         },
-        { timeout: 30000 },
+        { timeout: 30000, headers: aiWorkerHeaders() },
       ),
     );
     const data = response.data;
@@ -105,7 +106,7 @@ export async function generateNudgeVariations(
       }>(
         `${config.ai.serviceUrl}/generate-variations`,
         { text, language, count, context: { pipeline: 'translation' } },
-        { timeout: 30000 },
+        { timeout: 30000, headers: aiWorkerHeaders() },
       ),
     );
     const data = response.data;

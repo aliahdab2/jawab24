@@ -23,6 +23,7 @@ import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { aiService } from './ai';
+import { aiWorkerHeaders } from './aiWorkerAuth';
 import { logAiUsage } from './aiUsageLog';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { executeToolCall } from './ecommerceActions';
@@ -152,7 +153,7 @@ export async function generateReplyWithTools(
             },
             {
                 timeout: TOOL_LOOP_TIMEOUT_MS,
-                headers: request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined,
+                headers: aiWorkerHeaders(request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined),
             },
         );
 
@@ -219,7 +220,7 @@ export async function generateReplyWithTools(
                 },
                 {
                     timeout: TOOL_LOOP_TIMEOUT_MS,
-                    headers: request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined,
+                    headers: aiWorkerHeaders(request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined),
                 },
             );
 

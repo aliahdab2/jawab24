@@ -126,6 +126,29 @@ server.addContentTypeParser(
   },
 );
 
+// Facebook posts its GDPR data-deletion (and deauthorize) callback as
+// application/x-www-form-urlencoded with a `signed_request` field. Without a parser
+// for this content type Fastify 415s the request and the handler never runs, so
+// user-initiated deletions were silently never fulfilled. Parse it into an object
+// (and keep rawBody for parity with the JSON parser). Built-in URLSearchParams — no
+// new dependency.
+server.addContentTypeParser(
+  "application/x-www-form-urlencoded",
+  { parseAs: "buffer" },
+  (req, body, done) => {
+    try {
+      req.rawBody = Buffer.isBuffer(body) ? body : Buffer.from(body, "utf8");
+      const params = new URLSearchParams(body.toString("utf8"));
+      const parsed: Record<string, string> = {};
+      for (const [key, value] of params) parsed[key] = value;
+      done(null, parsed);
+    } catch (err: any) {
+      err.statusCode = 400;
+      done(err, undefined);
+    }
+  },
+);
+
 const start = async () => {
   try {
     // Set global error handler
@@ -138,9 +161,15 @@ const start = async () => {
     const { geoMiddleware } = await import("./middleware/geo");
     server.addHook("onRequest", geoMiddleware);
 
-    // CSRF protection for cookie-based web requests
-    // Skips: Bearer token auth (mobile), GET/HEAD/OPTIONS, unauthenticated requests
-    server.addHook("onRequest", csrfProtection);
+    // CSRF protection for cookie-based web requests.
+    // Skips: Bearer token auth (mobile), GET/HEAD/OPTIONS, unauthenticated requests.
+    // MUST be a preHandler (not onRequest): the @fastify/cookie parser runs as an
+    // onRequest hook registered later (below), so an onRequest CSRF hook ran before
+    // cookies were parsed — request.cookies was always empty and the check silently
+    // no-op'd. preHandler always runs after every onRequest hook, so cookies are
+    // populated. Web mutations send X-CSRF-Token via the frontend axios interceptor;
+    // sameSite:strict on the auth cookie remains the primary CSRF defense.
+    server.addHook("preHandler", csrfProtection);
 
     // Register plugins
     // CORS: Environment-based origin configuration

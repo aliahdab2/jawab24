@@ -5,6 +5,7 @@ import { db } from '../db';
 import { aiCache, semanticCache } from '../db/schema';
 import { eq, sql, count } from 'drizzle-orm';
 import { config } from '../config';
+import { aiWorkerHeaders } from './aiWorkerAuth';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
 import { redis, redisScanDelete } from '../lib/redis';
 import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
@@ -517,7 +518,7 @@ export class AiService {
                         },
                         {
                             timeout: 30000,
-                            headers: pageId ? { 'X-Workspace-Id': pageId } : undefined,
+                            headers: aiWorkerHeaders(pageId ? { 'X-Workspace-Id': pageId } : undefined),
                         }
                     ),
                 )
@@ -623,7 +624,7 @@ export class AiService {
                             },
                             {
                                 timeout: 30000,
-                                headers: pageId ? { 'X-Workspace-Id': pageId } : undefined,
+                                headers: aiWorkerHeaders(pageId ? { 'X-Workspace-Id': pageId } : undefined),
                             },
                         ),
                     );

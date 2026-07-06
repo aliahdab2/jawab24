@@ -35,6 +35,10 @@ const EnvSchema = z.object({
 
     // AI Service
     AI_SERVICE_URL: z.string().url('AI_SERVICE_URL must be a valid URL').default('http://localhost:3002'),
+    // Shared secret sent on every backend → ai-worker call (X-AI-Worker-Secret header).
+    // The worker gates its paid OpenAI/Anthropic endpoints on this. Must match the
+    // worker's AI_WORKER_SECRET. Required in production (refine below); optional in dev.
+    AI_WORKER_SECRET: z.string().optional(),
     AI_ENABLED: z.string().transform(val => val === 'true').default('false'),
     AI_CACHE_ENABLED: z.string().transform(val => val !== 'false').default('true'),
     // Kill-switch for self-service card top-ups. Defaults OFF so the feature +
@@ -170,6 +174,16 @@ const EnvSchema = z.object({
     {
         message: 'ZID_WEBHOOK_SECRET must be set in production when ZID_CLIENT_ID is configured — Zid webhook HMAC verification fails closed without it (every webhook 401s)',
         path: ['ZID_WEBHOOK_SECRET'],
+    },
+).refine(
+    // The ai-worker gates its paid OpenAI/Anthropic endpoints on this shared secret.
+    // Without it the backend sends no auth header and the worker (in production, where
+    // it mandates the secret) 401s every generation request — all AI replies break.
+    // Must be >=16 chars to match the worker's own guard.
+    data => data.NODE_ENV !== 'production' || (!!data.AI_WORKER_SECRET && data.AI_WORKER_SECRET.length >= 16),
+    {
+        message: 'AI_WORKER_SECRET must be set (>=16 chars) in production — it authenticates backend → ai-worker calls; without it the worker rejects every generation request',
+        path: ['AI_WORKER_SECRET'],
     },
 );
 
