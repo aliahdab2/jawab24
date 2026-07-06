@@ -13,7 +13,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
 import { parseKeywords } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
-import { useHandoffPauseDuration, useSwipe, useArrowKeyNavigation } from '@/hooks';
+import { useHandoffPauseDuration, useSwipe, useArrowKeyNavigation, useClampOverflow } from '@/hooks';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
@@ -122,31 +122,13 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   // toggle (matches the platform's own "see more" pattern, no nested scrollbox —
   // which traps touch scrolling in the mobile WebView). The generous 6-line clamp
   // means most posts show in full and the toggle only appears for long ones.
-  const postRef = useRef<HTMLParagraphElement>(null);
-  const [postExpanded, setPostExpanded] = useState(false);
-  const [postOverflows, setPostOverflows] = useState(false);
-
   // Navigating prev/next remounts this modal (parent keys it by comment id), so
-  // postExpanded resets to its initial collapsed state automatically — no manual
-  // reset needed.
-
-  // Only show the toggle when the clamped post actually overflows 6 lines.
-  // Skipped while expanded so postOverflows keeps its last clamped reading
-  // (the toggle must stay visible to collapse again).
-  useEffect(() => {
-    const el = postRef.current;
-    if (!el || postExpanded) return;
-    let cancelled = false;
-    const measure = () => { if (!cancelled) setPostOverflows(el.scrollHeight - el.clientHeight > 1); };
-    measure();
-    // ResizeObserver (not window.resize) catches the modal/container rewrapping;
-    // fonts.ready re-measures after the async Arabic webfonts (Cairo/Tajawal)
-    // load and shift the line count. Matches the pattern in MessageDetailModal.
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    document.fonts?.ready.then(measure).catch(() => { /* font API unavailable — initial measure stands */ });
-    return () => { cancelled = true; observer.disconnect(); };
-  }, [comment.postMessage, postExpanded]);
+  // postExpanded resets to its initial collapsed state automatically.
+  const [postExpanded, setPostExpanded] = useState(false);
+  const { ref: postRef, isOverflowing: postOverflows } = useClampOverflow<HTMLParagraphElement>(
+    comment.postMessage,
+    postExpanded,
+  );
 
   // Pause state
   const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
