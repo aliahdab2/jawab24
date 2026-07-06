@@ -99,7 +99,7 @@ export function PostReplyIntroBanner({ onSetup }: PostReplyIntroBannerProps) {
   return (
     <div
       role="status"
-      className="mb-3 sm:mb-5 p-3 sm:p-4 rounded-xl flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700"
+      className="mb-3 sm:mb-5 p-3 sm:p-4 rounded-xl flex items-start gap-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-300 dark:border-indigo-700"
     >
       <PostReplyIcon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${postReplyIconClass}`} aria-hidden="true" />
       <div className="flex-1 min-w-0">

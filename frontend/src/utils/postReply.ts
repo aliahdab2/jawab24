@@ -2,8 +2,9 @@ import { KeyRound } from 'lucide-react';
 
 /**
  * Single source of truth for the Post Reply visual identity, distinct from Smart
- * Reply (Sparkles + violet). Post Reply = KeyRound icon + emerald, used on the
- * per-post button, the intro banner, the setup modal, the detail-modal keywords,
+ * Reply (Sparkles + violet). Post Reply = KeyRound icon + indigo — a different hue
+ * from Smart Reply's violet so the two auto-reply types stay tellable apart. Used on
+ * the per-post button, the intro banner, the setup modal, the detail-modal keywords,
  * and the reply-source badge. Change the icon/colour here once instead of editing
  * every component (this lived in 5 files and was swapped three times before).
  *
@@ -12,5 +13,5 @@ import { KeyRound } from 'lucide-react';
  */
 export const PostReplyIcon = KeyRound;
 
-/** Emerald tint for the Post Reply icon — combine with a size class. */
-export const postReplyIconClass = 'text-emerald-500 dark:text-emerald-400';
+/** Indigo tint for the Post Reply icon — combine with a size class. */
+export const postReplyIconClass = 'text-indigo-500 dark:text-indigo-400';

@@ -473,7 +473,7 @@ const CommentsPage: NextPageWithLayout = () => {
             {/* Lightweight ghost action — labeled on every breakpoint so the feature
                 reads clearly on mobile and web (owner call). The ghost weight (vs the
                 old filled block) keeps it from dominating the header even with the
-                label always shown; the emerald key carries the Post Reply identity,
+                label always shown; the indigo key carries the Post Reply identity,
                 distinct from the icon-only Export beside it. */}
             <Button
               size="sm"

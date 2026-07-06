@@ -31,8 +31,9 @@ export const ReplySourceBadge = React.memo(function ReplySourceBadge({
   const config = {
     ai: { Icon: Sparkles, label: tDashboard('aiReply'), colorClass: 'reply-source-ai' },
     manual: { Icon: UserCheck, label: tc('manual'), colorClass: 'reply-source-manual' },
-    // 'post_reply' = per-post keyword trigger (Post Reply feature).
-    post_reply: { Icon: PostReplyIcon, label: tDashboard('postReply'), colorClass: 'reply-source-template' },
+    // 'post_reply' = per-post trigger (Post Reply feature) — indigo identity, now
+    // visually distinct from the fallback-template emerald and Smart Reply's violet.
+    post_reply: { Icon: PostReplyIcon, label: tDashboard('postReply'), colorClass: 'reply-source-post-reply' },
     // 'template' = canned fallback (AI fallback when quota out, greeting, away message).
     // Visually distinct from post_reply so merchants don't confuse a generic
     // "thanks for your comment!" with a configured trigger reply.
