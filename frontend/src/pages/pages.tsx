@@ -311,89 +311,81 @@ const PagesPage: NextPageWithLayout = () => {
     return true;
   };
 
-  const handleToggle = async (pageId: string, enabled: boolean, skipInfoGate = false) => {
-    if (!skipInfoGate && gateEnableWithoutInfo(pageId, enabled, () => handleToggle(pageId, enabled, true))) return;
-    setPages(prev => prev.map(page =>
-      page.id === pageId ? { ...page, autoReplyEnabled: enabled } : page
-    ));
+  /**
+   * Shared enable/disable flow for every channel toggle (Facebook / Instagram /
+   * WhatsApp). One implementation of: the no-answer-source soft gate, the
+   * optimistic update + rollback, and the billing/trial/disconnect error → toast
+   * mapping. Channels differ only in the field flipped, the endpoint, and the
+   * "not connected" error code — passed via `cfg`. Adding a channel = one config.
+   */
+  const toggleChannel = async (
+    pageId: string,
+    enabled: boolean,
+    cfg: {
+      field: 'autoReplyEnabled' | 'instagramAutoReplyEnabled' | 'whatsappAutoReplyEnabled';
+      call: () => Promise<unknown>;
+      disconnectedCode: string;
+      disconnectedMsg: string;
+      logLabel: string;
+      action: string;
+    },
+    skipInfoGate = false,
+  ) => {
+    if (!skipInfoGate && gateEnableWithoutInfo(pageId, enabled, () => toggleChannel(pageId, enabled, cfg, true))) return;
+
+    setPages(prev => prev.map(page => page.id === pageId ? { ...page, [cfg.field]: enabled } : page));
 
     try {
-      await pagesApi.toggle(pageId, enabled);
+      await cfg.call();
     } catch (error) {
-      setPages(prev => prev.map(page =>
-        page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
-      ));
+      setPages(prev => prev.map(page => page.id === pageId ? { ...page, [cfg.field]: !enabled } : page));
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
-        toast.error(t('reconnectRequired'));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
+      const code = axiosErr.response?.data?.code;
+      const status = axiosErr.response?.status;
+      if (code === cfg.disconnectedCode) {
+        toast.error(cfg.disconnectedMsg);
+      } else if (status === 402 && code === 'SUBSCRIPTION_INACTIVE') {
         toast.error(t('subscriptionInactive'));
-      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
+      } else if (status === 403 && code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
+      } else if (status === 402 && code === 'TRIAL_ALREADY_USED') {
         toast.error(t('pageTrialUsedBlocked'));
       } else {
-        captureError(error, 'Failed to toggle auto-reply', { tags: { page: 'pages', action: 'toggle' } });
+        captureError(error, cfg.logLabel, { tags: { page: 'pages', action: cfg.action } });
         toast.error(tc('error'));
       }
     }
   };
 
-  const handleInstagramToggle = async (pageId: string, enabled: boolean, skipInfoGate = false) => {
-    if (!skipInfoGate && gateEnableWithoutInfo(pageId, enabled, () => handleInstagramToggle(pageId, enabled, true))) return;
-    setPages(prev => prev.map(page =>
-      page.id === pageId ? { ...page, instagramAutoReplyEnabled: enabled } : page
-    ));
+  const handleToggle = (pageId: string, enabled: boolean) =>
+    toggleChannel(pageId, enabled, {
+      field: 'autoReplyEnabled',
+      call: () => pagesApi.toggle(pageId, enabled),
+      disconnectedCode: 'PAGE_DISCONNECTED',
+      disconnectedMsg: t('reconnectRequired'),
+      logLabel: 'Failed to toggle auto-reply',
+      action: 'toggle',
+    });
 
-    try {
-      await api.patch(`/pages/${pageId}/instagram-auto-reply`, { enabled });
-    } catch (error) {
-      setPages(prev => prev.map(page =>
-        page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
-      ));
-      const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
-        toast.error(t('reconnectRequired'));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
-        toast.error(t('subscriptionInactive'));
-      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
-        toast.error(t('pageTrialUsedBlocked'));
-      } else {
-        captureError(error, 'Failed to toggle Instagram auto-reply', { tags: { page: 'pages', action: 'instagram-toggle' } });
-        toast.error(tc('error'));
-      }
-    }
-  };
+  const handleInstagramToggle = (pageId: string, enabled: boolean) =>
+    toggleChannel(pageId, enabled, {
+      field: 'instagramAutoReplyEnabled',
+      call: () => api.patch(`/pages/${pageId}/instagram-auto-reply`, { enabled }),
+      disconnectedCode: 'PAGE_DISCONNECTED',
+      disconnectedMsg: t('reconnectRequired'),
+      logLabel: 'Failed to toggle Instagram auto-reply',
+      action: 'instagram-toggle',
+    });
 
-  const handleWhatsAppToggle = async (pageId: string, enabled: boolean, skipInfoGate = false) => {
-    if (!skipInfoGate && gateEnableWithoutInfo(pageId, enabled, () => handleWhatsAppToggle(pageId, enabled, true))) return;
-    setPages(prev => prev.map(page =>
-      page.id === pageId ? { ...page, whatsappAutoReplyEnabled: enabled } : page
-    ));
-
-    try {
-      await api.patch(`/pages/${pageId}/whatsapp-auto-reply`, { enabled });
-    } catch (error) {
-      setPages(prev => prev.map(page =>
-        page.id === pageId ? { ...page, whatsappAutoReplyEnabled: !enabled } : page
-      ));
-      const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.data?.code === 'WHATSAPP_NOT_CONNECTED') {
-        toast.error(t('whatsappNotConnected'));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
-        toast.error(t('subscriptionInactive'));
-      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
-      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
-        toast.error(t('pageTrialUsedBlocked'));
-      } else {
-        captureError(error, 'Failed to toggle WhatsApp auto-reply', { tags: { page: 'pages', action: 'whatsapp-toggle' } });
-        toast.error(tc('error'));
-      }
-    }
-  };
+  const handleWhatsAppToggle = (pageId: string, enabled: boolean) =>
+    toggleChannel(pageId, enabled, {
+      field: 'whatsappAutoReplyEnabled',
+      call: () => api.patch(`/pages/${pageId}/whatsapp-auto-reply`, { enabled }),
+      disconnectedCode: 'WHATSAPP_NOT_CONNECTED',
+      disconnectedMsg: t('whatsappNotConnected'),
+      logLabel: 'Failed to toggle WhatsApp auto-reply',
+      action: 'whatsapp-toggle',
+    });
 
   const handleRemoveWhatsAppOnlyPage = async (pageId: string) => {
     setRemoveWhatsAppOnlyPage(null);
