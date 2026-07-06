@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import clsx from 'clsx';
+import { FileText } from 'lucide-react';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
@@ -115,10 +116,23 @@ export function PostTriggerModal({
           {t('postTriggerDescription')}
         </p>
 
-        {/* Post preview */}
+        {/* Post preview — a labeled "POST" card matching CommentDetailModal, so it
+            reads as the post this reply is configured for and themes correctly in dark
+            mode (bg-surface-800 is near-white in the dark scale — see globals.css). It's
+            context here, not something to read in full, so it's clamped to 3 lines; that
+            also keeps the keyword + reply fields above the fold on mobile. */}
         {postMessage && (
-          <div className="bg-surface-50 dark:bg-surface-800 rounded-lg px-3 py-2.5">
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed" dir="auto">
+          <div className="rounded-xl border border-theme-border bg-card overflow-hidden shadow-sm">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-muted border-b border-theme-border">
+              <FileText className="w-3.5 h-3.5 flex-shrink-0 text-icon-muted" aria-hidden="true" />
+              <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                {t('postContext')}
+              </span>
+            </div>
+            <p
+              className="px-3 pt-2.5 pb-2.5 text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed line-clamp-3"
+              dir="auto"
+            >
               {postMessage}
             </p>
           </div>
