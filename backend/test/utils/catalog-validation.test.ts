@@ -49,6 +49,16 @@ describe('CatalogItemSchema', () => {
             expect(priceOf('1 250')).toBe(1250);
         });
 
+        it('treats a single comma with 1–2 trailing digits as a DECIMAL comma (M4: "3,50" must not become 350)', () => {
+            expect(priceOf('3,50')).toBe(3.5);
+            expect(priceOf('12,5')).toBe(12.5);
+            expect(priceOf('1250,99')).toBe(1250.99);
+        });
+
+        it('keeps 3-digit comma groups as thousands separators', () => {
+            expect(priceOf('1,234,567')).toBe(1234567);
+        });
+
         it('accepts the Arabic decimal separator', () => {
             expect(priceOf('٤٩٫٩٩')).toBe(49.99);
         });

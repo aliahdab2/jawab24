@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createTestUser, createTestWorkspace, createTestPage, testDb } from './setup';
 import * as schema from '../../src/db/schema';
-import { catalogService, CatalogLimitError } from '../../src/services/catalog';
+import { catalogService, CatalogLimitError, CatalogStoreConflictError } from '../../src/services/catalog';
 import { MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
 
 async function makePage() {
@@ -22,34 +22,35 @@ async function kbActiveVersionOf(pageId: string): Promise<number> {
 
 describe('catalogService — integration', () => {
     it('creates, lists, updates and deletes items', async () => {
-        const { workspace, page } = await makePage();
+        const { user, workspace, page } = await makePage();
 
         const created = await catalogService.createCatalogItem(workspace.id, page.id, {
             name: 'دبل صدمات NJT', price: 3500, currency: 'EGP', description: 'يناسب الصيني والهندي',
         });
         expect(created).not.toBeNull();
-        expect(created!.type).toBe('product');
-        expect(created!.price).toBe('3500.00');
-        expect(created!.isAvailable).toBe(true);
-        expect(created!.sortOrder).toBe(0);
+        expect(created!.pageUserId).toBe(user.id); // feeds the activation event without a second query
+        expect(created!.item.type).toBe('product');
+        expect(created!.item.price).toBe('3500.00');
+        expect(created!.item.isAvailable).toBe(true);
+        expect(created!.item.sortOrder).toBe(0);
 
         const second = await catalogService.createCatalogItem(workspace.id, page.id, {
             name: 'دورة صيانة', type: 'course', price: 1200, currency: 'EGP',
         });
-        expect(second!.sortOrder).toBe(1); // appended after the first
+        expect(second!.item.sortOrder).toBe(1); // appended after the first
 
         const items = await catalogService.listCatalogItems(workspace.id, page.id);
         expect(items).toHaveLength(2);
         expect(items![0].name).toBe('دبل صدمات NJT');
 
-        const updated = await catalogService.updateCatalogItem(workspace.id, page.id, created!.id, {
+        const updated = await catalogService.updateCatalogItem(workspace.id, page.id, created!.item.id, {
             isAvailable: false, price: null,
         });
         expect(updated!.isAvailable).toBe(false);
         expect(updated!.price).toBeNull(); // "price on request"
         expect(updated!.name).toBe('دبل صدمات NJT'); // untouched fields survive
 
-        const deleted = await catalogService.deleteCatalogItem(workspace.id, page.id, created!.id);
+        const deleted = await catalogService.deleteCatalogItem(workspace.id, page.id, created!.item.id);
         expect(deleted).toBe(true);
         expect(await catalogService.listCatalogItems(workspace.id, page.id)).toHaveLength(1);
     });
@@ -58,15 +59,15 @@ describe('catalogService — integration', () => {
         const { workspace, page } = await makePage();
         const v0 = await kbActiveVersionOf(page.id);
 
-        const item = await catalogService.createCatalogItem(workspace.id, page.id, { name: 'منتج' });
+        const created = await catalogService.createCatalogItem(workspace.id, page.id, { name: 'منتج' });
         const v1 = await kbActiveVersionOf(page.id);
         expect(v1).toBe(v0 + 1);
 
-        await catalogService.updateCatalogItem(workspace.id, page.id, item!.id, { name: 'منتج معدل' });
+        await catalogService.updateCatalogItem(workspace.id, page.id, created!.item.id, { name: 'منتج معدل' });
         const v2 = await kbActiveVersionOf(page.id);
         expect(v2).toBe(v1 + 1);
 
-        await catalogService.deleteCatalogItem(workspace.id, page.id, item!.id);
+        await catalogService.deleteCatalogItem(workspace.id, page.id, created!.item.id);
         const v3 = await kbActiveVersionOf(page.id);
         expect(v3).toBe(v2 + 1);
     });
@@ -88,8 +89,43 @@ describe('catalogService — integration', () => {
         const foreign = await catalogService.createCatalogItem(workspace.id, other.id, { name: 'أجنبي' });
 
         // Right workspace, wrong page for this item id → not found
-        expect(await catalogService.updateCatalogItem(workspace.id, page.id, foreign!.id, { name: 'x' })).toBeNull();
-        expect(await catalogService.deleteCatalogItem(workspace.id, page.id, foreign!.id)).toBe(false);
+        expect(await catalogService.updateCatalogItem(workspace.id, page.id, foreign!.item.id, { name: 'x' })).toBeNull();
+        expect(await catalogService.deleteCatalogItem(workspace.id, page.id, foreign!.item.id)).toBe(false);
+    });
+
+    it('rejects writes on a store-linked page (manual items would orphan its RAG chunks)', async () => {
+        const { user, workspace, page } = await makePage();
+
+        // Link the page to a store (dummy encrypted-token fields satisfy NOT NULLs)
+        const [store] = await testDb.insert(schema.ecommerceStores).values({
+            userId: user.id,
+            workspaceId: workspace.id,
+            platform: 'salla',
+            storeDomain: `store-${Date.now()}.test`,
+            accessToken: 'enc-token',
+            accessTokenIv: 'iv',
+        }).returning({ id: schema.ecommerceStores.id });
+        await testDb.update(schema.pages)
+            .set({ ecommerceStoreId: store.id })
+            .where(eq(schema.pages.id, page.id));
+
+        const vBefore = await kbActiveVersionOf(page.id);
+        await expect(
+            catalogService.createCatalogItem(workspace.id, page.id, { name: 'ممنوع' }),
+        ).rejects.toThrow(CatalogStoreConflictError);
+        await expect(
+            catalogService.updateCatalogItem(workspace.id, page.id, crypto.randomUUID(), { name: 'x' }),
+        ).rejects.toThrow(CatalogStoreConflictError);
+        await expect(
+            catalogService.deleteCatalogItem(workspace.id, page.id, crypto.randomUUID()),
+        ).rejects.toThrow(CatalogStoreConflictError);
+
+        // The guard must fire BEFORE any version bump — a bump would orphan the
+        // store page's RAG chunks (exact kb_version filter in pgvector-store).
+        expect(await kbActiveVersionOf(page.id)).toBe(vBefore);
+
+        // Reads stay allowed (harmless; lets the merchant see leftover items).
+        expect(await catalogService.listCatalogItems(workspace.id, page.id)).toEqual([]);
     });
 
     it(`enforces the ${MAX_CATALOG_ITEMS_PER_PAGE}-item cap at create time`, async () => {

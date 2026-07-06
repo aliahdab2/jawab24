@@ -71,18 +71,30 @@ export function CatalogManager({ pageId }: CatalogManagerProps) {
 
   const busy = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
 
-  const handleSave = (data: CatalogItemInput, addAnother: boolean) => {
-    if (editing) {
-      updateMutation.mutate({ itemId: editing.id, data }, {
-        onSuccess: () => { toast.success(t('toast.updated')); setFormOpen(false); setEditing(null); },
-      });
-      return;
+  /** Resolves true on success so the form sheet only clears its fields once the
+   *  server confirmed (M5, PR #407) — a failed batch-add must not eat the
+   *  merchant's typed item. Error toasts come from the mutations' onError. */
+  const handleSave = async (data: CatalogItemInput, addAnother: boolean): Promise<boolean> => {
+    try {
+      if (editing) {
+        await updateMutation.mutateAsync({ itemId: editing.id, data });
+        toast.success(t('toast.updated'));
+        setFormOpen(false);
+        setEditing(null);
+      } else {
+        await createMutation.mutateAsync(data);
+        if (!addAnother) setFormOpen(false);
+      }
+      return true;
+    } catch {
+      return false;
     }
-    createMutation.mutate(data, {
-      onSuccess: () => { if (!addAnother) setFormOpen(false); },
-    });
   };
 
+  // TODO(M6, PR #407): fold reorder into ONE backend operation (single PATCH
+  // with both ids or a positions array) — two independent PATCHes are not
+  // atomic and cost two cache bumps. Deferred from review; acceptable for the
+  // founder-only canary, must land before GA.
   const handleMove = (item: CatalogItem, direction: 'up' | 'down') => {
     const idx = items.findIndex((i) => i.id === item.id);
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
@@ -109,7 +121,7 @@ export function CatalogManager({ pageId }: CatalogManagerProps) {
       <EmptyState
         icon={Tag}
         title={t('toast.loadError')}
-        action={<Button variant="secondary" onClick={() => queryClient.invalidateQueries({ queryKey })}>{t('actions.save')}</Button>}
+        action={<Button variant="secondary" onClick={() => queryClient.invalidateQueries({ queryKey })}>{t('actions.retry')}</Button>}
       />
     );
   }
@@ -163,6 +175,7 @@ export function CatalogManager({ pageId }: CatalogManagerProps) {
 
       {formOpen && (
         <CatalogItemFormSheet
+          key={editing?.id ?? 'new'}
           item={editing}
           defaultCurrency={lastCurrency}
           saving={createMutation.isPending || updateMutation.isPending}

@@ -516,9 +516,14 @@ export class PagesService {
      *
      * Returns the post-bump kbActiveVersion, or null if the page doesn't
      * exist. Callers usually don't need the return value.
+     *
+     * `executor` lets a caller run the bump inside its own transaction so the
+     * row write and the cache invalidation land (or fail) together — e.g. the
+     * catalog service, where a committed delete without the bump would keep
+     * replies quoting a deleted item until cache TTL.
      */
-    async invalidatePageCaches(pageId: string): Promise<{ kbActiveVersion: number } | null> {
-        const [updated] = await db
+    async invalidatePageCaches(pageId: string, executor: Pick<typeof db, 'update'> = db): Promise<{ kbActiveVersion: number } | null> {
+        const [updated] = await executor
             .update(pages)
             .set({
                 kbVersion: sql`COALESCE(${pages.kbVersion}, 0) + 1`,

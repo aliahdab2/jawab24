@@ -13,20 +13,20 @@
     "examplePrice": "350",
     "cta": "أضف أول عنصر"
   },
-  "count": "{count, plural, zero {لا عناصر} one {عنصر واحد} two {عنصران} few {# عناصر} many {# عنصرًا} other {# عنصر}}",
   "limitLabel": "{count} من {max} عنصر",
   "fields": {
     "type": "النوع",
     "name": "الاسم",
     "namePlaceholder": "مثال: دبل صدمات أمامي",
-    "price": "السعر",
     "priceOptional": "السعر (اختياري)",
     "pricePlaceholder": "اتركه فارغًا ليصبح «السعر عند الطلب»",
     "currency": "العملة",
-    "description": "الوصف",
     "descriptionOptional": "الوصف (اختياري)",
     "descriptionPlaceholder": "أي تفاصيل مفيدة يحتاجها العميل",
     "available": "متوفر حاليًا"
+  },
+  "errors": {
+    "nameRequired": "اكتب اسم العنصر أولًا"
   },
   "types": {
     "product": "منتج",
@@ -47,13 +47,13 @@
     "edit": "تعديل",
     "delete": "حذف",
     "moveUp": "تحريك لأعلى",
-    "moveDown": "تحريك لأسفل"
+    "moveDown": "تحريك لأسفل",
+    "retry": "حاول مرة أخرى"
   },
   "delete": {
     "title": "حذف هذا العنصر؟",
     "body": "سيُحذف «{name}» من قائمتك. لا يمكن التراجع عن هذا.",
-    "confirm": "حذف",
-    "cancel": "إلغاء"
+    "confirm": "حذف"
   },
   "toast": {
     "created": "تمت الإضافة",
@@ -63,6 +63,5 @@
     "deleteError": "تعذّر حذف العنصر. حاول مرة أخرى.",
     "loadError": "تعذّر تحميل عناصرك. حدّث الصفحة.",
     "limitReached": "وصلت إلى الحد الأقصى ({max} عنصر) لهذه الصفحة."
-  },
-  "kbChip": "إدارة المنتجات والخدمات"
+  }
 }

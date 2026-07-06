@@ -13,20 +13,20 @@
     "examplePrice": "350",
     "cta": "Add your first item"
   },
-  "count": "{count, plural, zero {No items} one {# item} other {# items}}",
   "limitLabel": "{count} of {max} items",
   "fields": {
     "type": "Type",
     "name": "Name",
     "namePlaceholder": "e.g. Front shock absorbers",
-    "price": "Price",
     "priceOptional": "Price (optional)",
     "pricePlaceholder": "Leave empty for “price on request”",
     "currency": "Currency",
-    "description": "Description",
     "descriptionOptional": "Description (optional)",
     "descriptionPlaceholder": "Anything useful the customer should know",
     "available": "In stock"
+  },
+  "errors": {
+    "nameRequired": "Please enter a name for this item"
   },
   "types": {
     "product": "Product",
@@ -47,13 +47,13 @@
     "edit": "Edit",
     "delete": "Delete",
     "moveUp": "Move up",
-    "moveDown": "Move down"
+    "moveDown": "Move down",
+    "retry": "Try again"
   },
   "delete": {
     "title": "Delete this item?",
     "body": "“{name}” will be removed from your catalog. This can’t be undone.",
-    "confirm": "Delete",
-    "cancel": "Cancel"
+    "confirm": "Delete"
   },
   "toast": {
     "created": "Item added",
@@ -63,6 +63,5 @@
     "deleteError": "Couldn’t delete the item. Please try again.",
     "loadError": "Couldn’t load your items. Please refresh.",
     "limitReached": "You’ve reached the {max}-item limit for this page."
-  },
-  "kbChip": "Manage products & services"
+  }
 }

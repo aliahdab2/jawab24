@@ -13,8 +13,10 @@ interface CatalogItemFormSheetProps {
   /** Currency to pre-fill on a fresh create (last used on this page). */
   defaultCurrency?: string;
   saving: boolean;
-  /** `addAnother` keeps the sheet open with cleared fields for batch entry. */
-  onSave: (data: CatalogItemInput, addAnother: boolean) => void;
+  /** Resolves true when the server confirmed the save. `addAnother` keeps the
+   *  sheet open — fields are cleared only AFTER success so a failed request
+   *  never eats the merchant's typed item. */
+  onSave: (data: CatalogItemInput, addAnother: boolean) => Promise<boolean>;
   onClose: () => void;
 }
 
@@ -53,11 +55,11 @@ export function CatalogItemFormSheet({ item, defaultCurrency, saving, onSave, on
     };
   };
 
-  const submit = (addAnother: boolean) => {
+  const submit = async (addAnother: boolean) => {
     const data = build();
     if (!data) return;
-    onSave(data, addAnother);
-    if (addAnother) {
+    const ok = await onSave(data, addAnother);
+    if (ok && addAnother) {
       // Keep type + currency (Simplicity contract §4/§5); clear the rest and refocus.
       setName(''); setPrice(''); setDescription(''); setIsAvailable(true); setShowNameError(false);
       nameRef.current?.focus();
@@ -82,16 +84,18 @@ export function CatalogItemFormSheet({ item, defaultCurrency, saving, onSave, on
         className="flex-1 overflow-y-auto px-5 py-4 space-y-4"
         onSubmit={(e) => { e.preventDefault(); submit(false); }}
       >
-        {/* Type — chips, product preselected; picking another never blocks saving */}
+        {/* Type — chips, product preselected; picking another never blocks saving.
+            aria-pressed toggles (not radio roles): full radio semantics would
+            require roving tabindex + arrow-key nav; pressed-state buttons are
+            honest to how these behave and keyboard-complete as-is (L7, PR #407). */}
         <div>
           <span className="label">{t('fields.type')}</span>
-          <div className="flex flex-wrap gap-2 mt-1.5" role="radiogroup" aria-label={t('fields.type')}>
+          <div className="flex flex-wrap gap-2 mt-1.5" role="group" aria-label={t('fields.type')}>
             {CATALOG_ITEM_TYPES.map((ty) => (
               <button
                 key={ty}
                 type="button"
-                role="radio"
-                aria-checked={type === ty}
+                aria-pressed={type === ty}
                 onClick={() => setType(ty)}
                 className={clsx(
                   'px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/30',
@@ -113,7 +117,7 @@ export function CatalogItemFormSheet({ item, defaultCurrency, saving, onSave, on
           value={name}
           onChange={(e) => { setName(e.target.value); if (showNameError) setShowNameError(false); }}
           placeholder={t('fields.namePlaceholder')}
-          error={showNameError ? t('fields.name') : undefined}
+          error={showNameError ? t('errors.nameRequired') : undefined}
           maxLength={200}
         />
 

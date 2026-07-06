@@ -23,6 +23,21 @@ export class CatalogLimitError extends Error {
     }
 }
 
+/**
+ * Thrown when a write targets a page with a connected e-commerce store. Two
+ * reasons manual items are blocked there: (a) contextEnricher's store branch
+ * wins, so the items would silently never reach the AI; (b) every catalog
+ * write bumps kbActiveVersion WITHOUT re-ingesting chunks, and e-commerce
+ * pages are the only ones still on the RAG path with an exact kb_version
+ * filter — one write would orphan all their chunks until the next store sync.
+ */
+export class CatalogStoreConflictError extends Error {
+    constructor() {
+        super('This page gets its catalog from a connected store; manual items are disabled');
+        this.name = 'CatalogStoreConflictError';
+    }
+}
+
 export interface CreateCatalogItemDTO {
     type?: CatalogItemType;
     name: string;
@@ -53,11 +68,12 @@ const TYPE_TAGS: Record<CatalogItemType, string> = {
 
 class CatalogService {
     /** Ownership gate: the page must belong to the caller's workspace. Returns the
-     *  page row or null (controllers translate null → 404, never 403 — don't leak
-     *  existence of foreign pages). */
+     *  page row (id + userId for activation telemetry + ecommerceStoreId for the
+     *  store-conflict guard) or null (controllers translate null → 404, never
+     *  403 — don't leak existence of foreign pages). */
     private async resolvePage(workspaceId: string, pageId: string) {
         const [page] = await db
-            .select({ id: pages.id })
+            .select({ id: pages.id, userId: pages.userId, ecommerceStoreId: pages.ecommerceStoreId })
             .from(pages)
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .limit(1);
@@ -76,9 +92,17 @@ class CatalogService {
             .limit(MAX_CATALOG_ITEMS_PER_PAGE);
     }
 
+    /**
+     * Create an item. Returns `{ item, pageUserId }` (userId feeds the caller's
+     * fire-and-forget activation event without a second page query), or null
+     * when the page isn't in the workspace. Row insert + cache-version bump are
+     * one transaction: a bump that never lands would leave replies serving the
+     * pre-write catalog until cache TTL (worst on delete — see M2 in PR #407).
+     */
     async createCatalogItem(workspaceId: string, pageId: string, data: CreateCatalogItemDTO) {
         const page = await this.resolvePage(workspaceId, pageId);
         if (!page) return null;
+        if (page.ecommerceStoreId) throw new CatalogStoreConflictError();
 
         const [{ value: existing }] = await db
             .select({ value: count() })
@@ -86,28 +110,31 @@ class CatalogService {
             .where(eq(catalogItems.pageId, pageId));
         if (existing >= MAX_CATALOG_ITEMS_PER_PAGE) throw new CatalogLimitError();
 
-        const [item] = await db
-            .insert(catalogItems)
-            .values({
-                pageId,
-                type: data.type ?? 'product',
-                name: data.name,
-                description: data.description ?? null,
-                price: typeof data.price === 'number' ? data.price.toFixed(2) : null,
-                currency: data.currency ?? null,
-                isAvailable: data.isAvailable ?? true,
-                // Append to the end of the merchant's list.
-                sortOrder: sql`COALESCE((SELECT MAX(${catalogItems.sortOrder}) + 1 FROM ${catalogItems} WHERE ${catalogItems.pageId} = ${pageId}), 0)`,
-            })
-            .returning();
-
-        await pagesService.invalidatePageCaches(pageId);
-        return item;
+        const item = await db.transaction(async (tx) => {
+            const [created] = await tx
+                .insert(catalogItems)
+                .values({
+                    pageId,
+                    type: data.type ?? 'product',
+                    name: data.name,
+                    description: data.description ?? null,
+                    price: typeof data.price === 'number' ? data.price.toFixed(2) : null,
+                    currency: data.currency ?? null,
+                    isAvailable: data.isAvailable ?? true,
+                    // Append to the end of the merchant's list.
+                    sortOrder: sql`COALESCE((SELECT MAX(${catalogItems.sortOrder}) + 1 FROM ${catalogItems} WHERE ${catalogItems.pageId} = ${pageId}), 0)`,
+                })
+                .returning();
+            await pagesService.invalidatePageCaches(pageId, tx);
+            return created;
+        });
+        return { item, pageUserId: page.userId };
     }
 
     async updateCatalogItem(workspaceId: string, pageId: string, itemId: string, data: UpdateCatalogItemDTO) {
         const page = await this.resolvePage(workspaceId, pageId);
         if (!page) return null;
+        if (page.ecommerceStoreId) throw new CatalogStoreConflictError();
 
         const values: Record<string, unknown> = { updatedAt: new Date() };
         if (data.type !== undefined) values.type = data.type;
@@ -118,39 +145,32 @@ class CatalogService {
         if (data.isAvailable !== undefined) values.isAvailable = data.isAvailable;
         if (data.sortOrder !== undefined) values.sortOrder = data.sortOrder;
 
-        const [item] = await db
-            .update(catalogItems)
-            .set(values)
-            .where(and(eq(catalogItems.id, itemId), eq(catalogItems.pageId, pageId)))
-            .returning();
-        if (!item) return null;
-
-        await pagesService.invalidatePageCaches(pageId);
-        return item;
+        return db.transaction(async (tx) => {
+            const [item] = await tx
+                .update(catalogItems)
+                .set(values)
+                .where(and(eq(catalogItems.id, itemId), eq(catalogItems.pageId, pageId)))
+                .returning();
+            if (!item) return null;
+            await pagesService.invalidatePageCaches(pageId, tx);
+            return item;
+        });
     }
 
     async deleteCatalogItem(workspaceId: string, pageId: string, itemId: string) {
         const page = await this.resolvePage(workspaceId, pageId);
         if (!page) return false;
+        if (page.ecommerceStoreId) throw new CatalogStoreConflictError();
 
-        const deleted = await db
-            .delete(catalogItems)
-            .where(and(eq(catalogItems.id, itemId), eq(catalogItems.pageId, pageId)))
-            .returning({ id: catalogItems.id });
-        if (deleted.length === 0) return false;
-
-        await pagesService.invalidatePageCaches(pageId);
-        return true;
-    }
-
-    /** Items that can back a DM photo-card (Release 2 consumer). */
-    async getCatalogItemsForCards(pageId: string) {
-        return db
-            .select()
-            .from(catalogItems)
-            .where(and(eq(catalogItems.pageId, pageId), sql`${catalogItems.imageUrl} IS NOT NULL`))
-            .orderBy(asc(catalogItems.sortOrder))
-            .limit(MAX_CATALOG_ITEMS_PER_PAGE);
+        return db.transaction(async (tx) => {
+            const deleted = await tx
+                .delete(catalogItems)
+                .where(and(eq(catalogItems.id, itemId), eq(catalogItems.pageId, pageId)))
+                .returning({ id: catalogItems.id });
+            if (deleted.length === 0) return false;
+            await pagesService.invalidatePageCaches(pageId, tx);
+            return true;
+        });
     }
 
     /**

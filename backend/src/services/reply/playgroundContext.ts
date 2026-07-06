@@ -2,6 +2,7 @@ import { settingsService } from '../settings';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
+import { captureError } from '../../utils/sentryHelpers';
 import { pickNudgeVariation } from './nudge';
 import { detectLanguageCode } from '../../utils/language';
 import type { PlaygroundInput } from './generator';
@@ -112,8 +113,10 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         // stay in sync (same rule as commentPreprocess).
         try {
             productCatalog = await catalogService.buildCatalogPromptBlock(page.id);
-        } catch {
-            // Non-critical — test reply proceeds without the catalog block
+        } catch (err) {
+            // Non-critical — the test reply proceeds without the block; logged
+            // so playground and production failures are equally visible.
+            captureError(err, 'Catalog prompt block failed (playground)', { level: 'warning', tags: { service: 'catalog' }, extra: { pageId: page.id } });
         }
     }
 

@@ -35,9 +35,14 @@ function CatalogPageInner() {
     queryFn: () => pagesApi.getAll().then((r) => r.data),
     enabled: canSee,
   });
-  const pages = useMemo(() => pagesData ?? [], [pagesData]);
+  // Store-linked pages are excluded: their catalog comes from the store sync,
+  // and the API rejects manual writes there (409 PAGE_HAS_STORE) because a
+  // catalog write would orphan the page's RAG chunks. Not gated on auto-reply.
+  const pages = useMemo(
+    () => (pagesData ?? []).filter((p) => !p.ecommerceStoreId),
+    [pagesData],
+  );
 
-  // Catalog applies to any connected page (not only auto-reply-enabled ones).
   const { pageId, updatePageId, validPages, syncFromUrl } = usePageFilter(pages, {
     storageKey: 'catalogPageId',
     validateAgainst: 'all',

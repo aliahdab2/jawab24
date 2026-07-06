@@ -1,6 +1,7 @@
 import { integrationRegistry } from '../../integrations';
 import { getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
+import { captureError } from '../../utils/sentryHelpers';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { detectLanguageCode } from '../../utils/language';
 import {
@@ -73,7 +74,12 @@ export async function enrichPageContext(
         // byte-identical for every page without a catalog.
         try {
             productCatalog = await catalogService.buildCatalogPromptBlock(pageId);
-        } catch { /* non-critical — reply proceeds without the catalog block */ }
+        } catch (err) {
+            // Non-critical — the reply proceeds without the catalog block. But
+            // never silently: a persistent failure here means catalogs vanish
+            // from prompts fleet-wide ("the AI ignores my items") with no signal.
+            captureError(err, 'Catalog prompt block failed', { level: 'warning', tags: { service: 'catalog' }, extra: { pageId } });
+        }
     }
 
     // 3a. Narrative business profile appended to KB. DESCRIPTIVE fields only
