@@ -1,5 +1,5 @@
 import { db } from '../../db';
-import { pages, posts, comments, settings, notifications, messages, ecommerceStores, ecommerceProducts } from '../../db/schema';
+import { pages, posts, comments, settings, notifications, messages, ecommerceStores, ecommerceProducts, catalogItems } from '../../db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
@@ -235,7 +235,92 @@ const DEMO_PAGES = [
             },
         },
     },
+    {
+        // NATIVE-CATALOG fixture (playground-eval Cat 62, Stage 2 v2). A store-less
+        // merchant whose item PRICES live ONLY in catalog_items (seeded from
+        // DEMO_CATALOG_ITEMS below) — the KB text deliberately carries no prices, so
+        // any correct price answer proves the <product_catalog> prompt path, and the
+        // price guard's grounding on that block. Named to dodge every other page's
+        // name pattern in playground-eval.ts (no متجر/معهد/مدارس/عيادة/أزياء/دمشقي).
+        facebookPageId: 'demo_page_motoshop',
+        name: 'معرض المجد للموتوسيكلات',
+        suggestedKnowledgeBase: `🏍️ معرض المجد للموتوسيكلات وقطع الغيار
+
+📍 الموقع: الرياض، حي العزيزية، طريق الحائر
+
+📞 للتواصل: 0114567890
+
+⏰ أوقات الدوام:
+السبت - الخميس: 9 صباحاً - 10 مساءً
+الجمعة: مغلق
+
+نوفر قطع غيار أصلية وصيانة معتمدة لجميع أنواع الموتوسيكلات، وبيع موتوسيكلات مستعملة بحالة ممتازة.`,
+        autoReplyEnabled: true,
+        instagramUsername: null,
+    },
 ];
+
+/**
+ * Stage 2 v2: merchant-authored catalog rows for the motoshop fixture. Mixed
+ * types (product / vehicle / course / service), some out-of-stock, some
+ * price-on-request — mirrors what a real store-less merchant enters. Prices
+ * exist ONLY here (not in the page's KB text) so Cat 62 eval cases prove the
+ * catalog prompt path end-to-end.
+ */
+const DEMO_CATALOG_ITEMS: {
+    type: 'product' | 'service' | 'course' | 'vehicle' | 'custom';
+    name: string;
+    description?: string;
+    price?: number;
+    currency?: string;
+    isAvailable?: boolean;
+}[] = [
+    { type: 'product', name: 'دبل صدمات NJT', description: 'يناسب معظم الموتوسيكلات الصيني والهندي', price: 350, currency: 'ريال' },
+    { type: 'product', name: 'طرمبة بنزين هوندا أصلية', price: 95, currency: 'ريال', isAvailable: false },
+    { type: 'product', name: 'كاوتش ميشلان 90/90-17', description: 'مقاس أمامي', currency: 'ريال' },
+    { type: 'product', name: 'زيت محرك موتول 20W-50 (1 لتر)', price: 22, currency: 'ريال' },
+    { type: 'product', name: 'فلتر هواء K&N رياضي', price: 48, currency: 'ريال' },
+    { type: 'product', name: 'بطارية يواسا 12 فولت', price: 130, currency: 'ريال' },
+    { type: 'product', name: 'طقم فرامل أمامي بريمبو', price: 210, currency: 'ريال' },
+    { type: 'product', name: 'جنزير وترسين DID ياباني', description: 'مقاس 428', price: 165, currency: 'ريال' },
+    { type: 'product', name: 'خوذة LS2 مقفلة', description: 'مقاسات M و L و XL', price: 380, currency: 'ريال' },
+    { type: 'product', name: 'قفازات جلد مبطنة', price: 55, currency: 'ريال', isAvailable: false },
+    { type: 'product', name: 'شنطة خلفية 45 لتر', price: 175, currency: 'ريال' },
+    { type: 'product', name: 'بوجيهات NGK إيريديوم', price: 35, currency: 'ريال' },
+    { type: 'product', name: 'مرايا جانبية عالمية', price: 40, currency: 'ريال' },
+    { type: 'product', name: 'كفرات دراجة نارية بريدجستون 120/70-17', price: 290, currency: 'ريال' },
+    { type: 'product', name: 'سير كاتينة ياماها أصلي', currency: 'ريال', isAvailable: false },
+    { type: 'vehicle', name: 'موتوسيكل مستعمل — هوندا CG 2019', description: 'ماشي 22 ألف كم، بحالة ممتازة، فحص كامل', price: 5500, currency: 'ريال' },
+    { type: 'vehicle', name: 'موتوسيكل مستعمل — سوزوكي GN 2021', description: 'ماشي 9 آلاف كم، وكالة', price: 8200, currency: 'ريال' },
+    { type: 'vehicle', name: 'سكوتر هوندا PCX 2022', description: 'نظيف جداً، صيانة وكالة منتظمة', price: 11500, currency: 'ريال', isAvailable: false },
+    { type: 'course', name: 'دورة صيانة الموتوسيكلات للمبتدئين', description: '4 أسابيع، 3 أيام أسبوعياً، شهادة حضور معتمدة', price: 1200, currency: 'ريال' },
+    { type: 'service', name: 'فحص شامل قبل الشراء', description: 'فحص كامل للمحرك والهيكل والكهرباء', price: 150, currency: 'ريال' },
+    { type: 'service', name: 'صيانة دورية (زيت + فلاتر + فحص)', description: 'تشمل زيت المحرك وفلتر الهواء وفحص عام', currency: 'ريال' },
+    { type: 'service', name: 'تركيب قطع الغيار', description: 'مجاني لأي قطعة مشتراة من المعرض' },
+    { type: 'product', name: 'واقيات ركب ومرافق', price: 85, currency: 'ريال' },
+    { type: 'product', name: 'جاكيت حماية شبكي صيفي', description: 'مقاسات M حتى XXL', price: 240, currency: 'ريال' },
+    { type: 'product', name: 'قفل ديسك مع إنذار', price: 65, currency: 'ريال' },
+];
+
+/**
+ * Delete-then-reseed the motoshop fixture's catalog rows (idempotent on both
+ * the create and refresh paths, mirroring how messages are refreshed).
+ */
+async function seedMotoshopCatalog(pageId: string): Promise<void> {
+    await db.delete(catalogItems).where(eq(catalogItems.pageId, pageId));
+    await db.insert(catalogItems).values(
+        DEMO_CATALOG_ITEMS.map((item, i) => ({
+            pageId,
+            type: item.type,
+            name: item.name,
+            description: item.description ?? null,
+            price: item.price !== undefined ? item.price.toFixed(2) : null,
+            currency: item.currency ?? null,
+            isAvailable: item.isAvailable ?? true,
+            sortOrder: i,
+        })),
+    );
+}
 
 const DEMO_POSTS = [
     // Institute posts
@@ -1246,6 +1331,13 @@ export async function seedDemoData(
         const demoExistingPages = refreshedExistingPages.filter(p => p.facebookPageId && demoPageIds.includes(p.facebookPageId));
         const existingPageIds = demoExistingPages.map(p => p.id);
 
+        // Refresh the motoshop catalog fixture (Stage 2 v2, Cat 62)
+        const motoshopRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_motoshop');
+        if (motoshopRefresh) {
+            await seedMotoshopCatalog(motoshopRefresh.id);
+            logger.debug('[DemoData] Refreshed motoshop catalog items', { count: DEMO_CATALOG_ITEMS.length });
+        }
+
         // Refresh messages: delete old → re-seed with fresh timestamps
         await db.delete(messages).where(inArray(messages.pageId, existingPageIds));
         for (const msgData of DEMO_MESSAGES) {
@@ -1390,6 +1482,13 @@ export async function seedDemoData(
             .returning({ id: pages.id, facebookPageId: pages.facebookPageId });
         createdPages.push(created);
         logger.debug('[DemoData] Created demo page', { name: pageData.name });
+    }
+
+    // Seed the motoshop catalog fixture (Stage 2 v2, Cat 62)
+    const motoshopPage = createdPages.find(p => p.facebookPageId === 'demo_page_motoshop');
+    if (motoshopPage) {
+        await seedMotoshopCatalog(motoshopPage.id);
+        logger.debug('[DemoData] Seeded motoshop catalog items', { count: DEMO_CATALOG_ITEMS.length });
     }
 
     // Create demo posts

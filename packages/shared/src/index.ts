@@ -335,7 +335,40 @@ export interface Page {
   // True when at least one post/media on this page has a Post Reply configured
   // (trigger_reply set, either mode). Powers the dashboard "try Post Reply" nudge.
   hasPostReplyTrigger?: boolean;
+  // Number of merchant-authored catalog items (products/services/courses/...).
+  // A page with items counts as having an answer source (needsBusinessInfo,
+  // setup checklist) even with an empty free-text KB.
+  catalogItemsCount?: number;
   createdAt: string | Date | null;
+}
+
+// --- Native catalog (merchant-authored offerings, store-less pages) ---
+/** Generic offering kind. Verticals extend this union — never add per-vertical tables/screens. */
+export type CatalogItemType = 'product' | 'service' | 'course' | 'vehicle' | 'custom';
+
+export const CATALOG_ITEM_TYPES: CatalogItemType[] = ['product', 'service', 'course', 'vehicle', 'custom'];
+
+/** Hard per-page cap on catalog items — enforced at write time (403 CATALOG_LIMIT_REACHED).
+ *  Sized so the whole catalog always fits the AI prompt block without retrieval. */
+export const MAX_CATALOG_ITEMS_PER_PAGE = 300;
+
+/** One thing a business offers, entered by the merchant (no e-commerce store needed).
+ *  Rendered into the AI's <product_catalog> prompt block; never exposed via AI tools. */
+export interface CatalogItem {
+  id: string;
+  pageId: string;
+  type: CatalogItemType;
+  name: string;
+  description: string | null;
+  /** Decimal string (numeric column). null = "price on request". */
+  price: string | null;
+  currency: string | null;
+  /** Merchant-uploaded photo (Release 2); shown to customers as a DM card. */
+  imageUrl: string | null;
+  isAvailable: boolean;
+  sortOrder: number;
+  createdAt: string | Date | null;
+  updatedAt: string | Date | null;
 }
 
 // --- Post Reply picker ---

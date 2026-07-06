@@ -104,6 +104,69 @@ export const BusinessProfileSchema = z.object({
 export type BusinessProfileInput = z.infer<typeof BusinessProfileSchema>;
 
 // ==========================================
+// Native catalog (merchant-authored offerings)
+// ==========================================
+
+/**
+ * Accept a price however a merchant naturally types it (Simplicity contract §5):
+ * Arabic-Indic digits (٣٥٠٠), Eastern separators (٫ decimal / ٬ thousands),
+ * Western separators, or a plain number — normalized before numeric validation.
+ * null/'' = "price on request".
+ *
+ * Comma disambiguation (M4, PR #407): a single comma followed by exactly 1–2
+ * digits is a DECIMAL comma ("3,50" → 3.50 — common comma-as-decimal habit),
+ * anything else treats commas as thousands separators ("3,500" → 3500,
+ * "1,234,567" → 1234567). Mis-reading "3,50" as 350 would send a 100× wrong
+ * price to customers.
+ */
+const PriceInput = z.preprocess((raw) => {
+    if (raw === null || raw === undefined || raw === '') return null;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw !== 'string') return raw; // let z.number() reject it
+    let normalized = raw
+        .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+        .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+        .replace(/٫/g, '.')
+        .trim();
+    if (/^\d+,\d{1,2}$/.test(normalized)) {
+        normalized = normalized.replace(',', '.');
+    } else {
+        normalized = normalized.replace(/[,٬\s]/g, '');
+    }
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : raw; // unparseable → fails z.number() with a clear error
+}, z.number().min(0, 'Price must be non-negative').max(9_999_999_999.99).nullable());
+
+export const CatalogItemSchema = z.object({
+    type: z.enum(['product', 'service', 'course', 'vehicle', 'custom']).default('product'),
+    name: z.string().trim().min(1, 'Name is required').max(200),
+    description: z.string().trim().max(600).nullable().optional()
+        .transform(v => (v === '' ? null : v ?? null)),
+    price: PriceInput.optional().transform(v => v ?? null),
+    currency: z.string().trim().max(10).nullable().optional()
+        .transform(v => (v === '' ? null : v ?? null)),
+    isAvailable: z.boolean().default(true),
+});
+
+/** PATCH body: any subset of the create fields, plus list reordering.
+ *  '' → null mirrors the create schema so an update can't store empty strings
+ *  (omitted fields stay undefined = unchanged). */
+export const CatalogItemUpdateSchema = z.object({
+    type: z.enum(['product', 'service', 'course', 'vehicle', 'custom']).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+    description: z.string().trim().max(600).nullable().optional()
+        .transform(v => (v === '' ? null : v)),
+    price: PriceInput.optional(),
+    currency: z.string().trim().max(10).nullable().optional()
+        .transform(v => (v === '' ? null : v)),
+    isAvailable: z.boolean().optional(),
+    sortOrder: z.number().int().min(0).optional(),
+}).refine(body => Object.keys(body).length > 0, { message: 'At least one field is required' });
+
+export type CatalogItemInput = z.infer<typeof CatalogItemSchema>;
+export type CatalogItemUpdateInput = z.infer<typeof CatalogItemUpdateSchema>;
+
+// ==========================================
 // Generic ID Validation
 // ==========================================
 export const UUIDSchema = z.string().uuid('Invalid ID format');

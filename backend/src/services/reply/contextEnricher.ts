@@ -1,5 +1,7 @@
 import { integrationRegistry } from '../../integrations';
 import { getStoreContextForAI } from '../ecommerce';
+import { catalogService } from '../catalog';
+import { captureError } from '../../utils/sentryHelpers';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { detectLanguageCode } from '../../utils/language';
 import {
@@ -58,12 +60,26 @@ export async function enrichPageContext(
     let storePolicies: string | undefined;
     let productCatalog: string | undefined;
     const ecommerceStoreId = typeof page.ecommerceStoreId === 'string' ? page.ecommerceStoreId : undefined;
+    const pageId = typeof page.id === 'string' ? page.id : undefined;
     if (ecommerceStoreId) {
         try {
             const storeCtx = await getStoreContextForAI(ecommerceStoreId);
             storePolicies = storeCtx.storePolicies;
             productCatalog = storeCtx.productCatalog;
         } catch { /* non-critical */ }
+    } else if (pageId) {
+        // Store-less pages: merchant-authored catalog_items fill the same
+        // <product_catalog> block (Stage 2 v2 — prompt content, never AI tools;
+        // D-004). undefined when the page has no items, so the prompt stays
+        // byte-identical for every page without a catalog.
+        try {
+            productCatalog = await catalogService.buildCatalogPromptBlock(pageId);
+        } catch (err) {
+            // Non-critical — the reply proceeds without the catalog block. But
+            // never silently: a persistent failure here means catalogs vanish
+            // from prompts fleet-wide ("the AI ignores my items") with no signal.
+            captureError(err, 'Catalog prompt block failed', { level: 'warning', tags: { service: 'catalog' }, extra: { pageId } });
+        }
     }
 
     // 3a. Narrative business profile appended to KB. DESCRIPTIVE fields only

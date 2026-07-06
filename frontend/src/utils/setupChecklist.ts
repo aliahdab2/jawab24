@@ -22,7 +22,9 @@ export function deriveSetupState(pages: Page[], usage: UsageSummary | null): Set
   const connectedPages = pages.filter((p) => p.isConnected !== false);
 
   const pageConnected = connectedPages.length > 0;
-  const kbFilled = connectedPages.some(isKbFilled);
+  // "Business info" is satisfied by either a filled free-text KB or a native
+  // catalog with at least one item — both give the AI something to answer from.
+  const kbFilled = connectedPages.some((p) => isKbFilled(p) || (p.catalogItemsCount ?? 0) > 0);
   const autoReplyOn = connectedPages.some(
     (p) => p.autoReplyEnabled || p.instagramAutoReplyEnabled || p.whatsappAutoReplyEnabled,
   );

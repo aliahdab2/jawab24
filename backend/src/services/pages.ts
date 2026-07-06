@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
+import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems } from '../db/schema';
 import { eq, and, desc, sql, count, isNotNull } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
@@ -422,6 +422,22 @@ export class PagesService {
             captureError(err, 'Pages Post Reply trigger query failed', { level: 'warning', tags: { service: 'pages' } });
         }
 
+        // Native-catalog item counts per page. A page with items counts as having
+        // an answer source (needsBusinessInfo / setup checklist) even with an empty
+        // free-text KB. Computed fresh (not in the 60s stats cache) so the KB nudge
+        // clears the moment a merchant adds their first item. Best-effort like above.
+        const catalogCountByPage = new Map<string, number>();
+        try {
+            const rows = await db.select({ pageId: catalogItems.pageId, value: count() })
+                .from(catalogItems)
+                .innerJoin(pages, eq(catalogItems.pageId, pages.id))
+                .where(eq(pages.workspaceId, workspaceId))
+                .groupBy(catalogItems.pageId);
+            for (const r of rows) catalogCountByPage.set(r.pageId, Number(r.value));
+        } catch (err) {
+            captureError(err, 'Pages catalog count query failed', { level: 'warning', tags: { service: 'pages' } });
+        }
+
         return workspacePages.map(page => {
             const stats = statsMap.get(page.id) ?? {
                 commentsCount: 0, repliesCount: 0, breakdown: { ...emptyBreakdown }, lastActivity: null,
@@ -435,6 +451,7 @@ export class PagesService {
                     ? Math.round((stats.repliesCount / stats.commentsCount) * 100)
                     : 0,
                 hasPostReplyTrigger: triggerPageIds.has(page.id),
+                catalogItemsCount: catalogCountByPage.get(page.id) ?? 0,
             };
         });
     }
@@ -486,9 +503,9 @@ export class PagesService {
      *
      * If you add a new field that gets prompt-injected (not tool-fetched), wire
      * its writer through this function or your edits won't reach customers
-     * until the next semantic-cache eviction (~24h). The catalog write path is
-     * NOT a precedent here — catalog routes through tool calls, so it doesn't
-     * need this; it only bumps kbVersion for version-chain consistency.
+     * until the next semantic-cache eviction (~24h). catalog_items writes
+     * (services/catalog.ts) follow exactly this rule — items are prompt-injected
+     * via the <product_catalog> block, so every CRUD call lands here.
      *
      * Mechanism: the exact-cache key (ai.ts:buildCacheKey) and the semantic
      * cache (kb/semantic-cache.ts) both include kbActiveVersion as a scope
@@ -499,9 +516,14 @@ export class PagesService {
      *
      * Returns the post-bump kbActiveVersion, or null if the page doesn't
      * exist. Callers usually don't need the return value.
+     *
+     * `executor` lets a caller run the bump inside its own transaction so the
+     * row write and the cache invalidation land (or fail) together — e.g. the
+     * catalog service, where a committed delete without the bump would keep
+     * replies quoting a deleted item until cache TTL.
      */
-    async invalidatePageCaches(pageId: string): Promise<{ kbActiveVersion: number } | null> {
-        const [updated] = await db
+    async invalidatePageCaches(pageId: string, executor: Pick<typeof db, 'update'> = db): Promise<{ kbActiveVersion: number } | null> {
+        const [updated] = await executor
             .update(pages)
             .set({
                 kbVersion: sql`COALESCE(${pages.kbVersion}, 0) + 1`,

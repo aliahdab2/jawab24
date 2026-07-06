@@ -137,6 +137,7 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     fashion: /أزياء|الخليج|fashion/i,
     damascus: /الفريق الدمشقي|دمشقي/i,
     clinic: /الشفاء|عيادة|clinic/i,
+    moto: /المجد|موتوسيكلات|motoshop/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -168,7 +169,7 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 385 total (372 previous + 13 persona goal-timing & variety tests)
+// Test cases — 395 total (385 previous + 10 native-catalog tests, Cat 62)
 // ---------------------------------------------------------------------------
 
 /**
@@ -3982,6 +3983,23 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Large-KB positive guard: confirmed enrollment intent + no prior ask — the persona goal legitimately fires (collect contact info or share the registration channel). Guards against over-suppression in the real-KB regime.',
     },
+
+    // ── Category 62: Native Catalog (Stage 2 v2) ─────────────────────────────
+    // The motoshop fixture's prices live ONLY in catalog_items (its KB text has
+    // address/hours/phone but zero prices), so every correct price below proves
+    // the <product_catalog> prompt path AND the price guard's catalog grounding
+    // (getKBText includeProductCatalog). The catalog is complete (25 items, no
+    // truncation tail) → the model may confidently deny items it doesn't carry.
+    { id: 679, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'كم سعر دبل صدمات NJT؟', page: 'moto', expected: { flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'], replyContainsAny: ['350', '٣٥٠'] }, notes: 'Exact catalog price — must quote 350 ريال from catalog_items, not deflect (price exists nowhere in KB text).' },
+    { id: 680, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'بكم خوذة LS2؟', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'], replyContainsAny: ['380', '٣٨٠'] }, notes: 'Catalog price + description item (sizes M/L/XL).' },
+    { id: 681, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'هل بطارية يواسا متوفرة عندكم؟', page: 'moto', expected: { confidence: ['high', 'medium'], replyNotContains: ['غير متوفر', 'نفد', 'خلصت', 'مو موجود', 'لا يوجد'] }, notes: 'In-stock availability — catalog says in stock; must not deny.' },
+    { id: 682, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'عندكم طرمبة بنزين هوندا؟', page: 'moto', expected: { replyContainsAny: ['غير متوفر', 'غير متوفرة', 'نفد', 'نفدت', 'خلص', 'مو متوفر', 'انتهت', 'حالياً غير'] }, notes: 'Out-of-stock item (isAvailable=false → "out of stock" in the block) — must say unavailable, not sell it.' },
+    { id: 683, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'عندكم زيت جيربوكس لسيارة كامري؟', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'], replyContainsAny: ['ما عندنا', 'لا نوفر', 'غير متوفر', 'ما نبيع', 'موتوسيكلات', 'للأسف', 'لا يتوفر', 'مو متوفر'] }, notes: 'Not-in-catalog (car part at a motorcycle shop) — complete catalog, so a confident "we don\'t carry that" is correct; must not invent a price.' },
+    { id: 684, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'How much is the LS2 helmet?', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'], replyContainsAny: ['380', '٣٨٠'] }, notes: 'EN question over an AR catalog — cross-language product lookup (D-017).' },
+    { id: 685, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'كم سعر كاوتش ميشلان؟', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'] }, notes: 'Price-on-request item (null price → "price on request" in the block) — any invented number trips the catalog-grounded guard and fails this case.' },
+    { id: 686, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'كم سعر دورة صيانة الموتوسيكلات؟', page: 'moto', expected: { flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'], replyContainsAny: ['1200', '١٢٠٠', '1,200'] }, notes: 'Course-type item ([course] tag) — generic types answer like products.' },
+    { id: 687, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'بكم الهوندا CG المستعملة؟', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'], replyContainsAny: ['5500', '٥٥٠٠', '5,500'] }, notes: 'Vehicle-type item ([vehicle] tag) — the used-bike listing.' },
+    { id: 688, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'وين موقعكم؟', page: 'moto', expected: { confidence: ['high'], replyContainsAny: ['العزيزية', 'الرياض'] }, notes: 'Feature-must-not-distort guard (v1 post-mortem lesson 4): an off-topic question on a catalog page still answers from KB text normally.' },
 ];
 
 // ---------------------------------------------------------------------------

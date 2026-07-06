@@ -29,8 +29,14 @@ export function resolveChannel(request: GenerateRequest): 'comment' | 'dm' {
  * from the post are legitimate (the business's own published content).
  * Excluding it here would misflag those prices as hallucinated and
  * trigger PRICE_FALLBACK.
+ *
+ * `includeProductCatalog` is an explicit opt-in (used by the price guard):
+ * the <product_catalog> block is prompt-injected merchant content, so its
+ * prices are legitimate grounding. It is NOT included by default because
+ * resolveLanguage also consumes getKBText — folding the catalog in
+ * unconditionally would perturb language inference for existing pages.
  */
-export function getKBText(request: GenerateRequest): string | null {
+export function getKBText(request: GenerateRequest, opts?: { includeProductCatalog?: boolean }): string | null {
     const parts: string[] = [];
     const chunks = request.context?.retrievedChunks;
     if (chunks && chunks.length > 0) {
@@ -43,6 +49,9 @@ export function getKBText(request: GenerateRequest): string | null {
     }
     if (request.context?.storePolicies) {
         parts.push(request.context.storePolicies);
+    }
+    if (opts?.includeProductCatalog && request.context?.productCatalog) {
+        parts.push(request.context.productCatalog);
     }
     return parts.length > 0 ? parts.join(' ') : null;
 }

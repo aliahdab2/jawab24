@@ -19,6 +19,7 @@ import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useIsEmbedded } from '@/hooks/useIsEmbedded';
 import { isNativePlatform } from '@/lib/capacitor';
+import { isCatalogVisible } from '@/lib/featureFlags';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';
 
 interface DashboardLayoutProps {
@@ -68,10 +69,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   // those paths — derived from the same nav config the overlay uses, so
   // adding a nav entry can never silently miss this active-state check.
   const moreOverlayPaths = useMemo(
-    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam })
+    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(user) })
       .flatMap((g) => g.items.map((i) => i.href))
       .filter((href) => !['/dashboard', '/comments', '/messages'].includes(href)),
-    [isAdmin, canManageTeam],
+    [isAdmin, canManageTeam, user],
   );
 
   // ESC key to close modals (logout confirmation takes priority)
@@ -442,6 +443,7 @@ function MobileMenuOverlay({
   const workspaces = useAuthStore((s) => s.workspaces);
   const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
+  const overlayUser = useAuthStore((s) => s.user);
   const showWorkspaceSwitcher = workspaces.length > 1;
   const handleWorkspaceSwitch = (id: string) => {
     setActiveWorkspace(id);
@@ -449,7 +451,7 @@ function MobileMenuOverlay({
     router.replace(router.asPath);
   };
 
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(overlayUser) });
   const menuItems = navigationGroups.flatMap((group) =>
     group.items.map((item) => ({
       path: item.href,

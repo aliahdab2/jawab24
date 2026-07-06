@@ -54,4 +54,14 @@ describe('deriveSetupState', () => {
     const s = deriveSetupState([page({ autoReplyEnabled: false, instagramAutoReplyEnabled: true })], usage(0));
     expect(s.autoReplyOn).toBe(true);
   });
+
+  it('counts a catalog with items as kbFilled even with an empty free-text KB', () => {
+    const s = deriveSetupState([page({ knowledgeBase: null, catalogItemsCount: 2 })], usage(0));
+    expect(s.kbFilled).toBe(true);
+  });
+
+  it('does not count a catalog with zero items as kbFilled', () => {
+    const s = deriveSetupState([page({ knowledgeBase: null, catalogItemsCount: 0 })], usage(0));
+    expect(s.kbFilled).toBe(false);
+  });
 });
