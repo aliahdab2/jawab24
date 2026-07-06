@@ -49,9 +49,10 @@ export function SectionEditor({
         const originalLength = insertText.length;
         insertText = insertText.slice(0, budget);
         toast.info(
-          tKb('extractTrimmedToBudget')
-            .replace('{kept}', budget.toLocaleString())
-            .replace('{total}', originalLength.toLocaleString()),
+          tKb('extractTrimmedToBudget', {
+            kept: budget.toLocaleString(),
+            total: originalLength.toLocaleString(),
+          }),
         );
       }
     }
