@@ -70,15 +70,19 @@ export class PostReplyCap {
     /**
      * Count one automated any-comment send toward the cap. Sets the 24h window TTL on
      * the first send of the window. Fail-open.
+     *
+     * SET NX (with TTL) before INCR — not INCR-then-EXPIRE — so the key can never
+     * exist without a TTL: a crash between INCR and EXPIRE would leave a permanent
+     * counter that caps the post forever once it reaches 300 lifetime sends. The
+     * worst interruption here leaves a TTL'd key at count 0, which self-heals when
+     * the window expires (INCR preserves the existing TTL).
      */
     async increment(pageId: string, postId: string): Promise<void> {
         if (getCap() === 0) return;
         try {
             const key = buildKey(pageId, postId);
-            const count = await redis.incr(key);
-            if (count === 1) {
-                await redis.expire(key, WINDOW_SECONDS);
-            }
+            await redis.set(key, '0', 'EX', WINDOW_SECONDS, 'NX');
+            await redis.incr(key);
         } catch (error) {
             this.logger.error('[PostReplyCap] Redis error on increment', { error });
         }

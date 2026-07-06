@@ -70,15 +70,24 @@ describe('CommentDetailModal', () => {
 
     it('renders the Set up Post Reply action and calls onSetupPostReply when clicked', () => {
       const onSetupPostReply = vi.fn();
-      renderModal({ comment: postComment, onSetupPostReply, postTriggerKeyword: null });
+      renderModal({ comment: postComment, onSetupPostReply, postTrigger: null });
       const btn = screen.getByRole('button', { name: /set up post reply/i });
       fireEvent.click(btn);
       expect(onSetupPostReply).toHaveBeenCalledTimes(1);
     });
 
     it('shows the Edit Post Reply action when the post already has a configured reply', () => {
-      renderModal({ comment: postComment, onSetupPostReply: vi.fn(), postTriggerKeyword: 'register' });
+      renderModal({ comment: postComment, onSetupPostReply: vi.fn(), postTrigger: { keyword: 'register' } });
       expect(screen.getByRole('button', { name: /edit post reply/i })).toBeInTheDocument();
+      expect(screen.getByText('register')).toBeInTheDocument();
+    });
+
+    it('treats an any-comment rule (keyword null) as configured — Edit action + mode chip', () => {
+      renderModal({ comment: postComment, onSetupPostReply: vi.fn(), postTrigger: { keyword: null } });
+      expect(screen.getByRole('button', { name: /edit post reply/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /set up post reply/i })).not.toBeInTheDocument();
+      // Chips row shows the mode label instead of keywords
+      expect(screen.getByText(/any comment/i)).toBeInTheDocument();
     });
 
     it('does not render the Post Reply action when no handler is provided', () => {

@@ -151,7 +151,10 @@ export class PostsController {
             return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
         }
 
-        const type: 'keyword' | 'all' = triggerType === 'all' ? 'all' : 'keyword';
+        // Default only when the field is ABSENT (pre-triggerType clients). A present
+        // but invalid value must 400 via the validator below, not silently coerce
+        // to keyword mode.
+        const rawType: string = triggerType ?? 'keyword';
         const keyword = triggerKeyword?.trim() || null;
         const replyText = triggerReply?.trim() || null;
 
@@ -166,9 +169,11 @@ export class PostsController {
 
             // Setting: validate keyword vs any-comment shape via the shared validator. A
             // partial trigger (keyword without a reply) fails here — triggerReply is required.
-            const validationError = validatePostReplyRuleInput({ triggerType: type, triggerKeyword: keyword, triggerReply: replyText });
+            const validationError = validatePostReplyRuleInput({ triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText });
             if (validationError) return reply.status(400).send({ error: validationError });
 
+            // Validation guarantees rawType is 'keyword' | 'all' past this point.
+            const type: 'keyword' | 'all' = rawType === 'all' ? 'all' : 'keyword';
             // Any-comment mode stores no keyword.
             const storedKeyword = type === 'all' ? null : keyword;
             const found = await postsService.updateTrigger(id, source, storedKeyword, replyText, req.workspaceId, type);

@@ -659,7 +659,7 @@ const CommentsPage: NextPageWithLayout = () => {
           onUnresolve={selectedComment.resolved ? () => handleUnresolve(selectedComment.id) : undefined}
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
           pageUrl={selectedCommentPageUrl}
-          postTriggerKeyword={selectedComment.postId ? triggersByPostId[selectedComment.postId]?.keyword ?? null : null}
+          postTrigger={selectedComment.postId ? triggersByPostId[selectedComment.postId] ?? null : null}
           // Post Reply is post-scoped: rather than stack a second modal inside this
           // URL-driven detail modal (z-index + routing conflicts), transition to the
           // shared config modal (usePostReplySetup) — open it, then close the detail.

@@ -460,7 +460,8 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │
 ├── Try POST REPLY MATCHING (per-post trigger: keyword match, or any-comment mode)
 │   ├── any-comment mode → run skip rules (spam/friend-tag/promo-link) + complaint
-│   │   keyword-guard + per-post 24h cap BEFORE sending (postReplyRule.ts)
+│   │   keyword-guard + handoff-pause gate + per-post 24h cap BEFORE sending,
+│   │   inside the per-comment idempotency check + lock (postReplyRule.ts)
 │   └── MATCH → Use Post Reply → Go to Safety Filters
 │
 ├── Is AI enabled?

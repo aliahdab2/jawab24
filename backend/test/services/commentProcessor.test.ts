@@ -1825,6 +1825,62 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(result.success).toBe(true);
         });
 
+        it('webhook redelivery of an already-flagged comment does NOT re-flag or re-notify (idempotency runs before the guard)', async () => {
+            // Regression: the guard's flag branch used to run before the idempotency
+            // check, so every Meta redelivery re-flagged the comment and sent the
+            // merchant a duplicate push notification.
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+                storeComment: vi.fn().mockResolvedValue({
+                    comment: { id: 'comment-uuid', replied: false, needsAttention: true },
+                    isNew: false,
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'بدي استرجاع فلوسي', 'user-1', 'Ali',
+            );
+
+            expect(adapter.flagComment).not.toHaveBeenCalled();
+            expect(notificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Comment already replied');
+        });
+
+        it('suppresses the template while a handoff pause is active — comment stays pending', async () => {
+            // The merchant is manually talking to this customer; a canned template
+            // must not interject. Mirrors the AI path's isPaused gate.
+            vi.mocked(messagesService.isPaused).mockResolvedValue(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'طيب وبعدين؟', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            // Pending, NOT resolved — the merchant is engaged with the thread.
+            expect(commentsService.resolveComment).not.toHaveBeenCalled();
+            expect(postReplyCap.increment).not.toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('does not count a failed send toward the per-post cap', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+                sendReply: vi.fn().mockResolvedValue({ success: false, error: 'Graph API error' }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كيف أطلب؟', 'user-1', 'Ali',
+            );
+
+            expect(result.success).toBe(false);
+            expect(postReplyCap.increment).not.toHaveBeenCalled();
+        });
+
     });
 
     describe('Friend-tag silent skip — runs before trigger-keyword branch', () => {

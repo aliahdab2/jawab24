@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { toast } from 'sonner';
@@ -39,6 +39,8 @@ export function PostTriggerModal({
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
   const [reply, setReply] = useState(initialReply ?? '');
   const [confirmingClear, setConfirmingClear] = useState(false);
+  // Roving-tabindex focus targets for the mode radiogroup (arrow-key navigation).
+  const modeRefs = useRef<Record<TriggerMode, HTMLButtonElement | null>>({ keyword: null, all: null });
 
   // Sync when modal opens with fresh values
   useEffect(() => {
@@ -141,16 +143,33 @@ export function PostTriggerModal({
           </div>
         )}
 
-        {/* Trigger mode: match keywords vs reply to any comment */}
-        <FormField label={t('postTriggerMode')} htmlFor="trigger-mode">
-          <div id="trigger-mode" role="radiogroup" aria-label={t('postTriggerMode')} className="grid grid-cols-2 gap-2">
+        {/* Trigger mode: match keywords vs reply to any comment.
+            Not wrapped in FormField — its <label htmlFor> needs a labelable control,
+            and a radiogroup div isn't one; aria-labelledby is the correct association.
+            WAI-ARIA radio semantics: roving tabindex + arrow keys move the selection. */}
+        <div className="flex flex-col gap-1.5">
+          <span id="trigger-mode-label" className="text-sm font-medium text-foreground">
+            {t('postTriggerMode')}
+          </span>
+          <div role="radiogroup" aria-labelledby="trigger-mode-label" className="grid grid-cols-2 gap-2">
             {(['keyword', 'all'] as const).map((m) => (
               <button
                 key={m}
+                ref={(el) => { modeRefs.current[m] = el; }}
                 type="button"
                 role="radio"
                 aria-checked={mode === m}
+                tabIndex={mode === m ? 0 : -1}
                 onClick={() => setMode(m)}
+                onKeyDown={(e) => {
+                  // Two options — any arrow key moves selection (and focus) to the other.
+                  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                    e.preventDefault();
+                    const other: TriggerMode = m === 'keyword' ? 'all' : 'keyword';
+                    setMode(other);
+                    modeRefs.current[other]?.focus();
+                  }
+                }}
                 className={clsx(
                   'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                   mode === m
@@ -162,7 +181,7 @@ export function PostTriggerModal({
               </button>
             ))}
           </div>
-        </FormField>
+        </div>
 
         {/* Keyword chip input — only in keyword mode */}
         {mode === 'keyword' && (
