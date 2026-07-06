@@ -40,7 +40,7 @@ import { getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { groupComments, filterGroupsBySearch } from '@/utils/commentGrouping';
-import { PostReplyIcon } from '@/utils/postReply';
+import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 
 import { type InboxFilterType, resolveInboxFilter, inboxFilterToApiParams } from '@/utils/inboxFilters';
 type FilterType = InboxFilterType;
@@ -469,15 +469,21 @@ const CommentsPage: NextPageWithLayout = () => {
         }
         description={t('description')}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            {/* Lightweight ghost action paired with the icon-only Export — labeled on
+                desktop for discovery, collapses to an icon on mobile (aria-label/title
+                keep it accessible) so the header doesn't crowd on narrow screens. The
+                emerald key carries the Post Reply identity, distinct from Export. */}
             <Button
               size="sm"
-              variant="secondary"
+              variant="ghost"
               onClick={postReplySetup.openPicker}
               className="gap-1.5"
+              aria-label={t('postReplyPickerButton')}
+              title={t('postReplyPickerButton')}
             >
-              <PostReplyIcon className="w-4 h-4" aria-hidden="true" />
-              {t('postReplyPickerButton')}
+              <PostReplyIcon className={clsx('w-4 h-4 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />
+              <span className="hidden sm:inline">{t('postReplyPickerButton')}</span>
             </Button>
             <InboxExportButton onExport={exportToCSV} exporting={exporting} />
           </div>
