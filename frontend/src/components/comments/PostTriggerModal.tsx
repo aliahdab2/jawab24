@@ -172,8 +172,12 @@ export function PostTriggerModal({
             dir="auto"
             rows={4}
             maxLength={1000}
-            className="resize-none leading-relaxed"
-            style={{ fieldSizing: 'content', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
+            className="leading-relaxed"
+            // resize:none is set inline, not via a class: the base Textarea hardcodes
+            // `resize-y`, which wins over a `resize-none` class in Tailwind's cascade and
+            // leaves a resize grip in the corner (a stray "dot" in the RTL bottom corner).
+            // The field auto-sizes via fieldSizing, so manual resize is never wanted here.
+            style={{ fieldSizing: 'content', resize: 'none', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
           />
         </FormField>
       </div>
