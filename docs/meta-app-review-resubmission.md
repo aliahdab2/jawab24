@@ -236,3 +236,109 @@ Jawab24 uses the email permission to read the user's primary email address assoc
 ### Nice to have
 
 - [ ] iOS build — upload proper .app/.zip (NOT .apk) if required for this submission
+
+---
+
+# WhatsApp Embedded Signup Submission (added 2026-07-07)
+
+**Goal:** Advanced Access for `whatsapp_business_messaging` + `whatsapp_business_management` on app **774211662298446**, so Jawab24 can onboard merchants as a **Tech Provider** via Embedded Signup (no Facebook Page required for the merchant — only a Facebook login).
+
+**Why this unblocks launch:** the WhatsApp channel is already deployed dark in production (PR #392). The ONLY remaining blocker is this approval → then create the ES configuration → set `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` → founder pilot.
+
+## Status
+
+| Prerequisite | State |
+|---|---|
+| Business verification (Business 867483152446840) | ✅ Done — verified Meta Tech Provider |
+| WhatsApp product added to the app | ☐ Not yet — Part A below |
+| Test number + screencasts | ☐ Not yet — Parts A–B below |
+| Review timeline after submitting | 3–5 business days |
+
+**Key fact (verified in Meta docs):** you do NOT need approval to record the evidence. Adding the WhatsApp product gives a free **dev-mode test number** immediately, and Meta explicitly accepts as screencast evidence: (1) the **API Setup cURL** sending a message that arrives in the WhatsApp client, and (2) **WhatsApp Manager** creating a message template. Both work pre-approval.
+
+> **Caption-rule nuance vs the Facebook videos above:** the "no API endpoints in captions" rule came from the pages_* rejection. For WhatsApp, Meta's own sample-submission page accepts a terminal cURL recording — the endpoint being visible in the terminal is fine. Still keep the *captions* descriptive ("The business sends a WhatsApp message from its system"), not technical.
+
+---
+
+## Part A — Dashboard setup (~15 min, do first)
+
+1. [developers.facebook.com/apps/774211662298446](https://developers.facebook.com/apps/774211662298446) → **Add Product** → **WhatsApp** → Set up.
+2. Choose the existing business portfolio (867483152446840) when asked.
+3. Open **WhatsApp → API Setup**. Note the **test phone number** Meta assigned and the temporary access token.
+4. Under **To**, add your personal WhatsApp number as a test recipient (OTP verification on your phone).
+5. Copy the pre-filled **cURL** command, run it in a terminal → the `hello_world` template arrives on your phone. This is both the smoke test and Scene 3–5 of Video 1.
+
+## Part B — Record the two screencasts (~30 min)
+
+Follow the global Recording Rules above (no audio, captions, 1920×1080, QuickTime + captions in iMovie/CapCut, one video per permission).
+
+### Video 1 — `whatsapp_business_messaging`
+
+| Scene | Action | Caption |
+| ----- | ------ | ------- |
+| 1 | App Dashboard → WhatsApp → API Setup (pause 3s) | *"The business configures WhatsApp messaging"* |
+| 2 | Show the test number + recipient field | *"A WhatsApp Business number is set up for the business"* |
+| 3 | Terminal — run the API Setup cURL | *"The business system sends a reply to a customer's WhatsApp message"* |
+| 4 | Phone screen/mirror — message arrives in WhatsApp (pause 4s) | *"The customer receives the message in WhatsApp"* |
+| 5 | (Optional, stronger) Jawab24 `/en/messages` inbox showing a WhatsApp conversation | *"Conversations appear in the business dashboard"* |
+
+**Key:** the message MUST be shown arriving in the WhatsApp client (phone mirror via QuickTime works). Business-facing interface only — never the customer-side flow alone.
+
+### Video 2 — `whatsapp_business_management`
+
+| Scene | Action | Caption |
+| ----- | ------ | ------- |
+| 1 | business.facebook.com → WhatsApp Manager (pause 3s) | *"The business opens WhatsApp Manager"* |
+| 2 | Account tools → Message templates → Create template | *"The business creates a message template"* |
+| 3 | Fill name/category/body (e.g. order update) | *"The template defines the message the business will send"* |
+| 4 | Submit → template listed (pause 4s) | *"The template is created and pending review"* |
+
+## Part C — Submission texts (paste into App Review)
+
+### `whatsapp_business_messaging`
+
+> Jawab24 is a Tech Provider that enables small businesses to automatically reply to their customers on WhatsApp.
+>
+> When a customer sends a WhatsApp message to a business's registered number, Jawab24 receives the message via webhook, generates a reply based on the business's own business information, and sends the reply back to the customer within the 24-hour customer service window. Voice notes are transcribed and answered the same way. All conversations also appear in the business's Jawab24 inbox, where the business can reply manually.
+>
+> This allows business owners to:
+> - Automatically answer customer questions 24/7, in Arabic and English
+> - Respond to voice notes, images and text messages
+> - Manage all customer conversations from one dashboard
+>
+> Jawab24 only responds to customer-initiated conversations. It does not send unsolicited or promotional messages.
+
+### `whatsapp_business_management`
+
+> Jawab24 uses whatsapp_business_management to onboard its business customers through Embedded Signup and to manage the WhatsApp Business Accounts they connect.
+>
+> When a business connects WhatsApp inside the Jawab24 dashboard, Jawab24 completes Embedded Signup, subscribes the business's WhatsApp Business Account to webhooks so that customer messages reach the business's Jawab24 inbox, and registers the business's phone number for Cloud API messaging. Jawab24 also needs this permission to manage message templates on behalf of its business customers.
+>
+> This allows business owners to:
+> - Connect their WhatsApp Business number to Jawab24 in a few clicks, without technical setup
+> - Have their number registered and their account subscribed to receive customer messages
+> - Manage their WhatsApp presence alongside Facebook and Instagram in one dashboard
+
+## Part D — Submit
+
+1. App Dashboard → **App Review → Permissions and Features**.
+2. Request **Advanced Access** for `whatsapp_business_messaging` and `whatsapp_business_management`.
+3. Attach the matching video to each permission + paste the texts above. One video per permission.
+4. Submit. Expect 3–5 business days.
+5. **On approval:** WhatsApp → Embedded Signup → create a **configuration** → copy the **Configuration ID** → hand it over for the prod env (`NEXT_PUBLIC_WHATSAPP_CONFIG_ID` + `WHATSAPP_ALLOWLIST` + canary flag, frontend rebuild).
+
+## Pilot watch item — payment method
+
+Meta's Tech Provider docs state onboarded businesses "must add a payment method to their WhatsApp Business account." During the founder pilot, verify whether **inbound-only** usage (customer-initiated service conversations, which are free) actually works without one — this matters for sanctioned-country merchants who can't add international cards.
+
+## WhatsApp submission checklist
+
+- [ ] Part A: WhatsApp product added, test number noted, own number verified as recipient
+- [ ] Part A: cURL smoke test — hello_world arrived on phone
+- [ ] Video 1 (messaging) recorded + captioned
+- [ ] Video 2 (management) recorded + captioned
+- [ ] Both submission texts reviewed
+- [ ] Submitted — clock started (3–5 business days)
+- [ ] On approval: ES configuration created → Configuration ID handed over
+
+**Sources:** Meta docs — [Embedded Signup](https://developers.facebook.com/docs/whatsapp/embedded-signup/), [Become a Tech Provider](https://developers.facebook.com/docs/whatsapp/solution-providers/get-started-for-tech-providers), [App Review sample submission](https://developers.facebook.com/docs/whatsapp/solution-providers/app-review/sample-submission), [Onboarding customers as a Tech Provider](https://developers.facebook.com/docs/whatsapp/embedded-signup/onboarding-customers-as-a-tech-provider/).
