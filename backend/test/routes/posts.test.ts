@@ -143,7 +143,7 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id');
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id', 'keyword');
         });
 
         it('should clear trigger when both values are null', async () => {
@@ -156,7 +156,7 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id');
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id', 'keyword');
         });
 
         it('should return 400 for invalid source', async () => {
@@ -177,6 +177,30 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(400);
+        });
+
+        it('should return 400 for an unknown triggerType instead of silently coercing to keyword mode', async () => {
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details', triggerType: 'garbage' },
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(postsService.updateTrigger).not.toHaveBeenCalled();
+        });
+
+        it('should set an any-comment trigger (no keyword stored)', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue(true);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: null, triggerReply: 'DM sent!', triggerType: 'all' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', null, 'DM sent!', 'test_workspace_id', 'all');
         });
 
         it('should return 404 when post not found or not owned', async () => {

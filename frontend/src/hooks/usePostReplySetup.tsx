@@ -18,6 +18,7 @@ interface PostReplyTarget {
   postMessage?: string | null;
   keyword: string | null;
   reply: string | null;
+  type: string | null;
 }
 
 export interface PostReplySetup {
@@ -53,7 +54,7 @@ export function usePostReplySetup(): PostReplySetup {
         queryFn: () =>
           postsApi
             .getById(comment.postId!)
-            .then((r) => r.data as { triggerKeyword?: string | null; triggerReply?: string | null }),
+            .then((r) => r.data as { triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null }),
       });
       setTarget({
         postId: comment.postId,
@@ -61,6 +62,7 @@ export function usePostReplySetup(): PostReplySetup {
         postMessage: comment.postMessage,
         keyword: post?.triggerKeyword ?? null,
         reply: post?.triggerReply ?? null,
+        type: post?.triggerType ?? null,
       });
       return true;
     } catch (err) {
@@ -86,6 +88,7 @@ export function usePostReplySetup(): PostReplySetup {
       postMessage={target.postMessage}
       triggerKeyword={target.keyword}
       triggerReply={target.reply}
+      triggerType={target.type}
       isOpen
       onClose={close}
       onSaved={onSaved}

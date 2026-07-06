@@ -45,7 +45,10 @@ interface CommentDetailModalProps {
   mode?: 'full' | 'quick';
   pageName?: string;
   pageUrl?: string;
-  postTriggerKeyword?: string | null;
+  /** The post's active Post Reply rule, or null when none is configured.
+   *  `keyword` is null for any-comment rules (trigger_type 'all'), which are
+   *  active rules too — never key "configured" off the keyword alone. */
+  postTrigger?: { keyword: string | null } | null;
   /** Open the post's Post Reply config (the parent transitions to the shared
    *  PostTriggerModal). Post-scoped, so it's not stacked inside this modal. */
   onSetupPostReply?: () => void;
@@ -65,7 +68,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   mode = 'full',
   pageName,
   pageUrl,
-  postTriggerKeyword,
+  postTrigger,
   onSetupPostReply,
   onPrev,
   onNext,
@@ -299,12 +302,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={onSetupPostReply}
-                    title={postTriggerKeyword ? t('postTriggerEdit') : t('postTriggerAria')}
-                    aria-label={postTriggerKeyword ? t('postTriggerEdit') : t('postTriggerAria')}
+                    title={postTrigger ? t('postTriggerEdit') : t('postTriggerAria')}
+                    aria-label={postTrigger ? t('postTriggerEdit') : t('postTriggerAria')}
                     className={clsx(
                       // Compact, secondary-scale action that lives in the post header.
                       'ms-auto inline-flex items-center gap-1.5 rounded-md text-xs border transition-all',
-                      postTriggerKeyword
+                      postTrigger
                         // Already configured: quiet "edit" affordance on the emerald band.
                         ? 'px-2 py-0.5 font-medium border-transparent text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
                         // Not configured: a card-white chip so the invite stays prominent
@@ -312,18 +315,20 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                         : 'px-2 py-0.5 font-medium border-emerald-600/30 dark:border-emerald-700 bg-card text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 hover:border-emerald-600/50 dark:hover:bg-emerald-900/30'
                     )}
                   >
-                    {postTriggerKeyword
+                    {postTrigger
                       ? <Pencil className="w-3 h-3" aria-hidden="true" />
                       : <PostReplyIcon className="w-3 h-3" aria-hidden="true" />}
-                    {postTriggerKeyword ? t('postTriggerEdit') : t('postTriggerCta')}
+                    {postTrigger ? t('postTriggerEdit') : t('postTriggerCta')}
                   </button>
                 ) : undefined}
-                // Configured keywords live inside the card so the post + its post-reply
-                // read as one unit, separated from the post text by a divider.
-                footer={comment.postId && postTriggerKeyword ? (
+                // Configured trigger lives inside the card so the post + its post-reply
+                // read as one unit, separated from the post text by a divider. Keyword
+                // rules list their keywords; any-comment rules (keyword null) show the
+                // mode label instead.
+                footer={comment.postId && postTrigger ? (
                   <div className="flex items-center gap-1.5 flex-wrap px-3 pt-2 pb-2.5 border-t border-theme-border">
                     <PostReplyIcon className={clsx('w-3.5 h-3.5 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />
-                    {parseKeywords(postTriggerKeyword).map((kw, i) => (
+                    {(postTrigger.keyword ? parseKeywords(postTrigger.keyword) : [t('postTriggerModeAll')]).map((kw, i) => (
                       <span
                         key={i}
                         className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700"

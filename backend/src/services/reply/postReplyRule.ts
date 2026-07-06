@@ -1,0 +1,149 @@
+import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
+
+/**
+ * Post Reply rule resolution + matching + the any-comment guardrail.
+ *
+ * Post Reply fires a merchant-authored template on incoming comments, configured
+ * per post. A rule triggers on either specific keywords ('keyword') or any comment
+ * ('all'); if the post has no rule the comment falls through to the AI pipeline.
+ *
+ * Keyword mode is opt-in narrow and keeps its long-standing behavior. Any-comment
+ * mode fires on everything, so before sending it MUST run the same skip rules the AI
+ * path uses plus a no-AI complaint guard — see evaluateAnyCommentGuard.
+ *
+ * Kept in its own module (no DB / adapter deps) so the resolution + matching logic is
+ * unit-testable in isolation and can't drift between the pipeline and its tests.
+ */
+
+export type PostReplyTriggerType = 'keyword' | 'all';
+
+/** A content row's own per-post trigger fields (posts / instagramMedia). */
+export interface ContentTriggerFields {
+    triggerKeyword: string | null;
+    triggerReply: string | null;
+    /** 'keyword' | 'all'. Legacy rows / nulls are treated as 'keyword'. */
+    triggerType: string | null;
+}
+
+export interface EffectivePostReplyRule {
+    triggerType: PostReplyTriggerType;
+    triggerKeyword: string | null;
+    triggerReply: string;
+}
+
+/**
+ * Resolve the effective Post Reply rule for a piece of content, or null if none.
+ *
+ * A rule "exists" iff the content carries a `triggerReply` — keyword mode stores
+ * keyword+reply, any-comment mode stores reply only (the controller enforces this
+ * consistency). A keyword-mode rule missing its keyword is treated as no rule
+ * (defensive against inconsistent legacy rows).
+ */
+export function resolvePostReplyRule(content: ContentTriggerFields): EffectivePostReplyRule | null {
+    if (!content.triggerReply) return null;
+    const type: PostReplyTriggerType = content.triggerType === 'all' ? 'all' : 'keyword';
+    if (type === 'keyword' && !content.triggerKeyword) return null;
+    return {
+        triggerType: type,
+        triggerKeyword: content.triggerKeyword,
+        triggerReply: content.triggerReply,
+    };
+}
+
+export type PostReplyMatch =
+    | { matched: true; keyword: string | null }
+    | { matched: false };
+
+/**
+ * Does a comment satisfy the rule's trigger?
+ *   'all'     → any comment matches (keyword: null). The caller then applies the guard.
+ *   'keyword' → returns the first matching keyword, else no match.
+ * Matching mirrors the long-standing per-post logic (Arabic-normalized, shared
+ * matchesKeyword) so behavior is identical to before for keyword rules.
+ */
+export function matchPostReplyRule(rule: EffectivePostReplyRule, commentMessage: string): PostReplyMatch {
+    if (rule.triggerType === 'all') {
+        return { matched: true, keyword: null };
+    }
+    if (!rule.triggerKeyword) return { matched: false };
+    const normalizedComment = normalizeArabic(commentMessage.toLowerCase());
+    const keywords = parseKeywords(rule.triggerKeyword);
+    const matchedKeyword = keywords.find(kw =>
+        matchesKeyword(normalizedComment, normalizeArabic(kw.toLowerCase())),
+    );
+    return matchedKeyword ? { matched: true, keyword: matchedKeyword } : { matched: false };
+}
+
+/** Limits shared by the per-post trigger. 10 keywords matches the "5–10 variations
+ *  per keyword" industry best practice — do not raise without cause. */
+export const POST_REPLY_MAX_KEYWORDS = 10;
+export const POST_REPLY_MAX_KEYWORD_LEN = 100;
+export const POST_REPLY_MAX_REPLY_LEN = 1000;
+
+export interface PostReplyRuleInput {
+    triggerType: string;            // expected 'keyword' | 'all'
+    triggerKeyword: string | null;  // already trimmed by the caller, or null
+    triggerReply: string | null;    // already trimmed by the caller, or null
+}
+
+/**
+ * Validate a Post Reply rule payload. Returns an error message when invalid, or null
+ * when valid. Callers handle "clear the rule" (no reply) separately — this validates
+ * the SET case only.
+ *   - keyword mode: reply required (≤1000), 1–10 keywords, ≤100 chars each.
+ *   - any-comment mode: reply required (≤1000); keyword must be absent.
+ */
+export function validatePostReplyRuleInput(input: PostReplyRuleInput): string | null {
+    const { triggerType, triggerKeyword, triggerReply } = input;
+    if (triggerType !== 'keyword' && triggerType !== 'all') {
+        return 'triggerType must be "keyword" or "all"';
+    }
+    if (!triggerReply) return 'triggerReply is required';
+    if (triggerReply.length > POST_REPLY_MAX_REPLY_LEN) {
+        return `triggerReply must be ${POST_REPLY_MAX_REPLY_LEN} characters or fewer`;
+    }
+    if (triggerType === 'all') {
+        if (triggerKeyword) return 'triggerKeyword must be empty when triggerType is "all"';
+        return null;
+    }
+    if (!triggerKeyword) return 'triggerKeyword is required when triggerType is "keyword"';
+    const parts = parseKeywords(triggerKeyword);
+    if (parts.length === 0) return 'triggerKeyword must contain at least one keyword';
+    if (parts.length > POST_REPLY_MAX_KEYWORDS) {
+        return `triggerKeyword must not exceed ${POST_REPLY_MAX_KEYWORDS} keywords`;
+    }
+    if (parts.some(k => k.length > POST_REPLY_MAX_KEYWORD_LEN)) {
+        return `Each keyword must be ${POST_REPLY_MAX_KEYWORD_LEN} characters or fewer`;
+    }
+    return null;
+}
+
+export type AnyCommentGuardVerdict =
+    | { action: 'send' }
+    | { action: 'skip'; reason: string }       // silent spam skip (resolve, no notification)
+    | { action: 'flag'; flagReason: string };   // route to needs_attention (notify merchant)
+
+/**
+ * Guardrail for any-comment (triggerType 'all') template sends. Keyword mode is
+ * opt-in narrow and keeps its existing behavior; any-comment fires on EVERY comment,
+ * so it must not template-reply to spam or complaints:
+ *   - a preprocess skipReason (friend_mention / external_promo_url / punctuation)   → skip
+ *   - SPAM_OR_IRRELEVANT fallback intent (emoji-only, spam keywords)                → skip
+ *   - a business-action flag (refund / cancellation / exchange)                     → flag
+ *   - COMPLAINT fallback intent (angry customer)                                    → flag
+ *   - otherwise                                                                     → send
+ *
+ * Pure function over already-computed signals so it's unit-testable; the caller
+ * supplies the preprocess skipReason, the fallback intent, and the business flags.
+ */
+export function evaluateAnyCommentGuard(opts: {
+    skipReason: string | null;
+    fallbackIntent: string | undefined;
+    businessActionFlags: string[];
+}): AnyCommentGuardVerdict {
+    if (opts.skipReason) return { action: 'skip', reason: opts.skipReason };
+    if (opts.fallbackIntent === 'SPAM_OR_IRRELEVANT') return { action: 'skip', reason: 'spam' };
+    if (opts.businessActionFlags.length > 0) return { action: 'flag', flagReason: opts.businessActionFlags.join(',') };
+    if (opts.fallbackIntent === 'COMPLAINT') return { action: 'flag', flagReason: 'angry_customer' };
+    return { action: 'send' };
+}

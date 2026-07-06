@@ -96,6 +96,11 @@ vi.mock('../../src/services/protection', () => ({
         release: vi.fn().mockResolvedValue(undefined),
         setLogger: vi.fn(),
     },
+    postReplyCap: {
+        isOverCap: vi.fn().mockResolvedValue(false),
+        increment: vi.fn().mockResolvedValue(undefined),
+        setLogger: vi.fn(),
+    },
 }));
 
 vi.mock('../../src/services/reply/generator', async (importOriginal) => {

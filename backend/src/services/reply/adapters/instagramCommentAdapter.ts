@@ -49,6 +49,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
                 message: existing[0].caption,
                 triggerKeyword: existing[0].triggerKeyword ?? null,
                 triggerReply: existing[0].triggerReply ?? null,
+                triggerType: existing[0].triggerType ?? 'keyword',
             };
         }
 
@@ -67,6 +68,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             message: created.caption,
             triggerKeyword: null,
             triggerReply: null,
+            triggerType: 'keyword',
         };
     }
 

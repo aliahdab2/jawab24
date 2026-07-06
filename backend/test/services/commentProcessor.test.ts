@@ -4,7 +4,7 @@ import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
 import { commentsService } from '../../src/services/comments';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../../src/services/reply/generator';
-import { rateLimiter, commentDebounce } from '../../src/services/protection';
+import { rateLimiter, commentDebounce, postReplyCap } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { notificationService } from '../../src/services/notifications';
 import { publishSSEEvent } from '../../src/lib/eventBus';
@@ -37,6 +37,11 @@ vi.mock('../../src/services/protection', () => ({
         // Default: win the slot (proceed). A null return means "slot already held".
         tryAcquire: vi.fn().mockResolvedValue('debounce-token'),
         release: vi.fn().mockResolvedValue(undefined),
+        setLogger: vi.fn(),
+    },
+    postReplyCap: {
+        isOverCap: vi.fn().mockResolvedValue(false),
+        increment: vi.fn().mockResolvedValue(undefined),
         setLogger: vi.fn(),
     },
 }));
@@ -1820,6 +1825,135 @@ describe('CommentProcessor — template reply mode behavior', () => {
             const call = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
             expect(call[7]).toBe('content-uuid');
         });
+    });
+
+    describe('Post Reply — any-comment mode (triggerType "all")', () => {
+        const anyCommentContent = {
+            id: 'content-uuid',
+            autoReplyEnabled: true,
+            message: 'Post body',
+            triggerKeyword: null,
+            triggerReply: 'تم إرسال الكود على الخاص 📩',
+            triggerType: 'all',
+        };
+
+        it('sends the template on any benign comment (no keyword needed)', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كيف أطلب؟', 'user-1', 'Ali',
+            );
+
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+            expect(result.replyText).toBe('تم إرسال الكود على الخاص 📩');
+            // Successful any-comment send counts toward the per-post cap
+            expect(postReplyCap.increment).toHaveBeenCalledWith('page-uuid', 'content-uuid');
+        });
+
+        it('skips spam (emoji-only) without sending — guardrail', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', '😂😂😂', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            expect(result.success).toBe(true);
+        });
+
+        it('flags a refund request for attention instead of sending the template', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'بدي استرجاع فلوسي', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'refund_request', undefined);
+            expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('does not send once the per-post cap is reached', async () => {
+            vi.mocked(postReplyCap.isOverCap).mockResolvedValueOnce(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كيف أطلب؟', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            expect(result.success).toBe(true);
+        });
+
+        it('webhook redelivery of an already-flagged comment does NOT re-flag or re-notify (idempotency runs before the guard)', async () => {
+            // Regression: the guard's flag branch used to run before the idempotency
+            // check, so every Meta redelivery re-flagged the comment and sent the
+            // merchant a duplicate push notification.
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+                storeComment: vi.fn().mockResolvedValue({
+                    comment: { id: 'comment-uuid', replied: false, needsAttention: true },
+                    isNew: false,
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'بدي استرجاع فلوسي', 'user-1', 'Ali',
+            );
+
+            expect(adapter.flagComment).not.toHaveBeenCalled();
+            expect(notificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Comment already replied');
+        });
+
+        it('suppresses the template while a handoff pause is active — comment stays pending', async () => {
+            // The merchant is manually talking to this customer; a canned template
+            // must not interject. Mirrors the AI path's isPaused gate.
+            vi.mocked(messagesService.isPaused).mockResolvedValue(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'طيب وبعدين؟', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            // Pending, NOT resolved — the merchant is engaged with the thread.
+            expect(commentsService.resolveComment).not.toHaveBeenCalled();
+            expect(postReplyCap.increment).not.toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('does not count a failed send toward the per-post cap', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+                sendReply: vi.fn().mockResolvedValue({ success: false, error: 'Graph API error' }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كيف أطلب؟', 'user-1', 'Ali',
+            );
+
+            expect(result.success).toBe(false);
+            expect(postReplyCap.increment).not.toHaveBeenCalled();
+        });
+
     });
 
     describe('Friend-tag silent skip — runs before trigger-keyword branch', () => {

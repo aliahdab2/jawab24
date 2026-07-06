@@ -1,7 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { parseKeywords } from '@jawab24/shared';
 import { postsService } from '../services/posts';
 import { pagesService } from '../services/pages';
+import { validatePostReplyRuleInput } from '../services/reply/postReplyRule';
 import { UpdatePostDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
 
@@ -139,43 +139,44 @@ export class PostsController {
      * PATCH /posts/:id/trigger
      */
     async updateTrigger(
-        request: FastifyRequest<{ Params: { id: string }; Body: { source: 'facebook' | 'instagram'; triggerKeyword: string | null; triggerReply: string | null } }>,
+        request: FastifyRequest<{ Params: { id: string }; Body: { source: 'facebook' | 'instagram'; triggerKeyword: string | null; triggerReply: string | null; triggerType?: 'keyword' | 'all' } }>,
         reply: FastifyReply,
     ) {
         const req = request as WorkspaceRequest;
         if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
-        const { source, triggerKeyword, triggerReply } = request.body;
+        const { source, triggerKeyword, triggerReply, triggerType } = request.body;
 
         if (!['facebook', 'instagram'].includes(source)) {
             return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
         }
 
-        // Trigger must be either fully set (both keyword + reply) or fully cleared (both null).
-        // A keyword without a reply (or vice versa) is an inconsistent state.
+        // Default only when the field is ABSENT (pre-triggerType clients). A present
+        // but invalid value must 400 via the validator below, not silently coerce
+        // to keyword mode.
+        const rawType: string = triggerType ?? 'keyword';
         const keyword = triggerKeyword?.trim() || null;
         const replyText = triggerReply?.trim() || null;
-        if ((keyword === null) !== (replyText === null)) {
-            return reply.status(400).send({ error: 'triggerKeyword and triggerReply must both be set or both be null' });
-        }
-        if (keyword) {
-            const parts = parseKeywords(keyword);
-            if (parts.length === 0) {
-                return reply.status(400).send({ error: 'triggerKeyword must contain at least one keyword' });
-            }
-            if (parts.length > 10) {
-                return reply.status(400).send({ error: 'triggerKeyword must not exceed 10 keywords' });
-            }
-            if (parts.some(k => k.length > 100)) {
-                return reply.status(400).send({ error: 'Each keyword must be 100 characters or fewer' });
-            }
-        }
-        if (replyText && replyText.length > 1000) {
-            return reply.status(400).send({ error: 'triggerReply must be 1000 characters or fewer' });
-        }
 
         try {
-            const found = await postsService.updateTrigger(id, source, keyword, replyText, req.workspaceId);
+            // Clearing the trigger: both keyword and reply empty → remove the rule (fields
+            // nulled, type reset to the default).
+            if (!keyword && !replyText) {
+                const cleared = await postsService.updateTrigger(id, source, null, null, req.workspaceId, 'keyword');
+                if (!cleared) return reply.status(404).send({ error: 'Post not found' });
+                return reply.send({ success: true });
+            }
+
+            // Setting: validate keyword vs any-comment shape via the shared validator. A
+            // partial trigger (keyword without a reply) fails here — triggerReply is required.
+            const validationError = validatePostReplyRuleInput({ triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText });
+            if (validationError) return reply.status(400).send({ error: validationError });
+
+            // Validation guarantees rawType is 'keyword' | 'all' past this point.
+            const type: 'keyword' | 'all' = rawType === 'all' ? 'all' : 'keyword';
+            // Any-comment mode stores no keyword.
+            const storedKeyword = type === 'all' ? null : keyword;
+            const found = await postsService.updateTrigger(id, source, storedKeyword, replyText, req.workspaceId, type);
             if (!found) return reply.status(404).send({ error: 'Post not found' });
             return reply.send({ success: true });
         } catch (error) {

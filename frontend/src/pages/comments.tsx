@@ -85,10 +85,12 @@ const CommentsPage: NextPageWithLayout = () => {
     staleTime: 30_000,
   });
   const triggersByPostId = useMemo(() => {
-    const map: Record<string, { keyword: string; reply: string } | null> = {};
+    // A rule is active whenever a reply is set — keyword mode carries keyword+reply,
+    // any-comment mode carries a reply only (keyword null).
+    const map: Record<string, { keyword: string | null; reply: string } | null> = {};
     for (const post of postsData as Array<{ id: string; triggerKeyword?: string | null; triggerReply?: string | null }>) {
-      map[post.id] = post.triggerKeyword && post.triggerReply
-        ? { keyword: post.triggerKeyword, reply: post.triggerReply }
+      map[post.id] = post.triggerReply
+        ? { keyword: post.triggerKeyword ?? null, reply: post.triggerReply }
         : null;
     }
     return map;
@@ -657,7 +659,7 @@ const CommentsPage: NextPageWithLayout = () => {
           onUnresolve={selectedComment.resolved ? () => handleUnresolve(selectedComment.id) : undefined}
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
           pageUrl={selectedCommentPageUrl}
-          postTriggerKeyword={selectedComment.postId ? triggersByPostId[selectedComment.postId]?.keyword ?? null : null}
+          postTrigger={selectedComment.postId ? triggersByPostId[selectedComment.postId] ?? null : null}
           // Post Reply is post-scoped: rather than stack a second modal inside this
           // URL-driven detail modal (z-index + routing conflicts), transition to the
           // shared config modal (usePostReplySetup) — open it, then close the detail.
