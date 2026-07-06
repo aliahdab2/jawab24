@@ -51,3 +51,18 @@ export function isWhatsAppVisible(isAdmin: boolean): boolean {
   if (process.env.NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY === 'true') return isAdmin;
   return true;
 }
+
+/**
+ * TEMP (catalog canary, founder call 2026-07-07): the native-catalog surface
+ * (/catalog page + its nav entry) is visible ONLY to the founder's own account
+ * while dogfooding — deliberately narrower than the platform-admin gate Stores
+ * uses, so other admins/team members don't see a half-launched surface. The
+ * backend CRUD stays auth + workspace-admin gated regardless; this flag only
+ * hides the UI. Rollout path: widen the allowlist → swap to `isAdmin` →
+ * delete the gate at GA (tracked in the catalog plan, Phase D).
+ */
+const CATALOG_CANARY_EMAILS = ['aliahdab@gmail.com'];
+export function isCatalogVisible(user: { email?: string } | null | undefined): boolean {
+  const email = user?.email?.toLowerCase().trim();
+  return !!email && CATALOG_CANARY_EMAILS.includes(email);
+}

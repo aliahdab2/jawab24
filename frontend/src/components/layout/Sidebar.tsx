@@ -28,7 +28,7 @@ import { BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui'
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 import { isNativePlatform } from '@/lib/capacitor';
-import { PHONE_AUTH_ENABLED, isWhatsAppEnabled } from '@/lib/featureFlags';
+import { PHONE_AUTH_ENABLED, isWhatsAppEnabled, isCatalogVisible } from '@/lib/featureFlags';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -134,7 +134,7 @@ export function resolveNavKey(
     return key;
 }
 
-export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boolean; canManageTeam?: boolean } = {}) {
+export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boolean; canManageTeam?: boolean; showCatalog?: boolean } = {}) {
   const accountItems = [
     // Team is workspace owner/admin-only (canManageTeam = workspace role, NOT
     // the platform `isAdmin` super-admin flag). Placed first so it sits between
@@ -157,12 +157,13 @@ export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boo
   // Store listing, Salla/Zid backend reliability parity). Once those land
   // we'll drop the gate. Page-level guard in pages/integrations.tsx mirrors
   // this so deep-links also fail closed.
-  // Products & Services (native catalog) is admin-gated during the founder
-  // canary, same as Stores. Once dogfooded we drop the gate (Phase D).
+  // Products & Services (native catalog) is founder-only during the canary
+  // (isCatalogVisible email allowlist — narrower than the Stores admin gate).
+  // Once dogfooded we widen, then drop the gate (Phase D).
   const overviewItems = [
     { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
     { key: 'nav.pages', href: '/pages', icon: FileText },
-    ...(options.isAdmin
+    ...(options.showCatalog
       ? [{ key: 'nav.catalog', href: '/catalog', icon: Tag }]
       : []),
     ...(options.isAdmin
@@ -346,7 +347,7 @@ export const Sidebar = memo(function Sidebar() {
   const tAdmin = useTranslations('admin');
   const tAuth = useTranslations('auth');
   const isDemoUser = useIsDemoUser();
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(user) });
 
   const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing);
 

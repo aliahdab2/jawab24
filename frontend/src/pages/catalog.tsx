@@ -7,6 +7,8 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader, EmptyState, Select, Skeleton } from '@/components/ui';
 import { CatalogManager } from '@/components/catalog/CatalogManager';
 import { pagesApi } from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
+import { isCatalogVisible } from '@/lib/featureFlags';
 import { usePageFilter } from '@/hooks/usePageFilter';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
@@ -15,10 +17,23 @@ import type { Page } from '@jawab24/shared';
 function CatalogPageInner() {
   const t = useTranslations('catalog');
   const router = useRouter();
+  const { isAuthenticated, user, _hasHydrated } = useAuthStore();
+  const canSee = isCatalogVisible(user);
+
+  // Founder-only canary (mirrors the Stores page guard): deep links fail
+  // closed — anyone outside the allowlist is bounced to the dashboard. Wait
+  // for store hydration so we don't bounce the founder on first paint.
+  useEffect(() => {
+    if (!_hasHydrated) return;
+    if (isAuthenticated && !canSee) {
+      router.replace('/dashboard');
+    }
+  }, [_hasHydrated, isAuthenticated, canSee, router]);
 
   const { data: pagesData, isLoading } = useQuery<Page[]>({
     queryKey: ['pages'],
     queryFn: () => pagesApi.getAll().then((r) => r.data),
+    enabled: canSee,
   });
   const pages = useMemo(() => pagesData ?? [], [pagesData]);
 
