@@ -27,6 +27,7 @@ export { useWorkspaceRole } from './useWorkspaceRole';
 export { useOwnerGate } from './useOwnerGate';
 export { useHintDisplay } from './useHintDisplay';
 export { useTextareaAutoResize } from './useTextareaAutoResize';
+export { useClampOverflow } from './useClampOverflow';
 export { usePostReplySetup, type PostReplySetup } from './usePostReplySetup';
 export { useNotificationPoller } from './useNotificationPoller';
 export { useCountdown } from './useCountdown';
