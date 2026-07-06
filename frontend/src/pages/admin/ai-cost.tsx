@@ -23,6 +23,12 @@ import { captureError } from '@/lib/sentryHelpers';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
 
+// Pipelines that flow through the internal reply cache (mirrors backend
+// REPLY_PIPELINES, plus admin playground traffic). Every other pipeline can
+// never produce a cache hit, so its hit-rate cell shows "—" instead of a
+// misleading 0%.
+const CACHE_CAPABLE_PIPELINES = new Set(['comment_reply', 'dm_reply', 'playground']);
+
 export default function AdminAiCostPage() {
   const t = useTranslations('admin');
   const tc = useTranslations('common');
@@ -99,7 +105,10 @@ export default function AdminAiCostPage() {
   });
 
   const totals = consumption.data?.totals;
-  const cacheRatePct = totals && totals.calls > 0 ? Math.round(totals.internalCacheHitRate * 100) : 0;
+  // Reply-scoped rate: hits over comment_reply + dm_reply only. The blended
+  // all-pipeline rate (internalCacheHitRate) counts embeddings/translation/…
+  // that can never hit, which made a healthy cache read as ~12%.
+  const cacheRatePct = totals && totals.replyCalls > 0 ? Math.round(totals.replyCacheHitRate * 100) : 0;
   const apiKeyLabel = (label: string) => t(`aiCost.apiKey_${label}` as Parameters<typeof t>[0]);
 
   return (
@@ -269,7 +278,7 @@ export default function AdminAiCostPage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <StatCard icon={DollarSign} label={t('aiCost.cardTotalSpend')} value={formatCostUsd(totals.costUsd, 2)} />
                 <StatCard icon={Zap} label={t('aiCost.cardBilledCalls')} value={totals.billedCalls.toLocaleString()} sub={t('aiCost.cardBilledCallsSub', { calls: totals.calls.toLocaleString() })} />
-                <StatCard icon={Database} label={t('aiCost.cardCacheHitRate')} value={`${cacheRatePct}%`} sub={t('aiCost.cardCacheHitRateSub', { hits: totals.cacheHits.toLocaleString() })} />
+                <StatCard icon={Database} label={t('aiCost.cardCacheHitRate')} value={`${cacheRatePct}%`} sub={t('aiCost.cardCacheHitRateSub', { hits: totals.replyCacheHits.toLocaleString(), calls: totals.replyCalls.toLocaleString() })} />
                 <StatCard icon={PiggyBank} label={t('aiCost.cardCacheSavings')} value={formatCostUsd(totals.promptCacheSavingsUsd, 2)} />
               </div>
 
@@ -282,6 +291,7 @@ export default function AdminAiCostPage() {
                         <th className="text-start pb-2 text-muted-foreground font-medium">{t('aiCost.colFeature')}</th>
                         <th className="text-end pb-2 text-muted-foreground font-medium">{t('aiCost.colBilled')}</th>
                         <th className="text-end pb-2 text-muted-foreground font-medium">{t('aiCost.colCached')}</th>
+                        <th className="text-end pb-2 text-muted-foreground font-medium">{t('aiCost.colHitRate')}</th>
                         <th className="text-end pb-2 text-muted-foreground font-medium">{t('aiCost.colCost')}</th>
                       </tr>
                     </thead>
@@ -291,6 +301,11 @@ export default function AdminAiCostPage() {
                           <td className="py-2 text-foreground">{pipelineLabel(row.pipeline)}</td>
                           <td className="py-2 text-end text-foreground">{row.billedCalls.toLocaleString()}</td>
                           <td className="py-2 text-end text-foreground">{row.cacheHits.toLocaleString()}</td>
+                          <td className="py-2 text-end text-foreground">
+                            {CACHE_CAPABLE_PIPELINES.has(row.pipeline) && row.calls > 0
+                              ? `${Math.round((row.cacheHits / row.calls) * 100)}%`
+                              : '—'}
+                          </td>
                           <td className="py-2 text-end font-medium text-foreground">{formatCostUsd(row.costUsd)}</td>
                         </tr>
                       ))}

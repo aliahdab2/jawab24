@@ -7,6 +7,7 @@ import { instagramReplyService } from '../services/instagramReply';
 import { whatsappReplyService } from '../services/whatsappReply';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { pipelineMetrics, Pipeline } from '../lib/pipelineMetrics';
+import { computeQueueWaitMs, recordQueueWaitSample } from '../services/replyQueueHealth';
 import { Logger, noopLogger } from '../types';
 import { commentsService } from '../services/comments';
 import { messagesService } from '../services/messages';
@@ -45,14 +46,31 @@ function planAiPark(error: unknown): { kind: 'quota' | 'circuit'; delaySeconds: 
 }
 
 /**
- * Re-enqueue the current job with a delay, carrying an incremented aiRetryCount
- * (kept separate from handoffRetries so quota-parked jobs are NOT treated as
- * handoff backlog). Mirrors the handoff re-enqueue but for AI-unavailable parking.
- * Returns false when the job lacks the ids needed to re-enqueue.
+ * Re-enqueue the current job with a delay — the single re-enqueue path for ALL three
+ * "park and retry later" reasons (handoff pause, AI-unavailable, attachment-enriching).
+ * Each reason bumps its OWN counter and every other counter is preserved from the
+ * current job, so the three park kinds never clobber each other's budgets (and the
+ * shared-post context always survives the hop). Returns false when the job lacks the
+ * ids needed to re-enqueue.
  */
-async function reEnqueueParked(job: Job<ReplyJobData>, delaySeconds: number, nextAiRetryCount: number): Promise<boolean> {
+async function reEnqueueParked(
+    job: Job<ReplyJobData>,
+    opts: { delaySeconds: number; handoffRetries?: number; aiRetryCount?: number; attachmentRetries?: number },
+): Promise<boolean> {
     const { jobType } = job.data;
     const isComment = jobType.includes('comment');
+    // Only the counter(s) the caller bumps are carried; the rest are intentionally
+    // dropped. This is load-bearing for `handoffRetries`: an AI-park or
+    // attachment-park must NEVER inherit a prior handoffRetries>0, or the resumed
+    // job would be treated as handoff backlog and stale-suppressed (dropped). Each
+    // park kind advances only its own budget.
+    // Include a counter key ONLY when this park bumps it — an omitted key means
+    // "don't carry it forward" (see the handoffRetries note above).
+    const counters = {
+        ...(opts.handoffRetries !== undefined ? { handoffRetries: opts.handoffRetries } : {}),
+        ...(opts.aiRetryCount !== undefined ? { aiRetryCount: opts.aiRetryCount } : {}),
+        ...(opts.attachmentRetries !== undefined ? { attachmentRetries: opts.attachmentRetries } : {}),
+    };
 
     if (isComment && job.data.postId && job.data.commentId) {
         await enqueueComment({
@@ -66,8 +84,8 @@ async function reEnqueueParked(job: Job<ReplyJobData>, delaySeconds: number, nex
             senderName: job.data.senderName,
             messageTags: job.data.messageTags,
             requestId: job.data.requestId,
-            replyDelay: delaySeconds,
-            aiRetryCount: nextAiRetryCount,
+            replyDelay: opts.delaySeconds,
+            ...counters, // attachmentRetries is ignored by enqueueComment (DM-only)
         });
         return true;
     }
@@ -82,8 +100,8 @@ async function reEnqueueParked(job: Job<ReplyJobData>, delaySeconds: number, nex
             sharedPostId: job.data.sharedPostId,
             senderName: job.data.senderName,
             requestId: job.data.requestId,
-            replyDelay: delaySeconds,
-            aiRetryCount: nextAiRetryCount,
+            replyDelay: opts.delaySeconds,
+            ...counters,
         });
         return true;
     }
@@ -153,9 +171,9 @@ async function processFacebookComment(job: Job<ReplyJobData>): Promise<ReplyJobR
 async function processMessageJob(
     job: Job<ReplyJobData>,
     label: string,
-    service: { processMessage: (pageId: string, senderId: string, text: string, messageId: string, sharedPostUrl?: string, sharedPostId?: string, wasHandoffPaused?: boolean) => Promise<import('../interfaces').MessageResult> },
+    service: { processMessage: (pageId: string, senderId: string, text: string, messageId: string, sharedPostUrl?: string, sharedPostId?: string, wasHandoffPaused?: boolean, attachmentRetries?: number) => Promise<import('../interfaces').MessageResult> },
 ): Promise<ReplyJobResult> {
-    const { pageId, messageId, senderId, text, sharedPostUrl, sharedPostId, requestId, handoffRetries } = job.data;
+    const { pageId, messageId, senderId, text, sharedPostUrl, sharedPostId, requestId, handoffRetries, attachmentRetries } = job.data;
 
     logger.info(`[ReplyWorker] Processing ${label} message`, {
         jobId: job.id,
@@ -171,7 +189,7 @@ async function processMessageJob(
     // A job that has been re-enqueued at least once was held by a handoff
     // pause; messageProcessor uses this to gate stale-backlog suppression.
     const wasHandoffPaused = (handoffRetries ?? 0) > 0;
-    const result = await service.processMessage(pageId, senderId, text, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused);
+    const result = await service.processMessage(pageId, senderId, text, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused, attachmentRetries ?? 0);
 
     return {
         success: result.success,
@@ -179,6 +197,7 @@ async function processMessageJob(
         replyMethod: result.replyMethod as 'template' | 'ai' | 'post_reply' | undefined,
         error: result.error,
         handoffDelayMs: result.handoffDelayMs,
+        attachmentPendingDelayMs: result.attachmentPendingDelayMs,
     };
 }
 
@@ -225,11 +244,19 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
     const { jobType, requestId } = job.data;
     const startTime = Date.now();
 
+    // Queue-wait sample: first attempt only — a retry's wait is backoff, not backlog.
+    let queueWaitMs: number | undefined;
+    if (job.attemptsStarted <= 1) {
+        queueWaitMs = computeQueueWaitMs(job, startTime);
+        recordQueueWaitSample(queueWaitMs, startTime);
+    }
+
     logger.info('[ReplyWorker] Starting job processing', {
         jobId: job.id,
         jobType,
         requestId,
         attemptNumber: job.attemptsMade + 1,
+        queueWaitMs,
     });
 
     try {
@@ -262,35 +289,10 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
             const retries = job.data.handoffRetries || 0;
             if (retries < MAX_HANDOFF_RETRIES) {
                 const pipeline = jobType as Pipeline;
-                const isComment = jobType.includes('comment');
-
-                if (isComment && job.data.postId && job.data.commentId) {
-                    await enqueueComment({
-                        jobType: jobType as 'facebook_comment' | 'instagram_comment',
-                        pageId: job.data.pageId,
-                        postId: job.data.postId,
-                        commentId: job.data.commentId,
-                        text: job.data.text,
-                        senderId: job.data.senderId,
-                        senderName: job.data.senderName,
-                        requestId: job.data.requestId,
-                        replyDelay: Math.ceil(result.handoffDelayMs / 1000),
-                        handoffRetries: retries + 1,
-                    });
-                } else if (!isComment && job.data.messageId && job.data.senderId) {
-                    await enqueueMessage({
-                        jobType: jobType as 'facebook_message' | 'instagram_message' | 'whatsapp_message',
-                        pageId: job.data.pageId,
-                        messageId: job.data.messageId,
-                        senderId: job.data.senderId,
-                        text: job.data.text,
-                        senderName: job.data.senderName,
-                        requestId: job.data.requestId,
-                        replyDelay: Math.ceil(result.handoffDelayMs / 1000),
-                        handoffRetries: retries + 1,
-                    });
-                }
-
+                await reEnqueueParked(job, {
+                    delaySeconds: Math.ceil(result.handoffDelayMs / 1000),
+                    handoffRetries: retries + 1,
+                });
                 pipelineMetrics.record(pipeline, 'handoff_requeued');
                 logger.info('[ReplyWorker] Job re-enqueued after handoff pause', {
                     jobId: job.id,
@@ -309,6 +311,28 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
             }
         }
 
+        // Re-enqueue if a sibling attachment is still being enriched (store-then-enrich).
+        // Mutually exclusive with the handoff block above: handoffDelayMs is returned at
+        // steps 4b/6, attachmentPendingDelayMs only at step 11, so a result never carries
+        // both. The retry cap is enforced in messageProcessor (it falls through to a real
+        // reply once exhausted), so there is deliberately no cap check here — a returned
+        // delay always means "park again". reEnqueueParked routes DM-only.
+        if (result.attachmentPendingDelayMs && result.attachmentPendingDelayMs > 0) {
+            const pipeline = jobType as Pipeline;
+            await reEnqueueParked(job, {
+                delaySeconds: Math.ceil(result.attachmentPendingDelayMs / 1000),
+                attachmentRetries: (job.data.attachmentRetries ?? 0) + 1,
+            });
+            pipelineMetrics.record(pipeline, 'attachment_park_requeued');
+            logger.info('[ReplyWorker] Job parked waiting for attachment enrichment', {
+                jobId: job.id,
+                jobType,
+                requestId,
+                delayMs: result.attachmentPendingDelayMs,
+                attachmentRetries: (job.data.attachmentRetries ?? 0) + 1,
+            });
+        }
+
         const duration = Date.now() - startTime;
         logger.info('[ReplyWorker] Job completed', {
             jobId: job.id,
@@ -317,6 +341,7 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
             success: result.success,
             skipReason: result.success ? undefined : result.error,
             duration,
+            queueWaitMs,
             replyMethod: result.replyMethod,
         });
 
@@ -348,7 +373,7 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
             const aiRetryCount = job.data.aiRetryCount ?? 0;
             const pipeline = jobType as Pipeline;
             if (aiRetryCount < config.ai.parkMaxRetries) {
-                const reEnqueued = await reEnqueueParked(job, parkPlan.delaySeconds, aiRetryCount + 1);
+                const reEnqueued = await reEnqueueParked(job, { delaySeconds: parkPlan.delaySeconds, aiRetryCount: aiRetryCount + 1 });
                 if (reEnqueued) {
                     pipelineMetrics.record(pipeline, 'ai_parked');
                     logger.warn('[ReplyWorker] AI unavailable — job parked for retry', {

@@ -130,6 +130,40 @@ describe('Leads Routes', () => {
                 expect.objectContaining({ status: undefined }),
             );
         });
+
+        it('passes the search term through trimmed', async () => {
+            vi.mocked(leadExtractorService.getLeadsByPage).mockResolvedValue({ data: [], total: 0 } as any);
+
+            await app.inject({ method: 'GET', url: `/leads?pageId=page_1&search=${encodeURIComponent('  Mona ')}` });
+
+            expect(leadExtractorService.getLeadsByPage).toHaveBeenCalledWith(
+                'page_1',
+                expect.objectContaining({ search: 'Mona' }),
+            );
+        });
+
+        it('caps the search term at 100 chars', async () => {
+            vi.mocked(leadExtractorService.getLeadsByPage).mockResolvedValue({ data: [], total: 0 } as any);
+            const long = 'a'.repeat(250);
+
+            await app.inject({ method: 'GET', url: `/leads?pageId=page_1&search=${long}` });
+
+            expect(leadExtractorService.getLeadsByPage).toHaveBeenCalledWith(
+                'page_1',
+                expect.objectContaining({ search: 'a'.repeat(100) }),
+            );
+        });
+
+        it('omits search entirely when blank', async () => {
+            vi.mocked(leadExtractorService.getLeadsByPage).mockResolvedValue({ data: [], total: 0 } as any);
+
+            await app.inject({ method: 'GET', url: '/leads?pageId=page_1&search=%20%20' });
+
+            expect(leadExtractorService.getLeadsByPage).toHaveBeenCalledWith(
+                'page_1',
+                expect.objectContaining({ search: undefined }),
+            );
+        });
     });
 
     describe('GET /leads/:id', () => {

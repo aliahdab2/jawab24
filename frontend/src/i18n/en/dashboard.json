@@ -15,6 +15,8 @@
   "latestCommentsDesc": "View and respond to the latest comments here.",
   "topPages": "Your Pages",
   "topPagesDesc": "Connecting more pages improves response efficiency.",
+  "topPagesChannels": "Your Channels",
+  "topPagesChannelsDesc": "Connecting more channels improves response efficiency.",
   "replyRate": "Reply Rate",
   "activePages": "Active Pages",
   "presetReplies": "Preset Replies",
@@ -54,6 +56,9 @@
   "kbNudgeLater": "Later",
   "kbNudgeEcomTitle": "Complete your Business Info",
   "kbNudgeEcomBody": "Your store products are synced! Add business hours, location, and FAQs for even better replies.",
+  "whatsappNudgeTitle": "Jawab now replies on WhatsApp",
+  "whatsappNudgeBody": "Connect your WhatsApp Business number and Smart Replies will answer your customers there too — voice notes included.",
+  "whatsappNudgeCta": "Connect WhatsApp",
   "setupChecklist": {
     "titleWithProgress": "Finish your setup ({done}/{total})",
     "subtitle": "A few quick steps to start getting smart replies",

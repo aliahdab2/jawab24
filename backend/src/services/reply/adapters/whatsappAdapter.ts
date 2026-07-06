@@ -17,7 +17,9 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
     async getPage(whatsappPhoneNumberId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByWhatsAppPhoneNumberId(whatsappPhoneNumberId);
         if (!page) return null;
-        return mapToPlatformPage(page, {
+        // WhatsApp sends authenticate with the Embedded Signup business token,
+        // not the Facebook page token that accessToken normally carries.
+        return mapToPlatformPage({ ...page, accessToken: page.whatsappAccessToken ?? '' }, {
             autoReplyEnabled: page.whatsappAutoReplyEnabled ?? false,
             platformAccountId: page.whatsappPhoneNumberId ?? undefined,
         });

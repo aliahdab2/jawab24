@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover } from '@/components/ui';
+import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon } from '@/components/ui';
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
 import { BusinessInfoNudgeBanner } from '@/components/pages/BusinessInfoNudgeBanner';
 import { needsBusinessInfo } from '@/utils/kb';
@@ -24,6 +24,7 @@ import {
   ExternalLink,
   AlertTriangle,
   LinkIcon,
+  Unlink,
   FlaskConical
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,6 +35,8 @@ import dynamic from 'next/dynamic';
 
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
+import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
+import { isWhatsAppVisible } from '@/lib/featureFlags';
 import { captureError } from '@/lib/sentryHelpers';
 import { useWorkspaceRole, useSaveKnowledgeBase } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
@@ -71,7 +74,12 @@ const PagesPage: NextPageWithLayout = () => {
   const tTest = useTranslations('testSmartReply');
   const tOnboarding = useTranslations('onboarding');
   const { language } = useLanguage();
-  const { isAuthenticated, fbToken } = useAuthStore();
+  const { isAuthenticated, fbToken, user } = useAuthStore();
+  // Canary: while NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY is on, the WhatsApp
+  // surface shows only to platform admins (the founder). Otherwise governed by
+  // the master switch. Actionable surfaces (picker, connect, add-card) gate on
+  // this so no non-founder can reach the Meta signup during the canary window.
+  const whatsappVisible = isWhatsAppVisible(user?.isAdmin ?? false);
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const { canEdit, isOwner } = useWorkspaceRole();
   const queryClient = useQueryClient();
@@ -81,9 +89,16 @@ const PagesPage: NextPageWithLayout = () => {
     (pageId, text) => setPages((prev) => prev.map(p => (p.id === pageId ? { ...p, knowledgeBase: text } : p))),
   );
   const [showConnectDialog, setShowConnectDialog] = useState(false);
+  const [showChannelPicker, setShowChannelPicker] = useState(false);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
   const [testSmartReplyPage, setTestSmartReplyPage] = useState<Page | null>(null);
+  // Page ID currently running the WhatsApp Embedded Signup popup (null = none)
+  const [connectingWhatsApp, setConnectingWhatsApp] = useState<string | null>(null);
+  // Page whose WhatsApp disconnect confirmation is open (null = none)
+  const [disconnectWhatsAppPage, setDisconnectWhatsAppPage] = useState<Page | null>(null);
+  // WhatsApp-only card whose remove confirmation is open (removal deletes the page row)
+  const [removeWhatsAppOnlyPage, setRemoveWhatsAppOnlyPage] = useState<Page | null>(null);
   // Pre-fill the test-reply box with a sample question only when opened from the
   // onboarding checklist deep-link (not from the per-page "Test smart reply" button).
   const [testReplyPrefillSample, setTestReplyPrefillSample] = useState(false);
@@ -108,7 +123,7 @@ const PagesPage: NextPageWithLayout = () => {
       // Priority: active (0), inactive (1), disconnected (2)
       const priority = (p: Page) =>
         p.isConnected === false ? 2
-        : (p.autoReplyEnabled || p.instagramAutoReplyEnabled) ? 0
+        : (p.autoReplyEnabled || p.instagramAutoReplyEnabled || p.whatsappAutoReplyEnabled) ? 0
         : 1;
       const diff = priority(a) - priority(b);
       if (diff !== 0) return diff;
@@ -332,6 +347,134 @@ const PagesPage: NextPageWithLayout = () => {
     }
   };
 
+  const handleWhatsAppToggle = async (pageId: string, enabled: boolean) => {
+    setPages(prev => prev.map(page =>
+      page.id === pageId ? { ...page, whatsappAutoReplyEnabled: enabled } : page
+    ));
+
+    try {
+      await api.patch(`/pages/${pageId}/whatsapp-auto-reply`, { enabled });
+    } catch (error) {
+      setPages(prev => prev.map(page =>
+        page.id === pageId ? { ...page, whatsappAutoReplyEnabled: !enabled } : page
+      ));
+      const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
+      if (axiosErr.response?.data?.code === 'WHATSAPP_NOT_CONNECTED') {
+        toast.error(t('whatsappNotConnected'));
+      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'SUBSCRIPTION_INACTIVE') {
+        toast.error(t('subscriptionInactive'));
+      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
+        toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
+      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
+        toast.error(t('pageTrialUsedBlocked'));
+      } else {
+        captureError(error, 'Failed to toggle WhatsApp auto-reply', { tags: { page: 'pages', action: 'whatsapp-toggle' } });
+        toast.error(tc('error'));
+      }
+    }
+  };
+
+  const handleRemoveWhatsAppOnlyPage = async (pageId: string) => {
+    setRemoveWhatsAppOnlyPage(null);
+    try {
+      await api.delete(`/pages/${pageId}`);
+      setPages(prev => prev.filter(p => p.id !== pageId));
+      toast.success(t('whatsappDisconnected'));
+    } catch (error) {
+      captureError(error, 'Failed to remove WhatsApp-only page', { tags: { page: 'pages', action: 'whatsapp-remove-page' } });
+      toast.error(tc('error'));
+    }
+  };
+
+  const handleDisconnectWhatsApp = async (pageId: string) => {
+    setDisconnectWhatsAppPage(null);
+    try {
+      const response = await api.delete(`/pages/${pageId}/whatsapp`);
+      const updated = response.data as Partial<Page>;
+      setPages(prev => prev.map(p => (p.id === pageId ? { ...p, ...updated } : p)));
+      toast.success(t('whatsappDisconnected'));
+    } catch (error) {
+      captureError(error, 'Failed to disconnect WhatsApp', { tags: { page: 'pages', action: 'whatsapp-disconnect' } });
+      toast.error(tc('error'));
+    }
+  };
+
+  /**
+   * Run the Embedded Signup popup and connect the resulting number.
+   * pageId set → attach to that Facebook-backed page card.
+   * pageId null → create a new WhatsApp-only card (no Facebook page).
+   */
+  const handleConnectWhatsApp = async (pageId: string | null) => {
+    // Embedded Signup runs in a Facebook JS SDK popup — a real browser context.
+    // The Capacitor WebView can't host it, but Meta's wizard works in mobile
+    // browsers, so hand off to the web dashboard instead of dead-ending.
+    if (Capacitor.isNativePlatform()) {
+      toast.info(t('whatsappConnectWebOnly'));
+      const { openExternalUrl } = await import('@/lib/openExternalUrl');
+      const { buildWebUrl } = await import('@/lib/webUrl');
+      await openExternalUrl(buildWebUrl('/pages', language));
+      return;
+    }
+    setConnectingWhatsApp(pageId ?? 'new');
+    try {
+      const { launchWhatsAppSignup } = await import('@/lib/whatsappSignup');
+      const result = await launchWhatsAppSignup();
+      const body = {
+        code: result.code,
+        phoneNumberId: result.phoneNumberId,
+        wabaId: result.wabaId,
+      };
+      let connectedPageId: string;
+      if (pageId) {
+        const response = await api.post(`/pages/${pageId}/connect-whatsapp`, body);
+        const updated = response.data as Partial<Page>;
+        setPages(prev => prev.map(p => (p.id === pageId ? { ...p, ...updated } : p)));
+        connectedPageId = pageId;
+      } else {
+        const response = await api.post('/pages/connect-whatsapp', body);
+        const created = response.data as Page;
+        setPages(prev => [...prev, created]);
+        connectedPageId = created.id;
+      }
+      toast.success(t('whatsappConnectSuccess'));
+
+      // Parity with Facebook pages (which arrive enabled): try to switch
+      // auto-reply on right away. Billing/trial gates keep authority — if the
+      // plan is full or the trial is spent the attempt fails silently and the
+      // toggle simply stays off for the merchant to act on.
+      try {
+        await api.patch(`/pages/${connectedPageId}/whatsapp-auto-reply`, { enabled: true });
+        setPages(prev => prev.map(p => (p.id === connectedPageId ? { ...p, whatsappAutoReplyEnabled: true } : p)));
+      } catch {
+        // Gated (402/403) or transient — leave off; the toggle is right there.
+      }
+    } catch (error) {
+      const err = error as { message?: string; response?: { data?: { code?: string } } };
+      if (err.message === 'WHATSAPP_SIGNUP_CANCELLED') {
+        // Merchant closed the signup popup — not an error
+      } else if (err.response?.data?.code === 'WHATSAPP_NUMBER_TAKEN') {
+        toast.error(t('whatsappNumberTaken'));
+      } else if (err.response?.data?.code === 'WHATSAPP_PIN_MISMATCH') {
+        toast.error(t('whatsappPinMismatch'));
+      } else {
+        captureError(error, 'Failed to connect WhatsApp', { tags: { page: 'pages', action: 'whatsapp-connect' } });
+        toast.error(t('whatsappConnectFailed'));
+      }
+    } finally {
+      setConnectingWhatsApp(null);
+    }
+  };
+
+  // Single "Connect channel" entry point. With WhatsApp not yet configured the
+  // picker would have one option, so it collapses to the Facebook dialog directly.
+  const handleOpenConnect = () => {
+    if (whatsappVisible) {
+      setShowChannelPicker(true);
+    } else {
+      setShowConnectDialog(true);
+    }
+  };
+
   const formatTime = (epochMs: number) => {
     if (!epochMs) return tc('noData');
     return formatRelativeTime(new Date(epochMs), tTime);
@@ -374,15 +517,15 @@ const PagesPage: NextPageWithLayout = () => {
     <>
       {/* Header */}
       <PageHeader
-        title={t('title')}
-        description={t('description')}
+        title={whatsappVisible ? t('titleChannels') : t('title')}
+        description={whatsappVisible ? t('descriptionChannels') : t('description')}
         action={isOwner
           ? <Button
-              onClick={() => setShowConnectDialog(true)}
+              onClick={handleOpenConnect}
               disabled={syncing}
               icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
             >
-              {syncing ? t('syncing') : t('connectPage')}
+              {syncing ? t('syncing') : (whatsappVisible ? t('connectChannel') : t('connectPage'))}
             </Button>
           : undefined
         }
@@ -392,8 +535,8 @@ const PagesPage: NextPageWithLayout = () => {
       {pages.length > 0 ? (
         <div className="flex flex-col gap-8 pb-12 landscape:px-6">
           {(() => {
-            const activePages = pages.filter(p => p.isConnected !== false && (p.autoReplyEnabled || p.instagramAutoReplyEnabled));
-            const inactivePages = pages.filter(p => p.isConnected !== false && !p.autoReplyEnabled && !p.instagramAutoReplyEnabled);
+            const activePages = pages.filter(p => p.isConnected !== false && (p.autoReplyEnabled || p.instagramAutoReplyEnabled || p.whatsappAutoReplyEnabled));
+            const inactivePages = pages.filter(p => p.isConnected !== false && !p.autoReplyEnabled && !p.instagramAutoReplyEnabled && !p.whatsappAutoReplyEnabled);
             const disconnectedPages = pages.filter(p => p.isConnected === false);
             const hasMultipleGroups = [activePages, inactivePages, disconnectedPages].filter(g => g.length > 0).length > 1;
             let globalIndex = 0;
@@ -412,6 +555,9 @@ const PagesPage: NextPageWithLayout = () => {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {sectionPages.map((page) => {
                       const i = globalIndex++;
+                      // WhatsApp-only card: a pages row with no Facebook page behind it
+                      // (Shopify/Salla/Zid sellers, or an extra number for a branch).
+                      const isWhatsAppOnly = !page.facebookPageId;
                       return (
                         <Card
                           key={page.id}
@@ -426,7 +572,10 @@ const PagesPage: NextPageWithLayout = () => {
               {/* Header with gradient background */}
               <div className="p-4 sm:p-6 bg-gradient-to-br from-background to-card border-b border-theme-border flex items-start gap-4">
                 {/* Page avatar */}
-                <div className="w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden bg-brand-600 flex items-center justify-center">
+                <div className={clsx(
+                  'w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden flex items-center justify-center',
+                  isWhatsAppOnly ? 'bg-[#25D366]' : 'bg-brand-600'
+                )}>
                   {getPageAvatarUrl(page) && !imgError[page.id] ? (
                     <img
                       src={getPageAvatarUrl(page)!}
@@ -434,6 +583,8 @@ const PagesPage: NextPageWithLayout = () => {
                       className="w-full h-full object-cover"
                       onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
                     />
+                  ) : isWhatsAppOnly ? (
+                    <WhatsAppIcon className="w-7 h-7 text-white" aria-hidden="true" />
                   ) : (
                     <FileText className="w-7 h-7 text-white" />
                   )}
@@ -474,8 +625,9 @@ const PagesPage: NextPageWithLayout = () => {
                 <BusinessInfoNudgeBanner onAdd={() => openKnowledgeBase(page)} />
               )}
 
-              {/* Disconnected Banner */}
-              {page.isConnected === false && (
+              {/* Disconnected Banner — Facebook-backed pages only; a WhatsApp-only
+                  card has no Facebook credential to reconnect */}
+              {page.isConnected === false && !!page.facebookPageId && (
                 <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -496,9 +648,14 @@ const PagesPage: NextPageWithLayout = () => {
                 </div>
               )}
 
-              <div className={clsx('p-4 sm:p-6 flex-1 flex flex-col gap-6', page.isConnected === false && 'opacity-60 pointer-events-none')}>
+              {/* Full-card lock only when nothing on the card still works: a page
+                  whose FB token died but whose WhatsApp is connected keeps replying
+                  on WhatsApp, so only the FB/IG rows get locked (below). */}
+              <div className={clsx('p-4 sm:p-6 flex-1 flex flex-col gap-6', page.isConnected === false && !page.whatsappConnected && 'opacity-60 pointer-events-none')}>
                 {/* Platform Toggles */}
                 <div className="flex flex-col gap-3">
+                  {/* Facebook + Instagram rows — hidden on a WhatsApp-only card */}
+                  {!isWhatsAppOnly && (<div className={clsx('flex flex-col gap-3', page.isConnected === false && 'opacity-60 pointer-events-none')}>
                   {/* Facebook row */}
                   <div className={`flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all ${page.autoReplyEnabled ? 'bg-blue-50/50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800' : 'bg-background border-theme-border'}`}>
                     <div className="flex items-center gap-3 min-w-0">
@@ -577,6 +734,90 @@ const PagesPage: NextPageWithLayout = () => {
                       </span>
                     )}
                   </div>
+                  </div>)}
+
+                  {/* WhatsApp row — master-switch gated so a dark deploy shows
+                      no WhatsApp surface; the whatsappConnected OR never hides
+                      an already-connected number. */}
+                  {(whatsappVisible || page.whatsappConnected) && (
+                  <div
+                    className={clsx(
+                      'flex items-center justify-between gap-4 px-4 py-3 rounded-2xl border transition-all',
+                      page.whatsappConnected
+                        ? (page.whatsappAutoReplyEnabled ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' : 'bg-background border-theme-border')
+                        : 'bg-background border-theme-border border-dashed'
+                    )}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={clsx(
+                        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                        page.whatsappConnected
+                          ? (page.whatsappAutoReplyEnabled ? 'bg-[#25D366] text-white shadow-sm' : 'bg-surface-200 text-icon-muted')
+                          : 'bg-surface-100 text-icon-muted'
+                      )}>
+                        <WhatsAppIcon className="w-4 h-4" aria-hidden="true" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={clsx(
+                          'text-sm font-bold',
+                          page.whatsappConnected && page.whatsappAutoReplyEnabled
+                            ? 'text-emerald-900 dark:text-emerald-300'
+                            : 'text-muted-foreground'
+                        )}>{t('platformWhatsApp')}</p>
+                        <div className="flex items-center gap-1">
+                          {/* dir=ltr keeps the +NNN phone number readable in RTL */}
+                          <p dir={page.whatsappDisplayPhoneNumber ? 'ltr' : undefined} className={clsx(
+                            'text-xs font-medium',
+                            page.whatsappConnected && page.whatsappAutoReplyEnabled
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-muted-foreground'
+                          )}>
+                            {page.whatsappConnected
+                              ? (page.whatsappDisplayPhoneNumber || t('platformWhatsApp'))
+                              : t('whatsappNotConnected')}
+                          </p>
+                          {!page.whatsappConnected && (
+                            <InfoPopover label={t('whatsappTooltip')}>
+                              <span className="block">{t('whatsappTooltip')}</span>
+                            </InfoPopover>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {page.whatsappConnected ? (
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {isOwner && (
+                          <button
+                            type="button"
+                            onClick={() => (isWhatsAppOnly ? setRemoveWhatsAppOnlyPage(page) : setDisconnectWhatsAppPage(page))}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-icon-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                            aria-label={`${t('whatsappDisconnect')} - ${page.name}`}
+                            title={t('whatsappDisconnect')}
+                          >
+                            <Unlink className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        )}
+                        <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
+                          <Toggle
+                            enabled={page.whatsappAutoReplyEnabled ?? false}
+                            onChange={(enabled) => handleWhatsAppToggle(page.id, enabled)}
+                            disabled={!canEdit}
+                            aria-label={`${t('autoReply')} WhatsApp - ${page.name}`}
+                          />
+                        </span>
+                      </div>
+                    ) : (isOwner && whatsappVisible && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleConnectWhatsApp(page.id)}
+                        disabled={connectingWhatsApp === page.id}
+                      >
+                        {connectingWhatsApp === page.id ? t('whatsappConnecting') : t('whatsappConnectButton')}
+                      </Button>
+                    ))}
+                  </div>
+                  )}
                 </div>
 
                 {/* Stats Grid */}
@@ -673,7 +914,7 @@ const PagesPage: NextPageWithLayout = () => {
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                     {page.isConnected === false
                       ? t('disconnected')
-                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? tc('active') : tc('inactive')}
+                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled || page.whatsappAutoReplyEnabled) ? tc('active') : tc('inactive')}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -709,10 +950,10 @@ const PagesPage: NextPageWithLayout = () => {
           <EmptyState
             icon={FileText}
             title={t('noPages')}
-            description={t('noPagesDesc')}
+            description={whatsappVisible ? t('noPagesDescChannels') : t('noPagesDesc')}
             action={isOwner
-              ? <Button onClick={() => setShowConnectDialog(true)}>
-                  {t('connectPage')}
+              ? <Button onClick={handleOpenConnect}>
+                  {whatsappVisible ? t('connectChannel') : t('connectPage')}
                 </Button>
               : undefined
             }
@@ -740,6 +981,22 @@ const PagesPage: NextPageWithLayout = () => {
         />
       )}
 
+      {/* Channel picker — the single global "connect" entry point */}
+      <ChannelPickerModal
+        isOpen={showChannelPicker}
+        onClose={() => setShowChannelPicker(false)}
+        onPickFacebook={() => {
+          setShowChannelPicker(false);
+          setShowConnectDialog(true);
+        }}
+        onPickWhatsApp={() => {
+          setShowChannelPicker(false);
+          handleConnectWhatsApp(null);
+        }}
+        whatsappAvailable={whatsappVisible}
+        whatsappConnecting={connectingWhatsApp === 'new'}
+      />
+
       {/* Connect Page confirmation dialog */}
       <ConfirmationModal
         isOpen={showConnectDialog}
@@ -766,6 +1023,32 @@ const PagesPage: NextPageWithLayout = () => {
         message={t('reconnectDialogBody')}
         confirmText={t('continueToFacebook')}
         variant="info"
+      />
+
+      {/* Remove WhatsApp-only card confirmation dialog */}
+      <ConfirmationModal
+        isOpen={!!removeWhatsAppOnlyPage}
+        onClose={() => setRemoveWhatsAppOnlyPage(null)}
+        onConfirm={() => {
+          if (removeWhatsAppOnlyPage) handleRemoveWhatsAppOnlyPage(removeWhatsAppOnlyPage.id);
+        }}
+        title={t('whatsappOnlyRemoveTitle')}
+        message={t('whatsappOnlyRemoveMessage', { number: removeWhatsAppOnlyPage?.whatsappDisplayPhoneNumber ?? '' })}
+        confirmText={t('whatsappOnlyRemoveConfirm')}
+        variant="danger"
+      />
+
+      {/* Disconnect WhatsApp confirmation dialog */}
+      <ConfirmationModal
+        isOpen={!!disconnectWhatsAppPage}
+        onClose={() => setDisconnectWhatsAppPage(null)}
+        onConfirm={() => {
+          if (disconnectWhatsAppPage) handleDisconnectWhatsApp(disconnectWhatsAppPage.id);
+        }}
+        title={t('whatsappDisconnectTitle')}
+        message={t('whatsappDisconnectMessage', { number: disconnectWhatsAppPage?.whatsappDisplayPhoneNumber ?? '' })}
+        confirmText={t('whatsappDisconnectConfirm')}
+        variant="danger"
       />
     </>
   );

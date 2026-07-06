@@ -5,6 +5,7 @@ import { resolveWorkspace, requireRole } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 import { externalApiDuration } from '../lib/metrics';
 import { probeDatabase, probeRedis, probeAiWorkerCircuit } from '../utils/healthChecks';
+import { getQueueHealth } from '../services/replyQueueHealth';
 
 /**
  * Compute per-service/method latency summary from the prom-client histogram.
@@ -141,6 +142,9 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
             // External API latency percentiles from prom-client histogram
             const apiLatencies = await computeExternalApiSummary();
 
+            // Reply-queue depth + wait percentiles; null (card hidden) if Redis is down
+            const queue = await getQueueHealth().catch(() => null);
+
             return reply.send({
                 services: {
                     database: { status: dbProbe.status, latencyMs: dbProbe.latencyMs },
@@ -154,6 +158,7 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
                     uptimeSeconds: Math.floor(process.uptime()),
                 },
                 externalApis: apiLatencies,
+                queue,
             });
         });
     });

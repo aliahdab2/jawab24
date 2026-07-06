@@ -584,6 +584,61 @@ describe('Reply Worker — Handoff Re-enqueue', () => {
             handoffRetries: 1,
         }));
     });
+
+    // --- Attachment-enrichment park (store-then-enrich) ---
+
+    it('re-enqueues with attachmentRetries+1 (and the delay) when attachmentPendingDelayMs is returned', async () => {
+        mockReplyService.processMessage.mockResolvedValue({
+            success: false,
+            messageId: 'msg-1',
+            error: 'Attachment enrichment pending',
+            attachmentPendingDelayMs: 5000,
+        });
+
+        const job = createMockJob({ attachmentRetries: 2, sharedPostUrl: 'https://fb/p/1', sharedPostId: '1' });
+        await processJobFn(job);
+
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            jobType: 'facebook_message',
+            messageId: 'msg-1',
+            replyDelay: 5,
+            attachmentRetries: 3,
+            // shared-post context survives the park (full-fidelity forward)
+            sharedPostUrl: 'https://fb/p/1',
+            sharedPostId: '1',
+        }));
+        expect(mockPipelineRecord).toHaveBeenCalledWith('facebook_message', 'attachment_park_requeued');
+    });
+
+    it('does NOT carry handoffRetries when parking for attachment enrichment', async () => {
+        mockReplyService.processMessage.mockResolvedValue({
+            success: false,
+            messageId: 'msg-1',
+            error: 'Attachment enrichment pending',
+            attachmentPendingDelayMs: 5000,
+        });
+
+        // Even if the job previously carried a handoff count, an attachment park must
+        // drop it — otherwise the resumed job is treated as handoff backlog and can be
+        // stale-suppressed (dropped). Only attachmentRetries advances.
+        const job = createMockJob({ handoffRetries: 1, attachmentRetries: 0 });
+        await processJobFn(job);
+
+        expect(mockEnqueueMessage.mock.calls[0][0]).not.toHaveProperty('handoffRetries');
+        expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
+            attachmentRetries: 1,
+        }));
+    });
+
+    it('does NOT re-enqueue for attachment parking when the result has no attachmentPendingDelayMs', async () => {
+        mockReplyService.processMessage.mockResolvedValue({
+            success: true, messageId: 'msg-1', replyText: 'ok', replyMethod: 'ai',
+        });
+
+        await processJobFn(createMockJob());
+
+        expect(mockPipelineRecord).not.toHaveBeenCalledWith('facebook_message', 'attachment_park_requeued');
+    });
 });
 
 describe('Reply Worker — AI park-and-retry', () => {

@@ -21,6 +21,21 @@
  *   CATEGORY     — Run only this category number (1-21). Default: all
  *   VERBOSE      — Set to "1" for detailed output per test. Default: summary only
  *   EVAL_MODEL   — Override AI model (e.g. claude-haiku-4-5-20251001, gpt-4.1-mini). Default: server default
+ *
+ * Reliability & determinism:
+ *   - Transient 429/5xx/network failures are retried with backoff (4 attempts,
+ *     2s/8s/20s, Retry-After honored). The summary prints a TRANSIENT RETRIES
+ *     count — if it's high, the run was rate-limited: lower CONCURRENCY.
+ *     (2026-07-05: a CONCURRENCY=5 run produced 101 false "API call failed"
+ *     verdicts purely from OpenAI 429 bursts + failover; never again.)
+ *   - Scores are NOISY run-to-run at production sampling settings: the model
+ *     samples at OPENAI_TEMPERATURE=0.5, and graders check its stochastic
+ *     outputs (confidence/intent/flags/substrings), so ±5 PARTIALs between
+ *     identical runs is normal. For A/B REGRESSION comparisons (branch vs
+ *     main, flag on vs off), start the ai-worker with
+ *     OPENAI_TEMPERATURE=0 OPENAI_TOP_P=1 to minimize sampling variance —
+ *     absolute scores then differ slightly from the historical (temp 0.5)
+ *     baseline, so compare temp-0 runs only against temp-0 runs.
  */
 
 // ---------------------------------------------------------------------------
@@ -53,6 +68,8 @@ interface TestCase {
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
     brandVoiceNotes?: string;
     customerContext?: string;
+    /** Customer display name (DM only) — exercises name-based gender inference (category 59). */
+    senderName?: string;
     expected: {
         replyMethod?: string[];
         intent?: string[];
@@ -151,7 +168,7 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 277 total (273 previous + 4 post-as-KB-source tests)
+// Test cases — 385 total (372 previous + 13 persona goal-timing & variety tests)
 // ---------------------------------------------------------------------------
 
 /**
@@ -196,6 +213,30 @@ const CALLBACK_PROMISE_PHRASES = [
     'سيتواصلون معك', 'يتواصلو معاك', 'سأحوّلها للفريق', 'نوصّلها للفريق',
     'بسأل الفريق', 'يردّوا عليك',
     'contact you', "they'll contact", 'check with the team',
+];
+
+/**
+ * Distinctly-FEMININE second-person address forms (category 59, gender addressing).
+ *
+ * Substring grading of Arabic gender is asymmetric: feminine forms are the masculine base + a
+ * suffix (تفضّل→تفضّلي) or carry a kasra (بك→بكِ), so feminine forms are NOT substrings of the
+ * masculine ones — but the reverse IS true. That gives us ONE reliable direction:
+ *  - For a MASCULINE- or NEUTRAL-expected reply → `replyNotContains: FEMININE_ADDRESS` is
+ *    bulletproof: a correct reply never contains these; only a wrongly-feminine reply does.
+ *  - For a FEMININE-expected reply → `replyContainsAny: FEMININE_ADDRESS` is a SOFT signal: it
+ *    passes when the bot addresses her femininely, but a correct reply that phrases neutrally
+ *    (no 2nd-person address) will also miss — so a miss is not proof of a bug.
+ * Only 2nd-person ADDRESS forms are listed (not feminine adjectives that could agree with a
+ * feminine KB noun like "الخدمة متاحة"), so they fire only when the bot addresses the customer.
+ */
+const FEMININE_ADDRESS = [
+    // The single most reliable marker: the feminine 2nd-person kaf ـكِ (kaf + kasra). It catches
+    // بكِ، لكِ، أنصحكِ، يهمّكِ، مستواكِ, etc. in one entry. Undiacritized bot output otherwise omits
+    // the kasra, so its PRESENCE is a strong positive feminine signal — and in the masculine/unisex
+    // `replyNotContains` cases it also flags a wrongly-feminized reply.
+    'كِ',
+    'تفضلي', 'تفضّلي', 'عزيزتي', 'حبيبتي', 'أنتِ', 'إنتِ',
+    'تقدرين', 'تبغين', 'تحبين', 'تريدين', 'تحتاجين', 'ترغبين', 'حابّة',
 ];
 
 const TEST_CASES: TestCase[] = [
@@ -3635,6 +3676,312 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Non-AR/EN (French) multi-turn: closing suppression comes from the v50 prompt reminder (Layer 1).',
     },
+
+    // ===== Category 60: Image Messages (vision describe-then-enqueue) =====
+    // Customer photos arrive as "[صورة: <auto description>]" bodies (backend imageUnderstanding).
+    // The per-call IMAGE MESSAGE directive (promptBuilder) must make the model ANSWER the implicit
+    // inquiry on the business's own product/ad screenshots instead of punting with a thanks-for-
+    // sharing acknowledgment (live regression caught 2026-07-05: intent COMPLIMENT + "شكراً لمشاركتك").
+    {
+        id: 663, category: 60, categoryName: 'Image Messages', channel: 'dm',
+        message: '[صورة: لقطة شاشة لمنشور المعهد عن دورة اللغة الإنجليزية مع دعوة للتسجيل]',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION', 'PURCHASE_INTENT'],
+            replyNotContains: ['شكراً لمشاركتك', 'شكرا لمشاركتك', 'thanks for sharing'],
+        },
+        notes: 'Bare screenshot of the business\'s own course ad = implicit "available? price?" — must answer from KB, not acknowledge. Regression guard for the COMPLIMENT-punt failure.',
+    },
+    {
+        id: 664, category: 60, categoryName: 'Image Messages', channel: 'dm',
+        message: '[صورة: مستند ورقي قانوني فارغ (نموذج إيصال أمانة) بدون أي صلة بالمعهد أو دوراته]',
+        page: 'training',
+        expected: {
+            replyNotContains: ['سجل الآن', 'احجز مقعدك', 'دورة اللغة الإنجليزية'],
+        },
+        notes: 'Unrelated document photo — must NOT pitch courses at it. Empty reply (spam) or a short clarifying question are both acceptable; selling is the failure.',
+    },
+    {
+        id: 665, category: 60, categoryName: 'Image Messages', channel: 'dm',
+        message: 'طيب كم سعرها؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: '[صورة: لقطة شاشة لمنشور المعهد عن دورة اللغة الإنجليزية]' },
+            { role: 'assistant', content: 'نعم متوفرة دورة اللغة الإنجليزية للتسجيل.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+        },
+        notes: 'Follow-up referencing a photo earlier in the thread — the history-resolution line must let "سعرها" resolve to the pictured course.',
+    },
+
+    // ===== Category 59: Gender Addressing (Arabic DM) — v51 =====
+    // Feature is Arabic-DM-only (see DECISIONS.md D-015). Grading is asymmetric (see FEMININE_ADDRESS):
+    // masculine/neutral/unisex cases assert `replyNotContains: FEMININE_ADDRESS` (bulletproof — catches
+    // any wrongly-feminine addressing); feminine cases assert `replyContainsAny: FEMININE_ADDRESS` (soft
+    // positive signal). NOT part of the Tier-1 must-pass set.
+    // 59.1 — Masculine SELF-REFERENCE ("خريج"/"متحمس") → must not address him with feminine forms.
+    { id: 640, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'أنا خريج جديد ومتحمس أطور نفسي، أي دورة تنصحوني فيها؟', page: 'training', expected: { replyMethod: ['ai'], replyNotContains: FEMININE_ADDRESS }, notes: 'Male self-reference — reply must be masculine/neutral, never feminine address.' },
+    // 59.2 — Feminine SELF-REFERENCE ("خريجة"/"متحمسة") → should address her with feminine forms.
+    { id: 641, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'أنا خريجة جديدة ومتحمسة أطور نفسي، أي دورة تنصحوني فيها؟', page: 'training', expected: { replyMethod: ['ai'], replyContainsAny: FEMININE_ADDRESS }, notes: 'Female self-reference (authoritative signal). SOFT: passes on feminine address; a fully-neutral reply also misses.' },
+    // 59.3 — Masculine NAME, neutral message (no self-reference) → gender comes from the name.
+    { id: 642, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'السلام عليكم، ممكن تساعدوني أختار الدورة المناسبة لي؟', page: 'training', senderName: 'أحمد', expected: { replyMethod: ['ai'], replyNotContains: FEMININE_ADDRESS }, notes: 'Clearly-masculine name (أحمد) + no self-reference — must not address as feminine.' },
+    // 59.4 — Feminine NAME, neutral message → gender comes from the name.
+    { id: 643, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'السلام عليكم، ممكن تساعدوني أختار الدورة المناسبة لي؟', page: 'training', senderName: 'فاطمة', expected: { replyMethod: ['ai'], replyContainsAny: FEMININE_ADDRESS }, notes: 'Clearly-feminine name (فاطمة) + no self-reference. SOFT positive signal (see 59.2).' },
+    // 59.5 — UNISEX name, neutral message → must NOT guess; stay neutral (no feminine address). Tests the D-015 precedence rule.
+    { id: 644, category: 59, categoryName: 'Gender Addressing', channel: 'dm', message: 'السلام عليكم، ممكن تساعدوني أختار الدورة المناسبة لي؟', page: 'training', senderName: 'نور', expected: { replyMethod: ['ai'], replyNotContains: FEMININE_ADDRESS }, notes: 'Unisex name (نور) + no self-reference → the model must not confidently pick feminine; neutral/masculine both pass.' },
+
+    // ===== Category 61: Persona Goal Timing & Variety =====
+    // Reproduces two prod threads on الفريق الدمشقي that read robotic:
+    //  - June 2026: enthusiastic-style tics ("يسعدني!" filler, closing-offer stapled onto every
+    //    turn, re-asking name/number already given). Cases 666-671 were authored then (as Cat 51,
+    //    stashed) — the June root cause turned out to be a gpt-4o-mini override, but the cases pin
+    //    the guarantees on the default model too.
+    //  - July 2026 (customer Dalal thread, post-persona-fix): a merchant persona whose GOAL line
+    //    ("لما يبيّن اهتمام خذي اسمه ورقمه") over-triggers on every question, and consecutive
+    //    replies all ending with the same conditional-offer closing ("خبريني/فيني أساعدك") via
+    //    self-imitation of history. Cases 672-675 encode the goal-TIMING norm: apply a goal-type
+    //    persona instruction only on confirmed intent, at most once per conversation, and never
+    //    repeat your own closing shape.
+    // The existing tone categories (37 No Bot Closings, 38 No Repeated Hedging, 42 Brand Voice No
+    // Repetition, 44 No False Follow-Up Promises) run on the DEFAULT professional style; 666-671
+    // pin the SAME guarantees on replyStyle: 'enthusiastic' — the directive that suggests punchy
+    // openers and freer emoji — across multi-turn threads. Grounded in the demo training KB
+    // (English course: 1500 ريال, 3 months, accredited certificate).
+    {
+        id: 666, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'وفيها شهادة؟',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم دورة انجليزي؟' },
+            { role: 'assistant', content: 'أكيد! دورة الإنجليزي ٣ شهور و١٥٠٠ ريال.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyContainsAny: ['شهادة', 'شهاد', 'معتمد', 'نعم'],
+            replyNotContains: ['يسعدني'],
+        },
+        notes: 'Enthusiastic: a real certificate question mid-thread must be ANSWERED, not opened with the canned "يسعدني!" filler (June prod tic a).',
+    },
+    {
+        id: 667, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'كم مدة دورة الإنجليزي؟',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyContainsAny: ['شهر', '3', '٣'],
+            replyNotContains: ['أنا هنا', 'إذا احتجت', 'إذا عندك أي', 'إذا حابة', 'لا تتردد', 'إذا بدك'],
+        },
+        notes: 'Enthusiastic: answer the duration and stop — no trailing "أنا هنا / إذا احتجت" closing-offer (June prod tic b).',
+    },
+    {
+        id: 668, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'وايمتى بتبلش الدورة؟',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        conversationHistory: [
+            { role: 'user', content: 'بدي اسجل بدورة الإنجليزي' },
+            { role: 'assistant', content: 'يا هلا! ممكن اسمك ورقمك لنكمل التسجيل؟' },
+            { role: 'user', content: 'سارة، 0501234567' },
+            { role: 'assistant', content: 'تشرفنا سارة! سجّلنا رقمك ٠٥٠١٢٣٤٥٦٧.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['اسمك ورقمك', 'اسمك ورقم', 'رقم تلفونك', 'ممكن اسمك', 'زوديني باسمك', 'وش اسمك'],
+        },
+        notes: 'Name + number already given and confirmed — a follow-up must NOT re-ask for contact info (June prod tic c). Tests the larger history window too.',
+    },
+    {
+        id: 669, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'كمان',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        conversationHistory: [
+            { role: 'user', content: 'شو دوراتكم؟' },
+            { role: 'assistant', content: 'عنا إنجليزي، حاسب وOffice، محاسبة، PMP، وIELTS/TOEFL.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['يسعدني', 'أنا جاهزة', 'إذا عندك أي', 'أنا هنا', 'لا تتردد'],
+            replyMaxLength: 220,
+        },
+        notes: 'Terse "كمان" after a course list — should ask what specifically or add a concrete detail, not emit a "يسعدني/أنا جاهزة + offer-to-help" filler non-answer.',
+    },
+    {
+        id: 670, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'كم سعر دورة المحاسبة؟',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        conversationHistory: [
+            { role: 'user', content: 'كم سعر دورة الإنجليزي؟' },
+            { role: 'assistant', content: 'دورة الإنجليزي ١٥٠٠ ريال.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyNotContains: ['اسمك ورقمك', 'خبريني باسمك', 'زوديني باسمك', 'حابة تسجلي خبريني'],
+        },
+        notes: 'Pure price question — answer it; do NOT staple a "خبريني باسمك ورقمك" registration CTA onto an info answer (June prod tic d).',
+    },
+    {
+        id: 671, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'طيب وكم باقي عالتسجيل؟',
+        page: 'training',
+        brandVoiceNotes: 'الاسم: سارة من فريق المركز. اللهجة شامية ودودة مع إيموجي خفيف. نوّعي الصياغة ولا تكرّري نفس الخاتمة بكل رسالة، ولا تنهي كل ردّ بطلب التسجيل. اطلبي الاسم والرقم مرّة وحدة فقط.',
+        conversationHistory: [
+            { role: 'user', content: 'مرحبا، بدي اعرف عن دورة الإنجليزي' },
+            { role: 'assistant', content: 'أهلين فيكِ 🌸 دورة الإنجليزي ٣ شهور و١٥٠٠ ريال.' },
+            { role: 'user', content: 'حلو، وفي شهادة؟' },
+            { role: 'assistant', content: 'أكيد، في شهادة معتمدة بنهاية الدورة.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['أنا هنا', 'إذا احتجت', 'إذا عندك أي', 'حابة تسجلي خبريني', 'لا تتردد'],
+        },
+        notes: 'Mirrors June prod setup: a well-written brand voice that explicitly asks to vary closings and not end every reply with a registration request. Reply must honor it — no boilerplate closing-offer.',
+    },
+    // 672-675: the July failure mode — a CONFLICTED persona (concrete goal line + vague variety
+    // line, the exact shape the merchant actually wrote). The system must resolve the conflict by
+    // TIMING: no contact-ask on general questions (672), ask exactly when intent is confirmed
+    // (673 — guards against over-suppression), never re-ask (674), never repeat its own closing
+    // shape from history (675 — Dalal-thread replica; cross-turn variety is approximated by
+    // banning the literal closings the history already used).
+    {
+        id: 672, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'لسا التسجيل مفتوح ولا كيف',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        brandVoiceNotes: 'الاسم: سارة، من فريق المركز. اللهجة شامية ودودة مع إيموجي خفيف. أسلوب الرد قصير وطبيعي. نوّعي الصياغة — لا تكرّري نفس الخاتمة بكل رسالة، ولا تنهي كل ردّ بطلب التسجيل. الهدف: جاوبي على سؤال الزبون أول شي. لما يبيّن اهتمام بدورة، خذي اسمه ورقمه واسم الدورة لتسجيله. اطلبي المعلومات مرّة وحدة وبشكل طبيعي.',
+        conversationHistory: [
+            { role: 'user', content: 'شو دوراتكم؟' },
+            { role: 'assistant', content: 'عنا دورة إنجليزي ٣ شهور بـ١٥٠٠ ريال، ودورات حاسب ومحاسبة. أي وحدة بتهمك؟' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['اسمك ورقمك', 'اسمك ورقم', 'اسم ورقم', 'رقمك واسمك', 'رقم هاتفك', 'ورقمك لنساعدك', 'ممكن اسمك'],
+        },
+        notes: 'THE الفريق الدمشقي failure (July 2026): a general "is registration open?" is NOT confirmed intent — the persona goal line must not trigger a name+number ask here. Answer the status question and stop.',
+    },
+    {
+        id: 673, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'اي بدي سجل بدورة الإنجليزي',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        brandVoiceNotes: 'الاسم: سارة، من فريق المركز. اللهجة شامية ودودة مع إيموجي خفيف. أسلوب الرد قصير وطبيعي. نوّعي الصياغة — لا تكرّري نفس الخاتمة بكل رسالة، ولا تنهي كل ردّ بطلب التسجيل. الهدف: جاوبي على سؤال الزبون أول شي. لما يبيّن اهتمام بدورة، خذي اسمه ورقمه واسم الدورة لتسجيله. اطلبي المعلومات مرّة وحدة وبشكل طبيعي.',
+        conversationHistory: [
+            { role: 'user', content: 'كم سعر دورة الإنجليزي؟' },
+            { role: 'assistant', content: 'دورة الإنجليزي ١٥٠٠ ريال ومدتها ٣ شهور.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['اسمك', 'الاسم', 'رقم'],
+        },
+        notes: 'Confirmed enrollment intent + no prior ask in history — NOW the persona goal legitimately fires: the reply should collect contact info (or share the registration channel). Guards against over-suppressing the goal.',
+    },
+    {
+        id: 674, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'ايمتى بتبلش الدورة؟',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        brandVoiceNotes: 'الاسم: سارة، من فريق المركز. اللهجة شامية ودودة مع إيموجي خفيف. أسلوب الرد قصير وطبيعي. نوّعي الصياغة — لا تكرّري نفس الخاتمة بكل رسالة، ولا تنهي كل ردّ بطلب التسجيل. الهدف: جاوبي على سؤال الزبون أول شي. لما يبيّن اهتمام بدورة، خذي اسمه ورقمه واسم الدورة لتسجيله. اطلبي المعلومات مرّة وحدة وبشكل طبيعي.',
+        conversationHistory: [
+            { role: 'user', content: 'بدي سجل بدورة الإنجليزي' },
+            { role: 'assistant', content: 'تمام! ممكن اسمك ورقمك لنسجلك؟' },
+            { role: 'user', content: 'دلال، 0951234567' },
+            { role: 'assistant', content: 'أهلين دلال! سجلت رقمك وحجزتلك مقعد بدورة الإنجليزي.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['اسمك ورقمك', 'اسمك ورقم', 'اسم ورقم', 'رقمك واسمك', 'رقم هاتفك', 'ممكن اسمك'],
+        },
+        notes: 'The persona goal line pushes for contact info, but history shows it was already collected — "مرّة وحدة فقط" must win. Harder variant of 668 (there the persona had no goal line).',
+    },
+    {
+        id: 675, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'تمام بس شو اسم المدربة يلي رح تدربنا بالكورس؟',
+        page: 'training',
+        replyStyle: 'enthusiastic',
+        senderName: 'دلال',
+        brandVoiceNotes: 'الاسم: سارة، من فريق المركز. اللهجة شامية ودودة مع إيموجي خفيف. أسلوب الرد قصير وطبيعي. نوّعي الصياغة — لا تكرّري نفس الخاتمة بكل رسالة، ولا تنهي كل ردّ بطلب التسجيل. الهدف: جاوبي على سؤال الزبون أول شي. لما يبيّن اهتمام بدورة، خذي اسمه ورقمه واسم الدورة لتسجيله. اطلبي المعلومات مرّة وحدة وبشكل طبيعي.',
+        conversationHistory: [
+            { role: 'user', content: 'ممكن صفحة المدربة يلي رح تدربني بدورة الإنجليزي؟' },
+            { role: 'assistant', content: 'ما في صفحة خاصة بالمدربة، كل الدورات بتتم بالمعهد. إذا حابة تفاصيل أكتر، خبريني!' },
+            { role: 'user', content: 'طيب مين رح يدربنا؟' },
+            { role: 'assistant', content: 'التدريب بيتم مع فريق متخصص بالمعهد. إذا حابة تعرفي مواعيد أو تفاصيل أكثر، فيني أساعدك.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['خبريني', 'فيني أساعدك', 'أنا جاهزة', 'أنا هنا', 'لا تتردد', 'يسعدني'],
+        },
+        notes: 'Dalal-thread replica (July 2026): both prior replies ended with the same conditional-offer shape ("…خبريني!" / "…فيني أساعدك") — the next reply must NOT imitate its own closing pattern. Answer honestly (trainer name not in KB) and stop.',
+    },
+    // 676-678: same failure modes in the LARGE-KB regime. The prod tic did not reproduce on the
+    // small training demo KB (temp 0 AND 5× temp 0.5 all clean) — June's investigation hit the
+    // same wall: the tics are tied to the real merchant's ~13k-char KB. The 'damascus' demo page
+    // carries a verbatim copy of that KB, so these cases replay the July prod turns as close to
+    // live conditions as the harness allows (real KB, verbatim customer messages, history seeded
+    // with the bot's actual tic-shaped closings).
+    {
+        id: 676, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'لسا التسجيل مفتوح ولا كيف',
+        page: 'damascus',
+        replyStyle: 'enthusiastic',
+        brandVoiceNotes: 'الاسم: سارة، من فريق المركز. اللهجة شامية ودودة مع إيموجي خفيف. أسلوب الرد قصير وطبيعي. نوّعي الصياغة — لا تكرّري نفس الخاتمة بكل رسالة، ولا تنهي كل ردّ بطلب التسجيل. الهدف: جاوبي على سؤال الزبون أول شي. لما يبيّن اهتمام بدورة، خذي اسمه ورقمه واسم الدورة لتسجيله. اطلبي المعلومات مرّة وحدة وبشكل طبيعي.',
+        conversationHistory: [
+            { role: 'user', content: 'شو العروض يلي عندكم؟' },
+            { role: 'assistant', content: 'هذه العروض تشمل دورات ICDL، الإسعافات الأولية، محاسبة الأمين المبتدئ، المكياج المبتدئ، والحلاقة النسائية المبتدئ بسعر 35 ألف ل.س بالعملة القديمة. إذا حابب تعرف تفاصيل دورة معيّنة، خبرني باسم الدورة!' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['ورقمك', 'اسمك ورقم', 'اسم ورقم', 'رقمك واسمك', 'رقم هاتفك', 'ممكن اسمك'],
+        },
+        notes: 'VERBATIM July prod failure turn (large real KB): general "is registration open?" — prod replied "…ممكن تعطيني اسم الدورة ورقمك لنساعدك بالتسجيل". Not confirmed intent → no contact ask; answer the status and stop.',
+    },
+    {
+        id: 677, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'تمام اسم يلي رح تدربنا بلكورس',
+        page: 'damascus',
+        replyStyle: 'enthusiastic',
+        senderName: 'دلال',
+        brandVoiceNotes: 'الاسم: سارة، من فريق المركز. اللهجة شامية ودودة مع إيموجي خفيف. أسلوب الرد قصير وطبيعي. نوّعي الصياغة — لا تكرّري نفس الخاتمة بكل رسالة، ولا تنهي كل ردّ بطلب التسجيل. الهدف: جاوبي على سؤال الزبون أول شي. لما يبيّن اهتمام بدورة، خذي اسمه ورقمه واسم الدورة لتسجيله. اطلبي المعلومات مرّة وحدة وبشكل طبيعي.',
+        conversationHistory: [
+            { role: 'user', content: 'في بآخر الكورس هدية ميك اب؟ شفتها عل صفحتكم' },
+            { role: 'assistant', content: 'ما في هدايا ضمن الكورس، بس إذا مهتمة بشي تاني خبريني.' },
+            { role: 'user', content: 'ممكن صفحه اللي رح دربني بلكورس' },
+            { role: 'assistant', content: 'ما في صفحة خاصة بالمدرب للكورس، بس كل الدورات بتتم في معهد الفريق الدمشقي ببرامكة. إذا حابة أعرفك على تفاصيل أكتر، خبريني!' },
+            { role: 'user', content: 'طيب شو اسمها الكوافيرة' },
+            { role: 'assistant', content: 'المدربة المتميزة لدورة اللاش ليفتينغ هي آلاء درويش، أما دورة المكياج والكوافيرة فالتدريب يتم في المعهد مع فريق متخصص.' },
+            { role: 'user', content: 'او الميك اب ارتست' },
+            { role: 'assistant', content: 'المدربة الخاصة بدورة المكياج هي ضمن فريق المعهد المختص، وما في صفحة خاصة بالميك أب آرتست. إذا حابة تعرفي مواعيد أو تفاصيل أكثر، فيني أساعدك.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['خبريني', 'فيني أساعدك', 'أنا جاهزة', 'أنا هنا', 'لا تتردد', 'يسعدني'],
+        },
+        notes: 'VERBATIM Dalal thread (July 2026, large real KB, full 8-turn history with 3 tic-shaped closings seeded — 5 of 9 prod replies ended that way). The next reply must answer honestly (trainer name not in KB) WITHOUT repeating its own closing shape.',
+    },
+    {
+        id: 678, category: 61, categoryName: 'Persona Goal Timing & Variety', channel: 'dm',
+        message: 'اي بدي سجل بدورة المكياج',
+        page: 'damascus',
+        replyStyle: 'enthusiastic',
+        brandVoiceNotes: 'الاسم: سارة، من فريق المركز. اللهجة شامية ودودة مع إيموجي خفيف. أسلوب الرد قصير وطبيعي. نوّعي الصياغة — لا تكرّري نفس الخاتمة بكل رسالة، ولا تنهي كل ردّ بطلب التسجيل. الهدف: جاوبي على سؤال الزبون أول شي. لما يبيّن اهتمام بدورة، خذي اسمه ورقمه واسم الدورة لتسجيله. اطلبي المعلومات مرّة وحدة وبشكل طبيعي.',
+        conversationHistory: [
+            { role: 'user', content: 'قديش سعر دورة المكياج؟' },
+            { role: 'assistant', content: 'دورة المكياج سعرها 35 ألف ل.س بالعملة القديمة.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['اسمك', 'الاسم', 'رقم'],
+        },
+        notes: 'Large-KB positive guard: confirmed enrollment intent + no prior ask — the persona goal legitimately fires (collect contact info or share the registration channel). Guards against over-suppression in the real-KB regime.',
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -3756,6 +4103,18 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
 // API caller
 // ---------------------------------------------------------------------------
 
+/** Statuses worth retrying: OpenAI 429 bursts surface as backend 500s; plus
+ *  gateway/transient codes. 4xx client errors (bad payload, auth) are NOT
+ *  retried — those are real harness bugs and must fail loudly. */
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+/** Backoff schedule between attempts (4 attempts total). */
+const RETRY_DELAYS_MS = [2000, 8000, 20000];
+/** Total transient retries across the run — reported in the summary so
+ *  throttling is visible instead of silently absorbed. */
+let transientRetries = 0;
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
 async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundResponse | null; latencyMs: number }> {
     const pageId = PAGE_MAP[test.page];
     const body: Record<string, unknown> = {
@@ -3771,30 +4130,56 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
     if (test.replyStyle) body.replyStyle = test.replyStyle;
     if (test.brandVoiceNotes) body.brandVoiceNotes = test.brandVoiceNotes;
     if (test.customerContext) body.customerContext = test.customerContext;
+    if (test.senderName) body.senderName = test.senderName;
     if (EVAL_MODEL) body.model = EVAL_MODEL;
 
-    const start = Date.now();
-    try {
-        const res = await fetch(`${BASE_URL}/admin/ai/playground`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${ADMIN_TOKEN}`,
-            },
-            body: JSON.stringify(body),
-        });
-        const latencyMs = Date.now() - start;
-        if (!res.ok) {
-            console.error(`  [#${test.id}] HTTP ${res.status}: ${await res.text()}`);
-            return { resp: null, latencyMs };
+    // Transient failures are RETRIED with backoff instead of failing the case.
+    // OpenAI 429 rate-limit bursts surface here as backend 500s ("Failed to
+    // generate AI reply"); without retry, a CONCURRENCY=5 run turned 101 cases
+    // into false "API call failed" FAILs (2026-07-05) — the harness must never
+    // report infra throttling as a reply regression. Retry-After is honored
+    // when the backend provides it; latency is measured per attempt so backoff
+    // sleeps don't pollute the latency stats.
+    let lastError = '';
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+        const attemptStart = Date.now();
+        try {
+            const res = await fetch(`${BASE_URL}/admin/ai/playground`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${ADMIN_TOKEN}`,
+                },
+                body: JSON.stringify(body),
+            });
+            const latencyMs = Date.now() - attemptStart;
+            if (res.ok) {
+                const json = await res.json() as PlaygroundResponse;
+                return { resp: json, latencyMs };
+            }
+            lastError = `HTTP ${res.status}: ${await res.text()}`;
+            if (!RETRYABLE_STATUS.has(res.status) || attempt === RETRY_DELAYS_MS.length) {
+                console.error(`  [#${test.id}] ${lastError}`);
+                return { resp: null, latencyMs };
+            }
+            transientRetries++;
+            const retryAfterSec = parseFloat(res.headers.get('retry-after') || '');
+            await sleep(Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : RETRY_DELAYS_MS[attempt]);
+        } catch (err) {
+            const latencyMs = Date.now() - attemptStart;
+            lastError = `Network error: ${(err as Error).message}`;
+            if (attempt === RETRY_DELAYS_MS.length) {
+                console.error(`  [#${test.id}] ${lastError}`);
+                return { resp: null, latencyMs };
+            }
+            transientRetries++;
+            await sleep(RETRY_DELAYS_MS[attempt]);
         }
-        const json = await res.json() as PlaygroundResponse;
-        return { resp: json, latencyMs };
-    } catch (err) {
-        const latencyMs = Date.now() - start;
-        console.error(`  [#${test.id}] Network error:`, (err as Error).message);
-        return { resp: null, latencyMs };
     }
+    // Unreachable (both branches return at the last attempt), but TypeScript
+    // needs a terminal return.
+    console.error(`  [#${test.id}] ${lastError}`);
+    return { resp: null, latencyMs: 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -3997,6 +4382,11 @@ async function main() {
     console.log(`  TOTAL: ${totalPass} PASS  ${totalPartial} PARTIAL  ${totalFail} FAIL  (${total} tests)`);
     console.log(`  SCORE: ${score}%`);
     console.log(`  AVG LATENCY: ${avgLatency}ms`);
+    if (transientRetries > 0) {
+        // Throttling visibility: retried-and-recovered calls are not failures,
+        // but a high count means the run was rate-limited — lower CONCURRENCY.
+        console.log(`  TRANSIENT RETRIES: ${transientRetries} (429/5xx recovered — if high, lower CONCURRENCY)`);
+    }
     console.log('═'.repeat(60));
 
     // Exit with non-zero if score below threshold

@@ -4,10 +4,12 @@ import { t } from './i18n';
 /**
  * Leads Page E2E Tests
  *
- * Coverage: CSV export button is gated by plan —
- *   - Business / Pro: normal Export CSV button
- *   - Starter (active): locked button with "Business+" badge → navigates to /pricing
- *   - Starter (trialing): export unlocked (trial = full paid experience)
+ * Coverage: CSV export is available on EVERY plan (it used to be Business+ only,
+ * with a locked "Business+" upsell chip shown to Starter accounts; that gate was
+ * removed — the backend never enforced it, and the chip read as a broken state
+ * and crowded the mobile header). The only thing that hides the button now is an
+ * empty list.
+ *   - Any plan (Business, Starter, …): normal Export CSV button, no "Business+" chip
  *   - Any plan, no leads: export button hidden entirely
  */
 
@@ -121,13 +123,13 @@ async function gotoLeads(page: import('@playwright/test').Page) {
   await expect(page.getByRole('heading', { name: t('leads.title'), exact: true }).first()).toBeVisible({ timeout: 15000 });
 }
 
-test.describe('Leads — Export gating', () => {
+test.describe('Leads — CSV export', () => {
   test.beforeEach(async ({ page }) => {
-    page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
+    page.on('pageerror', (err) => console.warn(`PAGE ERROR: ${err}`));
   });
 
   /* ------------------------------------------------------------------ */
-  /*  Business / Pro — export available                                   */
+  /*  Export available on every plan (no gating)                          */
   /* ------------------------------------------------------------------ */
 
   test('Business plan: Export CSV button is visible', async ({ page }) => {
@@ -139,49 +141,13 @@ test.describe('Leads — Export gating', () => {
     await expect(page.locator('text=Business+')).not.toBeVisible();
   });
 
-  test('Pro plan: Export CSV button is visible', async ({ page }) => {
-    await setupAuth(page);
-    await mockAPIs(page, { planSlug: 'pro' });
-    await gotoLeads(page);
-
-    await expect(page.getByRole('button', { name: new RegExp(t('leads.exportCsv')) })).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('text=Business+')).not.toBeVisible();
-  });
-
-  /* ------------------------------------------------------------------ */
-  /*  Starter (active) — export locked                                    */
-  /* ------------------------------------------------------------------ */
-
-  test('Starter plan: locked export button shows Business+ badge', async ({ page }) => {
+  test('Starter plan: Export CSV button is visible (export is no longer gated)', async ({ page }) => {
     await setupAuth(page);
     await mockAPIs(page, { planSlug: 'starter' });
     await gotoLeads(page);
 
-    await expect(page.getByRole('button', { name: new RegExp(t('leads.exportCsv')) })).not.toBeVisible({ timeout: 5000 });
-    await expect(page.locator('text=Business+')).toBeVisible({ timeout: 5000 });
-  });
-
-  test('Starter plan: locked export button links to /pricing', async ({ page }) => {
-    await setupAuth(page);
-    await mockAPIs(page, { planSlug: 'starter' });
-    await gotoLeads(page);
-
-    // Locked variant renders an UpgradeCTA (Lock icon + "Business+" badge) that
-    // links to /pricing — the accessible name is "Business+", not "Export CSV".
-    const lockedLink = page.getByRole('link', { name: /Business\+/i });
-    await expect(lockedLink).toBeVisible({ timeout: 5000 });
-    await expect(lockedLink).toHaveAttribute('href', /\/pricing/);
-  });
-
-  /* ------------------------------------------------------------------ */
-  /*  Trial — export unlocked regardless of base plan                     */
-  /* ------------------------------------------------------------------ */
-
-  test('Starter on trial: Export CSV button is visible', async ({ page }) => {
-    await setupAuth(page);
-    await mockAPIs(page, { planSlug: 'starter', subscriptionStatus: 'trialing' });
-    await gotoLeads(page);
-
+    // Previously this showed a locked "Business+" upsell chip; export is now open
+    // to every plan, so the real Export button appears and there is no chip.
     await expect(page.getByRole('button', { name: new RegExp(t('leads.exportCsv')) })).toBeVisible({ timeout: 5000 });
     await expect(page.locator('text=Business+')).not.toBeVisible();
   });
@@ -192,7 +158,7 @@ test.describe('Leads — Export gating', () => {
 
   test('No leads: export button hidden regardless of plan', async ({ page }) => {
     await setupAuth(page);
-    await mockAPIs(page, { planSlug: 'business', hasLeads: false });
+    await mockAPIs(page, { planSlug: 'starter', hasLeads: false });
     await gotoLeads(page);
 
     await expect(page.getByRole('button', { name: new RegExp(t('leads.exportCsv')) })).not.toBeVisible({ timeout: 5000 });

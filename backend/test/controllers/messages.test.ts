@@ -41,6 +41,9 @@ vi.mock('../../src/services/facebook', () => ({
 vi.mock('../../src/services/instagram', () => ({
     instagramService: { sendDirectMessage: vi.fn() },
 }));
+vi.mock('../../src/services/whatsapp', () => ({
+    whatsappService: { sendTextMessage: vi.fn() },
+}));
 vi.mock('../../src/services/workspaceSettings', () => ({
     workspaceSettingsService: { getSettings: vi.fn() },
 }));
@@ -57,6 +60,7 @@ import { pagesService } from '../../src/services/pages';
 import { conversationsService } from '../../src/services/conversations';
 import { facebookService } from '../../src/services/facebook';
 import { instagramService } from '../../src/services/instagram';
+import { whatsappService } from '../../src/services/whatsapp';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 
 describe('MessagesController', () => {
@@ -469,6 +473,46 @@ describe('MessagesController', () => {
             await messagesController.reply(mockRequest as any, mockReply as any);
 
             expect(instagramService.sendDirectMessage).toHaveBeenCalledWith('ig-123', 'sender-1', 'Thank you!', 'token-123');
+        });
+
+        it('should send reply via WhatsApp with the WABA token (never the FB path)', async () => {
+            const waMessage = { ...mockMessage, platform: 'whatsapp', senderId: '+966500000000' };
+            // WhatsApp-only page: FB token is the '' disconnect sentinel — must not block WhatsApp
+            const waPage = { ...mockPage, accessToken: '', whatsappPhoneNumberId: 'pn-1', whatsappAccessToken: 'wa-token' };
+            vi.mocked(messagesService.getMessageById).mockResolvedValue(waMessage as any);
+            vi.mocked(pagesService.getPage).mockResolvedValue(waPage as any);
+            vi.mocked(whatsappService.sendTextMessage).mockResolvedValue('wamid.out' as any);
+            vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+            vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({ id: 'out-1' } as any);
+
+            await messagesController.reply(mockRequest as any, mockReply as any);
+
+            expect(whatsappService.sendTextMessage).toHaveBeenCalledWith('pn-1', '+966500000000', 'Thank you!', 'wa-token');
+            expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+        });
+
+        it('should 409 WHATSAPP_DISCONNECTED when the WhatsApp token is missing', async () => {
+            const waMessage = { ...mockMessage, platform: 'whatsapp' };
+            const waPage = { ...mockPage, whatsappPhoneNumberId: 'pn-1', whatsappAccessToken: null };
+            vi.mocked(messagesService.getMessageById).mockResolvedValue(waMessage as any);
+            vi.mocked(pagesService.getPage).mockResolvedValue(waPage as any);
+
+            await expect(messagesController.reply(mockRequest as any, mockReply as any))
+                .rejects.toMatchObject({ statusCode: 409, code: 'WHATSAPP_DISCONNECTED' });
+            expect(whatsappService.sendTextMessage).not.toHaveBeenCalled();
+        });
+
+        it('should map the 24h-window Meta error to DM_WINDOW_EXPIRED', async () => {
+            const waMessage = { ...mockMessage, platform: 'whatsapp' };
+            const waPage = { ...mockPage, whatsappPhoneNumberId: 'pn-1', whatsappAccessToken: 'wa-token' };
+            vi.mocked(messagesService.getMessageById).mockResolvedValue(waMessage as any);
+            vi.mocked(pagesService.getPage).mockResolvedValue(waPage as any);
+            vi.mocked(whatsappService.sendTextMessage).mockRejectedValue({
+                response: { data: { error: { code: 131047, message: 'Re-engagement message' } } },
+            });
+
+            await expect(messagesController.reply(mockRequest as any, mockReply as any))
+                .rejects.toMatchObject({ statusCode: 409, code: 'DM_WINDOW_EXPIRED' });
         });
 
         it('should return 400 when replyText is empty', async () => {

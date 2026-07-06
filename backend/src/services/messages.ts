@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, sql, ne, isNotNull, count, max } from 'drizzle-orm';
+import { eq, desc, asc, and, sql, ne, isNotNull, inArray, count, max } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages, conversations } from '../db/schema';
 import { ConversationMessage } from '../types';
@@ -19,6 +19,10 @@ export interface CreateMessageDTO {
     direction?: 'incoming' | 'outgoing';
     platform?: string;
     attachmentType?: string;
+    /** Store-then-enrich lifecycle marker. Only 'pending' is ever set at insert
+     *  time (by nonTextHandler when an attachment will be enriched); everything
+     *  else leaves it NULL. See messages schema + finalizeEnrichment. */
+    enrichmentStatus?: 'pending';
 }
 
 export class MessagesService {
@@ -30,7 +34,9 @@ export class MessagesService {
     private scopeConditions(workspaceId: string, pageId?: string) {
         const conds = [
             eq(messages.workspaceId, workspaceId),
-            sql`(${pages.autoReplyEnabled} = true OR ${pages.instagramAutoReplyEnabled} = true)`,
+            // Any-channel gate: a WhatsApp-only page has both FB toggles false,
+            // so omitting the whatsapp toggle here would hide its entire inbox.
+            sql`(${pages.autoReplyEnabled} = true OR ${pages.instagramAutoReplyEnabled} = true OR ${pages.whatsappAutoReplyEnabled} = true)`,
         ];
         if (pageId) conds.push(eq(messages.pageId, pageId));
         return conds;
@@ -198,6 +204,7 @@ export class MessagesService {
                 direction: data.direction || 'incoming',
                 ...(data.platform ? { platform: data.platform } : {}),
                 ...(data.attachmentType ? { attachmentType: data.attachmentType } : {}),
+                ...(data.enrichmentStatus ? { enrichmentStatus: data.enrichmentStatus } : {}),
                 createdTime: new Date(),
             })
             .returning();
@@ -222,6 +229,7 @@ export class MessagesService {
         senderName?: string,
         attachmentType?: string,
         platform?: string,
+        enrichmentStatus?: 'pending',
     ): Promise<{ message: Message; isNew: boolean }> {
         const existing = await db.query.messages.findFirst({
             where: eq(messages.platformMessageId, platformMessageId),
@@ -248,6 +256,7 @@ export class MessagesService {
                 direction: 'incoming',
                 platform,
                 ...(attachmentType ? { attachmentType } : {}),
+                ...(enrichmentStatus ? { enrichmentStatus } : {}),
             });
             return { message: newMessage, isNew: true };
         } catch (err) {
@@ -264,6 +273,36 @@ export class MessagesService {
             }
             throw err;
         }
+    }
+
+    /**
+     * Finalize a store-then-enrich attachment row: flip `enrichment_status` off
+     * 'pending' and (on success) replace the placeholder `message` with the real
+     * enriched content — atomically, in one UPDATE.
+     *
+     * Guarded on `enrichment_status = 'pending'` so a duplicate/late webhook
+     * redelivery (or a retry) can never clobber an already-finalized row. Returns
+     * false when nothing was updated (already finalized / not a pending row) so the
+     * caller can log the anomaly. On 'failed' the `text` arg is omitted and the
+     * placeholder text stands.
+     */
+    async finalizeEnrichment(
+        messageId: string,
+        status: 'done' | 'failed',
+        text?: string,
+    ): Promise<boolean> {
+        const result = await db.update(messages)
+            .set({
+                enrichmentStatus: status,
+                ...(text !== undefined ? { message: text } : {}),
+                updatedAt: new Date(),
+            })
+            .where(and(
+                eq(messages.id, messageId),
+                eq(messages.enrichmentStatus, 'pending'),
+            ))
+            .returning({ id: messages.id });
+        return result.length > 0;
     }
 
     /**
@@ -640,7 +679,13 @@ export class MessagesService {
                 eq(messages.direction, 'incoming'),
                 eq(messages.replied, false),
                 ne(messages.id, currentMsg.id),
-                sql`${messages.createdAt} > ${currentMsg.createdAt}`
+                sql`${messages.createdAt} > ${currentMsg.createdAt}`,
+                // Only defer to a newer message whose reply job is guaranteed to
+                // exist: NULL (plain text — enqueued by the webhook) or 'done' (its
+                // job is enqueued right after enrichment finalizes). A 'pending' stub
+                // has no job yet and a 'failed' stub never gets one, so deferring to
+                // either would strand this message with no reply. See store-then-enrich.
+                sql`(${messages.enrichmentStatus} IS NULL OR ${messages.enrichmentStatus} = 'done')`
             ),
         });
         return !!newer;
@@ -653,7 +698,7 @@ export class MessagesService {
     async getUnrepliedFromSender(
         pageId: string,
         senderId: string
-    ): Promise<{ id: string; message: string; platformMessageId: string }[]> {
+    ): Promise<{ id: string; message: string; platformMessageId: string; enrichmentStatus: string | null; createdAt: Date | null }[]> {
         const result = await db.query.messages.findMany({
             where: and(
                 eq(messages.pageId, pageId),
@@ -664,21 +709,43 @@ export class MessagesService {
             orderBy: [asc(messages.createdAt)],
             limit: 50,
         });
-        return result.map(r => ({ id: r.id, message: r.message, platformMessageId: r.platformMessageId }));
+        // enrichmentStatus + createdAt are returned so messageProcessor can PARK
+        // when a sibling attachment row is still 'pending' (store-then-enrich).
+        return result.map(r => ({
+            id: r.id,
+            message: r.message,
+            platformMessageId: r.platformMessageId,
+            enrichmentStatus: r.enrichmentStatus ?? null,
+            createdAt: r.createdAt ?? null,
+        }));
     }
 
     /**
-     * Mark older unreplied messages from the same sender as replied
-     * (they were addressed via the consolidated reply to the latest message).
+     * Mark the messages that were consolidated into a single reply as replied.
+     *
+     * Scoped to the EXACT ids seen at consolidation (step 11), not "everything
+     * unreplied from this sender". This is load-bearing: a sibling attachment row
+     * can land in the DB between consolidation and this UPDATE (its enrichment
+     * finishing mid-AI-generation). The old blanket predicate swept that fresh row
+     * `replied=true` under a reply that never saw it — a silent drop. Scoping to
+     * `consolidatedIds` leaves the late row `replied=false`, so the orphan recheck
+     * (or the attachment's own job) still answers it.
+     *
+     * `replied=false` is kept as an idempotency guard; the pageId/senderId/direction
+     * predicates stay as defense-in-depth.
      */
     async markOlderMessagesAsReplied(
         pageId: string,
         senderId: string,
+        consolidatedIds: string[],
         excludeMessageId: string,
         replyText: string,
         replyMethod: 'template' | 'ai' | 'manual' | 'post_reply',
         conn: DbConn = db
     ): Promise<number> {
+        const targetIds = consolidatedIds.filter(id => id !== excludeMessageId);
+        if (targetIds.length === 0) return 0;
+
         const result = await conn.update(messages)
             .set({
                 replied: true,
@@ -692,7 +759,7 @@ export class MessagesService {
                 eq(messages.senderId, senderId),
                 eq(messages.direction, 'incoming'),
                 eq(messages.replied, false),
-                ne(messages.id, excludeMessageId)
+                inArray(messages.id, targetIds)
             ))
             .returning({ id: messages.id });
         return result.length;
@@ -903,6 +970,7 @@ export class MessagesService {
             resolved: record.resolved ?? false,
             platform: (record.platform || 'facebook') as 'facebook' | 'instagram',
             attachmentType: record.attachmentType ?? null,
+            enrichmentStatus: record.enrichmentStatus ?? null,
         };
     }
 }

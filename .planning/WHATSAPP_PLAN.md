@@ -1,7 +1,7 @@
 # WhatsApp Integration Plan
 
-> **Last updated:** 2026-04-25
-> **Status:** Phase B+C backend complete (text DMs flow through `messageProcessor`); Phases 2–6 remaining
+> **Last updated:** 2026-07-03
+> **Status:** Code-complete for launch — backend (B+C), connect flow (Phase 3) and voice/media (Phase 5 core) shipped on `feat/whatsapp-connect`. Blocking on Phase 2 (Meta Embedded Signup access + `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`). Phases 4 (templates) & 6 (status callbacks) deferred post-launch
 >
 > **Why this matters strategically:** WhatsApp is the channel LetsBot owns end-to-end. Phase B+C closes the inbound DM gap (text auto-replies work). Phase 4 (template messages) closes the proactive cart-recovery / order-update gap that's LetsBot's biggest revenue feature. Phase 5 (Catalog media) is the WhatsApp equivalent of Messenger/IG rich cards. Phase 6 (status callbacks) gives read receipts that feed the analytics dashboard.
 >
@@ -76,18 +76,18 @@ Make `facebookPageId` nullable so merchants can connect WhatsApp without a Faceb
 - [x] `backend/test/services/whatsappAdapter.test.ts` — getPage, fetchSenderName, sendReply, sendAwayMessage, sendTypingIndicator no-op, getInternalMessageId
 - [x] `backend/test/controllers/webhook-whatsapp.test.ts` — routing, text enqueue, sender name, non-text skip, status skip, field filter
 
-### Phase 2: Meta Setup (Tech Provider)
+### Phase 2: Meta Setup (Tech Provider) — ⏳ ONLY REMAINING LAUNCH BLOCKER
 Jawab24 is a Tech Provider — merchants connect their own WhatsApp Business Account via Embedded Signup.
 
 **Meta submission steps:**
 1. Add WhatsApp product to Facebook App (App Dashboard → Add Product → WhatsApp) — instant
 2. Verify Meta Business Account (may already be done since app is Live) — check in Business Settings
 3. Request Embedded Signup access (WhatsApp → API Setup) — 3-5 business days
-4. Receive Solution ID for Embedded Signup integration
+4. Create an Embedded Signup **configuration** (App Dashboard → Facebook Login for Business → Configurations, type: WhatsApp Embedded Signup) and set its ID as `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` in the frontend env — the Connect button + dashboard announcement render only when this is set
 
 **No App Review needed for WhatsApp** — unlike Facebook permissions, WhatsApp Business Platform only requires business verification + Standard Access.
 
-### Phase 3: Frontend — WhatsApp Connection UI
+### Phase 3: Frontend — WhatsApp Connection UI ✅ (2026-07-03, `feat/whatsapp-connect`)
 Connect WhatsApp via Facebook Embedded Signup on the existing pages screen.
 
 **UX: third row on each page card**
@@ -111,27 +111,30 @@ Connect WhatsApp via Facebook Embedded Signup on the existing pages screen.
 ```
 
 **Tasks:**
-- [ ] "Connect WhatsApp" button on pages.tsx (opens Embedded Signup popup)
-- [ ] Embedded Signup callback handler — receives `phone_number_id`, `waba_id`, access token
-- [ ] Backend endpoint: `POST /pages/connect-whatsapp` — stores WhatsApp fields on page (creates page row if WhatsApp-only)
-- [ ] WhatsApp row on page card: phone number display + auto-reply toggle
-- [ ] `handleWhatsAppToggle` function (same pattern as `handleInstagramToggle`)
-- [ ] Translation keys (en + ar) for WhatsApp UI strings
-- [ ] Handle WhatsApp-only page card (no Facebook/Instagram rows)
+- [x] "Connect WhatsApp" button on pages.tsx (opens Embedded Signup popup via on-demand FB JS SDK — `frontend/src/lib/whatsappSignup.ts`; button env-gated on `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`)
+- [x] Embedded Signup callback handler — auth `code` from FB.login + `phone_number_id`/`waba_id` from the WA_EMBEDDED_SIGNUP message event (sessionInfoVersion 3)
+- [x] Backend endpoint: `POST /pages/:id/connect-whatsapp` (owner-only) — exchanges code → business token (new encrypted `pages.whatsapp_access_token`, migration 0125), subscribes app to WABA, registers phone (deterministic HMAC PIN), stores fields. Plus `DELETE /pages/:id/whatsapp` and `PATCH /pages/:id/whatsapp-auto-reply` (billing + channel-trial gates)
+- [x] WhatsApp row on page card: phone number display (LTR-isolated in RTL) + auto-reply toggle + owner-only disconnect (unlink → ConfirmationModal)
+- [x] `handleWhatsAppToggle` function (same pattern as `handleInstagramToggle`)
+- [x] Translation keys (en + ar) for WhatsApp UI strings
+- [x] Dashboard announcement nudge (env-gated, owner-only, dismissible) for post-approval discoverability
+- [x] Mobile: Connect hands off to the system browser at the web dashboard (`openExternalUrl` + `buildWebUrl`) — ES popup can't run in the Capacitor WebView
+- [x] WhatsApp-only page card ✅ (2026-07-03): `POST /pages/connect-whatsapp` creates a `facebookPageId=null` page row (named after the WABA verified name, own Business Info + stats); "Add WhatsApp number" card + empty-state CTA on /pages; removal = page delete; enabled card consumes a page slot. **Doubles as multi-number support** — one card per number. Manual inbox replies route per-platform (whatsapp branch in messages controller). UI renamed "Pages" → "Channels"/«قنوات التواصل» (copy only). Deferred alternative: a decoupled `channels` table (enterprise pattern, zero demand signal — revisit only if merchants outgrow cards). Tier B (no Facebook account at all → WhatsApp OTP login) stays parked until our own WABA is live
 
-### Phase 4: Template Messages (24h window)
+### Phase 4: Template Messages (24h window) — deferred post-launch
 - [ ] Detect when 24h window expires (check `lastMessageAt` from sender)
 - [ ] Create/manage WhatsApp message templates in Meta Business Suite
 - [ ] Fallback to template when free-form reply fails with error 131047
 - [ ] UI for template selection (or auto-select based on context)
+> Not launch-blocking: auto-replies to incoming messages are always inside the 24h window. Needed for proactive messaging (cart recovery / order updates).
 
-### Phase 5: Media Messages
-- [ ] Handle incoming images, voice notes, videos, documents
-- [ ] Extend `nonTextHandler.ts` to support `'whatsapp'` platform
-- [ ] Voice transcription via Whisper (same as FB/IG)
-- [ ] Image/document acknowledgment nudge
+### Phase 5: Media Messages — ✅ core shipped (2026-07-03)
+- [x] Handle incoming images, voice notes, videos, documents (`handleWhatsAppNonTextMessage` in `nonTextHandler.ts` — separate function: WhatsApp media is ID + authorized download, not a public URL)
+- [x] Voice transcription via Whisper (`transcribeFromBuffer` after bearer-token download; codec suffix stripped)
+- [x] Image/document acknowledgment nudge (1h cooldown, shared `sendNudge`); stickers stored silently; media captions / button / interactive replies routed to the AI as text
+- [ ] location / contacts / reaction / order message types (currently skipped)
 
-### Phase 6: Status Callbacks
+### Phase 6: Status Callbacks — deferred post-launch
 - [ ] Handle `statuses` array in webhook (sent/delivered/read/failed)
 - [ ] Track message delivery status per conversation
 - [ ] Surface delivery status in frontend (blue ticks equivalent)

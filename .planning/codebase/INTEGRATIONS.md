@@ -67,6 +67,11 @@
 - **Shared Post Handling (Messages)**:
   - When a customer DMs a shared post with no text → smart nudge acknowledging the post
   - When a customer DMs a shared post + text → post content fetched via Graph API and prepended to message for AI context
+  - **Note**: shared-post handling reads only the CAPTION (`message,story`), not the post IMAGE — describing shared/own post images (cache-by-post-id) is a parked follow-up (see plan). Customers who *screenshot* a post and send it as a plain image ARE covered by image understanding below.
+
+- **Customer Image Handling (Messages, FB/IG)**:
+  - Customer sends a plain image → AI vision description (`imageUnderstanding.describeFromUrl`, gpt-4.1-mini) → fed into the normal reply pipeline (describe-then-enqueue, like voice transcription). Reads Arabic text / product / screenshot content so the bot can answer.
+  - Gated by `IMAGE_UNDERSTANDING_ENABLED` env kill switch + per-plan daily cap (shared `lib/dailyCap`); default-on with no per-merchant toggle. Image bytes never stored (only the text description). On denial/failure → placeholder + text-only nudge.
 
 - **Configuration**:
   - `FACEBOOK_APP_ID` - App identifier (public)
@@ -85,17 +90,34 @@
 
 ### WhatsApp Business (Meta Cloud API)
 - **Purpose**: Auto-reply automation for WhatsApp DMs
-- **Status**: Backend complete (2026-04-04); Meta Tech Provider Embedded Signup approval pending
+- **Status**: Backend + connect flow + voice/media handling complete (2026-07-03); awaiting Meta Embedded Signup access + env config to go live
 - **Business Model**: Tech Provider (ManyChat model) — merchant connects their own WhatsApp Business Account; Meta bills merchant directly for per-message costs
 
-- **Connection Flow (planned — Embedded Signup)**:
-  - Merchant clicks "Connect WhatsApp" → Facebook Embedded Signup popup
-  - Embedded Signup callback returns `phone_number_id` + `waba_id` + access token
-  - Backend stores WhatsApp fields on existing `pages` row (or creates new row for WhatsApp-only merchant)
+- **Connection Flow (implemented — Embedded Signup)**:
+  - Owner clicks "Connect" on the WhatsApp row of a page card (`pages.tsx`) → FB JS SDK loaded on demand → Embedded Signup popup (`frontend/src/lib/whatsappSignup.ts`)
+  - Popup resolves the one-time auth `code` (FB.login) + `phone_number_id`/`waba_id` (WA_EMBEDDED_SIGNUP message event, sessionInfoVersion 3)
+  - `POST /pages/:id/connect-whatsapp` (owner-only): exchanges code → business token, subscribes app to the WABA, registers the phone for Cloud API (deterministic HMAC PIN), fetches display number, stores fields
+  - `DELETE /pages/:id/whatsapp` disconnects (local-only — no WABA unsubscribe, a WABA can serve multiple numbers); UI: owner-only unlink icon on the connected row → ConfirmationModal. `PATCH /pages/:id/whatsapp-auto-reply` toggles (admin+, same billing/trial gates as FB/IG)
+  - Mobile: the Capacitor WebView can't host the ES popup — Connect hands off to the system browser at the web dashboard (`openExternalUrl` + `buildWebUrl`); Meta's wizard works in mobile browsers
+  - Discoverability: dismissible dashboard announcement nudge (env-gated on the same config vars, owner-only, hidden once any page has WhatsApp connected; `useTimedDismiss` key `whatsappNudgeDismissedAt`)
+  - Requires env: `NEXT_PUBLIC_FB_APP_ID` + `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` (ES configuration ID) — the Connect button only renders when both are set
+  - **WhatsApp-only cards** (shipped): `POST /pages/connect-whatsapp` (no :id, owner-only) CREATES a pages row with `facebookPageId=null` — card named after the WABA verified name, own Business Info + stats. Serves (a) merchants with no Facebook page (Shopify/Salla/Zid sellers — they still need a Facebook *personal* login for Meta's ES wizard) and (b) **multi-number**: one card per number. An enabled card consumes a page slot (existing `canEnablePage` gate). Removing a WA-only card = `DELETE /pages/:id`. After connect, the UI auto-attempts enable (billing gates keep authority; fails silently to OFF)
+  - **Connect entry points** (one rule: global → new card, card → attach here): the Channels header has a single "Connect channel"/«ربط قناة» button opening `ChannelPickerModal` (Facebook Page vs "WhatsApp only"; WhatsApp option env-gated — without config the button collapses to the FB dialog directly). Options are **situation-framed** ("No Facebook Page? …") not channel-named, and the WhatsApp option sets expectations: number must not already be on the consumer WhatsApp app, and a Facebook *sign-in* (not Page) is still required for Embedded Signup. Attaching WhatsApp to an existing page's Business Info stays contextual via that card's WhatsApp row
+  - **Manual inbox replies** route per-platform: whatsapp branch in `controllers/messages.ts` `sendAndStoreManualReply` (WABA token, per-channel disconnect guard, Meta 131047 → `DM_WINDOW_EXPIRED`). `getPage`/`getPages` decrypt `whatsappAccessToken` alongside the FB token
+  - **UI terminology**: the Pages screen + nav item are now "Channels" / «قنوات التواصل» (user-facing copy only; `/pages` route, i18n namespace, and code names unchanged — same precedent as Business Info vs `knowledgeBase`). Inbox renders a WhatsApp platform badge + wa.me link for whatsapp conversations
+  - Fully Facebook-free sign-in (no Meta account at all) deferred — phone auth is disabled; parked on WhatsApp-OTP (needs our live WABA) / Salla OAuth
 
 - **Access Token**:
-  - Merchant's page-level access token (same token as Facebook/Instagram)
-  - Encrypted at rest (AES-256-GCM, same key as Facebook tokens)
+  - Embedded Signup business integration system-user token, stored in `pages.whatsapp_access_token` — separate from the Facebook page token
+  - Encrypted at rest (AES-256-GCM `enc:v1:` scheme, same key as Facebook tokens)
+  - The WhatsApp adapter carries this token in `PlatformPage.accessToken`; a missing token surfaces as `''` so sends fail instead of silently using the FB token
+
+- **Incoming Media (implemented)**:
+  - Voice notes: media ID → `GET /{media-id}` (bearer) → authorized download → Whisper `transcribeFromBuffer` → normal AI pipeline (`handleWhatsAppNonTextMessage` in `nonTextHandler.ts`)
+  - Media captions, quick-reply buttons, interactive list/button replies → routed to the AI pipeline as text
+  - Caption-less images: media ID → authorized download → AI vision description (`imageUnderstanding.describeFromBuffer`, gpt-4.1-mini) → normal AI pipeline, gated by env kill switch + per-plan daily cap. On denial/failure → placeholder + text-only nudge. (Captioned WhatsApp images still take the caption-as-text path — enriching those with vision is a noted follow-up.)
+  - Caption-less video/document → stored placeholder + text-only nudge (1h cooldown); stickers stored silently
+  - location/contacts/reaction/order → skipped (no reply path yet)
 
 - **Webhook Setup**:
   - Same `/webhook` endpoint as Facebook/Instagram
@@ -127,12 +149,13 @@
   - `pages.whatsapp_business_account_id` — WABA ID
   - `pages.whatsapp_display_phone_number` — human-readable "+966 55..."
   - `pages.whatsapp_auto_reply_enabled` — per-channel toggle
+  - `pages.whatsapp_access_token` — encrypted ES business token (migration 0125)
   - `messages.platform_message_id` — generic dedup column (wamid for WhatsApp, message ID for Facebook/Instagram)
 
 - **Meta Submission Status**:
   - Must request Embedded Signup access (App Dashboard → WhatsApp → Embedded Signup) — ~3-5 business days
   - No App Review needed — only business verification + Standard Access required
-  - Need Solution ID before building frontend Embedded Signup flow
+  - After approval: create an ES configuration in the App Dashboard (Facebook Login for Business → Configurations) and set its ID as `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`
 
 ---
 

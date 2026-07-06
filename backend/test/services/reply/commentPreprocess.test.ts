@@ -3,7 +3,7 @@ import {
     buildCommentRagQuery,
     preprocessCommentText,
     resolveCommentLanguage,
-    rewritePunctuationForDualDm,
+    rewriteContentFreeCta,
 } from '../../../src/services/reply/commentPreprocess';
 import type { FacebookMessageTag } from '../../../src/utils/commentText';
 
@@ -234,73 +234,61 @@ describe('resolveCommentLanguage', () => {
     });
 });
 
-describe('rewritePunctuationForDualDm', () => {
-    it('rewrites dot on Arabic CTA post to "أريد التفاصيل" in DM channel', () => {
-        const out = rewritePunctuationForDualDm({
+describe('rewriteContentFreeCta', () => {
+    it('rewrites dot on Arabic CTA post to "أريد التفاصيل"', () => {
+        const out = rewriteContentFreeCta({
             commentForAI: '.',
             rawText: '.',
             postMessage: 'علق بنقطة لتصلك تفاصيل الدورة',
-            effectiveChannel: 'dm',
         });
         expect(out).toBe('أريد التفاصيل');
     });
 
-    it('rewrites emoji on English post to "I want the details" in DM channel', () => {
-        const out = rewritePunctuationForDualDm({
+    it('rewrites emoji on English post to "I want the details"', () => {
+        const out = rewriteContentFreeCta({
             commentForAI: '👍',
             rawText: '👍',
             postMessage: 'Comment to get pricing on iPhone 15',
-            effectiveChannel: 'dm',
         });
         expect(out).toBe('I want the details');
     });
 
-    it('does not rewrite when channel is comment (only DM)', () => {
-        const out = rewritePunctuationForDualDm({
-            commentForAI: '.',
-            rawText: '.',
-            postMessage: 'علق بنقطة',
-            effectiveChannel: 'comment',
-        });
-        expect(out).toBe('.');
-    });
-
     it('does not rewrite when post message is missing', () => {
-        const out = rewritePunctuationForDualDm({
+        const out = rewriteContentFreeCta({
             commentForAI: '.',
             rawText: '.',
             postMessage: undefined,
-            effectiveChannel: 'dm',
         });
         expect(out).toBe('.');
     });
 
     it('does not rewrite real-text comments', () => {
-        const out = rewritePunctuationForDualDm({
+        const out = rewriteContentFreeCta({
             commentForAI: 'كم السعر؟',
             rawText: 'كم السعر؟',
             postMessage: 'علق بنقطة',
-            effectiveChannel: 'dm',
         });
         expect(out).toBe('كم السعر؟');
     });
 
+    // Regression for eval #324 (لامار الشام resurfacing on the PUBLIC channel):
+    // the rewrite is channel-agnostic — the old `effectiveChannel !== 'dm'` gate
+    // left public-mode merchants unprotected and the model's spam verdict on
+    // "٠٠٠" silently dropped solicited engagement comments.
     it('rewrites Arabic-Indic digit CTA "٠٠٠" on Arabic post (لامار الشام case)', () => {
-        const out = rewritePunctuationForDualDm({
+        const out = rewriteContentFreeCta({
             commentForAI: '٠٠٠',
             rawText: '٠٠٠',
             postMessage: '#عروض 🔥 دورات بكلفة 25 الف فقط — ICDL، إسعافات، محاسبة الأمين. علق بنقطة ❤️⭕️',
-            effectiveChannel: 'dm',
         });
         expect(out).toBe('أريد التفاصيل');
     });
 
     it('rewrites ASCII-digit CTA "000" on English post', () => {
-        const out = rewritePunctuationForDualDm({
+        const out = rewriteContentFreeCta({
             commentForAI: '000',
             rawText: '000',
             postMessage: 'New iPhone 15 — comment 0 to get pricing!',
-            effectiveChannel: 'dm',
         });
         expect(out).toBe('I want the details');
     });

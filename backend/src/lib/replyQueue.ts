@@ -52,6 +52,9 @@ export async function enqueueComment(data: {
     replyDelay?: number;
     handoffRetries?: number;
     aiRetryCount?: number;
+    // Accepted (so the shared re-enqueue helper can spread a common counter bag) but
+    // NOT mapped: comments never park on attachment enrichment.
+    attachmentRetries?: number;
 }): Promise<string> {
     const jobData: ReplyJobData = {
         jobType: data.jobType,
@@ -92,6 +95,7 @@ export async function enqueueMessage(data: {
     replyDelay?: number;
     handoffRetries?: number;
     aiRetryCount?: number;
+    attachmentRetries?: number;
 }): Promise<string> {
     const jobData: ReplyJobData = {
         jobType: data.jobType,
@@ -106,6 +110,7 @@ export async function enqueueMessage(data: {
         receivedAt: new Date().toISOString(),
         handoffRetries: data.handoffRetries,
         aiRetryCount: data.aiRetryCount,
+        attachmentRetries: data.attachmentRetries,
     };
 
     // Use delay option if replyDelay is set (in milliseconds)

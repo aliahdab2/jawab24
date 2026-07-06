@@ -1,5 +1,5 @@
 {
-  "id": "71a207fe-1013-46b7-97bb-6f82f880b976",
+  "id": "b22ece01-6609-454e-be7d-124122ff1a04",
   "prevId": "2e74ea1a-28fb-446f-bca9-328fe8439de7",
   "version": "5",
   "dialect": "pg",
@@ -2337,13 +2337,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "trigger_type": {
-          "name": "trigger_type",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'keyword'"
-        },
         "created_time": {
           "name": "created_time",
           "type": "timestamp",
@@ -3819,6 +3812,12 @@
           "notNull": false,
           "default": false
         },
+        "whatsapp_access_token": {
+          "name": "whatsapp_access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "ecommerce_store_id": {
           "name": "ecommerce_store_id",
           "type": "uuid",
@@ -4586,13 +4585,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "trigger_type": {
-          "name": "trigger_type",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'keyword'"
         },
         "created_time": {
           "name": "created_time",

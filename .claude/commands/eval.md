@@ -44,3 +44,15 @@ ADMIN_TOKEN="$ADMIN_TOKEN" VERBOSE=1 npm run eval
 After the eval completes:
 - Kill the background services: `pkill -f "tsx backend/src/index.ts"; pkill -f "tsx ai-worker/src/index.ts"`
 - Summarize: overall pass rate, which categories failed (if any), patterns in failures
+
+Reliability & determinism notes:
+- The script retries transient 429/5xx with backoff and prints a `TRANSIENT RETRIES`
+  count in the summary. If that count is high, the run was rate-limited — re-run with
+  a lower CONCURRENCY (1-3). Never interpret rate-limit noise as reply regressions.
+- Scores are noisy run-to-run (±5 PARTIALs is normal): the model samples at
+  OPENAI_TEMPERATURE=0.5 and the graders check stochastic outputs (confidence,
+  intent, flags, substrings). A single run is a coarse gate, not a precise measure.
+- For A/B REGRESSION comparisons (branch vs main, feature flag on vs off), start the
+  AI worker with `OPENAI_TEMPERATURE=0 OPENAI_TOP_P=1` for BOTH runs to minimize
+  sampling variance, and clear the AI cache before each run. Temp-0 scores are only
+  comparable to other temp-0 scores — not to the historical temp-0.5 baseline.

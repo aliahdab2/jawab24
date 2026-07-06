@@ -4,12 +4,42 @@ import { conversationsService } from '../services/conversations';
 import { pagesService, isPageDisconnected } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
+import { whatsappService } from '../services/whatsapp';
 import { workspaceSettingsService } from '../services/workspaceSettings';
 import { promoteDelayedJobs } from '../lib/replyQueue';
 import { parseInboxFilters, parseLimit } from '../lib/queryParsers';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { DmSendError, classifyDmError, type FbPlatform } from '../utils/fbGraphErrors';
 import { AppError } from '../utils/errors';
+
+type DmPlatform = FbPlatform | 'whatsapp';
+
+/** Resolve the three-way DM platform from a message/conversation row. */
+function resolveDmPlatform(platform: string | null | undefined): DmPlatform {
+    if (platform === 'instagram') return 'instagram';
+    if (platform === 'whatsapp') return 'whatsapp';
+    return 'facebook';
+}
+
+/** Meta error code: outside the 24h customer-service window (re-engagement needed). */
+const META_WA_WINDOW_EXPIRED = 131047;
+
+/** Map a WhatsApp send failure to an AppError. whatsappService throws a
+ *  sanitized WhatsAppApiError (metaCode + message, no secrets); fall back to the
+ *  raw axios shape for safety. */
+function mapWhatsAppSendError(error: unknown): AppError {
+    const e = error as { metaCode?: number; message?: string; response?: { data?: { error?: { code?: number; message?: string } } } };
+    const code = e.metaCode ?? e.response?.data?.error?.code;
+    if (code === META_WA_WINDOW_EXPIRED) {
+        return new AppError(
+            'More than 24 hours have passed since the customer\'s last message — WhatsApp only allows template messages now.',
+            409,
+            'DM_WINDOW_EXPIRED'
+        );
+    }
+    const detail = e.message || e.response?.data?.error?.message || 'Failed to send WhatsApp message';
+    return new AppError(detail, 502, 'DM_UNKNOWN', false);
+}
 
 // Map a classified DM-send failure to an AppError with a proper status code.
 // 4xx for expected conditions (won't flood Sentry); 5xx for real faults on our side.
@@ -46,8 +76,8 @@ function mapDmErrorToAppError(error: DmSendError, platform: FbPlatform): AppErro
  */
 async function sendAndStoreManualReply(opts: {
     workspaceId: string;
-    page: { accessToken: string; instagramAccountId: string | null };
-    platform: FbPlatform;
+    page: { accessToken: string; instagramAccountId: string | null; whatsappPhoneNumberId?: string | null; whatsappAccessToken?: string | null };
+    platform: DmPlatform;
     pageId: string;
     recipientId: string;
     replyText: string;
@@ -55,9 +85,24 @@ async function sendAndStoreManualReply(opts: {
 }) {
     const { workspaceId, page, platform, pageId, recipientId, replyText, clientMessageId } = opts;
 
-    // Empty accessToken is the disconnect sentinel set by pages sync / tokenRefresh
-    // when FB revokes the page. Merchant must reconnect.
-    if (isPageDisconnected(page)) {
+    // Disconnect guard is per-channel: WhatsApp sends authenticate with the WABA
+    // token, so a blanked Facebook token (or a WhatsApp-only page, where it is
+    // always '') must not block them — and vice versa.
+    let waPhoneNumberId = '';
+    let waAccessToken = '';
+    if (platform === 'whatsapp') {
+        if (!page.whatsappPhoneNumberId || !page.whatsappAccessToken) {
+            throw new AppError(
+                'WhatsApp is disconnected for this page. Please reconnect the number to resume replies.',
+                409,
+                'WHATSAPP_DISCONNECTED'
+            );
+        }
+        waPhoneNumberId = page.whatsappPhoneNumberId;
+        waAccessToken = page.whatsappAccessToken;
+    } else if (isPageDisconnected(page)) {
+        // Empty accessToken is the disconnect sentinel set by pages sync / tokenRefresh
+        // when FB revokes the page. Merchant must reconnect.
         throw new AppError(
             'This page is disconnected. Please reconnect via Facebook to resume replies.',
             409,
@@ -66,7 +111,14 @@ async function sendAndStoreManualReply(opts: {
     }
 
     try {
-        if (platform === 'instagram' && page.instagramAccountId) {
+        if (platform === 'whatsapp') {
+            await whatsappService.sendTextMessage(
+                waPhoneNumberId,
+                recipientId,
+                replyText,
+                waAccessToken
+            );
+        } else if (platform === 'instagram' && page.instagramAccountId) {
             await instagramService.sendDirectMessage(
                 page.instagramAccountId,
                 recipientId,
@@ -81,6 +133,9 @@ async function sendAndStoreManualReply(opts: {
             );
         }
     } catch (error) {
+        if (platform === 'whatsapp') {
+            throw mapWhatsAppSendError(error);
+        }
         if (error instanceof DmSendError) {
             throw mapDmErrorToAppError(error, platform);
         }
@@ -287,9 +342,9 @@ export class MessagesController {
             }
         }
 
-        // 3. Send via FB/IG (with classified error mapping) and store the outgoing row.
+        // 3. Send via FB/IG/WhatsApp (with classified error mapping) and store the outgoing row.
         const trimmed = replyText.trim();
-        const platform: FbPlatform = message.platform === 'instagram' ? 'instagram' : 'facebook';
+        const platform = resolveDmPlatform(message.platform);
         const outgoing = await sendAndStoreManualReply({
             workspaceId: req.workspaceId,
             page,
@@ -366,10 +421,10 @@ export class MessagesController {
             }
         }
 
-        // 4. Send via FB/IG (with classified error mapping) and store the outgoing row.
+        // 4. Send via FB/IG/WhatsApp (with classified error mapping) and store the outgoing row.
         // Platform comes from the conversation row, not a message. No markAsReplied —
         // there is no incoming row to mark.
-        const platform: FbPlatform = conversation.platform === 'instagram' ? 'instagram' : 'facebook';
+        const platform = resolveDmPlatform(conversation.platform);
         const outgoing = await sendAndStoreManualReply({
             workspaceId: req.workspaceId,
             page,

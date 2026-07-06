@@ -54,6 +54,10 @@ interface TestCase {
         fieldsHave?: string[];     // these keys MUST appear
         fieldsLack?: string[];     // these keys MUST NOT appear (hallucination guard)
         valueContainsForKey?: { key: string; substrings: string[] }[]; // value sanity check
+        // Key-agnostic value checks — field keys are AI-generated and vary
+        // (size vs measurements), so recency/promo-echo cases assert on values.
+        anyFieldValueContains?: string[]; // each substring must appear in at least one field value
+        noFieldValueContains?: string[];  // no field value may contain any of these (promo-echo/stale-value guard)
     };
 }
 
@@ -296,6 +300,135 @@ const TESTS: TestCase[] = [
             fieldsLack: ['email'], // never shared, must not be hallucinated
         },
     },
+    // ─── Cases 16-20: structural clones of real prod failures (2026-07-02
+    //     nourvacare investigation, fabricated identities). 16-18 model the
+    //     conversation AS THE RE-EXTRACTION PATH SEES IT (full history incl.
+    //     post-phone messages); 19 is the passing control; 20 proves the new
+    //     prompt rules generalize beyond stores. ───
+    {
+        id: 16,
+        name: 'AR — recency: vague size corrected to concrete after phone (store)',
+        rawPhone: '0910000016',
+        conversation: [
+            'Customer: أريد حجز العرض قبل نفاذ الكمية',
+            'Agent: أهلاً بيك! أرسلي لي الاسم ورقم الهاتف والعنوان والمقاس باش نحجزلك',
+            'Customer: 0910000016',
+            'Agent: شكراً لمشاركتك رقمك، أرسلي لي الاسم والمقاس عشان نكمل تجهيز طلبك',
+            'Customer: أستخدم مقاسًا أصغر بكثير',
+            'Agent: فهمت عليك، أرسلي المقاس اللي يناسبك بالضبط عشان نعدل طلبك',
+            'Customer: المقاس 38، والاسم سلمى، العنوان شارع الجمهورية مصراتة',
+        ].join('\n'),
+        expected: {
+            phone: '0910000016',
+            summaryLang: 'ar',
+            summaryNotMeta: true,
+            fieldsHave: ['name'],
+            valueContainsForKey: [{ key: 'name', substrings: ['سلمى'] }],
+            anyFieldValueContains: ['38'],          // the FINAL concrete size
+            noFieldValueContains: ['أصغر بكثير'],   // the stale vague statement must not survive
+        },
+    },
+    {
+        id: 17,
+        name: 'AR — promo-echo: stock limit echoed by customer AND mis-confirmed by Agent (store)',
+        rawPhone: '0910000017',
+        // Mirrors the real prod transcript shape: duplicated ad-click openers,
+        // the stock-limit promo, the customer echoing it, and — the hard part —
+        // the Agent itself wrongly confirming "the offer includes 50 pieces".
+        conversation: [
+            'Customer: أريد حجز الحزمة الفاخرة (عرض 1+1 المجاني) قبل نفاذ الـ 50 قطعة 🎁',
+            'Customer: أريد حجز الحزمة الفاخرة (عرض 1+1 المجاني) قبل نفاذ الـ 50 قطعة 🎁',
+            'Agent: يا هلا! العرض الفاخر (1+1 مجاناً) متوفر حالياً 🚚 أرسلي لي الاسم - رقم الهاتف - العنوان - المقاس (A:34 | B:36 | C:38 | D:40) باش نحجزلك',
+            'Customer: أعيش في بنغازي',
+            'Agent: التوصيل مجاني لكل المدن، وبنغازي من ضمنهم 🚚',
+            'Customer: بكم يمكنني الحصول على اثنين؟',
+            'Agent: باقة المناسبات المتكاملة (1+1 مجاناً + الملحقات) السعر الآن 160 دينار فقط بدلاً من 320',
+            'Customer: كم عدد الموجودين بالداخل؟',
+            'Agent: ما عنديش رقم محدد للمخزون، لكن العرض محدود لـ 50 قطعة فقط ⏳',
+            'Customer: 50 قطعة مقابل 160',
+            'Agent: بالضبط! العرض يشمل 50 قطعة بسعر 160 دينار فقط مع توصيل مجاني 🎁',
+            'Customer: حسناً، لا مشكلة، سأرسل رقمي الآن.',
+            'Agent: تدللي! أرسلي لي الاسم - العنوان - رقم التليفون - المقاس عشان نثبت طلبك',
+            'Customer: 0910000017',
+            'Customer: سعاد',
+            'Customer: أستخدم مقاسًا أصغر بكثير',
+            'Customer: شارع الوادي الحدائق',
+        ].join('\n'),
+        expected: {
+            phone: '0910000017',
+            summaryLang: 'ar',
+            summaryNotMeta: true,
+            fieldsHave: ['name'],
+            valueContainsForKey: [{ key: 'name', substrings: ['سعاد'] }],
+            // She ordered the 1+1 offer (2 pieces); "50 قطعة" is the stock-limit
+            // promo echoed back and even mis-confirmed by the Agent — it must
+            // NOT become her order quantity.
+            noFieldValueContains: ['50'],
+        },
+    },
+    {
+        id: 18,
+        name: 'AR — late details: recipient name + address arrive after phone (store)',
+        rawPhone: '0910000018',
+        conversation: [
+            'Customer: ممكن الحجز',
+            'Customer: 0910000018',
+            'Agent: تم استلام رقمك، أرسلي لي اسم المستلم والعنوان والمقاسات باش نجهز الطلب',
+            'Customer: لو معاه واحد تاني خليه 38',
+            'Customer: اسم المستلم أحمد الصالح، العنوان زليتن، المقاس 40',
+            'Agent: تم اعتماد طلبك! فريق الشحن حيتواصل معاك',
+        ].join('\n'),
+        expected: {
+            phone: '0910000018',
+            summaryLang: 'ar',
+            summaryNotMeta: true,
+            // Key-agnostic: the model may emit `name` or (more precisely)
+            // `recipient_name` — what matters is the late-arriving recipient
+            // name and order details are all on the card.
+            anyFieldValueContains: ['أحمد', 'زليتن', '40', '38'],
+        },
+    },
+    {
+        id: 19,
+        name: 'EN — control: name/address/size given around the phone (store)',
+        rawPhone: '+218910000019',
+        conversation: [
+            'Customer: How is delivery to Tripoli?',
+            'Agent: Free delivery! Just send me your name, address, phone number, and size to get started',
+            'Customer: Name: Grace\nPhone: +218910000019',
+            'Agent: Just missing your address and size to complete your order',
+            'Customer: +218910000019\nGrace\nIndustrial Road Tripoli',
+            'Customer: Size:38',
+        ].join('\n'),
+        expected: {
+            phone: '+218910000019',
+            summaryNotMeta: true,
+            fieldsHave: ['name'],
+            valueContainsForKey: [{ key: 'name', substrings: ['Grace'] }],
+            anyFieldValueContains: ['38', 'Tripoli'],
+        },
+    },
+    {
+        id: 20,
+        name: 'AR — generalization: course switch + discount echo (institute)',
+        rawPhone: '0910000021',
+        conversation: [
+            'Customer: أبي أعرف عن دورة الإنجليزي',
+            'Agent: عندنا دورة إنجليزي تبدأ الشهر الجاي، وفيه خصم خاص لأول المتسجلين',
+            'Customer: طيب وعندكم دورة PMP؟',
+            'Agent: نعم متوفرة أونلاين وتبدأ بعد أسبوعين',
+            'Customer: خلاص أبي أسجل في دورة PMP، الخصم الخاص شامل لها صح؟ رقمي 0910000021 واسمي ليلى',
+        ].join('\n'),
+        expected: {
+            phone: '0910000021',
+            summaryLang: 'ar',
+            summaryNotMeta: true,
+            fieldsHave: ['name'],
+            valueContainsForKey: [{ key: 'name', substrings: ['ليلى'] }],
+            anyFieldValueContains: ['pmp'],       // the FINAL course choice
+            noFieldValueContains: ['إنجليزي'],    // the abandoned earlier choice must not survive
+        },
+    },
 ];
 
 const HAS_ARABIC = /[؀-ۿ]/;
@@ -351,6 +484,22 @@ function checkResult(t: TestCase, j: ExtractedJson): { ok: boolean; failures: st
             const v = (f.value || '').toLowerCase();
             const hit = substrings.some(s => v.includes(s.toLowerCase()));
             if (!hit) failures.push(`valueContainsForKey[${key}]: value "${f.value}" missing any of [${substrings.join('|')}]`);
+        }
+    }
+    const fieldValues = (j.fields ?? []).map(f => (f.value || '').toLowerCase());
+    if (exp.anyFieldValueContains) {
+        for (const s of exp.anyFieldValueContains) {
+            if (!fieldValues.some(v => v.includes(s.toLowerCase()))) {
+                failures.push(`anyFieldValueContains: "${s}" not found in any field value (values: ${fieldValues.join(' | ') || 'none'})`);
+            }
+        }
+    }
+    if (exp.noFieldValueContains) {
+        for (const s of exp.noFieldValueContains) {
+            const offender = (j.fields ?? []).find(f => (f.value || '').toLowerCase().includes(s.toLowerCase()));
+            if (offender) {
+                failures.push(`noFieldValueContains: forbidden "${s}" found in field "${offender.key}" = "${offender.value}"`);
+            }
         }
     }
 

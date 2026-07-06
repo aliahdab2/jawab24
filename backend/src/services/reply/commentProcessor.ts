@@ -9,7 +9,7 @@ import { resolvePostReplyRule, matchPostReplyRule, evaluateAnyCommentGuard } fro
 import { preprocessCommentText } from './commentPreprocess';
 import { classifyFallbackIntent } from './fallbackClassifier';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
-import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag } from '../../utils/commentText';
+import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag, isContentFree } from '../../utils/commentText';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
@@ -100,6 +100,14 @@ export class CommentProcessor {
     ): Promise<CommentResult> {
         const platform = adapter.platform;
         const pipeline = `${platform}_comment` as Pipeline;
+
+        // Per-(page, post, sender) debounce slot. Claimed atomically before reply
+        // generation (see step 3ab) and released in the outer `finally` on any
+        // outcome that did NOT send a reply — so a BullMQ retry or the sender's
+        // next genuine comment isn't wrongly debounced. A committed successful
+        // send leaves `replyCommitted` true so the slot is kept for the window.
+        let releaseDebounceSlot: (() => Promise<void>) | null = null;
+        let replyCommitted = false;
 
         try {
             // 1. Validate page
@@ -239,39 +247,50 @@ export class CommentProcessor {
                 return { success: false, commentId: platformCommentId, error: 'Subscription inactive' };
             }
 
-            // 3ab. Per-(page, post, sender) debounce — silently skip when this
-            // commenter already received an auto-reply on this post inside the
-            // cooldown window. Catches accidental double-comments and back-to-back
-            // duplicates (e.g. "..", "...") that would otherwise each fire a fresh
-            // AI reply. Distinct from the per-comment idempotency lock, which only
-            // dedupes the same comment_id. Distinct from the rate limiter, which
-            // counts comments per sender across all posts. Skipped when fromId is
-            // missing (pre-registered fan posts) — there's nothing to key on.
-            // Applies to AI, trigger, and template paths uniformly.
-            if (fromId && isCommentsEnabled && await commentDebounce.isCoolingDown(page.id, content.id, fromId)) {
-                const { comment, isNew } = await adapter.storeComment(
-                    content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags,
-                );
-                // True webhook duplicate for the SAME comment_id (not a separate
-                // back-to-back comment): defer to the existing already_replied
-                // path so observability stays clean — duplicate webhooks should
-                // not surface as "debounced", they were never going to reply.
-                if (!isNew && (comment.replied || comment.needsAttention)) {
-                    pipelineMetrics.record(pipeline, 'already_replied');
-                    return { success: false, commentId: comment.id, error: 'Comment already replied' };
+            // 3ab. Per-(page, post, sender) debounce — atomically CLAIM the reply
+            // slot for this commenter on this post. If the slot is already held,
+            // this commenter already received (or is mid-flight receiving) an
+            // auto-reply on this post inside the window, so silently skip. Catches
+            // accidental double-comments and back-to-back duplicates (e.g. "..",
+            // "...") that would otherwise each fire a fresh AI reply. Claiming
+            // atomically (not arming after send) closes the race where a burst of
+            // comments all passed a read-only check before any armed the key.
+            // Distinct from the per-comment idempotency lock, which only dedupes
+            // the same comment_id. Distinct from the rate limiter, which counts
+            // comments per sender across all posts. Skipped when fromId is missing
+            // (pre-registered fan posts) — there's nothing to key on. Applies to
+            // AI, trigger, and template paths uniformly. The slot is released in
+            // the outer `finally` unless a reply was actually sent.
+            if (fromId && isCommentsEnabled) {
+                const senderId = fromId;
+                const debounceToken = await commentDebounce.tryAcquire(page.id, content.id, senderId);
+                if (!debounceToken) {
+                    const { comment, isNew } = await adapter.storeComment(
+                        content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags,
+                    );
+                    // True webhook duplicate for the SAME comment_id (not a separate
+                    // back-to-back comment): defer to the existing already_replied
+                    // path so observability stays clean — duplicate webhooks should
+                    // not surface as "debounced", they were never going to reply.
+                    if (!isNew && (comment.replied || comment.needsAttention)) {
+                        pipelineMetrics.record(pipeline, 'already_replied');
+                        return { success: false, commentId: comment.id, error: 'Comment already replied' };
+                    }
+                    publishSSEEvent(userId, 'comment:received', {
+                        commentId: comment.id,
+                        pageId: page.id,
+                        fromName: fromName ?? null,
+                        message: commentMessage,
+                    });
+                    await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'debounced', 'recent_reply_to_same_sender_on_post');
+                    pipelineMetrics.record(pipeline, 'debounce_skipped');
+                    this.logger.info(`[${platform}] Comment debounced — same sender replied to on this post within cooldown`, {
+                        commentId: comment.id, platformCommentId, pageId: page.id, postId: content.id, fromId,
+                    });
+                    return { success: true, commentId: comment.id };
                 }
-                publishSSEEvent(userId, 'comment:received', {
-                    commentId: comment.id,
-                    pageId: page.id,
-                    fromName: fromName ?? null,
-                    message: commentMessage,
-                });
-                await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'debounced', 'recent_reply_to_same_sender_on_post');
-                pipelineMetrics.record(pipeline, 'debounce_skipped');
-                this.logger.info(`[${platform}] Comment debounced — same sender replied to on this post within cooldown`, {
-                    commentId: comment.id, platformCommentId, pageId: page.id, postId: content.id, fromId,
-                });
-                return { success: true, commentId: comment.id };
+                // Won the slot — release it on any exit that doesn't send a reply.
+                releaseDebounceSlot = () => commentDebounce.release(page.id, content.id, senderId, debounceToken);
             }
 
             // 3b. Post Reply trigger — fires before the template/AI pipeline.
@@ -410,6 +429,10 @@ export class CommentProcessor {
                                 triggerKeyword: match.keyword ?? undefined,
                                 triggerType: rule.triggerType,
                             });
+                            // Keep the debounce slot only if the reply actually went out
+                            // (skip/flag/pause/cap/failed-send exits leave replyCommitted
+                            // false → the shared release below frees the slot).
+                            replyCommitted = result.success;
                             // Count a successful any-comment send toward the per-post cap.
                             if (rule.triggerType === 'all' && result.success) {
                                 await postReplyCap.increment(page.id, content.id);
@@ -571,8 +594,15 @@ export class CommentProcessor {
                 generatedText = PRICE_FALLBACK[lang];
             }
 
-            // 8c. Skip reply — silent for spam/tags, flagged for offensive content
-            if (shouldSkipReply(flagReason, aiIntent)) {
+            // 8c. Skip reply — silent for spam/tags, flagged for offensive content.
+            // Exception: never SPAM-skip a content-free comment on a post — "٠٠٠" / "."
+            // is the customer following the post's CTA (in any reply mode). The
+            // rewriteContentFreeCta input fix normally prevents the spam verdict; this
+            // is the deterministic backstop so a model quirk can't silently drop a
+            // solicited lead (eval #324, لامار الشام regression). OFFENSIVE is NOT
+            // bypassed — shouldSilentlySkip is true only for SPAM_OR_IRRELEVANT.
+            const solicitedCta = !!content.message && isContentFree(commentMessage.trim());
+            if (shouldSkipReply(flagReason, aiIntent) && !(solicitedCta && shouldSilentlySkip(aiIntent))) {
                 if (shouldSilentlySkip(aiIntent)) {
                     // Spam/irrelevant (tagging someone, emoji-only, etc.) — no flag, no
                     // notification. `friend_tag` skips are handled upstream in step 3a, so
@@ -679,7 +709,7 @@ export class CommentProcessor {
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }
 
-            return this.sendAndFinalize({
+            const finalizeResult = await this.sendAndFinalize({
                 adapter, platform, pipeline,
                 pageId: page.id, userId, workspaceId,
                 comment, replyText, replyMethod, commentMessage,
@@ -691,6 +721,9 @@ export class CommentProcessor {
                 needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
                 confidence,
             });
+            // Keep the debounce slot only if the reply actually went out.
+            replyCommitted = finalizeResult.success;
+            return finalizeResult;
 
             } finally {
                 await releaseReplyLock(`comment:${page.id}`, platformCommentId, lockToken).catch(() => { /* TTL will auto-expire */ });
@@ -776,6 +809,16 @@ export class CommentProcessor {
                 commentId: platformCommentId,
                 error: error instanceof Error ? error.message : 'Unknown error',
             };
+        } finally {
+            // Release the debounce slot if we claimed it but did NOT send a reply
+            // — skips (spam/rate-limit/held), no-reply, send failure, and the
+            // transient-error rethrow that triggers a BullMQ retry. Without this,
+            // a retried comment would hit its own held key and be silently
+            // debounced, dropping the reply. A committed successful send keeps the
+            // slot for the window so genuine back-to-back duplicates stay suppressed.
+            if (releaseDebounceSlot && !replyCommitted) {
+                await releaseDebounceSlot().catch(() => { /* fail-open; TTL expires the slot */ });
+            }
         }
     }
 
@@ -917,13 +960,10 @@ export class CommentProcessor {
         // Cheap (UPDATE guarded by counter > 0 inside the helper).
         void recordSendSuccess(pageId);
 
-        // Arm the per-(page, post, sender) cooldown so back-to-back comments
-        // from the same sender on the same post don't each fire a fresh reply.
-        // See step 3ab in processComment(). Skipped when fromId is missing
-        // (pre-registered fan posts) — nothing to key on. Fail-open inside arm().
-        if (fromId) {
-            await commentDebounce.arm(pageId, contentId, fromId);
-        }
+        // NB: the per-(page, post, sender) debounce slot is claimed atomically at
+        // the start of processComment (step 3ab), not armed here. A successful send
+        // leaves the slot in place (processComment keeps it when replyCommitted is
+        // true); non-send outcomes release it in the outer finally.
 
         if (replyMethod === 'ai') {
             publishSSEEvent(userId, 'usage:updated', { aiRepliesUsed: -1 });

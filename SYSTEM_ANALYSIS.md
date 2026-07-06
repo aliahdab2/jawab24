@@ -68,7 +68,7 @@ Jawab24 is a **monorepo** with 3 services + 1 shared package:
 **External Integrations:**
 - Facebook Graph API (comments + DMs) — Live (App ID: 774211662298446)
 - Instagram Graph API (comments + DMs) — Live (all permissions approved 2026-04-07)
-- WhatsApp Cloud API (DMs) — backend complete; Meta Tech Provider Embedded Signup approval pending
+- WhatsApp Cloud API (DMs) — backend + connect flow (Embedded Signup) + voice/media + WhatsApp-only cards (no Facebook page; also = multi-number, one card per number w/ own Business Info) + manual inbox replies complete; awaiting Meta Embedded Signup access + `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` config to go live. UI: the Pages screen is now "Channels" (قنوات التواصل)
 - Shopify API (products + policies)
 - Salla API (products + policies)
 - Zid API (products + policies — Saudi Arabia)
@@ -90,7 +90,7 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 **التكاملات الخارجية:**
 - Facebook Graph API (التعليقات + الرسائل المباشرة) — مباشر (App ID: 774211662298446)
 - Instagram Graph API (التعليقات + الرسائل المباشرة) — مباشر (جميع الصلاحيات مُوافَق عليها 2026-04-07)
-- WhatsApp Cloud API (الرسائل المباشرة) — الكود مكتمل؛ موافقة Meta Tech Provider Embedded Signup قيد الانتظار
+- WhatsApp Cloud API (الرسائل المباشرة) — الكود مكتمل (الربط عبر Embedded Signup + الرسائل الصوتية والوسائط + بطاقات واتساب مستقلة بدون صفحة فيسبوك = دعم أكثر من رقم، لكل رقم معلومات نشاطه + الرد اليدوي من صندوق الوارد)؛ بانتظار موافقة Meta على Embedded Signup وإعداد `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`. الواجهة: شاشة الصفحات أصبحت «قنوات التواصل»
 - Shopify API (المنتجات + السياسات)
 - Salla API (المنتجات + السياسات)
 - Zid API (المنتجات + السياسات — المملكة العربية السعودية)
@@ -784,6 +784,8 @@ After OpenAI returns, the system runs **6 automated checks**:
 | **v21** | 2026-03-15 | Prompt tuning for eval accuracy and edge case handling. Workspace-scoped context. | 99.6% |
 | **v22–v26** | 2026-03-29 – 2026-04-03 | Iterative prompt refinements and edge case tuning. | 99.6% (last measured at v19) |
 | **v27–v30** | 2026-04-03 – 2026-04-15 | Continued prompt refinements, edge case coverage, and tuning. | 97.6% (226 test cases) |
+| **v31–v50** | 2026-04-15 – 2026-06-28 | Iterative refinements (see the per-version comments above `PROMPT_VERSION` in `packages/shared/src/index.ts`): dialect mirroring, stale-date guard, comment-on-post context, KB prompt-cache hoist, anti-robotic sign-off rule. | ~96–97% |
+| **v51** | 2026-07-04 | Gender-aware Arabic addressing, scoped to **Arabic DMs only** (per-call block under `language === 'ar' && isDM`, NOT the shared static prefix — every other language/comment/business gets a v50-identical prompt). Name surfaced + `ARABIC GENDER` directive matching masculine/feminine from name + self-reference, neutral when unclear. Exact cache name-bucketed for DMs; semantic cache bypassed for DMs. See [`DECISIONS.md` D-015](DECISIONS.md). | no-regression vs v50 |
 
 ### Fallback Classifier (when AI Worker is down)
 
@@ -1218,13 +1220,14 @@ Merchants can extract text from documents and images to populate KB content:
 | **UX** | Paperclip icon next to mic icon in each KB section + onboarding |
 | **Flow** | Upload → extract text → append to textarea → user reviews → save |
 
-### Incoming Voice Messages (Customer Side)
+### Incoming Voice & Image Messages (Customer Side)
 
-When a customer sends a voice/audio message via Facebook Messenger or Instagram:
+When a customer sends a voice/audio or image message via Facebook Messenger, Instagram, or WhatsApp:
 - **Handler**: `backend/src/services/reply/nonTextHandler.ts`
-- **Flow**: Audio URL → GPT-4o-mini-transcribe → transcribed text → fed into AI reply pipeline (same as text message)
-- **Fallback**: If transcription fails or message is non-audio (image, video, sticker) → store placeholder text + send nudge reply (e.g. "Please send a text message")
-- **Non-text types handled**: voice, image, video, file, sticker
+- **Voice flow**: Audio → GPT-4o-mini-transcribe → transcribed text → fed into AI reply pipeline (same as text message)
+- **Image flow**: Image → GPT-4.1-mini vision description (`imageUnderstanding.ts`, `image_understanding` cost pipeline) → description stored/enqueued as `[صورة: …]` / `[Image: …]` (marker protocol shared via `@jawab24/shared` `imageMessage.ts`; drift-guarded against the i18n template) → fed into AI reply pipeline (describe-then-enqueue, mirrors voice). The ai-worker injects a per-call IMAGE MESSAGE prompt directive when the marker is present (and only then — non-image prompts stay byte-identical, no PROMPT_VERSION bump), so a bare screenshot of the merchant's own product/ad is answered as an implicit "available?/price?" inquiry from the KB instead of acknowledged; receipts route to low-confidence human follow-up. Image bytes are **never stored** — only the text description. **No per-merchant toggle** (default-on, like voice); gated by the `IMAGE_UNDERSTANDING_ENABLED` env kill switch + a per-plan daily cap via shared `lib/dailyCap`: free 3 / starter 5 / business 40 / pro 75 / scale-20k 150 / scale-30k 200, **doubled when the merchant has an active top-up (PAYG) balance**. Cost ≈ $0.0015/image (~$2–3/mo).
+- **Fallback**: If transcription/vision fails or is gated, or the message is video/file/sticker → store placeholder + send nudge reply. Out-of-domain images (e.g. a legal document) are described factually and flagged by the existing low-confidence/needs-attention guard rather than answered.
+- **Non-text types handled**: voice (transcribed), image (vision), video/file (nudge), sticker (silent)
 
 ### RAG Modes
 
@@ -1940,8 +1943,17 @@ Normal operation: CLOSED
 | **Lock contention** | `lock_contention` > 50 in 5 min | Medium | Workers fighting over same sender |
 | **Usage log drops** | `ai_usage_log.dropped` > 0 | Low | DB write issues (cost tracking gap) |
 | **Cache hit rate low** | Exact cache hits < 30% of total | Low | Check if KB/products changed a lot |
-| **Queue backlog** | BullMQ waiting > 10,000 jobs | Medium | Worker concurrency too low or stuck |
+| **Queue backlog** ✅ SHIPPED 2026-07-04 | `alert:reply_queue_backlog`: waiting ≥ 25 jobs OR p95 queue-wait ≥ 15s (15-min window), on 2 consecutive 60s checks; 1h SET-NX cooldown → Sentry + admin email | High | Raise `REPLY_WORKER_CONCURRENCY` first; per-channel queue split only if persistent (D-016) |
 | **Held replies pile up** | `held_low_confidence` > 100/day | Low | KB may need updating (too many unknowns) |
+
+### Reply-Queue Wait Metric (shipped 2026-07-04)
+
+The instrument for the D-016 scaling trigger ("sustained queue wait-time"):
+
+- **Sample**: the reply worker records `queueWaitMs = pickup − enqueue − intentional delay` per job (first attempt only — retries measure backoff, not backlog). Stored newest-first in the Redis LIST `metrics:queue_wait:reply` (`ts:waitMs` entries, capped at 2,000), fire-and-forget.
+- **Surface**: `GET /analytics/system-health` (admin-guarded) returns a `queue` block — live BullMQ depth (waiting/active/delayed/failed via `getQueueStats()`) + p50/p95/max wait over the last 15 min; rendered as the "Reply Queue" card on `/admin/observability` (polls every 60s).
+- **Evaluate**: `services/replyQueueHealth.ts` cron (every 60s, `config.replyQueueHealth`) fires the Queue-backlog alert above. Alert dispatch goes through the shared `services/adminAlerts.ts` helper (SET-NX dedup + Sentry + admin email), also used by the AI cost alerts.
+- **Baseline** (measured 2026-07-04, prod): p50 wait 2 ms, p95 6 ms, worst 2.1 s in micro-bursts; ~4% worker utilization at concurrency 8 (~115 jobs/min sustained capacity).
 
 ### Structured Log Events: Complete Reference
 
@@ -1963,9 +1975,9 @@ Every pipeline step is timed with a lap timer:
 #### Reply Worker Lifecycle
 
 ```
-[ReplyWorker] Starting job     {jobId, jobType, requestId, attemptNumber}
+[ReplyWorker] Starting job     {jobId, jobType, requestId, attemptNumber, queueWaitMs}
 [ReplyWorker] Processing ...   {jobId, requestId, pageId, commentId|messageId}
-[ReplyWorker] Job completed    {jobId, jobType, duration, replyMethod}
+[ReplyWorker] Job completed    {jobId, jobType, duration, queueWaitMs, replyMethod}
 [ReplyWorker] Job failed       {jobId, jobType, duration, error, attemptsMade}
 [ReplyWorker] Job stalled      {jobId}  ← watch for these!
 ```
@@ -2004,7 +2016,7 @@ The `analytics` service computes these from live tables (30-day window):
 | ~~No frontend RUM~~ | `@sentry/nextjs` with `tracesSampleRate: 0.1` in `sentry.client.config.ts` (LCP, FCP, CLS, route changes) |
 | ~~No distributed tracing~~ | Both backend + AI worker use `@sentry/node` v10+ with tracing; trace headers auto-propagated on HTTP calls |
 
-**Admin dashboard**: `/admin/observability` shows service status (DB/Redis/AI circuit latency), process metrics (RSS, heap, uptime), and external API latency table with p50/p95/p99.
+**Admin dashboard**: `/admin/observability` shows service status (DB/Redis/AI circuit latency), reply-queue health (waiting/active/delayed depth + queue-wait p50/p95/max over 15 min), process metrics (RSS, heap, uptime), and external API latency table with p50/p95/p99.
 
 **Merchant-facing analytics** (shipped 2026-04-25): `/ecommerce-analytics` page + a summary widget inside `ConnectedStoreCard` on the integrations page. Aggregates from `customerNotificationsLog` + `messages` over a 30d/90d window. Surfaces revenue recovered (approximate — phone-window matching), carts recovered, AI reply count, notification funnel (delivered/failed/pending) and per-type breakdown. Channel-keyed funnel structure (`{ total, byChannel }`) is forward-compatible with WhatsApp + DM channels when those land. Endpoint: `GET /api/ecommerce-analytics/:storeId?range=30d|90d`. Code: `services/ecommerceAnalytics.ts` + `controllers/ecommerceAnalytics.ts` + `components/analytics/`.
 
@@ -2349,7 +2361,7 @@ Internal **ops-only** dashboard — system health, not cost (all AI cost visibil
 The single home for AI cost visibility and quota-runway monitoring (built to prevent a repeat of the 2026-06-28 `insufficient_quota` outage):
 
 - **Route**: `/admin/ai-cost` (protected, admin+ access)
-- **Consumption**: cost by feature (pipeline), by model, by intent, plus a daily-spend trend — with a billed-vs-cached split and prompt-cache savings, from `ai_usage_log` via `getGlobalAiCostByPipeline`
+- **Consumption**: cost by feature (pipeline), by model, by intent, plus a daily-spend trend — with a billed-vs-cached split, a per-pipeline hit-rate column, and prompt-cache savings, from `ai_usage_log` via `getGlobalAiCostByPipeline`. The headline "Reply cache hit rate" card is scoped to `REPLY_PIPELINES` (`comment_reply` + `dm_reply`) — the only cacheable traffic; the blended all-pipeline rate counts never-cacheable calls (embeddings, translation, …) and once made a healthy 54% comment-reply cache read as "12%"
 - **OpenAI billing (authoritative)**: pulled daily from the OpenAI org **Costs API** into `ai_cost_snapshots`, split prod vs eval/dev by API key, with a reconciliation view against `ai_usage_log` (prod key matched the DB within 0.6%)
 - **Credit runway**: admin-entered balance anchor (OpenAI has no balance API) → remaining ÷ rolling org burn; surfaced by a `AiCreditRunwayBanner` (not dismissible at critical)
 - **Proactive alerts**: throttled admin email + Sentry on credit-low (`alert:openai_credit_low`) and spend-spike (`alert:openai_spend_spike`). OpenAI **auto-recharge** (enabled in the OpenAI dashboard) is the primary outage protection; these alerts are the backstop
@@ -2413,6 +2425,8 @@ The single home for AI cost visibility and quota-runway monitoring (built to pre
 
 Automatically captures structured lead records whenever a customer shares a phone number in an AI conversation (DM or comment). AI analyzes the full conversation to extract dynamic, context-specific fields — e.g., course of interest for an institute, specialty needed for a clinic.
 
+**Follow-up re-extraction (July 2026):** customers naturally send the phone first and the order details after (final size, recipient name, address). While a DM-sourced lead is still `new` and within `LEAD_REEXTRACT_WINDOW_HOURS` (default 24h, `0` = kill-switch), each further customer message — including one whose only phone-like number fails the customer-phone gate (e.g. the merchant's own quoted line) — re-runs the extraction over the full history and **merges** the result into the card (`mergeExtractedData`: fresh value wins per field key, existing keys are never dropped, phone/status/follow-up flags never touched; the UPDATE re-checks `status='new'` so a card the merchant flips mid-call is never mutated). **Both** card-write paths merge: the phone-re-share upsert uses the same semantics, so an over-limit or AI-failed re-share can never wipe a populated card, and a `completed` card is never demoted to `pending`. Bounded by a 3-min per-lead Redis cooldown, an `extractionAttempts` cap of 10 (a **shared counter across all extraction runs for the lead** — first capture, phone re-shares, and follow-up re-reads all increment it), and a separate 150/day workspace budget so re-extraction can never starve first-time capture. Root cause fixed: 2026-07-02 Nourva orders shipped from cards with a stale size / missing recipient name because extraction ran exactly once, at the phone message.
+
 ### Pipeline Position
 
 Runs fire-and-forget after `reply_sent` in both `messageProcessor.ts` and `commentProcessor.ts`. Never blocks the reply pipeline.
@@ -2457,9 +2471,11 @@ The three main statuses are fixed (the system depends on `new` for counters/dige
 
 `/leads` page — page selector, status filter tabs (All/New/Contacted/Converted), dynamic table columns from `extractedData.fields`, CSV export (incl. sub-stage + custom-field columns), real-time SSE updates via `lead:captured` event, new-leads badge in sidebar. Detail panel ordered by merchant workflow: AI intent summary + extracted details first, then contact actions, status + sub-stage picker, custom data fields. "Customize leads" opens `StageCustomizerModal`.
 
+**Search is server-side (July 2026):** `GET /leads?search=` matches senderName, phone, and the extracted data's **summary + field values only** (never JSON keys or the bilingual labels — a whole-document text match would return every lead for common words like "الاسم"/"size"). Legacy double-encoded rows (jsonb strings) are normalized to objects in SQL before navigating; wildcards are escaped via `escapeLike`. Previously search filtered only the client-loaded rows, so any lead beyond the first page (50) was unfindable by name — the 2026-07-02 "Jawab24 didn't catch the lead" complaint was partly this.
+
 ### Rate Limiting
 
-Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per workspace, TTL 86400s. Prevents runaway OpenAI costs on high-traffic pages.
+Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per workspace, TTL 86400s. Prevents runaway OpenAI costs on high-traffic pages. Follow-up re-extraction has its own budget: `leads:reextraction:{workspaceId}:{YYYY-MM-DD}`, 150/day, plus a `lead:reextract:{leadId}` 180s cooldown.
 
 ---
 
@@ -2472,6 +2488,8 @@ Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per 
 ### الموقع في خط الإنتاج
 
 تعمل بأسلوب "أطلق وانسَ" (fire-and-forget) بعد إرسال الرد في `messageProcessor.ts` و`commentProcessor.ts`. لا تعيق خط الرد أبدًا.
+
+**إعادة الاستخلاص عند رسائل المتابعة (يوليو 2026):** يرسل العميل رقمه أولًا ثم تفاصيل الطلب بعده (المقاس النهائي، اسم المستلم، العنوان). ما دام العميل المحتمل (من الرسائل الخاصة) في حالة `new` وخلال نافذة `LEAD_REEXTRACT_WINDOW_HOURS` (افتراضيًا 24 ساعة، والقيمة `0` توقف الميزة)، تعيد كل رسالة لاحقة من العميل تشغيل الاستخلاص على كامل المحادثة **وتدمج** النتيجة في البطاقة (القيمة الأحدث تفوز لكل حقل، الحقول القديمة لا تُحذف أبدًا، ولا يُمَسّ الرقم أو الحالة أو أعلام المتابعة). **كلا مساري الكتابة يدمجان**: إعادة مشاركة الرقم تدمج أيضًا ولا تستبدل، فلا يمكن لبطاقة ممتلئة أن تُمسح عند تجاوز الحد اليومي أو فشل الذكاء الاصطناعي. محكومة بمهلة تهدئة 3 دقائق لكل عميل، وعدّاد `extractionAttempts` بحد 10 (عدّاد مشترك لكل عمليات الاستخلاص للعميل الواحد: الالتقاط الأول وإعادة مشاركة الرقم وإعادات القراءة)، وميزانية يومية منفصلة (150/يوم لكل مساحة عمل) حتى لا تزاحم الالتقاط الأول.
 
 ### المخطط في قاعدة البيانات
 
@@ -2493,6 +2511,8 @@ Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per 
 ### الواجهة الأمامية
 
 صفحة `/leads` — تحديد الصفحة، تصفية بالحالة، أعمدة ديناميكية من `extractedData.fields`، تصدير CSV (يشمل المرحلة الفرعية والحقول المخصصة)، تحديثات فورية عبر SSE، شارة عملاء جدد في الشريط الجانبي. لوحة التفاصيل مرتبة حسب سير عمل التاجر: ملخص الطلب أولًا، ثم أزرار التواصل، ثم الحالة والمراحل، ثم حقول البيانات.
+
+**البحث من الخادم (يوليو 2026):** `GET /leads?search=` يطابق اسم المرسل والرقم والبيانات المستخلصة. سابقًا كان البحث يصفّي الصفوف المحمّلة في المتصفح فقط، فأي عميل بعد الصفحة الأولى (50) لا يظهر عند البحث باسمه.
 
 ---
 

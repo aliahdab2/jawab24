@@ -379,7 +379,11 @@ describe('AnalyticsService', () => {
 
             expect(result.byPage).toEqual([]);
             expect(result.byPipeline).toEqual([]);
-            expect(result.totals).toEqual({ calls: 0, billedCalls: 0, cacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 });
+            expect(result.totals).toEqual({
+                calls: 0, billedCalls: 0, cacheHits: 0,
+                replyCalls: 0, replyCacheHits: 0, replyCacheHitRate: 0,
+                tokensIn: 0, tokensOut: 0, costUsd: 0,
+            });
         });
 
         it('folds (page, pipeline) rows into per-page and per-pipeline breakdowns', async () => {
@@ -397,6 +401,12 @@ describe('AnalyticsService', () => {
             expect(result.totals.billedCalls).toBe(595);
             expect(result.totals.cacheHits).toBe(45);
             expect(result.totals.costUsd).toBeCloseTo(0.57, 6);
+
+            // Reply-scoped rate counts only dm_reply (130 calls / 45 hits) — the
+            // lead_extraction + embedding_rag rows never enter the denominator.
+            expect(result.totals.replyCalls).toBe(130);
+            expect(result.totals.replyCacheHits).toBe(45);
+            expect(result.totals.replyCacheHitRate).toBeCloseTo(45 / 130, 6);
 
             // byPage sorted by cost desc; Page A's two pipelines are summed.
             expect(result.byPage.map(p => p.pageId)).toEqual(['pB', 'pA', null]);
@@ -453,6 +463,7 @@ describe('AnalyticsService', () => {
             expect(result.byModel).toEqual([]);
             expect(result.totals.calls).toBe(0);
             expect(result.totals.internalCacheHitRate).toBe(0);
+            expect(result.totals.replyCacheHitRate).toBe(0);
             expect(result.totals.promptCacheSavingsUsd).toBe(0);
         });
 
@@ -484,6 +495,11 @@ describe('AnalyticsService', () => {
             expect(result.totals.costUsd).toBeCloseTo(0.271, 6);
             expect(result.totals.cachedInputTokens).toBe(35000);
             expect(result.totals.internalCacheHitRate).toBeCloseTo(50 / 655, 6);
+            // Reply-scoped rate: dm_reply only (150 calls / 50 hits). The 500
+            // embedding_rag calls dilute the blended rate (7.6%) but not this one (33%).
+            expect(result.totals.replyCalls).toBe(150);
+            expect(result.totals.replyCacheHits).toBe(50);
+            expect(result.totals.replyCacheHitRate).toBeCloseTo(50 / 150, 6);
             // gpt-4.1-mini: 30000/1000 × (0.0004 − 0.0001) = 0.009
             // gpt-4o-mini: 5000/1000 × (0.00015 − 0.000075) = 0.000375
             // text-embedding-3-small: no cached rate → 0

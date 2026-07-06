@@ -71,6 +71,14 @@ export const config = {
         apiKey: process.env.OPENAI_API_KEY || '',
     },
 
+    // Customer-image understanding (vision on DM images). Global kill switch —
+    // default ON; set IMAGE_UNDERSTANDING_ENABLED=false to disable instantly
+    // without a deploy. Per-merchant control is intentionally absent (matches
+    // voice transcription); cost is bounded by the per-plan daily cap.
+    imageUnderstanding: {
+        enabled: process.env.IMAGE_UNDERSTANDING_ENABLED !== 'false',
+    },
+
     // OpenAI ORG ADMIN key (sk-admin-…) — used ONLY by the read-only Costs/Usage
     // API that powers the admin AI Cost panel's billing snapshot. Distinct from the
     // project key above (project keys can't read org costs). Never sent to the
@@ -102,6 +110,20 @@ export const config = {
         spendSpikeMinDailyUsd: parseFloat(process.env.AI_COST_SPIKE_MIN_DAILY_USD || '5'),
         spendSpikeBaselineDays: parseInt(process.env.AI_COST_SPIKE_BASELINE_DAYS || '7', 10),
         spendSpikeAlertCooldownSeconds: parseInt(process.env.AI_COST_SPIKE_COOLDOWN_SECONDS || '86400', 10),
+    },
+
+    // Reply-queue health: per-job queue-wait sampling + backlog alert (the D-016
+    // "sustained queue wait-time" scaling trigger). Breach = live waiting depth OR
+    // recent p95 wait over threshold; two consecutive breaches fire a throttled
+    // admin alert. The responses (raise REPLY_WORKER_CONCURRENCY, then split
+    // queues) are manual by design — this only provides the signal.
+    replyQueueHealth: {
+        enabled: process.env.REPLY_QUEUE_HEALTH_ENABLED !== 'false',
+        waitingThreshold: parseInt(process.env.REPLY_QUEUE_WAITING_THRESHOLD || '25', 10),
+        waitP95ThresholdMs: parseInt(process.env.REPLY_QUEUE_WAIT_P95_THRESHOLD_MS || '15000', 10),
+        // 1h — a queue incident needs faster re-alerting than the 24h cost cooldowns.
+        alertCooldownSeconds: parseInt(process.env.REPLY_QUEUE_ALERT_COOLDOWN_SECONDS || '3600', 10),
+        evalIntervalMs: parseInt(process.env.REPLY_QUEUE_EVAL_INTERVAL_MS || '60000', 10),
     },
 
     // RAG mode: 'off' = static KB, 'shadow' = run RAG but use static KB, 'on' = full RAG
@@ -200,6 +222,16 @@ export const config = {
 
     // Admin emails (comma-separated)
     adminEmails: (process.env.ADMIN_EMAILS || '').split(',').filter(Boolean),
+
+    // WhatsApp canary allowlist (comma-separated emails, case-insensitive).
+    // EMPTY = WhatsApp connect open to everyone (full launch); non-empty =
+    // only these accounts may connect a WhatsApp number (founder canary).
+    // Independent of NEXT_PUBLIC_WHATSAPP_CONFIG_ID (which must also be set for
+    // the Embedded Signup popup to function at all).
+    whatsappAllowlist: (process.env.WHATSAPP_ALLOWLIST || '')
+        .split(',')
+        .map(e => e.trim().toLowerCase())
+        .filter(Boolean),
 
     // Cleanup endpoint secret token
     cleanupSecretToken: process.env.CLEANUP_SECRET_TOKEN || '',

@@ -162,8 +162,8 @@ export function AiSection({ customer, userId, intlLocale, onUpdated }: Props) {
                         <div className="bg-background rounded-lg p-3">
                             <p className="text-xs text-muted-foreground">{t('customer.aiCostCacheHitRate')}</p>
                             <p className="text-lg font-bold text-foreground">
-                                {aiCost.totals.calls > 0
-                                    ? `${Math.round((aiCost.totals.cacheHits / aiCost.totals.calls) * 100)}%`
+                                {aiCost.totals.replyCalls > 0
+                                    ? `${Math.round(aiCost.totals.replyCacheHitRate * 100)}%`
                                     : '—'}
                             </p>
                         </div>

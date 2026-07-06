@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
 import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal } from '@/components/ui';
+import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
 
@@ -126,14 +127,10 @@ export function PostTriggerModal({
           {t('postTriggerDescription')}
         </p>
 
-        {/* Post preview */}
-        {postMessage && (
-          <div className="bg-surface-50 dark:bg-surface-800 rounded-lg px-3 py-2.5">
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed" dir="auto">
-              {postMessage}
-            </p>
-          </div>
-        )}
+        {/* Post preview — the post this reply is configured for. Clamped to 3 lines
+            (keeps the keyword + reply fields above the fold on mobile) with a show-more
+            toggle for long posts. */}
+        {postMessage && <PostContextCard postMessage={postMessage} clampLines={3} />}
 
         {/* Active trigger badge */}
         {hasActiveTrigger && (
@@ -218,8 +215,12 @@ export function PostTriggerModal({
             dir="auto"
             rows={4}
             maxLength={1000}
-            className="resize-none leading-relaxed"
-            style={{ fieldSizing: 'content', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
+            className="leading-relaxed"
+            // resize:none is set inline, not via a class: the base Textarea hardcodes
+            // `resize-y`, which wins over a `resize-none` class in Tailwind's cascade and
+            // leaves a resize grip in the corner (a stray "dot" in the RTL bottom corner).
+            // The field auto-sizes via fieldSizing, so manual resize is never wanted here.
+            style={{ fieldSizing: 'content', resize: 'none', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
           />
         </FormField>
       </div>

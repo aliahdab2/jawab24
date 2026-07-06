@@ -7,6 +7,7 @@ export type SSEEventType =
     | 'comment:reply_failed'
     | 'comment:skipped'
     | 'message:received'
+    | 'message:updated'
     | 'message:reply_sent'
     | 'message:reply_failed'
     | 'usage:updated'
@@ -29,6 +30,8 @@ export interface SSEMessageSnapshot {
     createdTime: string | Date | null;
     repliedAt: string | Date | null;
     createdAt: string | Date | null;
+    /** Attachment kind for icon rendering ('image' | 'audio' | …); null for text. */
+    attachmentType?: string | null;
 }
 
 /** Maps each event type to its data payload */
@@ -71,6 +74,16 @@ export interface SSEEventDataMap {
         pageId: string;
         senderId: string;
         senderName: string | null;
+        message?: SSEMessageSnapshot;
+    };
+    /** An attachment row's content changed in place after async enrichment
+     *  (placeholder "[صورة]" → the vision description / voice transcript).
+     *  Frontend patches the row in the open thread by id — no toast, no unread
+     *  bump (mirrors comment:skipped / message:reply_failed invalidation style). */
+    'message:updated': {
+        messageId: string;
+        pageId: string;
+        senderId: string;
         message?: SSEMessageSnapshot;
     };
     'message:reply_sent': {

@@ -185,6 +185,9 @@ export const pages = pgTable('pages', {
     whatsappBusinessAccountId: varchar('whatsapp_business_account_id', { length: 255 }),
     whatsappDisplayPhoneNumber: varchar('whatsapp_display_phone_number', { length: 30 }),
     whatsappAutoReplyEnabled: boolean('whatsapp_auto_reply_enabled').default(false),
+    // Embedded Signup business token for the merchant's WABA — separate from the
+    // Facebook page token in access_token. AES-256-GCM encrypted (enc:v1: prefix).
+    whatsappAccessToken: text('whatsapp_access_token'),
     // E-commerce store linked to this page (for product-aware AI replies)
     ecommerceStoreId: uuid('ecommerce_store_id').references(() => ecommerceStores.id, { onDelete: 'set null' }),
     // Knowledge base for AI context - business info, products, FAQ
@@ -222,7 +225,13 @@ export const pages = pgTable('pages', {
         workspaceIdIdx: index('idx_pages_workspace_id').on(table.workspaceId),
         facebookPageIdIdx: index('idx_pages_facebook_page_id').on(table.facebookPageId),
         instagramAccountIdIdx: index('idx_pages_instagram_account_id').on(table.instagramAccountId),
-        whatsappPhoneNumberIdIdx: index('idx_pages_whatsapp_phone_number_id').on(table.whatsappPhoneNumberId),
+        // UNIQUE: one WhatsApp number belongs to exactly one page across the
+        // platform. Makes the "number taken" invariant structural (a concurrent
+        // double-connect gets 23505 → 409) instead of relying only on the
+        // check-then-insert in controllers/whatsapp.ts. Postgres treats NULLs as
+        // distinct, so the many WhatsApp-less rows (whatsapp_phone_number_id NULL)
+        // never collide — uniqueness applies only to real numbers.
+        whatsappPhoneNumberIdIdx: uniqueIndex('idx_pages_whatsapp_phone_number_id').on(table.whatsappPhoneNumberId),
         ecommerceStoreIdIdx: index('idx_pages_ecommerce_store_id').on(table.ecommerceStoreId),
     };
 });
@@ -569,6 +578,18 @@ export const messages = pgTable('messages', {
     aiIntent: varchar('ai_intent', { length: 50 }),
     resolved: boolean('resolved').default(false),
     attachmentType: varchar('attachment_type', { length: 20 }), // 'audio', 'image', 'video', 'file' — null for text
+    // Store-then-enrich lifecycle for attachment messages (see nonTextHandler.ts).
+    // The attachment row is stored as a placeholder the instant the webhook lands,
+    // then enriched (Whisper transcript / vision description / shared-post text) and
+    // finalized with one atomic UPDATE — so the merchant inbox shows the attachment
+    // immediately and the reply pipeline can PARK until the real content is ready
+    // (messageProcessor step 11) instead of answering the bare "[صورة]" placeholder.
+    //   NULL      = no enrichment lifecycle (text, outgoing, sticker, non-enrichable
+    //               attachment, and every legacy row — no backfill needed)
+    //   'pending' = stub stored, enrichment in flight (bounded by service timeouts)
+    //   'done'    = enrichment succeeded; `message` now holds the real content
+    //   'failed'  = enrichment failed/denied; the placeholder text is final
+    enrichmentStatus: varchar('enrichment_status', { length: 16 }),
     // Client-supplied idempotency key for outgoing manual replies. Frontend generates a UUID
     // per send attempt; if the network drops mid-flight and the client retries with the same
     // key, the controller short-circuits instead of double-sending to FB/IG. NULL on incoming

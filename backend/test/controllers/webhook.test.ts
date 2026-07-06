@@ -20,6 +20,7 @@ const {
     mockGetPageByFacebookId,
     mockGetPageByInstagramId,
     mockFindOrCreateFromWebhook,
+    mockFinalizeEnrichment,
     mockStoreOutgoingMessage,
     mockGetLastIncomingTextFromSender,
     mockSendPrivateMessage,
@@ -30,7 +31,8 @@ const {
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
     mockGetPageByFacebookId: vi.fn().mockResolvedValue({ id: 'internal-page-123', accessToken: 'token-abc', name: 'Test Page', userId: 'user-1', workspaceId: 'ws-1' }),
     mockGetPageByInstagramId: vi.fn().mockResolvedValue({ id: 'internal-ig-123', accessToken: 'token-ig', name: 'IG Page', userId: 'user-1', workspaceId: 'ws-1' }),
-    mockFindOrCreateFromWebhook: vi.fn().mockResolvedValue({ message: { id: 'msg-1' }, isNew: true }),
+    mockFindOrCreateFromWebhook: vi.fn().mockResolvedValue({ message: { id: 'msg-1', enrichmentStatus: 'pending' }, isNew: true }),
+    mockFinalizeEnrichment: vi.fn().mockResolvedValue(true),
     mockStoreOutgoingMessage: vi.fn().mockResolvedValue({}),
     mockGetLastIncomingTextFromSender: vi.fn().mockResolvedValue(null),
     mockSendPrivateMessage: vi.fn().mockResolvedValue(undefined),
@@ -70,11 +72,19 @@ vi.mock('../../src/services/pages', () => ({
         getPageByInstagramId: mockGetPageByInstagramId,
     },
     isPageDisconnected: vi.fn().mockReturnValue(false),
+    invalidateWorkspaceStatsCache: vi.fn(),
+}));
+
+vi.mock('../../src/lib/eventBus', () => ({
+    publishSSEEvent: vi.fn(),
 }));
 
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
         findOrCreateFromWebhook: mockFindOrCreateFromWebhook,
+        finalizeEnrichment: mockFinalizeEnrichment,
+        setCreatedTime: vi.fn(),
+        markAsResolved: vi.fn(),
         storeOutgoingMessage: mockStoreOutgoingMessage,
         getLastIncomingTextFromSender: mockGetLastIncomingTextFromSender,
         getSenderNameBySenderId: vi.fn().mockResolvedValue(null),
@@ -896,10 +906,12 @@ describe('Webhook Controller', () => {
             expect(response.statusCode).toBe(200);
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Placeholder stored in DB
+            // Pending stub stored immediately (store-then-enrich): placeholder + 'pending'.
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'user_123', '[رسالة صوتية]', undefined, 'audio',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'user_123', '[رسالة صوتية]', undefined, 'audio', undefined, 'pending',
             );
+            // Transcription failed → finalized 'failed' (placeholder text stands).
+            expect(mockFinalizeEnrichment).toHaveBeenCalledWith('msg-1', 'failed');
 
             // Nudge reply sent
             expect(mockSendPrivateMessage).toHaveBeenCalledWith(
@@ -941,10 +953,12 @@ describe('Webhook Controller', () => {
             expect(response.statusCode).toBe(200);
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Transcribed text stored in DB (not placeholder)
+            // Pending stub stored FIRST with the placeholder (store-then-enrich).
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_voice_transcribed', 'user_123', 'كم سعر الجاكيت الأسود؟', undefined, 'audio',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_transcribed', 'user_123', '[رسالة صوتية]', undefined, 'audio', undefined, 'pending',
             );
+            // Then finalized 'done' with the transcript.
+            expect(mockFinalizeEnrichment).toHaveBeenCalledWith('msg-1', 'done', 'كم سعر الجاكيت الأسود؟');
 
             // Enqueued for AI reply pipeline (pageId = platform ID, not internal UUID)
             expect(mockEnqueueMessage).toHaveBeenCalledWith(
@@ -991,10 +1005,11 @@ describe('Webhook Controller', () => {
             expect(response.statusCode).toBe(200);
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Placeholder stored (not transcription)
+            // Pending stub stored (placeholder), then finalized 'failed'.
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_voice_fail', 'user_123', '[رسالة صوتية]', undefined, 'audio',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_fail', 'user_123', '[رسالة صوتية]', undefined, 'audio', undefined, 'pending',
             );
+            expect(mockFinalizeEnrichment).toHaveBeenCalledWith('msg-1', 'failed');
 
             // Nudge sent as fallback
             expect(mockSendPrivateMessage).toHaveBeenCalled();
@@ -1069,9 +1084,9 @@ describe('Webhook Controller', () => {
             expect(response.statusCode).toBe(200);
             await new Promise(resolve => setTimeout(resolve, 50));
 
-            // English placeholder
+            // English placeholder (terminal stub — no owner/url → not enrichable, status undefined)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_img_1', 'user_en', '[Image]', undefined, 'image',
+                mockPage.id, mockPage.workspaceId, 'msg_img_1', 'user_en', '[Image]', undefined, 'image', undefined, undefined,
             );
 
             // English nudge
@@ -1182,9 +1197,9 @@ describe('Webhook Controller', () => {
             expect(response.statusCode).toBe(200);
             await new Promise(resolve => setTimeout(resolve, 50));
 
-            // Placeholder stored
+            // Placeholder stored (video → not enrichable → terminal stub, status undefined)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'ig_user_789', '[فيديو]', undefined, 'video',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'ig_user_789', '[فيديو]', undefined, 'video', undefined, undefined,
             );
 
             // Nudge sent via Instagram API

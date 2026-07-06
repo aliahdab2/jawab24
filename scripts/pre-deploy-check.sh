@@ -502,6 +502,17 @@ fi
 echo ""
 echo "5️⃣  Running tests..."
 
+echo "   Testing Shared Package..."
+_TEST_LOG=$(mktemp)
+if npm test --workspace=@jawab24/shared -- --run > "$_TEST_LOG" 2>&1; then
+    echo -e "${GREEN}   ✅ Shared package tests pass${NC}"
+    rm -f "$_TEST_LOG"
+else
+    echo -e "${RED}   ❌ Shared package tests failed!${NC}"
+    cat "$_TEST_LOG"; rm -f "$_TEST_LOG"
+    exit 1
+fi
+
 echo "   Testing Backend (Unit + coverage thresholds)..."
 _TEST_LOG=$(mktemp)
 if npm run test:coverage --workspace=jawab24-backend > "$_TEST_LOG" 2>&1; then
@@ -673,11 +684,25 @@ if [ "$CI" != "true" ]; then
     docker builder prune -af > /dev/null 2>&1 || true
     docker image prune -f > /dev/null 2>&1 || true
 
-    if docker build -f backend/Dockerfile -t jawab24-backend:pre-deploy-check . > /dev/null 2>&1; then
+    # Build once, capturing output to a log (same pattern as the test steps
+    # above). A first-build failure here is frequently TRANSIENT: the cache was
+    # just pruned, so `npm ci` runs uncached against the network — a registry
+    # hiccup or a momentary BuildKit/disk blip fails the attempt. The build is
+    # idempotent, so retry ONCE (reusing any layers the first attempt cached)
+    # before failing the gate; only surface the log — and exit — if BOTH fail.
+    # (The old code discarded the first attempt's error to /dev/null, then did a
+    # blind verbose re-run whose success was ignored — producing a misleading
+    # "❌ failed!" next to a green build log, with no actual error to act on.)
+    _DOCKER_LOG=$(mktemp)
+    if docker build -f backend/Dockerfile -t jawab24-backend:pre-deploy-check . > "$_DOCKER_LOG" 2>&1; then
         echo -e "${GREEN}   ✅ Docker image builds successfully${NC}"
+        rm -f "$_DOCKER_LOG"
+    elif docker build -f backend/Dockerfile -t jawab24-backend:pre-deploy-check . > "$_DOCKER_LOG" 2>&1; then
+        echo -e "${GREEN}   ✅ Docker image builds successfully (passed on retry — first attempt flaked)${NC}"
+        rm -f "$_DOCKER_LOG"
     else
-        echo -e "${RED}   ❌ Docker build failed!${NC}"
-        docker build -f backend/Dockerfile -t jawab24-backend:pre-deploy-check .
+        echo -e "${RED}   ❌ Docker build failed (both attempts). Build output:${NC}"
+        cat "$_DOCKER_LOG"; rm -f "$_DOCKER_LOG"
         exit 1
     fi
 fi

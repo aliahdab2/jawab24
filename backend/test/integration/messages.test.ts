@@ -128,7 +128,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
     // Test 3: Bulk mark — markOlderMessagesAsReplied
     // =========================================================
     describe('markOlderMessagesAsReplied', () => {
-        it('marks all unreplied messages except the excluded one', async () => {
+        it('marks the consolidated messages except the excluded one', async () => {
             const msg1 = await insertMessage(pageId, senderId, {
                 platformMessageId: 'dm-bulk-1',
                 message: 'Msg 1',
@@ -145,9 +145,9 @@ describe('Messages Service — Integration (real Postgres)', () => {
                 createdAt: new Date('2026-01-01T10:00:02Z'),
             });
 
-            // Mark older messages as replied, excluding msg3 (the latest / primary)
+            // Mark the consolidated set as replied, excluding msg3 (the latest / primary)
             const markedCount = await messagesService.markOlderMessagesAsReplied(
-                pageId, senderId, msg3.id, 'Consolidated reply', 'ai',
+                pageId, senderId, [msg1.id, msg2.id, msg3.id], msg3.id, 'Consolidated reply', 'ai',
             );
 
             expect(markedCount).toBe(2);
@@ -175,17 +175,114 @@ describe('Messages Service — Integration (real Postgres)', () => {
             expect(updated3.replied).toBe(false);
         });
 
-        it('returns 0 when no other unreplied messages exist', async () => {
+        // Regression (silent-drop guard): a row that was NOT in the consolidated set —
+        // e.g. an attachment stub whose enrichment finished mid-generation — must NOT be
+        // swept replied by the id-scoped UPDATE.
+        it('does NOT touch an unreplied row outside the consolidated id list', async () => {
+            const consolidated1 = await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-c1', message: 'C1', createdAt: new Date('2026-01-01T10:00:00Z'),
+            });
+            const primary = await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-primary', message: 'Primary', createdAt: new Date('2026-01-01T10:00:01Z'),
+            });
+            // Landed after consolidation — outside the id list.
+            const lateArrival = await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-late', message: 'Late', createdAt: new Date('2026-01-01T10:00:02Z'),
+            });
+
+            const markedCount = await messagesService.markOlderMessagesAsReplied(
+                pageId, senderId, [consolidated1.id, primary.id], primary.id, 'Reply', 'ai',
+            );
+
+            expect(markedCount).toBe(1); // only consolidated1
+            const [late] = await testDb.select().from(messages).where(eq(messages.id, lateArrival.id));
+            expect(late.replied).toBe(false); // survives — will be answered by its own job / recheck
+        });
+
+        it('returns 0 when the id list contains only the excluded message', async () => {
             const msg = await insertMessage(pageId, senderId, {
                 platformMessageId: 'dm-only',
                 message: 'Only message',
             });
 
             const markedCount = await messagesService.markOlderMessagesAsReplied(
-                pageId, senderId, msg.id, 'Reply', 'template',
+                pageId, senderId, [msg.id], msg.id, 'Reply', 'template',
             );
 
             expect(markedCount).toBe(0);
+        });
+    });
+
+    // =========================================================
+    // Test 3b: Store-then-enrich — finalizeEnrichment + pending filters
+    // =========================================================
+    describe('finalizeEnrichment', () => {
+        it("replaces the placeholder text and flips 'pending' → 'done' atomically", async () => {
+            const stub = await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-stub', message: '[صورة]', attachmentType: 'image', enrichmentStatus: 'pending',
+            });
+
+            const ok = await messagesService.finalizeEnrichment(stub.id, 'done', '[صورة: وصف الصورة]');
+            expect(ok).toBe(true);
+
+            const [row] = await testDb.select().from(messages).where(eq(messages.id, stub.id));
+            expect(row.enrichmentStatus).toBe('done');
+            expect(row.message).toBe('[صورة: وصف الصورة]');
+        });
+
+        it("on 'failed' keeps the placeholder text and only flips the status", async () => {
+            const stub = await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-stub-f', message: '[صورة]', attachmentType: 'image', enrichmentStatus: 'pending',
+            });
+
+            const ok = await messagesService.finalizeEnrichment(stub.id, 'failed');
+            expect(ok).toBe(true);
+
+            const [row] = await testDb.select().from(messages).where(eq(messages.id, stub.id));
+            expect(row.enrichmentStatus).toBe('failed');
+            expect(row.message).toBe('[صورة]');
+        });
+
+        it("is a no-op (returns false) on a row that is not 'pending' — guards against double-finalize", async () => {
+            const stub = await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-stub-done', message: '[صورة: first]', attachmentType: 'image', enrichmentStatus: 'done',
+            });
+
+            const ok = await messagesService.finalizeEnrichment(stub.id, 'done', '[صورة: SECOND]');
+            expect(ok).toBe(false);
+
+            const [row] = await testDb.select().from(messages).where(eq(messages.id, stub.id));
+            expect(row.message).toBe('[صورة: first]'); // not clobbered
+        });
+    });
+
+    describe('enrichment-aware debounce/consolidation', () => {
+        it("hasNewerUnrepliedMessage ignores a newer 'pending' stub but counts a 'done' one", async () => {
+            const text = await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-text', message: 'q', createdAt: new Date('2026-01-01T10:00:00Z'),
+            });
+            // A newer stub still enriching — the text job must NOT defer to it.
+            await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-pending', message: '[صورة]', attachmentType: 'image',
+                enrichmentStatus: 'pending', createdAt: new Date('2026-01-01T10:00:01Z'),
+            });
+            expect(await messagesService.hasNewerUnrepliedMessage(pageId, senderId, 'dm-text')).toBe(false);
+
+            // Once that stub is 'done', its reply job is guaranteed → debounce applies.
+            await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-done', message: '[صورة: وصف]', attachmentType: 'image',
+                enrichmentStatus: 'done', createdAt: new Date('2026-01-01T10:00:02Z'),
+            });
+            expect(await messagesService.hasNewerUnrepliedMessage(pageId, senderId, 'dm-text')).toBe(true);
+            expect(text).toBeTruthy();
+        });
+
+        it('getUnrepliedFromSender returns enrichmentStatus for park decisions', async () => {
+            await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-p', message: '[صورة]', attachmentType: 'image', enrichmentStatus: 'pending',
+            });
+            const rows = await messagesService.getUnrepliedFromSender(pageId, senderId);
+            expect(rows.find(r => r.platformMessageId === 'dm-p')?.enrichmentStatus).toBe('pending');
         });
     });
 

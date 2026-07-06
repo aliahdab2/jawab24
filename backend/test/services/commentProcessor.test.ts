@@ -34,8 +34,9 @@ vi.mock('../../src/services/protection', () => ({
         setLogger: vi.fn(),
     },
     commentDebounce: {
-        isCoolingDown: vi.fn().mockResolvedValue(false),
-        arm: vi.fn().mockResolvedValue(undefined),
+        // Default: win the slot (proceed). A null return means "slot already held".
+        tryAcquire: vi.fn().mockResolvedValue('debounce-token'),
+        release: vi.fn().mockResolvedValue(undefined),
         setLogger: vi.fn(),
     },
     postReplyCap: {
@@ -53,6 +54,8 @@ vi.mock('../../src/services/notifications', () => ({
 vi.mock('../../src/utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('en'),
     detectCommentLanguage: vi.fn().mockReturnValue('en'),
+    detectTemplateLanguage: vi.fn().mockReturnValue('en'),
+    isLowSignalLatinToken: vi.fn().mockReturnValue(false),
 }));
 vi.mock('../../src/services/comments', () => ({
     commentsService: {
@@ -158,8 +161,8 @@ describe('CommentProcessor', () => {
         // it a resolved promise by default so the .catch() chain doesn't throw in tests.
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
-        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
-        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
+        vi.mocked(commentDebounce.tryAcquire).mockResolvedValue('debounce-token');
+        vi.mocked(commentDebounce.release).mockResolvedValue(undefined);
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'Thank you!',
             replyMethod: 'ai',
@@ -415,8 +418,10 @@ describe('CommentProcessor', () => {
     });
 
     describe('per-(page, post, sender) debounce', () => {
-        it('skips with reason=debounced when same sender already replied to on same post within window', async () => {
-            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValueOnce(true);
+        it('skips with reason=debounced when the slot is already held (same sender, same post, within window)', async () => {
+            // tryAcquire returns null → another comment from this sender on this
+            // post won (or just completed) the slot inside the window.
+            vi.mocked(commentDebounce.tryAcquire).mockResolvedValueOnce(null);
             const adapter = createMockAdapter();
 
             const result = await commentProcessor.processComment(
@@ -425,7 +430,7 @@ describe('CommentProcessor', () => {
 
             expect(result.success).toBe(true);
             expect(result.commentId).toBe('comment-uuid');
-            expect(commentDebounce.isCoolingDown).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'from-1');
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'from-1');
             // No AI call, no platform reply, no markAsReplied
             expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
             expect(adapter.sendReply).not.toHaveBeenCalled();
@@ -443,13 +448,15 @@ describe('CommentProcessor', () => {
             const counters = (await pipelineMetrics.getMetrics()).counters;
             expect(counters['facebook_comment.debounce_skipped']).toBe(1);
             expect(counters['facebook_comment.skipped_spam']).toBeUndefined();
+            // We never won the slot, so there is nothing to release.
+            expect(commentDebounce.release).not.toHaveBeenCalled();
         });
 
-        it('a duplicate webhook for the SAME comment_id (after arm) defers to already_replied, not debounced', async () => {
-            // Webhook A successfully replied; arm fired. Webhook B for the same
-            // comment_id arrives — cooldown is hot, BUT storeComment returns the
-            // existing replied=true row. Must hit already_replied, not debounce.
-            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValueOnce(true);
+        it('a duplicate webhook for the SAME comment_id (slot held) defers to already_replied, not debounced', async () => {
+            // Webhook A won the slot and replied. Webhook B for the same comment_id
+            // arrives — the slot is held, BUT storeComment returns the existing
+            // replied=true row. Must hit already_replied, not debounce.
+            vi.mocked(commentDebounce.tryAcquire).mockResolvedValueOnce(null);
             const adapter = createMockAdapter({
                 storeComment: vi.fn().mockResolvedValue({
                     comment: { id: 'comment-uuid', replied: true },
@@ -473,7 +480,7 @@ describe('CommentProcessor', () => {
             expect(counters['facebook_comment.debounce_skipped']).toBeUndefined();
         });
 
-        it('keys the cooldown by (page, post, sender) — different sender on same post is not gated', async () => {
+        it('keys the slot by (page, post, sender) — different sender on same post is not gated', async () => {
             const adapter = createMockAdapter();
             await commentProcessor.processComment(
                 adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'sender-A', 'Alice',
@@ -481,56 +488,120 @@ describe('CommentProcessor', () => {
             await commentProcessor.processComment(
                 adapter, 'page-1', 'content-1', 'comment-2', 'Hello!', 'sender-B', 'Bob',
             );
-            // arm called with two distinct sender ids — same page, same post
-            expect(commentDebounce.arm).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'sender-A');
-            expect(commentDebounce.arm).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'sender-B');
+            // Slot claimed for two distinct sender ids — same page, same post.
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'sender-A');
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'sender-B');
         });
 
-        it('arms the cooldown after a successful reply (per page/post/sender)', async () => {
+        it('claims the slot before replying and keeps it after a successful reply (not released)', async () => {
             const adapter = createMockAdapter();
 
             await commentProcessor.processComment(
                 adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1', 'Alice',
             );
 
-            expect(commentDebounce.arm).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'from-1');
+            // Slot claimed at check-time...
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'from-1');
+            // ...and NOT released — a delivered reply holds the slot for the window,
+            // so back-to-back duplicates from this sender are suppressed.
+            expect(commentDebounce.release).not.toHaveBeenCalled();
         });
 
-        it('does not arm the cooldown when fromId is missing', async () => {
-            const adapter = createMockAdapter();
+        it('releases the slot when the reply fails to send (so a retry is not self-debounced)', async () => {
+            const adapter = createMockAdapter({
+                sendReply: vi.fn().mockResolvedValue({ success: false, error: 'send failed' }),
+            });
 
-            await commentProcessor.processComment(
-                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!',
-                // fromId omitted
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1', 'Alice',
             );
 
-            expect(commentDebounce.arm).not.toHaveBeenCalled();
+            expect(result.success).toBe(false);
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'from-1');
+            // A failed send must free the slot — the BullMQ retry of this same comment
+            // would otherwise hit its own held key and be silently debounced.
+            expect(commentDebounce.release).toHaveBeenCalled();
         });
 
-        it('does not check the debounce when fromId is missing', async () => {
-            // If we somehow set isCoolingDown=true but fromId is absent, the gate
-            // is skipped entirely — there is nothing to key on.
-            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(true);
+        it('does not claim the slot when fromId is missing', async () => {
             const adapter = createMockAdapter();
 
             const result = await commentProcessor.processComment(
                 adapter, 'page-1', 'content-1', 'comment-1', 'Hello!',
+                // fromId omitted
             );
 
-            expect(commentDebounce.isCoolingDown).not.toHaveBeenCalled();
+            expect(commentDebounce.tryAcquire).not.toHaveBeenCalled();
+            expect(commentDebounce.release).not.toHaveBeenCalled();
             expect(result.success).toBe(true);
         });
 
-        it('does not check the debounce when comments auto-reply is disabled (settings_disabled path wins)', async () => {
+        it('does not claim the slot when comments auto-reply is disabled (settings_disabled path wins)', async () => {
             vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
-            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(true);
             const adapter = createMockAdapter();
 
             await commentProcessor.processComment(
                 adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1',
             );
 
-            expect(commentDebounce.isCoolingDown).not.toHaveBeenCalled();
+            expect(commentDebounce.tryAcquire).not.toHaveBeenCalled();
+        });
+
+        // REGRESSION (prod 2026-07-05, معرض الأحمد للسيارات): a burst of comments
+        // from ONE sender on ONE post raced through the pipeline and each fired its
+        // own reply, because the old debounce did a read-only check THEN armed the
+        // key seconds later (after generation) — a time-of-check/time-of-use gap.
+        // This drives the real concurrency: three same-(page,post,sender) comments
+        // in flight at once, gated only by an atomic first-wins claim. Exactly one
+        // reply must go out. If the claim ever regresses to non-atomic / claim-after-
+        // send, all three win and sendReply is called 3× — this test fails.
+        it('collapses a concurrent same-sender burst to exactly ONE reply (the race the fix closes)', async () => {
+            // Atomic first-wins claim, modelling Redis SET NX. The check-and-add is
+            // synchronous (no await before it), so it is atomic across the interleaved
+            // processComment calls — exactly like SET NX on a single Redis instance.
+            const heldSlots = new Set<string>();
+            vi.mocked(commentDebounce.tryAcquire).mockImplementation(
+                async (pageId: string, postId: string, senderId: string) => {
+                    const key = `${pageId}:${postId}:${senderId}`;
+                    if (heldSlots.has(key)) return null; // slot held → caller debounces
+                    heldSlots.add(key);
+                    return 'debounce-token';
+                },
+            );
+            vi.mocked(commentDebounce.release).mockImplementation(
+                async (pageId: string, postId: string, senderId: string) => {
+                    heldSlots.delete(`${pageId}:${postId}:${senderId}`);
+                },
+            );
+
+            // Distinct comment rows per webhook so the per-comment reply lock (keyed by
+            // comment id, and mocked open) can't be what collapses them — the debounce
+            // must be the only thing that does.
+            const adapter = createMockAdapter({
+                storeComment: vi.fn().mockImplementation(
+                    async (_contentId, _ws, platformCommentId) => ({
+                        comment: { id: `row-${platformCommentId}`, replied: false },
+                        isNew: true,
+                    }),
+                ),
+            });
+
+            const results = await Promise.all([
+                commentProcessor.processComment(adapter, 'page-1', 'content-1', 'c1', '..', 'from-1', 'Nano'),
+                commentProcessor.processComment(adapter, 'page-1', 'content-1', 'c2', '..', 'from-1', 'Nano'),
+                commentProcessor.processComment(adapter, 'page-1', 'content-1', 'c3', '..', 'from-1', 'Nano'),
+            ]);
+
+            // Every comment consulted the atomic claim...
+            expect(commentDebounce.tryAcquire).toHaveBeenCalledTimes(3);
+            // ...exactly one won and sent a reply...
+            expect(adapter.sendReply).toHaveBeenCalledTimes(1);
+            expect(adapter.markAsReplied).toHaveBeenCalledTimes(1);
+            // ...and the other two were debounced, not replied.
+            expect(results.filter(r => r.success).length).toBe(3); // debounced counts as a handled success
+            const counters = (await pipelineMetrics.getMetrics()).counters;
+            expect(counters['facebook_comment.debounce_skipped']).toBe(2);
+            expect(counters['facebook_comment.success']).toBe(1);
         });
     });
 
@@ -770,9 +841,11 @@ describe('CommentProcessor', () => {
         });
         const adapter = createMockAdapter();
 
+        // Lettered spam — content-free tokens ('.') are exempt from the spam skip
+        // when post context exists (solicited CTA engagement, step 8c exception).
         await commentProcessor.processComment(
             adapter, 'fb-page-1', 'content-1', 'comment-1',
-            '.', 'from-1', 'Commenter',
+            'تابعوني على قناتي للربح السريع', 'from-1', 'Commenter',
         );
 
         expect(publishSSEEvent).toHaveBeenCalledWith(
@@ -1355,8 +1428,8 @@ describe('CommentProcessor — fromName fallback fetch', () => {
         } as any);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
-        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
-        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
+        vi.mocked(commentDebounce.tryAcquire).mockResolvedValue('debounce-token');
+        vi.mocked(commentDebounce.release).mockResolvedValue(undefined);
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'Thank you!',
             replyMethod: 'ai',
@@ -1492,8 +1565,8 @@ describe('CommentProcessor — template reply mode behavior', () => {
         // Default mock so fire-and-forget .catch() chain doesn't blow up
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
-        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
-        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
+        vi.mocked(commentDebounce.tryAcquire).mockResolvedValue('debounce-token');
+        vi.mocked(commentDebounce.release).mockResolvedValue(undefined);
 
         // Template match returns the price redirect text (old-style template)
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
@@ -1645,8 +1718,8 @@ describe('CommentProcessor — template reply mode behavior', () => {
             vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode(mode));
             vi.mocked(messagesService.isPaused).mockResolvedValue(false);
             vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
-        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
-        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
+        vi.mocked(commentDebounce.tryAcquire).mockResolvedValue('debounce-token');
+        vi.mocked(commentDebounce.release).mockResolvedValue(undefined);
             vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
                 replyText: 'reply text',
                 replyMethod: 'ai',
@@ -2100,8 +2173,9 @@ describe('CommentProcessor — template reply mode behavior', () => {
                 needsAttention: false,
             });
 
+            // Lettered spam — content-free tokens are exempt (see next test).
             const result = await commentProcessor.processComment(
-                adapter, 'page-1', 'content-1', 'comment-1', '.', 'user-1', 'Walaa',
+                adapter, 'page-1', 'content-1', 'comment-1', 'تابعوني على قناتي للربح', 'user-1', 'Walaa',
             );
 
             expect(result.success).toBe(true);
@@ -2109,6 +2183,51 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
             // Should NOT flag it — silent skip means no merchant notification
             expect(adapter.flagComment).not.toHaveBeenCalled();
+        });
+
+        // Regression for eval #324 (لامار الشام on the PUBLIC channel): a content-free
+        // comment ("٠٠٠", ".") on a post is the customer following the post's CTA.
+        // A model SPAM_OR_IRRELEVANT quirk must NOT silently drop it — the step-8c
+        // exception bypasses the silent skip and the reply is sent.
+        it('does NOT silently skip a content-free CTA comment despite a spam verdict', async () => {
+            const adapter = createMockAdapter();
+
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: 'دورات ICDL بكلفة 25 ألف — سجّل الآن',
+                replyMethod: 'ai',
+                aiIntent: 'SPAM_OR_IRRELEVANT',
+                needsAttention: false,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', '٠٠٠', 'user-1', 'Walaa',
+            );
+
+            expect(result.success).toBe(true);
+            // NOT resolved-as-spam; the reply goes out instead
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(result.replyText).toBe('دورات ICDL بكلفة 25 ألف — سجّل الآن');
+        });
+
+        it('still skips+flags OFFENSIVE even when the comment is content-free', async () => {
+            const adapter = createMockAdapter();
+
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: null,
+                replyMethod: 'ai',
+                aiIntent: 'OFFENSIVE',
+                flagReason: 'offensive_or_abusive',
+                needsAttention: true,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', '🖕', 'user-1', 'Walaa',
+            );
+
+            expect(result.success).toBe(true);
+            // Offensive content is flagged for merchant attention, never auto-replied
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'offensive_or_abusive', 'OFFENSIVE');
         });
     });
 

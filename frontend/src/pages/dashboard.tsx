@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, PageHeader, Button, PageSkeleton, UpgradeCTA, FeedSnippet, ArrowLink } from '@/components/ui';
+import { WhatsAppNudgeBanner } from '@/components/dashboard/WhatsAppNudgeBanner';
 import { intentLabelKey } from '@/utils/feedPreview';
 import dynamic from 'next/dynamic';
 
@@ -30,6 +31,7 @@ import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
 import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, AiUsageWarningBanner, SetupChecklistCard, type NeedsAttentionItem } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
+import { isWhatsAppEnabled } from '@/lib/featureFlags';
 import { getPageExternalUrl } from '@/utils/pageUrl';
 import { isKbFilled } from '@/utils/kb';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -317,7 +319,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const statsData = useMemo(() => {
     const stats = commentStats || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
     const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
-    const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled).length;
+    const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled || p.whatsappAutoReplyEnabled).length;
 
     // Tooltip breakdown: only pass values when BOTH endpoints succeeded, so a
     // partial-load doesn't render a misleading "X comments + 0 messages" tooltip.
@@ -887,7 +889,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
           {/* KB Nudge Banner — gentle, non-blocking */}
           {!kbNudgeDismissed && (() => {
-            const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled);
+            const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled || p.whatsappAutoReplyEnabled);
             if (activePages.length === 0) return null;
 
             // Use the shared KB-filled rule (>= KB_FILLED_MIN_CHARS, trimmed) so this
@@ -949,11 +951,14 @@ const DashboardPage: NextPageWithLayout = () => {
             );
           })()}
 
+          {/* WhatsApp launch announcement — env-gated + canary-aware inside the component */}
+          <WhatsAppNudgeBanner pages={pages} isOwner={isOwner} isAdmin={user?.isAdmin ?? false} />
+
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">
             <div className="p-5 sm:p-6 border-b border-theme-border bg-background/50">
-              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{t('topPages')}</h2>
-              <p className="text-sm font-medium text-muted-foreground mt-1">{t('topPagesDesc')}</p>
+              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{isWhatsAppEnabled() ? t('topPagesChannels') : t('topPages')}</h2>
+              <p className="text-sm font-medium text-muted-foreground mt-1">{isWhatsAppEnabled() ? t('topPagesChannelsDesc') : t('topPagesDesc')}</p>
             </div>
             <div className={clsx(
               'divide-y divide-theme-border',
@@ -1035,6 +1040,7 @@ const DashboardPage: NextPageWithLayout = () => {
           pageUrl={selectedMessagePageUrl}
           facebookPageId={selectedMessageFacebookPageId}
           isInstagram={selectedConversation.lastMessage.platform === 'instagram'}
+          platform={selectedConversation.lastMessage.platform ?? 'facebook'}
         />
       )}
     </>

@@ -8,7 +8,7 @@ import {
     stripTagsByOffsets,
     type FacebookMessageTag,
 } from '../../utils/commentText';
-import { detectCommentLanguage, detectLanguage, detectLanguageCode } from '../../utils/language';
+import { detectCommentLanguage, detectLanguageCode, isLowSignalLatinToken } from '../../utils/language';
 import { hasExternalPromoUrl } from './spamPatterns';
 
 /** Threshold below which a @mention comment is treated as friend-tagging
@@ -84,8 +84,8 @@ export function preprocessCommentText(opts: {
     // Nothing meaningful to anchor a reply to — skip when the post context is
     // also absent. With post context we pass through to the AI, which can judge
     // whether a dot/emoji is a valid engagement response (see engagement-post
-    // CTA tests in category 34). `rewritePunctuationForDualDm` then synthesises
-    // a question in DM channel when the merchant has dual-reply enabled.
+    // CTA tests in category 34). `rewriteContentFreeCta` then synthesises a
+    // question on any channel so the AI answers with actual details.
     if (!hasPostContext && (!commentForAI || isPunctuationOnly(commentForAI))) {
         return { commentForAI, skipReason: 'punctuation_no_context', hadMention: false };
     }
@@ -129,13 +129,7 @@ export function resolveCommentLanguage(
     kbText: string | undefined,
 ): string {
     const effectiveLang = detectCommentLanguage(commentForAI, postMessage);
-    const trimmed = commentForAI.trim();
-    const commentDet = detectLanguage(trimmed);
-    const isLowSignalLatin = commentDet.language === 'en'
-        && commentDet.confidence <= 0.5
-        && /^[a-zA-Z0-9\s]+$/.test(trimmed)
-        && trimmed.split(/\s+/).length <= 3;
-    if (!isLowSignalLatin) return effectiveLang;
+    if (!isLowSignalLatinToken(commentForAI)) return effectiveLang;
 
     // Mirror the context language, post first (always present, RAG-independent),
     // KB second. General across ALL languages:
@@ -165,10 +159,20 @@ function hasNonLatinScript(text: string): boolean {
 
 /**
  * When a post's CTA is "comment a dot / zero / heart to get details" and the
- * customer did exactly that, a dual-reply DM must answer with actual details
- * rather than letting the bare token reach the AI as an unanswerable input.
- * Replace the synthetic input with a post-language request sentence so the
- * downstream AI + RAG chain has something to work with.
+ * customer did exactly that, the reply must answer with actual details rather
+ * than letting the bare token reach the AI as an unanswerable input. Replace
+ * the synthetic input with a post-language request sentence so the downstream
+ * AI + RAG chain has something to work with.
+ *
+ * Channel-agnostic ON PURPOSE (was DM-only until 2026-07): with the old
+ * `effectiveChannel !== 'dm'` gate, a merchant in PUBLIC reply mode got no
+ * rewrite — the model saw the raw token and its spam verdict silently killed
+ * the reply. Deterministic for "." / "000", but "٠٠٠" (Arabic-Indic digits)
+ * was classified SPAM_OR_IRRELEVANT and the solicited commenter got silence
+ * (eval #324, the لامار الشام regression resurfacing on the public channel).
+ * A content-free comment on a post with context is solicited engagement in
+ * every reply mode — public replies answer directly (eval category 31), so
+ * the rewrite applies unconditionally.
  *
  * Content-free detection covers any script: punctuation ("."), emoji ("❤️"),
  * ASCII digits ("000"), Arabic-Indic digits ("٠٠٠"), or any combination. The
@@ -178,14 +182,12 @@ function hasNonLatinScript(text: string): boolean {
  * Returns the (possibly rewritten) comment text. When no rewrite applies,
  * returns the input unchanged.
  */
-export function rewritePunctuationForDualDm(opts: {
+export function rewriteContentFreeCta(opts: {
     commentForAI: string;
     rawText: string;
     postMessage: string | undefined;
-    effectiveChannel: 'comment' | 'dm';
 }): string {
-    const { commentForAI, rawText, postMessage, effectiveChannel } = opts;
-    if (effectiveChannel !== 'dm') return commentForAI;
+    const { commentForAI, rawText, postMessage } = opts;
     if (!postMessage) return commentForAI;
     const probe = commentForAI || rawText;
     if (!isContentFree(probe.trim())) return commentForAI;

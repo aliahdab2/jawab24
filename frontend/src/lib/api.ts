@@ -320,7 +320,19 @@ export interface AdminUserAiCostReport {
   period: AdminUserAiCostPeriod;
   rangeStart: string;
   rangeEnd: string;
-  totals: { calls: number; billedCalls: number; cacheHits: number; tokensIn: number; tokensOut: number; costUsd: number };
+  totals: {
+    calls: number;
+    billedCalls: number;
+    cacheHits: number;
+    // Scoped to the reply pipelines (comment_reply + dm_reply) — the only
+    // cacheable traffic, so this is the meaningful cache-hit rate.
+    replyCalls: number;
+    replyCacheHits: number;
+    replyCacheHitRate: number;
+    tokensIn: number;
+    tokensOut: number;
+    costUsd: number;
+  };
   byPage: Array<{
     pageId: string | null;
     pageName: string | null;
@@ -353,7 +365,14 @@ export interface AdminGlobalAiCostReport {
     calls: number;
     billedCalls: number;
     cacheHits: number;
+    // Blended across ALL pipelines (incl. never-cacheable ones — embeddings,
+    // translation, …) so it understates the cache; use replyCacheHitRate.
     internalCacheHitRate: number;
+    // Scoped to the reply pipelines (comment_reply + dm_reply) — the only
+    // cacheable traffic, so this is the meaningful cache-hit rate.
+    replyCalls: number;
+    replyCacheHits: number;
+    replyCacheHitRate: number;
     tokensIn: number;
     cachedInputTokens: number;
     tokensOut: number;
@@ -447,6 +466,18 @@ export interface SystemHealthReport {
     p95Ms: number;
     p99Ms: number;
   }>;
+  /** Reply-queue depth + wait percentiles; null when Redis is unreachable. */
+  queue: {
+    waiting: number;
+    active: number;
+    delayed: number;
+    failed: number;
+    waitP50Ms: number | null;
+    waitP95Ms: number | null;
+    waitMaxMs: number | null;
+    sampleCount: number;
+    windowMinutes: number;
+  } | null;
 }
 
 export interface CacheStats {
@@ -617,7 +648,7 @@ export interface Message {
   aiIntent?: string | null;
   aiOriginalReply?: string | null;
   resolved?: boolean;
-  platform?: 'facebook' | 'instagram';
+  platform?: 'facebook' | 'instagram' | 'whatsapp';
   attachmentType?: string | null;
 }
 
@@ -1195,7 +1226,7 @@ export interface LeadsPaginatedResponse {
 }
 
 export const leadsApi = {
-  getByPage: (pageId: string, params?: { status?: LeadStatus; needsFollowUp?: boolean; limit?: number; offset?: number }) =>
+  getByPage: (pageId: string, params?: { status?: LeadStatus; needsFollowUp?: boolean; search?: string; limit?: number; offset?: number }) =>
     api.get<LeadsPaginatedResponse>('/leads', { params: { pageId, ...params } }),
 
   /** Fetch a single lead by id — used by the notification deep-link to open the exact lead. */

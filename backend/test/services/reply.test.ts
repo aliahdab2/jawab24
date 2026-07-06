@@ -35,7 +35,12 @@ vi.mock('../../src/services/subscriptions', () => ({
 vi.mock('../../src/lib/redis', () => ({
     redis: {
         get: vi.fn(),
-        set: vi.fn(),
+        // SET NX returns 'OK' when the key is free — the comment debounce reads
+        // this as "slot won, proceed". Returning undefined would read as "slot
+        // held" and debounce every comment.
+        set: vi.fn().mockResolvedValue('OK'),
+        // Lua compare-and-delete used by the debounce release path.
+        eval: vi.fn().mockResolvedValue(1),
         quit: vi.fn(),
         incr: vi.fn().mockResolvedValue(1),
         expire: vi.fn().mockResolvedValue(1),

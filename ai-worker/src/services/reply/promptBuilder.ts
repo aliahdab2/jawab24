@@ -6,7 +6,8 @@
  * allowlist forbids it outside the real call sites), so buildMessages — which
  * assembles the SDK message array — stays in openai.ts and imports from here.
  */
-import { MAX_BRAND_VOICE_LENGTH, safeTimezone } from '@jawab24/shared';
+import { MAX_BRAND_VOICE_LENGTH, safeTimezone, isAnyImageMessage } from '@jawab24/shared';
+import { langEngineMode, displayLanguageName } from '@jawab24/shared/dist/language/engine';
 import { STATIC_SYSTEM_PREFIX } from './systemPrompt';
 import { resolveLanguage, resolveChannel } from './replyContext';
 import type { GenerateRequest } from './types';
@@ -170,10 +171,30 @@ function buildPerCallBlock(request: GenerateRequest): string {
     // before falling back to English.
     // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
     const language = resolveLanguage(request);
+    // Language label for the reply directive. FLAG-GATED (Phase 1b): legacy mode
+    // keeps the historical 7-entry map byte-identical — codes it doesn't know
+    // (ru/ja/… from detectLanguageOrNull) render "English", matching the
+    // "unrecognized → English" rule the prompt states. In tinyld mode the
+    // resolver can pass through more ISO codes (da/pt/vi/…), so the label comes
+    // from Intl.DisplayNames instead of a hand-maintained list. Swapping
+    // unconditionally would change live prompts while the flag is off.
     const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
-    const languageName = languageNames[language] || 'English';
+    const languageName = langEngineMode() === 'tinyld'
+        ? displayLanguageName(language)
+        : (languageNames[language] || 'English');
     const retrievedChunks = request.context?.retrievedChunks;
     const isDM = resolveChannel(request) === 'dm';
+
+    // Customer's first name from the platform profile — the first whitespace token,
+    // sanitized. Used for DM addressing and, in Arabic, as the primary grammatical-gender
+    // cue (see the GENDER directive below). Comments stay gender-neutral, so this only
+    // feeds the DM path. Empty when no name arrived (e.g. IG restricted, WhatsApp with no
+    // profile name) — the model then falls back to message self-reference, then neutral.
+    const rawSenderName = request.context?.senderName?.trim();
+    // First token only (split already drops any whitespace); strip quotes/backslashes like the
+    // page-name handling since it's interpolated into a quoted "..." label, then run the shared
+    // marker/tag sanitizer and 40-char cap.
+    const firstName = rawSenderName ? sanitizeUserField(rawSenderName.split(/\s+/)[0].replace(/["\\]/g, ''), 40) : '';
 
     // Reply style — maps setting to prompt personality directive.
     // Each directive covers: sentence-length variation, contraction use, clarifying-question permission,
@@ -181,7 +202,7 @@ function buildPerCallBlock(request: GenerateRequest): string {
     const styleMap: Record<string, string> = {
         professional: 'warm but precise — like a knowledgeable colleague, not a corporate FAQ. Mix short and medium sentences; use natural contractions (English "don\'t"/"we\'ll"; in Arabic, the customer\'s own colloquial form rather than stiff فصحى). Ask a clarifying question only when you genuinely can\'t answer without it — don\'t tack one on out of habit. Emojis rare — most replies need none; never default to 😊. Avoid corporate filler like "we appreciate your inquiry" or "kindly be informed".',
         casual: 'relaxed and conversational — like texting a helpful friend who knows the business. Vary sentence length: sometimes one short line, sometimes a longer answer with a brief aside. Contractions always (English "I\'m"/"it\'s"; in Arabic, match the customer\'s spoken dialect, not فصحى). When the customer is terse, a quick question-back is fine. Emojis when they feel natural, not every reply — and vary which one, don\'t repeat the same emoji each time. Never sound stiff or overly formal ("Dear customer", "السيد/ة العميل").',
-        enthusiastic: 'upbeat and warmly engaged — genuinely happy to help. Short punchy openers work well ("Awesome!", "يسعدني!"). Still vary length — don\'t pile on exclamation marks in every sentence. Contractions always. Ask back naturally when more info would help. Emojis more freely (1–2 per reply), but vary which ones — don\'t use 😊 in every reply. Avoid sounding fake-cheerful or over-the-top ("AMAZING!!! ❤️❤️❤️").',
+        enthusiastic: 'upbeat and warmly engaged — genuinely happy to help. Let the warmth come from your word choice and from reacting to what the customer actually said — NOT from a stock opener: do NOT start replies with a canned enthusiasm word, never open two replies the same way, and do NOT default to "يسعدني" / "Awesome" / "أهلاً" (often the best opener is simply the answer itself). Vary length — don\'t pile on exclamation marks in every sentence. Contractions always. Ask a clarifying question only when you genuinely can\'t answer without it — never tack one onto a reply that already answered, and don\'t close with an offer to help. Emojis more freely (1–2 per reply), but vary which ones — don\'t use 😊 in every reply. Avoid sounding fake-cheerful or over-the-top ("AMAZING!!! ❤️❤️❤️").',
     };
     const replyStyle = request.context?.replyStyle;
     const styleDirective = styleMap[replyStyle || ''] || styleMap.professional;
@@ -212,6 +233,19 @@ ${isDM
         // High-salience reminder next to the language directive; lives in the per-call block,
         // after the cached prefix, so it never affects KB caching.
         prompt += `\n- ARABIC DIALECT: mirror the customer's dialect exactly — Maghrebi/Darija (واش، شحال، تاع، بزّاف، شكون) → reply in Maghrebi; Egyptian → Egyptian; Gulf → Gulf; Levantine → Levantine. NEVER reply in a dialect different from theirs (e.g. Levantine مو/بدك/هلق to a Maghrebi customer reads as a foreign bot). If their message is too short or dialect-neutral to tell, use light Modern Standard Arabic — do NOT default to Levantine or Gulf.`;
+
+        // Arabic DMs ONLY: gender-matched addressing. Arabic verbs, pronouns, and adjectives are
+        // gendered, and getting it wrong is an obvious bot tell. This whole block is deliberately
+        // scoped to `language === 'ar' && isDM` — every other language, and every comment, gets a
+        // prompt byte-identical to before this feature, so no other vertical/language is touched.
+        // The name (surfaced here, only when present) feeds gender inference; when the signal is
+        // unclear the model stays neutral rather than guessing.
+        if (isDM) {
+            if (firstName) {
+                prompt += `\n- Customer's first name: "${firstName}" — use it naturally where it helps; don't force it into every reply.`;
+            }
+            prompt += `\n- ARABIC GENDER: address the customer in their correct grammatical gender. Decide in this order: (1) how the customer refers to THEMSELVES is authoritative ("أنا مهتم" masculine vs "أنا مهتمة" feminine) — follow it even if the name suggests otherwise; (2) otherwise use the first name ONLY when it is clearly gendered — a unisex name (نور، سما، جود، رهف), a username/handle, or a transliteration you're unsure of is NOT a clear signal. When the customer is FEMALE, ACTIVELY use the marked feminine forms — the feminine kaf ـكِ (بكِ، لكِ، يهمّكِ، أنصحكِ) and feminine verb/adjective endings (تفضّلي، تحبّين، مهتمّة); do NOT leave the address in the unmarked default (بك، يهمك، تفضّل), which reads as masculine. Contrast — female: "أهلاً بكِ! أي مجال يهمّكِ؟" · male: "أهلاً بك! أي مجال يهمّك؟". When gender is genuinely unclear, use gender-neutral / light-MSA phrasing that avoids gendered forms — do NOT default to masculine, and do NOT guess. Never state, ask about, or comment on the customer's gender.`;
+        }
     }
 
     if (request.context?.suppressGreeting) {
@@ -267,6 +301,30 @@ ${chunkLines}${buildPoliciesBlock(request)}
     // Capped at 500 chars (same as the user-prompt post label).
     if (request.context?.postMessage) {
         prompt += `\n\n[current_post]\n${sanitizeForPrompt(request.context.postMessage).slice(0, 500)}`;
+    }
+
+    // Image-message convention. The backend's vision step turns customer photos into
+    // "[صورة: <description>]" / "[Image: <description>]" message bodies; without this
+    // directive the model reads a bare product screenshot as small talk and punts
+    // ("thanks for sharing!") instead of answering the implicit "available? how much?"
+    // (caught live against a real merchant image + KB, 2026-07-05). Injected per-call
+    // ONLY when the current message or history actually contains an image marker, so
+    // every other prompt stays byte-identical (no PROMPT_VERSION bump, prefix cache
+    // untouched — this block trails the cached prefix like [current_post] above).
+    const hasImageMessage = isAnyImageMessage(request.comment)
+        || (request.context?.conversationHistory?.some(m => isAnyImageMessage(m.content)) ?? false);
+    if (hasImageMessage) {
+        prompt += `\n\nIMAGE MESSAGE:
+A message formatted [صورة: ...] or [Image: ...] is a PHOTO the customer sent — the bracketed text is an automatic description of it, not words the customer typed. Interpret the photo's intent and answer it; NEVER quote or repeat the bracketed description back.
+- Photo of one of the business's own products, ads, or a screenshot of the business's post → the customer is implicitly asking about it. Classify as QUESTION (or PURCHASE_INTENT if they show buying signals) and answer directly from the business knowledge: is it available, the current price/offer, and how to order. Do NOT just thank them for sharing or ask what they want to know.
+- Photo showing the customer PAID the business (their payment receipt, bank-transfer screenshot, or order confirmation for THIS business) → write a short reply acknowledging you received it, do NOT confirm the payment yourself, classify as BUSINESS_INQUIRY with confidence "low" so a person follows up.
+- Photo of a product that looks damaged or defective → treat as COMPLAINT.
+- Photo unrelated to the business (random documents or forms, memes, other businesses' content) → SPAM_OR_IRRELEVANT with an empty reply, like any irrelevant message.
+- Bare [صورة] / [Image] with no description → a photo we could not read; politely ask what they would like to know about it.
+Only SPAM_OR_IRRELEVANT or OFFENSIVE may have an empty reply — any other classification of a photo MUST include a written reply.`;
+        if (!isAnyImageMessage(request.comment)) {
+            prompt += `\nThe image marker appears in the conversation history: when the customer's current message refers to "it" or asks a follow-up, resolve it against that photo's description.`;
+        }
     }
 
     // Recency reinforcement of the single most-violated rule (the #1 "you're a bot" tell:

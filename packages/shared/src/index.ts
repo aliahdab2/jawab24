@@ -111,6 +111,9 @@ export interface Message {
   resolved?: boolean;
   platform?: 'facebook' | 'instagram' | 'whatsapp';
   attachmentType?: string | null;
+  /** Store-then-enrich lifecycle for attachment rows: null | 'pending' | 'done' | 'failed'.
+   *  See messages table schema + nonTextHandler. */
+  enrichmentStatus?: string | null;
 }
 
 // --- Comment Types ---
@@ -314,6 +317,8 @@ export interface Page {
   leadFields?: LeadCustomFieldDef[] | null;
   // Connection status (true if Facebook access token is valid)
   isConnected?: boolean;
+  // True when a WhatsApp business token is stored (Embedded Signup completed)
+  whatsappConnected?: boolean;
   // Defensive auto-pause: set to 'send_rejected' when the bot was paused after
   // hitting the consecutive-send-failure threshold (Page restricted/unpublished
   // by Meta, permission lost mid-flight). Cleared when the customer re-enables
@@ -586,6 +591,15 @@ export interface ReplyJobData {
   // handoff stale-backlog suppression (a 15-min-old unanswered message SHOULD
   // still get a reply once quota returns). Bounded by config.ai.parkMaxRetries.
   aiRetryCount?: number;
+  // How many times this DM job has been re-enqueued (parked) while a sibling
+  // attachment from the same sender is still being enriched (vision / Whisper /
+  // shared-post fetch), so the reply consolidates the real content instead of
+  // answering the bare text first. Kept SEPARATE from handoffRetries for the same
+  // reason as aiRetryCount: parking here must NOT trip handoff stale-backlog
+  // suppression, and these jobs must NOT be promoted by "Resume Smart Reply"
+  // (promoteDelayedJobs filters on handoffRetries > 0). Bounded in messageProcessor
+  // by MAX_ATTACHMENT_RETRIES, after which it replies to the text alone.
+  attachmentRetries?: number;
 }
 
 export interface ReplyJobResult {
@@ -601,6 +615,9 @@ export interface ReplyJobResult {
   aiIntent?: string;
   /** When set, the worker should re-enqueue this job with the given delay (ms) */
   handoffDelayMs?: number;
+  /** When set, a sibling attachment is still enriching — the worker should
+   *  re-enqueue this DM job with the given delay (ms), carrying attachmentRetries+1. */
+  attachmentPendingDelayMs?: number;
 }
 
 export const REPLY_QUEUE_NAME = 'reply-processing-queue';
@@ -727,7 +744,24 @@ export {
 // threads (the multi-turn drift that makes ~12-14% of replies end with a bot-like closing). The
 // cacheable STATIC_SYSTEM_PREFIX is unchanged; this bump only invalidates the internal exact-reply
 // cache so the new tail reminder isn't shadowed by stale cached replies.
-export const PROMPT_VERSION = 'v50';
+// v51: gender-aware Arabic addressing, scoped to ARABIC DMs ONLY. The per-call block gains a name
+// line + an ARABIC GENDER directive that matches masculine/feminine forms inferred from the name +
+// the customer's self-reference, falling back to neutral phrasing when unclear. Deliberately NOT in
+// the cacheable STATIC_SYSTEM_PREFIX: every other language, every comment, and every business gets a
+// byte-identical prompt to v50 (guarded by blast-radius unit tests). Comments stay neutral. The exact
+// cache is name-bucketed for DMs and the semantic cache is bypassed for DMs (see ai.ts) so a reply
+// gendered for one customer is never served to another — flush caches on deploy.
+// v52: SOURCE fix for the offer-closing bot-tell — the prompt was contradicting itself, so the ban
+// lost to competing demonstrations/directives (root-caused 2026-07-05, eval Cat 61 #677). Three
+// changes, all in the cacheable STATIC_SYSTEM_PREFIX / styleMap: (1) the GENERAL RESPONSE RULES no
+// longer say "sometimes ask a question back" (which licensed the tic against the same block's
+// offer-closing ban) — a question-back is now explicitly only-when-needed; (2) the `enthusiastic`
+// style directive dropped "ask back naturally when more info would help" (a positive license the
+// model followed over the negative ban) and now matches the disciplined `professional` phrasing;
+// (3) two new few-shot examples DEMONSTRATE a clean flat ending — a warm mid-thread answer and an
+// info-not-in-KB answer that stop on the answer (demonstrations beat rules; the prompt previously
+// had no positive pattern for the common case). Prefix bytes change → cache invalidated by the bump.
+export const PROMPT_VERSION = 'v52';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
@@ -1096,3 +1130,5 @@ export type { CanonicalHoursEntry, ParseResult, ParseSuccess, ParseFailure } fro
 // --- Activation funnel (shared BE emit/query ↔ FE admin panel) ---
 export { ACTIVATION_FUNNEL_STEPS, KB_FILLED_MIN_CHARS, isBusinessInfoProvided } from './activation';
 export type { ActivationEvent, ActivationFunnel, ActivationFunnelStep } from './activation';
+// --- Image-message marker protocol (DM vision descriptions) ---
+export { IMAGE_MESSAGE_RE, IMAGE_PLACEHOLDER_RE, isImageMessageBody, extractImageDescription, isAnyImageMessage } from './imageMessage';

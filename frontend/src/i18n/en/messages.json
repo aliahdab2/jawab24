@@ -30,6 +30,7 @@
   "replyFailedNetwork": "Connection problem. Check your internet and try again.",
   "replyFailedTimeout": "The request took too long. Check your connection and try again.",
   "voiceMessage": "Voice message",
+  "imageMessage": "Photo",
   "pauseSmartReply": "Pause Smart Reply",
   "resumeSmartReply": "Resume Smart Reply",
   "smartReplyPaused": "Smart Reply Paused",

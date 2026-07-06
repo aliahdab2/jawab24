@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
     detectLanguage,
     detectLanguageCode,
+    detectTemplateLanguage,
+    isLowSignalLatinToken,
     isRTL,
     getLanguageName,
     SupportedLanguage,
@@ -297,6 +299,51 @@ describe('Language Detection Utility', () => {
             const effectiveLang = commentLang !== 'unknown' ? commentLang
                 : detectLanguageCode(postMessage);
             expect(effectiveLang).toBe('ar');
+        });
+    });
+
+    describe('isLowSignalLatinToken (the "icdl" gate)', () => {
+        it('is true for a bare Latin acronym / product name with no language signal', () => {
+            expect(isLowSignalLatinToken('icdl')).toBe(true);
+            expect(isLowSignalLatinToken('ICDL')).toBe(true);
+            expect(isLowSignalLatinToken('iPhone')).toBe(true);
+            expect(isLowSignalLatinToken('Excel')).toBe(true);
+            expect(isLowSignalLatinToken('  icdl  ')).toBe(true); // trims first
+        });
+
+        it('is false for a genuine short English phrase (matched function word → confidence > 0.5)', () => {
+            expect(isLowSignalLatinToken('which course')).toBe(false);
+            expect(isLowSignalLatinToken('how much')).toBe(false);
+            expect(isLowSignalLatinToken('hello')).toBe(false); // "hello" ∈ ENGLISH_COMMON
+        });
+
+        it('is false for non-Latin scripts (they carry a real signal)', () => {
+            expect(isLowSignalLatinToken('مرحبا')).toBe(false);
+            expect(isLowSignalLatinToken('دورة')).toBe(false);
+        });
+
+        it('is false for punctuation / emoji / empty (unknown, not English)', () => {
+            expect(isLowSignalLatinToken('...')).toBe(false);
+            expect(isLowSignalLatinToken('👍')).toBe(false);
+            expect(isLowSignalLatinToken('')).toBe(false);
+            expect(isLowSignalLatinToken('   ')).toBe(false);
+        });
+
+        it('is false for a longer Latin sentence (word-count safety cap)', () => {
+            expect(isLowSignalLatinToken('please send me the price list now')).toBe(false);
+        });
+    });
+
+    describe('detectTemplateLanguage (away / greeting / fallback variant picker)', () => {
+        it('returns "unknown" for a bare Latin token so callers use the merchant default', () => {
+            expect(detectTemplateLanguage('icdl')).toBe('unknown');
+            expect(detectTemplateLanguage('iPhone')).toBe('unknown');
+        });
+
+        it('preserves a genuine language signal', () => {
+            expect(detectTemplateLanguage('كم السعر؟')).toBe('ar');
+            expect(detectTemplateLanguage('how much is it?')).toBe('en');
+            expect(detectTemplateLanguage('hello')).toBe('en');
         });
     });
 });

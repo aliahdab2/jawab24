@@ -50,6 +50,9 @@ export type Outcome =
     | 'ai_failed_immediate_flag'
     | 'ai_parked'
     | 'ai_park_exhausted'
+    | 'attachment_park'
+    | 'attachment_park_exhausted'
+    | 'attachment_park_requeued'
     | 'error';
 
 const PREFIX = 'metrics:pipeline:';

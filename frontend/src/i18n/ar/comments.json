@@ -84,6 +84,7 @@
   "replyNotFound": "تم حذف هذا التعليق أو معالجته بالفعل. جارٍ تحديث القائمة.",
   "platformFacebook": "فيسبوك",
   "platformInstagram": "إنستغرام",
+  "platformWhatsApp": "واتساب",
   "commentCount": "{count, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}}",
   "showEarlier": "عرض التعليقات السابقة",
   "hideEarlier": "إخفاء التعليقات السابقة",

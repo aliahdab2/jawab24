@@ -96,6 +96,9 @@ const EnvSchema = z.object({
     // Admin emails (comma-separated list)
     ADMIN_EMAILS: z.string().optional(),
 
+    // WhatsApp canary allowlist (comma-separated emails). Empty = open to all.
+    WHATSAPP_ALLOWLIST: z.string().optional(),
+
     // Cleanup endpoint secret token
     CLEANUP_SECRET_TOKEN: z.string().optional(),
 

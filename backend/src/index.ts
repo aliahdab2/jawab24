@@ -22,6 +22,7 @@ import commentsRoutes from "./routes/comments";
 import settingsRoutes from "./routes/settings";
 import messagesRoutes from "./routes/messages";
 import instagramRoutes from "./routes/instagram";
+import whatsappRoutes from "./routes/whatsapp";
 import versionRoutes from "./routes/version";
 import plansRoutes from "./routes/plans";
 import subscriptionsRoutes from "./routes/subscriptions";
@@ -236,6 +237,7 @@ const start = async () => {
     await server.register(messagesRoutes);
     await server.register(leadsRoutes);
     await server.register(instagramRoutes);
+    await server.register(whatsappRoutes);
     await server.register(plansRoutes, { prefix: "/plans" });
     await server.register(subscriptionsRoutes, { prefix: "/subscription" });
     await server.register(paymentRoutes, { prefix: "/payment" });
@@ -375,6 +377,25 @@ const start = async () => {
       runCostSnapshot().catch(err => {
         server.log.error(err, '[CostSnapshot] Initial run failed');
         captureError(err, '[CostSnapshot] Initial run failed', { tags: { cron: 'ai_cost_snapshot' }, level: 'error' });
+      });
+    }, 90_000);
+
+    // Reply-queue backlog watch — the D-016 "sustained queue wait-time" signal.
+    // Evaluates live queue depth + recent p95 wait every minute; two consecutive
+    // breaches fire a throttled admin alert (alert:reply_queue_backlog). The
+    // remedies (raise REPLY_WORKER_CONCURRENCY, per-channel split) stay manual.
+    const { evaluateQueueBacklogAndAlert } = await import("./services/replyQueueHealth");
+    setInterval(() => {
+      evaluateQueueBacklogAndAlert().catch(err => {
+        server.log.error(err, '[QueueHealth] Scheduled evaluation failed');
+        captureError(err, '[QueueHealth] Scheduled evaluation failed', { tags: { cron: 'reply_queue_health' }, level: 'error' });
+      });
+    }, config.replyQueueHealth.evalIntervalMs);
+    // First run delayed 90s after boot so Redis/queue connections settle.
+    setTimeout(() => {
+      evaluateQueueBacklogAndAlert().catch(err => {
+        server.log.error(err, '[QueueHealth] Initial evaluation failed');
+        captureError(err, '[QueueHealth] Initial evaluation failed', { tags: { cron: 'reply_queue_health' }, level: 'error' });
       });
     }, 90_000);
 

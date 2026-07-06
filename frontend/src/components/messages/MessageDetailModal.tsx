@@ -7,7 +7,8 @@ import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { openExternalUrl } from '@/lib/openExternalUrl';
-import { renderMessageText } from '@/utils/renderMessageText';
+import { buildWhatsAppUrl } from '@/lib/whatsapp';
+import { renderMessageText, stripImageDescription } from '@/utils/renderMessageText';
 import { isKbRelatedFlag, isKbGapFlag, getKbGapQuestion } from '@/utils/flagReason';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import { messagesApi } from '@/lib/api';
@@ -21,6 +22,7 @@ import {
   CheckCircle,
   Undo2,
   Mic,
+  Image as ImageIcon,
   ExternalLink,
   ChevronRight,
   ArrowDown,
@@ -47,6 +49,8 @@ interface MessageDetailModalProps {
   pageUrl?: string;
   facebookPageId?: string;
   isInstagram?: boolean;
+  /** Conversation channel — drives the platform badge and the external chat link */
+  platform?: 'facebook' | 'instagram' | 'whatsapp';
 }
 
 export function MessageDetailModal({
@@ -66,10 +70,12 @@ export function MessageDetailModal({
   pageUrl,
   facebookPageId,
   isInstagram = false,
+  platform: platformProp,
 }: MessageDetailModalProps) {
   const t = useTranslations('messages');
   const tc = useTranslations('common');
   const tComments = useTranslations('comments');
+  const platform = platformProp ?? (isInstagram ? 'instagram' : 'facebook');
 
   // Fetch full conversation (including outgoing replies) regardless of which tab filter
   // was used to find this conversation. Tabs control which conversations appear in the list,
@@ -240,7 +246,15 @@ export function MessageDetailModal({
         <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-muted-foreground">
           <span className="font-medium">{t('title')}</span>
           <ChevronRight className="w-3 h-3 rtl:rotate-180" />
-          {!isInstagram ? (
+          {platform === 'whatsapp' ? (
+            <button
+              onClick={() => openExternalUrl(buildWhatsAppUrl(conversation.senderId, ''))}
+              className="flex items-center gap-1 font-semibold text-muted-foreground hover:text-brand-500 transition-colors truncate"
+            >
+              <span className="truncate">{conversation.senderName || tc('user')}</span>
+              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+            </button>
+          ) : platform === 'facebook' ? (
             <button
               onClick={() => openExternalUrl(
                 facebookPageId
@@ -278,9 +292,9 @@ export function MessageDetailModal({
               {pageName && (
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <PlatformIcon
-                    platform={isInstagram ? 'instagram' : 'facebook'}
+                    platform={platform}
                     size="sm"
-                    ariaLabel={isInstagram ? tComments('platformInstagram') : tComments('platformFacebook')}
+                    ariaLabel={platform === 'instagram' ? tComments('platformInstagram') : platform === 'whatsapp' ? tComments('platformWhatsApp') : tComments('platformFacebook')}
                   />
                   {pageUrl ? (
                     <button
@@ -342,15 +356,23 @@ export function MessageDetailModal({
                     : 'bg-card text-foreground rounded-bs-none border border-theme-border'
                 )}>
                   {msg.direction === 'incoming' && msg.attachmentType === 'audio' && (
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1">
-                      <Mic className="w-3 h-3" />
-                      <span>{t('voiceMessage')}</span>
-                    </div>
+                    <span className="inline-flex items-center gap-1 mb-1.5 ps-1.5 pe-2 py-0.5 rounded-full icon-bg-blue text-[11px] font-medium">
+                      <Mic className="w-3.5 h-3.5" aria-hidden="true" />
+                      {t('voiceMessage')}
+                    </span>
+                  )}
+                  {msg.direction === 'incoming' && msg.attachmentType === 'image' && (
+                    <span className="inline-flex items-center gap-1 mb-1.5 ps-1.5 pe-2 py-0.5 rounded-full icon-bg-brand text-[11px] font-medium">
+                      <ImageIcon className="w-3.5 h-3.5" aria-hidden="true" />
+                      {t('imageMessage')}
+                    </span>
                   )}
                   {msg.attachmentType === 'sticker' ? (
                     <p className="text-2xl leading-relaxed">👍</p>
                   ) : (
-                    <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(msg.message)}</p>
+                    <p className="text-sm leading-relaxed italic-arabic" dir="auto">
+                      {renderMessageText(msg.attachmentType === 'image' ? stripImageDescription(msg.message) : msg.message)}
+                    </p>
                   )}
                 </div>
                 <div className={clsx(

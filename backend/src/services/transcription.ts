@@ -4,6 +4,7 @@ import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { logAiUsage } from './aiUsageLog';
+import { fetchMediaBuffer, MediaDownloadError } from '../utils/mediaDownload';
 
 /** Maximum time to download audio from Facebook/Instagram CDN */
 const DOWNLOAD_TIMEOUT_MS = 10_000;
@@ -198,40 +199,41 @@ class TranscriptionService {
         if (!client) return null;
 
         try {
-            // 1. Download audio with its own timeout
-            const downloadController = new AbortController();
-            const downloadTimer = setTimeout(() => downloadController.abort(), DOWNLOAD_TIMEOUT_MS);
-
+            // 1. Download audio (shared media downloader: abort timeout + size cap)
             let audioBuffer: Buffer;
             let contentType: string;
             try {
-                const response = await fetch(audioUrl, { signal: downloadController.signal });
-                if (!response.ok) {
+                ({ buffer: audioBuffer, contentType } = await fetchMediaBuffer(audioUrl, {
+                    maxBytes: MAX_AUDIO_BYTES,
+                    timeoutMs: DOWNLOAD_TIMEOUT_MS,
+                }));
+            } catch (error) {
+                if (error instanceof MediaDownloadError && error.reason === 'not_ok') {
                     captureError(
-                        new Error(`Audio download failed: ${response.status}`),
+                        new Error(`Audio download failed: ${error.status}`),
                         'Transcription audio download failed',
                         { tags: { service: 'transcription' } },
                     );
                     return null;
                 }
-
-                const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
-                if (contentLength > MAX_AUDIO_BYTES) {
-                    captureError(
-                        new Error(`Audio too large: ${contentLength} bytes`),
-                        'Transcription audio too large',
-                        { tags: { service: 'transcription' } },
-                    );
+                if (error instanceof MediaDownloadError && error.reason === 'too_large') {
+                    captureError(error, 'Transcription audio too large', { tags: { service: 'transcription' } });
                     return null;
                 }
-
-                contentType = (response.headers.get('content-type') || '').toLowerCase();
-                audioBuffer = Buffer.from(await response.arrayBuffer());
-            } finally {
-                clearTimeout(downloadTimer);
+                // Network / timeout: preserve the prior behavior where this path
+                // recorded a failed_before_log metric before any OpenAI call (kept
+                // as-is so Phase-6.5 gap analysis is unchanged).
+                recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, 'OpenAIApiError');
+                const isTimeout = error instanceof MediaDownloadError && error.reason === 'timeout';
+                captureError(
+                    error instanceof Error ? error : new Error(String(error)),
+                    isTimeout ? 'Transcription timeout' : 'Transcription failed',
+                    { tags: { service: 'transcription' } },
+                );
+                return null;
             }
 
-            if (audioBuffer.length === 0 || audioBuffer.length > MAX_AUDIO_BYTES) return null;
+            if (audioBuffer.length === 0) return null;
 
             // Validate that what we downloaded actually looks like audio. FB CDN
             // occasionally returns HTML error pages or truncated buffers with a

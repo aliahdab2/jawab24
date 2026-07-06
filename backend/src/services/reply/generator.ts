@@ -11,9 +11,9 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, type ProductCard, type FlagMeta } from '@jawab24/shared';
-import { detectLanguage, detectLanguageCode } from '../../utils/language';
-import type { FacebookMessageTag } from '../../utils/commentText';
-import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
+import { detectLanguage, detectLanguageCode, isLowSignalLatinToken } from '../../utils/language';
+import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
+import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
 import { detectBusinessActionFlags } from './urgentFlags';
 
 /**
@@ -239,6 +239,12 @@ export function resolveFallbackLanguage(opts: {
     const sources = [opts.text, opts.postMessage, opts.knowledgeBase];
     for (const s of sources) {
         if (!s) continue;
+        // A bare Latin token ("icdl", a product name) carries no real language
+        // signal — the detector floors it at English. Skip it so the conversation
+        // context (post → KB → merchant default) decides the fallback language,
+        // matching resolveCommentLanguage. Without this, an "icdl" reply on an
+        // Arabic thread forces the English away/quota fallback template.
+        if (isLowSignalLatinToken(s)) continue;
         const lang = detectLanguageCode(s);
         if (lang !== 'unknown') return lang === 'ar' ? 'ar' : 'en';
     }
@@ -348,6 +354,8 @@ export interface PlaygroundInput {
     /** Stage 2.6 structured BUSINESS_INFO prompt block (merchant-confirmed only). */
     businessInfoBlock?: string | null;
     customerContext?: string;
+    /** Customer display name (DM only) — feeds gender-aware Arabic DM addressing. */
+    senderName?: string;
     model?: string;
     defaultReplyLanguage?: string;
     /** See GenerateReplyContext.timezone. */
@@ -525,8 +533,8 @@ export class ReplyGenerator {
             // instead of the brief "message us" comment-style reply.
             const effectiveChannel: 'comment' | 'dm' = (commentReplyMode === 'dual' || commentReplyMode === 'private') ? 'dm' : 'comment';
 
-            commentForAI = rewritePunctuationForDualDm({
-                commentForAI, rawText: text, postMessage, effectiveChannel,
+            commentForAI = rewriteContentFreeCta({
+                commentForAI, rawText: text, postMessage,
             });
 
             // Build gap source context for merchant insights
@@ -579,7 +587,10 @@ export class ReplyGenerator {
             if (!limitCheck.allowed) {
                 this.logger.info('[Generator] AI limit reached', { reason: limitCheck.reason });
                 const lang = resolveFallbackLanguage({
-                    text, knowledgeBase,
+                    // postMessage is present for DMs that originated from a comment
+                    // (dual/private mode) — an Arabic origin post rescues the language
+                    // when the customer's latest DM is a bare token like "icdl".
+                    text, postMessage: context.postMessage, knowledgeBase,
                     defaultReplyLanguage: context.defaultReplyLanguage,
                 });
                 // Master switch: when off, suppress the auto-reply (silent + flag).
@@ -788,7 +799,7 @@ export class ReplyGenerator {
         const {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
-            replyStyle, brandVoiceNotes, businessInfoBlock, customerContext, model, defaultReplyLanguage,
+            replyStyle, brandVoiceNotes, businessInfoBlock, customerContext, senderName, model, defaultReplyLanguage,
             timezone, messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
         } = input;
 
@@ -820,11 +831,11 @@ export class ReplyGenerator {
             questionForAI = pre.commentForAI;
         }
 
-        // Dual-mode DM with punctuation-only input (e.g. "." on a CTA post): replace with
-        // a synthetic question so the AI has something meaningful to answer.
-        questionForAI = rewritePunctuationForDualDm({
+        // Content-free CTA input (e.g. "." / "٠٠٠" on a CTA post): replace with a
+        // synthetic question so the AI has something meaningful to answer — on any
+        // channel (see rewriteContentFreeCta for the public-mode rationale).
+        questionForAI = rewriteContentFreeCta({
             commentForAI: questionForAI, rawText: question, postMessage,
-            effectiveChannel: channel,
         });
 
         // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production).
@@ -866,6 +877,7 @@ export class ReplyGenerator {
                 queryEmbedding,
                 ...(postMessage ? { postMessage } : {}),
                 ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
+                ...(channel === 'dm' && senderName ? { senderName } : {}),
                 ...(replyStyle ? { replyStyle } : {}),
                 ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
                 ...(businessInfoBlock ? { businessInfoBlock } : {}),
@@ -894,10 +906,18 @@ export class ReplyGenerator {
 
         const needsAttention = computeNeedsAttention(flags, normalizedIntent);
         // Don't skip DM replies that originated from a post comment (dual mode) —
-        // the customer engaged with a CTA post and deserves a response
+        // the customer engaged with a CTA post and deserves a response.
+        // Likewise never SPAM-skip a content-free comment on a post, on ANY channel:
+        // "٠٠٠" / "." is the customer following the post's CTA. rewriteContentFreeCta
+        // normally prevents the spam verdict at the input; this is the deterministic
+        // backstop so a model quirk about one Unicode script can't silence solicited
+        // engagement (eval #324). OFFENSIVE is NOT bypassed — shouldSilentlySkip is
+        // true only for SPAM_OR_IRRELEVANT, so an offensive emoji still skips+flags.
+        const solicitedCta = !!postMessage && isContentFree(question.trim());
         const skipped = (channel === 'dm' && postMessage)
             ? false
-            : shouldSkipReply(flags.join(','), normalizedIntent);
+            : shouldSkipReply(flags.join(','), normalizedIntent)
+                && !(solicitedCta && shouldSilentlySkip(normalizedIntent));
         const useFallback = shouldUseFallback(flags.join(','));
 
         // Gap recording (fire-and-forget, same triggers as processAiResponse)

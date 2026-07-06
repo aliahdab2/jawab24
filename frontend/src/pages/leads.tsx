@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, type ReactElement } from 'react';
+import React, { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
 import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, useDebounce } from '@/hooks';
 import { toast } from 'sonner';
@@ -6,20 +6,19 @@ import clsx from 'clsx';
 import * as Popover from '@radix-ui/react-popover';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageHeader, EmptyState, ConfirmationModal, UpgradeCTA, Input } from '@/components/ui';
+import { PageHeader, EmptyState, ConfirmationModal, Input, WhatsAppIcon } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useIsDemoUser } from '@/features/demo/useDemoMode';
 import { useUIStore } from '@/lib/store';
-import { leadsApi, pagesApi, subscriptionApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
+import { leadsApi, pagesApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
-import type { Page, UsageSummary } from '@jawab24/shared';
+import type { Page } from '@jawab24/shared';
 import { resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
 import {
   Users,
   Phone,
   Trash2,
   Download,
-  Lock,
   Loader2,
   Search,
   X,
@@ -364,9 +363,7 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-[#25D366] hover:bg-[#1ebe5d] active:bg-[#17a34a] text-white font-semibold text-sm transition-colors"
               aria-label={t('whatsapp')}
             >
-              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-              </svg>
+              <WhatsAppIcon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
               {t('whatsapp')}
             </button>
             {/* View conversation — only message-sourced leads have a DM thread */}
@@ -537,22 +534,6 @@ const LeadsPage: NextPageWithLayout = () => {
     staleTime: 60_000,
   });
 
-  const { data: usageData } = useQuery<UsageSummary>({
-    queryKey: ['subscription', 'usage'],
-    queryFn: async () => {
-      const res = await subscriptionApi.getUsage();
-      return (res.data?.data ?? res.data) as UsageSummary;
-    },
-    staleTime: 5 * 60_000,
-  });
-
-  // CSV export is available on Business and Pro plans (and any trialing user,
-  // so they experience the full product before deciding to pay).
-  // Default to true while loading so the button doesn't flash in for Starter users.
-  const canExport = usageData
-    ? usageData.subscription.plan.slug !== 'starter' || usageData.subscription.status === 'trialing'
-    : true;
-
   // Only connected pages belong on the leads picker: a disconnected page (missing/
   // invalid FB token, isConnected === false) captures nothing, so it shouldn't appear
   // as a choice. Its historical leads return as soon as the page is reconnected.
@@ -626,7 +607,7 @@ const LeadsPage: NextPageWithLayout = () => {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['leads', selectedPageId, statusFilter],
+    queryKey: ['leads', selectedPageId, statusFilter, debouncedSearch.trim()],
     queryFn: ({ pageParam }) =>
       leadsApi.getByPage(selectedPageId, {
         // 'returning' filters by the follow-up flag (any status); 'all' = no filter.
@@ -635,6 +616,10 @@ const LeadsPage: NextPageWithLayout = () => {
           : statusFilter === 'all'
             ? {}
             : { status: statusFilter }),
+        // Server-side search (name / phone / extracted data). The list paginates,
+        // so filtering only the loaded rows made older leads unfindable — a lead
+        // beyond the first page returned nothing for its own name (2026-07-02).
+        ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
         limit: LEADS_PER_PAGE,
         offset: pageParam,
       }).then((r) => r.data),
@@ -677,21 +662,10 @@ const LeadsPage: NextPageWithLayout = () => {
     staleTime: 30_000,
   });
 
-  // Client-side search over the loaded leads (name / phone / summary / extracted
-  // fields), mirroring the Messages page. Status filtering stays server-side.
-  const filteredLeads = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
-    if (!q) return leads;
-    return leads.filter((l) =>
-      (l.senderName ?? '').toLowerCase().includes(q) ||
-      l.phone.toLowerCase().includes(q) ||
-      (l.extractedData?.summary ?? '').toLowerCase().includes(q) ||
-      // Also match the AI-extracted detail fields: when several people share one
-      // FB account, each name/phone they leave lives here (not in l.phone), so
-      // without this their names/numbers are unsearchable.
-      (l.extractedData?.fields ?? []).some((f) => (f.value ?? '').toLowerCase().includes(q)),
-    );
-  }, [leads, debouncedSearch]);
+  // Search runs server-side (part of the query key above) — the server matches
+  // senderName, phone, AND the AI-extracted data (summary + field values, which
+  // hold e.g. the names/numbers of several people sharing one FB account), so
+  // the loaded pages ARE the filtered result.
 
   // Open the related message thread for a (message-sourced) lead. messageId
   // deep-links reliably regardless of the inbox filter; senderId is the fallback.
@@ -929,29 +903,24 @@ const LeadsPage: NextPageWithLayout = () => {
                 <SlidersHorizontal className="w-4 h-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{t('customizeStages')}</span>
               </button>
+              {/* CSV export — available on every plan. (It used to be Business+ only,
+                  shown to Starter accounts as a 🔒 + "Business+" upsell chip; that read
+                  as a cryptic broken state and crowded the mobile header, so export was
+                  ungated — the backend never enforced the plan anyway.) */}
               <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
-                {canExport ? (
-                  <button
-                    onClick={handleExport}
-                    disabled={exporting}
-                    aria-label={t('exportCsv')}
-                    title={t('exportCsv')}
-                    className={clsx(HEADER_ACTION_BTN, 'disabled:opacity-50')}
-                  >
-                    {exporting
-                      ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                      : <Download className="w-4 h-4" aria-hidden="true" />
-                    }
-                    <span className="hidden sm:inline">{t('exportCsv')}</span>
-                  </button>
-                ) : (
-                  <UpgradeCTA
-                    className="flex items-center justify-center gap-1.5 min-h-[40px] px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors cursor-pointer"
-                  >
-                    <Lock className="w-4 h-4" aria-hidden="true" />
-                    <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
-                  </UpgradeCTA>
-                )}
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  aria-label={t('exportCsv')}
+                  title={t('exportCsv')}
+                  className={clsx(HEADER_ACTION_BTN, 'disabled:opacity-50')}
+                >
+                  {exporting
+                    ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                    : <Download className="w-4 h-4" aria-hidden="true" />
+                  }
+                  <span className="hidden sm:inline">{t('exportCsv')}</span>
+                </button>
               </div>
             </div>
           ) : undefined
@@ -1088,7 +1057,12 @@ const LeadsPage: NextPageWithLayout = () => {
       ) : isError ? (
         <EmptyState icon={Users} title={t('loadFailed')} variant="search" />
       ) : leads.length === 0 ? (
-        statusFilter === 'all' ? (
+        debouncedSearch.trim() ? (
+          // Search (server-side) found nothing — say so. Never show the onboarding
+          // or filter copy here: a merchant with hundreds of leads whose search
+          // misses must not read "no leads captured yet".
+          <EmptyState icon={Search} title={tc('noData')} variant="search" />
+        ) : statusFilter === 'all' ? (
           // No leads captured yet — the onboarding empty state.
           <EmptyState icon={Users} title={t('empty')} description={t('emptySub')} />
         ) : (
@@ -1109,13 +1083,11 @@ const LeadsPage: NextPageWithLayout = () => {
             }
           />
         )
-      ) : filteredLeads.length === 0 ? (
-        <EmptyState icon={Search} title={tc('noData')} variant="search" />
       ) : (
         <>
           {/* Mobile: card list */}
           <div className="flex flex-col gap-3 md:hidden">
-            {filteredLeads.map((lead) => (
+            {leads.map((lead) => (
               <LeadCard
                 key={lead.id}
                 lead={lead}
@@ -1144,7 +1116,7 @@ const LeadsPage: NextPageWithLayout = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredLeads.map((lead) => (
+                {leads.map((lead) => (
                   <LeadRow
                     key={lead.id}
                     lead={lead}

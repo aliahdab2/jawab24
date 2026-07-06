@@ -15,6 +15,8 @@
   "latestCommentsDesc": "استعرض ورد على أحدث التعليقات هنا.",
   "topPages": "صفحاتك",
   "topPagesDesc": "ربط المزيد من الصفحات يحسن كفاءة الرد.",
+  "topPagesChannels": "قنوات التواصل",
+  "topPagesChannelsDesc": "ربط المزيد من القنوات يحسن كفاءة الرد.",
   "replyRate": "معدل الرد",
   "activePages": "صفحات مفعلة",
   "presetReplies": "ردود جاهزة",
@@ -54,6 +56,9 @@
   "kbNudgeLater": "لاحقاً",
   "kbNudgeEcomTitle": "أكمل معلومات نشاطك التجاري",
   "kbNudgeEcomBody": "منتجات متجرك متزامنة! أضف ساعات العمل والموقع والأسئلة الشائعة لردود أفضل.",
+  "whatsappNudgeTitle": "جواب صار يرد على واتساب",
+  "whatsappNudgeBody": "اربط رقم واتساب للأعمال وستصل الردود الذكية لعملائك هناك أيضًا — حتى الرسائل الصوتية.",
+  "whatsappNudgeCta": "اربط واتساب",
   "setupChecklist": {
     "titleWithProgress": "أكمل إعدادك ({done}/{total})",
     "subtitle": "خطوات بسيطة لتبدأ باستقبال الردود الذكية",

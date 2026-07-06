@@ -10,6 +10,12 @@ export interface BlogPost {
 
 export const BLOG_POSTS: BlogPost[] = [
   {
+    slug: 'ai-auto-reply-customer-photos',
+    date: '2026-07-05',
+    category: 'guides',
+    readingTime: 5,
+  },
+  {
     slug: 'social-commerce-ai-customer-service-statistics-2026',
     date: '2026-03-21',
     category: 'statistics',
