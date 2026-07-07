@@ -233,9 +233,17 @@ class ImageUnderstandingService {
             return await this.describe(dataUrl, langHint, ctx);
         } catch (error) {
             // A 400 means the image bytes are bad (unsupported/corrupt) — we
-            // already fall back gracefully, so warn instead of paging Sentry.
+            // already fall back gracefully. Capture as a fingerprinted WARNING
+            // (one grouped issue, alert on frequency) so a spike — e.g. our own
+            // buffer handling regressing — is visible without paging per event.
             if (error instanceof APIError && error.status === 400) {
                 console.warn('[imageUnderstanding] OpenAI 400, returning null', { message: error.message });
+                captureError(error, 'Image understanding OpenAI 400', {
+                    level: 'warning',
+                    fingerprint: ['image-understanding-openai-400'],
+                    tags: { service: 'image_understanding' },
+                    extra: { message: error.message },
+                });
                 return null;
             }
             const isTimeout = error instanceof Error && error.name === 'AbortError';

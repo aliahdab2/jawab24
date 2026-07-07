@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
+
 import {
     PLAN_DEPENDENT_PATHS,
     revalidatePlanPages,
     revalidatePublicPages,
 } from '../../src/services/revalidation';
+import { captureError } from '../../src/utils/sentryHelpers';
 
 const REVALIDATE_URL = 'https://jawab24.com/api/revalidate';
 const REVALIDATE_SECRET = 'test-secret';
@@ -16,6 +20,7 @@ describe('revalidatePublicPages', () => {
     const originalSecret = process.env.REVALIDATE_SECRET;
 
     beforeEach(() => {
+        vi.mocked(captureError).mockClear();
         fetchMock = vi.fn();
         global.fetch = fetchMock as unknown as typeof fetch;
         warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -42,12 +47,20 @@ describe('revalidatePublicPages', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('skips revalidation and warns when env vars are missing', async () => {
+    it('skips revalidation, warns and captures a fingerprinted WARNING when env vars are missing', async () => {
         delete process.env.FRONTEND_REVALIDATE_URL;
         await revalidatePublicPages(['/pricing']);
         expect(fetchMock).not.toHaveBeenCalled();
         expect(warnSpy).toHaveBeenCalledWith(
             expect.stringContaining('FRONTEND_REVALIDATE_URL or REVALIDATE_SECRET not set'),
+        );
+        expect(captureError).toHaveBeenCalledWith(
+            expect.anything(),
+            'Revalidation not configured',
+            expect.objectContaining({
+                level: 'warning',
+                fingerprint: ['revalidation-not-configured'],
+            }),
         );
     });
 
@@ -72,6 +85,14 @@ describe('revalidatePublicPages', () => {
         expect(warnSpy).toHaveBeenCalledWith(
             expect.stringContaining('Frontend returned 503'),
         );
+        expect(captureError).toHaveBeenCalledWith(
+            expect.anything(),
+            'Revalidation request rejected',
+            expect.objectContaining({
+                level: 'warning',
+                fingerprint: ['revalidation-failed'],
+            }),
+        );
     });
 
     it('does not throw when fetch rejects (network failure)', async () => {
@@ -81,6 +102,14 @@ describe('revalidatePublicPages', () => {
         expect(warnSpy).toHaveBeenCalledWith(
             expect.stringContaining('Request failed for paths /pricing'),
             expect.stringContaining('ECONNREFUSED'),
+        );
+        expect(captureError).toHaveBeenCalledWith(
+            expect.anything(),
+            'Revalidation request failed',
+            expect.objectContaining({
+                level: 'warning',
+                fingerprint: ['revalidation-failed'],
+            }),
         );
     });
 
