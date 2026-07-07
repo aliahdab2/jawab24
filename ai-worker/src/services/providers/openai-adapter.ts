@@ -39,6 +39,12 @@ export class OpenAIAdapter implements LLMProvider {
                     { name: 'ai.llm.call', op: 'ai', attributes: { 'ai.model': this.modelId } },
                     () => {
                         const isReasoningModel = /^(gpt-5|o1|o3|o4)/i.test(this.modelId);
+                        // Lowest reasoning tier — enough to stop the model burning
+                        // max_completion_tokens on hidden reasoning. The gpt-5.1+ family
+                        // renamed this tier: 'minimal' was removed and only 'none' disables
+                        // reasoning (gpt-5.4-mini rejects 'minimal' with a 400). gpt-5.0 and
+                        // the o-series still use 'minimal'.
+                        const minimalReasoningEffort = /^gpt-5\.\d/i.test(this.modelId) ? 'none' : 'minimal';
                         const base: OpenAI.ChatCompletionCreateParamsNonStreaming = {
                             model: this.modelId,
                             messages: params.messages as OpenAI.ChatCompletionMessageParam[],
@@ -57,9 +63,9 @@ export class OpenAIAdapter implements LLMProvider {
                                 max_completion_tokens: params.maxTokens,
                                 // gpt-5 / o-series default to 'medium' reasoning_effort,
                                 // which consumes most of max_completion_tokens on hidden
-                                // reasoning and starves the JSON output. 'minimal' makes
-                                // gpt-5-mini behave like a standard chat model.
-                                reasoning_effort: 'minimal',
+                                // reasoning and starves the JSON output. The lowest tier
+                                // makes the model behave like a standard chat model.
+                                reasoning_effort: minimalReasoningEffort,
                                 // Note: gpt-5 / o-series reject custom temperature/top_p/penalties.
                             }
                             : {
