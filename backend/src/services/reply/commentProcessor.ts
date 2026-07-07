@@ -360,6 +360,9 @@ export class CommentProcessor {
                                 });
                                 const verdict = evaluateAnyCommentGuard({
                                     skipReason: pre.skipReason,
+                                    // Same probe as rewriteContentFreeCta: the cleaned text, or the
+                                    // raw comment when cleaning stripped it to empty.
+                                    isContentFree: isContentFree((pre.commentForAI || commentMessage).trim()),
                                     fallbackIntent: classifyFallbackIntent(commentMessage),
                                     businessActionFlags: detectBusinessActionFlags(commentMessage),
                                 });

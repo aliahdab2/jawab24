@@ -1,4 +1,5 @@
 import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
+import type { CommentSkipReason } from './commentPreprocess';
 
 /**
  * Post Reply rule resolution + matching + the any-comment guardrail.
@@ -127,20 +128,39 @@ export type AnyCommentGuardVerdict =
  * Guardrail for any-comment (triggerType 'all') template sends. Keyword mode is
  * opt-in narrow and keeps its existing behavior; any-comment fires on EVERY comment,
  * so it must not template-reply to spam or complaints:
- *   - a preprocess skipReason (friend_mention / external_promo_url / punctuation)   → skip
- *   - SPAM_OR_IRRELEVANT fallback intent (emoji-only, spam keywords)                → skip
+ *   - friend_mention / user_tag / external_promo_url preprocess skipReason          → skip
+ *   - content-free comment ("." / "٠٠٠" / emoji-only)                               → send
+ *   - any other preprocess skipReason (e.g. bare URL stripped to empty)             → skip
+ *   - SPAM_OR_IRRELEVANT fallback intent (spam keywords)                            → skip
  *   - a business-action flag (refund / cancellation / exchange)                     → flag
  *   - COMPLAINT fallback intent (angry customer)                                    → flag
  *   - otherwise                                                                     → send
  *
+ * Content-free comments SEND on purpose (D-021, reverses the PR #389 skip): "علق
+ * بنقطة" (comment a dot) is the canonical campaign this mode exists for, and the
+ * fixed template needs no comprehension — the AI path's "nothing to answer"
+ * rationale doesn't apply. No post-context requirement either: on Instagram the
+ * CTA often lives inside the image with an empty caption. Content-free wins over
+ * `punctuation_no_context` but NOT over the tag/spam skips — friend-tag chatter
+ * must never get a template (owner directive), and a tagged name always carries
+ * letters so a tag comment can't read as content-free anyway; the ordering is
+ * belt-and-braces.
+ *
  * Pure function over already-computed signals so it's unit-testable; the caller
- * supplies the preprocess skipReason, the fallback intent, and the business flags.
+ * supplies the preprocess skipReason, the content-free signal, the fallback
+ * intent, and the business flags.
  */
 export function evaluateAnyCommentGuard(opts: {
-    skipReason: string | null;
+    skipReason: CommentSkipReason | null;
+    /** `isContentFree(commentForAI || rawText)` — no letters in any script. */
+    isContentFree: boolean;
     fallbackIntent: string | undefined;
     businessActionFlags: string[];
 }): AnyCommentGuardVerdict {
+    if (opts.skipReason && opts.skipReason !== 'punctuation_no_context') {
+        return { action: 'skip', reason: opts.skipReason };
+    }
+    if (opts.isContentFree) return { action: 'send' };
     if (opts.skipReason) return { action: 'skip', reason: opts.skipReason };
     if (opts.fallbackIntent === 'SPAM_OR_IRRELEVANT') return { action: 'skip', reason: 'spam' };
     if (opts.businessActionFlags.length > 0) return { action: 'flag', flagReason: opts.businessActionFlags.join(',') };

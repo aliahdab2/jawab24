@@ -58,28 +58,61 @@ describe('matchPostReplyRule', () => {
 
 describe('evaluateAnyCommentGuard', () => {
     it('sends a benign comment', () => {
-        expect(evaluateAnyCommentGuard({ skipReason: null, fallbackIntent: 'QUESTION', businessActionFlags: [] }))
+        expect(evaluateAnyCommentGuard({ skipReason: null, isContentFree: false, fallbackIntent: 'QUESTION', businessActionFlags: [] }))
             .toEqual({ action: 'send' });
     });
 
     it('skips when preprocess flagged a skip reason', () => {
-        expect(evaluateAnyCommentGuard({ skipReason: 'friend_mention', fallbackIntent: undefined, businessActionFlags: [] }))
+        expect(evaluateAnyCommentGuard({ skipReason: 'friend_mention', isContentFree: false, fallbackIntent: undefined, businessActionFlags: [] }))
             .toEqual({ action: 'skip', reason: 'friend_mention' });
     });
 
     it('skips spam/irrelevant', () => {
-        expect(evaluateAnyCommentGuard({ skipReason: null, fallbackIntent: 'SPAM_OR_IRRELEVANT', businessActionFlags: [] }))
+        expect(evaluateAnyCommentGuard({ skipReason: null, isContentFree: false, fallbackIntent: 'SPAM_OR_IRRELEVANT', businessActionFlags: [] }))
             .toEqual({ action: 'skip', reason: 'spam' });
     });
 
     it('flags a business-action request (refund/cancel/exchange)', () => {
-        expect(evaluateAnyCommentGuard({ skipReason: null, fallbackIntent: undefined, businessActionFlags: ['refund_request'] }))
+        expect(evaluateAnyCommentGuard({ skipReason: null, isContentFree: false, fallbackIntent: undefined, businessActionFlags: ['refund_request'] }))
             .toEqual({ action: 'flag', flagReason: 'refund_request' });
     });
 
     it('flags a complaint', () => {
-        expect(evaluateAnyCommentGuard({ skipReason: null, fallbackIntent: 'COMPLAINT', businessActionFlags: [] }))
+        expect(evaluateAnyCommentGuard({ skipReason: null, isContentFree: false, fallbackIntent: 'COMPLAINT', businessActionFlags: [] }))
             .toEqual({ action: 'flag', flagReason: 'angry_customer' });
+    });
+
+    // D-021: content-free comments (dot/emoji CTA engagement) get the template.
+    it('sends a dot comment even though the classifier calls it spam ("علق بنقطة" CTA)', () => {
+        expect(evaluateAnyCommentGuard({ skipReason: null, isContentFree: true, fallbackIntent: 'SPAM_OR_IRRELEVANT', businessActionFlags: [] }))
+            .toEqual({ action: 'send' });
+    });
+
+    it('sends a dot comment on a captionless post (punctuation_no_context is overridden)', () => {
+        expect(evaluateAnyCommentGuard({ skipReason: 'punctuation_no_context', isContentFree: true, fallbackIntent: 'SPAM_OR_IRRELEVANT', businessActionFlags: [] }))
+            .toEqual({ action: 'send' });
+    });
+
+    it('sends a non-compliment emoji-only comment (😂😂)', () => {
+        expect(evaluateAnyCommentGuard({ skipReason: null, isContentFree: true, fallbackIntent: 'SPAM_OR_IRRELEVANT', businessActionFlags: [] }))
+            .toEqual({ action: 'send' });
+    });
+
+    it('friend-tag skips win over content-free (owner directive: never template a friend tag)', () => {
+        expect(evaluateAnyCommentGuard({ skipReason: 'friend_mention', isContentFree: true, fallbackIntent: undefined, businessActionFlags: [] }))
+            .toEqual({ action: 'skip', reason: 'friend_mention' });
+        expect(evaluateAnyCommentGuard({ skipReason: 'user_tag', isContentFree: true, fallbackIntent: undefined, businessActionFlags: [] }))
+            .toEqual({ action: 'skip', reason: 'user_tag' });
+    });
+
+    it('promo-URL skips win over content-free', () => {
+        expect(evaluateAnyCommentGuard({ skipReason: 'external_promo_url', isContentFree: true, fallbackIntent: 'SPAM_OR_IRRELEVANT', businessActionFlags: [] }))
+            .toEqual({ action: 'skip', reason: 'external_promo_url' });
+    });
+
+    it('still skips punctuation_no_context when the raw text has letters (e.g. bare URL stripped to empty)', () => {
+        expect(evaluateAnyCommentGuard({ skipReason: 'punctuation_no_context', isContentFree: false, fallbackIntent: undefined, businessActionFlags: [] }))
+            .toEqual({ action: 'skip', reason: 'punctuation_no_context' });
     });
 });
 

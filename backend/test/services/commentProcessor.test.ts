@@ -1854,13 +1854,42 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(postReplyCap.increment).toHaveBeenCalledWith('page-uuid', 'content-uuid');
         });
 
-        it('skips spam (emoji-only) without sending — guardrail', async () => {
+        // D-021: content-free comments are solicited engagement in any-comment mode
+        // ("علق بنقطة" campaigns) — the template sends, they are NOT spam-skipped.
+        it('sends the template on a dot comment (content-free CTA engagement)', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', '.', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+            expect(result.replyText).toBe('تم إرسال الكود على الخاص 📩');
+        });
+
+        it('sends the template on an emoji-only comment', async () => {
             const adapter = createMockAdapter({
                 findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
             });
 
             const result = await commentProcessor.processComment(
                 adapter, 'page-1', 'content-1', 'comment-1', '😂😂😂', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('skips spam-keyword comments without sending — guardrail', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(anyCommentContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'follow me for more deals', 'user-1', 'Ali',
             );
 
             expect(adapter.sendReply).not.toHaveBeenCalled();

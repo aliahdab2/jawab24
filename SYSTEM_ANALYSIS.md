@@ -3,7 +3,7 @@
 > **System Reference Document / وثيقة مرجعية للنظام**
 > Generated: 2026-02-28 | Updated: 2026-04-15 (v30 — Email service via Resend; waitlist with admin management; all Facebook+Instagram permissions approved 2026-04-07; prompt v30)
 >
-> **Terminology note:** Preset Replies (formerly Templates+Rules) was removed. Template reply paths are now handled by **Post Replies** only — a per-post trigger with two modes (`posts/instagram_media.trigger_type`): **keyword** (comment matches one of ≤10 keywords) or **any-comment** (fires on every comment; runs the spam/friend-tag skip rules + a best-effort complaint keyword-guard first, bounded by an invisible per-post/24h anti-runaway cap — see D-013). Smart Replies (AI) remain the default for comments and DMs that don't match a Post Reply trigger.
+> **Terminology note:** Preset Replies (formerly Templates+Rules) was removed. Template reply paths are now handled by **Post Replies** only — a per-post trigger with two modes (`posts/instagram_media.trigger_type`): **keyword** (comment matches one of ≤10 keywords) or **any-comment** (fires on every comment; runs the spam/friend-tag skip rules + a best-effort complaint keyword-guard first, bounded by an invisible per-post/24h anti-runaway cap — see D-013; content-free comments like "." / emoji-only / "٠٠٠" DO get the template — dot-CTA campaigns, see D-021). Smart Replies (AI) remain the default for comments and DMs that don't match a Post Reply trigger.
 
 ---
 
@@ -461,7 +461,8 @@ CUSTOMER SENDS MESSAGE/COMMENT
 ├── Try POST REPLY MATCHING (per-post trigger: keyword match, or any-comment mode)
 │   ├── any-comment mode → run skip rules (spam/friend-tag/promo-link) + complaint
 │   │   keyword-guard + handoff-pause gate + per-post 24h cap BEFORE sending,
-│   │   inside the per-comment idempotency check + lock (postReplyRule.ts)
+│   │   inside the per-comment idempotency check + lock (postReplyRule.ts).
+│   │   Content-free comments ("." / emoji / digits) SEND — dot-CTA (D-021)
 │   └── MATCH → Use Post Reply → Go to Safety Filters
 │
 ├── Is AI enabled?
