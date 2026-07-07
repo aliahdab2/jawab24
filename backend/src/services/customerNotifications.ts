@@ -18,6 +18,11 @@ export interface ScheduleParams {
     platformEventId?: string;
     orderNumber?: string;
     cartTotal?: string;
+    /** Minimum delay before sending, in ms. Effective delay = max(template delay, this). */
+    minDelayMs?: number;
+    /** On dedup conflict, overwrite a still-pending row's rendered message (used to
+     *  upgrade a shipped notification in place when a later webhook carries tracking). */
+    upgradePendingOnDuplicate?: boolean;
 }
 
 // Arabic phone prefixes — SA, AE, KW, BH, OM, QA, JO, EG, IQ, SY, LB, YE, MA, TN, DZ, LY
@@ -33,37 +38,26 @@ export class CustomerNotificationService {
 
     /**
      * Schedule a notification — immediate or delayed.
-     * Deduplicates by (notificationType, platformEventId) to prevent double-sends.
+     * Deduplicates by (storeId, notificationType, platformEventId) via a unique index,
+     * so a concurrent re-delivery of the same webhook can't double-send.
      */
     async schedule(params: ScheduleParams): Promise<void> {
-        const { storeId, type, customerPhone, customerName, variables, platformEventId, orderNumber, cartTotal } = params;
+        const { storeId, type, customerPhone, customerName, variables, platformEventId, orderNumber, cartTotal, minDelayMs, upgradePendingOnDuplicate } = params;
 
         // Fetch template
         const template = await this.getTemplate(storeId, type);
         if (!template || !template.isEnabled) return;
 
-        // Dedup: skip if already sent/pending for this event
-        if (platformEventId) {
-            const [existing] = await db
-                .select({ id: customerNotificationsLog.id })
-                .from(customerNotificationsLog)
-                .where(and(
-                    eq(customerNotificationsLog.ecommerceStoreId, storeId),
-                    eq(customerNotificationsLog.notificationType, type),
-                    eq(customerNotificationsLog.platformEventId, platformEventId),
-                ))
-                .limit(1);
-            if (existing) return;
-        }
-
         const lang = this.detectLanguage(customerPhone);
         const rawTemplate = lang === 'ar' ? template.messageAr : template.messageEn;
         const rendered = this.renderTemplate(rawTemplate, { customer_name: customerName ?? '', ...variables });
 
-        const delayMs = (template.delayMinutes ?? 0) * 60 * 1000;
+        const delayMs = Math.max((template.delayMinutes ?? 0) * 60 * 1000, minDelayMs ?? 0);
         const scheduledAt = delayMs > 0 ? new Date(Date.now() + delayMs) : null;
 
-        // Create log entry
+        // Create log entry. The unique index on (store, type, platformEventId) makes dedup
+        // atomic: a concurrent duplicate conflicts and returns no row. NULL platformEventId
+        // never conflicts (NULLs distinct), so non-event notifications always insert.
         const [log] = await db
             .insert(customerNotificationsLog)
             .values({
@@ -79,7 +73,34 @@ export class CustomerNotificationService {
                 cartTotal,
                 scheduledAt,
             })
+            .onConflictDoNothing({
+                target: [
+                    customerNotificationsLog.ecommerceStoreId,
+                    customerNotificationsLog.notificationType,
+                    customerNotificationsLog.platformEventId,
+                ],
+            })
             .returning({ id: customerNotificationsLog.id });
+
+        if (!log) {
+            // Duplicate — a row for this (store, type, event) already exists. If a richer
+            // version of the same notification just arrived (e.g. Salla's shipment.created
+            // carrying a tracking number, after an earlier status-update row was scheduled
+            // without one), upgrade the still-pending row's message in place. The worker
+            // re-reads messageSent at send time (see send()), so the queued job sends it.
+            if (upgradePendingOnDuplicate && platformEventId) {
+                await db
+                    .update(customerNotificationsLog)
+                    .set({ messageSent: rendered })
+                    .where(and(
+                        eq(customerNotificationsLog.ecommerceStoreId, storeId),
+                        eq(customerNotificationsLog.notificationType, type),
+                        eq(customerNotificationsLog.platformEventId, platformEventId),
+                        eq(customerNotificationsLog.status, 'pending'),
+                    ));
+            }
+            return;
+        }
 
         // Enqueue job (with delay if needed)
         // If enqueue fails, delete the log entry so the event can be retried

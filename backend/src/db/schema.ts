@@ -1458,7 +1458,10 @@ export const customerNotificationsLog = pgTable('customer_notifications_log', {
     phoneIdx: index('idx_cust_notif_log_phone').on(table.customerPhone),
     statusIdx: index('idx_cust_notif_log_status').on(table.status),
     typeEventIdx: index('idx_cust_notif_log_type_event').on(table.notificationType, table.platformEventId),
-    storeTypeEventIdx: index('idx_cust_notif_log_store_type_event').on(table.ecommerceStoreId, table.notificationType, table.platformEventId),
+    // Unique so a concurrent re-delivery of the same webhook can't double-send. NULL
+    // platformEventId rows (non-event notifications) never conflict — Postgres treats
+    // NULLs as distinct — matching the pre-existing "only dedup when event id present" rule.
+    storeTypeEventIdx: uniqueIndex('idx_cust_notif_log_store_type_event').on(table.ecommerceStoreId, table.notificationType, table.platformEventId),
     pendingScheduledIdx: index('idx_cust_notif_log_pending_scheduled').on(table.status, table.scheduledAt),
 }));
 

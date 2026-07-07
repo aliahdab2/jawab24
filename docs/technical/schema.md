@@ -14,8 +14,8 @@ The authoritative schema lives in code, not in this doc. Drizzle ORM definitions
 | Facebook / Instagram | `pages`, `posts`, `comments`, `messages`, `instagram_media`, `instagram_comments`, `conversation_pauses` |
 | AI & knowledge base | `knowledge_base_entries`, `kb_chunks`, `reply_templates`, `reply_rules`, `ai_usage_log`, `ai_reply_cache` |
 | Billing | `plans`, `subscriptions`, `payment_events` |
-| E-commerce | `ecommerce_stores`, `ecommerce_products`, `ecommerce_orders` |
-| Leads & notifications | `leads`, `customer_notifications`, `waitlist_subscribers` |
+| E-commerce | `ecommerce_stores`, `ecommerce_products`, `pending_ecommerce_installs`, `catalog_items` |
+| Leads & notifications | `leads`, `customer_notification_templates`, `customer_notifications_log`, `waitlist_subscribers` |
 
 ## Conventions
 

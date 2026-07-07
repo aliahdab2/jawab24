@@ -43,11 +43,13 @@ function mockSelectChain(returnValue: unknown) {
     };
 }
 
-function mockInsertChain(returnValue: unknown) {
+/** Mock the insert chain: values().onConflictDoNothing().returning().
+ *  Pass `null` to simulate a dedup conflict (empty returning array). */
+function mockInsertChain(returnValue: unknown | null) {
+    const returning = vi.fn().mockResolvedValue(returnValue === null ? [] : [returnValue]);
+    const onConflictDoNothing = vi.fn().mockReturnValue({ returning });
     return {
-        values: vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([returnValue]),
-        }),
+        values: vi.fn().mockReturnValue({ onConflictDoNothing }),
     };
 }
 
@@ -162,10 +164,10 @@ describe('CustomerNotificationService', () => {
             expect(db.insert).not.toHaveBeenCalled();
         });
 
-        it('skips if platformEventId already exists in log', async () => {
-            vi.mocked(db.select)
-                .mockReturnValueOnce(mockSelectChain([enabledTemplate]) as never)
-                .mockReturnValueOnce(mockSelectChain([{ id: 'existing-log' }]) as never);
+        it('does not enqueue when the insert hits a dedup conflict (duplicate event)', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([enabledTemplate]) as never);
+            // onConflictDoNothing → returning [] means a concurrent duplicate already exists
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain(null) as never);
 
             await service.schedule({
                 storeId: 'store-1',
@@ -175,7 +177,59 @@ describe('CustomerNotificationService', () => {
                 platformEventId: 'salla:order_confirmed:999',
             });
 
-            expect(db.insert).not.toHaveBeenCalled();
+            expect(db.insert).toHaveBeenCalledTimes(1);
+            expect(customerNotificationQueue.add).not.toHaveBeenCalled();
+            expect(db.update).not.toHaveBeenCalled();
+        });
+
+        it('upgrades a still-pending row in place on conflict when upgradePendingOnDuplicate is set', async () => {
+            const shippedTemplate = {
+                ...enabledTemplate,
+                notificationType: 'order_shipped' as const,
+                messageAr: '{customer_name}، طلبك #{order_number} تم شحنه، رقم التتبع: {tracking_number}',
+                messageEn: '{customer_name}, order #{order_number} shipped, tracking: {tracking_number}',
+            };
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([shippedTemplate]) as never);
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain(null) as never);
+            const updateMock = mockUpdateChain();
+            vi.mocked(db.update).mockReturnValue(updateMock as never);
+
+            await service.schedule({
+                storeId: 'store-1',
+                type: 'order_shipped',
+                customerPhone: '+966501234567',
+                customerName: 'Ahmed',
+                variables: { order_number: '42', tracking_number: 'TRK-9' },
+                platformEventId: 'salla:order_shipped:42',
+                upgradePendingOnDuplicate: true,
+            });
+
+            // Conflict → no new enqueue, but the pending row's message is re-rendered (with tracking)
+            expect(customerNotificationQueue.add).not.toHaveBeenCalled();
+            expect(db.update).toHaveBeenCalledTimes(1);
+            expect(updateMock.set).toHaveBeenCalledWith(
+                expect.objectContaining({ messageSent: expect.stringContaining('TRK-9') }),
+            );
+        });
+
+        it('minDelayMs overrides a zero template delay', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([enabledTemplate]) as never);
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain({ id: 'log-min' }) as never);
+
+            await service.schedule({
+                storeId: 'store-1',
+                type: 'order_shipped',
+                customerPhone: '+966501234567',
+                variables: {},
+                platformEventId: 'salla:order_shipped:77',
+                minDelayMs: 5 * 60 * 1000,
+            });
+
+            expect(customerNotificationQueue.add).toHaveBeenCalledWith(
+                'order_shipped',
+                { notificationLogId: 'log-min' },
+                { delay: 5 * 60 * 1000 },
+            );
         });
 
         it('creates log entry and enqueues job when template enabled and no duplicate', async () => {
