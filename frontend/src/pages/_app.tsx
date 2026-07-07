@@ -10,9 +10,9 @@ import { isAxiosError } from 'axios';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { AppShell } from '@/components/layout/AppShell';
+import { dmSans, cairo, tajawal, outfit, jetbrainsMono } from '@/lib/fonts';
 import { useUIStore, useAuthStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
-import { dmSans, cairo, tajawal, outfit, jetbrainsMono } from '@/lib/fonts';
 import { Toaster } from 'sonner';
 import { isNativePlatform } from '@/lib/capacitor';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
@@ -492,7 +492,24 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           <SSEManager />
           <ThemeManager />
           <MetaHead locale={effectiveLocale} />
-          <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} ${outfit.variable} ${jetbrainsMono.variable}`}>
+          {/* Font CSS variables MUST be defined on :root, not on an inner wrapper:
+              Tailwind's font stacks are built from these vars, and both
+              `body { @apply font-sans }` (globals.css) and portals rendered into
+              document.body sit OUTSIDE any wrapper — with the vars scoped to a
+              wrapper, the body's font-family is invalid at computed-value time and
+              the browser silently falls back to its default serif (Times).
+              This is the documented pages-router pattern for styling <html>/<body>
+              with next/font (font.style.fontFamily in a global style). */}
+          <style jsx global>{`
+            :root {
+              --font-dm-sans: ${dmSans.style.fontFamily};
+              --font-cairo: ${cairo.style.fontFamily};
+              --font-tajawal: ${tajawal.style.fontFamily};
+              --font-outfit: ${outfit.style.fontFamily};
+              --font-jetbrains-mono: ${jetbrainsMono.style.fontFamily};
+            }
+          `}</style>
+          <AppShell>
             <ErrorBoundary name="root" resetKeys={router.asPath}>
               {getLayout(<Component {...pageProps} />)}
               <Toaster

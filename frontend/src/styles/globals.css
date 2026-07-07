@@ -253,10 +253,11 @@
       radial-gradient(ellipse at 80% 90%, rgba(79, 116, 178, 0.04) 0%, transparent 55%);
   }
 
-  /* RTL Arabic font */
+  /* RTL Arabic font — same next/font var stack as font-arabic, instead of
+     literal family names that only partially match what next/font registers */
   [dir="rtl"] body,
   [dir="rtl"] {
-    font-family: 'Cairo', 'DM Sans', system-ui, sans-serif;
+    font-family: theme('fontFamily.arabic');
     /* Disable Arabic-Indic digit substitution — keep Western digits (0-9) in all contexts */
     font-feature-settings: "anum" 0;
   }
