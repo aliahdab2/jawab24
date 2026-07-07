@@ -16,6 +16,7 @@ import { Logger, noopLogger, createRequestLogger } from '../types';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import { redis } from '../lib/redis';
 
 /**
  * Verify Facebook/Instagram webhook signature using X-Hub-Signature-256 header.
@@ -528,8 +529,11 @@ export class WebhookController {
             await this.processInstagramComment(instagramAccountId, change.value);
         }
 
-        // Handle mentions
+        // Handle mentions — not supported yet. Count the drops (fire-and-forget,
+        // same contract as aiMetrics) so the decision to build support can be
+        // made from real volume instead of a silent gap.
         if (change.field === 'mentions') {
+            redis.incr('metrics:instagram:mentions_dropped').catch(() => {});
             this.log().debug('[Instagram] Mention received - not processing for now');
         }
     }
