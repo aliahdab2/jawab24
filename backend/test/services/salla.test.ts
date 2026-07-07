@@ -70,6 +70,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     updateStoreTokens: (...args: unknown[]) => mockUpdateStoreTokens(...args),
     markStoreNeedsReauth: vi.fn().mockResolvedValue(undefined),
     replaceProductsAndRebuildSummary: (...args: unknown[]) => mockReplaceProductsAndRebuildSummary(...args),
+    PRODUCT_SAFETY_CAP: 5000,
 }));
 
 vi.mock('../../src/services/ecommerceCrypto', () => ({

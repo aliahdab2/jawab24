@@ -20,6 +20,7 @@ import { captureError } from '../utils/sentryHelpers';
 import {
     getStoreById,
     replaceProductsAndRebuildSummary,
+    PRODUCT_SAFETY_CAP,
     type WebhookRegistrationResult,
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
@@ -35,7 +36,8 @@ import {
 } from './ecommerceTokenRefresh';
 
 const MAX_PRODUCTS_PER_PAGE = 65;
-const MAX_PAGES_TO_FETCH = 4; // 260 products max
+// Page enough to reach the shared safety cap (loop also early-exits at the cap).
+const MAX_PAGES_TO_FETCH = Math.ceil(PRODUCT_SAFETY_CAP / MAX_PRODUCTS_PER_PAGE);
 const ERROR_TEXT_MAX_LENGTH = 200;
 
 const SALLA_TOKEN_REFRESH_CONFIG: TokenRefreshConfig = {
@@ -304,6 +306,8 @@ async function fetchAllProducts(accessToken: string): Promise<SallaProduct[]> {
 
         allProducts.push(...data.data);
 
+        // Stop at the shared safety cap — the DB layer truncates beyond it anyway.
+        if (allProducts.length >= PRODUCT_SAFETY_CAP) break;
         if (page >= data.pagination.totalPages) break;
         page++;
     }

@@ -167,6 +167,16 @@ export async function markStoreNeedsReauth(storeId: string): Promise<void> {
 
 export const KB_MAX_CHARS = 8000; // Must match ai-worker's KB_MAX_CHARS
 
+// Hard ceiling on how many products a single store syncs into the DB. This is an
+// abuse/runaway guard, NOT a plan limit — per-plan `plans.maxProducts` is not enforced
+// here (see replaceProductsAndRebuildSummary). Platform fetchers derive their page count
+// from this so a catalog can't be silently truncated below the cap by pagination limits.
+export const PRODUCT_SAFETY_CAP = 5000;
+
+// Rows per multi-row insert. toProductRow has 15 columns; Postgres caps a statement at
+// 65535 bind params, so keep batches well under 65535/15 ≈ 4369.
+const PRODUCT_INSERT_BATCH_SIZE = 1000;
+
 // --- Store CRUD ---
 
 export async function getStoreById(storeId: string) {
@@ -1135,16 +1145,25 @@ async function refreshStoreProductMetadata(storeId: string): Promise<number> {
 /**
  * Atomically replace all products for a store and rebuild summary.
  * Platform services call this after fetching products from their API.
- * Products are truncated to the user's plan limit (maxProducts).
+ *
+ * Products are capped at PRODUCT_SAFETY_CAP as an abuse/runaway guard. Per-plan
+ * `plans.maxProducts` is intentionally NOT enforced here — silently hiding a merchant's
+ * products is a pricing/product decision, and the AI-prompt side is already bounded
+ * separately (buildProductSummary caps the summary that reaches the model). Returns
+ * `capped: true` when the catalog exceeded the safety cap so callers can surface it.
  */
 export async function replaceProductsAndRebuildSummary(
     storeId: string,
     products: NormalizedProduct[],
-): Promise<{ synced: number }> {
-    // Safety cap: prevent abuse (no store realistically has 5000+ products)
-    const PRODUCT_SAFETY_CAP = 5000;
-    if (products.length > PRODUCT_SAFETY_CAP) {
+): Promise<{ synced: number; capped: boolean }> {
+    const capped = products.length > PRODUCT_SAFETY_CAP;
+    if (capped) {
         products = products.slice(0, PRODUCT_SAFETY_CAP);
+        captureError(
+            new Error(`Product catalog exceeded PRODUCT_SAFETY_CAP (${PRODUCT_SAFETY_CAP})`),
+            'E-commerce product sync hit the safety cap — catalog truncated',
+            { level: 'warning', tags: { service: 'ecommerce-sync' }, extra: { storeId, cap: PRODUCT_SAFETY_CAP } },
+        );
     }
 
     // Per-row UPSERT inside a transaction.
@@ -1159,10 +1178,15 @@ export async function replaceProductsAndRebuildSummary(
         if (products.length > 0) {
             const rows = products.map(p => toProductRow(storeId, p));
 
-            await tx.insert(ecommerceProducts).values(rows).onConflictDoUpdate({
-                target: [ecommerceProducts.ecommerceStoreId, ecommerceProducts.platformProductId],
-                set: productUpsertSetClause(),
-            });
+            // Chunk the upsert: toProductRow has 15 columns, so a single .values(rows)
+            // insert binds 15×N params and would blow past Postgres's 65535-parameter
+            // limit once a catalog nears the safety cap. 1000 rows/batch = 15k params.
+            for (let i = 0; i < rows.length; i += PRODUCT_INSERT_BATCH_SIZE) {
+                await tx.insert(ecommerceProducts).values(rows.slice(i, i + PRODUCT_INSERT_BATCH_SIZE)).onConflictDoUpdate({
+                    target: [ecommerceProducts.ecommerceStoreId, ecommerceProducts.platformProductId],
+                    set: productUpsertSetClause(),
+                });
+            }
 
             // Remove products that no longer exist in the platform catalog.
             const currentIds = rows.map(r => r.platformProductId);
@@ -1179,7 +1203,7 @@ export async function replaceProductsAndRebuildSummary(
     });
 
     await refreshStoreProductMetadata(storeId);
-    return { synced: products.length };
+    return { synced: products.length, capped };
 }
 
 /**
