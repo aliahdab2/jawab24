@@ -123,6 +123,13 @@ function setupAuth(page: import('@playwright/test').Page, language: 'en' | 'ar' 
       version: 0,
     }));
     localStorage.setItem('jawab24_onboarding_complete', 'true');
+    // Suppress the transient Post Reply intro banner (PostReplyIntroBanner) so
+    // layout snapshots are deterministic. Its visibility is rollout-state driven
+    // (shows while count < MAX_SHOWS, then postpones ~6 months), which otherwise
+    // makes the Comments page screenshot depend on impression history. Seed a
+    // postponed state — same rationale as jawab24_onboarding_complete above.
+    // The banner's own show/hide logic is covered by PostReplyIntroBanner.test.tsx.
+    localStorage.setItem('postReplyIntro', JSON.stringify({ count: 3, postponedUntil: 4102444800000 }));
   }, language);
 }
 
