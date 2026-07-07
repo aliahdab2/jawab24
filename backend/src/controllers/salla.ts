@@ -264,6 +264,26 @@ interface SallaWebhookData extends SallaOrderCore {
     total?: { amount?: number; currency?: string }; // best-effort for abandoned.cart
 }
 
+// order.shipment.created — `data` IS the shipment (NOT an order). The customer lives
+// under `ship_to` (with `phone` already a single consolidated international string — no
+// mobile_code split), and the tracking number is a top-level field. Ref: docs.salla.dev
+// "Shipments Webhook Events Model".
+interface SallaShipmentData {
+    id?: number;
+    order_id?: number;
+    order_reference_id?: number;
+    tracking_number?: string;
+    tracking_link?: string;
+    courier_name?: string;
+    status?: string;
+    ship_to?: { name?: string; phone?: string };
+}
+
+// order.status.updated (slug 'shipped') carries no tracking number. Hold the shipped SMS
+// briefly so a following order.shipment.created can upgrade the row in place with tracking,
+// while still guaranteeing a single SMS for merchants whose flow never fires shipment.created.
+const SHIPPED_NO_TRACKING_GRACE_MS = 5 * 60 * 1000;
+
 /** Build a full international phone from Salla's split `mobile` + `mobile_code`.
  *  Delegates to the shared `composeSallaPhone` (single source of truth — also used
  *  by the order/shipment agent tools in services/salla.ts). */
@@ -297,6 +317,28 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
         };
     }
 
+    // order.shipment.created has a shipment-shaped payload (not an order): customer under
+    // `ship_to`, tracking at the top level. Handle it before the order/slug resolution
+    // below, which would otherwise read the (absent) `data.customer` and drop the event.
+    if (event === 'order.shipment.created') {
+        const shipment = (body as { data?: SallaShipmentData }).data;
+        const phone = shipment?.ship_to?.phone?.trim();
+        if (!shipment || !phone) return null;
+        const orderId = String(shipment.order_id ?? '');
+        const rawTracking = shipment.tracking_number?.trim();
+        const trackingNumber = rawTracking && rawTracking !== '0' ? rawTracking : undefined;
+        return orderShippedEvent('salla', storeId, {
+            customerPhone: phone,
+            customerName: shipment.ship_to?.name,
+            orderId,
+            orderNumber: String(shipment.order_reference_id ?? shipment.order_id ?? ''),
+            trackingNumber,
+            // Shares the dedup key salla:order_shipped:<order_id> with the status path;
+            // if a tracking-less status-update row is already pending, upgrade it in place.
+            upgradePendingOnDuplicate: true,
+        });
+    }
+
     // Resolve the order + slug from whichever shape this event uses.
     const isStatusUpdate = event === 'order.status.updated';
     const order: SallaOrderCore = isStatusUpdate ? (data.order ?? {}) : data;
@@ -315,8 +357,14 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
     }
     // `order.updated` fires alongside `order.status.updated` on every status change —
     // notifications are driven solely off `order.status.updated` to avoid double-sending.
-    if (event === 'order.shipment.created' || (isStatusUpdate && slug === 'shipped')) {
-        return orderShippedEvent('salla', storeId, { customerPhone: phone, customerName, orderId, orderNumber, trackingNumber });
+    if (isStatusUpdate && slug === 'shipped') {
+        // The status-update payload never carries tracking. Hold the SMS briefly
+        // (SHIPPED_NO_TRACKING_GRACE_MS) so a following order.shipment.created can upgrade
+        // this row with the tracking number; if none arrives, it still sends after the grace.
+        return orderShippedEvent('salla', storeId, {
+            customerPhone: phone, customerName, orderId, orderNumber, trackingNumber,
+            minDelayMs: SHIPPED_NO_TRACKING_GRACE_MS,
+        });
     }
     if (isStatusUpdate && (slug === 'completed' || slug === 'delivered')) {
         return orderDeliveredEvent('salla', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
