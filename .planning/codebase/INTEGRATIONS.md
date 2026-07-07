@@ -203,27 +203,23 @@
 
 ### Shopify
 - **Purpose**: Sync product catalog, enrich AI knowledge base with product details
-- **Integration Type**: OAuth 2.0 + REST API
+- **Integration Type**: OAuth 2.0 + GraphQL Admin API
 - **OAuth Flow**:
   - User enters store domain (e.g., `shop.myshopify.com`)
   - Redirect to Shopify authorization endpoint
   - Request scopes: `read_products`, `read_content`, `read_orders`, `read_fulfillments`, `read_inventory`
-  - Access token received (no expiration for custom apps)
+  - Access token received (no expiration for offline tokens)
   - Token encrypted (AES-256-GCM) and stored in database
 
-- **API Endpoints Used**:
-  - `/admin/api/2024-01/products.json` - list/fetch products
-  - `/admin/api/2024-01/orders.json` - order history
-  - `/admin/api/2024-01/inventory_levels.json` - stock info
-  - `/admin/api/2024-01/product_variants.json` - variant details
+- **API**: GraphQL Admin API, `POST /admin/api/<version>/graphql.json`. Version pinned in `SHOPIFY_API_VERSION` (`services/shopify.ts`, currently **`2026-04`**; guarded by `test/services/shopifyApiVersion.test.ts` which fails ~60 days before sunset). Handles cost-based `THROTTLED` (HTTP 200 + `errors[].extensions.code`) with backoff, in addition to HTTP 429/5xx retries. Product fetch uses cursor pagination up to `PRODUCT_SAFETY_CAP`.
 
 - **Webhook Integration**:
-  - Endpoint: `/shopify/webhooks` (POST), plus dedicated `/shopify/webhooks/{uninstall,products-update,orders}` per-event handlers
-  - Events (8): `app/uninstalled`, `products/{create,update,delete}`, `orders/{create,updated,fulfilled,cancelled}`
+  - Endpoint: dedicated `/shopify/webhooks/{uninstall,products-update,orders,fulfillments}` per-event handlers
+  - Events (8): `app/uninstalled`, `products/{create,update,delete}`, `orders/{create,fulfilled,cancelled}`, `fulfillments/update`. Delivery is detected via `fulfillments/update` (`fulfillment.shipment_status === 'delivered'`) — NOT `orders/updated`, whose order-level `fulfillment_status` never becomes `'delivered'`.
   - Verification: HMAC-SHA256 base64 signature in `X-Shopify-Hmac-SHA256` header
   - Signature Key: Shopify API secret
   - GDPR endpoints: `/gdpr/customers/{data_request,redact}`, `/gdpr/shop/redact` (mandatory for App Store)
-  - Source-of-truth topic list: in `services/shopify.ts:registerWebhooks` body
+  - Source-of-truth topic list: `registerWebhooks` in `services/shopify.ts` + `SHOPIFY_WEBHOOK_TOPICS` in `integrations/shopify.ts`; pinned in `test/integrations/webhookTopicDrift.test.ts`. New topics need `scripts/reregister-webhooks.ts shopify` for already-connected stores.
 
 - **Background Worker**:
   - `ecommerceSyncWorker` - syncs products on interval
@@ -279,7 +275,7 @@
 
 - **Webhook Integration**:
   - Endpoint: `/salla/webhooks` (POST) — single endpoint, dispatched by `event` field in body
-  - Events (11): `product.{created,deleted,price.updated,status.updated,quantity.low}`, `app.uninstalled`, `order.{created,updated,shipping.update,completed}`, `abandoned.cart`
+  - Events (11): `product.{created,deleted,price.updated,status.updated,quantity.low}`, `app.uninstalled`, `order.{created,updated,status.updated,shipment.created}`, `abandoned.cart`. Salla has NO `order.completed` and NO `order.shipping.update`: completion/delivery is a status VALUE inside `order.status.updated` (`data.customized.slug` ∈ {shipped,delivered,completed}); tracking arrives via `order.shipment.created` (payload `data` is the shipment: `ship_to.phone` + top-level `tracking_number`).
   - Verification: HMAC-SHA256 hex signature in `X-Salla-Signature` header (timing-safe compare)
   - Source-of-truth topic list: `SALLA_WEBHOOK_EVENTS` in `services/salla.ts`
   - No GDPR endpoints required (Salla policy)
@@ -298,24 +294,21 @@
 ---
 
 ### Zid
-- **Status**: Fully implemented, production-ready
-- **Purpose**: Saudi Arabia e-commerce platform — product sync + KB enrichment + AI agent tools
+- **Status**: ❌ **Broken end-to-end — rebuild pending**. The adapter/service/controller/routes exist and are enabled when `ZID_CLIENT_ID` is set, but the code was built against the wrong Zid API contract and has never round-tripped a real Zid store: it sends only `X-MANAGER-TOKEN` (Zid requires **both** `Authorization: Bearer <oauth>` and `X-Manager-Token`), subscribes to non-existent event names (`order.created`/`order.shipped` vs Zid's real `order.create`/`order.status.update`), and likely targets the wrong endpoints (`/v1/products` vs `/v1/managers/...`). Tests mock the wrong shapes, so they pass while nothing works. **Do not present Zid as production-ready.** Full bug list + rebuild scope: [`docs/integrations/zid.md`](../../docs/integrations/zid.md). Ruling: [`DECISIONS.md` D-020](../../DECISIONS.md).
+- **Purpose**: Saudi Arabia e-commerce platform — product sync + KB enrichment + AI agent tools (intended; not yet functional)
 - **Auth Flow**: OAuth2 (same pattern as Salla — redirect flow, no domain input required)
-- **Token Auth**: `X-MANAGER-TOKEN` header (not `Authorization: Bearer`)
-- **Token Expiry**: ~1 year; refresh uses Redis distributed lock (single-use safety)
 - **Configuration**:
   - `ZID_CLIENT_ID` - OAuth app ID
   - `ZID_CLIENT_SECRET` - OAuth secret
   - `ZID_HOST_NAME` - App hostname for redirect URI
   - `ZID_WEBHOOK_SECRET` - HMAC secret for webhook verification
   - `ZID_SCOPES` - Comma-separated OAuth scopes
-- **Implementation**:
+- **Implementation** (present but non-functional):
   - Integration: `/backend/src/integrations/zid.ts`
   - Service: `/backend/src/services/zid.ts`
   - Controller: `/backend/src/controllers/zid.ts`
   - Routes: `/backend/src/routes/zid.ts`
-- **Webhook**: `POST /zid/webhooks` — HMAC-verified (SHA256 hex, `X-ZID-SIGNATURE`); handles `app.uninstalled` + product events; resolves store by domain OR `platformData.merchantId` (JSONB fallback)
-- **AI Agent Tools**: `lookupOrder`, `getShipmentTracking`, `checkInventory` via `ecommerceActions.ts`
+- **AI Agent Tools** (shared, platform-agnostic — same 5 as Shopify/Salla): `lookup_order`, `track_shipment`, `check_inventory`, `verify_and_get_order`, `verify_and_get_shipment` (whitelist in `packages/shared/src/ecommerce-tools.ts`, executed via `ecommerceActions.ts`)
 
 ---
 
@@ -747,7 +740,7 @@ Voice-to-text for KB content via microphone:
 | Instagram API | Comments + DM auto-replies | `FACEBOOK_*` env vars | ⚠️ Code ready, permissions deferred |
 | Shopify | Product sync + KB enrichment | `SHOPIFY_*` env vars | ✅ Production |
 | Salla | Product sync (Middle East) | `SALLA_*` env vars | ✅ Production |
-| Zid | Product sync + KB enrichment (Saudi) | `ZID_*` env vars | ✅ Production |
+| Zid | Product sync + KB enrichment (Saudi) | `ZID_*` env vars | ❌ Broken — rebuild pending (see `docs/integrations/zid.md`, D-020) |
 | OpenAI | Smart reply generation | `OPENAI_API_KEY` | ✅ Production |
 | Anthropic Claude | Tier-2 failover LLM + playground | `ANTHROPIC_API_KEY` | ✅ Active (circuit-open failover) |
 | Stripe | Subscription payments | `STRIPE_*` env vars | ✅ Production |

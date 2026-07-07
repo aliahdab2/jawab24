@@ -1058,9 +1058,9 @@ Top Products:
 
 | Platform | Status | OAuth | Token Expiry | Max Products | Webhook hardening |
 |----------|--------|-------|-------------|--------------|-------------------|
-| **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL (unlimited) | ✅ Full (retry, exhaustion flag, manual reregister, frontend recovery UI) |
-| **Salla** | Active | OAuth 2.0 (Custom + **Easy Mode**) | 14 days (auto-refresh, single-use refresh tokens) | REST, max 260 | ✅ Full (lifted to platform-agnostic in PR #27, 2026-05-07) |
-| **Zid** | Active | OAuth 2.0 | ~1 year (auto-refresh via Redis lock) | REST, paginated | ✅ Full (same shared infrastructure) |
+| **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Full (retry incl. THROTTLED, exhaustion flag, manual reregister, frontend recovery UI) |
+| **Salla** | Active | OAuth 2.0 (Custom + **Easy Mode**) | 14 days (auto-refresh, single-use refresh tokens) | REST, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Full (lifted to platform-agnostic in PR #27, 2026-05-07) |
+| **Zid** | ❌ Broken (rebuild pending) | OAuth 2.0 | — | — | ❌ Built against the wrong API contract; never round-tripped a real store. See `docs/integrations/zid.md`, D-020 |
 
 **Salla Easy Mode** (required for the public App Store listing): published apps receive tokens via the server-to-server `app.store.authorize` webhook (the OAuth callback is never hit). `controllers/salla.ts:handleStoreAuthorize` ingests/refreshes tokens idempotently; fresh installs stage a `merchantId`-keyed pending install (`pending_ecommerce_installs.merchant_id`, migration `0123`) that the merchant claims after login via `GET /salla/store/pending` + `POST /salla/store/claim` (landing page `frontend/src/pages/salla/connected.tsx`). Custom Mode (OAuth redirect) is retained for dev. The merchant-id source from Salla's post-install redirect is finalized at the live round-trip.
 
@@ -1119,7 +1119,7 @@ Products synced from Shopify/Salla
 **المنصات المدعومة:**
 - **Shopify**: نشط، OAuth 2.0، التوكن لا ينتهي أبداً
 - **سلة (Salla)**: نشط، OAuth 2.0، التوكن ينتهي كل 14 يوم (تجديد تلقائي)
-- **زد (Zid)**: نشط، OAuth 2.0، التوكن ينتهي بعد ~سنة (تجديد تلقائي بقفل Redis)
+- **زد (Zid)**: ❌ معطّل — بحاجة لإعادة بناء (مبني على تعاقد API خاطئ ولم يُختبر مع متجر حقيقي؛ راجع `docs/integrations/zid.md` وقرار D-020)
 
 ---
 
@@ -1649,7 +1649,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 
 | # | Gap | Severity | Impact |
 |---|-----|----------|--------|
-| ~~1~~ | ~~Zid e-commerce not implemented~~ | ~~RESOLVED~~ | Full Zid integration shipped — OAuth, sync, KB enrichment, AI agent tools, webhooks |
+| 1 | Zid e-commerce broken (rebuild pending) | High | Adapter/service/controller exist but were built against the wrong Zid API (single auth header, non-existent event names, likely wrong endpoints); a merchant can't connect. Do not present as production-ready. Bug list + rebuild scope: `docs/integrations/zid.md`; ruling D-020 |
 | ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` — **note**: `setInterval` doesn't survive process restart without external scheduler; acceptable for single-instance deploy |
 | ~~3~~ | ~~No voice input for KB~~ | ~~RESOLVED~~ | Voice recording via VoiceRecordButton.tsx — transcribed via GPT-4o-mini-transcribe before KB ingestion |
 | 4 | Single-language KB | Medium | Must mix both languages in one text |
