@@ -14,6 +14,7 @@ export default async function shopifyRoutes(fastify: FastifyInstance) {
     fastify.post('/webhooks/uninstall', shopifyController.webhookUninstall);
     fastify.post('/webhooks/products-update', shopifyController.webhookProductsUpdate);
     fastify.post('/webhooks/orders', shopifyController.webhookOrders);
+    fastify.post('/webhooks/fulfillments', shopifyController.webhookFulfillments);
 
     // GDPR mandatory endpoints
     fastify.post('/gdpr/customers/data_request', shopifyController.gdprCustomerDataRequest);

@@ -11,9 +11,9 @@ const SHOPIFY_WEBHOOK_TOPICS = [
     'products/update',
     'products/delete',
     'orders/create',
-    'orders/updated',
     'orders/fulfilled',
     'orders/cancelled',
+    'fulfillments/update',
 ] as const;
 
 /**

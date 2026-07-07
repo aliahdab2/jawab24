@@ -25,13 +25,26 @@ Facebook/Instagram Comment --> Reply Pipeline --> AI Generator <-- Enriched KB
 | Shop domain input | Required (user enters `store.myshopify.com`) | Not needed (merchant authenticates directly) |
 | GDPR endpoints | Required (3 mandatory endpoints) | Not required |
 | Product pagination | GraphQL cursor-based (50/page) | REST page-based (65/page) |
-| Max products synced | 250 (5 pages x 50) | 260 (4 pages x 65) |
+| Max products synced | Shared `PRODUCT_SAFETY_CAP` (5000), 50/page | Shared `PRODUCT_SAFETY_CAP` (5000), 65/page |
 | Merchant ID | Not applicable | Stored in `platformData.merchantId` |
 
 ### Two Install Flows
 
 1. **Logged-in user** (from Settings/Integrations page): OAuth -> store created immediately -> redirect to onboarding
 2. **Salla-first** (from Salla App Store): OAuth -> pending install created (encrypted token) -> user logs in -> pending install claimed -> store created
+
+### Easy Mode (`app.store.authorize`) — asymmetric to Shopify/Zid
+
+Published Salla apps use **Easy Mode**: instead of an OAuth redirect, Salla POSTs an `app.store.authorize` webhook carrying the access/refresh tokens directly. This has no Shopify/Zid equivalent, so its plumbing is Salla-only.
+
+- **Token receipt** — `handleStoreAuthorize` (`controllers/salla.ts`) validates HMAC (via the shared webhook path), then stores the tokens as a **pending install** keyed by Salla `merchant` id. No page is linked yet.
+- **Claim** — the merchant later logs into Jawab24 and binds the pending install to their workspace via the claim endpoints below.
+- **Dormant by default** — the claim endpoints return **404** unless `SALLA_EASY_MODE_CLAIM_ENABLED=true` (`config.salla.easyModeClaimEnabled`). They stay off until the ownership binding is hardened — see [`DECISIONS.md` D-012](../../DECISIONS.md). Token *receipt* still runs so nothing is lost while the claim path is gated.
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/salla/store/pending` | List pending Easy-Mode installs for the logged-in user to claim (JWT; 404 while dormant) |
+| POST | `/salla/store/claim` | Bind a pending install to the user's workspace → creates the store (JWT; 404 while dormant) |
 
 ---
 
@@ -56,8 +69,7 @@ Facebook/Instagram Comment --> Reply Pipeline --> AI Generator <-- Enriched KB
 | File | Description |
 |------|-------------|
 | `src/pages/salla/onboarding.tsx` | 3-step onboarding wizard (sync -> link page -> done) |
-| `src/pages/integrations.tsx` | Unified integrations page (Shopify + Salla) |
-| `src/components/settings/EcommerceSection.tsx` | Platform-agnostic store info component |
+| `src/pages/integrations.tsx` | Unified integrations page (Shopify + Salla); renders the store card via a local `ConnectedStoreCard` |
 
 ### Database
 
@@ -79,7 +91,7 @@ All e-commerce platforms share the same unified schema:
 1. Go to [Salla Partners](https://salla.partners/)
 2. Create a new app
 3. Set the Callback URL to `https://jawab24.com/salla/auth/callback`
-4. Required scopes: `offline_access`, `products.read_write`, `settings.read`
+4. Required scopes (`config.salla.scopes`): `offline_access`, `products.read_write`, `settings.read`, `webhooks.read_write`, `orders.read_write`
 
 ### 2. Configure Webhooks
 
@@ -93,6 +105,23 @@ Webhooks are registered automatically via API after OAuth. All events are regist
 | `product.status.updated` | Enqueue product sync |
 | `product.quantity.low` | Enqueue product sync |
 | `app.uninstalled` | Deactivate store |
+| `order.created` | Schedule `order_confirmed` customer SMS |
+| `order.updated` | Ignored (fires alongside `order.status.updated`; avoids double-send) |
+| `order.status.updated` | Schedule SMS by `data.customized.slug`: `shipped` → `order_shipped`, `delivered`/`completed` → `order_delivered` (+ `review_request`) |
+| `order.shipment.created` | Schedule `order_shipped` **with tracking** (payload `data` is the shipment) |
+| `abandoned.cart` | Schedule `abandoned_cart` recovery SMS |
+
+> **11 subscribed events** — the source-of-truth list is `SALLA_WEBHOOK_EVENTS` in `services/salla.ts`. Salla has **no** `order.completed` and **no** `order.shipping.update` event (verified against docs.salla.dev): completion/delivery is a status *value* inside `order.status.updated`, and tracking arrives via `order.shipment.created`.
+
+#### Shipped-notification behaviour (single SMS, with tracking when available)
+
+`order.status.updated` (slug `shipped`) carries **no** tracking number, while `order.shipment.created` does — and its `data` is the shipment object (`ship_to.phone` + top-level `tracking_number`), *not* an order. Both paths share the dedup key `salla:order_shipped:<order_id>`, so the customer gets exactly one shipped SMS:
+
+- **Shipment webhook only** → immediate SMS with tracking.
+- **Status webhook only** (manual merchants) → SMS after a 5-min grace, without tracking.
+- **Both** → the tracking-bearing shipment upgrades the (still-pending) status row's message in place, so the single SMS includes the tracking number.
+
+Enforced by the unique index on `(ecommerce_store_id, notification_type, platform_event_id)` (migration `0130`) + `onConflictDoNothing`/in-place upgrade in `services/customerNotifications.ts`.
 
 ### 3. Environment Variables
 
@@ -136,7 +165,7 @@ Salla access tokens expire after 14 days. Refresh tokens are **single-use** (usi
 
 - Triggered on: store creation, manual sync, product webhook events
 - Uses Salla REST API (`GET /admin/v2/products`)
-- Fetches up to 260 products (4 pages x 65 products)
+- Fetches products page-by-page (65/page) up to the shared `PRODUCT_SAFETY_CAP` (5000); the DB layer returns `capped: true` if the catalog exceeds it
 - Maps Salla statuses: `sale` -> `active`, `out` -> `out_of_stock`, `hidden` -> `hidden`, `deleted` -> `archived`
 - Strips HTML from product descriptions
 - Builds variant summary from product options

@@ -793,7 +793,67 @@ describe('Salla Controller', () => {
             const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
             await webhookHandler(req, mockReply());
 
-            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({ type: 'order_shipped', orderNumber: '264808310' });
+            // The status-update payload has no tracking → held via minDelayMs so a following
+            // order.shipment.created can upgrade it with the tracking number.
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                type: 'order_shipped', orderId: '964176593', orderNumber: '264808310', minDelayMs: 5 * 60 * 1000,
+            });
+            expect(mockDispatchOrderNotification.mock.calls[0][0].trackingNumber).toBeUndefined();
+        });
+
+        // --- order.shipment.created: `data` IS the shipment (ship_to.phone + top-level
+        // tracking_number), NOT an order. Regression for the null-return bug where the
+        // handler read data.customer / data.shipments[0] and dropped every shipment event. ---
+        it('should dispatch order_shipped WITH tracking on order.shipment.created (shipment-shaped payload)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'order.shipment.created', merchant: 2108580704,
+                data: {
+                    id: 560695738, type: 'shipment',
+                    order_id: 964176593, order_reference_id: 264808310,
+                    tracking_number: '4324233', courier_name: 'Aramex',
+                    ship_to: { name: 'abc def', phone: '966501806978' },
+                },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                platform: 'salla', storeId: 'store-1', type: 'order_shipped',
+                customerPhone: '966501806978', customerName: 'abc def',
+                orderId: '964176593', orderNumber: '264808310',
+                trackingNumber: '4324233', upgradePendingOnDuplicate: true,
+            });
+        });
+
+        it('should NOT dispatch on order.shipment.created when ship_to.phone is missing', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'order.shipment.created', merchant: 2108580704,
+                data: { id: 1, order_id: 964176593, order_reference_id: 264808310, tracking_number: '4324233', ship_to: { name: 'abc' } },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+            await webhookHandler(req, rep);
+
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should treat a "0" tracking_number as absent on order.shipment.created', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'order.shipment.created', merchant: 2108580704,
+                data: { id: 1, order_id: 964176593, order_reference_id: 264808310, tracking_number: '0', ship_to: { name: 'abc', phone: '966501806978' } },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification.mock.calls[0][0].trackingNumber).toBeUndefined();
         });
 
         it('should NOT dispatch on order.updated (avoids double-send with order.status.updated)', async () => {

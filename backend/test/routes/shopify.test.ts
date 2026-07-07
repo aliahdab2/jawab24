@@ -13,6 +13,7 @@ vi.mock('../../src/controllers/shopify', () => ({
     webhookUninstall: vi.fn(),
     webhookProductsUpdate: vi.fn(),
     webhookOrders: vi.fn(),
+    webhookFulfillments: vi.fn(),
     gdprCustomerDataRequest: vi.fn(),
     gdprCustomerRedact: vi.fn(),
     gdprShopRedact: vi.fn(),
@@ -46,6 +47,8 @@ describe('Shopify Routes', () => {
         // Webhook routes
         expect(registeredRoutes).toContain('POST /webhooks/uninstall');
         expect(registeredRoutes).toContain('POST /webhooks/products-update');
+        expect(registeredRoutes).toContain('POST /webhooks/orders');
+        expect(registeredRoutes).toContain('POST /webhooks/fulfillments');
 
         // GDPR routes
         expect(registeredRoutes).toContain('POST /gdpr/customers/data_request');

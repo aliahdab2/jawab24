@@ -40,9 +40,11 @@ import {
     saveWebhookStatus,
     upsertSingleProduct,
     deleteSingleProduct,
+    replaceProductsAndRebuildSummary,
+    PRODUCT_SAFETY_CAP,
     type WebhookRegistrationResult,
 } from '../../src/services/ecommerce';
-import { syncProducts, mapShopifyWebhookProduct } from '../../src/services/shopify';
+import { syncProducts, mapShopifyWebhookProduct, SHOPIFY_API_VERSION } from '../../src/services/shopify';
 import { encrypt, decrypt, decryptOptional } from '../../src/services/ecommerceCrypto';
 
 // ---------------------------------------------------------------------------
@@ -405,7 +407,7 @@ describe('syncProducts — full catalog sync', () => {
         // The token stored encrypted at rest reached the API boundary decrypted.
         expect(fetchMock).toHaveBeenCalledTimes(1);
         const [url, init] = fetchMock.mock.calls[0];
-        expect(String(url)).toBe(`https://${store.storeDomain}/admin/api/2025-01/graphql.json`);
+        expect(String(url)).toBe(`https://${store.storeDomain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`);
         const headers = init?.headers as Record<string, string>;
         expect(headers['X-Shopify-Access-Token']).toBe('shpat_sync_token');
 
@@ -607,5 +609,46 @@ describe('webhook product path — upsert and delete', () => {
         expect(rows[0].platformProductId).toBe('444555');
         expect(rows[0].title).toBe('Cap');
         expect((await getStoreRow(store.id)).productCount).toBe(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Product safety cap — truncation + batched insert (>4369 rows would exceed the
+// Postgres 65535-param limit if inserted in one statement, so this also guards
+// that the chunked insert works at scale).
+// ---------------------------------------------------------------------------
+
+describe('replaceProductsAndRebuildSummary — safety cap', () => {
+    it('caps at PRODUCT_SAFETY_CAP, reports capped, and persists exactly the cap', async () => {
+        const { store } = await createConnectedStore();
+        const overflow = PRODUCT_SAFETY_CAP + 5;
+        const products = Array.from({ length: overflow }, (_, i) => ({
+            platformProductId: `p-${i}`,
+            title: `Product ${i}`,
+            status: 'active',
+            priceRange: '10',
+            currency: 'SAR',
+            totalInventory: 1,
+            hasVariants: false,
+        }));
+
+        const result = await replaceProductsAndRebuildSummary(store.id, products);
+
+        expect(result.capped).toBe(true);
+        expect(result.synced).toBe(PRODUCT_SAFETY_CAP);
+        expect(await getProductRows(store.id)).toHaveLength(PRODUCT_SAFETY_CAP);
+        expect((await getStoreRow(store.id)).productCount).toBe(PRODUCT_SAFETY_CAP);
+    });
+
+    it('does not flag capped for a normal-sized catalog', async () => {
+        const { store } = await createConnectedStore();
+        const products = Array.from({ length: 3 }, (_, i) => ({
+            platformProductId: `s-${i}`, title: `Small ${i}`, status: 'active',
+            priceRange: '10', currency: 'SAR', totalInventory: 1, hasVariants: false,
+        }));
+
+        const result = await replaceProductsAndRebuildSummary(store.id, products);
+
+        expect(result).toEqual({ synced: 3, capped: false });
     });
 });

@@ -39,9 +39,9 @@ describe('webhook topic drift', () => {
             'products/update',
             'products/delete',
             'orders/create',
-            'orders/updated',
             'orders/fulfilled',
             'orders/cancelled',
+            'fulfillments/update',
         ]);
     });
 });

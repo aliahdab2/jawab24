@@ -268,7 +268,6 @@ interface ShopifyOrderBody {
     id?: number;
     order_number?: number;
     customer?: { phone?: string; first_name?: string };
-    fulfillment_status?: string | null;
     fulfillments?: Array<{ tracking_number?: string }>;
 }
 
@@ -286,10 +285,57 @@ function buildShopifyOrderEvent(storeId: string, topic: string, body: unknown): 
         return orderConfirmedEvent('shopify', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
     } else if (topic === 'orders/fulfilled') {
         return orderShippedEvent('shopify', storeId, { customerPhone: phone, customerName, orderId, orderNumber, trackingNumber });
-    } else if (topic === 'orders/updated' && order.fulfillment_status === 'delivered') {
-        return orderDeliveredEvent('shopify', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
     }
+    // Delivery is NOT an orders/* event: the order-level fulfillment_status enum is only
+    // null|partial|fulfilled|restocked — never 'delivered'. Delivery arrives on the
+    // fulfillments/update topic (see webhookFulfillments) via fulfillment.shipment_status.
     return null;
+}
+
+// fulfillments/update carries the delivery signal (`shipment_status`) that orders/* lacks.
+// Payload: { order_id, shipment_status, tracking_number, destination: { first_name, phone } }.
+interface ShopifyFulfillmentBody {
+    order_id?: number;
+    shipment_status?: string | null;
+    destination?: { first_name?: string; phone?: string } | null;
+}
+
+export async function webhookFulfillments(request: FastifyRequest, reply: FastifyReply) {
+    try {
+        if (!verifyShopifyWebhookHmac(request, reply)) return;
+
+        const fulfillment = request.body as ShopifyFulfillmentBody;
+        // Only act on the terminal 'delivered' status. Other values (in_transit,
+        // out_for_delivery, attempted_delivery, failure, …) fire the same topic repeatedly;
+        // the order_delivered dedup key collapses duplicate 'delivered' deliveries.
+        if (fulfillment.shipment_status !== 'delivered' || !fulfillment.order_id) {
+            return reply.status(200).send({ ok: true });
+        }
+
+        const shopDomain = request.headers['x-shopify-shop-domain'] as string;
+        if (shopDomain) {
+            const store = await shopifyService.getStoreByDomain(shopDomain);
+            if (store) {
+                // Prefer the canonical order (E.164 phone, order name) over the webhook's
+                // unnormalized destination fields; fall back to destination if the fetch fails.
+                const target = await shopifyService.getOrderNotificationTarget(store.id, fulfillment.order_id);
+                const phone = target?.phone || fulfillment.destination?.phone;
+                if (phone) {
+                    dispatchOrderNotification(orderDeliveredEvent('shopify', store.id, {
+                        customerPhone: phone,
+                        customerName: target?.firstName || fulfillment.destination?.first_name,
+                        orderId: String(fulfillment.order_id),
+                        orderNumber: target?.orderNumber || String(fulfillment.order_id),
+                    }), request.log);
+                }
+            }
+        }
+
+        return reply.status(200).send({ ok: true });
+    } catch (error) {
+        reportWebhookFailure(request, 'fulfillments', error);
+        throw error;
+    }
 }
 
 // --- GDPR Mandatory Endpoints (HMAC-verified) ---

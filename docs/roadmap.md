@@ -1,5 +1,7 @@
 # Technical Roadmap & Architecture Evolution
 
+> ⚠️ **DEPRECATED (kept for history).** This roadmap is superseded by the root [`ROADMAP.md`](../ROADMAP.md) (launch roadmap) and, for the current codebase state, [`SYSTEM_ANALYSIS.md`](../SYSTEM_ANALYSIS.md) and [`.planning/codebase/INTEGRATIONS.md`](../.planning/codebase/INTEGRATIONS.md). Do not rely on the status claims below — they reflect 2026-02-22.
+
 > **Last updated**: 2026-02-22
 
 This document outlines the technical infrastructure state and planned improvements for the Jawab24 platform.

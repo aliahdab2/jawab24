@@ -138,6 +138,7 @@ import {
     registerWebhooks,
     linkStoreToPage,
     invalidateCachesForStore,
+    SHOPIFY_API_VERSION,
 } from '../../src/services/shopify';
 
 describe('Shopify Service', () => {
@@ -237,7 +238,7 @@ describe('Shopify Service', () => {
             await registerWebhooks('test-store.myshopify.com', 'token123');
 
             expect(mockFetch).toHaveBeenCalledTimes(8);
-            const url = 'https://test-store.myshopify.com/admin/api/2025-01/webhooks.json';
+            const url = `https://test-store.myshopify.com/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`;
             const opts = { method: 'POST' };
             // Product events
             expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('app/uninstalled') }));
@@ -246,9 +247,10 @@ describe('Shopify Service', () => {
             expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/delete') }));
             // Order events — for customer notifications
             expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/create') }));
-            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/updated') }));
             expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/fulfilled') }));
             expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/cancelled') }));
+            // Delivery — fulfillments/update carries shipment_status (orders/* never does)
+            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('fulfillments/update') }));
         });
 
         it('should not throw on 422 (already exists)', async () => {

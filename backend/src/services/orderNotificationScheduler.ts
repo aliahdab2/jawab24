@@ -19,6 +19,13 @@ export interface OrderEvent {
     orderNumber: string;
     trackingNumber?: string;
     cartTotal?: string;
+    /** Minimum delay before sending (ms). Effective delay = max(template delay, this).
+     *  Used to hold a tracking-less shipped SMS briefly so a later shipment webhook
+     *  carrying the tracking number can upgrade it in place. */
+    minDelayMs?: number;
+    /** On dedup conflict, upgrade the still-pending row's rendered message instead of
+     *  skipping — lets a tracking-bearing shipment webhook enrich an earlier row. */
+    upgradePendingOnDuplicate?: boolean;
     /** Additional notification types to schedule together (e.g. review_request after delivery) */
     also?: Array<{ type: OrderNotificationType; variables: Record<string, string> }>;
 }
@@ -43,7 +50,7 @@ export function orderConfirmedEvent(platform: string, storeId: string, fields: O
 export function orderShippedEvent(
     platform: string,
     storeId: string,
-    fields: OrderEventFields & { trackingNumber?: string },
+    fields: OrderEventFields & { trackingNumber?: string; minDelayMs?: number; upgradePendingOnDuplicate?: boolean },
 ): OrderEvent {
     return { platform, storeId, type: 'order_shipped', ...fields };
 }
@@ -63,7 +70,7 @@ export function orderDeliveredEvent(platform: string, storeId: string, fields: O
  * Shared across Salla, Shopify, and Zid controllers.
  */
 export async function scheduleOrderNotifications(event: OrderEvent): Promise<void> {
-    const { platform, storeId, type, customerPhone, customerName, orderId, orderNumber, trackingNumber, cartTotal, also } = event;
+    const { platform, storeId, type, customerPhone, customerName, orderId, orderNumber, trackingNumber, cartTotal, minDelayMs, upgradePendingOnDuplicate, also } = event;
 
     const variables: Record<string, string> = {
         order_number: orderNumber,
@@ -80,6 +87,8 @@ export async function scheduleOrderNotifications(event: OrderEvent): Promise<voi
         platformEventId: `${platform}:${type}:${orderId}`,
         orderNumber,
         cartTotal,
+        minDelayMs,
+        upgradePendingOnDuplicate,
     });
 
     for (const extra of also ?? []) {
