@@ -27,6 +27,7 @@ const mockLinkStoreToPage = vi.fn().mockResolvedValue(undefined);
 const mockMapToShopifyStore = vi.fn((store) => ({ id: store.id, shopDomain: store.shopDomain }));
 const mockMapToEcommerceStore = vi.fn((store) => ({ id: store.id, shopDomain: store.shopDomain }));
 const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-uuid-123');
+const mockGetOrderNotificationTarget = vi.fn();
 
 // services/ecommerce now provides per-row product helpers used by the
 // products webhook (Fix B-3.1). Stub them so importing the controller
@@ -68,6 +69,7 @@ vi.mock('../../src/services/shopify', () => ({
     mapToShopifyStore: (...args: any[]) => mockMapToShopifyStore(...args),
     mapToEcommerceStore: (...args: any[]) => mockMapToEcommerceStore(...args),
     createPendingInstall: (...args: any[]) => mockCreatePendingInstall(...args),
+    getOrderNotificationTarget: (...args: any[]) => mockGetOrderNotificationTarget(...args),
     saveWebhookStatus: vi.fn().mockResolvedValue(undefined),
     mapShopifyWebhookProduct: vi.fn((p: any) => ({
         platformProductId: String(p?.id ?? ''),
@@ -149,6 +151,8 @@ import {
     authCallback,
     webhookUninstall,
     webhookProductsUpdate,
+    webhookOrders,
+    webhookFulfillments,
     gdprCustomerDataRequest,
     gdprCustomerRedact,
     gdprShopRedact,
@@ -757,6 +761,102 @@ describe('Shopify Controller', () => {
             await webhookProductsUpdate(req, rep);
 
             expect(rep.status).toHaveBeenCalledWith(401);
+        });
+    });
+
+    describe('webhookOrders', () => {
+        it('dispatches order_confirmed on orders/create', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = { id: 111, order_number: 1001, customer: { phone: '+966512345678', first_name: 'Ahmed' } };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'orders/create' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            await webhookOrders(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({ type: 'order_confirmed', orderNumber: '1001' });
+        });
+
+        it('does NOT dispatch on orders/updated (delivery is no longer inferred from fulfillment_status)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            // The old impossible branch treated fulfillment_status==='delivered' as delivery.
+            const body = { id: 111, order_number: 1001, fulfillment_status: 'delivered', customer: { phone: '+966512345678' } };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'orders/updated' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await webhookOrders(req, rep);
+
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+    });
+
+    describe('webhookFulfillments', () => {
+        it('dispatches order_delivered on a delivered fulfillment (phone/name from the fetched order)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            mockGetOrderNotificationTarget.mockResolvedValue({ orderNumber: '1001', phone: '+966512345678', firstName: 'Ahmed' });
+            const body = { order_id: 964176593, shipment_status: 'delivered', destination: { first_name: 'X', phone: '+966500000000' } };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'fulfillments/update' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            await webhookFulfillments(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                type: 'order_delivered', customerPhone: '+966512345678', customerName: 'Ahmed', orderId: '964176593', orderNumber: '1001',
+            });
+        });
+
+        it('falls back to the webhook destination when the order fetch returns null', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            mockGetOrderNotificationTarget.mockResolvedValue(null);
+            const body = { order_id: 964176593, shipment_status: 'delivered', destination: { first_name: 'Sara', phone: '+966500000000' } };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'fulfillments/update' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            await webhookFulfillments(req, mockReply());
+
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                type: 'order_delivered', customerPhone: '+966500000000', customerName: 'Sara',
+            });
+        });
+
+        it('does NOT dispatch for non-delivered shipment statuses', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = { order_id: 964176593, shipment_status: 'in_transit', destination: { phone: '+966500000000' } };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'fulfillments/update' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await webhookFulfillments(req, rep);
+
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('rejects an invalid HMAC with 401', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(false);
+            const body = { order_id: 1, shipment_status: 'delivered' };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'invalid' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await webhookFulfillments(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(401);
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
         });
     });
 

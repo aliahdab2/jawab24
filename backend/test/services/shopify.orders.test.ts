@@ -26,6 +26,7 @@ vi.mock('../../src/utils/tracing', () => ({
 
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
+    PRODUCT_SAFETY_CAP: 5000,
 }));
 
 vi.mock('../../src/services/ecommerceCrypto', () => ({
@@ -48,7 +49,7 @@ global.fetch = mockFetch;
 
 // --- Import after mocks ---
 
-import { lookupOrder, getShipmentTracking, checkInventory } from '../../src/services/shopify';
+import { lookupOrder, getShipmentTracking, checkInventory, getOrderNotificationTarget } from '../../src/services/shopify';
 
 // --- Helpers ---
 
@@ -224,6 +225,91 @@ describe('Shopify — lookupOrder / getShipmentTracking / checkInventory', () =>
             expect(result?.price).toBe('49.00 SAR');
             expect(result?.currency).toBe('SAR');
             expect(result?.productUrl).toBe('https://test-store.myshopify.com/products/phone-case');
+        });
+    });
+
+    // ============================================================
+    // getOrderNotificationTarget (used by the fulfillments/update delivery webhook)
+    // ============================================================
+
+    describe('getOrderNotificationTarget', () => {
+        it('resolves order number + customer phone + first name from the order id', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: { order: { name: '#1234', phone: null, customer: { firstName: 'Ahmed', phone: '+966512345678' } } },
+                }),
+            });
+
+            const result = await getOrderNotificationTarget('store-1', 964176593);
+
+            expect(result).toEqual({ orderNumber: '1234', phone: '+966512345678', firstName: 'Ahmed' });
+            // The numeric id is interpolated into the GraphQL global id.
+            const sentQuery = (mockFetch.mock.calls[0][1] as { body: string }).body;
+            expect(sentQuery).toContain('gid://shopify/Order/964176593');
+        });
+
+        it('falls back to the order-level phone when the customer has none', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: { order: { name: '#77', phone: '+966500000000', customer: { firstName: 'Sara', phone: null } } },
+                }),
+            });
+
+            const result = await getOrderNotificationTarget('store-1', 42);
+            expect(result?.phone).toBe('+966500000000');
+        });
+
+        it('returns null when the order is not found', async () => {
+            mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { order: null } }) });
+            expect(await getOrderNotificationTarget('store-1', 42)).toBeNull();
+        });
+    });
+
+    // ============================================================
+    // GraphQL cost-based throttling (HTTP 200 + errors[].extensions.code === 'THROTTLED')
+    // ============================================================
+
+    describe('THROTTLED handling', () => {
+        it('backs off and retries on a THROTTLED response, then succeeds', async () => {
+            vi.useFakeTimers();
+            mockFetch
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({
+                        errors: [{ message: 'Throttled', extensions: { code: 'THROTTLED' } }],
+                        extensions: { cost: { requestedQueryCost: 10, throttleStatus: { currentlyAvailable: 0, restoreRate: 50 } } },
+                    }),
+                })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({ data: { order: { name: '#1234', phone: null, customer: { firstName: 'Ahmed', phone: '+966512345678' } } } }),
+                });
+
+            const promise = getOrderNotificationTarget('store-1', 964176593);
+            await vi.runAllTimersAsync();
+            const result = await promise;
+
+            expect(mockFetch).toHaveBeenCalledTimes(2);
+            expect(result?.orderNumber).toBe('1234');
+            vi.useRealTimers();
+        });
+
+        it('throws after exhausting retries when THROTTLED never clears', async () => {
+            vi.useFakeTimers();
+            mockFetch.mockResolvedValue({
+                ok: true,
+                json: async () => ({ errors: [{ message: 'Throttled', extensions: { code: 'THROTTLED' } }] }),
+            });
+
+            const promise = getOrderNotificationTarget('store-1', 964176593);
+            const expectation = expect(promise).rejects.toThrow(/THROTTLED after 3 retries/);
+            await vi.runAllTimersAsync();
+            await expectation;
+
+            expect(mockFetch).toHaveBeenCalledTimes(4); // initial + 3 retries
+            vi.useRealTimers();
         });
     });
 });

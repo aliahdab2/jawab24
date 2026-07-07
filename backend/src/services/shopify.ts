@@ -47,11 +47,16 @@ import {
     replaceProductsAndRebuildSummary,
     invalidateCachesForStore,
     getStoreByWorkspaceAny as _getStoreByWorkspaceAny,
+    PRODUCT_SAFETY_CAP,
 } from './ecommerce';
 
-const SHOPIFY_API_VERSION = '2025-01';
+// Shopify supports each API version for ~12 months from its quarterly release. Bump this
+// to a currently-supported version well before it sunsets — the sunset guard in
+// test/services/shopifyApiVersion.test.ts fails locally ~60 days before expiry.
+export const SHOPIFY_API_VERSION = '2026-04';
 const MAX_PRODUCTS_PER_PAGE = 50;
-const MAX_PAGES_TO_FETCH = 5; // 250 products max
+// Page enough to reach the shared safety cap (loop also early-exits at the cap).
+const MAX_PAGES_TO_FETCH = Math.ceil(PRODUCT_SAFETY_CAP / MAX_PRODUCTS_PER_PAGE);
 const ERROR_TEXT_MAX_LENGTH = 200;
 const POLICY_PREVIEW_LENGTH = 100;
 const GRAPHQL_STRING_MAX_LENGTH = 100;
@@ -108,9 +113,11 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
         { topic: 'products/delete', address: `${webhookUrl}/products-update` },
         // Order lifecycle — for customer notifications
         { topic: 'orders/create', address: `${webhookUrl}/orders` },
-        { topic: 'orders/updated', address: `${webhookUrl}/orders` },
         { topic: 'orders/fulfilled', address: `${webhookUrl}/orders` },
         { topic: 'orders/cancelled', address: `${webhookUrl}/orders` },
+        // Delivery — order-level fulfillment_status never becomes 'delivered'; the delivered
+        // signal is fulfillment.shipment_status, delivered via the fulfillments/update topic.
+        { topic: 'fulfillments/update', address: `${webhookUrl}/fulfillments` },
     ];
 
     const registered: string[] = [];
@@ -229,6 +236,8 @@ export function cleanupExpiredInstalls(): Promise<number> {
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
 
+const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
+
 async function shopifyGraphQL<T = unknown>(shop: string, accessToken: string, query: string): Promise<T> {
     let lastError: Error | undefined;
 
@@ -251,7 +260,7 @@ async function shopifyGraphQL<T = unknown>(shop: string, accessToken: string, qu
                 : RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
 
             if (attempt < MAX_RETRIES) {
-                await new Promise(r => setTimeout(r, delayMs));
+                await sleep(delayMs);
                 continue;
             }
             lastError = new Error(`Shopify API ${response.status} after ${MAX_RETRIES} retries`);
@@ -262,7 +271,27 @@ async function shopifyGraphQL<T = unknown>(shop: string, accessToken: string, qu
             throw new Error(`Shopify GraphQL HTTP error: ${response.status}`);
         }
 
-        const result = await response.json() as T & { errors?: Array<{ message: string }> };
+        const result = await response.json() as T & {
+            errors?: Array<{ message: string; extensions?: { code?: string } }>;
+            extensions?: { cost?: { requestedQueryCost?: number; throttleStatus?: { currentlyAvailable?: number; restoreRate?: number } } };
+        };
+
+        // Cost-based throttling: Shopify returns HTTP 200 with a THROTTLED error, NOT 429.
+        // Back off (using the returned throttle status when present) and retry the whole call.
+        if (result.errors?.some(e => e.extensions?.code === 'THROTTLED')) {
+            if (attempt < MAX_RETRIES) {
+                const cost = result.extensions?.cost;
+                const deficit = (cost?.requestedQueryCost ?? 0) - (cost?.throttleStatus?.currentlyAvailable ?? 0);
+                const restoreRate = cost?.throttleStatus?.restoreRate;
+                const delayMs = deficit > 0 && restoreRate && restoreRate > 0
+                    ? Math.ceil(deficit / restoreRate) * 1000 + 250
+                    : RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+                await sleep(delayMs);
+                continue;
+            }
+            lastError = new Error(`Shopify GraphQL THROTTLED after ${MAX_RETRIES} retries`);
+            break;
+        }
 
         if (result.errors && result.errors.length > 0) {
             throw new Error(`Shopify GraphQL error: ${result.errors.map(e => e.message).join(', ')}`);
@@ -276,14 +305,14 @@ async function shopifyGraphQL<T = unknown>(shop: string, accessToken: string, qu
 
 async function fetchShopInfo(shop: string, accessToken: string) {
     const data = await shopifyGraphQL<{
-        data: { shop: { name: string; email: string; currencyCode: string; timezoneAbbreviation: string; plan: { displayName: string } } }
+        data: { shop: { name: string; email: string; currencyCode: string; timezoneAbbreviation: string; plan: { publicDisplayName: string } } }
     }>(shop, accessToken, `{
         shop {
             name
             email
             currencyCode
             timezoneAbbreviation
-            plan { displayName }
+            plan { publicDisplayName }
         }
     }`);
 
@@ -293,7 +322,7 @@ async function fetchShopInfo(shop: string, accessToken: string) {
         storeEmail: s.email,
         storeCurrency: s.currencyCode,
         storeTimezone: s.timezoneAbbreviation,
-        platformData: { planName: s.plan?.displayName ?? null },
+        platformData: { planName: s.plan?.publicDisplayName ?? null },
     };
 }
 
@@ -387,6 +416,9 @@ async function fetchAllProducts(shop: string, accessToken: string): Promise<Shop
         const edges = data.data.products.edges;
         allProducts.push(...edges.map((e: { node: ShopifyGQLProduct }) => e.node));
 
+        // Stop once we've reached the shared safety cap — the DB layer would truncate
+        // beyond it anyway (replaceProductsAndRebuildSummary), so don't keep paginating.
+        if (allProducts.length >= PRODUCT_SAFETY_CAP) break;
         if (!data.data.products.pageInfo.hasNextPage) break;
         cursor = data.data.products.pageInfo.endCursor;
         pagesCount++;
@@ -673,6 +705,44 @@ async function resolveStoreCredentials(storeId: string): Promise<{ storeDomain: 
     if (!store || !store.isActive) return null;
     const accessToken = resolveStoreToken(store);
     return { storeDomain: store.storeDomain, accessToken };
+}
+
+/**
+ * Resolve the customer-notification target (order number + phone + first name) for a
+ * Shopify order by its numeric id — used by the fulfillments/update (delivery) webhook,
+ * whose payload carries only `order_id` and an unnormalized `destination`. Returns null
+ * if the store is inactive or the order can't be fetched (caller falls back to the
+ * webhook's own destination fields).
+ */
+export async function getOrderNotificationTarget(
+    storeId: string,
+    orderId: string | number,
+): Promise<{ orderNumber: string; phone?: string; firstName?: string } | null> {
+    const creds = await resolveStoreCredentials(storeId);
+    if (!creds) return null;
+
+    // Sanitize to digits — the id is interpolated into the GraphQL global id string.
+    const numericId = String(orderId).replace(/[^0-9]/g, '');
+    if (!numericId) return null;
+
+    const data = await shopifyGraphQL<{
+        data: { order: { name: string; phone: string | null; customer: { firstName: string | null; phone: string | null } | null } | null };
+    }>(creds.storeDomain, creds.accessToken, `{
+        order(id: "gid://shopify/Order/${numericId}") {
+            name
+            phone
+            customer { firstName phone }
+        }
+    }`);
+
+    const order = data.data.order;
+    if (!order) return null;
+
+    return {
+        orderNumber: order.name.replace(/^#/, ''),
+        phone: order.customer?.phone || order.phone || undefined,
+        firstName: order.customer?.firstName || undefined,
+    };
 }
 
 /**
