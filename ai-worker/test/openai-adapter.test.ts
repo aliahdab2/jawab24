@@ -94,6 +94,54 @@ describe('OpenAIAdapter', () => {
         expect(result.tokensInCached).toBe(0);
     });
 
+    it("sends reasoning_effort 'none' for the gpt-5.1+ family (gpt-5.4-mini rejects 'minimal')", async () => {
+        // OpenAI removed the 'minimal' reasoning tier in gpt-5.1+; those models
+        // 400 on it. The adapter must send 'none' (the new no-reasoning value)
+        // for dotted gpt-5.x versions, and use max_completion_tokens (not
+        // max_tokens) with no temperature for reasoning models.
+        mockCreate.mockResolvedValue({
+            choices: [{ message: { content: validReplyJson } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+        });
+
+        const { OpenAIAdapter } = await import('../src/services/providers/openai-adapter');
+        await new OpenAIAdapter('gpt-5.4-mini').chat(baseParams);
+
+        const body = mockCreate.mock.calls[0][0];
+        expect(body.reasoning_effort).toBe('none');
+        expect(body.max_completion_tokens).toBe(100);
+        expect(body.max_tokens).toBeUndefined();
+        expect(body.temperature).toBeUndefined();
+    });
+
+    it("sends reasoning_effort 'minimal' for gpt-5.0 / gpt-5-mini (still supported there)", async () => {
+        mockCreate.mockResolvedValue({
+            choices: [{ message: { content: validReplyJson } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+        });
+
+        const { OpenAIAdapter } = await import('../src/services/providers/openai-adapter');
+        await new OpenAIAdapter('gpt-5-mini').chat(baseParams);
+
+        expect(mockCreate.mock.calls[0][0].reasoning_effort).toBe('minimal');
+    });
+
+    it('sends no reasoning_effort and keeps temperature/max_tokens for non-reasoning models', async () => {
+        mockCreate.mockResolvedValue({
+            choices: [{ message: { content: validReplyJson } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+        });
+
+        const { OpenAIAdapter } = await import('../src/services/providers/openai-adapter');
+        await new OpenAIAdapter('gpt-4.1-mini').chat(baseParams);
+
+        const body = mockCreate.mock.calls[0][0];
+        expect(body.reasoning_effort).toBeUndefined();
+        expect(body.max_completion_tokens).toBeUndefined();
+        expect(body.max_tokens).toBe(100);
+        expect(body.temperature).toBe(0.7);
+    });
+
     it('converts OpenAI APIUserAbortError into a typed AiTimeoutError', async () => {
         // Internal timeout aborts via AbortController → OpenAI SDK throws
         // APIUserAbortError. Without normalization the raw "Request was aborted."
