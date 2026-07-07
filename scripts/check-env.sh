@@ -138,6 +138,66 @@ fi
 echo ""
 
 # ==========================================
+# AI Worker Environment
+# ==========================================
+echo "🤖 AI Worker Environment (ai.env)"
+echo "----------------------------------"
+
+AI_ENV="$ENV_DIR/ai.env"
+
+if [ ! -f "$AI_ENV" ]; then
+    echo -e "${RED}❌ $AI_ENV not found!${NC}"
+    ERRORS=1
+else
+    AI_REQUIRED=(
+        "OPENAI_API_KEY"
+        "AI_WORKER_SECRET"
+    )
+
+    for var in "${AI_REQUIRED[@]}"; do
+        if grep -q "^$var=" "$AI_ENV" 2>/dev/null; then
+            value=$(grep "^$var=" "$AI_ENV" | tail -1 | cut -d'=' -f2-)
+            if [ -z "$value" ] || [[ "$value" == your_* ]] || [[ "$value" == sk-your* ]]; then
+                echo -e "${RED}❌ $var is not set properly${NC}"
+                ERRORS=1
+            else
+                echo -e "${GREEN}✅ $var = ****${NC}"
+            fi
+        else
+            echo -e "${RED}❌ $var is MISSING${NC}"
+            ERRORS=1
+        fi
+    done
+
+    # AI_WORKER_SECRET contract (required in production since PR #409):
+    # must exist in BOTH backend.env and ai.env, be >=16 chars, and be IDENTICAL —
+    # the backend presents it as X-AI-Worker-Secret and the worker compares it.
+    # A missing secret crash-loops both containers at startup (JAWAB24-AI-WORKER-8);
+    # a mismatched one makes the worker 401 every generation request.
+    AI_SECRET=$(grep "^AI_WORKER_SECRET=" "$AI_ENV" 2>/dev/null | tail -1 | cut -d'=' -f2-)
+    BACKEND_SECRET=$(grep "^AI_WORKER_SECRET=" "$BACKEND_ENV" 2>/dev/null | tail -1 | cut -d'=' -f2-)
+
+    if [ -z "$BACKEND_SECRET" ]; then
+        echo -e "${RED}❌ AI_WORKER_SECRET is MISSING from backend.env (backend fails startup validation without it)${NC}"
+        ERRORS=1
+    fi
+    if [ -n "$AI_SECRET" ] && [ ${#AI_SECRET} -lt 16 ]; then
+        echo -e "${RED}❌ AI_WORKER_SECRET must be at least 16 characters (got ${#AI_SECRET})${NC}"
+        ERRORS=1
+    fi
+    if [ -n "$AI_SECRET" ] && [ -n "$BACKEND_SECRET" ]; then
+        if [ "$AI_SECRET" = "$BACKEND_SECRET" ]; then
+            echo -e "${GREEN}✅ AI_WORKER_SECRET matches between backend.env and ai.env${NC}"
+        else
+            echo -e "${RED}❌ AI_WORKER_SECRET MISMATCH between backend.env and ai.env (worker will 401 every backend request)${NC}"
+            ERRORS=1
+        fi
+    fi
+fi
+
+echo ""
+
+# ==========================================
 # Database Environment
 # ==========================================
 echo "🗄️  Database Environment (db.env)"
