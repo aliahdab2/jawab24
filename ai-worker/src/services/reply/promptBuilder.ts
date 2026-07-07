@@ -348,7 +348,16 @@ Only SPAM_OR_IRRELEVANT or OFFENSIVE may have an empty reply — any other class
  */
 export function buildUserPrompt(request: GenerateRequest): string {
     const label = resolveChannel(request) === 'dm' ? 'Message' : 'Comment';
-    let prompt = `${label}:\n<customer_message>${request.comment}</customer_message>`;
+    // The customer message is the one genuinely attacker-controlled field in the
+    // prompt — every OTHER embedded field (post, KB, brand voice, customer context)
+    // already runs through sanitizeForPrompt, but this one did not. Sanitize it so a
+    // crafted message can't close the <customer_message> delimiter or inject
+    // SYSTEM:/override markers. All generation paths (default, tools, provider) reach
+    // this via buildMessages → buildUserPrompt, so this is the single choke point.
+    // Note: only the LLM-facing copy is sanitized; the raw comment still keys the
+    // backend caches, so cache scoping is unchanged.
+    const safeComment = sanitizeForPrompt(request.comment);
+    let prompt = `${label}:\n<customer_message>${safeComment}</customer_message>`;
 
     if (request.context?.postMessage) {
         const safePost = sanitizeForPrompt(request.context.postMessage).replace(/"/g, "'").slice(0, 500);

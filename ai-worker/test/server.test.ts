@@ -12,9 +12,14 @@ vi.mock('../src/lib/sentry', () => ({
     Sentry: { captureException: vi.fn() },
 }));
 
+// Mutable so individual tests can toggle the shared secret the auth hook reads at
+// request time (the hook references config.workerSecret via the getter below).
+const configState = vi.hoisted(() => ({ workerSecret: '' }));
+
 vi.mock('../src/config', () => ({
     config: {
         openai: { model: 'gpt-4.1-mini', maxTokens: 300, temperature: 0.8 },
+        get workerSecret() { return configState.workerSecret; },
     },
 }));
 
@@ -23,6 +28,7 @@ describe('Server (buildServer)', () => {
 
     beforeEach(() => {
         vi.resetModules();
+        configState.workerSecret = ''; // default: auth disabled (dev)
     });
 
     afterEach(() => {
@@ -85,5 +91,62 @@ describe('Server (buildServer)', () => {
         // Server should be created without throwing
         expect(server).toBeDefined();
         await server.close();
+    });
+
+    describe('shared-secret auth (X-AI-Worker-Secret)', () => {
+        const SECRET = 'test-worker-secret-1234567890';
+
+        it('keeps /health open even when a secret is configured (Docker healthcheck)', async () => {
+            configState.workerSecret = SECRET;
+            const { buildServer } = await import('../src/server');
+            const server = await buildServer({ logger: false });
+            const res = await server.inject({ method: 'GET', url: '/health' });
+            expect(res.statusCode).toBe(200);
+            await server.close();
+        });
+
+        it('rejects a protected route with no secret header (401)', async () => {
+            configState.workerSecret = SECRET;
+            const { buildServer } = await import('../src/server');
+            const server = await buildServer({ logger: false });
+            const res = await server.inject({ method: 'GET', url: '/status' });
+            expect(res.statusCode).toBe(401);
+            await server.close();
+        });
+
+        it('rejects a protected route with a wrong secret (401)', async () => {
+            configState.workerSecret = SECRET;
+            const { buildServer } = await import('../src/server');
+            const server = await buildServer({ logger: false });
+            const res = await server.inject({
+                method: 'GET',
+                url: '/status',
+                headers: { 'x-ai-worker-secret': 'wrong-secret-value-000' },
+            });
+            expect(res.statusCode).toBe(401);
+            await server.close();
+        });
+
+        it('allows a protected route with the correct secret', async () => {
+            configState.workerSecret = SECRET;
+            const { buildServer } = await import('../src/server');
+            const server = await buildServer({ logger: false });
+            const res = await server.inject({
+                method: 'GET',
+                url: '/status',
+                headers: { 'x-ai-worker-secret': SECRET },
+            });
+            expect(res.statusCode).toBe(200);
+            await server.close();
+        });
+
+        it('does not enforce auth when no secret is configured (local dev)', async () => {
+            configState.workerSecret = '';
+            const { buildServer } = await import('../src/server');
+            const server = await buildServer({ logger: false });
+            const res = await server.inject({ method: 'GET', url: '/status' });
+            expect(res.statusCode).toBe(200);
+            await server.close();
+        });
     });
 });

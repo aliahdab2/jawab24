@@ -2,6 +2,7 @@ import { FastifyError, FastifyRequest, FastifyReply } from 'fastify';
 import * as Sentry from '@sentry/node';
 import { AppError, ValidationError } from '../utils/errors';
 import { config } from '../config';
+import { sanitizeBody } from '../utils/logSanitizer';
 
 /**
  * Global Error Handler for Fastify
@@ -28,7 +29,7 @@ export function errorHandler(
                 requestId: request.id,
                 url: request.url,
                 method: request.method,
-                body: request.body,
+                body: sanitizeBody(request.body),
             },
         });
     }

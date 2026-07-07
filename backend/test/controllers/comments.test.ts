@@ -104,14 +104,16 @@ describe('CommentsController', () => {
     // ─── getByPost() ─────────────────────────────────────────────
 
     describe('getByPost', () => {
-        it('should return comments for a post', async () => {
+        it('should return comments for a post, scoped to the caller workspace (IDOR guard)', async () => {
             mockRequest.params = { postId: 'post-1' };
             const mockComments = [{ id: 'c-1', postId: 'post-1' }];
             vi.mocked(commentsService.getCommentsByPost).mockResolvedValue(mockComments);
 
             await commentsController.getByPost(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.getCommentsByPost).toHaveBeenCalledWith('post-1');
+            // The workspaceId MUST be passed so a foreign post id can't leak another
+            // workspace's comment thread.
+            expect(commentsService.getCommentsByPost).toHaveBeenCalledWith('post-1', 'test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(mockComments);
         });
 

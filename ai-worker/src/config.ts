@@ -8,6 +8,14 @@ export const config = {
     port: parseInt(process.env.PORT || '3002', 10),
     nodeEnv: process.env.NODE_ENV || 'development',
 
+    // Shared secret the backend must present (X-AI-Worker-Secret header) on every
+    // generation request. The worker's endpoints call paid OpenAI/Anthropic APIs and
+    // are only meant to be driven by our own backend over the internal network — this
+    // secret prevents an anonymous caller (or SSRF) from spending our AI credits.
+    // Required in production (validateConfig fails fast); optional in dev so local
+    // runs without the var keep working (auth is then not enforced — see server.ts).
+    workerSecret: process.env.AI_WORKER_SECRET || '',
+
     // Redis (for future queue-based processing)
     redis: {
         host: process.env.REDIS_HOST || 'localhost',
@@ -70,6 +78,9 @@ export function validateConfig(): void {
     }
     if (isNaN(config.queue.concurrency) || config.queue.concurrency < 1) {
         errors.push(`QUEUE_CONCURRENCY must be a positive integer, got: ${process.env.QUEUE_CONCURRENCY}`);
+    }
+    if (config.nodeEnv === 'production' && config.workerSecret.length < 16) {
+        errors.push('AI_WORKER_SECRET is required in production and must be at least 16 characters (shared secret for backend → ai-worker auth)');
     }
 
     if (errors.length > 0) {
