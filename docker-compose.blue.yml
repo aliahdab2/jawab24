@@ -56,6 +56,8 @@ services:
       args:
         - NEXT_PUBLIC_FB_APP_ID=${NEXT_PUBLIC_FB_APP_ID:-}
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://jawab24.com/api}
+        - NEXT_PUBLIC_WHATSAPP_CONFIG_ID=${NEXT_PUBLIC_WHATSAPP_CONFIG_ID:-}
+        - NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY=${NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY:-}
         - SEMANTIC_VERSION=${SEMANTIC_VERSION:-untagged}
     restart: unless-stopped
     env_file:
