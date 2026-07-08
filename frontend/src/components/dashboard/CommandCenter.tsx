@@ -203,17 +203,19 @@ export function CommandCenter({
       borderColor: 'border-s-emerald-500',
       iconBg: 'icon-bg-emerald-light',
       iconColor: '',
-      // Tooltip shows both: the comments/messages breakdown (how many were comments
-      // vs DMs) AND the method breakdown (how many were Smart vs Post Reply).
-      // Both numbers always shown for transparency: a merchant seeing "Smart: 0 +
-      // Post Reply: 12" knows the complete story (Post Reply intercepts before AI,
-      // so 0 is often healthy). Hiding zeros would create ambiguity.
+      // Two parallel breakdowns of the same total, one per line and identically
+      // structured ("<view> — <label>: <n> + <label>: <n>") so the numbers always
+      // sit after the label in both: line 1 splits by channel (comments vs DMs),
+      // line 2 by type (Smart vs Post Reply). The type line appears only when Post
+      // Reply fired today — but both its numbers always show, so a merchant reading
+      // "Smart: 0 + Post Reply: 12" gets the full story (Post Reply intercepts
+      // before the AI, so a 0 there is often healthy, not a fault).
       tooltip: (commentsRepliedToday !== undefined && messagesRepliedToday !== undefined)
         ? (repliedTodayByMethod && repliedTodayByMethod.postReply > 0
             ? tDash('commandCenter.repliedTodayTooltip', {
                 comments: commentsRepliedToday,
                 messages: messagesRepliedToday,
-              }) + '\n' + tDash('commandCenter.repliedTodayBreakdown', {
+              }) + '\n' + tDash('commandCenter.repliedTodayBreakdownLine', {
                 smart: repliedTodayByMethod.smart,
                 post: repliedTodayByMethod.postReply,
               })

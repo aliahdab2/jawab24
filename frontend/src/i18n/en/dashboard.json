@@ -80,7 +80,6 @@
     "repliedToday": "Replies Today",
     "replyRate": "Reply Rate",
     "avgSpeed": "Avg Speed",
-    "repliedTodayBreakdown": "Smart: {smart} + Post Reply: {post}",
     "quotaWarning": "{percent}% of plan",
     "quotaExceeded": "Over limit",
     "onTopupLeft": "{balance} top-up left",
@@ -91,7 +90,8 @@
     "topupAvailable": "+{balance} top-up",
     "replyRateTooltip": "Share of incoming items answered in the last 30 days.",
     "avgSpeedTooltip": "Average time from a customer's message to your reply, over the last 30 days.",
-    "repliedTodayTooltip": "{comments, plural, one {# comment} other {# comments}} + {messages, plural, one {# message} other {# messages}}"
+    "repliedTodayTooltip": "Comments: {comments} + Messages: {messages}",
+    "repliedTodayBreakdownLine": "Smart: {smart} + Post Reply: {post}"
   },
   "smartBanner": {
     "needsAttention": "{count, plural, one {# item needs} other {# items need}} your attention",

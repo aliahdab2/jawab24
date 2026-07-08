@@ -80,7 +80,6 @@
     "repliedToday": "ردود اليوم",
     "replyRate": "معدل الرد",
     "avgSpeed": "متوسط السرعة",
-    "repliedTodayBreakdown": "الذكية: {smart} + البوست: {post}",
     "quotaWarning": "{percent}% من الخطة",
     "quotaExceeded": "تجاوز الحد",
     "onTopupLeft": "متبقٍ {balance} من رصيدك الإضافي",
@@ -91,7 +90,8 @@
     "topupAvailable": "رصيد إضافي {balance}",
     "replyRateTooltip": "نسبة الرسائل والتعليقات التي تم الرد عليها خلال آخر 30 يوماً.",
     "avgSpeedTooltip": "متوسط الزمن بين رسالة العميل وردّك خلال آخر 30 يوماً.",
-    "repliedTodayTooltip": "{comments, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}} + {messages, plural, zero {لا رسائل} one {رسالة واحدة} two {رسالتان} few {# رسائل} many {# رسالةً} other {# رسالة}}"
+    "repliedTodayTooltip": "التعليقات: {comments} + الرسائل: {messages}",
+    "repliedTodayBreakdownLine": "الذكية: {smart} + البوست: {post}"
   },
   "smartBanner": {
     "needsAttention": "{count, plural, zero {لا عناصر تحتاج انتباهك} one {عنصر واحد يحتاج انتباهك} two {عنصران يحتاجان انتباهك} few {# عناصر تحتاج انتباهك} many {# عنصر يحتاج انتباهك} other {# عنصر يحتاج انتباهك}}",
