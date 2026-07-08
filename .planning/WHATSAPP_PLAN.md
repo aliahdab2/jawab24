@@ -1,7 +1,7 @@
 # WhatsApp Integration Plan
 
-> **Last updated:** 2026-07-03
-> **Status:** Code-complete for launch — backend (B+C), connect flow (Phase 3) and voice/media (Phase 5 core) shipped on `feat/whatsapp-connect`. Blocking on Phase 2 (Meta Embedded Signup access + `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`). Phases 4 (templates) & 6 (status callbacks) deferred post-launch
+> **Last updated:** 2026-07-08
+> **Status:** Code-complete for launch — backend (B+C), connect flow (Phase 3) and voice/media (Phase 5 core) MERGED + deployed dark (PR #392, 2026-07-04). Meta App Review submission staged 2026-07-08 (see Phase 2). Approval-day steps: [`docs/WHATSAPP_LAUNCH_RUNBOOK.md`](../docs/WHATSAPP_LAUNCH_RUNBOOK.md). Phases 4 (templates) & 6 (status callbacks) deferred post-launch
 >
 > **Why this matters strategically:** WhatsApp is the channel LetsBot owns end-to-end. Phase B+C closes the inbound DM gap (text auto-replies work). Phase 4 (template messages) closes the proactive cart-recovery / order-update gap that's LetsBot's biggest revenue feature. Phase 5 (Catalog media) is the WhatsApp equivalent of Messenger/IG rich cards. Phase 6 (status callbacks) gives read receipts that feed the analytics dashboard.
 >
@@ -79,13 +79,15 @@ Make `facebookPageId` nullable so merchants can connect WhatsApp without a Faceb
 ### Phase 2: Meta Setup (Tech Provider) — ⏳ ONLY REMAINING LAUNCH BLOCKER
 Jawab24 is a Tech Provider — merchants connect their own WhatsApp Business Account via Embedded Signup.
 
-**Meta submission steps:**
-1. Add WhatsApp product to Facebook App (App Dashboard → Add Product → WhatsApp) — instant
-2. Verify Meta Business Account (may already be done since app is Live) — check in Business Settings
-3. Request Embedded Signup access (WhatsApp → API Setup) — 3-5 business days
-4. Create an Embedded Signup **configuration** (App Dashboard → Facebook Login for Business → Configurations, type: WhatsApp Embedded Signup) and set its ID as `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` in the frontend env — the Connect button + dashboard announcement render only when this is set
+> **Go-live steps now live in [`docs/WHATSAPP_LAUNCH_RUNBOOK.md`](../docs/WHATSAPP_LAUNCH_RUNBOOK.md)** — the executable approval-day → canary → GA checklist (incl. the env-var build plumbing added 2026-07-08 on `feat/whatsapp-launch-plumbing`).
 
-**No App Review needed for WhatsApp** — unlike Facebook permissions, WhatsApp Business Platform only requires business verification + Standard Access.
+**Meta submission steps (status 2026-07-08):**
+1. ✅ Add WhatsApp product to Facebook App — done (test number +1 555 191-8478 claimed)
+2. ✅ Verify Meta Business Account — verified Tech Provider (business 867483152446840)
+3. ⏳ **App Review for Advanced Access** on `whatsapp_business_messaging` + `whatsapp_business_management` — submission draft `949305008122443` fully staged (screencasts, usage texts, data handling, API test calls made); waiting on Meta's ≤24h API-call registration to unlock Submit, then 3–5 business days review. See `docs/meta-app-review-resubmission.md` § WhatsApp.
+4. On approval: create the Embedded Signup **configuration** and set its ID as `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` → follow the runbook.
+
+> ~~"No App Review needed for WhatsApp — only business verification + Standard Access."~~ **Corrected 2026-07-08:** Standard Access only covers assets *owned by* the developer's own business. Serving *other* businesses' WABAs as a Tech Provider (Embedded Signup onboarding) requires **Advanced Access** via App Review for both permissions — which is exactly the submission above.
 
 ### Phase 3: Frontend — WhatsApp Connection UI ✅ (2026-07-03, `feat/whatsapp-connect`)
 Connect WhatsApp via Facebook Embedded Signup on the existing pages screen.

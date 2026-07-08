@@ -11,6 +11,11 @@ coverage
 out
 build
 
+# Capacitor native projects — not needed for the Next.js server image
+# (these carry multi-GB native build intermediates that otherwise bloat the build context)
+frontend/ios
+frontend/android
+
 # Production
 dist
 
