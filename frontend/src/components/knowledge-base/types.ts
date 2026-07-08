@@ -14,7 +14,10 @@ export function isPresetSection(id: SectionId): id is PresetSectionId {
 }
 
 export const CUSTOM_SECTION_MARKER = '✦';
-export const MAX_CUSTOM_SECTIONS = 8;
+// 18 custom + 2 fixed presets (products, notes) = 20 total sections. Content is
+// still bounded by MAX_LENGTH (16000 chars) in KnowledgeBaseModal — sections only
+// organise that budget, so raising this count doesn't grow the KB/prompt size.
+export const MAX_CUSTOM_SECTIONS = 18;
 
 export interface KbGap {
   id: string;
