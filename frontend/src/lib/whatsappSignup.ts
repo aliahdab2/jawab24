@@ -46,6 +46,23 @@ const GRAPH_VERSION = 'v23.0';
 /** How long to wait for the merchant to finish the signup wizard. */
 const SIGNUP_TIMEOUT_MS = 10 * 60 * 1000;
 
+/**
+ * True only when a message event came from facebook.com or one of its
+ * subdomains over https. A naive `event.origin.endsWith('facebook.com')`
+ * also matches attacker-registrable domains like `evil-facebook.com`
+ * (`'evil-facebook.com'.endsWith('facebook.com') === true`), so we parse the
+ * origin and compare the hostname — the same URL-whitelist pattern used for
+ * deep links in `_app.tsx`.
+ */
+function isFacebookOrigin(origin: string): boolean {
+    try {
+        const { protocol, hostname } = new URL(origin);
+        return protocol === 'https:' && (hostname === 'facebook.com' || hostname.endsWith('.facebook.com'));
+    } catch {
+        return false;
+    }
+}
+
 let sdkPromise: Promise<FacebookSdk> | null = null;
 
 function loadFacebookSdk(appId: string): Promise<FacebookSdk> {
@@ -117,7 +134,7 @@ export async function launchWhatsAppSignup(): Promise<WhatsAppSignupResult> {
         // Meta posts the selected phone_number_id / waba_id from inside the
         // signup wizard via a WA_EMBEDDED_SIGNUP message event.
         const onMessage = (event: MessageEvent) => {
-            if (!event.origin.endsWith('facebook.com')) return;
+            if (!isFacebookOrigin(event.origin)) return;
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                 if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;

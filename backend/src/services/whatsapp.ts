@@ -24,17 +24,34 @@ const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
  */
 export class WhatsAppApiError extends Error {
     readonly metaCode?: number;
-    constructor(message: string, metaCode?: number) {
+    /**
+     * True when the failure is retry-worthy (network/timeout, 429, 5xx) rather
+     * than permanent (bad token, 24h window, invalid recipient). The reply
+     * pipeline reads this — via `classifyDmError` — to decide whether to rethrow
+     * for a BullMQ retry instead of marking the reply `delivery_failed` and
+     * counting it toward the defensive page auto-pause.
+     */
+    readonly transient: boolean;
+    constructor(message: string, metaCode?: number, transient = false) {
         super(message);
         this.name = 'WhatsAppApiError';
         this.metaCode = metaCode;
+        this.transient = transient;
     }
 }
 
 function sanitizeWhatsAppError(error: unknown): WhatsAppApiError {
-    const ax = error as { response?: { data?: { error?: { code?: number; message?: string } } }; message?: string };
+    const ax = error as {
+        response?: { status?: number; data?: { error?: { code?: number; message?: string } } };
+        message?: string;
+    };
     const meta = ax?.response?.data?.error;
-    return new WhatsAppApiError(meta?.message || ax?.message || 'WhatsApp API request failed', meta?.code);
+    // Same rule the FB/IG classifier uses (see classifyDmError): no HTTP response
+    // (network/timeout) or a 429 / 5xx is transient; a 4xx (bad token, 24h window,
+    // invalid recipient) is permanent.
+    const status = ax?.response?.status;
+    const transient = status === undefined || status === 429 || (status >= 500 && status < 600);
+    return new WhatsAppApiError(meta?.message || ax?.message || 'WhatsApp API request failed', meta?.code, transient);
 }
 
 /**

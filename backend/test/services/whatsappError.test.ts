@@ -66,4 +66,21 @@ describe('WhatsAppService error sanitization', () => {
             expect(e).not.toHaveProperty('config');
         }
     });
+
+    // Regression: transient send failures must be retry-worthy so a Meta blip
+    // doesn't burn the reply AND spuriously trip the page auto-pause counter.
+    it.each([
+        ['5xx server error', { response: { status: 503, data: {} }, message: 'boom' }, true],
+        ['429 rate limit', { response: { status: 429, data: {} }, message: 'slow down' }, true],
+        ['network error (no response)', { code: 'ECONNRESET', message: 'socket hang up' }, true],
+        ['4xx business error (24h window)', { response: { status: 400, data: { error: { code: 131047, message: 'window' } } } }, false],
+        ['401 bad token', { response: { status: 401, data: { error: { code: 190, message: 'expired' } } } }, false],
+    ])('sendTextMessage marks %s transient=%s', async (_label, axiosErr, expectedTransient) => {
+        vi.mocked(axios.post).mockRejectedValueOnce(axiosErr);
+        const err = await whatsappService
+            .sendTextMessage('phone-1', '+966500000000', 'hi', 'tok')
+            .catch(e => e as WhatsAppApiError);
+        expect(err).toBeInstanceOf(WhatsAppApiError);
+        expect(err.transient).toBe(expectedTransient);
+    });
 });
