@@ -14,6 +14,11 @@ interface ModalProps {
   title: string;
   /** Optional icon rendered before the title in the header (e.g. a feature glyph). */
   titleIcon?: React.ReactNode;
+  /**
+   * Optional node rendered immediately after the title text in the header (e.g. an
+   * InfoPopover trigger). Purely additive — omit it and the header is unchanged.
+   */
+  titleAction?: React.ReactNode;
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   /**
@@ -47,6 +52,7 @@ export function Modal({
   onClose,
   title,
   titleIcon,
+  titleAction,
   children,
   size = 'md',
   mobilePresentation = 'sheet',
@@ -165,6 +171,7 @@ export function Modal({
               <h3 id={titleId} className="text-xl font-bold text-foreground leading-tight">
                 {title}
               </h3>
+              {titleAction}
             </div>
             <button
               type="button"

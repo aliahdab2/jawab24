@@ -4,14 +4,34 @@ import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
-import { MessageCircle, Mail } from 'lucide-react';
-import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal } from '@/components/ui';
+import { MessageCircle, Mail, ArrowUpRight } from 'lucide-react';
+import Link from 'next/link';
+import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
-import { useCommentReplyMode } from '@/hooks/useCommentReplyMode';
+import { useCommentReplyMode, useDualReplyNudge } from '@/hooks/useCommentReplyMode';
 
 type TriggerMode = 'keyword' | 'all';
+
+/** Max length of the reply message — mirrored by the textarea cap and the counter. */
+const REPLY_MAX = 1000;
+
+/** Single source for how each delivery channel renders in the outcome rows:
+ *  icon (Mail = private DM, MessageCircle = public comment), label key, and pill
+ *  colour (private = brand, public = sky). */
+const CHANNEL_META = {
+  private: {
+    Icon: Mail,
+    labelKey: 'postTriggerChannelPrivate',
+    pill: 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700',
+  },
+  public: {
+    Icon: MessageCircle,
+    labelKey: 'postTriggerChannelPublic',
+    pill: 'text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800',
+  },
+} as const;
 
 interface PostTriggerModalProps {
   postId: string;
@@ -38,6 +58,7 @@ export function PostTriggerModal({
 }: PostTriggerModalProps) {
   const t = useTranslations('comments');
   const deliveryMode = useCommentReplyMode();
+  const dualNudge = useDualReplyNudge();
 
   const [mode, setMode] = useState<TriggerMode>(() => (initialType === 'all' ? 'all' : 'keyword'));
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
@@ -94,20 +115,52 @@ export function PostTriggerModal({
   // any-comment mode carries a reply only.
   const hasActiveTrigger = !!initialReply;
 
+  // Outcome rows — exactly what the commenter receives, per the workspace delivery
+  // mode (from Settings; not overridable here). In dual mode the Post Reply is the
+  // PRIVATE message and a SEPARATE static comment is posted publicly — see
+  // reply/sender.ts. Empty reply shows a placeholder in its row. Rows are empty
+  // while the mode is still loading (deliveryMode null) so nothing wrong is shown.
+  const replyTrimmed = reply.trim();
+  const replyRowText = replyTrimmed || t('postTriggerPreviewEmpty');
+  const outcomeRows: { channel: 'private' | 'public'; text: string; fromSettings: boolean; emptyReply: boolean }[] =
+    deliveryMode === 'public'
+      ? [{ channel: 'public', text: replyRowText, fromSettings: false, emptyReply: !replyTrimmed }]
+      : deliveryMode === 'private'
+        ? [{ channel: 'private', text: replyRowText, fromSettings: false, emptyReply: !replyTrimmed }]
+        : deliveryMode === 'dual'
+          ? [
+              { channel: 'private', text: replyRowText, fromSettings: false, emptyReply: !replyTrimmed },
+              { channel: 'public', text: dualNudge.trim() || t('postTriggerDefaultNudge'), fromSettings: true, emptyReply: false },
+            ]
+          : [];
+
   const footer = (
-    <div className={clsx('flex items-center gap-3', hasActiveTrigger ? 'justify-between' : 'justify-end')}>
+    // Mobile: primary action goes full-width on top (col-reverse ⇒ Save above
+    // Remove), a strong thumb target on the fullscreen sheet. Desktop: inline
+    // row — Remove at the start edge, Save at the end.
+    <div
+      className={clsx(
+        'flex flex-col-reverse gap-2 sm:flex-row sm:items-center',
+        hasActiveTrigger ? 'sm:justify-between' : 'sm:justify-end',
+      )}
+    >
       {hasActiveTrigger && (
         <Button
           variant="ghost"
           size="sm"
           onClick={requestClear}
           disabled={saving}
-          className="text-destructive hover:text-destructive"
+          className="w-full sm:w-auto text-destructive hover:text-destructive"
         >
           {t('postTriggerClear')}
         </Button>
       )}
-      <Button onClick={handleSave} disabled={saving} size="sm">
+      <Button
+        onClick={handleSave}
+        disabled={saving}
+        loading={savingSave}
+        className="w-full sm:w-auto"
+      >
         {t('postTriggerSave')}
       </Button>
     </div>
@@ -119,33 +172,18 @@ export function PostTriggerModal({
       onClose={onClose}
       title={hasActiveTrigger ? t('postTriggerEdit') : t('postTriggerCta')}
       titleIcon={<PostReplyIcon className={clsx('w-5 h-5', postReplyIconClass)} aria-hidden="true" />}
+      // "What a Post Reply is" now lives in a title tooltip — available on demand,
+      // never occupying the form flow (it used to be a prose block above the fields).
+      titleAction={
+        <InfoPopover label={t('postTriggerAboutLabel')}>
+          {t('postTriggerDescription')}
+        </InfoPopover>
+      }
       size="sm"
       mobilePresentation="fullscreen"
       footer={footer}
     >
       <div className="flex flex-col gap-4">
-        {/* What a Post Reply is — fixed, self-written message (channel-neutral copy).
-            The Post Reply icon already appears in the modal title (the feature's identity). */}
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {t('postTriggerDescription')}
-        </p>
-
-        {/* How the reply is delivered — follows the workspace-level comment reply
-            mode from Settings (no per-post override). Hidden until settings load so
-            a wrong delivery claim is never shown. */}
-        {deliveryMode !== null && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 text-sm leading-relaxed" role="note">
-            {deliveryMode === 'public'
-              ? <MessageCircle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
-              : <Mail className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />}
-            <span>
-              {deliveryMode === 'public' && t('postTriggerDeliveryPublic')}
-              {deliveryMode === 'private' && t('postTriggerDeliveryPrivate')}
-              {deliveryMode === 'dual' && t('postTriggerDeliveryDual')}
-            </span>
-          </div>
-        )}
-
         {/* Post preview — the post this reply is configured for. Clamped to 3 lines
             (keeps the keyword + reply fields above the fold on mobile) with a show-more
             toggle for long posts. */}
@@ -224,8 +262,26 @@ export function PostTriggerModal({
           </div>
         )}
 
-        {/* Reply textarea */}
-        <FormField label={t('postTriggerReply')} htmlFor="trigger-reply">
+        {/* Reply textarea — label row carries a live character counter (the field
+            is capped at REPLY_MAX; the count turns amber as it approaches the limit
+            so the wall is never hit blind). */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="trigger-reply" className="text-sm font-medium text-foreground">
+              {t('postTriggerReply')}
+            </label>
+            <span
+              className={clsx(
+                'text-xs tabular-nums',
+                reply.length >= REPLY_MAX ? 'text-destructive'
+                  : reply.length > REPLY_MAX * 0.9 ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-muted-foreground',
+              )}
+              aria-live="polite"
+            >
+              {reply.length} / {REPLY_MAX}
+            </span>
+          </div>
           <Textarea
             id="trigger-reply"
             value={reply}
@@ -233,7 +289,7 @@ export function PostTriggerModal({
             placeholder={mode === 'all' ? t('postTriggerAllReplyPlaceholder') : t('postTriggerReplyPlaceholder')}
             dir="auto"
             rows={4}
-            maxLength={1000}
+            maxLength={REPLY_MAX}
             className="leading-relaxed"
             // resize:none is set inline, not via a class: the base Textarea hardcodes
             // `resize-y`, which wins over a `resize-none` class in Tailwind's cascade and
@@ -241,7 +297,59 @@ export function PostTriggerModal({
             // The field auto-sizes via fieldSizing, so manual resize is never wanted here.
             style={{ fieldSizing: 'content', resize: 'none', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
           />
-        </FormField>
+        </div>
+
+        {/* Outcome card — what the commenter actually receives, one row per channel.
+            Hidden until the delivery mode resolves (deliveryMode !== null) so a wrong
+            delivery claim is never shown. The "how it's delivered" sentence sits in an
+            info tooltip; in dual mode the static public comment links to the exact
+            Settings field that owns it. */}
+        {deliveryMode !== null && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-medium text-foreground">{t('postTriggerOutcomeTitle')}</span>
+              <InfoPopover label={t('postTriggerDeliveryLabel')}>
+                {deliveryMode === 'public' && t('postTriggerDeliveryPublic')}
+                {deliveryMode === 'private' && t('postTriggerDeliveryPrivate')}
+                {deliveryMode === 'dual' && t('postTriggerDeliveryDual')}
+              </InfoPopover>
+              <span className="ms-auto text-[10px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700 rounded-full px-2 py-0.5">
+                {t('postTriggerOutcomeLive')}
+              </span>
+            </div>
+            <div className="rounded-xl border border-theme-border overflow-hidden">
+              {outcomeRows.map((row, i) => {
+                const { Icon, labelKey, pill } = CHANNEL_META[row.channel];
+                return (
+                  <div
+                    key={row.channel}
+                    className={clsx('grid grid-cols-[auto_1fr] gap-2.5 px-3 py-2.5 items-start', i > 0 && 'border-t border-dashed border-theme-border')}
+                  >
+                    <span className={clsx('inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap', pill)}>
+                      <Icon className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
+                      {t(labelKey)}
+                    </span>
+                    <span
+                      className={clsx('text-sm leading-relaxed whitespace-pre-wrap break-words', row.emptyReply ? 'italic text-muted-foreground' : 'text-foreground')}
+                      dir="auto"
+                    >
+                      {row.text}
+                      {row.fromSettings && (
+                        <Link
+                          href="/settings#comment-reply-mode-label"
+                          className="ms-1.5 align-[1px] inline-flex items-center gap-0.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline whitespace-nowrap"
+                        >
+                          {t('postTriggerOutcomeSettingsLink')}
+                          <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
+                        </Link>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
       <ConfirmationModal
         isOpen={confirmingClear}

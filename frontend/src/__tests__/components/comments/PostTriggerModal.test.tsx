@@ -12,6 +12,10 @@ vi.mock('@/hooks/useSaveHandler', () => ({
     useSaveHandler: () => ({ handle: vi.fn(), saving: false }),
 }));
 
+vi.mock('next/link', () => ({
+    default: ({ href, children }: { href: string; children: ReactNode }) => <a href={href}>{children}</a>,
+}));
+
 vi.mock('@/components/ui', () => ({
     Modal: ({ isOpen, title, children, footer }: { isOpen: boolean; title: string; children: ReactNode; footer?: ReactNode }) =>
         isOpen ? (
@@ -32,6 +36,9 @@ vi.mock('@/components/ui', () => ({
             {children}
         </div>
     ),
+    // Closed popover: renders only the trigger, never its content (matches the real
+    // click-to-open behaviour). So the on-demand explanations stay out of the DOM.
+    InfoPopover: ({ label }: { label: string }) => <button type="button" aria-label={label} />,
     ConfirmationModal: () => null,
 }));
 
@@ -39,12 +46,6 @@ import { PostTriggerModal } from '@/components/comments/PostTriggerModal';
 import { settingsApi } from '@/lib/api';
 
 const settingsGetMock = vi.mocked(settingsApi.get);
-
-const DELIVERY_TEXT = {
-    public: 'Based on your settings, this reply will be posted as a public comment on the post.',
-    private: 'Based on your settings, this reply will be sent to the commenter in a private message.',
-    dual: 'Based on your settings, this reply will be sent in a private message, with a short public comment posted on the post.',
-};
 
 function renderModal() {
     const client = new QueryClient({
@@ -63,33 +64,69 @@ function renderModal() {
     );
 }
 
-// The delivery note tells the merchant where the Post Reply will actually land —
-// it follows the workspace-level commentReplyMode, which this modal cannot override.
-describe('PostTriggerModal — delivery mode note', () => {
+// The outcome card shows exactly what the commenter receives, per the workspace
+// commentReplyMode (which this modal cannot override). It is hidden until the mode
+// resolves so a wrong delivery claim is never shown.
+describe('PostTriggerModal — outcome card', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it.each([
-        ['public', DELIVERY_TEXT.public],
-        ['private', DELIVERY_TEXT.private],
-        ['dual', DELIVERY_TEXT.dual],
-    ])('shows the %s-mode note when settings resolve', async (mode, expected) => {
-        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: mode } });
+    it('private mode: one private-message row, no public row', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private' } });
         renderModal();
-        expect(await screen.findByText(expected)).toBeInTheDocument();
+        expect(await screen.findByText('What the commenter receives')).toBeInTheDocument();
+        expect(screen.getByText('Private message')).toBeInTheDocument();
+        expect(screen.queryByText('Public comment')).toBeNull();
     });
 
-    it('shows no note while settings are loading', () => {
+    it('public mode: one public-comment row, no private row', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'public' } });
+        renderModal();
+        expect(await screen.findByText('What the commenter receives')).toBeInTheDocument();
+        expect(screen.getByText('Public comment')).toBeInTheDocument();
+        expect(screen.queryByText('Private message')).toBeNull();
+    });
+
+    it('dual mode: reply as DM + a separate static public comment linking to Settings', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'dual', dualReplyNudge: '' } });
+        renderModal();
+        expect(await screen.findByText('What the commenter receives')).toBeInTheDocument();
+        // Both channels appear...
+        expect(screen.getByText('Private message')).toBeInTheDocument();
+        expect(screen.getByText('Public comment')).toBeInTheDocument();
+        // ...the public one is the static default (merchant hasn't customised it)...
+        expect(screen.getByText('Details sent via private message 📩')).toBeInTheDocument();
+        // ...and it deep-links to the exact comment-reply field in Settings.
+        const link = screen.getByRole('link', { name: /Change in Settings/i });
+        expect(link).toHaveAttribute('href', '/settings#comment-reply-mode-label');
+    });
+
+    it('dual mode: shows the merchant\'s custom static comment for the viewer\'s UI locale', async () => {
+        // Test locale is 'en' (test/setup mocks useLocale), so the preview reads the
+        // 'en' entry — never a different-language variant leaking into this UI.
+        settingsGetMock.mockResolvedValue({
+            data: {
+                commentReplyMode: 'dual',
+                dualReplyNudgeMulti: { en: 'We messaged you the details', ar: 'راسلناك بالتفاصيل', sourceLang: 'ar' },
+            },
+        });
+        renderModal();
+        expect(await screen.findByText('We messaged you the details')).toBeInTheDocument();
+        expect(screen.queryByText('راسلناك بالتفاصيل')).toBeNull();
+        expect(screen.queryByText('Details sent via private message 📩')).toBeNull();
+    });
+
+    it('shows no outcome card while settings are loading', () => {
         settingsGetMock.mockImplementation(() => new Promise(() => {}));
         renderModal();
-        expect(screen.queryByText(/Based on your settings/)).toBeNull();
+        expect(screen.queryByText('What the commenter receives')).toBeNull();
     });
 
-    it('shows no note when the settings fetch fails (never guesses delivery)', async () => {
+    it('shows no outcome card when the settings fetch fails (never guesses delivery)', async () => {
         settingsGetMock.mockRejectedValue(new Error('network down'));
         renderModal();
-        await waitFor(() => expect(settingsGetMock).toHaveBeenCalledTimes(1));
-        expect(screen.queryByText(/Based on your settings/)).toBeNull();
+        await waitFor(() => expect(settingsGetMock).toHaveBeenCalled());
+        expect(screen.queryByText('What the commenter receives')).toBeNull();
     });
 });

@@ -228,26 +228,32 @@ const SettingsPage: NextPageWithLayout = () => {
     }
   }, [isAuthenticated, fetchSettings]);
 
-  // Deep link from the dashboard AI-limit banner (`/settings#limit-fallback-message`).
-  // The fallback card lives inside the Advanced section, which is collapsed by
-  // default — so a bare hash jump finds no anchor in the DOM and the user lands
-  // at the top with the option hidden. Expand Advanced (transiently), then scroll
-  // to + briefly highlight the card once it has actually mounted.
+  // Deep links into a specific settings field via `/settings#<anchor>`:
+  //   - `#limit-fallback-message` — the dashboard AI-limit banner.
+  //   - `#comment-reply-mode-label` — the Post Reply modal's "change in Settings"
+  //     link (points at the comment reply mode + static dual comment).
+  // Only a known allowlist is honored (never scroll to an arbitrary id). The
+  // fallback card lives inside the Advanced section (collapsed by default), so it
+  // must be expanded before its anchor exists in the DOM; other anchors are always
+  // mounted. Scroll to + (for the fallback) briefly highlight once it has mounted.
   const didDeepLinkRef = useRef(false);
   useEffect(() => {
     if (loading || didDeepLinkRef.current) return;
-    if (typeof window === 'undefined' || window.location.hash !== '#limit-fallback-message') return;
+    if (typeof window === 'undefined') return;
+    const anchorId = window.location.hash.slice(1);
+    const KNOWN_ANCHORS = ['limit-fallback-message', 'comment-reply-mode-label'];
+    if (!KNOWN_ANCHORS.includes(anchorId)) return;
     didDeepLinkRef.current = true;
-    setForceAdvanced(true);
+    if (anchorId === 'limit-fallback-message') setForceAdvanced(true);
 
-    // The card mounts a render AFTER Advanced expands, so retry across a few
+    // The target may mount a render AFTER Advanced expands, so retry across a few
     // frames rather than racing a single rAF; bail out after ~0.5s.
     let frames = 0;
     let raf = requestAnimationFrame(function focus() {
-      const el = document.getElementById('limit-fallback-message');
+      const el = document.getElementById(anchorId);
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        setHighlightFallback(true);
+        if (anchorId === 'limit-fallback-message') setHighlightFallback(true);
         return;
       }
       if (frames++ < 30) raf = requestAnimationFrame(focus);
