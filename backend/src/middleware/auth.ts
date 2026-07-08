@@ -96,12 +96,37 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
 }
 
 /**
+ * Auth endpoints that (re)establish identity from a one-time credential in the
+ * request body — a Facebook OAuth `code` or access token — NOT from the session
+ * cookie. CSRF is inapplicable here and must not gate them:
+ *   - The OAuth code is itself the anti-forgery token: an attacker can't obtain a
+ *     valid one for the victim, and the endpoint mints a fresh session from it,
+ *     ignoring any ambient `token` cookie.
+ *   - They are called from the /auth/callback page via raw `fetch` (not the axios
+ *     client that attaches X-CSRF-Token), so a returning user whose browser still
+ *     holds a valid `token` cookie would otherwise be 403'd out of logging in.
+ *   - sameSite:strict on the `token` cookie stays the primary cross-site defense
+ *     (a cross-site forged request cannot send it at all).
+ */
+const CSRF_EXEMPT_ROUTES = new Set<string>([
+    '/auth/facebook',
+    '/auth/facebook/native',
+    '/auth/facebook/link',
+]);
+
+/**
  * Middleware to validation CSRF token
  * Required for all state-changing requests when using cookies
  */
 export async function csrfProtection(request: FastifyRequest, reply: FastifyReply) {
     // Skip for safe methods
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+        return;
+    }
+
+    // Skip for auth OAuth-exchange endpoints (see CSRF_EXEMPT_ROUTES). routeOptions.url
+    // is the matched route pattern, so query strings never interfere.
+    if (CSRF_EXEMPT_ROUTES.has(request.routeOptions?.url ?? '')) {
         return;
     }
 
