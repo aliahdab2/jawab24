@@ -4,10 +4,12 @@ import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
+import { MessageCircle, Mail } from 'lucide-react';
 import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
+import { useCommentReplyMode } from '@/hooks/useCommentReplyMode';
 
 type TriggerMode = 'keyword' | 'all';
 
@@ -35,6 +37,7 @@ export function PostTriggerModal({
   onSaved,
 }: PostTriggerModalProps) {
   const t = useTranslations('comments');
+  const deliveryMode = useCommentReplyMode();
 
   const [mode, setMode] = useState<TriggerMode>(() => (initialType === 'all' ? 'all' : 'keyword'));
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
@@ -126,6 +129,22 @@ export function PostTriggerModal({
         <p className="text-sm text-muted-foreground leading-relaxed">
           {t('postTriggerDescription')}
         </p>
+
+        {/* How the reply is delivered — follows the workspace-level comment reply
+            mode from Settings (no per-post override). Hidden until settings load so
+            a wrong delivery claim is never shown. */}
+        {deliveryMode !== null && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 text-sm leading-relaxed" role="note">
+            {deliveryMode === 'public'
+              ? <MessageCircle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              : <Mail className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />}
+            <span>
+              {deliveryMode === 'public' && t('postTriggerDeliveryPublic')}
+              {deliveryMode === 'private' && t('postTriggerDeliveryPrivate')}
+              {deliveryMode === 'dual' && t('postTriggerDeliveryDual')}
+            </span>
+          </div>
+        )}
 
         {/* Post preview — the post this reply is configured for. Clamped to 3 lines
             (keeps the keyword + reply fields above the fold on mobile) with a show-more

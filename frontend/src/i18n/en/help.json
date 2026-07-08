@@ -31,8 +31,16 @@
   "repliesTitle": "How Smart Replies work",
   "repliesText": "A Smart Reply is generated from your Business Info and your store catalog, and is written in the same language and dialect your customer used. Jawab24 will not invent prices or products it does not know — if something is not in your information, it hands the conversation to you instead of guessing.",
 
+  "commentModesTitle": "How comment replies work",
+  "commentModesText": "From Settings, choose what happens when someone comments on your posts. Three modes are available:",
+  "commentModesItem1": "Comment reply + private message (recommended) — a short comment is posted publicly, and the full answer is sent to the customer in a private message.",
+  "commentModesItem2": "Comment reply only — the answer is posted publicly as a comment reply; no private message is sent.",
+  "commentModesItem3": "Private message only — the customer receives the answer in a private message; nothing is posted on the comment.",
+  "commentModesItem4": "In comment reply + private message mode, you can customize the short public comment from Settings — Jawab24 rotates naturally-worded variations of it so replies don't look repetitive.",
+  "commentModesItem5": "Post Replies are delivered the same way: the mode you choose also decides whether a Post Reply arrives as a comment, a private message, or both.",
+
   "postReplyTitle": "Post Replies",
-  "postReplyText": "A Post Reply is a keyword you set on a specific post. When a customer comments with that keyword, Jawab24 automatically sends them the reply you configured as a direct message. You set this up per post from the comments view.",
+  "postReplyText": "A Post Reply is a keyword you set on a specific post. When a customer comments with that keyword, Jawab24 automatically sends them the reply you configured — delivered as a comment, a private message, or both, according to the comment reply mode described above. You set this up per post from the comments view.",
 
   "controlTitle": "Greeting, away messages, and working hours",
   "controlText": "You stay in control of every conversation:",
