@@ -83,6 +83,7 @@ export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: Se
             {settings.commentReplyMode === 'public' && t('commentReplyMode.publicDesc')}
             {settings.commentReplyMode === 'private' && t('commentReplyMode.privateDesc')}
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">{t('commentReplyMode.postReplyNote')}</p>
 
           {/* Flow Diagram */}
           <div
@@ -152,17 +153,12 @@ export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: Se
             )}
           </div>
 
-          {/* Public Comment Reply Configuration */}
-          <div
-            className={clsx(
-              "mt-4 overflow-hidden transition-all duration-300 ease-in-out",
-              (settings.commentReplyMode === 'dual' || settings.commentReplyMode === 'public')
-                ? 'max-h-[400px] opacity-100'
-                : 'max-h-0 opacity-0'
-            )}
-          >
+          {/* Short comment reply (nudge) — only sent by the backend in dual mode */}
+          {settings.commentReplyMode === 'dual' && (
+          <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="p-4 landscape:p-3 rounded-xl bg-brand-50/20 dark:bg-brand-950/20 border border-brand-200/50 dark:border-brand-800/40">
-              <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-3">{t('dualReplyConfigTitle.improved')}</h4>
+              <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-1">{t('dualReplyConfigTitle.improved')}</h4>
+              <p className="text-xs text-muted-foreground mb-3">{t('dualReplyConfigDesc')}</p>
               <InputFieldWrapper trailing={<CharCounter value={dualNudgeInput.length} max={80} />}>
                 <input
                   type="text"
@@ -196,6 +192,7 @@ export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: Se
               <p className="text-xs text-muted-foreground mt-1">{t('dualReplyVariationsHint')}</p>
             </div>
           </div>
+          )}
       </div>
     </Card>
   );

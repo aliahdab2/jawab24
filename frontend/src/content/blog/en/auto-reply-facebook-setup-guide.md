@@ -51,9 +51,9 @@ Set whether replies should be professional, casual, or enthusiastic to match you
 
 **Step 5: Choose your comment reply mode**
 For comments on posts, decide how the AI should respond:
-- **Public comment only** — reply directly on the comment
-- **Private DM only** — send a detailed direct message
-- **Dual mode** — short public comment + detailed private DM with full product details. The public nudge messages rotate with different wording to avoid looking repetitive on your post
+- **Comment reply only** — reply directly on the comment
+- **Private message only** — send a detailed private message
+- **Comment reply + private message** — short public comment + detailed private message with full product details. The short public comments rotate with different wording to avoid looking repetitive on your post
 
 **Step 6: Connect your store (optional)**
 If you use Shopify, Salla, or [Zid](/blog/zid-store-facebook-auto-reply), connect your store to sync product data automatically. The AI can then answer product questions with real prices and availability — and every price is verified against your catalog before being sent to a customer.

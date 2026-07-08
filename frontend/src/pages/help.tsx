@@ -22,6 +22,17 @@ export default function HelpCenter() {
       items: [t('metaItem1'), t('metaItem2'), t('metaItem3')],
     },
     { title: t('repliesTitle'), text: t('repliesText') },
+    {
+      title: t('commentModesTitle'),
+      text: t('commentModesText'),
+      items: [
+        t('commentModesItem1'),
+        t('commentModesItem2'),
+        t('commentModesItem3'),
+        t('commentModesItem4'),
+        t('commentModesItem5'),
+      ],
+    },
     { title: t('postReplyTitle'), text: t('postReplyText') },
     {
       title: t('controlTitle'),

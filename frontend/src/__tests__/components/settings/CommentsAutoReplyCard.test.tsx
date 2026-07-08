@@ -65,7 +65,7 @@ function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {
 // an empty input — which defaults to LTR per HTML spec, rendering the Arabic
 // placeholder left-aligned in the RTL UI.
 describe('CommentsAutoReplyCard — dual-reply nudge dir', () => {
-  const getNudgeInput = () => screen.getByLabelText('Public comment reply text') as HTMLInputElement;
+  const getNudgeInput = () => screen.getByLabelText('Short comment reply') as HTMLInputElement;
 
   it('uses locale rtl when auto-translated (input visually empty) in Arabic UI', () => {
     const settings = makeSettings({
@@ -126,5 +126,25 @@ describe('CommentsAutoReplyCard — dual-reply nudge dir', () => {
     const input = getNudgeInput();
     expect(input.value).toBe('');
     expect(input.getAttribute('dir')).toBe('rtl');
+  });
+});
+
+// Regression: the nudge is only ever sent by the backend in dual mode, but the
+// input used to render in public mode too — editable with zero effect.
+describe('CommentsAutoReplyCard — nudge field visibility per mode', () => {
+  it('shows the field with its explanatory sub-text in dual mode', () => {
+    render(<CommentsAutoReplyCard settings={makeSettings({ dashboardLanguage: 'en', commentReplyMode: 'dual' })} setSettings={() => {}} />);
+    expect(screen.getByLabelText('Short comment reply')).toBeInTheDocument();
+    expect(screen.getByText('This short reply is posted publicly on the comment — the full answer is sent to the customer in a private message.')).toBeInTheDocument();
+  });
+
+  it('hides the field in public mode (full reply is posted, nudge unused)', () => {
+    render(<CommentsAutoReplyCard settings={makeSettings({ dashboardLanguage: 'en', commentReplyMode: 'public' })} setSettings={() => {}} />);
+    expect(screen.queryByLabelText('Short comment reply')).toBeNull();
+  });
+
+  it('hides the field in private mode (nothing is posted publicly)', () => {
+    render(<CommentsAutoReplyCard settings={makeSettings({ dashboardLanguage: 'en', commentReplyMode: 'private' })} setSettings={() => {}} />);
+    expect(screen.queryByLabelText('Short comment reply')).toBeNull();
   });
 });

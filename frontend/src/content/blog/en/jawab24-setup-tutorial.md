@@ -95,13 +95,13 @@ The reply style affects *tone only* — the AI's accuracy and information stay t
 
 ### Comment Reply Mode
 
-For comments on your posts, Jawab24 offers a **dual reply mode**:
+For comments on your posts, choose how Jawab24 delivers the answer:
 
-- **Public comment only** — The AI replies directly on the comment for everyone to see
-- **Private DM only** — The AI sends a direct message to the commenter with detailed information
-- **Dual mode** — A short, friendly public comment (like "Thanks for asking! Check your DMs for details") plus a detailed private message with full product information, pricing, and ordering instructions
+- **Comment reply only** — The AI replies directly on the comment for everyone to see
+- **Private message only** — The AI sends the commenter a private message with detailed information
+- **Comment reply + private message** — A short, friendly public comment (like "Thanks for asking! Check your DMs for details") plus a detailed private message with full product information, pricing, and ordering instructions
 
-Dual mode is particularly effective for sales-oriented pages. The public reply shows other followers that you're responsive, while the private DM gives the customer all the details they need to purchase. The public nudge messages rotate automatically with different wording variations to avoid looking repetitive or triggering spam detection by Facebook.
+**Comment reply + private message** is particularly effective for sales-oriented pages. The public reply shows other followers that you're responsive, while the private message gives the customer all the details they need to purchase. The short public comments rotate automatically with different wording variations to avoid looking repetitive or triggering spam detection by Facebook.
 
 ### Away Message
 

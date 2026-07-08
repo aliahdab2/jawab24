@@ -86,9 +86,10 @@
     "dual": "Comment reply + private message",
     "publicOnly": "Comment reply only",
     "privateOnly": "Private message only",
-    "dualDesc": "We reply on the comment and send details privately using Smart Replies.",
-    "publicDesc": "Jawab24 will reply to every comment automatically.",
-    "privateDesc": "Jawab24 will send a private message using Smart Replies. No comment reply."
+    "dualDesc": "A short comment is posted publicly, and the full detailed answer is sent to the customer in a private message.",
+    "publicDesc": "The answer is posted publicly on the comment, kept short to suit comments. No private message is sent.",
+    "privateDesc": "The customer gets the full detailed answer in a private message. Nothing is posted on the comment.",
+    "postReplyNote": "Post Replies you set on specific posts are delivered the same way."
   },
   "replyModeDescription": "Reply on the comment or via private message",
   "publicReply": "Comment reply",
@@ -100,12 +101,11 @@
   "recommendedForLeads": "⭐ Recommended for leads",
   "dualReplyDesc": "Short comment reply + full private message",
   "dualReplyConfigTitle": {
-    "improved": "Public comment reply text"
+    "improved": "Short comment reply"
   },
-  "dualReplyConfigDesc": "Full details will be sent automatically in a private message.",
+  "dualReplyConfigDesc": "This short reply is posted publicly on the comment — the full answer is sent to the customer in a private message.",
   "dualReplyConfigHelper": "Max 80 characters • No links • Keep it short",
   "dualReplyVariationsHint": "Variations with the same meaning are generated automatically to keep replies fresh",
-  "dualReplyEmptyWarning": "This field is empty — the placeholder text will be used as the comment reply",
   "publicReplyPlaceholder": "Details sent in a private message 📩",
   "preview": "Preview",
   "flowNewComment": "New Comment",
@@ -207,8 +207,6 @@
   "awayMessageLabel": "Away Message",
   "businessHoursLabel": "Business Hours & Away Mode",
   "businessHoursErrorMsg": "End time must be after start time",
-  "commentReplyModeLabel": "Comment Reply Mode",
-  "dualReplyConfigLabel": "Short Comment Text",
   "greetingMessageLabel": "Welcome Message",
   "replyDelayLabel": "Reply Delay"
 }

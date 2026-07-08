@@ -34,6 +34,7 @@ export { useCountdown } from './useCountdown';
 export { usePageFilter } from './usePageFilter';
 export { useIsEmbedded } from './useIsEmbedded';
 export { useHandoffPauseDuration } from './useHandoffPauseDuration';
+export { useCommentReplyMode, type CommentReplyMode } from './useCommentReplyMode';
 export { useLoadConversation } from './useLoadConversation';
 export { useDeepLinkParam } from './useDeepLinkParam';
 export { useDeepLinkResource } from './useDeepLinkResource';
