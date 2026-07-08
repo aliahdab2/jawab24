@@ -53,6 +53,15 @@ describe('SetupChecklistCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('hides once the three active steps are done, even before a first reply lands', () => {
+    // page + business info + auto-reply on, but NO reply yet. `firstReplySent` is
+    // passive, so the card hands its slot to the Post Reply nudge at this point
+    // rather than lingering on a task the merchant can't directly complete.
+    const coreDone = makePage({ knowledgeBase: LONG_KB, autoReplyEnabled: true, repliesCount: 0 });
+    const { container } = render(<SetupChecklistCard pages={[coreDone]} usage={makeUsage(0)} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('counts first reply from monthly usage when no per-page reply count exists', () => {
     // KB filled + auto-reply on + a reply sent THIS MONTH (usage) but repliesCount=0
     const page = makePage({ knowledgeBase: LONG_KB, autoReplyEnabled: true, repliesCount: 0 });

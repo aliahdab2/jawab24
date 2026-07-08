@@ -21,17 +21,20 @@ interface ChecklistStep {
   href: string;
 }
 
-// 14 days: a dismissed-but-unfinished checklist gently re-surfaces. Once all four
-// steps are done the card hides regardless of dismissal (see `allDone` below), so
-// a finished merchant never sees it again. No `count` param — we don't want
-// completing a step to un-dismiss the card mid-session.
+// 14 days: a dismissed-but-unfinished checklist gently re-surfaces. Once core
+// setup is done the card hides regardless of dismissal (see `coreSetupDone`
+// below), so a set-up merchant never sees it again. No `count` param — we don't
+// want completing a step to un-dismiss the card mid-session.
 const DISMISS_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
  * "Finish your setup" activation checklist. Renders the four onboarding
  * milestones (connect → business info → auto-reply → first reply) with a
  * progress bar, derived live from data the dashboard already holds (no extra
- * fetch). Hides itself once every step is complete, and is manually dismissible.
+ * fetch). Manually dismissible, and hides itself once the three merchant-
+ * actionable steps are done (`coreSetupDone`) — the passive "first reply" step
+ * shouldn't keep the card alive on a task the merchant can't complete, and the
+ * Post Reply nudge takes this slot at exactly that point (see PostReplyNudgeBanner).
  */
 export function SetupChecklistCard({ pages, usage }: SetupChecklistCardProps) {
   const t = useTranslations('dashboard');
@@ -59,10 +62,11 @@ export function SetupChecklistCard({ pages, usage }: SetupChecklistCardProps) {
 
   const doneCount = steps.filter((s) => s.done).length;
   const total = steps.length;
-  const allDone = doneCount === total;
 
-  // Hide when finished (don't show a completed checklist) or when dismissed.
-  if (allDone || dismissed) return null;
+  // Hide once active setup is done (page + business info + auto-reply) or when
+  // dismissed. `firstReplySent` is passive, so it doesn't keep the card alive;
+  // the Post Reply nudge takes this slot at the same point (mutual exclusivity).
+  if (setup.coreSetupDone || dismissed) return null;
 
   const progressPct = Math.round((doneCount / total) * 100);
 

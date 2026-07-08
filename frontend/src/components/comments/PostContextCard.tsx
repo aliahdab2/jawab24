@@ -9,7 +9,7 @@ interface PostContextCardProps {
   postMessage: string;
   /** Lines the post is clamped to while collapsed. Default 6. */
   clampLines?: 3 | 6;
-  /** Action rendered at the trailing edge of the indigo header band (give it
+  /** Action rendered at the trailing edge of the sky header band (give it
    *  `ms-auto` to push it to the edge). */
   headerAction?: React.ReactNode;
   /** Content rendered below the post text inside the card (e.g. keyword chips).
@@ -19,7 +19,7 @@ interface PostContextCardProps {
 
 /**
  * The labeled "POST" context card shown in the comment detail and Post Reply
- * setup modals: an indigo header band (Post Reply's identity colour — matches the
+ * setup modals: an sky header band (Post Reply's identity colour — matches the
  * KeyRound title icon / keyword chips), a body clamped to a few lines with a
  * show-more / show-less toggle that appears only when the post overflows, and an
  * optional header action + footer. Single source of truth so both modals stay in
@@ -32,9 +32,9 @@ export function PostContextCard({ postMessage, clampLines = 6, headerAction, foo
 
   return (
     <div className="rounded-xl border border-theme-border bg-card overflow-hidden shadow-sm">
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-100 dark:border-indigo-800/50">
-        <FileText className="w-3.5 h-3.5 flex-shrink-0 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
-        <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-sky-50 dark:bg-sky-900/20 border-b border-sky-100 dark:border-sky-800/50">
+        <FileText className="w-3.5 h-3.5 flex-shrink-0 text-sky-600 dark:text-sky-400" aria-hidden="true" />
+        <span className="text-[10px] font-bold uppercase tracking-wide text-sky-700 dark:text-sky-300">
           {t('postContext')}
         </span>
         {headerAction}

@@ -64,4 +64,25 @@ describe('deriveSetupState', () => {
     const s = deriveSetupState([page({ knowledgeBase: null, catalogItemsCount: 0 })], usage(0));
     expect(s.kbFilled).toBe(false);
   });
+
+  it('coreSetupDone is true with page + kb + auto-reply even before any reply lands', () => {
+    const s = deriveSetupState([page({ knowledgeBase: LONG_KB, autoReplyEnabled: true, repliesCount: 0 })], usage(0));
+    expect(s.coreSetupDone).toBe(true);
+    // ...but the passive milestone hasn't flipped, so it's not fully "allDone".
+    expect(s.firstReplySent).toBe(false);
+    expect(s.allDone).toBe(false);
+  });
+
+  it('coreSetupDone is false while any active step is missing', () => {
+    // Missing auto-reply.
+    expect(deriveSetupState([page({ knowledgeBase: LONG_KB, autoReplyEnabled: false })], usage(0)).coreSetupDone).toBe(false);
+    // Missing business info.
+    expect(deriveSetupState([page({ knowledgeBase: null, autoReplyEnabled: true })], usage(0)).coreSetupDone).toBe(false);
+  });
+
+  it('allDone implies coreSetupDone', () => {
+    const s = deriveSetupState([page({ knowledgeBase: LONG_KB, autoReplyEnabled: true, repliesCount: 3 })], usage(0));
+    expect(s.allDone).toBe(true);
+    expect(s.coreSetupDone).toBe(true);
+  });
 });

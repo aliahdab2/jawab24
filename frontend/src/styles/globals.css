@@ -648,11 +648,11 @@
     @apply bg-emerald-100 text-emerald-600
            dark:bg-emerald-900/30 dark:text-emerald-400;
   }
-  /* Post Reply identity — indigo, distinct from Smart Reply's violet (reply-source-ai)
+  /* Post Reply identity — sky, distinct from Smart Reply's violet (reply-source-ai)
      and the fallback-template emerald. See src/utils/postReply.ts. */
   .reply-source-post-reply {
-    @apply bg-indigo-100 text-indigo-600
-           dark:bg-indigo-900/30 dark:text-indigo-400;
+    @apply bg-sky-100 text-sky-600
+           dark:bg-sky-900/30 dark:text-sky-400;
   }
   .reply-source-manual {
     @apply bg-slate-100 text-slate-600
@@ -733,7 +733,7 @@
   }
 
   .landing-platform-chip-instagram {
-    @apply bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 text-pink-600 dark:text-pink-300 hover:from-purple-500 hover:via-pink-500 hover:to-orange-500 hover:text-white;
+    @apply bg-gradient-to-r from-purple-500/10 via-sky-500/10 to-orange-500/10 text-sky-600 dark:text-sky-300 hover:from-purple-500 hover:via-sky-500 hover:to-orange-500 hover:text-white;
   }
 
   .landing-platform-chip-shopify {

@@ -299,12 +299,12 @@ export const CommentCard = React.memo(function CommentCard({
                   triggerActive
                     // Configured ("on"): quiet, settled confirmation — nothing left to do here,
                     // so it recedes rather than competing for attention.
-                    ? 'font-medium border-transparent bg-indigo-50/70 dark:bg-indigo-900/15 text-indigo-700/90 dark:text-indigo-300/90'
+                    ? 'font-medium border-transparent bg-sky-50/70 dark:bg-sky-900/15 text-sky-700/90 dark:text-sky-300/90'
                     // Not configured: medium-emphasis invite. Indigo is the Post Reply identity
                     // colour, kept tinted (not a saturated fill) so a list of mostly-unconfigured
                     // posts doesn't become a wall of colour — the red "needs attention" state stays
                     // the loudest signal on the card. Discovery punch comes from the NEW badge.
-                    : 'font-semibold border-indigo-600/30 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 hover:border-indigo-600/50 dark:hover:bg-indigo-900/30'
+                    : 'font-semibold border-sky-600/30 dark:border-sky-700 bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 hover:bg-sky-100 hover:border-sky-600/50 dark:hover:bg-sky-900/30'
                 )}
               >
                 {triggerActive
@@ -313,7 +313,7 @@ export const CommentCard = React.memo(function CommentCard({
                 {triggerActive ? t('postTriggerActive') : t('postTriggerCta')}
               </button>
               {showNewBadge && !triggerActive && (
-                <span className="absolute -top-2 -end-2 px-1.5 py-0.5 rounded-full bg-indigo-500 text-white text-[9px] font-bold leading-none shadow-sm pointer-events-none">
+                <span className="absolute -top-2 -end-2 px-1.5 py-0.5 rounded-full bg-sky-500 text-white text-[9px] font-bold leading-none shadow-sm pointer-events-none">
                   {t('newBadge')}
                 </span>
               )}
