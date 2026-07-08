@@ -39,6 +39,7 @@ vi.mock('@/components/ui', () => ({
     // Closed popover: renders only the trigger, never its content (matches the real
     // click-to-open behaviour). So the on-demand explanations stay out of the DOM.
     InfoPopover: ({ label }: { label: string }) => <button type="button" aria-label={label} />,
+    Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     ConfirmationModal: () => null,
 }));
 

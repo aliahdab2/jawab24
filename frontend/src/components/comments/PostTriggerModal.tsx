@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
 import { MessageCircle, Mail, ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
-import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover } from '@/components/ui';
+import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover, Badge } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
@@ -57,6 +57,7 @@ export function PostTriggerModal({
   onSaved,
 }: PostTriggerModalProps) {
   const t = useTranslations('comments');
+  const tc = useTranslations('common');
   const deliveryMode = useCommentReplyMode();
   const dualNudge = useDualReplyNudge();
 
@@ -172,12 +173,27 @@ export function PostTriggerModal({
       onClose={onClose}
       title={hasActiveTrigger ? t('postTriggerEdit') : t('postTriggerCta')}
       titleIcon={<PostReplyIcon className={clsx('w-5 h-5', postReplyIconClass)} aria-hidden="true" />}
-      // "What a Post Reply is" now lives in a title tooltip — available on demand,
-      // never occupying the form flow (it used to be a prose block above the fields).
+      // Header actions: a compact "active" pill in edit mode (replaces the old
+      // full-width badge row — same info, no body space) + the "what it is" tooltip
+      // (available on demand, never occupying the form flow).
       titleAction={
-        <InfoPopover label={t('postTriggerAboutLabel')}>
-          {t('postTriggerDescription')}
-        </InfoPopover>
+        <span className="flex items-center gap-1.5">
+          {/* Bespoke (not the shared Badge): "Post Reply active" is sky app-wide —
+              the comment-card active state + post-context header — and Badge has no
+              sky variant. Single instance, so no duplication. */}
+          {hasActiveTrigger && (
+            <span
+              title={t('postTriggerActive')}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 text-[11px] font-semibold whitespace-nowrap"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 dark:bg-sky-400" aria-hidden="true" />
+              {tc('active')}
+            </span>
+          )}
+          <InfoPopover label={t('postTriggerAboutLabel')}>
+            {t('postTriggerDescription')}
+          </InfoPopover>
+        </span>
       }
       size="sm"
       mobilePresentation="fullscreen"
@@ -188,14 +204,6 @@ export function PostTriggerModal({
             (keeps the keyword + reply fields above the fold on mobile) with a show-more
             toggle for long posts. */}
         {postMessage && <PostContextCard postMessage={postMessage} clampLines={3} />}
-
-        {/* Active trigger badge */}
-        {hasActiveTrigger && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 text-sm font-medium">
-            <PostReplyIcon className={clsx('w-4 h-4 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />
-            {t('postTriggerActive')}
-          </div>
-        )}
 
         {/* Trigger mode: match keywords vs reply to any comment.
             Not wrapped in FormField — its <label htmlFor> needs a labelable control,
@@ -313,9 +321,7 @@ export function PostTriggerModal({
                 {deliveryMode === 'private' && t('postTriggerDeliveryPrivate')}
                 {deliveryMode === 'dual' && t('postTriggerDeliveryDual')}
               </InfoPopover>
-              <span className="ms-auto text-[10px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700 rounded-full px-2 py-0.5">
-                {t('postTriggerOutcomeLive')}
-              </span>
+              <Badge variant="info" size="sm" className="ms-auto">{t('postTriggerOutcomeLive')}</Badge>
             </div>
             <div className="rounded-xl border border-theme-border overflow-hidden">
               {outcomeRows.map((row, i) => {
