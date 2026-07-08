@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { AxiosError, AxiosHeaders } from 'axios';
 import {
     classifyDmError,
+    isTransientFbError,
     DmSendError,
     isTransientAiError,
     AiUnavailableError,
@@ -175,6 +176,33 @@ describe('classifyDmError — unknown shapes', () => {
     it('preserves the raw message from plain Error', () => {
         const result = classifyDmError(new Error('boom'), 'facebook');
         expect(result.rawMessage).toBe('boom');
+    });
+});
+
+describe('classifyDmError — self-declared transient flag (WhatsAppApiError et al.)', () => {
+    // The reply pipeline's transient check is channel-agnostic: a custom error can
+    // carry `transient: true` to opt into a BullMQ retry without the FB-centric
+    // classifier knowing its type (D-016 — no per-channel branch in the core).
+    class CustomError extends Error {
+        constructor(msg: string, readonly transient: boolean) { super(msg); }
+    }
+
+    it('classifies a transient custom error as transient (would retry)', () => {
+        const result = classifyDmError(new CustomError('WhatsApp 503', true), 'facebook');
+        expect(result.bucket).toBe('transient');
+        expect(result.rawMessage).toBe('WhatsApp 503');
+        expect(isTransientFbError(new CustomError('WhatsApp 503', true), 'whatsapp')).toBe(true);
+    });
+
+    it('classifies a non-transient custom error as unknown (permanent — no retry)', () => {
+        const result = classifyDmError(new CustomError('bad recipient', false), 'facebook');
+        expect(result.bucket).toBe('unknown');
+        expect(isTransientFbError(new CustomError('bad recipient', false), 'whatsapp')).toBe(false);
+    });
+
+    it('does NOT treat a plain Error (no flag) as transient — FB/IG behavior unchanged', () => {
+        expect(classifyDmError(new Error('boom'), 'facebook').bucket).toBe('unknown');
+        expect(isTransientFbError(new Error('boom'), 'facebook')).toBe(false);
     });
 });
 

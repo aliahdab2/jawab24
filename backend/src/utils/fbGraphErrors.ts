@@ -290,7 +290,16 @@ export function classifyDmError(err: unknown, platform: FbPlatform): DmFailure {
         return { bucket: 'unknown', rawMessage: err.message };
     }
 
-    // 3. Plain Error or unknown shape
+    // 3. Custom errors that self-declare retryability (e.g. WhatsAppApiError from
+    //    a 5xx/429/network failure). Keeps the transient decision channel-agnostic
+    //    so no `platform === 'whatsapp'` branch has to leak into the reply pipeline
+    //    (see DECISIONS D-016). DmSendError/AxiosError are handled above, so FB/IG
+    //    errors never reach here — their behavior is unchanged.
+    if (err instanceof Error && (err as { transient?: unknown }).transient === true) {
+        return { bucket: 'transient', rawMessage: err.message };
+    }
+
+    // 4. Plain Error or unknown shape
     if (err instanceof Error) {
         return { bucket: 'unknown', rawMessage: err.message };
     }
