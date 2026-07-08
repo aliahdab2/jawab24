@@ -1,24 +1,21 @@
 import clsx from 'clsx';
-import { isLowSignalText } from '@/utils/feedPreview';
 
 /**
- * Renders a comment/message preview line for the dashboard feeds. When the raw
- * text is meaningful it's shown as-is. When it's low-signal ("...", emoji-only,
- * empty attachment) it falls back to a human-readable AI-intent label, then a
- * neutral "no preview" line — so the feed never shows a useless "..." row.
- *
- * Note: it deliberately does NOT fall back to the post a comment was left on —
- * in the dashboard glance feed that surfaced the merchant's own post copy,
- * which reads like the customer's message and adds noise. The AI intent (what
- * the customer wants) is the useful signal; the post stays on the Comments page.
+ * Renders a comment/message preview line for the dashboard feeds. Shows the raw
+ * text whenever there is anything to show — including short, emoji- or
+ * punctuation-only comments like "." or "❤️" (very common on "علّق بنقطة" /
+ * "comment a dot for the link" posts). Merchants would rather see the actual
+ * comment than a "no preview" placeholder. Only when the text is genuinely empty
+ * (e.g. an attachment-only message with no caption) does it fall back to the
+ * AI-intent label, then a neutral "no preview" line.
  *
  * Presentational only: callers resolve the i18n strings and pass them in.
  */
 interface FeedSnippetProps {
   text: string | null | undefined;
-  /** Resolved, human-readable AI-intent label (fallback when text is low-signal). */
+  /** Resolved, human-readable AI-intent label (fallback when text is empty). */
   intentLabel?: string | null;
-  /** Neutral fallback when nothing else is available. */
+  /** Neutral fallback when there is nothing at all to show. */
   noPreviewLabel: string;
   className?: string;
 }
@@ -29,7 +26,9 @@ export function FeedSnippet({
   noPreviewLabel,
   className,
 }: FeedSnippetProps) {
-  if (!isLowSignalText(text)) {
+  // Anything with visible content — including a lone "." or emoji — is the real
+  // comment and is shown as-is.
+  if (text && text.trim().length > 0) {
     return (
       <p className={clsx('text-xs text-muted-foreground line-clamp-2 leading-relaxed break-words', className)}>
         {text}
@@ -37,7 +36,7 @@ export function FeedSnippet({
     );
   }
 
-  // Fallback 1 — the AI-classified intent (e.g. "Question").
+  // Fallback 1 — empty text but an AI-classified intent (e.g. "Question").
   if (intentLabel) {
     return (
       <span className={clsx('inline-flex items-center text-[11px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5', className)}>
@@ -46,7 +45,7 @@ export function FeedSnippet({
     );
   }
 
-  // Fallback 2 — nothing to show.
+  // Fallback 2 — nothing to show (attachment-only / no caption).
   return (
     <p className={clsx('text-xs text-muted-foreground/70 italic', className)}>
       {noPreviewLabel}

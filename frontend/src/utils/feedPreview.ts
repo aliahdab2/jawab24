@@ -1,25 +1,8 @@
 /**
- * Helpers for rendering inbox/feed previews when the raw comment/message text
- * carries no useful information (e.g. "...", emoji-only, or an empty string on
- * an attachment-only message). Used by the dashboard feeds and — later — the
- * comments/messages pages, so the logic lives here rather than inline.
+ * Helpers for rendering inbox/feed previews. Used by the dashboard feeds (and,
+ * later, the comments/messages pages), so the logic lives here rather than inline.
  */
 import { VALID_AI_INTENTS } from '@jawab24/shared';
-
-/**
- * True when the text is empty, whitespace, or made up solely of punctuation /
- * symbols / emoji — i.e. there's nothing meaningful to preview. A genuine
- * word in any script (incl. Arabic) is NOT low-signal.
- */
-export function isLowSignalText(text: string | null | undefined): boolean {
-  if (!text) return true;
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return true;
-  // Keep only letters/numbers from any script; if nothing remains it was just
-  // punctuation/emoji (e.g. "...", "!!", "👍").
-  const meaningful = trimmed.replace(/[^\p{L}\p{N}]/gu, '');
-  return meaningful.length === 0;
-}
 
 /**
  * i18n key (in the global `common` namespace) for a normalized AI intent.
