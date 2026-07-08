@@ -63,7 +63,10 @@ mkdir -p "$BACKUP_DIR"
 # =============================================
 log "${BLUE}Starting database backup...${NC}"
 
-if ! docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" 2>/dev/null | gzip > "$BACKUP_FILE"; then
+# pg_dump stderr is deliberately NOT discarded: when a dump fails or produces
+# a corrupt file, the reason must land in the deploy log (2026-07-07: two
+# silent "corrupt" attempts were undiagnosable because stderr went to /dev/null).
+if ! docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_FILE"; then
     log "${RED}FAILED: pg_dump failed!${NC}"
     rm -f "$BACKUP_FILE"
     exit 1
@@ -106,11 +109,18 @@ else
 fi
 
 # =============================================
-# 5. Clean old local backups
+# 5. Clean old local backups (best-effort)
 # =============================================
+# This script's exit code means exactly one thing: "a verified backup exists".
+# Retention cleanup after that point must NEVER fail the script — under
+# `set -euo pipefail` a hiccup here (e.g. an rm race with a concurrent
+# backup/cron deleting the same old file) aborted a deployment on 2026-07-07
+# AFTER the backup had been created and verified. rm -f absorbs already-gone
+# files; any other cleanup failure logs a warning and moves on.
 log "${BLUE}Cleaning old local backups (keeping last ${LOCAL_RETENTION})...${NC}"
-DELETED=$(ls -t ${BACKUP_DIR}/jawab24_*.sql.gz 2>/dev/null | tail -n +$((LOCAL_RETENTION + 1)) | wc -l | tr -d ' ')
-ls -t ${BACKUP_DIR}/jawab24_*.sql.gz 2>/dev/null | tail -n +$((LOCAL_RETENTION + 1)) | xargs -r rm
+DELETED=$(ls -t ${BACKUP_DIR}/jawab24_*.sql.gz 2>/dev/null | tail -n +$((LOCAL_RETENTION + 1)) | wc -l | tr -d ' ') || DELETED=0
+ls -t ${BACKUP_DIR}/jawab24_*.sql.gz 2>/dev/null | tail -n +$((LOCAL_RETENTION + 1)) | xargs -r rm -f \
+    || log "${YELLOW}WARNING: old-backup cleanup failed (non-fatal — the new backup is verified)${NC}"
 
 if [ "$DELETED" -gt 0 ] 2>/dev/null; then
     log "Removed ${DELETED} old backup(s)"
