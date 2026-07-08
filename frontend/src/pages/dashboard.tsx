@@ -188,7 +188,7 @@ const DashboardPage: NextPageWithLayout = () => {
     queryKey: ['comments-stats'],
     queryFn: async () => {
       const res = await commentsApi.getStats();
-      return res.data || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
+      return res.data || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 }, repliedTodayByMethod: { ai: 0, postReply: 0 } };
     },
     enabled: isAuthenticated,
   });
@@ -197,7 +197,7 @@ const DashboardPage: NextPageWithLayout = () => {
     queryKey: ['messages-stats'],
     queryFn: async () => {
       const res = await messagesApi.getStats();
-      return res.data || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
+      return res.data || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 }, repliedTodayByMethod: { ai: 0, postReply: 0 } };
     },
     enabled: isAuthenticated,
   });
@@ -319,8 +319,8 @@ const DashboardPage: NextPageWithLayout = () => {
   const connectedPages = pages.filter(p => p.isConnected !== false);
 
   const statsData = useMemo(() => {
-    const stats = commentStats || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
-    const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
+    const stats = commentStats || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 }, repliedTodayByMethod: { ai: 0, postReply: 0 } };
+    const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 }, repliedTodayByMethod: { ai: 0, postReply: 0 } };
     const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled || p.whatsappAutoReplyEnabled).length;
 
     // Tooltip breakdown: only pass values when BOTH endpoints succeeded, so a
@@ -331,10 +331,15 @@ const DashboardPage: NextPageWithLayout = () => {
       repliedToday: (stats.repliedToday ?? 0) + (msgStats.repliedToday ?? 0),
       commentsRepliedToday: breakdownAvailable ? stats.repliedToday ?? 0 : undefined,
       messagesRepliedToday: breakdownAvailable ? msgStats.repliedToday ?? 0 : undefined,
+      // Today's Smart vs Post Reply split for the "Replied Today" tile — only when
+      // BOTH endpoints succeeded, so a partial load never renders a misleading sum.
+      repliedTodayByMethod: breakdownAvailable ? {
+        smart: (stats.repliedTodayByMethod?.ai ?? 0) + (msgStats.repliedTodayByMethod?.ai ?? 0),
+        postReply: (stats.repliedTodayByMethod?.postReply ?? 0) + (msgStats.repliedTodayByMethod?.postReply ?? 0),
+      } : undefined,
       commentsNeedsAction: Math.max(0, stats.needsAttention ?? 0),
       activePages,
       aiReplies: stats.byMethod.ai + (msgStats.byMethod?.ai ?? 0),
-      postReplies: (stats.byMethod.postReply ?? 0) + (msgStats.byMethod?.postReply ?? 0),
       messagesNeedsAction: Math.max(0, msgStats.needsAttention ?? 0),
     };
   }, [commentStats, messageStats, pages]);
@@ -602,6 +607,7 @@ const DashboardPage: NextPageWithLayout = () => {
         } : undefined}
         quotaResetsAt={usage?.currentPeriod?.end}
         smartRepliesTrend={aiUsage?.byDay?.slice(-14).map((d) => d.calls)}
+        repliedTodayByMethod={statsData.repliedTodayByMethod}
       />
 
       {/* Inbox: Comments + Messages side by side */}

@@ -52,6 +52,8 @@ describe('CommentsService', () => {
                     resolved: 3,
                     actionRequired: 39,  // (100 - 60 - 3 unreplied) + 2 needsAttention = 37 + 2
                     repliedToday: 3,
+                    aiToday: 2,
+                    postReplyToday: 1,
                     ai: 20,
                     template: 30,
                     manual: 10,
@@ -64,6 +66,8 @@ describe('CommentsService', () => {
                     resolved: 2,
                     actionRequired: 19,  // (50 - 30 - 2 unreplied) + 1 needsAttention = 18 + 1
                     repliedToday: 2,
+                    aiToday: 1,
+                    postReplyToday: 1,
                     ai: 15,
                     template: 10,
                     manual: 5,
@@ -85,7 +89,11 @@ describe('CommentsService', () => {
                     ai: 35,          // 20 + 15
                     manual: 15,      // 10 + 5
                     postReply: 0,
-                }
+                },
+                repliedTodayByMethod: {
+                    ai: 3,           // 2 + 1
+                    postReply: 2,    // 1 + 1
+                },
             });
         });
 
@@ -202,7 +210,8 @@ describe('CommentsService', () => {
                 resolved: 0,
                 repliedToday: 0,
                 replyRate: '0',
-                byMethod: { template: 0, ai: 0, manual: 0, postReply: 0 }
+                byMethod: { template: 0, ai: 0, manual: 0, postReply: 0 },
+                repliedTodayByMethod: { ai: 0, postReply: 0 },
             });
         });
     });

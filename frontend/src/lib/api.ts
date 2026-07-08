@@ -271,6 +271,8 @@ export interface CommentStats {
     /** Per-post keyword-trigger replies */
     postReply: number;
   };
+  /** Today's replies split by method — dashboard "Replied Today" breakdown line */
+  repliedTodayByMethod: { ai: number; postReply: number };
 }
 
 // Comments API
@@ -619,7 +621,7 @@ export const messagesApi = {
   getAll: (params?: MessagesQueryParams) =>
     api.get<MessagesPaginatedResponse>('/messages', { params }),
 
-  getStats: (params?: { pageId?: string }) => api.get<{ total: number; replied: number; pending: number; resolved: number; needsAttention: number; actionRequired: number; autoReplied: number; repliedToday: number; byMethod: { template: number; ai: number; manual: number; postReply: number }; convTotal: number; convActionRequired: number; convAutoReplied: number; convHandled: number }>('/messages/stats', { params }),
+  getStats: (params?: { pageId?: string }) => api.get<{ total: number; replied: number; pending: number; resolved: number; needsAttention: number; actionRequired: number; autoReplied: number; repliedToday: number; byMethod: { template: number; ai: number; manual: number; postReply: number }; repliedTodayByMethod: { ai: number; postReply: number }; convTotal: number; convActionRequired: number; convAutoReplied: number; convHandled: number }>('/messages/stats', { params }),
 
   getConversation: (senderId: string, params: { pageId: string; limit?: number }) =>
     api.get<Message[]>(`/messages/conversation/${senderId}`, { params }),

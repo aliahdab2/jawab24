@@ -843,6 +843,9 @@ export class MessagesService {
         autoReplied: number;
         repliedToday: number;
         byMethod: { template: number; ai: number; manual: number; postReply: number };
+        // Today's replies split by method — feeds the dashboard's "Replied Today"
+        // breakdown line (Smart vs Post Reply). Only the two methods the UI shows.
+        repliedTodayByMethod: { ai: number; postReply: number };
         // Conversation-level counts (COUNT DISTINCT sender_id) for tab labels
         convTotal: number;
         convActionRequired: number;
@@ -861,6 +864,8 @@ export class MessagesService {
                 needsAttention: sql<number>`count(*) FILTER (WHERE ${messages.needsAttention} = true AND ${messages.resolved} = false)`,
                 actionRequired: sql<number>`count(*) FILTER (WHERE ${messages.resolved} = false AND (${messages.replied} = false OR ${messages.needsAttention} = true))`,
                 repliedToday:   sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.repliedAt} >= ${todayStart})`,
+                aiToday:        sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.repliedAt} >= ${todayStart} AND ${messages.replyMethod} = 'ai')`,
+                postReplyToday: sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.repliedAt} >= ${todayStart} AND ${messages.replyMethod} = 'post_reply')`,
                 ai:             sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'template')`,
                 manual:         sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'manual')`,
@@ -883,7 +888,7 @@ export class MessagesService {
         const emptyByMethod = { template: 0, ai: 0, manual: 0, postReply: 0 };
 
         if (total === 0) {
-            return { total: 0, replied: 0, pending: 0, resolved: 0, needsAttention: 0, actionRequired: 0, autoReplied: 0, repliedToday: 0, byMethod: emptyByMethod, convTotal: 0, convActionRequired: 0, convAutoReplied: 0, convHandled: 0 };
+            return { total: 0, replied: 0, pending: 0, resolved: 0, needsAttention: 0, actionRequired: 0, autoReplied: 0, repliedToday: 0, byMethod: emptyByMethod, repliedTodayByMethod: { ai: 0, postReply: 0 }, convTotal: 0, convActionRequired: 0, convAutoReplied: 0, convHandled: 0 };
         }
 
         const replied = Number(row?.replied || 0);
@@ -906,6 +911,10 @@ export class MessagesService {
                 ai,
                 manual: Number(row?.manual || 0),
                 postReply,
+            },
+            repliedTodayByMethod: {
+                ai:        Number(row?.aiToday || 0),
+                postReply: Number(row?.postReplyToday || 0),
             },
             convTotal: Number(row?.convTotal || 0),
             convActionRequired: Number(row?.convActionRequired || 0),

@@ -471,6 +471,10 @@ export class CommentsService {
                 resolved:       sql<number>`count(*) FILTER (WHERE ${comments.resolved} = true)`,
                 actionRequired: sql<number>`count(*) FILTER (WHERE ${comments.resolved} = false AND (${comments.replied} = false OR ${comments.needsAttention} = true))`,
                 repliedToday:   sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.repliedAt} >= ${todayStart})`,
+                // Today's replies split by method — feeds the dashboard's "Replied Today"
+                // breakdown line (Smart vs Post Reply). Only the two methods the UI shows.
+                aiToday:        sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.repliedAt} >= ${todayStart} AND ${comments.replyMethod} = 'ai')`,
+                postReplyToday: sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.repliedAt} >= ${todayStart} AND ${comments.replyMethod} = 'post_reply')`,
                 ai:             sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'template')`,
                 manual:         sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'manual')`,
@@ -489,6 +493,8 @@ export class CommentsService {
                 resolved:       sql<number>`count(*) FILTER (WHERE ${instagramComments.resolved} = true)`,
                 actionRequired: sql<number>`count(*) FILTER (WHERE ${instagramComments.resolved} = false AND (${instagramComments.replied} = false OR ${instagramComments.needsAttention} = true))`,
                 repliedToday:   sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.repliedAt} >= ${todayStart})`,
+                aiToday:        sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.repliedAt} >= ${todayStart} AND ${instagramComments.replyMethod} = 'ai')`,
+                postReplyToday: sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.repliedAt} >= ${todayStart} AND ${instagramComments.replyMethod} = 'post_reply')`,
                 ai:             sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'template')`,
                 manual:         sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'manual')`,
@@ -510,6 +516,7 @@ export class CommentsService {
                 total: 0, replied: 0, unreplied: 0, needsAttention: 0, actionRequired: 0,
                 resolved: 0, repliedToday: 0, replyRate: '0',
                 byMethod: { template: 0, ai: 0, manual: 0, postReply: 0 },
+                repliedTodayByMethod: { ai: 0, postReply: 0 },
             };
         }
 
@@ -539,6 +546,10 @@ export class CommentsService {
             repliedToday,
             replyRate: (replied / total * 100).toFixed(1),
             byMethod,
+            repliedTodayByMethod: {
+                ai:        Number(fb?.aiToday || 0)        + Number(ig?.aiToday || 0),
+                postReply: Number(fb?.postReplyToday || 0) + Number(ig?.postReplyToday || 0),
+            },
         };
     }
     /**

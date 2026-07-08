@@ -80,6 +80,7 @@
     "repliedToday": "ردود اليوم",
     "replyRate": "معدل الرد",
     "avgSpeed": "متوسط السرعة",
+    "repliedTodayBreakdown": "الذكية: {smart} + البوست: {post}",
     "quotaWarning": "{percent}% من الخطة",
     "quotaExceeded": "تجاوز الحد",
     "onTopupLeft": "متبقٍ {balance} من رصيدك الإضافي",

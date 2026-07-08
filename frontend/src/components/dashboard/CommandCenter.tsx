@@ -31,6 +31,13 @@ interface CommandCenterProps {
   /** Daily Smart-Reply volume (oldest → newest) for the inline sparkline on the
    *  primary tile. Omitted/short series simply renders no trend line. */
   smartRepliesTrend?: number[];
+  /** Today's replies split by method (summed comments + messages). Feeds the
+   *  breakdown line on the "Replied Today" tile — rule-based Post Replies are
+   *  excluded from the AI-only primary tile, so without this line that automation
+   *  works invisibly. The line renders only when post replies fired today;
+   *  smart-only merchants keep the plain tile. Omit while either stats endpoint
+   *  is loading/failed so a partial sum never renders. */
+  repliedTodayByMethod?: { smart: number; postReply: number };
 }
 
 interface MetricCell {
@@ -74,6 +81,7 @@ export function CommandCenter({
   quota,
   quotaResetsAt,
   smartRepliesTrend,
+  repliedTodayByMethod,
 }: CommandCenterProps) {
   const tDash = useTranslations('dashboard');
   const tErrors = useTranslations('errors');
@@ -195,11 +203,24 @@ export function CommandCenter({
       borderColor: 'border-s-emerald-500',
       iconBg: 'icon-bg-emerald-light',
       iconColor: '',
+      // Tooltip shows both: the comments/messages breakdown (how many were comments
+      // vs DMs) AND the method breakdown (how many were Smart vs Post Reply).
+      // Both numbers always shown for transparency: a merchant seeing "Smart: 0 +
+      // Post Reply: 12" knows the complete story (Post Reply intercepts before AI,
+      // so 0 is often healthy). Hiding zeros would create ambiguity.
       tooltip: (commentsRepliedToday !== undefined && messagesRepliedToday !== undefined)
-        ? tDash('commandCenter.repliedTodayTooltip', {
-            comments: commentsRepliedToday,
-            messages: messagesRepliedToday,
-          })
+        ? (repliedTodayByMethod && repliedTodayByMethod.postReply > 0
+            ? tDash('commandCenter.repliedTodayTooltip', {
+                comments: commentsRepliedToday,
+                messages: messagesRepliedToday,
+              }) + '\n' + tDash('commandCenter.repliedTodayBreakdown', {
+                smart: repliedTodayByMethod.smart,
+                post: repliedTodayByMethod.postReply,
+              })
+            : tDash('commandCenter.repliedTodayTooltip', {
+                comments: commentsRepliedToday,
+                messages: messagesRepliedToday,
+              }))
         : undefined,
     },
     {

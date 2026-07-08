@@ -80,6 +80,7 @@
     "repliedToday": "Replies Today",
     "replyRate": "Reply Rate",
     "avgSpeed": "Avg Speed",
+    "repliedTodayBreakdown": "Smart: {smart} + Post Reply: {post}",
     "quotaWarning": "{percent}% of plan",
     "quotaExceeded": "Over limit",
     "onTopupLeft": "{balance} top-up left",
