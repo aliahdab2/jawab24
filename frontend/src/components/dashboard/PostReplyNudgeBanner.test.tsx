@@ -40,6 +40,19 @@ describe('PostReplyNudgeBanner', () => {
     expect(screen.getByText('Try Post Reply')).toBeInTheDocument();
   });
 
+  it('appears after CORE setup even before any customer reply has landed (the fix)', () => {
+    // Page + business info + auto-reply on, but zero replies and zero usage — the
+    // brand-new-merchant state where the old `allDone` gate kept the nudge hidden.
+    const noReplyUsage = {
+      ...usage(),
+      aiReplies: { used: 0, limit: 1000, remaining: 1000, percentUsed: 0 },
+    } as UsageSummary;
+    render(
+      <PostReplyNudgeBanner pages={[readyPage({ repliesCount: 0 })]} usage={noReplyUsage} isOwner onTry={vi.fn()} />,
+    );
+    expect(screen.getByText('Try Post Reply')).toBeInTheDocument();
+  });
+
   it('is hidden while setup is incomplete', () => {
     // Auto-reply off → setup not done.
     const { container } = render(

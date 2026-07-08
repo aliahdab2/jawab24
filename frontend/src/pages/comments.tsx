@@ -473,15 +473,15 @@ const CommentsPage: NextPageWithLayout = () => {
             {/* Lightweight ghost action — labeled on every breakpoint so the feature
                 reads clearly on mobile and web (owner call). The ghost weight (vs the
                 old filled block) keeps it from dominating the header even with the
-                label always shown; the indigo key carries the Post Reply identity,
+                label always shown; the sky key carries the Post Reply identity,
                 distinct from the icon-only Export beside it. */}
             <Button
               size="sm"
               variant="ghost"
               onClick={postReplySetup.openPicker}
-              className="gap-1.5 whitespace-nowrap"
+              icon={<PostReplyIcon className={clsx('w-4 h-4 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />}
+              className="whitespace-nowrap"
             >
-              <PostReplyIcon className={clsx('w-4 h-4 flex-shrink-0', postReplyIconClass)} aria-hidden="true" />
               {t('postReplyPickerButton')}
             </Button>
             <InboxExportButton onExport={exportToCSV} exporting={exporting} />

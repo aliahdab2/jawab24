@@ -309,10 +309,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                       'ms-auto inline-flex items-center gap-1.5 rounded-md text-xs border transition-all',
                       postTrigger
                         // Already configured: quiet "edit" affordance.
-                        ? 'px-2 py-0.5 font-medium border-transparent text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40'
+                        ? 'px-2 py-0.5 font-medium border-transparent text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/40'
                         // Not configured: a card-white chip so the invite stays prominent
-                        // against the header band (an indigo fill would blend in).
-                        : 'px-2 py-0.5 font-medium border-indigo-600/30 dark:border-indigo-700 bg-card text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 hover:border-indigo-600/50 dark:hover:bg-indigo-900/30'
+                        // against the header band (an sky fill would blend in).
+                        : 'px-2 py-0.5 font-medium border-sky-600/30 dark:border-sky-700 bg-card text-sky-700 dark:text-sky-300 hover:bg-sky-50 hover:border-sky-600/50 dark:hover:bg-sky-900/30'
                     )}
                   >
                     {postTrigger
@@ -331,7 +331,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                     {(postTrigger.keyword ? parseKeywords(postTrigger.keyword) : [t('postTriggerModeAll')]).map((kw, i) => (
                       <span
                         key={i}
-                        className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-700"
+                        className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-700"
                         dir="auto"
                       >
                         {kw}

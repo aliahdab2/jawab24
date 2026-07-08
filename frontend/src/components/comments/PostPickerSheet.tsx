@@ -169,7 +169,7 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
                     </span>
                   </span>
                   {post.hasTrigger ? (
-                    <span className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 whitespace-nowrap">
+                    <span className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300 whitespace-nowrap">
                       <PostReplyIcon className="w-3 h-3" aria-hidden="true" />
                       {t('postPickerActive')}
                     </span>
