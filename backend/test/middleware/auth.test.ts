@@ -194,4 +194,28 @@ describe('CSRF Protection Middleware', () => {
     await csrfProtection(mockRequest as FastifyRequest, mockReply as FastifyReply);
     expect(mockReply.status).not.toHaveBeenCalled();
   });
+
+  // Regression (JAWAB24-FRONTEND-2M): a returning user whose browser still holds a
+  // valid `token` cookie was 403'd out of logging in — the /auth/callback login POST
+  // is a raw fetch that carries the cookie but no X-CSRF-Token header. The OAuth
+  // login/exchange endpoints authenticate from the body `code`, not the cookie, so
+  // they are CSRF-exempt.
+  it.each([
+    '/auth/facebook',
+    '/auth/facebook/native',
+    '/auth/facebook/link',
+  ])('should skip CSRF for the auth exchange endpoint %s even with a stale token cookie and no header', async (url) => {
+    mockRequest.routeOptions = { url };
+    mockRequest.cookies = { token: 'stale-session' }; // present, but no csrfToken / header
+    await csrfProtection(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    expect(mockReply.status).not.toHaveBeenCalled();
+  });
+
+  it('should STILL enforce CSRF on a non-exempt route with a token cookie and no header', async () => {
+    mockRequest.routeOptions = { url: '/pages/:id/whatsapp' };
+    mockRequest.cookies = { token: 'valid-session' };
+    await csrfProtection(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    expect(mockReply.status).toHaveBeenCalledWith(403);
+    expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'CSRF_INVALID' }));
+  });
 });
