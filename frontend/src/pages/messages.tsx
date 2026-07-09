@@ -74,6 +74,19 @@ const MessagesPage: NextPageWithLayout = () => {
   const pages = pagesData as Page[];
   const { pageId, activePages, updatePageId, syncFromUrl } = usePageFilter(pages);
 
+  // Channel badges only make sense when more than one channel is connected —
+  // single-channel workspaces keep a clean list (same rule as the comments
+  // page's showPlatformIcon, extended with WhatsApp).
+  const showChannelBadge = useMemo(() => {
+    const channels = new Set<string>();
+    for (const p of pages) {
+      if (p.facebookPageId) channels.add('facebook');
+      if (p.instagramAccountId || p.instagramUsername) channels.add('instagram');
+      if (p.whatsappConnected) channels.add('whatsapp');
+    }
+    return channels.size > 1;
+  }, [pages]);
+
   // Sync Filter to URL
   const updateFilter = useCallback((newFilter: FilterType) => {
     if (newFilter === filter) return;
@@ -549,6 +562,7 @@ const MessagesPage: NextPageWithLayout = () => {
                 <SwipeableMessageCard
                   key={conv.senderId}
                   conversation={conv}
+                  showChannelBadge={showChannelBadge}
                   animationDelay={i < 10 ? i * 0.05 : 0}
                   onClick={() => openConversation(conv)}
                   onResolve={needsResolve ? () => handleResolve(conv.senderId, conv.lastMessage.pageId) : undefined}

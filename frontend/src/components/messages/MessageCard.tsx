@@ -2,7 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { FlagTag, ReplySourceBadge, InfoPopover, WhatsAppIcon } from '@/components/ui';
+import { FlagTag, ReplySourceBadge, InfoPopover, PlatformIcon, PLATFORM_LABEL_KEYS } from '@/components/ui';
 import { isKbRelatedFlag } from '@/utils/flagReason';
 import {
   Clock,
@@ -35,6 +35,9 @@ export interface MessageCardProps {
   onUnresolve?: () => void;
   animationDelay?: number;
   className?: string;
+  /** Show the channel badge on the avatar corner. Only true when the
+      workspace has more than one channel connected (multi-channel inbox). */
+  showChannelBadge?: boolean;
 }
 
 export const MessageCard = React.memo(function MessageCard({
@@ -43,6 +46,7 @@ export const MessageCard = React.memo(function MessageCard({
   // onResolve/onUnresolve accepted for API compatibility but actions are handled in the detail modal
   animationDelay = 0,
   className,
+  showChannelBadge = false,
 }: MessageCardProps) {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
@@ -66,11 +70,16 @@ export const MessageCard = React.memo(function MessageCard({
     ? conv.senderName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
     : null;
 
-  // Channel identity: only WhatsApp gets a badge — Facebook/Instagram rows stay
-  // pixel-identical to today, so existing merchants see no change (dark-deploy
-  // discipline). `.some()` over incoming messages because legacy outgoing rows
-  // may carry a defaulted platform.
-  const isWhatsApp = conv.messages.some(m => m.platform === 'whatsapp');
+  // Channel identity for the avatar-corner badge. Priority scan instead of
+  // reading lastMessage.platform because legacy outgoing rows may carry a
+  // defaulted 'facebook' — any whatsapp/instagram message wins over that.
+  const platform = conv.messages.some(m => m.platform === 'whatsapp')
+    ? 'whatsapp'
+    : conv.messages.some(m => m.platform === 'instagram')
+      ? 'instagram'
+      : 'facebook';
+  const isWhatsApp = platform === 'whatsapp';
+  const platformLabel = t(PLATFORM_LABEL_KEYS[platform]);
 
   // WhatsApp display names are self-set and often blank. When there's no name,
   // the wa_id (senderId) IS the customer's phone number — far more useful than
@@ -123,15 +132,26 @@ export const MessageCard = React.memo(function MessageCard({
       onKeyDown={handleKeyDown}
       style={animationDelay > 0 ? ({ animationDelay: `${animationDelay}s` } as React.CSSProperties) : undefined}
     >
-      {/* Avatar */}
-      <div className={clsx(
-        'flex-shrink-0 mt-0.5 w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center',
-        'text-sm font-bold',
-        conv.needsHumanAttention
-          ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-          : 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400'
-      )}>
-        {initials || <User className="w-5 h-5" />}
+      {/* Avatar (+ channel badge on the corner when multi-channel) */}
+      <div className="relative flex-shrink-0 mt-0.5">
+        <div className={clsx(
+          'w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center',
+          'text-sm font-bold',
+          conv.needsHumanAttention
+            ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+            : 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400'
+        )}>
+          {initials || <User className="w-5 h-5" />}
+        </div>
+        {showChannelBadge && (
+          <PlatformIcon
+            platform={platform}
+            variant="solid"
+            size="sm"
+            ariaLabel={platformLabel}
+            className="absolute -bottom-0.5 -end-0.5 ring-2 ring-card"
+          />
+        )}
       </div>
 
       {/* Content */}
@@ -140,11 +160,6 @@ export const MessageCard = React.memo(function MessageCard({
         <div className="flex items-center gap-2">
           <span className="flex-1 min-w-0 flex items-center gap-1.5 text-sm font-semibold text-foreground">
             <span className="min-w-0 truncate" dir={labelIsNumber ? 'ltr' : undefined}>{displayLabel}</span>
-            {isWhatsApp && (
-              <span title="WhatsApp" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#25D366] text-white">
-                <WhatsAppIcon className="w-2.5 h-2.5" aria-label="WhatsApp" />
-              </span>
-            )}
           </span>
           <span className="flex-shrink-0 text-[11px] text-subtle tabular-nums">
             {formatTime(conv.lastMessage.createdAt)}
@@ -205,6 +220,7 @@ export const MessageCard = React.memo(function MessageCard({
     a.lastMessage.resolved === b.lastMessage.resolved &&
     a.needsHumanAttention === b.needsHumanAttention &&
     a.pauseStatus?.paused === b.pauseStatus?.paused &&
+    prev.showChannelBadge === next.showChannelBadge &&
     !!prev.onResolve === !!next.onResolve &&
     !!prev.onUnresolve === !!next.onUnresolve
   );

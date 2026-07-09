@@ -365,7 +365,26 @@ describe('MessageCard', () => {
   });
 
   describe('channel badge', () => {
-    it('shows the WhatsApp badge when the conversation has whatsapp messages', () => {
+    it.each([
+      ['whatsapp', 'WhatsApp'],
+      ['instagram', 'Instagram'],
+      ['facebook', 'Facebook'],
+    ] as const)('shows the %s badge on multi-channel workspaces', (platform, label) => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          showChannelBadge
+          conversation={makeConversation({
+            messages: [makeMessage({ platform })],
+            lastMessage: makeMessage({ platform }),
+          })}
+        />
+      );
+
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    });
+
+    it('shows NO channel badge on single-channel workspaces (showChannelBadge omitted)', () => {
       render(
         <MessageCard
           {...defaultProps}
@@ -376,21 +395,34 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByLabelText('WhatsApp')).toBeInTheDocument();
+      for (const label of ['WhatsApp', 'Instagram', 'Facebook']) {
+        expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+      }
     });
 
-    it('shows NO channel badge for facebook conversations (existing UI unchanged)', () => {
+    it('prefers whatsapp over a legacy defaulted-facebook outgoing row', () => {
+      const legacyOutgoing = makeMessage({
+        id: '1',
+        direction: 'outgoing',
+        replied: true,
+        replyMethod: 'ai',
+        platform: 'facebook', // legacy rows were stamped with the default
+      });
+      const incoming = makeMessage({ id: '2', platform: 'whatsapp' });
+
       render(
         <MessageCard
           {...defaultProps}
+          showChannelBadge
           conversation={makeConversation({
-            messages: [makeMessage({ platform: 'facebook' })],
-            lastMessage: makeMessage({ platform: 'facebook' }),
+            messages: [legacyOutgoing, incoming],
+            lastMessage: incoming,
           })}
         />
       );
 
-      expect(screen.queryByLabelText('WhatsApp')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('WhatsApp')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Facebook')).not.toBeInTheDocument();
     });
   });
 
