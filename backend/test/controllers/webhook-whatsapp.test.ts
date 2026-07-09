@@ -254,36 +254,40 @@ describe('WhatsApp Webhook — routing', () => {
     });
 });
 
+// Shared across the receipt + media suites: a connected WhatsApp page fixture
+// and a signed-webhook POST helper (50ms settle for the async fan-out).
+const WA_TEST_PAGE = {
+    id: 'page-uuid',
+    userId: 'user-uuid',
+    workspaceId: 'ws-uuid',
+    name: 'Test Store',
+    accessToken: 'fb-page-token',
+    whatsappPhoneNumberId: 'phone-number-id-123',
+    whatsappAccessToken: 'wa-business-token',
+    whatsappAutoReplyEnabled: true,
+};
+
+async function postWebhook(app: Awaited<ReturnType<typeof buildApp>>, payload: object) {
+    await app.inject({
+        method: 'POST',
+        url: '/webhook',
+        headers: { 'x-hub-signature-256': generateSignature(payload) },
+        payload,
+    });
+    await new Promise(r => setTimeout(r, 50));
+}
+
 describe('WhatsApp Webhook — read receipts + typing', () => {
     let app: Awaited<ReturnType<typeof buildApp>>;
-
-    const waPage = {
-        id: 'page-uuid',
-        userId: 'user-uuid',
-        workspaceId: 'ws-uuid',
-        name: 'Test Store',
-        accessToken: 'fb-page-token',
-        whatsappPhoneNumberId: 'phone-number-id-123',
-        whatsappAccessToken: 'wa-business-token',
-        whatsappAutoReplyEnabled: true,
-    };
 
     beforeEach(async () => {
         app = await buildApp();
         vi.clearAllMocks();
-        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(waPage);
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(WA_TEST_PAGE);
         mockFindOrCreateFromWebhook.mockResolvedValue({ message: { id: 'msg-1' }, isNew: true });
     });
 
-    async function post(payload: object) {
-        await app.inject({
-            method: 'POST',
-            url: '/webhook',
-            headers: { 'x-hub-signature-256': generateSignature(payload) },
-            payload,
-        });
-        await new Promise(r => setTimeout(r, 50));
-    }
+    const post = (payload: object) => postWebhook(app, payload);
 
     it('text message: marks read WITH typing the moment it lands (blue ticks + "typing…")', async () => {
         await post(buildWhatsAppPayload({}));
@@ -295,7 +299,7 @@ describe('WhatsApp Webhook — read receipts + typing', () => {
     });
 
     it('auto-reply OFF: no receipt (a "typing…" with no reply coming would lie)', async () => {
-        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue({ ...waPage, whatsappAutoReplyEnabled: false });
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue({ ...WA_TEST_PAGE, whatsappAutoReplyEnabled: false });
 
         await post(buildWhatsAppPayload({}));
 
@@ -328,35 +332,16 @@ describe('WhatsApp Webhook — read receipts + typing', () => {
 describe('WhatsApp Webhook — media messages', () => {
     let app: Awaited<ReturnType<typeof buildApp>>;
 
-    const waPage = {
-        id: 'page-uuid',
-        userId: 'user-uuid',
-        workspaceId: 'ws-uuid',
-        name: 'Test Store',
-        accessToken: 'fb-page-token',
-        whatsappPhoneNumberId: 'phone-number-id-123',
-        whatsappAccessToken: 'wa-business-token',
-        whatsappAutoReplyEnabled: true,
-    };
-
     beforeEach(async () => {
         app = await buildApp();
         vi.clearAllMocks();
-        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(waPage);
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(WA_TEST_PAGE);
         mockFindOrCreateFromWebhook.mockResolvedValue({ message: { id: 'msg-1' }, isNew: true });
         mockWaGetMediaInfo.mockResolvedValue({ url: 'https://lookaside.example/media', mimeType: 'audio/ogg; codecs=opus', fileSize: 1024 });
         mockWaDownloadMedia.mockResolvedValue(Buffer.from('fake-audio'));
     });
 
-    async function post(payload: object) {
-        await app.inject({
-            method: 'POST',
-            url: '/webhook',
-            headers: { 'x-hub-signature-256': generateSignature(payload) },
-            payload,
-        });
-        await new Promise(r => setTimeout(r, 50));
-    }
+    const post = (payload: object) => postWebhook(app, payload);
 
     it('voice note: downloads with the WABA token, transcribes, and enqueues the transcript', async () => {
         mockTranscribeFromBuffer.mockResolvedValue({ text: 'كم سعر الشنطة؟' });
@@ -465,7 +450,7 @@ describe('WhatsApp Webhook — media messages', () => {
     });
 
     it('media message for a page without a WhatsApp token: does nothing', async () => {
-        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue({ ...waPage, whatsappAccessToken: null });
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue({ ...WA_TEST_PAGE, whatsappAccessToken: null });
         const payload = buildWhatsAppPayload({
             messages: [{ from: '+966500000000', id: 'wamid.img', type: 'image', timestamp: '1700000000', image: { id: 'media-2' } }],
         });
