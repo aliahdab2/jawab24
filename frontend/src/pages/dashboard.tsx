@@ -35,6 +35,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { isWhatsAppEnabled } from '@/lib/featureFlags';
 import { getPageExternalUrl } from '@/utils/pageUrl';
 import { isKbFilled } from '@/utils/kb';
+import { hasMultipleConnectedChannels } from '@/utils/channels';
 import { formatRelativeTime } from '@/utils/dateUtils';
 import type { NextPageWithLayout } from './_app';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
@@ -403,6 +404,7 @@ const DashboardPage: NextPageWithLayout = () => {
         bannerItems.push({
           id: latest.id,
           type: 'message',
+          platform: latest.platform ?? null,
           senderName: latest.senderName ?? null,
           text: latest.message || '',
           createdAt: latest.createdTime || latest.createdAt || null,
@@ -424,6 +426,9 @@ const DashboardPage: NextPageWithLayout = () => {
     });
     return bannerItems.slice(0, 5);
   }, [needsActionComments, recentMessages]);
+
+  // Multi-channel workspaces get a per-message channel ribbon on the needs-attention feed.
+  const showChannelBadge = useMemo(() => hasMultipleConnectedChannels(pages), [pages]);
 
   // Auto-sync if no pages found — only for existing users (onboarding already completed)
   const syncAttemptedRef = useRef(false);
@@ -572,6 +577,7 @@ const DashboardPage: NextPageWithLayout = () => {
         messageNeedsAction={statsData.messagesNeedsAction}
         items={needsAttentionItems}
         onItemClick={handleAttentionItemClick}
+        showChannelBadge={showChannelBadge}
       />
 
       {/* AI usage warning — appears at 80%, turns critical at 100% */}

@@ -11,7 +11,7 @@ import {
   Clock,
   X,
 } from 'lucide-react';
-import { Card } from '@/components/ui';
+import { Card, ChannelRibbon, PLATFORM_LABEL_KEYS } from '@/components/ui';
 import { SwipeDismissWrapper } from '@/components/ui/SwipeDismissWrapper';
 import { useTranslations, useLocale } from 'next-intl';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -22,6 +22,9 @@ import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 export interface NeedsAttentionItem {
   id: string;
   type: 'comment' | 'message';
+  /** Channel a message conversation is on — drives the channel ribbon on the row.
+   *  Only set for message items on multi-channel workspaces. */
+  platform?: 'facebook' | 'instagram' | 'whatsapp' | null;
   senderName: string | null;
   text: string;
   createdAt: string | Date | null;
@@ -47,6 +50,8 @@ interface SmartStatusBannerProps {
   items: NeedsAttentionItem[];
   /** Called when an item is clicked (opens inline modal instead of navigating) */
   onItemClick?: (item: NeedsAttentionItem) => void;
+  /** Show the per-message channel ribbon (multi-channel workspaces only). */
+  showChannelBadge?: boolean;
 }
 
 /** Default SLA reasons that are obvious from context — no need to show a tag */
@@ -80,9 +85,11 @@ export function SmartStatusBanner({
   messageNeedsAction,
   items,
   onItemClick,
+  showChannelBadge = false,
 }: SmartStatusBannerProps) {
   const tDash = useTranslations('dashboard');
   const tc = useTranslations('common');
+  const tComments = useTranslations('comments');
   const tFlagReason = useTranslations('flagReason');
   const tTime = useTranslations('time');
   const locale = useLocale();
@@ -297,6 +304,17 @@ export function SmartStatusBanner({
 
                       const sharedClassName = "flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-rose-100/50 dark:hover:bg-rose-800/30 transition-colors group w-full text-start";
 
+                      // Channel ribbon on the row's trailing edge — same spine as
+                      // the Messages inbox, shown for message items on multi-channel
+                      // workspaces (comments carry no per-row channel here).
+                      const channelRibbon = showChannelBadge && item.type === 'message' && item.platform ? (
+                        <ChannelRibbon
+                          platform={item.platform}
+                          ariaLabel={tComments(PLATFORM_LABEL_KEYS[item.platform])}
+                          className="-me-4 sm:-me-5"
+                        />
+                      ) : null;
+
                       return (
                         <li key={`${item.type}-${item.id}`}>
                           {useInlineClick ? (
@@ -306,6 +324,7 @@ export function SmartStatusBanner({
                               onClick={() => onItemClick?.(item)}
                             >
                               {itemContent}
+                              {channelRibbon}
                             </button>
                           ) : (
                             <Link
@@ -313,6 +332,7 @@ export function SmartStatusBanner({
                               className={sharedClassName}
                             >
                               {itemContent}
+                              {channelRibbon}
                             </Link>
                           )}
                         </li>

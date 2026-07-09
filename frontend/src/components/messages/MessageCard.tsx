@@ -2,7 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { FlagTag, ReplySourceBadge, InfoPopover, PlatformIcon, PLATFORM_LABEL_KEYS } from '@/components/ui';
+import { FlagTag, ReplySourceBadge, InfoPopover, ChannelRibbon, PLATFORM_LABEL_KEYS } from '@/components/ui';
 import { isKbRelatedFlag } from '@/utils/flagReason';
 import {
   Clock,
@@ -132,8 +132,8 @@ export const MessageCard = React.memo(function MessageCard({
       onKeyDown={handleKeyDown}
       style={animationDelay > 0 ? ({ animationDelay: `${animationDelay}s` } as React.CSSProperties) : undefined}
     >
-      {/* Avatar (+ channel badge on the corner when multi-channel) */}
-      <div className="relative flex-shrink-0 mt-0.5">
+      {/* Avatar (the channel is shown as an edge ribbon at the row's trailing side) */}
+      <div className="flex-shrink-0 mt-0.5">
         <div className={clsx(
           'w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center',
           'text-sm font-bold',
@@ -143,15 +143,6 @@ export const MessageCard = React.memo(function MessageCard({
         )}>
           {initials || <User className="w-5 h-5" />}
         </div>
-        {showChannelBadge && (
-          <PlatformIcon
-            platform={platform}
-            variant="solid"
-            size="sm"
-            ariaLabel={platformLabel}
-            className="absolute -bottom-0.5 -end-0.5 ring-2 ring-card"
-          />
-        )}
       </div>
 
       {/* Content */}
@@ -205,6 +196,11 @@ export const MessageCard = React.memo(function MessageCard({
         )}
       </div>
 
+      {/* Channel ribbon — a slim brand spine on the row's trailing edge, clear of
+          the avatar. Only on multi-channel workspaces. */}
+      {showChannelBadge && (
+        <ChannelRibbon platform={platform} ariaLabel={platformLabel} className="-me-3.5 sm:-me-5" />
+      )}
     </div>
   );
 }, (prev, next) => {

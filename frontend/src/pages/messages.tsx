@@ -30,6 +30,7 @@ import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import { captureError } from '@/lib/sentryHelpers';
 import { getPageExternalUrl } from '@/utils/pageUrl';
+import { hasMultipleConnectedChannels } from '@/utils/channels';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -74,18 +75,9 @@ const MessagesPage: NextPageWithLayout = () => {
   const pages = pagesData as Page[];
   const { pageId, activePages, updatePageId, syncFromUrl } = usePageFilter(pages);
 
-  // Channel badges only make sense when more than one channel is connected —
-  // single-channel workspaces keep a clean list (same rule as the comments
-  // page's showPlatformIcon, extended with WhatsApp).
-  const showChannelBadge = useMemo(() => {
-    const channels = new Set<string>();
-    for (const p of pages) {
-      if (p.facebookPageId) channels.add('facebook');
-      if (p.instagramAccountId || p.instagramUsername) channels.add('instagram');
-      if (p.whatsappConnected) channels.add('whatsapp');
-    }
-    return channels.size > 1;
-  }, [pages]);
+  // Channel ribbons only make sense when more than one channel is connected —
+  // single-channel workspaces keep a clean list.
+  const showChannelBadge = useMemo(() => hasMultipleConnectedChannels(pages), [pages]);
 
   // Sync Filter to URL
   const updateFilter = useCallback((newFilter: FilterType) => {

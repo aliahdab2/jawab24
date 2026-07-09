@@ -75,9 +75,6 @@ interface PlatformIconProps {
   platform: 'instagram' | 'facebook' | 'whatsapp';
   /** sm = w-4/h-4 container (w-2.5 icon), md = w-5/h-5 container (w-3.5 icon) */
   size?: 'sm' | 'md';
-  /** tint = pastel bg + colored glyph (default). solid = official brand color
-      bg + white glyph — for tiny overlays (avatar-corner channel badges). */
-  variant?: 'tint' | 'solid';
   /** Grey rendering — "connected but auto-reply off" in badge clusters */
   muted?: boolean;
   ariaLabel?: string;
@@ -90,7 +87,7 @@ const PLATFORM_STYLES = {
   whatsapp: { path: WHATSAPP_PATH, classes: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' },
 } as const;
 
-// Official brand colors — theme-independent, so no dark: variants needed.
+// Official brand colors (theme-independent) — used by the channel ribbon on inbox rows.
 const SOLID_CLASSES = {
   instagram: 'bg-[#E4405F] text-white',
   facebook: 'bg-[#1877F2] text-white',
@@ -107,13 +104,9 @@ export const PLATFORM_LABEL_KEYS = {
 
 const MUTED_CLASSES = 'bg-surface-100 text-icon-muted dark:bg-surface-800';
 
-export function PlatformIcon({ platform, size = 'sm', variant = 'tint', muted = false, ariaLabel, className }: PlatformIconProps) {
+export function PlatformIcon({ platform, size = 'sm', muted = false, ariaLabel, className }: PlatformIconProps) {
   const style = PLATFORM_STYLES[platform] ?? PLATFORM_STYLES.facebook;
-  const colorClasses = muted
-    ? MUTED_CLASSES
-    : variant === 'solid'
-      ? (SOLID_CLASSES[platform] ?? SOLID_CLASSES.facebook)
-      : style.classes;
+  const colorClasses = muted ? MUTED_CLASSES : style.classes;
   return (
     <span
       className={clsx(
@@ -130,6 +123,37 @@ export function PlatformIcon({ platform, size = 'sm', variant = 'tint', muted = 
         aria-hidden="true"
       >
         <path d={style.path} />
+      </svg>
+    </span>
+  );
+}
+
+/**
+ * Slim brand-colored channel tab for an inbox row's trailing edge — the "spine"
+ * that tells you which channel a conversation is on without crowding the avatar.
+ * Render it as the LAST flex child of a padded, `items-*` row and cancel the row's
+ * end padding with a negative inline-end margin (e.g. `-me-3.5 sm:-me-5`) so it sits
+ * flush to the edge. Reuses the shared brand colors + glyph paths (single source —
+ * no duplicated SVG or color values).
+ */
+export function ChannelRibbon({ platform, ariaLabel, className }: {
+  platform: 'instagram' | 'facebook' | 'whatsapp';
+  ariaLabel?: string;
+  className?: string;
+}) {
+  const path = (PLATFORM_STYLES[platform] ?? PLATFORM_STYLES.facebook).path;
+  const solid = SOLID_CLASSES[platform] ?? SOLID_CLASSES.facebook;
+  return (
+    <span
+      className={clsx(
+        'flex-shrink-0 self-center inline-flex items-center justify-center w-5 min-h-[34px] rounded-s-lg',
+        solid,
+        className,
+      )}
+      aria-label={ariaLabel}
+    >
+      <svg className="fill-current w-3 h-3" viewBox="0 0 24 24" aria-hidden="true">
+        <path d={path} />
       </svg>
     </span>
   );
