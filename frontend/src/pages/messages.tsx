@@ -30,7 +30,7 @@ import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import { captureError } from '@/lib/sentryHelpers';
 import { getPageExternalUrl } from '@/utils/pageUrl';
-import { hasMultipleConnectedChannels } from '@/utils/channels';
+import { hasMultipleActiveChannels } from '@/utils/channels';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -75,9 +75,9 @@ const MessagesPage: NextPageWithLayout = () => {
   const pages = pagesData as Page[];
   const { pageId, activePages, updatePageId, syncFromUrl } = usePageFilter(pages);
 
-  // Channel ribbons only make sense when more than one channel is connected —
-  // single-channel workspaces keep a clean list.
-  const showChannelBadge = useMemo(() => hasMultipleConnectedChannels(pages), [pages]);
+  // Channel ribbons only make sense when the workspace actively runs more than one
+  // channel — a single active channel (e.g. just Facebook) keeps a clean list.
+  const showChannelBadge = useMemo(() => hasMultipleActiveChannels(pages), [pages]);
 
   // Sync Filter to URL
   const updateFilter = useCallback((newFilter: FilterType) => {
