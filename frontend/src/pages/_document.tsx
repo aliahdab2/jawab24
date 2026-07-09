@@ -199,11 +199,20 @@ export default function MyDocument({ locale }: DocProps) {
               "operatingSystem": "Web, iOS, Android",
               "offers": {
                 "@type": "AggregateOffer",
-                "lowPrice": "0",
-                "highPrice": "49",
+                "lowPrice": "15",
+                "highPrice": "79",
                 "priceCurrency": "USD",
                 "offerCount": "3",
-                "description": "Free trial available — plans from $0 to $49/month"
+                "description": "30-day free trial — plans from $15 to $79/month"
+              },
+              // Matches the rating displayed on /pricing ("4.8/5 · 50+ businesses").
+              // Keep in sync with pricing.json socialProofRating/socialProofReviews.
+              "aggregateRating": {
+                "@type": "AggregateRating",
+                "ratingValue": "4.8",
+                "bestRating": "5",
+                "worstRating": "1",
+                "ratingCount": "50"
               },
               "description": "AI-powered auto-reply platform for Facebook and Instagram business pages. Integrates with Shopify and Salla e-commerce stores. Automatically respond to comments and messages in Arabic and English 24/7.",
               "featureList": [
