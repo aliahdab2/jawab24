@@ -1,0 +1,64 @@
+# SEO Follow-Up — July 10, 2026
+
+*Follow-up to `SEO_Audit_Jawab24.md` (May 30). Status re-check + remaining actions.*
+
+## Status of May 30 priority items
+
+| Item | Status |
+|---|---|
+| hreflang (ar/en/x-default) | ✅ Was already implemented in `_app.tsx` MetaHead (JSX `hrefLang`) and covered by `e2e/seo.spec.ts`. The May audit's "verify" flag is closed. |
+| AggregateRating schema | ✅ **Fixed today** — added to SoftwareApplication JSON-LD in `_document.tsx` (4.8/5, 50 ratings, matching /pricing display). |
+| Stale offer pricing in schema | ✅ **Fixed today** — `AggregateOffer` said $0–$49; corrected to $15–$79 (matches `fallbackPlans.ts` / live pricing). |
+| SoftwareApplication + Article schema | ✅ Already added since May audit. |
+| Blog TOC anchor bug (`#-`) | ✅ Fixed (`utils/headingSlug.ts`, Unicode-aware). |
+| `meta keywords` removal | ✅ Removed. |
+| Title/meta rewrites (CTR) | ✅ `seoTitle` fields with year present on key posts. Re-measure CTR in GSC (see below). |
+| French legacy content de-indexing | ⚠️ 410/301 rules live in nginx, **but Google still indexes French pages** (verified via `site:jawab24.com` today: Vikings, Neptune, Hollywood smile, citizen/denizen — several under `www.`). Manual GSC removals still needed. |
+| Off-page authority (backlinks) | ⚠️ Ongoing — still the #1 rankings gap. |
+| Bing Webmaster Tools | ⚠️ Still not set up. |
+
+## Manual actions (require your logins — can't be done from code)
+
+### 1. Google Search Console — remove French legacy URLs (~15 min)
+GSC → Indexing → Removals → New Request. Submit **prefix** removals for both hosts:
+
+```
+https://jawab24.com/2022/
+https://www.jawab24.com/2022/
+https://www.jawab24.com/les-
+https://www.jawab24.com/la-
+https://www.jawab24.com/le-
+https://www.jawab24.com/quelle-
+https://www.jawab24.com/sourire-
+https://jawab24.com/category/
+```
+
+Then use URL Inspection on 2–3 of the still-indexed URLs from today's `site:` check and confirm they return 410. Note: removals are temporary (~6 months) but the 410s make them permanent once recrawled. The `www.` variants matter — several indexed leftovers are on www.
+
+### 2. Bing Webmaster Tools (~10 min)
+- Verify jawab24.com (can import directly from GSC — one click).
+- Submit `https://jawab24.com/sitemap.xml`.
+- Relevant beyond Bing itself: powers ChatGPT/Copilot search, and you explicitly allow AI crawlers in robots.txt.
+
+### 3. Rich results validation (after next deploy, ~5 min)
+- Run https://search.google.com/test/rich-results on `https://jawab24.com/` and `/pricing`.
+- Confirm SoftwareApplication now shows AggregateRating + corrected offers with no warnings.
+
+### 4. GSC pulse check (~10 min)
+- Pull last-28-days CTR/position for `/en/blog/salla-vs-shopify-arabic-sellers` and `/en/blog/best-auto-reply-tools-2026` — did the title rewrites move CTR above ~1%?
+- Re-check "Discovered – currently not indexed" count (was 8).
+
+### 5. Backlinks — the durable fix for position 7→top 3 (ongoing)
+Highest-authority, lowest-effort first:
+- **App marketplaces**: Salla, Zid, Shopify app store listings (integration pages already exist to link back to).
+- **Meta Business Partner directory** — you're already a partner; claim the listing.
+- **Google Play** listing already live — ensure the description links jawab24.com.
+- Arabic SaaS/startup directories; Product Hunt launch; guest posts / inclusion in "best auto-reply tools" listicles.
+
+## Code changes made today
+
+- `frontend/src/pages/_document.tsx` — SoftwareApplication JSON-LD:
+  - `AggregateOffer` corrected: lowPrice 15, highPrice 79 (was 0–49), description mentions 30-day trial.
+  - `aggregateRating` added: 4.8/5, ratingCount 50 (kept in sync with `pricing.json` `socialProofRating`/`socialProofReviews` — update both together).
+
+Verified with eslint (0 errors/warnings) and per-file tsc. Full vitest suite must run on your machine/CI (sandbox can't execute the darwin-arm64 esbuild binary).
