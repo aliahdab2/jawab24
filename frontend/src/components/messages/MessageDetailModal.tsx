@@ -303,13 +303,15 @@ export function MessageDetailModal({
                   onClick={() => copyNumber(customerNumber)}
                   title={numberCopied ? t('copied') : t('copyNumber')}
                   aria-label={numberCopied ? t('copied') : `${t('copyNumber')}: ${customerNumber}`}
-                  className="group/phone flex items-center gap-1 mt-0.5 text-xs text-muted-foreground hover:text-brand-500 transition-colors"
+                  className="group/phone flex items-center gap-1 -ms-1 mt-0.5 px-1 py-0.5 rounded text-xs text-muted-foreground hover:text-brand-500 transition-colors"
                 >
                   <span dir="ltr" className="tabular-nums">{customerNumber}</span>
                   {numberCopied ? (
                     <Check className="w-3 h-3 flex-shrink-0 text-brand-500" aria-hidden="true" />
                   ) : (
-                    <Copy className="w-3 h-3 flex-shrink-0 opacity-0 group-hover/phone:opacity-100 transition-opacity" aria-hidden="true" />
+                    // Always visible (muted) — a hover-only icon has no affordance on
+                    // touch, and this inbox is used mostly on mobile.
+                    <Copy className="w-3 h-3 flex-shrink-0 text-icon-muted group-hover/phone:text-brand-500 transition-colors" aria-hidden="true" />
                   )}
                 </button>
               )}
