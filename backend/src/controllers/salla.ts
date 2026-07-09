@@ -1,8 +1,8 @@
 import { FastifyRequest, FastifyReply, FastifyBaseLogger } from 'fastify';
 import * as sallaService from '../services/salla';
 import {
-    getStoreByDomain,
     getStoreByMerchantId,
+    resolveStoreByDomainOrMerchant,
     deactivateStore,
     updateStoreTokens,
     createPendingInstall,
@@ -82,16 +82,11 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
 
     // Salla webhooks identify the store by its numeric `merchant` id, which is
     // persisted in platformData.merchantId — NOT in the storeDomain column (that
-    // holds the real domain). Try domain first for safety, then fall back to the
-    // merchantId lookup. Without the fallback, getStoreByDomain(String(merchant))
-    // never matches and EVERY Salla webhook silently no-ops in production —
-    // including app.uninstalled, so tokens/processing would survive an uninstall.
-    // Mirrors the Zid controller's resolveStore().
-    const resolveStore = async () => {
-        const byDomain = await getStoreByDomain('salla', String(merchant));
-        if (byDomain) return byDomain;
-        return getStoreByMerchantId('salla', String(merchant));
-    };
+    // holds the real domain). resolveStoreByDomainOrMerchant tries domain first,
+    // then the merchantId fallback. Without the fallback, EVERY Salla webhook
+    // silently no-ops in prod — including app.uninstalled, so tokens/processing
+    // would survive an uninstall. (Shared with the Zid controller.)
+    const resolveStore = () => resolveStoreByDomainOrMerchant('salla', String(merchant));
 
     if (event === 'app.uninstalled') {
         const store = await resolveStore();

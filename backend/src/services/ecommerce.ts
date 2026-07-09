@@ -262,6 +262,19 @@ export async function getStoreByMerchantId(platform: EcommercePlatform, merchant
     return result[0] || null;
 }
 
+/**
+ * Resolve a store from a webhook's external id, which is either the store domain
+ * OR the numeric merchant id depending on the platform/event. Tries domain first,
+ * then falls back to the merchant-id lookup. Shared by the Salla + Zid webhook
+ * controllers (both resolve stores exactly this way — without the fallback a
+ * merchant-id-keyed webhook silently no-ops in prod, including app.uninstalled).
+ */
+export async function resolveStoreByDomainOrMerchant(platform: EcommercePlatform, externalId: string) {
+    const byDomain = await getStoreByDomain(platform, externalId);
+    if (byDomain) return byDomain;
+    return getStoreByMerchantId(platform, externalId);
+}
+
 /** @deprecated Use getStoreByWorkspace — kept for OAuth flows that lack workspace context */
 export async function getStoreByUserId(platform: EcommercePlatform, userId: string) {
     const result = await db.select().from(ecommerceStores).where(
