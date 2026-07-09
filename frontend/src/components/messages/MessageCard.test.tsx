@@ -363,4 +363,34 @@ describe('MessageCard', () => {
       expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
   });
+
+  describe('channel badge', () => {
+    it('shows the WhatsApp badge when the conversation has whatsapp messages', () => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            messages: [makeMessage({ platform: 'whatsapp' })],
+            lastMessage: makeMessage({ platform: 'whatsapp' }),
+          })}
+        />
+      );
+
+      expect(screen.getByLabelText('WhatsApp')).toBeInTheDocument();
+    });
+
+    it('shows NO channel badge for facebook conversations (existing UI unchanged)', () => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            messages: [makeMessage({ platform: 'facebook' })],
+            lastMessage: makeMessage({ platform: 'facebook' }),
+          })}
+        />
+      );
+
+      expect(screen.queryByLabelText('WhatsApp')).not.toBeInTheDocument();
+    });
+  });
 });

@@ -25,9 +25,12 @@ export class WhatsAppReplyService {
         sharedPostId?: string,
         wasHandoffPaused?: boolean,
         attachmentRetries?: number,
+        // Webhook `contacts[].profile.name` — WhatsApp's only name source
+        // (no profile API), threaded through to the shared pipeline.
+        senderName?: string,
     ): Promise<MessageResult> {
         return messageProcessor.processMessage(
-            whatsappMessageAdapter, whatsappPhoneNumberId, senderId, messageText, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused, attachmentRetries,
+            whatsappMessageAdapter, whatsappPhoneNumberId, senderId, messageText, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused, attachmentRetries, senderName,
         );
     }
 }

@@ -409,6 +409,45 @@ describe('MessageProcessor — Guard Conditions', () => {
     });
 });
 
+describe('MessageProcessor — webhook-supplied sender name', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+    });
+
+    // Regression: WhatsApp has no profile API — the webhook's
+    // contacts[].profile.name is the ONLY name source, but it was dropped
+    // before reaching the pipeline, so every WhatsApp conversation showed
+    // "Unknown User" (founder pilot, 2026-07-08).
+    it('uses the webhook name and skips the adapter lookup when provided', async () => {
+        const adapter = createMockAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'مرحبا', 'msg-1',
+            undefined, undefined, false, 0, 'Pilot Customer',
+        );
+
+        expect(adapter.fetchSenderName).not.toHaveBeenCalled();
+        // storeIncomingMessage(pageId, workspaceId, platformMessageId, senderId, text, senderName)
+        expect(adapter.storeIncomingMessage).toHaveBeenCalledWith(
+            expect.anything(), expect.anything(), 'msg-1', 'sender-1', 'مرحبا', 'Pilot Customer',
+        );
+    });
+
+    it('falls back to the adapter lookup when the webhook carries no name (FB/IG)', async () => {
+        const adapter = createMockAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello', 'msg-1',
+        );
+
+        expect(adapter.fetchSenderName).toHaveBeenCalled();
+        expect(adapter.storeIncomingMessage).toHaveBeenCalledWith(
+            expect.anything(), expect.anything(), 'msg-1', 'sender-1', 'Hello', 'Alice',
+        );
+    });
+});
+
 describe('MessageProcessor — High-Stakes Notification Wiring', () => {
     beforeEach(() => {
         vi.clearAllMocks();

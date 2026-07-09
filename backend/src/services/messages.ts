@@ -933,7 +933,7 @@ export class MessagesService {
         if (!result) return null;
         return {
             ...this.mapToMessage(result),
-            platform: (result.platform || 'facebook') as 'facebook' | 'instagram',
+            platform: (result.platform || 'facebook') as 'facebook' | 'instagram' | 'whatsapp',
         };
     }
 
@@ -977,7 +977,7 @@ export class MessagesService {
             aiIntent: record.aiIntent ?? null,
             aiOriginalReply: record.aiOriginalReply ?? null,
             resolved: record.resolved ?? false,
-            platform: (record.platform || 'facebook') as 'facebook' | 'instagram',
+            platform: (record.platform || 'facebook') as 'facebook' | 'instagram' | 'whatsapp',
             attachmentType: record.attachmentType ?? null,
             enrichmentStatus: record.enrichmentStatus ?? null,
         };
