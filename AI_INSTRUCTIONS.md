@@ -66,6 +66,8 @@ Every feature must work in portrait AND landscape. Key patterns:
 
 Use `useTranslations('namespace')` from `next-intl`. Never hardcode strings or use `language === 'ar' ? ... : ...` conditionals.
 
+**Arabic register — فصحى only (added 2026-07-09).** All Arabic copy that Jawab24 itself authors — i18n strings, marketing pages, blog posts, notifications, emails, app-store listings — must be Modern Standard Arabic (الفصحى). No dialect: never «وش، اللي، مو، ليش، هالـ، بدك، شلون» or similar خليجي/مصري/شامي forms. Also avoid English loanwords and calqued phrasing where native Arabic exists. **Scope boundary:** this rule governs OUR copy only — the AI reply pipeline deliberately mirrors the customer's dialect (prompt v40/v44 dialect mirroring) and must NOT be "fixed" to فصحى. Older dialect content (some pre-2026-07-09 blog posts) is migrated opportunistically when touched, not in bulk.
+
 ```tsx
 const t = useTranslations('settings');
 const tc = useTranslations('common');  // shared strings
