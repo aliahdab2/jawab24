@@ -2,8 +2,9 @@ import { db } from '../../db';
 import {
     users, subscriptions, plans, pages, usage, posts, instagramMedia,
     leads, workspaces, workspaceMembers, settings, adminAuditLogs,
+    comments, instagramComments, messages,
 } from '../../db/schema';
-import { eq, ilike, desc, and, gte, lte, sql, isNotNull, inArray, or, type SQL } from 'drizzle-orm';
+import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'drizzle-orm';
 import { NotFoundError } from '../../utils/errors';
 
 /**
@@ -272,21 +273,6 @@ class AdminUsersService {
             )
             .limit(1);
 
-        // Count configured Post Replies (per-post keyword triggers) across user's pages
-        const pageIds = userPages.map(p => p.id);
-        let postRepliesCount = 0;
-        if (pageIds.length > 0) {
-            const [fbCount] = await db
-                .select({ count: sql<number>`count(*)::int` })
-                .from(posts)
-                .where(and(inArray(posts.pageId, pageIds), isNotNull(posts.triggerReply)));
-            const [igCount] = await db
-                .select({ count: sql<number>`count(*)::int` })
-                .from(instagramMedia)
-                .where(and(inArray(instagramMedia.pageId, pageIds), isNotNull(instagramMedia.triggerReply)));
-            postRepliesCount = (fbCount?.count || 0) + (igCount?.count || 0);
-        }
-
         // Lead stats — capture leads from pages owned directly by user OR by any
         // workspace this user belongs to (covers shared workspaces).
         let leadStats = {
@@ -351,6 +337,41 @@ class AdminUsersService {
                     : eq(pages.userId, userId),
             );
         const ownedPageIds = ownedPageIdsRows.map(r => r.id);
+
+        // Post Replies actually SENT (replyMethod = 'post_reply'), across FB comments,
+        // IG comments and DMs — the same definition the dashboard uses (services/pages.ts).
+        // NOT the count of configured trigger rules, and scoped to owned pages
+        // (direct + workspace) so workspace-owned pages are not silently zeroed.
+        let postRepliesCount = 0;
+        if (ownedPageIds.length > 0) {
+            const [fbPR, igPR, dmPR] = await Promise.all([
+                db.select({ count: sql<number>`count(*)::int` })
+                    .from(comments)
+                    .innerJoin(posts, eq(comments.postId, posts.id))
+                    .where(and(
+                        inArray(posts.pageId, ownedPageIds),
+                        eq(comments.replied, true),
+                        eq(comments.replyMethod, 'post_reply'),
+                    )),
+                db.select({ count: sql<number>`count(*)::int` })
+                    .from(instagramComments)
+                    .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+                    .where(and(
+                        inArray(instagramMedia.pageId, ownedPageIds),
+                        eq(instagramComments.replied, true),
+                        eq(instagramComments.replyMethod, 'post_reply'),
+                    )),
+                db.select({ count: sql<number>`count(*)::int` })
+                    .from(messages)
+                    .where(and(
+                        inArray(messages.pageId, ownedPageIds),
+                        eq(messages.direction, 'incoming'),
+                        eq(messages.replied, true),
+                        eq(messages.replyMethod, 'post_reply'),
+                    )),
+            ]);
+            postRepliesCount = (fbPR[0]?.count || 0) + (igPR[0]?.count || 0) + (dmPR[0]?.count || 0);
+        }
 
         if (ownedPageIds.length > 0) {
             const startOfToday = new Date(now);

@@ -97,8 +97,11 @@ vi.mock('../../src/db/schema', () => ({
     adminAuditLogs: { id: 'id', action: 'action', previousValue: 'pv', newValue: 'nv', paymentReference: 'pr', note: 'note', createdAt: 'createdAt', adminUserId: 'adminUserId', targetUserId: 'targetUserId' },
     pages: { id: 'id', userId: 'userId', name: 'name', workspaceId: 'workspaceId', knowledgeBase: 'kb', kbVersion: 'kbv', kbActiveVersion: 'kbav', kbUpdatedAt: 'kbua' },
     usage: { userId: 'userId', aiRepliesCount: 'airc', periodStart: 'ps', periodEnd: 'pe' },
-    posts: { pageId: 'pageId', triggerReply: 'triggerReply' },
-    instagramMedia: { pageId: 'pageId', triggerReply: 'triggerReply' },
+    posts: { id: 'id', pageId: 'pageId', triggerReply: 'triggerReply' },
+    instagramMedia: { id: 'id', pageId: 'pageId', triggerReply: 'triggerReply' },
+    comments: { id: 'id', postId: 'postId', replied: 'replied', replyMethod: 'replyMethod' },
+    instagramComments: { id: 'id', mediaId: 'mediaId', replied: 'replied', replyMethod: 'replyMethod' },
+    messages: { id: 'id', pageId: 'pageId', direction: 'direction', replied: 'replied', replyMethod: 'replyMethod' },
     kbChunks: { pageId: 'pageId', kbVersion: 'kbVersion' },
     kbGaps: { id: 'id', pageId: 'pageId', queryText: 'qt', detectedIntent: 'di', occurrenceCount: 'oc', firstSeenAt: 'fsa', lastSeenAt: 'lsa', resolved: 'resolved' },
     workspaces: { id: 'id', name: 'name', ownerId: 'ownerId', createdAt: 'createdAt' },
@@ -1081,17 +1084,7 @@ describe('Admin Routes', () => {
                 ]),
             };
 
-            // Fifth + sixth selects: post replies count (FB posts + IG media)
-            const fbPostsChain = {
-                from: vi.fn().mockReturnThis(),
-                where: vi.fn().mockResolvedValue([{ count: 4 }]),
-            };
-            const igMediaChain = {
-                from: vi.fn().mockReturnThis(),
-                where: vi.fn().mockResolvedValue([{ count: 6 }]),
-            };
-
-            // Seventh: workspace memberships (joined to workspace + owner). The user owns this
+            // Sixth: workspace memberships (joined to workspace + owner). The user owns this
             // workspace, so isOwner is derived true. Member count comes from the grouped query next.
             const membershipChain = {
                 from: vi.fn().mockReturnThis(),
@@ -1104,16 +1097,39 @@ describe('Admin Routes', () => {
                     },
                 ]),
             };
-            // Eighth: member count per workspace (grouped).
+            // Seventh: member count per workspace (grouped).
             const memberCountChain = {
                 from: vi.fn().mockReturnThis(),
                 where: vi.fn().mockReturnThis(),
                 groupBy: vi.fn().mockResolvedValue([{ workspaceId: 'ws-1', count: 3 }]),
             };
-            // Ninth: owned pages for lead stats. Empty set short-circuits the leads aggregation.
+            // Eighth: owned pages (direct + workspace) — drives both post-reply and lead stats.
             const ownedPagesChain = {
                 from: vi.fn().mockReturnThis(),
-                where: vi.fn().mockResolvedValue([]),
+                where: vi.fn().mockResolvedValue([{ id: 'page-1' }, { id: 'page-2' }]),
+            };
+            // Ninth–eleventh: post replies actually SENT (replyMethod='post_reply') across
+            // FB comments, IG comments and DMs → 4 + 6 + 2 = 12.
+            const fbPostReplyChain = {
+                from: vi.fn().mockReturnThis(),
+                innerJoin: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([{ count: 4 }]),
+            };
+            const igPostReplyChain = {
+                from: vi.fn().mockReturnThis(),
+                innerJoin: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([{ count: 6 }]),
+            };
+            const dmPostReplyChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([{ count: 2 }]),
+            };
+            // Twelfth: leads aggregation over the owned pages.
+            const leadsAggChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([
+                    { total: 0, today: 0, last7d: 0, last30d: 0, statusNew: 0, statusContacted: 0, statusConverted: 0 },
+                ]),
             };
 
             vi.mocked(db.select)
@@ -1122,11 +1138,13 @@ describe('Admin Routes', () => {
                 .mockReturnValueOnce(subChain as any)
                 .mockReturnValueOnce(pagesChain as any)
                 .mockReturnValueOnce(usageChain as any)
-                .mockReturnValueOnce(fbPostsChain as any)
-                .mockReturnValueOnce(igMediaChain as any)
                 .mockReturnValueOnce(membershipChain as any)
                 .mockReturnValueOnce(memberCountChain as any)
-                .mockReturnValueOnce(ownedPagesChain as any);
+                .mockReturnValueOnce(ownedPagesChain as any)
+                .mockReturnValueOnce(fbPostReplyChain as any)
+                .mockReturnValueOnce(igPostReplyChain as any)
+                .mockReturnValueOnce(dmPostReplyChain as any)
+                .mockReturnValueOnce(leadsAggChain as any);
 
             const response = await app.inject({
                 method: 'GET',
@@ -1142,7 +1160,8 @@ describe('Admin Routes', () => {
             expect(body.data.subscription.status).toBe('active');
             expect(body.data.pages).toHaveLength(2);
             expect(body.data.usage.aiRepliesCount).toBe(42);
-            expect(body.data.usage.postRepliesCount).toBe(10);
+            // Post replies = actual sends (replyMethod='post_reply') across FB + IG + DM.
+            expect(body.data.usage.postRepliesCount).toBe(12);
             expect(body.data.usage.limit).toBe(1000);
             // Workspace membership: user owns this workspace.
             expect(body.data.workspaces).toHaveLength(1);
