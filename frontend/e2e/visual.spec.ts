@@ -145,7 +145,8 @@ function setupApiMocks(page: import('@playwright/test').Page) {
     if (url.includes('/messages'))
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MESSAGES) });
     if (url.includes('/pages'))
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_PAGES }) });
+      // /pages returns a PLAIN ARRAY (not { data: [...] }) — matches pagesApi.getAll().
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_PAGES) });
     if (url.includes('/subscription/usage'))
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
     if (url.includes('/settings'))
