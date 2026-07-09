@@ -17,6 +17,7 @@ import { config } from '../config';
 import { decrypt } from './ecommerceCrypto';
 import { captureError } from '../utils/sentryHelpers';
 import { stripHtml } from '../utils/htmlUtils';
+import { REQUEST_TIMEOUT_MS } from '../utils/httpRetry';
 
 // Re-export shared functions for backward compat
 export {
@@ -47,6 +48,7 @@ import {
     replaceProductsAndRebuildSummary,
     invalidateCachesForStore,
     getStoreByWorkspaceAny as _getStoreByWorkspaceAny,
+    applySyncedStoreInfo,
     PRODUCT_SAFETY_CAP,
 } from './ecommerce';
 
@@ -250,6 +252,10 @@ async function shopifyGraphQL<T = unknown>(shop: string, accessToken: string, qu
                     'X-Shopify-Access-Token': accessToken,
                 },
                 body: JSON.stringify({ query }),
+                // Without a timeout a hung Shopify connection stalls the caller
+                // indefinitely (audit 2026-07-09); a timed-out attempt throws and
+                // surfaces to the caller like any network error.
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
             }),
         );
 
@@ -670,11 +676,10 @@ export async function fullSync(storeId: string) {
     const accessToken = resolveStoreToken(store);
     const storeDomain = store?.storeDomain ?? '';
 
-    const shopInfo = await fetchShopInfo(storeDomain, accessToken);
-    await db.update(ecommerceStores).set({
-        ...shopInfo,
-        updatedAt: new Date(),
-    }).where(eq(ecommerceStores.id, storeId));
+    // platformData is merged, not replaced — a full sync must not wipe
+    // webhookStatus/tokenHealth written by other flows.
+    const { platformData: platformDataPatch, ...shopScalars } = await fetchShopInfo(storeDomain, accessToken);
+    await applySyncedStoreInfo(storeId, shopScalars, platformDataPatch);
 
     const creds = { storeDomain, accessToken };
     const [productResult, policyResult] = await Promise.allSettled([

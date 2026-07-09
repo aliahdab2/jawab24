@@ -1,8 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import * as zidService from '../services/zid';
 import {
-    getStoreByDomain,
-    getStoreByMerchantId,
+    resolveStoreByDomainOrMerchant,
     deactivateStore,
 } from '../services/ecommerce';
 import {
@@ -51,11 +50,7 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
 
     // Zid may send a numeric merchant ID or a domain string.
     // Try domain lookup first; fall back to platformData.merchantId.
-    const resolveStore = async () => {
-        const byDomain = await getStoreByDomain('zid', store_id);
-        if (byDomain) return byDomain;
-        return getStoreByMerchantId('zid', store_id);
-    };
+    const resolveStore = () => resolveStoreByDomainOrMerchant('zid', store_id);
 
     if (event === 'app.uninstalled') {
         const store = await resolveStore();
@@ -63,10 +58,12 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
         return reply.status(200).send({ ok: true });
     }
 
+    // product_update, NOT full_sync: store info doesn't change when a product does
+    // (see the Salla controller's product.* branch for the full rationale).
     if (zidService.isProductEvent(event || '')) {
         const store = await resolveStore();
         if (store) {
-            enqueueSyncJob(store.id, 'zid').catch(err => {
+            enqueueSyncJob(store.id, 'zid', 'product_update').catch(err => {
                 request.log.error({ err }, 'Failed to enqueue Zid product sync');
             });
         }

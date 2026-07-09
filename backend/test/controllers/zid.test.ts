@@ -50,6 +50,10 @@ const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-zid-123');
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreByDomain: (...args: any[]) => mockGetStoreByDomain(...args),
     getStoreByMerchantId: (...args: any[]) => mockGetStoreByMerchantId(...args),
+    // Pass-through to the real domain-first → merchantId-fallback logic so the
+    // existing "resolves by domain / falls back to merchantId" assertions still hold.
+    resolveStoreByDomainOrMerchant: async (platform: any, id: any) =>
+        (await mockGetStoreByDomain(platform, id)) || (await mockGetStoreByMerchantId(platform, id)),
     getStoreByWorkspace: (...args: any[]) => mockGetStoreByWorkspace(...args),
     getStoreByWorkspaceAny: (...args: any[]) => mockGetStoreByWorkspaceAny(...args),
     createStore: (...args: any[]) => mockCreateStore(...args),
@@ -610,7 +614,8 @@ describe('Zid Controller', () => {
 
             await new Promise(r => setTimeout(r, 10));
 
-            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'zid');
+            // product_update, not full_sync — store info doesn't change on a product edit.
+            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'zid', 'product_update');
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 

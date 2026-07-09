@@ -60,7 +60,7 @@ vi.mock('../../src/db', () => ({
     },
 }));
 
-import { markStoreNeedsReauth, updateStoreTokens, createStore } from '../../src/services/ecommerce';
+import { markStoreNeedsReauth, updateStoreTokens, createStore, applySyncedStoreInfo } from '../../src/services/ecommerce';
 
 beforeEach(() => {
     state.selectResult = [];
@@ -82,6 +82,36 @@ describe('markStoreNeedsReauth', () => {
         state.selectResult = [{ platformData: { merchantId: '123', tokenHealth: 'invalid' } }];
         await markStoreNeedsReauth('store-1');
         expect(state.capturedUpdateSet?.platformData).toEqual({ merchantId: '123', tokenHealth: 'invalid' });
+    });
+});
+
+describe('applySyncedStoreInfo — fullSync must not clobber platformData', () => {
+    // Regression (audit 2026-07-09): fullSync used to REPLACE the whole platformData
+    // column with { merchantId }, wiping webhookStatus (the "Re-register webhooks"
+    // CTA + retry-worker exhaustion marker) and tokenHealth (the Reconnect banner)
+    // on every 6h scheduled sync, product webhook, and manual Sync click.
+    it('merges the patch, preserving webhookStatus and tokenHealth', async () => {
+        state.selectResult = [{
+            platformData: {
+                merchantId: 'old-id',
+                webhookStatus: { registered: 2, failed: 1, exhausted: true },
+                tokenHealth: 'invalid',
+            },
+        }];
+        await applySyncedStoreInfo('store-1', { storeName: 'New Name', storeCurrency: 'SAR' }, { merchantId: 'new-id' });
+        expect(state.capturedUpdateSet?.storeName).toBe('New Name');
+        expect(state.capturedUpdateSet?.storeCurrency).toBe('SAR');
+        expect(state.capturedUpdateSet?.platformData).toEqual({
+            merchantId: 'new-id',
+            webhookStatus: { registered: 2, failed: 1, exhausted: true },
+            tokenHealth: 'invalid',
+        });
+    });
+
+    it('handles a store with no prior platformData', async () => {
+        state.selectResult = [{ platformData: null }];
+        await applySyncedStoreInfo('store-1', { storeName: 'N' }, { merchantId: 'm-1' });
+        expect(state.capturedUpdateSet?.platformData).toEqual({ merchantId: 'm-1' });
     });
 });
 

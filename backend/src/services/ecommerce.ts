@@ -131,11 +131,28 @@ export async function registerWebhooksWithPersist(
  * function to an atomic `coalesce(platform_data,'{}'::jsonb) || $patch::jsonb`.
  */
 async function mergeStorePlatformData(storeId: string, patch: Record<string, unknown>): Promise<void> {
+    await applySyncedStoreInfo(storeId, {}, patch);
+}
+
+/**
+ * Persist refreshed store info from a platform sync. `platformData` is MERGED
+ * (same read-modify-write as mergeStorePlatformData), never replaced: a full
+ * sync must not wipe operational markers written by other flows — webhookStatus
+ * (registerWebhooksWithPersist / webhookRetryWorker exhaustion) and tokenHealth
+ * (markStoreNeedsReauth). Replacing the column erased the merchant's
+ * "Re-register webhooks" CTA and Reconnect banner within one 6h sync cycle.
+ */
+export async function applySyncedStoreInfo(
+    storeId: string,
+    info: { storeName?: string; storeEmail?: string | null; storeCurrency?: string | null; storeTimezone?: string | null },
+    platformDataPatch: Record<string, unknown> = {},
+): Promise<void> {
     const [store] = await db.select({ platformData: ecommerceStores.platformData })
         .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
     const existing = (store?.platformData as Record<string, unknown>) || {};
     await db.update(ecommerceStores).set({
-        platformData: { ...existing, ...patch },
+        ...info,
+        platformData: { ...existing, ...platformDataPatch },
         updatedAt: new Date(),
     }).where(eq(ecommerceStores.id, storeId));
 }
@@ -243,6 +260,19 @@ export async function getStoreByMerchantId(platform: EcommercePlatform, merchant
         )
     ).limit(1);
     return result[0] || null;
+}
+
+/**
+ * Resolve a store from a webhook's external id, which is either the store domain
+ * OR the numeric merchant id depending on the platform/event. Tries domain first,
+ * then falls back to the merchant-id lookup. Shared by the Salla + Zid webhook
+ * controllers (both resolve stores exactly this way — without the fallback a
+ * merchant-id-keyed webhook silently no-ops in prod, including app.uninstalled).
+ */
+export async function resolveStoreByDomainOrMerchant(platform: EcommercePlatform, externalId: string) {
+    const byDomain = await getStoreByDomain(platform, externalId);
+    if (byDomain) return byDomain;
+    return getStoreByMerchantId(platform, externalId);
 }
 
 /** @deprecated Use getStoreByWorkspace — kept for OAuth flows that lack workspace context */
@@ -924,9 +954,15 @@ async function finalizeClaim(
         refreshToken,
         tokenExpiresAt: pending.tokenExpiresAt ?? undefined,
         // Carry the Salla Easy-Mode merchant id so the webhook getStoreByMerchantId
-        // fallback can resolve this store. Null on the cookie/OAuth flow → undefined →
-        // createStore's jsonb merge leaves platformData untouched (identical to before).
-        platformData: pending.merchantId ? { merchantId: pending.merchantId } : undefined,
+        // fallback can resolve this store. A pending row with a merchantId is, by
+        // construction, an Easy-Mode install (app.store.authorize stages it; the
+        // cookie/OAuth flow never sets merchantId) — so also stamp tokenSource so the
+        // proactive pull-refresh can skip it (see getStoresNeedingTokenRefresh). Null
+        // on the cookie/OAuth flow → undefined → createStore's jsonb merge leaves
+        // platformData untouched (identical to before).
+        platformData: pending.merchantId
+            ? { merchantId: pending.merchantId, tokenSource: 'easy_mode' }
+            : undefined,
         workspaceId,
     });
 

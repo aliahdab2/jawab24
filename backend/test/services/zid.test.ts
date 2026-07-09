@@ -7,6 +7,7 @@ const {
     mockGetStoreById,
     mockUpdateStoreTokens,
     mockReplaceProductsAndRebuildSummary,
+    mockApplySyncedStoreInfo,
     mockDecrypt,
     mockCaptureError,
     mockRedisSet,
@@ -15,6 +16,7 @@ const {
     mockGetStoreById: vi.fn(),
     mockUpdateStoreTokens: vi.fn(),
     mockReplaceProductsAndRebuildSummary: vi.fn(),
+    mockApplySyncedStoreInfo: vi.fn(),
     mockDecrypt: vi.fn(),
     mockCaptureError: vi.fn(),
     mockRedisSet: vi.fn(),
@@ -74,6 +76,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     updateStoreTokens: (...args: unknown[]) => mockUpdateStoreTokens(...args),
     markStoreNeedsReauth: vi.fn().mockResolvedValue(undefined),
     replaceProductsAndRebuildSummary: (...args: unknown[]) => mockReplaceProductsAndRebuildSummary(...args),
+    applySyncedStoreInfo: (...args: unknown[]) => mockApplySyncedStoreInfo(...args),
 }));
 
 vi.mock('../../src/services/ecommerceCrypto', () => ({
@@ -729,9 +732,14 @@ describe('Zid Service', () => {
 
             await fullSync('store-1');
 
-            // Should have called db.update for store info
-            const { db } = await import('../../src/db');
-            expect(db.update).toHaveBeenCalled();
+            // Store info goes through applySyncedStoreInfo — platformData is a merge
+            // PATCH ({ merchantId }), never a whole-column replace (which used to wipe
+            // webhookStatus/tokenHealth).
+            expect(mockApplySyncedStoreInfo).toHaveBeenCalledWith(
+                'store-1',
+                expect.objectContaining({ storeName: 'Updated Store Name' }),
+                { merchantId: '99' },
+            );
 
             // Should have called replaceProductsAndRebuildSummary for product sync
             expect(mockReplaceProductsAndRebuildSummary).toHaveBeenCalled();

@@ -162,6 +162,13 @@ export const config = {
         // claim a known merchant's pending install. Flip to true ONLY after that hardening +
         // switching the published app to Easy Mode in the Salla Partners portal.
         easyModeClaimEnabled: process.env.SALLA_EASY_MODE_CLAIM_ENABLED === 'true',
+        // Easy Mode delivers tokens via the app.store.authorize webhook (server-to-server)
+        // and RE-fires it to push refreshed tokens. When true, the proactive 6h pull-refresh
+        // skips Easy-Mode stores so our OAuth refresh-token grant doesn't race Salla's push
+        // (dual single-use-refresh-token rotation → brief invalid-token window) or falsely
+        // mark a healthy webhook-managed store needs-reauth if the grant endpoint deviates.
+        // OFF until the live Easy-Mode dry-run confirms Salla's push-refresh cadence.
+        skipPullRefreshForEasyMode: process.env.SALLA_SKIP_PULL_REFRESH_EASY_MODE === 'true',
     },
 
     // Zid App (disabled until credentials are set)

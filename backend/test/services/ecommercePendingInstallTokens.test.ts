@@ -275,7 +275,10 @@ describe('Salla Easy Mode pending install (merchant-id keyed claim)', () => {
         expect(store).toBeTruthy();
 
         const storeInsert = findInsert(ecommerceStores);
-        expect(storeInsert!.values.platformData).toEqual({ merchantId: '671738424' });
+        // A merchantId-bearing pending row is an Easy-Mode install (only app.store.authorize
+        // stages one), so the claimed store is stamped tokenSource:'easy_mode' — this lets the
+        // proactive pull-refresh skip it when SALLA_SKIP_PULL_REFRESH_EASY_MODE is on.
+        expect(storeInsert!.values.platformData).toEqual({ merchantId: '671738424', tokenSource: 'easy_mode' });
         // tokens round-trip through the claim
         expect(decrypt(storeInsert!.values.refreshToken as string, storeInsert!.values.refreshTokenIv as string)).toBe('easy_refresh');
     });

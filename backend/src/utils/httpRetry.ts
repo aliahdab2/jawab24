@@ -2,7 +2,9 @@ import { tracedExternalCall } from './tracing';
 
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
-const REQUEST_TIMEOUT_MS = 30_000; // 30 s — same ceiling used across all e-commerce API calls
+// 30 s — same ceiling used across all e-commerce API calls (also imported by the
+// Shopify GraphQL client, which has its own retry loop for GraphQL cost throttling).
+export const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * Options for `ecommerceApiGet`.

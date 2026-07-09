@@ -5,7 +5,10 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./test/setup.ts'],
-    exclude: ['test/integration/**', 'node_modules/**', 'dist/**'],
+    // `.claude/worktrees/**` = per-task git worktrees (full repo checkouts). Without
+    // this, a plain `vitest run` scans every worktree's stale test copies too, so
+    // an assertion change here "fails" in N unrelated branches. Only test THIS tree.
+    exclude: ['test/integration/**', 'node_modules/**', 'dist/**', '**/.claude/worktrees/**'],
     // Coverage instrumentation can slow tests ~3-10x; default 5s timeout is
     // too tight for some heavier suites (instagramReply takes ~4.5s under coverage).
     testTimeout: 15000,

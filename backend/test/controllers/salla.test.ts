@@ -65,6 +65,10 @@ const mockSaveWebhookStatus = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreByDomain: (...args: any[]) => mockGetStoreByDomain(...args),
     getStoreByMerchantId: (...args: any[]) => mockGetStoreByMerchantId(...args),
+    // Pass-through to the real domain-first → merchantId-fallback logic so the
+    // existing "resolves by domain / falls back to merchantId" assertions still hold.
+    resolveStoreByDomainOrMerchant: async (platform: any, id: any) =>
+        (await mockGetStoreByDomain(platform, id)) || (await mockGetStoreByMerchantId(platform, id)),
     getStoreByWorkspace: (...args: any[]) => mockGetStoreByWorkspace(...args),
     getStoreByWorkspaceAny: (...args: any[]) => mockGetStoreByWorkspaceAny(...args),
     createStore: (...args: any[]) => mockCreateStore(...args),
@@ -91,6 +95,11 @@ vi.mock('../../src/services/auth', () => ({
     authService: {
         verifyToken: (...args: any[]) => mockVerifyToken(...args),
     },
+}));
+
+const mockCaptureError = vi.fn();
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: (...args: any[]) => mockCaptureError(...args),
 }));
 
 const mockGetUserWorkspaces = vi.fn().mockResolvedValue([{ id: 'test_workspace_id' }]);
@@ -578,7 +587,8 @@ describe('Salla Controller', () => {
 
             await new Promise(r => setTimeout(r, 10));
 
-            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'salla');
+            // product_update, not full_sync — store info doesn't change on a product edit.
+            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'salla', 'product_update');
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
@@ -597,7 +607,7 @@ describe('Salla Controller', () => {
 
             await new Promise(r => setTimeout(r, 10));
 
-            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'salla');
+            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'salla', 'product_update');
         });
 
         it('should deactivate store on app.uninstalled event (by resolved storeDomain, not merchant id)', async () => {
@@ -641,7 +651,7 @@ describe('Salla Controller', () => {
             await new Promise(r => setTimeout(r, 10));
 
             expect(mockGetStoreByMerchantId).toHaveBeenCalledWith('salla', '2108580704');
-            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-9', 'salla');
+            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-9', 'salla', 'product_update');
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
@@ -939,6 +949,21 @@ describe('Salla Controller', () => {
             }));
             expect(mockCreatePendingInstall).not.toHaveBeenCalled();
             expect(mockFetchStoreInfo).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        it('a Salla-API failure during handling → captured + 200 (Salla retries; never 500s)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByMerchantId.mockResolvedValue(null);
+            mockFetchStoreInfo.mockRejectedValueOnce(new Error('Salla API 503'));
+            const body = authorizeBody();
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+
+            await webhookHandler(req, rep);
+
+            expect(mockCaptureError).toHaveBeenCalledTimes(1);
+            expect(mockCreatePendingInstall).not.toHaveBeenCalled();
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 

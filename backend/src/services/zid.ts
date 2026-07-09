@@ -10,15 +10,13 @@
  * - Webhook HMAC uses hex SHA256 digest (header: X-ZID-SIGNATURE)
  */
 import { tracedExternalCall } from '../utils/tracing';
-import { eq } from 'drizzle-orm';
-import { db } from '../db';
-import { ecommerceStores } from '../db/schema';
 import { config } from '../config';
 import { decrypt } from './ecommerceCrypto';
 import { captureError } from '../utils/sentryHelpers';
 import {
     getStoreById,
     replaceProductsAndRebuildSummary,
+    applySyncedStoreInfo,
     type WebhookRegistrationResult,
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
@@ -328,14 +326,14 @@ export async function fullSync(storeId: string) {
 
     const accessToken = decrypt(store.accessToken, store.accessTokenIv);
 
+    // platformData is merged, not replaced — a full sync must not wipe
+    // webhookStatus/tokenHealth written by other flows.
     const storeInfo = await fetchStoreInfo(accessToken);
-    await db.update(ecommerceStores).set({
+    await applySyncedStoreInfo(storeId, {
         storeName: storeInfo.storeName,
         storeEmail: storeInfo.storeEmail,
         storeCurrency: storeInfo.storeCurrency,
-        platformData: { merchantId: storeInfo.merchantId },
-        updatedAt: new Date(),
-    }).where(eq(ecommerceStores.id, storeId));
+    }, { merchantId: storeInfo.merchantId });
 
     return syncProducts(storeId);
 }

@@ -22,12 +22,23 @@ export const ecommerceSyncQueue = new Queue<EcommerceSyncJobData>(ECOMMERCE_SYNC
 });
 
 /**
- * Enqueue a full product sync for an e-commerce store
+ * Enqueue a sync for an e-commerce store.
+ *
+ * `full_sync` (default) refreshes store info + the whole catalog — right for
+ * install/claim and the 6h scheduler. Product webhooks should pass
+ * `product_update` instead: it re-syncs the catalog WITHOUT the store-info
+ * round-trip (Salla/Zid product payloads are too sparse for an in-place upsert,
+ * so a catalog re-fetch is still needed — but touching store info on every
+ * product edit is redundant API load).
  */
-export async function enqueueSyncJob(storeId: string, platform: 'shopify' | 'salla' | 'zid' = 'shopify'): Promise<void> {
-    await ecommerceSyncQueue.add('full_sync', {
+export async function enqueueSyncJob(
+    storeId: string,
+    platform: 'shopify' | 'salla' | 'zid' = 'shopify',
+    jobType: 'full_sync' | 'product_update' = 'full_sync',
+): Promise<void> {
+    await ecommerceSyncQueue.add(jobType, {
         ecommerceStoreId: storeId,
         platform,
-        jobType: 'full_sync',
+        jobType,
     });
 }
