@@ -138,6 +138,7 @@
   "postPickerSetup": "إعداد",
   "postPickerNoText": "منشور بدون نص",
   "postPickerEmpty": "لا توجد منشورات حديثة على هذه الصفحة.",
+  "postPickerNoActivePages": "لا توجد صفحات مفعّلة. فعّل الرد التلقائي على صفحة لإعداد رد البوست.",
   "postPickerError": "تعذّر تحميل منشوراتك. حاول مرة أخرى.",
   "postPickerRetry": "إعادة المحاولة",
   "postPickerLoadMore": "عرض المزيد",

@@ -7,10 +7,17 @@ import type { Page, PublishedPost, PublishedPostsResponse } from '@jawab24/share
 import { Modal, Button, FacebookIcon, InstagramIcon } from '@/components/ui';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { postsApi } from '@/lib/api';
+import { isPageAutoReplyEnabled } from '@/utils/page';
 import { useLanguage } from '@/i18n/hooks';
 import { formatMessageTime } from '@/utils/dateUtils';
 
 type Source = 'facebook' | 'instagram';
+
+/** Remembers the last page the merchant picked, so reopening the sheet doesn't
+ *  reset to the first page every time. The sheet is unmounted on close
+ *  (usePostReplySetup gates it behind `pickerOpen`), so the restore happens in
+ *  the useState initializer on remount. */
+const PICKER_PAGE_STORAGE_KEY = 'post-reply-picker-page';
 
 export interface PickedPost {
   pageId: string;
@@ -30,9 +37,31 @@ interface PostPickerSheetProps {
   onPick: (post: PickedPost) => void;
 }
 
-/** Pages that can host a Post Reply: connected, with a FB page or an IG account. */
-function pickablePages(pages: Page[]): Page[] {
-  return pages.filter((p) => p.isConnected !== false && (p.facebookPageId || p.instagramAccountId));
+/** Pages that can host a Post Reply: connected, auto-reply ON, with a FB page or an
+ *  IG account. Auto-reply must be on because the comment pipeline hard-gates on it
+ *  (commentProcessor step 1 returns early when `autoReplyEnabled` is false), so a
+ *  trigger configured on a paused page would silently never fire — showing such a
+ *  page in the picker is misleading. WhatsApp-only pages have neither channel id and
+ *  are excluded (Post Reply is a comment feature). */
+export function pickablePages(pages: Page[]): Page[] {
+  return pages.filter(
+    (p) => p.isConnected !== false && isPageAutoReplyEnabled(p) && (p.facebookPageId || p.instagramAccountId),
+  );
+}
+
+function readStoredPageId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return window.localStorage.getItem(PICKER_PAGE_STORAGE_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** The last-picked page if it's still pickable, else the first candidate. */
+export function initialPage(candidates: Page[]): Page | undefined {
+  const stored = readStoredPageId();
+  return candidates.find((p) => p.id === stored) ?? candidates[0];
 }
 
 export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSheetProps) {
@@ -40,11 +69,11 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
   const { dateLocale } = useLanguage();
 
   const candidates = useMemo(() => pickablePages(pages), [pages]);
-  const [pageId, setPageId] = useState<string>(() => candidates[0]?.id ?? '');
+  const [pageId, setPageId] = useState<string>(() => initialPage(candidates)?.id ?? '');
   const selectedPage = candidates.find((p) => p.id === pageId) ?? candidates[0];
   const hasBoth = !!(selectedPage?.facebookPageId && selectedPage?.instagramAccountId);
   const [source, setSource] = useState<Source>(() =>
-    candidates[0]?.facebookPageId ? 'facebook' : 'instagram',
+    initialPage(candidates)?.facebookPageId ? 'facebook' : 'instagram',
   );
   // Resolve the effective source for the selected page (a FB-only page can't show IG).
   const effectiveSource: Source = selectedPage?.facebookPageId
@@ -71,6 +100,13 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
     setPageId(id);
     const p = candidates.find((c) => c.id === id);
     setSource(p?.facebookPageId ? 'facebook' : 'instagram');
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(PICKER_PAGE_STORAGE_KEY, id);
+      } catch {
+        // localStorage unavailable (e.g. private mode) — selection just won't persist.
+      }
+    }
   }
 
   return (
@@ -129,7 +165,9 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
         )}
 
         {/* Post list */}
-        {query.isLoading ? (
+        {candidates.length === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">{t('postPickerNoActivePages')}</div>
+        ) : query.isLoading ? (
           <div className="flex items-center justify-center py-10 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
           </div>
