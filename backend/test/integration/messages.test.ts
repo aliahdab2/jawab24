@@ -635,4 +635,34 @@ describe('Messages Service — Integration (real Postgres)', () => {
             expect(row.direction).toBe('incoming');
         });
     });
+
+    // =========================================================
+    // storeOutgoingMessage — platform stamping
+    // =========================================================
+    // Regression: the outgoing insert omitted `platform`, so the column default
+    // ('facebook') mislabeled every WhatsApp/Instagram reply (2026-07-08 pilot).
+    describe('storeOutgoingMessage platform stamping', () => {
+        it('stamps the conversation platform on the outgoing row (whatsapp)', async () => {
+            await testDb.insert(conversations).values({
+                pageId, senderId, platform: 'whatsapp', senderName: 'Pilot Customer',
+            });
+
+            const saved = await messagesService.storeOutgoingMessage(
+                pageId, workspaceId, senderId, 'أهلاً! كيف أقدر أساعدك؟', 'ai',
+            );
+
+            const [row] = await testDb.select().from(messages).where(eq(messages.id, saved.id));
+            expect(row.platform).toBe('whatsapp');
+            expect(row.direction).toBe('outgoing');
+        });
+
+        it('defaults to facebook when no prior conversation exists', async () => {
+            const saved = await messagesService.storeOutgoingMessage(
+                pageId, workspaceId, 'fresh-sender-no-convo', 'Hello!', 'ai',
+            );
+
+            const [row] = await testDb.select().from(messages).where(eq(messages.id, saved.id));
+            expect(row.platform).toBe('facebook');
+        });
+    });
 });

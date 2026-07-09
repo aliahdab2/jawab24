@@ -51,9 +51,10 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
     }
 
     async sendTypingIndicator(_page: PlatformPage, _senderId: string): Promise<void> {
-        // WhatsApp "mark as read" requires the wamid (message ID), not sender ID.
-        // The typing indicator interface only provides senderId, so we skip this.
-        // Blue ticks will be sent when we have the actual message ID in a future phase.
+        // No-op by design: WhatsApp's combined read+typing call requires the wamid
+        // (message ID), which this interface doesn't carry. Both are sent at webhook
+        // receipt instead (webhook.ts processWhatsAppWebhookAsync) — earlier than
+        // this hook would fire, which is what perceived latency needs.
     }
 
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {

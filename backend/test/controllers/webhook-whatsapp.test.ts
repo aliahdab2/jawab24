@@ -21,6 +21,7 @@ const {
     mockWaGetMediaInfo,
     mockWaDownloadMedia,
     mockWaSendTextMessage,
+    mockWaMarkAsRead,
 } = vi.hoisted(() => ({
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
     mockGetPageByFacebookId: vi.fn().mockResolvedValue(null),
@@ -33,6 +34,7 @@ const {
     mockWaGetMediaInfo: vi.fn().mockResolvedValue({ url: 'https://lookaside.example/media', mimeType: 'audio/ogg; codecs=opus', fileSize: 1024 }),
     mockWaDownloadMedia: vi.fn().mockResolvedValue(Buffer.from('fake-audio')),
     mockWaSendTextMessage: vi.fn().mockResolvedValue('wamid.nudge'),
+    mockWaMarkAsRead: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../src/lib/replyQueue', () => ({
@@ -90,7 +92,7 @@ vi.mock('../../src/services/whatsapp', () => ({
         getMediaInfo: mockWaGetMediaInfo,
         downloadMedia: mockWaDownloadMedia,
         sendTextMessage: mockWaSendTextMessage,
-        markAsRead: vi.fn().mockResolvedValue(undefined),
+        markAsRead: mockWaMarkAsRead,
     },
 }));
 
@@ -249,6 +251,77 @@ describe('WhatsApp Webhook — routing', () => {
         expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
             senderName: undefined,
         }));
+    });
+});
+
+describe('WhatsApp Webhook — read receipts + typing', () => {
+    let app: Awaited<ReturnType<typeof buildApp>>;
+
+    const waPage = {
+        id: 'page-uuid',
+        userId: 'user-uuid',
+        workspaceId: 'ws-uuid',
+        name: 'Test Store',
+        accessToken: 'fb-page-token',
+        whatsappPhoneNumberId: 'phone-number-id-123',
+        whatsappAccessToken: 'wa-business-token',
+        whatsappAutoReplyEnabled: true,
+    };
+
+    beforeEach(async () => {
+        app = await buildApp();
+        vi.clearAllMocks();
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(waPage);
+        mockFindOrCreateFromWebhook.mockResolvedValue({ message: { id: 'msg-1' }, isNew: true });
+    });
+
+    async function post(payload: object) {
+        await app.inject({
+            method: 'POST',
+            url: '/webhook',
+            headers: { 'x-hub-signature-256': generateSignature(payload) },
+            payload,
+        });
+        await new Promise(r => setTimeout(r, 50));
+    }
+
+    it('text message: marks read WITH typing the moment it lands (blue ticks + "typing…")', async () => {
+        await post(buildWhatsAppPayload({}));
+
+        expect(mockWaMarkAsRead).toHaveBeenCalledWith(
+            'phone-number-id-123', 'wamid.abc123', 'wa-business-token', { typing: true },
+        );
+        expect(mockEnqueueMessage).toHaveBeenCalled();
+    });
+
+    it('auto-reply OFF: no receipt (a "typing…" with no reply coming would lie)', async () => {
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue({ ...waPage, whatsappAutoReplyEnabled: false });
+
+        await post(buildWhatsAppPayload({}));
+
+        expect(mockWaMarkAsRead).not.toHaveBeenCalled();
+        // The receipt gate must not affect routing — the job still enqueues
+        // (the worker owns the real auto-reply decision).
+        expect(mockEnqueueMessage).toHaveBeenCalled();
+    });
+
+    it('unknown phone number (no page): no receipt, message still enqueued', async () => {
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(null);
+
+        await post(buildWhatsAppPayload({}));
+
+        expect(mockWaMarkAsRead).not.toHaveBeenCalled();
+        expect(mockEnqueueMessage).toHaveBeenCalled();
+    });
+
+    it('sticker: marks read WITHOUT typing (stickers are stored silently — no reply follows)', async () => {
+        await post(buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: 'wamid.stk', type: 'sticker', timestamp: '1700000000', sticker: { id: 'media-3', mime_type: 'image/webp' } }],
+        }));
+
+        expect(mockWaMarkAsRead).toHaveBeenCalledWith(
+            'phone-number-id-123', 'wamid.stk', 'wa-business-token', { typing: false },
+        );
     });
 });
 
