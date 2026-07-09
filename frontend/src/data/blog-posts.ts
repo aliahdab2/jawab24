@@ -10,6 +10,12 @@ export interface BlogPost {
 
 export const BLOG_POSTS: BlogPost[] = [
   {
+    slug: 'whatsapp-auto-reply-jawab24',
+    date: '2026-07-09',
+    category: 'integrations',
+    readingTime: 6,
+  },
+  {
     slug: 'ai-auto-reply-customer-photos',
     date: '2026-07-05',
     category: 'guides',
