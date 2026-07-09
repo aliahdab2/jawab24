@@ -13,6 +13,7 @@ import { useSelectPlan } from '@/hooks/useSelectPlan';
 import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctionedNonBlocking } from '@/utils/geoCheck';
+import { isWhatsAppMarketable } from '@/lib/featureFlags';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
@@ -215,6 +216,16 @@ function PlanCard({
           text={plan.maxAiRepliesPerMonth === null ? t('pricing.featureAiRepliesUnlimited') : t('pricing.featureAiReplies', { count: plan.maxAiRepliesPerMonth })}
           subtext={t('pricing.aiPowered')}
         />
+
+        {/* WhatsApp is a Business+ entitlement — crossed out on Starter as an
+            upsell. Hidden entirely until public launch (isWhatsAppMarketable). */}
+        {isWhatsAppMarketable() && (
+          <FeatureRow
+            included={plan.whatsappEnabled}
+            text={t('pricing.featureWhatsApp')}
+            subtext={plan.whatsappEnabled ? t('pricing.featureWhatsAppDesc') : undefined}
+          />
+        )}
 
         <FeatureRow
           included={plan.showBranding === false}

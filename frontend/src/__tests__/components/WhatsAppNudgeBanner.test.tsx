@@ -24,39 +24,44 @@ describe('WhatsAppNudgeBanner', () => {
     });
 
     it('renders for an owner with a connected page and no WhatsApp', () => {
-        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} />);
+        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} whatsappEntitled={true} />);
         expect(screen.getByText('Jawab now replies on WhatsApp')).toBeInTheDocument();
         expect(screen.getByText('Connect WhatsApp')).toBeInTheDocument();
     });
 
     it('hidden when Embedded Signup env config is missing', () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
-        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} />);
+        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} whatsappEntitled={true} />);
         expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
     });
 
     it('hidden for non-owners', () => {
-        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={false} isAdmin={true} />);
+        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={false} isAdmin={true} whatsappEntitled={true} />);
         expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
     });
 
     it('hidden when a page already has WhatsApp connected', () => {
-        render(<WhatsAppNudgeBanner pages={[connectedPage, whatsappPage]} isOwner={true} isAdmin={true} />);
+        render(<WhatsAppNudgeBanner pages={[connectedPage, whatsappPage]} isOwner={true} isAdmin={true} whatsappEntitled={true} />);
+        expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
+    });
+
+    it('hidden when the plan does not include WhatsApp (Starter / trial)', () => {
+        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} whatsappEntitled={false} />);
         expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
     });
 
     it('hidden when there is no connected page', () => {
-        render(<WhatsAppNudgeBanner pages={[disconnectedPage]} isOwner={true} isAdmin={true} />);
+        render(<WhatsAppNudgeBanner pages={[disconnectedPage]} isOwner={true} isAdmin={true} whatsappEntitled={true} />);
         expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
     });
 
     it('dismiss persists across re-mounts', () => {
-        const { unmount } = render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} />);
+        const { unmount } = render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} whatsappEntitled={true} />);
         fireEvent.click(screen.getByText('Later'));
         expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
         unmount();
 
-        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} />);
+        render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} whatsappEntitled={true} />);
         expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
     });
 
@@ -64,12 +69,12 @@ describe('WhatsAppNudgeBanner', () => {
         beforeEach(() => vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY', 'true'));
 
         it('hidden for a non-admin owner during the canary', () => {
-            render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={false} />);
+            render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={false} whatsappEntitled={true} />);
             expect(screen.queryByText('Jawab now replies on WhatsApp')).not.toBeInTheDocument();
         });
 
         it('shown for an admin during the canary', () => {
-            render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} />);
+            render(<WhatsAppNudgeBanner pages={[connectedPage]} isOwner={true} isAdmin={true} whatsappEntitled={true} />);
             expect(screen.getByText('Jawab now replies on WhatsApp')).toBeInTheDocument();
         });
     });

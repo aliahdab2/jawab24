@@ -14,7 +14,7 @@ import type { Page } from '@jawab24/shared';
  * setup-checklist step — WhatsApp is optional, and an eternally-incomplete
  * step would keep the checklist nagging.
  */
-export function WhatsAppNudgeBanner({ pages, isOwner, isAdmin }: { pages: Page[]; isOwner: boolean; isAdmin: boolean }) {
+export function WhatsAppNudgeBanner({ pages, isOwner, isAdmin, whatsappEntitled }: { pages: Page[]; isOwner: boolean; isAdmin: boolean; whatsappEntitled: boolean }) {
     const t = useTranslations('dashboard');
     const { dismissed, dismiss } = useTimedDismiss({
         key: 'whatsappNudgeDismissedAt',
@@ -25,8 +25,9 @@ export function WhatsAppNudgeBanner({ pages, isOwner, isAdmin }: { pages: Page[]
     const hasWhatsApp = pages.some(p => p.whatsappConnected);
 
     // Canary-aware: during admin-only rollout the CTA (which deep-links to the
-    // connect flow) must not show to non-admins.
-    if (dismissed || !isOwner || !isWhatsAppVisible(isAdmin) || !hasConnectedPage || hasWhatsApp) return null;
+    // connect flow) must not show to non-admins. Plan-aware: don't announce a
+    // launch to plans that can't use it (WhatsApp is Business+).
+    if (dismissed || !isOwner || !isWhatsAppVisible(isAdmin) || !whatsappEntitled || !hasConnectedPage || hasWhatsApp) return null;
 
     return (
         <div className="flex items-start gap-3 p-4 rounded-2xl border bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 transition-all">

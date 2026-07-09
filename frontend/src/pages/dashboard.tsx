@@ -16,7 +16,7 @@ import { useLanguage } from '@/i18n/hooks';
 
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { isIOSNative } from '@/lib/capacitor';
-import { subscriptionApi, settingsApi, pagesApi, commentsApi, messagesApi, analyticsApi, api } from '@/lib/api';
+import { settingsApi, pagesApi, commentsApi, messagesApi, analyticsApi, api } from '@/lib/api';
 import type { AnalyticsOverview, AiUsageReport } from '@/lib/api';
 import {
   MessageSquare,
@@ -29,7 +29,7 @@ import {
   Clock,
 } from 'lucide-react';
 import clsx from 'clsx';
-import type { Comment, Page, UsageSummary } from '@jawab24/shared';
+import type { Comment, Page } from '@jawab24/shared';
 import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, AiUsageWarningBanner, SetupChecklistCard, type NeedsAttentionItem } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
 import { isWhatsAppEnabled } from '@/lib/featureFlags';
@@ -41,7 +41,7 @@ import type { NextPageWithLayout } from './_app';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useConversationActions, useLoadConversation, usePostReplySetup } from '@/hooks';
-import { useWorkspaceRole } from '@/hooks';
+import { useWorkspaceRole, useSubscriptionUsage } from '@/hooks';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { useIsDemoUser } from '@/features/demo';
 
@@ -229,18 +229,7 @@ const DashboardPage: NextPageWithLayout = () => {
   // post picker (opened from the nudge banner) can list the merchant's posts.
   const postReplySetup = usePostReplySetup(pages);
 
-  const { data: usage } = useQuery({
-    queryKey: ['dashboard-usage'],
-    queryFn: async () => {
-      const res = await subscriptionApi.getUsage();
-      const usageData = res.data?.data ?? res.data;
-      if (usageData?.subscription !== undefined || usageData?.aiReplies !== undefined) {
-        return usageData as UsageSummary;
-      }
-      return null;
-    },
-    enabled: isAuthenticated,
-  });
+  const { data: usage } = useSubscriptionUsage(isAuthenticated);
 
   const { data: userSettings } = useQuery({
     queryKey: ['dashboard-settings'],
@@ -306,7 +295,7 @@ const DashboardPage: NextPageWithLayout = () => {
     queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-recent-comments'] });
     queryClient.invalidateQueries({ queryKey: ['pages'] });
-    queryClient.invalidateQueries({ queryKey: ['dashboard-usage'] });
+    queryClient.invalidateQueries({ queryKey: ['subscription-usage'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-settings'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-ai-usage'] });
@@ -967,7 +956,12 @@ const DashboardPage: NextPageWithLayout = () => {
           })()}
 
           {/* WhatsApp launch announcement — env-gated + canary-aware inside the component */}
-          <WhatsAppNudgeBanner pages={pages} isOwner={isOwner} isAdmin={user?.isAdmin ?? false} />
+          <WhatsAppNudgeBanner
+            pages={pages}
+            isOwner={isOwner}
+            isAdmin={user?.isAdmin ?? false}
+            whatsappEntitled={Boolean(usage?.subscription?.plan?.whatsappEnabled)}
+          />
 
           {/* Post Reply discovery — shows once setup is done and no post has a trigger yet.
               Opens the post picker (owned by postReplySetup) so a merchant can arm any

@@ -53,6 +53,18 @@ export function isWhatsAppVisible(isAdmin: boolean): boolean {
 }
 
 /**
+ * Gates the PUBLIC marketing surfaces (pricing plan cards, scale page,
+ * checkout summary). Stricter than `isWhatsAppEnabled()`: the launch runbook
+ * sets the config env DURING the admin-only canary, and the pricing page must
+ * not advertise WhatsApp to everyone while the in-app surface is founder-only.
+ * Full launch unsets the canary flag + rebuilds, so the marketing rows appear
+ * exactly at public launch with no extra step.
+ */
+export function isWhatsAppMarketable(): boolean {
+  return isWhatsAppEnabled() && process.env.NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY !== 'true';
+}
+
+/**
  * TEMP (catalog canary, founder call 2026-07-07): the native-catalog surface
  * (/catalog page + its nav entry) is visible ONLY to the founder's own account
  * while dogfooding — deliberately narrower than the platform-admin gate Stores

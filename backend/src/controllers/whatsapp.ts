@@ -45,6 +45,27 @@ const NOT_ALLOWLISTED_RESPONSE = {
     code: 'WHATSAPP_NOT_ALLOWLISTED',
 } as const;
 
+const PLAN_REQUIRED_RESPONSE = {
+    error: 'WhatsApp requires the Business plan or higher.',
+    code: 'WHATSAPP_PLAN_REQUIRED',
+    requiredPlan: 'business',
+} as const;
+
+/**
+ * Plan entitlement gate: WhatsApp is included on Business+ plans only
+ * (`plans.whatsapp_enabled`). Keyed on the WORKSPACE OWNER's subscription —
+ * team admins have no subscription row of their own (same subject as
+ * `canEnablePage`). No subscription = blocked (fail closed). Trial rides on
+ * Starter, so trialing users are blocked by Starter's flag, not by status.
+ * Enforced on connect + enable only — disconnect/disable always work, and an
+ * already-enabled number keeps working after a downgrade (matches the
+ * maxPages model: enforcement-on-enable, no retroactive disable).
+ */
+async function hasWhatsAppPlanAccess(workspaceOwnerId: string): Promise<boolean> {
+    const sub = await subscriptionsService.getUserSubscription(workspaceOwnerId);
+    return !!sub?.plan.whatsappEnabled;
+}
+
 /** True when a DB write lost the race to the whatsapp_phone_number_id unique index. */
 function isDuplicateNumberError(error: unknown): boolean {
     return (error as { code?: string })?.code === PG_UNIQUE_VIOLATION;
@@ -89,6 +110,9 @@ export class WhatsAppController {
 
         if (!(await isWhatsAppConnectAllowed(userId))) {
             return reply.status(403).send(NOT_ALLOWLISTED_RESPONSE);
+        }
+        if (!(await hasWhatsAppPlanAccess(req.workspaceOwnerId))) {
+            return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
         }
 
         try {
@@ -167,6 +191,9 @@ export class WhatsAppController {
 
         if (!(await isWhatsAppConnectAllowed(userId))) {
             return reply.status(403).send(NOT_ALLOWLISTED_RESPONSE);
+        }
+        if (!(await hasWhatsAppPlanAccess(req.workspaceOwnerId))) {
+            return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
         }
 
         try {
@@ -305,6 +332,10 @@ export class WhatsAppController {
 
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
+                if (!(await hasWhatsAppPlanAccess(workspaceOwnerId))) {
+                    return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
+                }
+
                 const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {
                     const { status, body } = pageGateError(limitCheck);
