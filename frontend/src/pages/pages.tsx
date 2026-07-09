@@ -469,6 +469,8 @@ const PagesPage: NextPageWithLayout = () => {
         toast.error(t('whatsappNumberTaken'));
       } else if (err.response?.data?.code === 'WHATSAPP_PIN_MISMATCH') {
         toast.error(t('whatsappPinMismatch'));
+      } else if (err.response?.data?.code === 'WHATSAPP_PLAN_REQUIRED') {
+        toast.error(t('whatsappPlanRequired'));
       } else {
         captureError(error, 'Failed to connect WhatsApp', { tags: { page: 'pages', action: 'whatsapp-connect' } });
         toast.error(t('whatsappConnectFailed'));

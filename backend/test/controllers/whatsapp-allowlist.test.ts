@@ -36,13 +36,14 @@ vi.mock('../../src/services/whatsapp', () => ({
     },
     WhatsAppApiError: class extends Error {},
 }));
-vi.mock('../../src/services/subscriptions', () => ({ subscriptionsService: { canEnablePage: vi.fn() } }));
+vi.mock('../../src/services/subscriptions', () => ({ subscriptionsService: { canEnablePage: vi.fn(), getUserSubscription: vi.fn() } }));
 vi.mock('../../src/services/channelTrial', () => ({ channelTrialService: { evaluate: vi.fn(), record: vi.fn(), channelsForPage: vi.fn().mockReturnValue([]) } }));
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
 vi.mock('../../src/services/auth', () => ({ authService: { getUserById: vi.fn() } }));
 
 import { whatsappController } from '../../src/controllers/whatsapp';
 import { pagesService } from '../../src/services/pages';
+import { subscriptionsService } from '../../src/services/subscriptions';
 
 function buildReply(): FastifyReply {
     return { status: vi.fn().mockReturnThis(), send: vi.fn().mockReturnThis() } as unknown as FastifyReply;
@@ -58,7 +59,23 @@ function buildRequest(): WorkspaceRequest {
 }
 
 describe('WhatsApp connect — canary allowlist gate', () => {
-    beforeEach(() => vi.clearAllMocks());
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Plan gate sits behind the allowlist gate — default it open here.
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(
+            { plan: { slug: 'business', whatsappEnabled: true } } as never,
+        );
+    });
+
+    it('allowlist gate fires BEFORE the plan gate (canary first)', async () => {
+        mockWhere.mockResolvedValue([{ email: 'someone.else@example.com' }]);
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(null as never);
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_NOT_ALLOWLISTED' }));
+        expect(subscriptionsService.getUserSubscription).not.toHaveBeenCalled();
+    });
 
     it('403 WHATSAPP_NOT_ALLOWLISTED when the acting user is not on the allowlist', async () => {
         mockWhere.mockResolvedValue([{ email: 'someone.else@example.com' }]);

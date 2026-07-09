@@ -42,6 +42,7 @@
   "whatsappConnectSuccess": "تم ربط واتساب بنجاح",
   "whatsappConnectFailed": "تعذّر ربط واتساب. حاول مرة أخرى.",
   "whatsappNumberTaken": "رقم واتساب هذا مرتبط بصفحة أخرى بالفعل.",
+  "whatsappPlanRequired": "واتساب متاح في باقة الأعمال وما فوق. رقِّ باقتك لربط رقمك.",
   "whatsappPinMismatch": "التحقق بخطوتين مفعّل على هذا الرقم. أوقفه من تطبيق واتساب للأعمال ثم حاول مجددًا.",
   "whatsappConnectWebOnly": "سنكمل ربط واتساب في المتصفح...",
   "whatsappDisconnect": "قطع ربط واتساب",
