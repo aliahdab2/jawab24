@@ -27,6 +27,7 @@ vi.mock('../../src/services/whatsapp', () => ({
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canEnablePage: vi.fn(),
+        getUserSubscription: vi.fn(),
     },
 }));
 
@@ -77,6 +78,11 @@ function buildReply(): FastifyReply {
     } as unknown as FastifyReply;
 }
 
+/** Subscription stub whose plan includes WhatsApp (Business+). */
+const businessSub = { plan: { slug: 'business', whatsappEnabled: true } };
+/** Subscription stub on a plan without WhatsApp (Starter). */
+const starterSub = { plan: { slug: 'starter', whatsappEnabled: false } };
+
 function buildRequest(overrides: Record<string, unknown> = {}): WorkspaceRequest {
     return {
         user: { userId: 'user-1', facebookId: 'fb-1' },
@@ -94,6 +100,7 @@ describe('WhatsAppController.connect', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(pagesService.getPage).mockResolvedValue(basePage as never);
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(businessSub as never);
         vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(null as never);
         vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue('wa-business-token');
         vi.mocked(whatsappService.subscribeAppToWaba).mockResolvedValue(undefined);
@@ -139,6 +146,33 @@ describe('WhatsAppController.connect', () => {
 
         expect(reply.status).toHaveBeenCalledWith(400);
         expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+    });
+
+    it('403s WHATSAPP_PLAN_REQUIRED on a plan without WhatsApp (Starter)', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSub as never);
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+    });
+
+    it('403s WHATSAPP_PLAN_REQUIRED with no subscription at all', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(null as never);
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
+    });
+
+    it('gates on the workspace OWNER, not the acting user', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(businessSub as never);
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest({ workspaceOwnerId: 'owner-9' }) as never, reply);
+
+        expect(subscriptionsService.getUserSubscription).toHaveBeenCalledWith('owner-9');
     });
 
     it('404s when the page is not in the workspace', async () => {
@@ -210,6 +244,7 @@ describe('WhatsAppController.toggleAutoReply', () => {
         vi.mocked(pagesService.toggleWhatsAppAutoReply).mockResolvedValue({
             ...connectedPage, whatsappAutoReplyEnabled: true,
         } as never);
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(businessSub as never);
         vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true } as never);
         vi.mocked(channelTrialService.evaluate).mockResolvedValue({ blocked: false } as never);
         vi.mocked(channelTrialService.record).mockResolvedValue(undefined as never);
@@ -245,6 +280,24 @@ describe('WhatsAppController.toggleAutoReply', () => {
         expect(reply.status).toHaveBeenCalledWith(402);
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'TRIAL_ALREADY_USED' }));
         expect(pagesService.toggleWhatsAppAutoReply).not.toHaveBeenCalled();
+    });
+
+    it('blocks ENABLING on a plan without WhatsApp (Starter)', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSub as never);
+        const reply = buildReply();
+        await whatsappController.toggleAutoReply(toggleRequest(true) as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
+        expect(pagesService.toggleWhatsAppAutoReply).not.toHaveBeenCalled();
+    });
+
+    it('still allows DISABLING on a plan without WhatsApp', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSub as never);
+        const reply = buildReply();
+        await whatsappController.toggleAutoReply(toggleRequest(false) as never, reply);
+
+        expect(pagesService.toggleWhatsAppAutoReply).toHaveBeenCalledWith('ws-1', 'page-1', false);
     });
 
     it('always allows disabling (no billing gates)', async () => {
@@ -298,6 +351,7 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(businessSub as never);
         vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(null as never);
         vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue('wa-business-token');
         vi.mocked(whatsappService.subscribeAppToWaba).mockResolvedValue(undefined);
@@ -340,6 +394,16 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
         const sent = vi.mocked(reply.send).mock.calls[0][0] as Record<string, unknown>;
         expect(sent).not.toHaveProperty('whatsappAccessToken');
         expect(sent).not.toHaveProperty('accessToken');
+    });
+
+    it('403s WHATSAPP_PLAN_REQUIRED on a plan without WhatsApp (Starter)', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSub as never);
+        const reply = buildReply();
+        await whatsappController.connectNew(newRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
+        expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
     });
 
     it('409s when the number is already connected anywhere', async () => {

@@ -68,7 +68,7 @@ Jawab24 is a **monorepo** with 3 services + 1 shared package:
 **External Integrations:**
 - Facebook Graph API (comments + DMs) — Live (App ID: 774211662298446)
 - Instagram Graph API (comments + DMs) — Live (all permissions approved 2026-04-07)
-- WhatsApp Cloud API (DMs) — backend + connect flow (Embedded Signup) + voice/media + WhatsApp-only cards (no Facebook page; also = multi-number, one card per number w/ own Business Info) + manual inbox replies complete; awaiting Meta Embedded Signup access + `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` config to go live. UI: the Pages screen is now "Channels" (قنوات التواصل)
+- WhatsApp Cloud API (DMs) — **LIVE (GA)**: Embedded Signup connect + voice/media + WhatsApp-only cards (no Facebook page; also = multi-number, one card per number w/ own Business Info) + manual inbox replies + read receipts/typing indicators. **Included on Business+ plans only** (server-enforced `WHATSAPP_PLAN_REQUIRED` gate). UI: the Pages screen is now "Channels" (قنوات التواصل)
 - Shopify API (products + policies)
 - Salla API (products + policies)
 - Zid API (products + policies — Saudi Arabia)
@@ -90,7 +90,7 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 **التكاملات الخارجية:**
 - Facebook Graph API (التعليقات + الرسائل المباشرة) — مباشر (App ID: 774211662298446)
 - Instagram Graph API (التعليقات + الرسائل المباشرة) — مباشر (جميع الصلاحيات مُوافَق عليها 2026-04-07)
-- WhatsApp Cloud API (الرسائل المباشرة) — الكود مكتمل (الربط عبر Embedded Signup + الرسائل الصوتية والوسائط + بطاقات واتساب مستقلة بدون صفحة فيسبوك = دعم أكثر من رقم، لكل رقم معلومات نشاطه + الرد اليدوي من صندوق الوارد)؛ بانتظار موافقة Meta على Embedded Signup وإعداد `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`. الواجهة: شاشة الصفحات أصبحت «قنوات التواصل»
+- WhatsApp Cloud API (الرسائل المباشرة) — **مباشر (متاح للجميع)**: الربط عبر Embedded Signup + الرسائل الصوتية والوسائط + بطاقات واتساب مستقلة بدون صفحة فيسبوك (= دعم أكثر من رقم، لكل رقم معلومات نشاطه) + الرد اليدوي من صندوق الوارد + إشعارات القراءة ومؤشر الكتابة. **متاح في باقة الأعمال فما فوق فقط** (بوابة `WHATSAPP_PLAN_REQUIRED` مفروضة من الخادم). الواجهة: شاشة الصفحات أصبحت «قنوات التواصل»
 - Shopify API (المنتجات + السياسات)
 - Salla API (المنتجات + السياسات)
 - Zid API (المنتجات + السياسات — المملكة العربية السعودية)

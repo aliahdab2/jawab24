@@ -90,8 +90,8 @@
 
 ### WhatsApp Business (Meta Cloud API)
 - **Purpose**: Auto-reply automation for WhatsApp DMs
-- **Status**: Backend + connect flow + voice/media handling complete (2026-07-03); awaiting Meta Embedded Signup access + env config to go live
-- **Business Model**: Tech Provider (ManyChat model) — merchant connects their own WhatsApp Business Account; Meta bills merchant directly for per-message costs
+- **Status**: LIVE (GA) — channel shipped #392 + follow-ups (#418/#420/#423/#424); Meta App Review cleared, canary opened per `docs/WHATSAPP_LAUNCH_RUNBOOK.md` Phase 5. **Packaging: included on Business+ plans** (`whatsappEnabled` on business/pro/scale-20k/scale-30k; Starter excluded — enforced server-side at connect/toggle via 403 `WHATSAPP_PLAN_REQUIRED`, `controllers/whatsapp.ts`)
+- **Business Model**: Tech Provider (ManyChat model) — merchant connects their own WhatsApp Business Account; Meta bills merchant directly for per-message costs (service-window replies are free; Jawab24 adds no markup)
 
 - **Connection Flow (implemented — Embedded Signup)**:
   - Owner clicks "Connect" on the WhatsApp row of a page card (`pages.tsx`) → FB JS SDK loaded on demand → Embedded Signup popup (`frontend/src/lib/whatsappSignup.ts`)

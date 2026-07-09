@@ -17,6 +17,7 @@ import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHero';
+import { WhatsAppIcon } from '@/components/ui';
 import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings, getSarMonthlyEquivalent, formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
 import { PlanTabSelector } from '@/components/billing/PlanTabSelector';
@@ -27,7 +28,7 @@ interface PricingPageProps {
 
 // FAQ entries rendered on the page AND emitted as FAQPage JSON-LD — keep in
 // sync with the faq<N>Q/faq<N>A keys in i18n/{en,ar}/pricing.json.
-const FAQ_IDS = [1, 2, 3, 4, 5, 6, 7, 8];
+const FAQ_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 
 function PlanCard({
@@ -207,13 +208,22 @@ function PlanCard({
         <FeatureRow
           included={true}
           text={plan.maxPages === null ? t('pricing.featurePagesUnlimited') : t('pricing.featurePages', { count: plan.maxPages })}
-          subtext={t('pricing.facebookInstagram')}
+          subtext={plan.whatsappEnabled ? t('pricing.facebookInstagramWhatsapp') : t('pricing.facebookInstagram')}
         />
 
         <FeatureRow
           included={true}
           text={plan.maxAiRepliesPerMonth === null ? t('pricing.featureAiRepliesUnlimited') : t('pricing.featureAiReplies', { count: plan.maxAiRepliesPerMonth })}
           subtext={t('pricing.aiPowered')}
+        />
+
+        <FeatureRow
+          included={plan.whatsappEnabled === true}
+          text={t('pricing.whatsappIntegration')}
+          subtextIcons={plan.whatsappEnabled ? (
+            <WhatsAppIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0 text-[#25D366]" aria-hidden="true" />
+          ) : undefined}
+          subtext={plan.whatsappEnabled ? t('pricing.whatsappIncludedNote') : undefined}
         />
 
         <FeatureRow

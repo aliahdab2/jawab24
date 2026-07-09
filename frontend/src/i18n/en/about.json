@@ -1,14 +1,14 @@
 {
-  "seoTitle": "What is Jawab24? | Arabic-First AI Auto-Reply for Facebook, Instagram, Shopify & Salla",
-  "seoDescription": "Jawab24 is an Arabic-first AI auto-reply platform for businesses selling through Facebook, Instagram, Shopify, and Salla. It automatically replies to customer comments and messages in Arabic and English, syncs product catalogs, and uses a 3-layer reply system with built-in price verification. Free trial available.",
+  "seoTitle": "What is Jawab24? | Arabic-First AI Auto-Reply for WhatsApp, Facebook, Instagram, Shopify & Salla",
+  "seoDescription": "Jawab24 is an Arabic-first AI auto-reply platform for businesses selling through WhatsApp, Facebook, Instagram, Shopify, and Salla. It automatically replies to customer comments and messages in the customer’s language, syncs product catalogs, and uses a 3-layer reply system with built-in price verification. Free trial available.",
   "title": "What is Jawab24?",
   "backToHome": "Back to Home",
   "intro": {
     "title": "What is Jawab24?",
-    "text": "Jawab24 is an AI-powered auto-reply platform built specifically for Arabic-speaking and bilingual businesses. It connects to Facebook Pages, Instagram business accounts, and e-commerce stores on Shopify and Salla, reads incoming comments and direct messages, and automatically replies to customers in their language — Arabic or English — 24 hours a day, 7 days a week.",
+    "text": "Jawab24 is an AI-powered auto-reply platform built specifically for Arabic-speaking and bilingual businesses. It connects to Facebook Pages, Instagram business accounts, WhatsApp Business numbers, and e-commerce stores on Shopify and Salla, reads incoming comments and direct messages, and automatically replies to customers in their language — 24 hours a day, 7 days a week.",
     "text2": "Jawab24 is not a chatbot — it is an intelligent auto-reply system designed for Arabic-first businesses. Unlike chatbots that follow rigid decision trees, Jawab24 understands context, recognizes Arabic dialect groups, integrates natively with Salla, and uses a built-in safety system to prevent the AI from inventing prices or unsupported facts. Every AI-generated reply passes through 6 automated post-validation checks before it is sent."
   },
-  "subtitle": "Jawab24 is an AI auto-reply tool that helps businesses automatically reply to Facebook comments, Instagram messages, and customer questions using artificial intelligence.",
+  "subtitle": "Jawab24 is an AI auto-reply tool that helps businesses automatically reply to Facebook comments, Instagram and WhatsApp messages, and customer questions using artificial intelligence.",
   "howItWorks": {
     "title": "How Jawab24 Works",
     "text": "When a customer writes a comment on your Facebook post or sends a message to your page, Jawab24 processes it through a 3-layer reply system:",
@@ -24,6 +24,7 @@
     "text": "As an official Meta Tech Provider, Jawab24 connects directly to the platforms where your customers are:",
     "facebook": "Facebook Pages — auto-reply to comments and Messenger messages",
     "instagram": "Instagram Business Accounts — auto-reply to comments and DMs",
+    "whatsapp": "WhatsApp Business numbers — auto-reply to customer messages, voice notes included (Business plan and up)",
     "shopify": "Shopify — sync your product catalog so the AI can answer product questions with accurate prices, descriptions, and availability",
     "salla": "Salla — sync your product catalog from Salla stores, the leading Arabic e-commerce platform"
   },
@@ -124,8 +125,8 @@
     "title": "Frequently Asked Questions",
     "q1": "Is Jawab24 free?",
     "a1": "Jawab24 offers a free trial. After the trial, paid plans are available starting at an affordable monthly rate. All plans include AI smart replies and post replies.",
-    "q2": "Does Jawab24 work with Instagram?",
-    "a2": "Yes. Jawab24 supports both Facebook Pages and Instagram Business Accounts. It can auto-reply to comments and direct messages on both platforms.",
+    "q2": "Does Jawab24 work with Instagram and WhatsApp?",
+    "a2": "Yes. Jawab24 supports Facebook Pages and Instagram Business Accounts on all plans, and WhatsApp Business numbers on the Business plan and up. It auto-replies to comments and direct messages, all from one shared inbox.",
     "q3": "Can Jawab24 reply in Arabic?",
     "a3": "Yes. Jawab24 is built for Arabic-first businesses. The AI understands Arabic (including dialects), replies in Arabic, and the entire interface supports right-to-left layout.",
     "q4": "Does it integrate with Shopify and Salla?",
