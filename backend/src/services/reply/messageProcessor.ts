@@ -117,6 +117,12 @@ export class MessageProcessor {
         // attachment to finish enriching (store-then-enrich). Bounds the wait at
         // MAX_ATTACHMENT_RETRIES so we never block a reply forever.
         attachmentRetries: number = 0,
+        // Sender display name captured by the webhook itself (WhatsApp
+        // `contacts[].profile.name`). WhatsApp has no profile API, so the
+        // webhook is the ONLY name source for that channel — when present it
+        // wins over the adapter lookup. FB/IG webhooks don't carry names, so
+        // it stays undefined there and the Graph API fetch runs as before.
+        webhookSenderName?: string,
     ): Promise<MessageResult> {
         const platform = adapter.platform;
         const pipeline = `${platform}_message` as Pipeline;
@@ -143,13 +149,17 @@ export class MessageProcessor {
             }
             const workspaceId = page.workspaceId;
 
-            // 2. Fetch sender name (best-effort) — do this BEFORE auto-reply check
-            // so dashboard always shows real names, even when page is OFF
-            let senderName: string | undefined;
-            try {
-                senderName = await adapter.fetchSenderName(senderId, page.accessToken, page.id, platformPageId);
-            } catch {
-                // Non-critical — continue without sender name
+            // 2. Resolve sender name (best-effort) — do this BEFORE auto-reply check
+            // so dashboard always shows real names, even when page is OFF.
+            // Webhook-supplied name wins (WhatsApp's only source); adapter fetch
+            // is the fallback (FB/IG Graph API lookup).
+            let senderName: string | undefined = webhookSenderName;
+            if (!senderName) {
+                try {
+                    senderName = await adapter.fetchSenderName(senderId, page.accessToken, page.id, platformPageId);
+                } catch {
+                    // Non-critical — continue without sender name
+                }
             }
             lap('2-fetchSenderName');
 

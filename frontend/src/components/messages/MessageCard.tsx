@@ -2,7 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { FlagTag, ReplySourceBadge, InfoPopover } from '@/components/ui';
+import { FlagTag, ReplySourceBadge, InfoPopover, WhatsAppIcon } from '@/components/ui';
 import { isKbRelatedFlag } from '@/utils/flagReason';
 import {
   Clock,
@@ -65,6 +65,12 @@ export const MessageCard = React.memo(function MessageCard({
     ? conv.senderName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
     : null;
 
+  // Channel identity: only WhatsApp gets a badge — Facebook/Instagram rows stay
+  // pixel-identical to today, so existing merchants see no change (dark-deploy
+  // discipline). `.some()` over incoming messages because legacy outgoing rows
+  // may carry a defaulted platform.
+  const isWhatsApp = conv.messages.some(m => m.platform === 'whatsapp');
+
   // Inline status badge
   const statusBadge = conv.pauseStatus?.paused ? (
     <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-violet border text-[10px] font-bold uppercase tracking-wide">
@@ -122,10 +128,15 @@ export const MessageCard = React.memo(function MessageCard({
 
       {/* Content */}
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        {/* Row 1: Name + time */}
+        {/* Row 1: Name (+ channel badge) + time */}
         <div className="flex items-center gap-2">
-          <span className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">
-            {conv.senderName || tc('unknownUser')}
+          <span className="flex-1 min-w-0 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <span className="min-w-0 truncate">{conv.senderName || tc('unknownUser')}</span>
+            {isWhatsApp && (
+              <span title="WhatsApp" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#25D366] text-white">
+                <WhatsAppIcon className="w-2.5 h-2.5" aria-label="WhatsApp" />
+              </span>
+            )}
           </span>
           <span className="flex-shrink-0 text-[11px] text-subtle tabular-nums">
             {formatTime(conv.lastMessage.createdAt)}
