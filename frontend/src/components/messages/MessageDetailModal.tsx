@@ -11,8 +11,9 @@ import { buildWhatsAppUrl } from '@/lib/whatsapp';
 import { renderMessageText, stripImageDescription } from '@/utils/renderMessageText';
 import { isKbRelatedFlag, isKbGapFlag, getKbGapQuestion } from '@/utils/flagReason';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
+import { formatInternationalPhone, resolveCustomerLabel } from '@/utils/phone';
 import { messagesApi } from '@/lib/api';
-import { useHandoffPauseDuration } from '@/hooks';
+import { useHandoffPauseDuration, useCopyToClipboard } from '@/hooks';
 import type { Conversation } from './MessageCard';
 import {
   User,
@@ -27,6 +28,8 @@ import {
   ChevronRight,
   ArrowDown,
   Loader2,
+  Copy,
+  Check,
 } from 'lucide-react';
 import type { Locale } from 'date-fns';
 
@@ -76,6 +79,14 @@ export function MessageDetailModal({
   const tc = useTranslations('common');
   const tComments = useTranslations('comments');
   const platform = platformProp ?? (isInstagram ? 'instagram' : 'facebook');
+
+  // For WhatsApp the senderId IS the customer's phone number (wa_id); it's the
+  // only stable identity (display names are self-set). Shown under the name, and
+  // used as the name fallback. Empty for FB/IG (opaque PSIDs, never a number).
+  const customerNumber = platform === 'whatsapp' ? formatInternationalPhone(conversation.senderId) : '';
+  // Header/breadcrumb label: name → number → generic. `isPhone` drives dir="ltr".
+  const { label: customerLabel, isPhone: labelIsNumber } = resolveCustomerLabel(conversation.senderName, customerNumber, tc('user'));
+  const { copied: numberCopied, copy: copyNumber } = useCopyToClipboard();
 
   // Fetch full conversation (including outgoing replies) regardless of which tab filter
   // was used to find this conversation. Tabs control which conversations appear in the list,
@@ -251,7 +262,7 @@ export function MessageDetailModal({
               onClick={() => openExternalUrl(buildWhatsAppUrl(conversation.senderId, ''))}
               className="flex items-center gap-1 font-semibold text-muted-foreground hover:text-brand-500 transition-colors truncate"
             >
-              <span className="truncate">{conversation.senderName || tc('user')}</span>
+              <span className="truncate" dir={labelIsNumber ? 'ltr' : undefined}>{customerLabel}</span>
               <ExternalLink className="w-3 h-3 flex-shrink-0" />
             </button>
           ) : platform === 'facebook' ? (
@@ -281,9 +292,29 @@ export function MessageDetailModal({
               <User className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="text-start min-w-0">
-              <h2 id="message-detail-modal-title" className="text-lg font-semibold text-foreground leading-tight truncate">
-                {conversation.senderName || tc('user')}
+              <h2 id="message-detail-modal-title" className="text-lg font-semibold text-foreground leading-tight truncate" dir={labelIsNumber ? 'ltr' : undefined}>
+                {customerLabel}
               </h2>
+              {/* Customer phone (WhatsApp only), tap to copy. Shown under the name;
+                  when the name is missing it's already the h2, so don't repeat it. */}
+              {customerNumber && conversation.senderName && (
+                <button
+                  type="button"
+                  onClick={() => copyNumber(customerNumber)}
+                  title={numberCopied ? t('copied') : t('copyNumber')}
+                  aria-label={numberCopied ? t('copied') : `${t('copyNumber')}: ${customerNumber}`}
+                  className="group/phone flex items-center gap-1 -ms-1 mt-0.5 px-1 py-0.5 rounded text-xs text-muted-foreground hover:text-brand-500 transition-colors"
+                >
+                  <span dir="ltr" className="tabular-nums">{customerNumber}</span>
+                  {numberCopied ? (
+                    <Check className="w-3 h-3 flex-shrink-0 text-brand-500" aria-hidden="true" />
+                  ) : (
+                    // Always visible (muted) — a hover-only icon has no affordance on
+                    // touch, and this inbox is used mostly on mobile.
+                    <Copy className="w-3 h-3 flex-shrink-0 text-icon-muted group-hover/phone:text-brand-500 transition-colors" aria-hidden="true" />
+                  )}
+                </button>
+              )}
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-start">
                   {t('msgCount', { count: messages.filter(m => m.direction === 'incoming').length })}

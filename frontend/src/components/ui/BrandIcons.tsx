@@ -75,6 +75,9 @@ interface PlatformIconProps {
   platform: 'instagram' | 'facebook' | 'whatsapp';
   /** sm = w-4/h-4 container (w-2.5 icon), md = w-5/h-5 container (w-3.5 icon) */
   size?: 'sm' | 'md';
+  /** tint = pastel bg + colored glyph (default). solid = official brand color
+      bg + white glyph — for tiny overlays (avatar-corner channel badges). */
+  variant?: 'tint' | 'solid';
   /** Grey rendering — "connected but auto-reply off" in badge clusters */
   muted?: boolean;
   ariaLabel?: string;
@@ -87,16 +90,36 @@ const PLATFORM_STYLES = {
   whatsapp: { path: WHATSAPP_PATH, classes: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' },
 } as const;
 
+// Official brand colors — theme-independent, so no dark: variants needed.
+const SOLID_CLASSES = {
+  instagram: 'bg-[#E4405F] text-white',
+  facebook: 'bg-[#1877F2] text-white',
+  whatsapp: 'bg-[#25D366] text-white',
+} as const;
+
+/** i18n keys (`comments` namespace) for localized platform names — the
+    single source for PlatformIcon ariaLabel lookups. */
+export const PLATFORM_LABEL_KEYS = {
+  facebook: 'platformFacebook',
+  instagram: 'platformInstagram',
+  whatsapp: 'platformWhatsApp',
+} as const;
+
 const MUTED_CLASSES = 'bg-surface-100 text-icon-muted dark:bg-surface-800';
 
-export function PlatformIcon({ platform, size = 'sm', muted = false, ariaLabel, className }: PlatformIconProps) {
+export function PlatformIcon({ platform, size = 'sm', variant = 'tint', muted = false, ariaLabel, className }: PlatformIconProps) {
   const style = PLATFORM_STYLES[platform] ?? PLATFORM_STYLES.facebook;
+  const colorClasses = muted
+    ? MUTED_CLASSES
+    : variant === 'solid'
+      ? (SOLID_CLASSES[platform] ?? SOLID_CLASSES.facebook)
+      : style.classes;
   return (
     <span
       className={clsx(
         'inline-flex items-center justify-center rounded-full flex-shrink-0',
         size === 'sm' ? 'w-4 h-4' : 'w-5 h-5',
-        muted ? MUTED_CLASSES : style.classes,
+        colorClasses,
         className,
       )}
       aria-label={ariaLabel}

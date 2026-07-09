@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect } from 'vitest';
 import { MessageDetailModal } from './MessageDetailModal';
 import { openExternalUrl } from '@/lib/openExternalUrl';
@@ -121,6 +121,63 @@ describe('MessageDetailModal', () => {
     );
 
     expect(screen.getAllByText('TestUser').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('shows the customer phone number under the name for WhatsApp conversations', () => {
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        platform="whatsapp"
+        conversation={makeConversation({ senderId: '46700224720', senderName: 'Sara' })}
+      />
+    );
+
+    // Name stays primary; the number is a copyable subtitle beneath it.
+    expect(screen.getAllByText('Sara').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('button', { name: /Copy number/ })).toHaveTextContent('+46 70 022 47 20');
+  });
+
+  it('copies the number to the clipboard when the phone button is tapped', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        platform="whatsapp"
+        conversation={makeConversation({ senderId: '46700224720', senderName: 'Sara' })}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Copy number/ }));
+
+    expect(writeText).toHaveBeenCalledWith('+46 70 022 47 20');
+    // Affordance flips to the "Copied" confirmation.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument());
+  });
+
+  it('uses the phone number as the header name when a WhatsApp conversation has no name', () => {
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        platform="whatsapp"
+        conversation={makeConversation({ senderId: '46700224720', senderName: null })}
+      />
+    );
+
+    expect(screen.getAllByText('+46 70 022 47 20').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not show a phone number for non-WhatsApp conversations', () => {
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        conversation={makeConversation({ senderId: '46700224720', senderName: 'Ali' })}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: /Copy number/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('+46 70 022 47 20')).not.toBeInTheDocument();
   });
 
   it('shows reply textarea and send button', () => {

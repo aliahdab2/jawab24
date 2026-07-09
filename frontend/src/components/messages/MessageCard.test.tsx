@@ -365,7 +365,26 @@ describe('MessageCard', () => {
   });
 
   describe('channel badge', () => {
-    it('shows the WhatsApp badge when the conversation has whatsapp messages', () => {
+    it.each([
+      ['whatsapp', 'WhatsApp'],
+      ['instagram', 'Instagram'],
+      ['facebook', 'Facebook'],
+    ] as const)('shows the %s badge on multi-channel workspaces', (platform, label) => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          showChannelBadge
+          conversation={makeConversation({
+            messages: [makeMessage({ platform })],
+            lastMessage: makeMessage({ platform }),
+          })}
+        />
+      );
+
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    });
+
+    it('shows NO channel badge on single-channel workspaces (showChannelBadge omitted)', () => {
       render(
         <MessageCard
           {...defaultProps}
@@ -376,21 +395,88 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByLabelText('WhatsApp')).toBeInTheDocument();
+      for (const label of ['WhatsApp', 'Instagram', 'Facebook']) {
+        expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+      }
     });
 
-    it('shows NO channel badge for facebook conversations (existing UI unchanged)', () => {
+    it('prefers whatsapp over a legacy defaulted-facebook outgoing row', () => {
+      const legacyOutgoing = makeMessage({
+        id: '1',
+        direction: 'outgoing',
+        replied: true,
+        replyMethod: 'ai',
+        platform: 'facebook', // legacy rows were stamped with the default
+      });
+      const incoming = makeMessage({ id: '2', platform: 'whatsapp' });
+
       render(
         <MessageCard
           {...defaultProps}
+          showChannelBadge
           conversation={makeConversation({
-            messages: [makeMessage({ platform: 'facebook' })],
-            lastMessage: makeMessage({ platform: 'facebook' }),
+            messages: [legacyOutgoing, incoming],
+            lastMessage: incoming,
           })}
         />
       );
 
-      expect(screen.queryByLabelText('WhatsApp')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('WhatsApp')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Facebook')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('customer identity (WhatsApp number)', () => {
+    it('falls back to the formatted phone number when a WhatsApp conversation has no name', () => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            senderId: '46700224720',
+            senderName: null,
+            messages: [makeMessage({ platform: 'whatsapp', senderName: null })],
+            lastMessage: makeMessage({ platform: 'whatsapp', senderName: null }),
+          })}
+        />
+      );
+
+      expect(screen.getByText('+46 70 022 47 20')).toBeInTheDocument();
+      expect(screen.queryByText('Unknown User')).not.toBeInTheDocument();
+    });
+
+    it('prefers the WhatsApp display name over the number when a name exists', () => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            senderId: '46700224720',
+            senderName: 'Sara',
+            messages: [makeMessage({ platform: 'whatsapp' })],
+            lastMessage: makeMessage({ platform: 'whatsapp' }),
+          })}
+        />
+      );
+
+      expect(screen.getByText('Sara')).toBeInTheDocument();
+      expect(screen.queryByText('+46 70 022 47 20')).not.toBeInTheDocument();
+    });
+
+    it('never renders a Facebook PSID as a phone number (keeps Unknown User)', () => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            // Digits, but a Facebook PSID must never be shown as a dialable number.
+            senderId: '46700224720',
+            senderName: null,
+            messages: [makeMessage({ platform: 'facebook', senderName: null })],
+            lastMessage: makeMessage({ platform: 'facebook', senderName: null }),
+          })}
+        />
+      );
+
+      expect(screen.getByText('Unknown User')).toBeInTheDocument();
+      expect(screen.queryByText('+46 70 022 47 20')).not.toBeInTheDocument();
     });
   });
 });
