@@ -127,13 +127,15 @@
 
 - **Key API Endpoints Used**:
   - `POST /{version}/{phone_number_id}/messages` — send text message (with `messaging_product: "whatsapp"`)
-  - `POST /{version}/{phone_number_id}/messages` — mark as read (with `status: "read"`, `message_id: wamid`)
+  - `POST /{version}/{phone_number_id}/messages` — mark as read + typing indicator (`status: "read"`, `message_id: wamid`, `typing_indicator: {type: "text"}` — one call does both; indicator clears on reply or after 25s)
+
+- **Read receipts + typing**: sent fire-and-forget at **webhook receipt** (`processWhatsAppWebhookAsync`), not via the adapter's typing hook (which lacks the wamid). Blue ticks + "typing…" appear instantly while the reply-delay + AI window (~8s) runs. Gated on the page having `whatsappAutoReplyEnabled` + a token; typing suppressed for stickers (stored silently, no reply follows).
 
 - **Constraints**:
   - 24h messaging window: free-form replies only allowed within 24h of last customer message
   - Template messages required outside window (Phase 4 — not yet implemented)
   - No sender profile API — display name comes from webhook `contacts[].profile.name` only (cached in DB)
-  - `sendTypingIndicator` is a no-op (markAsRead needs wamid, not senderId — Phase 6)
+  - Adapter `sendTypingIndicator` is a deliberate no-op (read+typing happen at webhook receipt, which has the wamid)
 
 - **Message ID Format**: `wamid.xxx` (e.g., `wamid.HBgLMTkxMzExMTExMTEVAgASGBI...`)
 

@@ -506,6 +506,9 @@ export class MessagesService {
                 workspaceId,
                 conversationId: conversation.id,
                 platformMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                // Without this the column defaulted to 'facebook', mislabeling every
+                // outgoing WhatsApp/Instagram reply (found in the 2026-07-08 pilot).
+                platform: conversation.platform ?? platform,
                 senderId,
                 ...(conversation.senderName ?? resolvedName ? { senderName: conversation.senderName ?? resolvedName } : {}),
                 message: replyText,

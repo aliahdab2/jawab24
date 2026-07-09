@@ -96,13 +96,17 @@ class WhatsAppService {
     }
 
     /**
-     * Mark a message as read (shows blue ticks to the sender).
-     * Used as the "typing indicator" equivalent for WhatsApp.
+     * Mark a message as read (blue ticks) and, when a reply will follow, show
+     * the typing indicator while it is generated. One Cloud API call does both;
+     * WhatsApp clears the indicator when our reply arrives or after 25s —
+     * comfortably above the reply-delay + AI-generation window. Meta's guidance:
+     * only show typing if you are going to respond, hence the flag.
      */
     async markAsRead(
         phoneNumberId: string,
         messageId: string,
         accessToken: string,
+        options: { typing?: boolean } = {},
     ): Promise<void> {
         await axios.post(
             `${WHATSAPP_API}/${phoneNumberId}/messages`,
@@ -110,10 +114,11 @@ class WhatsAppService {
                 messaging_product: 'whatsapp',
                 status: 'read',
                 message_id: messageId,
+                ...(options.typing ? { typing_indicator: { type: 'text' } } : {}),
             },
             { headers: { Authorization: `Bearer ${accessToken}` } },
         ).catch(() => {
-            // Fire-and-forget — blue ticks are cosmetic
+            // Fire-and-forget — receipts are cosmetic and must never block the pipeline
         });
     }
 

@@ -9,6 +9,7 @@ import { auditLog } from '../services/auditLog';
 import { captureError } from '../utils/sentryHelpers';
 import * as Sentry from '@sentry/node';
 import { handleNonTextMessage, handleWhatsAppNonTextMessage } from '../services/reply/nonTextHandler';
+import { whatsappService } from '../services/whatsapp';
 import { isSharedPostType } from '../utils/instagram';
 import { Logger, noopLogger, createRequestLogger } from '../types';
 import { db } from '../db';
@@ -641,6 +642,16 @@ export class WebhookController {
                     if (c.profile?.name) contactNames.set(c.wa_id, c.profile.name);
                 }
 
+                // One page fetch per change: read receipts need the WABA token at
+                // receipt time (the worker refetches later for the reply). Receipts
+                // are skipped — never failed — when the page is missing or auto-reply
+                // is off, since no reply will follow and a "typing…" would lie.
+                const waPage = await pagesService.getPageByWhatsAppPhoneNumberId(phoneNumberId)
+                    .catch(() => null);
+                const receiptToken = (waPage?.whatsappAutoReplyEnabled && waPage.whatsappAccessToken)
+                    ? waPage.whatsappAccessToken
+                    : null;
+
                 for (const msg of waMessages) {
                     const senderName = contactNames.get(msg.from);
 
@@ -649,6 +660,13 @@ export class WebhookController {
                     // and media captions (marked so the AI knows an attachment came with it).
                     const textBody = this.extractWhatsAppText(msg);
                     if (textBody) {
+                        // Blue ticks + "typing…" the instant the message lands. The reply
+                        // takes a few seconds (deliberate reply delay + AI generation) and
+                        // without this the wait reads as dead air — Messenger shows typing
+                        // for the same window (founder pilot feedback, 2026-07-08).
+                        if (receiptToken) {
+                            void whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: true });
+                        }
                         try {
                             const jobId = await enqueueMessage({
                                 jobType: 'whatsapp_message',
@@ -673,6 +691,11 @@ export class WebhookController {
                     // pipeline; other attachments store a placeholder + text-only nudge.
                     const media = msg.audio ?? msg.image ?? msg.video ?? msg.document ?? msg.sticker;
                     if (media) {
+                        // Read receipt for media too; typing only when a reply follows —
+                        // stickers are stored silently, so typing there would mislead.
+                        if (receiptToken) {
+                            void whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: msg.type !== 'sticker' });
+                        }
                         await handleWhatsAppNonTextMessage(phoneNumberId, {
                             senderId: msg.from,
                             messageId: msg.id,
