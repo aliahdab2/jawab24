@@ -348,8 +348,19 @@ async function resolveDeliveredTargetAndDispatch(
     if (!store) return;
 
     // Prefer the canonical order (E.164 phone, order name) over the webhook's
-    // unnormalized destination fields; fall back to destination if the fetch fails.
-    const target = await shopifyService.getOrderNotificationTarget(store.id, orderId);
+    // unnormalized destination fields. getOrderNotificationTarget THROWS on a
+    // GraphQL failure — and since this runs post-ACK there's no webhook retry to
+    // save us, so a throw must NOT drop the notification: fall back to the
+    // destination fields the webhook already carries (no API call needed).
+    let target: Awaited<ReturnType<typeof shopifyService.getOrderNotificationTarget>> = null;
+    try {
+        target = await shopifyService.getOrderNotificationTarget(store.id, orderId);
+    } catch (error) {
+        captureError(error, 'Shopify getOrderNotificationTarget failed; using webhook destination', {
+            tags: { service: 'shopify', webhook: 'fulfillments' },
+            extra: { orderId },
+        });
+    }
     const phone = target?.phone || destination?.phone;
     if (!phone) return;
 

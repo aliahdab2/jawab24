@@ -903,6 +903,28 @@ describe('Shopify Controller', () => {
             });
         });
 
+        // Post-ACK there is no webhook retry, so a THROW from the canonical-order lookup
+        // (getOrderNotificationTarget throws on GraphQL failure) must NOT drop the SMS —
+        // fall back to the destination fields the webhook already carries.
+        it('falls back to the webhook destination when the order fetch THROWS (no retry to save us)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            mockGetOrderNotificationTarget.mockRejectedValue(new Error('Shopify GraphQL THROTTLED after 3 retries'));
+            const body = { order_id: 964176593, shipment_status: 'delivered', destination: { first_name: 'Sara', phone: '+966500000000' } };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'fulfillments/update' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            await webhookFulfillments(req, mockReply());
+
+            await vi.waitFor(() => expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1));
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                type: 'order_delivered', customerPhone: '+966500000000', customerName: 'Sara',
+                // canonical order name unavailable → falls back to the order id
+                orderNumber: '964176593',
+            });
+        });
+
         it('does NOT dispatch for non-delivered shipment statuses', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
