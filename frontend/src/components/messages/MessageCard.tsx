@@ -14,7 +14,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { formatMessageTime } from '@/utils/dateUtils';
-import { formatInternationalPhone } from '@/utils/phone';
+import { formatInternationalPhone, resolveCustomerLabel } from '@/utils/phone';
 import { renderMessageText, stripImageDescription } from '@/utils/renderMessageText';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
 import type { Message } from '@/lib/api';
@@ -77,8 +77,7 @@ export const MessageCard = React.memo(function MessageCard({
   // "Unknown User". Facebook/Instagram senderIds are opaque PSIDs, never a
   // number, so this fallback is WhatsApp-only.
   const waNumber = isWhatsApp ? formatInternationalPhone(conv.senderId) : '';
-  const displayLabel = conv.senderName || waNumber || tc('unknownUser');
-  const labelIsNumber = !conv.senderName && !!waNumber;
+  const { label: displayLabel, isPhone: labelIsNumber } = resolveCustomerLabel(conv.senderName, waNumber, tc('unknownUser'));
 
   // Inline status badge
   const statusBadge = conv.pauseStatus?.paused ? (

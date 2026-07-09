@@ -27,3 +27,31 @@ export function formatInternationalPhone(input: string): string {
   }
   return `+${digits}`;
 }
+
+export interface CustomerLabel {
+  /** The text to render for the customer. */
+  label: string;
+  /**
+   * True when `label` is the phone number (name was missing). The caller MUST
+   * render it inside `dir="ltr"` — a phone number is bidi-mangled in the Arabic
+   * (RTL) layout. Keeping this here couples the LTR rule to the decision that
+   * produced it, so the two inbox surfaces can't drift apart.
+   */
+  isPhone: boolean;
+}
+
+/**
+ * Resolve the label for a conversation's customer: display name first, else the
+ * (already-formatted) phone number, else `fallback`. Shared by the inbox list
+ * (`MessageCard`) and the detail header (`MessageDetailModal`) so the name→
+ * number→fallback precedence and the LTR rule live in exactly one place.
+ */
+export function resolveCustomerLabel(
+  name: string | null | undefined,
+  phone: string,
+  fallback: string,
+): CustomerLabel {
+  if (name) return { label: name, isPhone: false };
+  if (phone) return { label: phone, isPhone: true };
+  return { label: fallback, isPhone: false };
+}

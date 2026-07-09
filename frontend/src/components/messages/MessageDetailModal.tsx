@@ -11,7 +11,7 @@ import { buildWhatsAppUrl } from '@/lib/whatsapp';
 import { renderMessageText, stripImageDescription } from '@/utils/renderMessageText';
 import { isKbRelatedFlag, isKbGapFlag, getKbGapQuestion } from '@/utils/flagReason';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
-import { formatInternationalPhone } from '@/utils/phone';
+import { formatInternationalPhone, resolveCustomerLabel } from '@/utils/phone';
 import { messagesApi } from '@/lib/api';
 import { useHandoffPauseDuration } from '@/hooks';
 import type { Conversation } from './MessageCard';
@@ -82,6 +82,8 @@ export function MessageDetailModal({
   // only stable identity (display names are self-set). Shown under the name, and
   // used as the name fallback. Empty for FB/IG (opaque PSIDs, never a number).
   const customerNumber = platform === 'whatsapp' ? formatInternationalPhone(conversation.senderId) : '';
+  // Header/breadcrumb label: name → number → generic. `isPhone` drives dir="ltr".
+  const { label: customerLabel, isPhone: labelIsNumber } = resolveCustomerLabel(conversation.senderName, customerNumber, tc('user'));
 
   // Fetch full conversation (including outgoing replies) regardless of which tab filter
   // was used to find this conversation. Tabs control which conversations appear in the list,
@@ -257,7 +259,7 @@ export function MessageDetailModal({
               onClick={() => openExternalUrl(buildWhatsAppUrl(conversation.senderId, ''))}
               className="flex items-center gap-1 font-semibold text-muted-foreground hover:text-brand-500 transition-colors truncate"
             >
-              <span className="truncate" dir={!conversation.senderName && customerNumber ? 'ltr' : undefined}>{conversation.senderName || customerNumber || tc('user')}</span>
+              <span className="truncate" dir={labelIsNumber ? 'ltr' : undefined}>{customerLabel}</span>
               <ExternalLink className="w-3 h-3 flex-shrink-0" />
             </button>
           ) : platform === 'facebook' ? (
@@ -287,8 +289,8 @@ export function MessageDetailModal({
               <User className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="text-start min-w-0">
-              <h2 id="message-detail-modal-title" className="text-lg font-semibold text-foreground leading-tight truncate" dir={!conversation.senderName && customerNumber ? 'ltr' : undefined}>
-                {conversation.senderName || customerNumber || tc('user')}
+              <h2 id="message-detail-modal-title" className="text-lg font-semibold text-foreground leading-tight truncate" dir={labelIsNumber ? 'ltr' : undefined}>
+                {customerLabel}
               </h2>
               {/* Customer phone (WhatsApp only). Shown under the name; when the
                   name is missing it's already the h2, so don't repeat it here. */}
