@@ -111,10 +111,11 @@ export default function WhatIsJawab24() {
                 "alternateName": "جواب24",
                 "applicationCategory": "BusinessApplication",
                 "operatingSystem": "Web, iOS, Android",
-                "description": "Arabic-first AI auto-reply platform for businesses selling through Facebook, Instagram, Shopify, and Salla. Automatically replies to customer comments and messages in Arabic and English.",
+                "description": "Arabic-first AI auto-reply platform for businesses selling through WhatsApp, Facebook, Instagram, Shopify, and Salla. Automatically replies to customer comments and messages in the customer's language.",
                 "featureList": [
                   "AI auto-replies to Facebook comments and Messenger messages",
                   "AI auto-replies to Instagram comments and direct messages",
+                  "AI auto-replies to WhatsApp Business messages, voice notes included",
                   "AI-powered automatic replies (Smart Replies) with 99.6% eval accuracy",
                   "Per-post keyword replies (Post Replies) — comment matches keyword, sends reply via DM",
                   "Knowledge Base with RAG (Retrieval-Augmented Generation) search",
@@ -216,6 +217,7 @@ export default function WhatIsJawab24() {
               features={[
                 t('platforms.facebook'),
                 t('platforms.instagram'),
+                t('platforms.whatsapp'),
                 t('platforms.shopify'),
                 t('platforms.salla'),
               ]}
