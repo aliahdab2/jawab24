@@ -66,6 +66,18 @@ Notes:
 
 ## Phase 5 — GA flip (after a clean pilot bake, e.g. 2–3 days)
 
+**Marketing + packaging land here, BEFORE the env flip** (plan: `.planning/WHATSAPP_MARKETING_LAUNCH.md`):
+
+- [ ] **Marketing branch:** rebase `feat/whatsapp-ga-marketing` on main, resolve, CI green.
+      Contains: `plans.ts` `whatsappEnabled` flip (business/pro/scale-20k/scale-30k),
+      `WHATSAPP_PLAN_REQUIRED` connect gate, landing/pricing/i18n sweep, teaser post → "now live".
+- [ ] Merge-day-only commit on that branch: bump sitemap `<lastmod>` for `/`, `/pricing`,
+      `/blog/whatsapp-auto-reply-jawab24` to today; `npm run sitemap:validate`.
+- [ ] Merge `feat/whatsapp-ga-marketing` to main — the deploy below ships marketing + plan
+      flip + env flip in ONE rebuild (`seed-plans` reconciles `whatsapp_enabled` in the DB).
+      **Ordering is load-bearing:** clearing the allowlist without this merge opens WhatsApp
+      to Starter (no plan gate exists on main today).
+
 ```bash
 ssh -i ~/.ssh/id_jawab24_deploy root@91.99.95.196
 # frontend.env: remove NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY (keep CONFIG_ID!)
@@ -75,6 +87,13 @@ exit
 ```
 
 - [ ] Verify with a non-admin account: WhatsApp UI now visible; connect works.
+- [ ] **Marketing verification** (/ar AND /en): landing shows WhatsApp chip + features card +
+      FAQ; `/pricing` shows the WhatsApp row included on Business+ and NOT included on Starter;
+      blog teaser reads "now live"; meta/OG descriptions mention WhatsApp (view-source).
+- [ ] **Plan-gate verification:** Starter account connect attempt → 403 `WHATSAPP_PLAN_REQUIRED`
+      toast; Business account → Embedded Signup opens and connects.
+- [ ] Plans flip is seed-driven — confirm `plans` table shows `whatsapp_enabled=true` for
+      business/pro/scale-20k/scale-30k after deploy (seed runs post-migrate).
 - [ ] Revisit the **coexistence copy** (`pages.whatsappTooltip`, `pages.channelWhatsAppDesc` in `frontend/src/i18n/{en,ar}/pages.json`) — "use a number not already on the WhatsApp app" is the #1 adoption barrier; decide softening/Coexistence support post-launch.
 - [ ] Update `SYSTEM_ANALYSIS.md` + `.planning/codebase/INTEGRATIONS.md` (WhatsApp status → live) in the same commit as any code change.
 
