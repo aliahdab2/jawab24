@@ -7,6 +7,7 @@ import { db } from '../src/db';
 import { ecommerceStores } from '../src/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { decrypt } from '../src/services/ecommerceCrypto';
+import { SHOPIFY_API_VERSION } from '../src/services/shopify';
 import axios from 'axios';
 
 const STORE_DOMAIN = 'jawab24-demo.myshopify.com';
@@ -42,7 +43,7 @@ const STORE_DOMAIN = 'jawab24-demo.myshopify.com';
         }`;
 
         const res = await axios.post(
-            `https://${STORE_DOMAIN}/admin/api/2025-01/graphql.json`,
+            `https://${STORE_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
             { query },
             { headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' } },
         );

@@ -5,7 +5,7 @@ import { OrderNotificationsCard } from '@/components/settings';
 import { StoreAnalyticsSummary } from '@/components/analytics';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
+import { Card, Button, PageHeader, PageSkeleton, ConfirmationModal, Badge } from '@/components/ui';
 import { ecommerceApi, sallaApi, zidApi, pagesApi } from '@/lib/api';
 import { toast } from 'sonner';
 import {
@@ -39,6 +39,11 @@ interface PlatformConfig {
   icon: React.ReactNode;
   iconClass: string;
   storeMetaClass: string;
+  /** Public availability. 'coming_soon' shows a badge on the not-connected card
+   *  (the connect flow stays open for admin/early-access testing; the backend
+   *  route only exists when the platform's client id is configured). Defaults to
+   *  'live' when omitted. */
+  status?: 'live' | 'coming_soon';
   /** Returns the backend path to initiate reconnect OAuth. */
   getReconnectPath: (storeDomain: string) => string;
   getStore: () => Promise<EcommerceStore>;
@@ -92,6 +97,9 @@ const PLATFORMS: PlatformConfig[] = [
     icon: <ZidIcon className="w-8 h-8" />,
     iconClass: 'icon-bg-orange',
     storeMetaClass: 'status-orange border',
+    // Zid integration is being rebuilt (see docs/integrations/zid.md, DECISIONS D-020).
+    // Surface it honestly as "coming soon" until the rebuild ships.
+    status: 'coming_soon',
     getReconnectPath: () => '/zid/auth',
     getStore: zidApi.getStore,
     syncProducts: zidApi.syncProducts,
@@ -447,7 +455,12 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             {platform.icon}
           </div>
           <div className="text-start">
-            <h3 className="font-bold text-lg landscape:text-base">{t('title')}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-lg landscape:text-base">{t('title')}</h3>
+              {platform.status === 'coming_soon' && (
+                <Badge variant="warning" size="xs">{tInt('notConnected.comingSoon')}</Badge>
+              )}
+            </div>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
               <Sparkles className="w-3 h-3" aria-hidden="true" />
               {tInt('notConnected.freeLabel')}
@@ -494,11 +507,12 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
         </div>
 
         {/* Connect action.
-            The comingSoon badge is shown in the header (above) as a public
-            signal — but the Connect flow stays open so early-access merchants
-            and internal testing can still complete OAuth. When the platform
-            graduates to status='live', the badge disappears; nothing else
-            changes here. */}
+            For a status==='coming_soon' platform the header shows a "coming soon"
+            badge as a public signal — but the Connect flow stays open so early-access
+            merchants and internal testing can still complete OAuth (the backend route
+            only exists when the platform's client id is configured, so it fails safe
+            otherwise). When the platform graduates to status='live', the badge
+            disappears; nothing else changes here. */}
         <div className="flex flex-col gap-2">
           {platform.requiresDomain && (
             <div>

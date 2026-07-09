@@ -60,7 +60,7 @@ vi.mock('../../src/db', () => ({
     },
 }));
 
-import { markStoreNeedsReauth, updateStoreTokens, createStore, applySyncedStoreInfo } from '../../src/services/ecommerce';
+import { markStoreNeedsReauth, updateStoreTokens, createStore, applySyncedStoreInfo, deactivateStore, disconnectStore } from '../../src/services/ecommerce';
 
 beforeEach(() => {
     state.selectResult = [];
@@ -127,6 +127,33 @@ describe('updateStoreTokens — clear-on-success', () => {
         await updateStoreTokens('store-1', { accessToken: 'a' });
         expect(state.capturedUpdateSet).toBeDefined();
         expect('platformData' in (state.capturedUpdateSet as object)).toBe(false);
+    });
+});
+
+describe('token blanking on inactive (SI-4)', () => {
+    // Defense-in-depth: the encrypted OAuth tokens must be cleared the instant a store
+    // goes inactive, not left at rest for the 30-day retention window before purgeStore.
+    it('deactivateStore blanks access/refresh tokens (accessToken NOT NULL → "") and flips isActive', async () => {
+        await deactivateStore('salla', 'my-store.salla.sa');
+        expect(state.capturedUpdateSet).toMatchObject({
+            isActive: false,
+            accessToken: '',
+            accessTokenIv: '',
+            refreshToken: null,
+            refreshTokenIv: null,
+        });
+        expect(state.capturedUpdateSet?.uninstalledAt).toBeInstanceOf(Date);
+    });
+
+    it('disconnectStore also blanks tokens (store update is the last SET captured)', async () => {
+        await disconnectStore('store-1');
+        expect(state.capturedUpdateSet).toMatchObject({
+            isActive: false,
+            accessToken: '',
+            accessTokenIv: '',
+            refreshToken: null,
+            refreshTokenIv: null,
+        });
     });
 });
 

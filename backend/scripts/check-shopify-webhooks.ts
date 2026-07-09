@@ -9,7 +9,7 @@ import { db } from '../src/db';
 import { ecommerceStores } from '../src/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { decrypt } from '../src/services/ecommerceCrypto';
-import { registerWebhooks, saveWebhookStatus } from '../src/services/shopify';
+import { registerWebhooks, saveWebhookStatus, SHOPIFY_API_VERSION } from '../src/services/shopify';
 import axios from 'axios';
 
 const STORE_DOMAIN = 'jawab24-demo.myshopify.com';
@@ -25,7 +25,7 @@ const STORE_DOMAIN = 'jawab24-demo.myshopify.com';
 
         // 1. List current webhooks on Shopify
         const list = await axios.get(
-            `https://${STORE_DOMAIN}/admin/api/2025-01/webhooks.json`,
+            `https://${STORE_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
             { headers: { 'X-Shopify-Access-Token': accessToken } },
         );
         const existing = list.data?.webhooks ?? [];
@@ -50,7 +50,7 @@ const STORE_DOMAIN = 'jawab24-demo.myshopify.com';
 
         // 3. List again to confirm
         const list2 = await axios.get(
-            `https://${STORE_DOMAIN}/admin/api/2025-01/webhooks.json`,
+            `https://${STORE_DOMAIN}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
             { headers: { 'X-Shopify-Access-Token': accessToken } },
         );
         const final = list2.data?.webhooks ?? [];

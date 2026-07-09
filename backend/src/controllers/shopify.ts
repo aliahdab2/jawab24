@@ -228,10 +228,10 @@ export async function webhookProductsUpdate(request: FastifyRequest, reply: Fast
         if (topic === 'products/delete') {
             await deleteSingleProduct(store.id, String(payload.id));
         } else {
-            // products/create + products/update
-            const normalized = shopifyService.mapShopifyWebhookProduct(payload as never);
-            // Stamp the store's currency since the REST webhook doesn't include it.
-            normalized.currency = store.storeCurrency || normalized.currency;
+            // products/create + products/update. The REST webhook has no shop currency,
+            // so pass the store's currency in — the mapper builds both currency and the
+            // priceRange string with it, matching the full-sync format immediately.
+            const normalized = shopifyService.mapShopifyWebhookProduct(payload as never, store.storeCurrency || '');
             await upsertSingleProduct(store.id, normalized);
         }
 
@@ -294,6 +294,10 @@ function buildShopifyOrderEvent(storeId: string, topic: string, body: unknown): 
     } else if (topic === 'orders/fulfilled') {
         return orderShippedEvent('shopify', storeId, { customerPhone: phone, customerName, orderId, orderNumber, trackingNumber });
     }
+    // orders/cancelled is subscribed but intentionally unhandled (no cancellation
+    // notification is designed yet) → returns null here, so the webhook is 200'd
+    // without dispatching. Add a branch here + an i18n template to enable it.
+    //
     // Delivery is NOT an orders/* event: the order-level fulfillment_status enum is only
     // null|partial|fulfilled|restocked — never 'delivered'. Delivery arrives on the
     // fulfillments/update topic (see webhookFulfillments) via fulfillment.shipment_status.

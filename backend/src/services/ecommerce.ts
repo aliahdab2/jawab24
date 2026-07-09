@@ -391,11 +391,26 @@ export async function updateStoreTokens(storeId: string, tokens: {
         .where(eq(ecommerceStores.id, storeId));
 }
 
+// Blank the encrypted OAuth tokens the instant a store goes inactive (uninstall or
+// merchant disconnect) — defense-in-depth so valid tokens don't sit at rest for the
+// 30-day retention window before purgeStore hard-deletes the row. accessToken/IV are
+// NOT NULL, so they're set to '' (empty, un-decryptable); refresh token/IV → NULL.
+// A reconnect overwrites all four via createStore's onConflictDoUpdate, and no code
+// path reads tokens for an inactive store (resolveStoreAccessToken + the sync/refresh
+// selectors all gate on isActive), so this is safe.
+const BLANKED_TOKEN_FIELDS = {
+    accessToken: '',
+    accessTokenIv: '',
+    refreshToken: null,
+    refreshTokenIv: null,
+} as const;
+
 export async function deactivateStore(platform: EcommercePlatform, storeDomain: string) {
     await db.update(ecommerceStores).set({
         isActive: false,
         uninstalledAt: new Date(),
         updatedAt: new Date(),
+        ...BLANKED_TOKEN_FIELDS,
     }).where(and(eq(ecommerceStores.storeDomain, storeDomain), eq(ecommerceStores.platform, platform)));
 }
 
@@ -408,6 +423,7 @@ export async function disconnectStore(storeId: string) {
         isActive: false,
         uninstalledAt: new Date(),
         updatedAt: new Date(),
+        ...BLANKED_TOKEN_FIELDS,
     }).where(eq(ecommerceStores.id, storeId));
 }
 

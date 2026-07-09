@@ -32,6 +32,7 @@
   "notConnected": {
     "connectBtn": "Connect Store",
     "freeLabel": "Free to connect",
+    "comingSoon": "Coming soon",
     "howItWorks": "How it works",
     "step1": "Connect your store",
     "step2": "Products sync automatically",

@@ -5,6 +5,7 @@ vi.mock('../../src/db', () => ({
     db: {
         delete: vi.fn(),
         select: vi.fn(),
+        update: vi.fn(),
     },
 }));
 
@@ -16,18 +17,21 @@ vi.mock('../../src/db/schema', () => ({
     otpCodes: { id: 'otp_codes.id', expiresAt: 'otp_codes.expires_at' },
     semanticCache: { id: 'semantic_cache.id', createdAt: 'semantic_cache.created_at' },
     ecommerceStores: { id: 'ecommerce_stores.id', isActive: 'ecommerce_stores.is_active', uninstalledAt: 'ecommerce_stores.uninstalled_at' },
+    customerNotificationsLog: { id: 'customer_notifications_log.id', createdAt: 'customer_notifications_log.created_at' },
+    emailSends: { id: 'email_sends.id', createdAt: 'email_sends.created_at', htmlBody: 'email_sends.html_body' },
 }));
 
 vi.mock('drizzle-orm', () => ({
     lt: vi.fn((a: any, b: any) => ({ op: 'lt', field: a, value: b })),
     eq: vi.fn((a: any, b: any) => ({ op: 'eq', field: a, value: b })),
+    ne: vi.fn((a: any, b: any) => ({ op: 'ne', field: a, value: b })),
     and: vi.fn((...conds: any[]) => ({ op: 'and', conds })),
     sql: vi.fn((strings: TemplateStringsArray, ...values: any[]) => ({ strings, values })),
 }));
 
-import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, cleanupSemanticCache, cleanupInactiveEcommerceStores, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
+import { cleanupAiCache, cleanupLogs, cleanupUsageLogs, cleanupRefreshTokens, cleanupSemanticCache, cleanupInactiveEcommerceStores, cleanupCustomerNotificationLogs, cleanupEmailBodies, runAllCleanupTasks, getAiCacheStats } from '../../src/utils/cleanup';
 import { db } from '../../src/db';
-import { lt } from 'drizzle-orm';
+import { lt, ne } from 'drizzle-orm';
 import { SEMANTIC_CACHE_TTL_DAYS } from '../../src/services/kb/semantic-cache';
 
 function mockDeleteChain(batches: Array<Array<{ id: string }>>) {
@@ -40,6 +44,15 @@ function mockDeleteChain(batches: Array<Array<{ id: string }>>) {
     const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
     vi.mocked(db.delete).mockReturnValue({ where: mockWhere } as any);
     return { mockWhere, mockReturning };
+}
+
+// db.update(...).set(...).where(...).returning() — used by cleanupEmailBodies.
+function mockUpdateChain(rows: Array<{ id: string }>) {
+    const mockReturning = vi.fn(() => Promise.resolve(rows));
+    const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+    const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+    vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+    return { mockSet, mockWhere };
 }
 
 describe('cleanup utilities', () => {
@@ -163,14 +176,67 @@ describe('cleanup utilities', () => {
         });
     });
 
+    describe('cleanupCustomerNotificationLogs', () => {
+        it('hard-deletes notification-log rows older than the retention window, keyed on created_at', async () => {
+            mockDeleteChain([[{ id: 'n-1' }, { id: 'n-2' }], []]);
+
+            const result = await cleanupCustomerNotificationLogs(90);
+
+            expect(db.delete).toHaveBeenCalled();
+            expect(result.table).toBe('customer_notifications_log');
+            expect(result.deletedCount).toBe(2);
+            const cutoffCall = vi.mocked(lt).mock.calls.find(c => c[0] === 'customer_notifications_log.created_at');
+            expect(cutoffCall).toBeDefined();
+            const daysBack = (Date.now() - (cutoffCall![1] as Date).getTime()) / 86_400_000;
+            expect(daysBack).toBeCloseTo(90, 1);
+        });
+
+        it('surfaces DB errors in the result', async () => {
+            vi.mocked(db.delete).mockImplementation(() => { throw new Error('boom'); });
+            const result = await cleanupCustomerNotificationLogs(90);
+            expect(result.error).toBe('boom');
+            expect(result.deletedCount).toBe(0);
+        });
+    });
+
+    describe('cleanupEmailBodies', () => {
+        it('blanks html_body older than the window (only non-empty rows) and returns the count', async () => {
+            const { mockSet } = mockUpdateChain([{ id: 'e-1' }, { id: 'e-2' }]);
+
+            const result = await cleanupEmailBodies(30);
+
+            expect(db.update).toHaveBeenCalled();
+            // html_body is NOT NULL → blanked to '' (not NULL).
+            expect(mockSet).toHaveBeenCalledWith({ htmlBody: '' });
+            expect(result.table).toBe('email_sends');
+            expect(result.deletedCount).toBe(2);
+            // Cutoff ~30 days back on created_at; guarded so already-blanked rows are skipped.
+            const cutoffCall = vi.mocked(lt).mock.calls.find(c => c[0] === 'email_sends.created_at');
+            expect(cutoffCall).toBeDefined();
+            const daysBack = (Date.now() - (cutoffCall![1] as Date).getTime()) / 86_400_000;
+            expect(daysBack).toBeCloseTo(30, 1);
+            expect(vi.mocked(ne)).toHaveBeenCalledWith('email_sends.html_body', '');
+        });
+
+        it('surfaces DB errors in the result', async () => {
+            vi.mocked(db.update).mockImplementation(() => { throw new Error('update failed'); });
+            const result = await cleanupEmailBodies(30);
+            expect(result.error).toBe('update failed');
+            expect(result.deletedCount).toBe(0);
+        });
+    });
+
     describe('runAllCleanupTasks', () => {
         it('should run all cleanup tasks and log results', async () => {
             mockDeleteChain([[]]);
+            mockUpdateChain([]);
             const logger = { info: vi.fn(), error: vi.fn(), warn: vi.fn() } as any;
 
             const results = await runAllCleanupTasks(undefined, logger);
 
-            expect(results).toHaveLength(7); // aiCache, semanticCache, logs, usageLogs, refreshTokens, otpCodes, ecommerceStores
+            // aiCache, semanticCache, logs, usageLogs, refreshTokens, otpCodes,
+            // ecommerceStores, customerNotificationsLog, emailSends
+            expect(results).toHaveLength(9);
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting'));
         });
 
@@ -189,6 +255,7 @@ describe('cleanup utilities', () => {
 
         it('should accept custom retention days', async () => {
             mockDeleteChain([[]]);
+            mockUpdateChain([]);
             const logger = { info: vi.fn(), error: vi.fn(), warn: vi.fn() } as any;
 
             await runAllCleanupTasks({ aiCacheDays: 7, logsDays: 14, usageLogsDays: 30 }, logger);

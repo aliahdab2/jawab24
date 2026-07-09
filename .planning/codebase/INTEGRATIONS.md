@@ -693,6 +693,7 @@ Voice-to-text for KB content via microphone:
 - **Language detection**: Arabic country prefixes (+966 SA, +971 AE, +965 KW, etc.) → Arabic template; otherwise English
 - **Templates**: Per-store, per-type, opt-in (`is_enabled=false` default) — seeded on store connect
 - **Schema**: `customer_notification_templates`, `customer_notifications_log`
+- **PII retention**: `customer_notifications_log` holds customer phone + name. `cleanupCustomerNotificationLogs` (`utils/cleanup.ts`, 90-day window) hard-deletes old rows for ACTIVE stores; `purgeStore` cascades on full store deletion. On uninstall/disconnect, `deactivateStore`/`disconnectStore` blank the store's encrypted OAuth tokens immediately (not left until the 30-day purge).
 - **Implementation**:
   - `/backend/src/services/customerNotifications.ts` — core service
   - `/backend/src/services/orderNotificationScheduler.ts` — shared dispatcher across platforms
