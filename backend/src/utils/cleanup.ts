@@ -4,8 +4,8 @@
  */
 
 import { db } from '../db';
-import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache, ecommerceStores } from '../db/schema';
-import { lt, eq, and, sql, SQL } from 'drizzle-orm';
+import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache, ecommerceStores, customerNotificationsLog, emailSends } from '../db/schema';
+import { lt, eq, and, ne, sql, SQL } from 'drizzle-orm';
 import type { PgTable, PgColumn } from 'drizzle-orm/pg-core';
 import { Logger, noopLogger, CleanupResult } from '../types';
 import { SEMANTIC_CACHE_TTL_DAYS } from '../services/kb/semantic-cache';
@@ -160,6 +160,53 @@ export async function cleanupInactiveEcommerceStores(
     );
 }
 
+/** Days a customer-notification log row (customer phone + name PII) is retained. */
+export const CUSTOMER_NOTIFICATION_RETENTION_DAYS = 90;
+
+/**
+ * GDPR data-minimisation for an ACTIVE store's notification log. purgeStore only
+ * erases this table on full store deletion (uninstall + 30d, or Shopify shop/redact);
+ * while a store stays connected the rows — customer phone + name captured from
+ * order/cart webhooks — would otherwise live forever. The notification lifecycle is
+ * minutes/hours, so any row past the window is terminal (its dedup value is long spent),
+ * safe to hard-delete.
+ */
+export async function cleanupCustomerNotificationLogs(
+    daysOld: number = CUSTOMER_NOTIFICATION_RETENTION_DAYS,
+    batchSize: number = 1000,
+): Promise<CleanupResult> {
+    return batchDelete(
+        'customer_notifications_log', customerNotificationsLog, customerNotificationsLog.id,
+        lt(customerNotificationsLog.createdAt, daysAgo(daysOld)) as SQL,
+        batchSize,
+    );
+}
+
+/** Days an email_sends row keeps its rendered body before the PII-bearing body is blanked. */
+export const EMAIL_BODY_RETENTION_DAYS = 30;
+
+/**
+ * Blank `email_sends.html_body` (contains lead names/phones) older than the window —
+ * the retention the schema TODO called for. The row itself is kept as a delivery-audit
+ * record; only the PII-bearing body is cleared. `html_body` is NOT NULL, so it's set to
+ * '' (not NULL). Guarded by `ne('')` so already-blanked rows aren't rewritten.
+ */
+export async function cleanupEmailBodies(daysOld: number = EMAIL_BODY_RETENTION_DAYS): Promise<CleanupResult> {
+    try {
+        const result = await db.update(emailSends)
+            .set({ htmlBody: '' })
+            .where(and(lt(emailSends.createdAt, daysAgo(daysOld)), ne(emailSends.htmlBody, '')))
+            .returning({ id: emailSends.id });
+        return { table: 'email_sends', deletedCount: result.length };
+    } catch (error) {
+        return {
+            table: 'email_sends',
+            deletedCount: 0,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        };
+    }
+}
+
 /**
  * Run all cleanup tasks
  * @param options - Configuration options including retention days
@@ -171,6 +218,8 @@ export async function runAllCleanupTasks(
         logsDays?: number;
         usageLogsDays?: number;
         inactiveStoreDays?: number;
+        customerNotificationDays?: number;
+        emailBodyDays?: number;
     },
     logger: Logger = noopLogger
 ): Promise<CleanupResult[]> {
@@ -179,6 +228,8 @@ export async function runAllCleanupTasks(
         logsDays = 90,
         usageLogsDays = 180,
         inactiveStoreDays = INACTIVE_STORE_RETENTION_DAYS,
+        customerNotificationDays = CUSTOMER_NOTIFICATION_RETENTION_DAYS,
+        emailBodyDays = EMAIL_BODY_RETENTION_DAYS,
     } = options || {};
 
     logger.info('[Cleanup] Starting database cleanup tasks...');
@@ -191,6 +242,8 @@ export async function runAllCleanupTasks(
         cleanupRefreshTokens(),
         cleanupOtpCodes(),
         cleanupInactiveEcommerceStores(inactiveStoreDays),
+        cleanupCustomerNotificationLogs(customerNotificationDays),
+        cleanupEmailBodies(emailBodyDays),
     ]);
     
     // Log results

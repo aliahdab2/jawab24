@@ -71,12 +71,12 @@ vi.mock('../../src/services/shopify', () => ({
     createPendingInstall: (...args: any[]) => mockCreatePendingInstall(...args),
     getOrderNotificationTarget: (...args: any[]) => mockGetOrderNotificationTarget(...args),
     saveWebhookStatus: vi.fn().mockResolvedValue(undefined),
-    mapShopifyWebhookProduct: vi.fn((p: any) => ({
+    mapShopifyWebhookProduct: vi.fn((p: any, storeCurrency = '') => ({
         platformProductId: String(p?.id ?? ''),
         title: p?.title ?? '',
         status: 'active',
-        priceRange: '0',
-        currency: '',
+        priceRange: `0${storeCurrency ? ` ${storeCurrency}` : ''}`,
+        currency: storeCurrency,
         totalInventory: 0,
         hasVariants: false,
     })),
@@ -710,6 +710,11 @@ describe('Shopify Controller', () => {
 
             expect(mockUpsertSingleProduct).toHaveBeenCalledTimes(1);
             expect(mockUpsertSingleProduct.mock.calls[0][0]).toBe('store-1');
+            // The store's currency is passed into the mapper so priceRange carries it
+            // immediately (not blank until the next full sync).
+            const upserted = mockUpsertSingleProduct.mock.calls[0][1];
+            expect(upserted.currency).toBe('USD');
+            expect(upserted.priceRange).toContain('USD');
             expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
             expect(rep.status).toHaveBeenCalledWith(200);
         });

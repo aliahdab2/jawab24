@@ -116,6 +116,11 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
         // Order lifecycle — for customer notifications
         { topic: 'orders/create', address: `${webhookUrl}/orders` },
         { topic: 'orders/fulfilled', address: `${webhookUrl}/orders` },
+        // orders/cancelled is subscribed but intentionally a no-op today:
+        // buildShopifyOrderEvent has no 'orders/cancelled' branch (no cancellation
+        // notification is designed yet), so the webhook is received and 200'd without
+        // dispatching. Kept subscribed so the feature can be added handler-side without
+        // a re-registration round-trip on every existing store.
         { topic: 'orders/cancelled', address: `${webhookUrl}/orders` },
         // Delivery — order-level fulfillment_status never becomes 'delivered'; the delivered
         // signal is fulfillment.shipment_status, delivered via the fulfillments/update topic.
@@ -446,6 +451,19 @@ function resolveStoreToken(store: Awaited<ReturnType<typeof getStoreById>>): str
 }
 
 /**
+ * Format a product's price range consistently across the full-sync and webhook
+ * paths: "<min> <currency>" for a single price, "<min> - <max> <currency>" for a
+ * range. A blank currency yields a trailing-space-free string. Single source of
+ * truth so the webhook path can't drift from the full-sync format.
+ */
+export function formatPriceRange(minPrice: number, maxPrice: number, currency: string): string {
+    const suffix = currency ? ` ${currency}` : '';
+    return minPrice === maxPrice
+        ? `${minPrice}${suffix}`
+        : `${minPrice} - ${maxPrice}${suffix}`;
+}
+
+/**
  * Sync all active products from Shopify store.
  * Accepts optional pre-resolved credentials to avoid redundant DB/decrypt calls
  * when called from fullSync.
@@ -469,9 +487,7 @@ export async function syncProducts(storeId: string, opts?: { storeDomain: string
         const minPrice = parseFloat(p.priceRangeV2?.minVariantPrice?.amount ?? '0');
         const maxPrice = parseFloat(p.priceRangeV2?.maxVariantPrice?.amount ?? '0');
         const currency = p.priceRangeV2?.minVariantPrice?.currencyCode ?? '';
-        const priceRange = minPrice === maxPrice
-            ? `${minPrice} ${currency}`
-            : `${minPrice} - ${maxPrice} ${currency}`;
+        const priceRange = formatPriceRange(minPrice, maxPrice, currency);
         const variantSummary = buildVariantSummary(
             (p.variants?.edges ?? []).map(e => e.node)
         );
@@ -526,8 +542,13 @@ interface ShopifyWebhookProduct {
 /**
  * Convert a Shopify webhook product payload into the shape `upsertSingleProduct`
  * expects. Used by the products/create and products/update webhook handlers.
+ *
+ * The REST webhook payload has no shop currency, so the caller passes the store's
+ * currency (from `store.storeCurrency`) — this builds the priceRange WITH the
+ * currency suffix so the AI-facing string matches the full-sync format immediately,
+ * instead of showing a bare number until the next 6h sync repairs it.
  */
-export function mapShopifyWebhookProduct(payload: ShopifyWebhookProduct): {
+export function mapShopifyWebhookProduct(payload: ShopifyWebhookProduct, storeCurrency = ''): {
     platformProductId: string;
     handle: string | null;
     title: string;
@@ -549,13 +570,8 @@ export function mapShopifyWebhookProduct(payload: ShopifyWebhookProduct): {
         .filter(n => !Number.isNaN(n));
     const minPrice = prices.length ? Math.min(...prices) : 0;
     const maxPrice = prices.length ? Math.max(...prices) : 0;
-    // REST webhook payload doesn't include shop currency — caller's store
-    // currency is the source of truth, but for the per-product cache we leave
-    // it empty and let the next full sync repair (every 6h).
-    const currency = '';
-    const priceRange = minPrice === maxPrice
-        ? `${minPrice}`
-        : `${minPrice} - ${maxPrice}`;
+    const currency = storeCurrency;
+    const priceRange = formatPriceRange(minPrice, maxPrice, currency);
 
     const totalInventory = variants.reduce(
         (sum, v) => sum + (typeof v.inventory_quantity === 'number' ? v.inventory_quantity : 0),

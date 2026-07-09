@@ -1297,7 +1297,7 @@ export const leadDigestSends = pgTable('lead_digest_sends', {
 // every email type (lead_digest, waitlist, transactional, …). Decision-level
 // audit lives in type-specific tables (lead_digest_sends, waitlist_email_sends);
 // the body + delivery status lives here. Bodies contain PII (lead names,
-// phones) — TODO: add a cron to null html_body older than 30 days.
+// phones); cleanupEmailBodies (utils/cleanup.ts) blanks html_body after 30 days.
 export const emailSends = pgTable('email_sends', {
     id: uuid('id').defaultRandom().primaryKey(),
     type: varchar('type', { length: 50 }).notNull(), // 'lead_digest' | 'waitlist' | 'transactional' | …

@@ -49,7 +49,7 @@ global.fetch = mockFetch;
 
 // --- Import after mocks ---
 
-import { lookupOrder, getShipmentTracking, checkInventory, getOrderNotificationTarget } from '../../src/services/shopify';
+import { lookupOrder, getShipmentTracking, checkInventory, getOrderNotificationTarget, formatPriceRange, mapShopifyWebhookProduct } from '../../src/services/shopify';
 
 // --- Helpers ---
 
@@ -65,6 +65,42 @@ function makeStore(overrides: Record<string, unknown> = {}) {
         ...overrides,
     };
 }
+
+describe('Shopify — formatPriceRange', () => {
+    it('single price: "<min> <currency>"', () => {
+        expect(formatPriceRange(100, 100, 'SAR')).toBe('100 SAR');
+    });
+    it('range: "<min> - <max> <currency>"', () => {
+        expect(formatPriceRange(100, 150, 'USD')).toBe('100 - 150 USD');
+    });
+    it('blank currency: no trailing space', () => {
+        expect(formatPriceRange(100, 100, '')).toBe('100');
+        expect(formatPriceRange(100, 150, '')).toBe('100 - 150');
+    });
+});
+
+describe('Shopify — mapShopifyWebhookProduct currency', () => {
+    // Regression (audit 2026-07-09): the REST webhook payload has no currency, so the
+    // caller passes the store's — the priceRange must carry it immediately, matching
+    // the full-sync format, instead of a bare number until the next 6h sync.
+    const payload = {
+        id: 999, title: 'Cap', handle: 'cap', status: 'active',
+        variants: [{ title: 'One', price: '80.00', inventory_quantity: 5 }],
+        options: [],
+    } as unknown as Parameters<typeof mapShopifyWebhookProduct>[0];
+
+    it('builds priceRange + currency from the passed store currency', () => {
+        const r = mapShopifyWebhookProduct(payload, 'SAR');
+        expect(r.currency).toBe('SAR');
+        expect(r.priceRange).toBe('80 SAR');
+    });
+
+    it('omits currency cleanly when none is passed (back-compat default)', () => {
+        const r = mapShopifyWebhookProduct(payload);
+        expect(r.currency).toBe('');
+        expect(r.priceRange).toBe('80');
+    });
+});
 
 describe('Shopify — lookupOrder / getShipmentTracking / checkInventory', () => {
     beforeEach(() => {

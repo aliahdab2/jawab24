@@ -1,6 +1,13 @@
 import { config } from '../config';
 import { aesGcmEncrypt, aesGcmDecrypt, deriveKey } from '../lib/aesGcm';
 
+// KEY INVARIANT: the encryption key is ECOMMERCE_TOKEN_ENCRYPTION_KEY, falling back
+// to SHOPIFY_TOKEN_ENCRYPTION_KEY (config.shopify.tokenEncryptionKey) for backward
+// compat with stores encrypted before the key was renamed. These two env vars MUST
+// hold the SAME value — setting ECOMMERCE_TOKEN_ENCRYPTION_KEY to anything different
+// from the historical SHOPIFY_TOKEN_ENCRYPTION_KEY makes every previously-stored token
+// undecryptable (the derived key changes). This is the single crypto module for all
+// e-commerce tokens (Shopify/Salla/Zid).
 function getKey(): Buffer {
     const key = process.env.ECOMMERCE_TOKEN_ENCRYPTION_KEY || config.shopify.tokenEncryptionKey;
     if (!key || key.length < 32) {

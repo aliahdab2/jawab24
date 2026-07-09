@@ -522,13 +522,12 @@ describe('syncProducts — full catalog sync', () => {
 
 type ShopifyWebhookPayload = Parameters<typeof mapShopifyWebhookProduct>[0];
 
-/** Mirrors webhookProductsUpdate in controllers/shopify.ts: map → stamp store currency → upsert. */
+/** Mirrors webhookProductsUpdate in controllers/shopify.ts: map (with store currency) → upsert. */
 async function applyProductWebhook(
     store: { id: string; storeCurrency: string | null },
     payload: ShopifyWebhookPayload,
 ): Promise<void> {
-    const normalized = mapShopifyWebhookProduct(payload);
-    normalized.currency = store.storeCurrency || normalized.currency;
+    const normalized = mapShopifyWebhookProduct(payload, store.storeCurrency || '');
     await upsertSingleProduct(store.id, normalized);
 }
 
@@ -566,8 +565,8 @@ describe('webhook product path — upsert and delete', () => {
         expect(row.description).toBe('Warm hoodie'); // body_html stripped
         expect(row.handle).toBe('hoodie');
         expect(row.status).toBe('active');
-        expect(row.priceRange).toBe('120 - 140'); // min/max across variants
-        expect(row.currency).toBe('SAR'); // REST payload has no currency — stamped from store
+        expect(row.priceRange).toBe('120 - 140 SAR'); // min/max across variants, currency from store
+        expect(row.currency).toBe('SAR'); // REST payload has no currency — passed in from store
         expect(row.totalInventory).toBe(7); // summed across variants
         expect(row.hasVariants).toBe(true);
         expect(row.variantSummary).toBe('Size: S, M');
@@ -591,7 +590,7 @@ describe('webhook product path — upsert and delete', () => {
         expect(rows).toHaveLength(1);
         expect(rows[0].id).toBe(before.id);
         expect(rows[0].title).toBe('Hoodie V2');
-        expect(rows[0].priceRange).toBe('150');
+        expect(rows[0].priceRange).toBe('150 SAR');
         expect(rows[0].totalInventory).toBe(9);
         expect(rows[0].hasVariants).toBe(false); // single variant after update
     });

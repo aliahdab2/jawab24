@@ -1061,7 +1061,7 @@ Top Products:
 |----------|--------|-------|-------------|--------------|-------------------|
 | **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Full (retry incl. THROTTLED, exhaustion flag, manual reregister, frontend recovery UI) |
 | **Salla** | Active | OAuth 2.0 (Custom + **Easy Mode**) | 14 days (auto-refresh, single-use refresh tokens) | REST, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Full (lifted to platform-agnostic in PR #27, 2026-05-07) |
-| **Zid** | ❌ Broken (rebuild pending) | OAuth 2.0 | — | — | ❌ Built against the wrong API contract; never round-tripped a real store. See `docs/integrations/zid.md`, D-020 |
+| **Zid** | ❌ Broken (rebuild pending) | OAuth 2.0 | — | — | ❌ Built against the wrong API contract; never round-tripped a real store. Surfaced as "coming soon" on the (admin-only) integrations page until rebuilt. See `docs/integrations/zid.md`, D-020 |
 
 **Salla Easy Mode** (required for the public App Store listing): published apps receive tokens via the server-to-server `app.store.authorize` webhook (the OAuth callback is never hit). `controllers/salla.ts:handleStoreAuthorize` ingests/refreshes tokens idempotently; fresh installs stage a `merchantId`-keyed pending install (`pending_ecommerce_installs.merchant_id`, migration `0123`) that the merchant claims after login via `GET /salla/store/pending` + `POST /salla/store/claim` (landing page `frontend/src/pages/salla/connected.tsx`). Custom Mode (OAuth redirect) is retained for dev. The merchant-id source from Salla's post-install redirect is finalized at the live round-trip.
 
