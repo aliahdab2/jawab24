@@ -129,12 +129,13 @@ export function PlatformIcon({ platform, size = 'sm', muted = false, ariaLabel, 
 }
 
 /**
- * Slim brand-colored channel tab for an inbox row's trailing edge — the "spine"
- * that tells you which channel a conversation is on without crowding the avatar.
- * Render it as the LAST flex child of a padded, `items-*` row and cancel the row's
- * end padding with a negative inline-end margin (e.g. `-me-3.5 sm:-me-5`) so it sits
- * flush to the edge. Reuses the shared brand colors + glyph paths (single source —
- * no duplicated SVG or color values).
+ * Diagonal brand-colored corner ribbon that marks which channel a conversation is
+ * on, without crowding the avatar. It's an absolutely-positioned corner overlay at
+ * the row's top trailing (inline-end) corner, so the HOST row must be `relative`,
+ * `overflow-hidden` (to clip the band to the rounded corner) and reserve end padding
+ * (e.g. `pe-14`) so its content clears the corner. The band rotation mirrors for RTL
+ * vs LTR. Reuses the shared brand colors + glyph paths (single source — no duplicated
+ * SVG or color values).
  */
 export function ChannelRibbon({ platform, ariaLabel, className }: {
   platform: 'instagram' | 'facebook' | 'whatsapp';
@@ -145,16 +146,21 @@ export function ChannelRibbon({ platform, ariaLabel, className }: {
   const solid = SOLID_CLASSES[platform] ?? SOLID_CLASSES.facebook;
   return (
     <span
-      className={clsx(
-        'flex-shrink-0 self-center inline-flex items-center justify-center w-5 min-h-[34px] rounded-s-lg',
-        solid,
-        className,
-      )}
+      className={clsx('pointer-events-none absolute top-0 end-0 h-[54px] w-[54px] overflow-hidden', className)}
       aria-label={ariaLabel}
     >
-      <svg className="fill-current w-3 h-3" viewBox="0 0 24 24" aria-hidden="true">
-        <path d={path} />
-      </svg>
+      <span
+        className={clsx(
+          // Band across the top-end corner: top-right in LTR, top-left in RTL —
+          // `end-[-18px]` mirrors on its own; only the rotation needs flipping.
+          'absolute top-[11px] end-[-18px] flex w-[80px] items-center justify-center py-[3px] shadow-sm rotate-45 rtl:-rotate-45',
+          solid,
+        )}
+      >
+        <svg className="h-[11px] w-[11px] fill-current -rotate-45 rtl:rotate-45" viewBox="0 0 24 24" aria-hidden="true">
+          <path d={path} />
+        </svg>
+      </span>
     </span>
   );
 }

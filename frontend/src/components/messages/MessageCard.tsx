@@ -119,7 +119,9 @@ export const MessageCard = React.memo(function MessageCard({
       tabIndex={0}
       aria-label={tMessages('openConversation', { name: displayLabel })}
       className={clsx(
-        'group relative flex items-start gap-3 sm:gap-4 px-3.5 sm:px-5 py-3 sm:py-4 bg-card rounded-2xl cursor-pointer',
+        'group relative flex items-start gap-3 sm:gap-4 py-3 sm:py-4 bg-card rounded-2xl cursor-pointer',
+        // Reserve corner space + clip the diagonal channel ribbon when it's shown.
+        showChannelBadge ? 'overflow-hidden ps-3.5 sm:ps-5 pe-14' : 'px-3.5 sm:px-5',
         'border border-transparent hover:border-theme-border',
         'hover:shadow-md hover:shadow-surface-200/30 dark:hover:shadow-surface-900/20',
         'transition-all duration-200',
@@ -196,10 +198,10 @@ export const MessageCard = React.memo(function MessageCard({
         )}
       </div>
 
-      {/* Channel ribbon — a slim brand spine on the row's trailing edge, clear of
-          the avatar. Only on multi-channel workspaces. */}
+      {/* Channel ribbon — a diagonal brand corner marker at the row's top trailing
+          corner, clear of the avatar. Only on multi-channel workspaces. */}
       {showChannelBadge && (
-        <ChannelRibbon platform={platform} ariaLabel={platformLabel} className="-me-3.5 sm:-me-5" />
+        <ChannelRibbon platform={platform} ariaLabel={platformLabel} />
       )}
     </div>
   );

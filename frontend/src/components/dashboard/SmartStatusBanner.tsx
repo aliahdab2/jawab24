@@ -302,18 +302,21 @@ export function SmartStatusBanner({
                         </>
                       );
 
-                      const sharedClassName = "flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-rose-100/50 dark:hover:bg-rose-800/30 transition-colors group w-full text-start";
-
-                      // Channel ribbon on the row's trailing edge — same spine as
-                      // the Messages inbox, shown for message items on multi-channel
+                      // Channel ribbon at the row's top trailing corner — same marker
+                      // as the Messages inbox, shown for message items on multi-channel
                       // workspaces (comments carry no per-row channel here).
                       const channelRibbon = showChannelBadge && item.type === 'message' && item.platform ? (
                         <ChannelRibbon
                           platform={item.platform}
                           ariaLabel={tComments(PLATFORM_LABEL_KEYS[item.platform])}
-                          className="-me-4 sm:-me-5"
                         />
                       ) : null;
+
+                      const sharedClassName = clsx(
+                        "flex items-start gap-3 py-3 sm:py-3.5 hover:bg-rose-100/50 dark:hover:bg-rose-800/30 transition-colors group w-full text-start",
+                        // Reserve corner space + clip the diagonal ribbon when present.
+                        channelRibbon ? "relative overflow-hidden ps-4 sm:ps-5 pe-14" : "px-4 sm:px-5",
+                      );
 
                       return (
                         <li key={`${item.type}-${item.id}`}>
