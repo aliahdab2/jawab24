@@ -9,12 +9,13 @@
  * Platform-specific values are injected via `TokenRefreshConfig`.
  */
 import { tracedExternalCall } from '../utils/tracing';
-import { eq, and, lt } from 'drizzle-orm';
+import { eq, and, lt, ne, or, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores } from '../db/schema';
 import { decrypt } from './ecommerceCrypto';
 import { captureError } from '../utils/sentryHelpers';
 import { redis } from '../lib/redis';
+import { config } from '../config';
 import { getStoreById, updateStoreTokens, markStoreNeedsReauth } from './ecommerce';
 
 const LOCK_WAIT_DELAY_MS = 2000;
@@ -143,16 +144,28 @@ export async function resolveStoreAccessToken(storeId: string, cfg: TokenRefresh
 
 /**
  * Return store IDs whose tokens expire within 2 days (for periodic proactive refresh).
+ *
+ * Salla Easy-Mode stores (platformData.tokenSource === 'easy_mode') are excluded when
+ * `config.salla.skipPullRefreshForEasyMode` is on: Salla pushes refreshed tokens via
+ * the app.store.authorize webhook, so a proactive pull-refresh would race that push.
+ * Flag defaults OFF, so behaviour is unchanged until the live dry-run validates it.
  */
 export async function getStoresNeedingTokenRefresh(platform: 'salla' | 'zid') {
     const twoDaysFromNow = new Date(Date.now() + 2 * ONE_DAY_MS);
-    return db.select({ id: ecommerceStores.id }).from(ecommerceStores).where(
-        and(
-            eq(ecommerceStores.platform, platform),
-            eq(ecommerceStores.isActive, true),
-            lt(ecommerceStores.tokenExpiresAt, twoDaysFromNow),
-        )
-    );
+    const conditions = [
+        eq(ecommerceStores.platform, platform),
+        eq(ecommerceStores.isActive, true),
+        lt(ecommerceStores.tokenExpiresAt, twoDaysFromNow),
+    ];
+    if (platform === 'salla' && config.salla.skipPullRefreshForEasyMode) {
+        // Keep rows that are NOT easy_mode (either a different tokenSource or none set).
+        const notEasyMode = or(
+            sql`${ecommerceStores.platformData}->>'tokenSource' is null`,
+            ne(sql`${ecommerceStores.platformData}->>'tokenSource'`, 'easy_mode'),
+        );
+        if (notEasyMode) conditions.push(notEasyMode);
+    }
+    return db.select({ id: ecommerceStores.id }).from(ecommerceStores).where(and(...conditions));
 }
 
 /**

@@ -63,10 +63,12 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
         return reply.status(200).send({ ok: true });
     }
 
+    // product_update, NOT full_sync: store info doesn't change when a product does
+    // (see the Salla controller's product.* branch for the full rationale).
     if (zidService.isProductEvent(event || '')) {
         const store = await resolveStore();
         if (store) {
-            enqueueSyncJob(store.id, 'zid').catch(err => {
+            enqueueSyncJob(store.id, 'zid', 'product_update').catch(err => {
                 request.log.error({ err }, 'Failed to enqueue Zid product sync');
             });
         }

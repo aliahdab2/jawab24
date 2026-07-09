@@ -13,6 +13,7 @@ import {
     EASY_MODE_PENDING_TTL_MS,
 } from '../services/ecommerce';
 import { tryGetUserId } from '../utils/authHelpers';
+import { captureError } from '../utils/sentryHelpers';
 import {
     dispatchOrderNotification,
     orderConfirmedEvent,
@@ -65,7 +66,17 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
     // never hit — Salla pushes the access/refresh tokens here, server-to-server, on
     // install and RE-fires the same event to deliver refreshed tokens.
     if (event === 'app.store.authorize') {
-        await handleStoreAuthorize(merchant, request.body, request.log);
+        try {
+            await handleStoreAuthorize(merchant, request.body, request.log);
+        } catch (error) {
+            // Capture + 200 like every other branch: a transient Salla-API/DB failure
+            // here must not 500 (Salla retries deliveries, and a persistent 500 streak
+            // during an outage could exhaust retries and drop the staged install).
+            captureError(error, 'Salla app.store.authorize handling failed', {
+                tags: { service: 'salla', webhook: 'app.store.authorize' },
+                extra: { merchant },
+            });
+        }
         return reply.status(200).send({ ok: true });
     }
 
@@ -88,11 +99,14 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
         return reply.status(200).send({ ok: true });
     }
 
-    // All product.* events trigger a sync
+    // All product.* events trigger a catalog re-sync. Salla product payloads are too
+    // sparse for an in-place upsert (e.g. product.status.updated = {id, sku, status}),
+    // so re-fetch the catalog — but as product_update, NOT full_sync: store info
+    // doesn't change when a product does.
     if (sallaService.isProductEvent(event || '')) {
         const store = await resolveStore();
         if (store) {
-            enqueueSyncJob(store.id, 'salla').catch(err => {
+            enqueueSyncJob(store.id, 'salla', 'product_update').catch(err => {
                 request.log.error({ err }, 'Failed to enqueue Salla product sync');
             });
         }

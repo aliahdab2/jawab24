@@ -11,15 +11,13 @@
  * - No GDPR endpoints required
  */
 import { tracedExternalCall } from '../utils/tracing';
-import { eq } from 'drizzle-orm';
-import { db } from '../db';
-import { ecommerceStores } from '../db/schema';
 import { config } from '../config';
 import { decrypt } from './ecommerceCrypto';
 import { captureError } from '../utils/sentryHelpers';
 import {
     getStoreById,
     replaceProductsAndRebuildSummary,
+    applySyncedStoreInfo,
     PRODUCT_SAFETY_CAP,
     type WebhookRegistrationResult,
 } from './ecommerce';
@@ -366,15 +364,14 @@ export async function fullSync(storeId: string) {
 
     const accessToken = decrypt(store.accessToken, store.accessTokenIv);
 
-    // Update store info
+    // Update store info. platformData is merged, not replaced — a full sync must
+    // not wipe webhookStatus/tokenHealth written by other flows.
     const storeInfo = await fetchStoreInfo(accessToken);
-    await db.update(ecommerceStores).set({
+    await applySyncedStoreInfo(storeId, {
         storeName: storeInfo.storeName,
         storeEmail: storeInfo.storeEmail,
         storeCurrency: storeInfo.storeCurrency,
-        platformData: { merchantId: storeInfo.merchantId },
-        updatedAt: new Date(),
-    }).where(eq(ecommerceStores.id, storeId));
+    }, { merchantId: storeInfo.merchantId });
 
     // Sync products
     const productResult = await syncProducts(storeId);

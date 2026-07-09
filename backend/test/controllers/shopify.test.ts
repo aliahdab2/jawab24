@@ -779,6 +779,59 @@ describe('Shopify Controller', () => {
             expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({ type: 'order_confirmed', orderNumber: '1001' });
         });
 
+        // Regression (audit 2026-07-09): customer.phone is the customer-ACCOUNT phone and
+        // is null for guest checkouts — the event must fall back to the order-level and
+        // address phones, like the delivered path's getOrderNotificationTarget already does.
+        it('guest checkout: falls back to the top-level order phone when customer.phone is missing', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = { id: 111, order_number: 1001, phone: '+966501112222', customer: null };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'orders/create' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            await webhookOrders(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                type: 'order_confirmed', customerPhone: '+966501112222',
+            });
+        });
+
+        it('guest checkout: falls back to shipping_address phone + name when customer and order phone are missing', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                id: 112, order_number: 1002, phone: null, customer: null,
+                shipping_address: { phone: '+966503334444', first_name: 'Sara' },
+            };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'orders/create' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            await webhookOrders(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                type: 'order_confirmed', customerPhone: '+966503334444', customerName: 'Sara',
+            });
+        });
+
+        it('does NOT dispatch (but still 200s) when no phone exists anywhere on the order', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = { id: 113, order_number: 1003, phone: null, customer: null, shipping_address: null, billing_address: null };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'orders/create' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await webhookOrders(req, rep);
+
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
         it('does NOT dispatch on orders/updated (delivery is no longer inferred from fulfillment_status)', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
@@ -797,6 +850,9 @@ describe('Shopify Controller', () => {
     });
 
     describe('webhookFulfillments', () => {
+        // The delivered dispatch runs AFTER the 200 ACK (fire-and-forget) so the
+        // canonical-order GraphQL lookup can't blow Shopify's ~5s webhook timeout —
+        // hence vi.waitFor instead of asserting synchronously after the handler.
         it('dispatches order_delivered on a delivered fulfillment (phone/name from the fetched order)', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
             mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
@@ -808,10 +864,26 @@ describe('Shopify Controller', () => {
             });
             await webhookFulfillments(req, mockReply());
 
-            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            await vi.waitFor(() => expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1));
             expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
                 type: 'order_delivered', customerPhone: '+966512345678', customerName: 'Ahmed', orderId: '964176593', orderNumber: '1001',
             });
+        });
+
+        it('ACKs 200 before the canonical-order lookup resolves (never blocks on GraphQL)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            // A lookup that never resolves must not delay the 200.
+            mockGetOrderNotificationTarget.mockReturnValue(new Promise(() => { /* hangs */ }));
+            const body = { order_id: 964176593, shipment_status: 'delivered', destination: { phone: '+966500000000' } };
+            const req = mockRequest({
+                headers: { 'x-shopify-hmac-sha256': 'valid_hmac', 'x-shopify-shop-domain': 'test.myshopify.com', 'x-shopify-topic': 'fulfillments/update' },
+                body, rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+            await webhookFulfillments(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(200);
         });
 
         it('falls back to the webhook destination when the order fetch returns null', async () => {
@@ -825,6 +897,7 @@ describe('Shopify Controller', () => {
             });
             await webhookFulfillments(req, mockReply());
 
+            await vi.waitFor(() => expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1));
             expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
                 type: 'order_delivered', customerPhone: '+966500000000', customerName: 'Sara',
             });

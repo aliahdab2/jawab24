@@ -32,8 +32,23 @@ vi.mock('../../src/db', () => ({
 }));
 
 vi.mock('../../src/db/schema', () => ({
-    ecommerceStores: {},
+    ecommerceStores: { platform: 'platform', isActive: 'isActive', tokenExpiresAt: 'tokenExpiresAt', platformData: 'platformData' },
 }));
+
+// Capture the WHERE conditions so the Easy-Mode exclusion can be asserted structurally.
+// drizzle-orm is only used by getStoresNeedingTokenRefresh in this module, so mocking it
+// here is safe (refreshAccessToken/ensureValidToken go through the mocked ecommerce helpers).
+vi.mock('drizzle-orm', () => ({
+    eq: (a: unknown, b: unknown) => ({ op: 'eq', a, b }),
+    ne: (a: unknown, b: unknown) => ({ op: 'ne', a, b }),
+    lt: (a: unknown, b: unknown) => ({ op: 'lt', a, b }),
+    and: (...conditions: unknown[]) => ({ op: 'and', conditions }),
+    or: (...conditions: unknown[]) => ({ op: 'or', conditions }),
+    sql: (strings: TemplateStringsArray, ...vals: unknown[]) => ({ op: 'sql', strings, vals }),
+}));
+
+const mockConfig = vi.hoisted(() => ({ salla: { skipPullRefreshForEasyMode: false } }));
+vi.mock('../../src/config', () => ({ config: mockConfig }));
 
 // Mock ecommerceCrypto
 vi.mock('../../src/services/ecommerceCrypto', () => ({
@@ -83,7 +98,41 @@ import {
     refreshAccessToken,
     ensureValidToken,
     refreshExpiringTokens,
+    getStoresNeedingTokenRefresh,
 } from '../../src/services/ecommerceTokenRefresh';
+
+interface WhereArg { op: string; conditions: Array<{ op: string }> }
+
+describe('getStoresNeedingTokenRefresh — Easy-Mode exclusion (SA-3)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockConfig.salla.skipPullRefreshForEasyMode = false;
+        mockDbWhere.mockResolvedValue([]);
+    });
+
+    it('does NOT exclude Easy-Mode stores when the flag is OFF (default — behaviour unchanged)', async () => {
+        await getStoresNeedingTokenRefresh('salla');
+        const where = mockDbWhere.mock.calls[0][0] as WhereArg;
+        expect(where.conditions).toHaveLength(3); // platform + isActive + expiry only
+        expect(where.conditions.some(c => c.op === 'or')).toBe(false);
+    });
+
+    it('excludes easy_mode stores for salla when the flag is ON', async () => {
+        mockConfig.salla.skipPullRefreshForEasyMode = true;
+        await getStoresNeedingTokenRefresh('salla');
+        const where = mockDbWhere.mock.calls[0][0] as WhereArg;
+        expect(where.conditions).toHaveLength(4);
+        // The extra clause keeps rows whose tokenSource is null OR not 'easy_mode'.
+        expect(where.conditions.some(c => c.op === 'or')).toBe(true);
+    });
+
+    it('never applies the Easy-Mode exclusion to zid, even with the flag ON', async () => {
+        mockConfig.salla.skipPullRefreshForEasyMode = true;
+        await getStoresNeedingTokenRefresh('zid');
+        const where = mockDbWhere.mock.calls[0][0] as WhereArg;
+        expect(where.conditions).toHaveLength(3);
+    });
+});
 
 describe('refreshAccessToken', () => {
     beforeEach(() => {

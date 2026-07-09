@@ -267,19 +267,27 @@ export async function webhookOrders(request: FastifyRequest, reply: FastifyReply
 interface ShopifyOrderBody {
     id?: number;
     order_number?: number;
-    customer?: { phone?: string; first_name?: string };
+    phone?: string | null;
+    customer?: { phone?: string | null; first_name?: string };
+    shipping_address?: { phone?: string | null; first_name?: string } | null;
+    billing_address?: { phone?: string | null; first_name?: string } | null;
     fulfillments?: Array<{ tracking_number?: string }>;
 }
 
 function buildShopifyOrderEvent(storeId: string, topic: string, body: unknown): OrderEvent | null {
     const order = body as ShopifyOrderBody;
-    const phone = order.customer?.phone;
+    // customer.phone is the customer-ACCOUNT phone and is null for guest/one-off
+    // checkouts (most social-commerce buyers). Fall back through the order-level and
+    // address phones — same chain the delivered path uses (getOrderNotificationTarget).
+    const phone = order.customer?.phone || order.phone
+        || order.shipping_address?.phone || order.billing_address?.phone;
     if (!phone) return null;
 
     const orderId = String(order.id ?? '');
     const orderNumber = String(order.order_number ?? order.id ?? '');
     const trackingNumber = order.fulfillments?.[0]?.tracking_number;
-    const customerName = order.customer?.first_name;
+    const customerName = order.customer?.first_name
+        || order.shipping_address?.first_name || order.billing_address?.first_name;
 
     if (topic === 'orders/create') {
         return orderConfirmedEvent('shopify', storeId, { customerPhone: phone, customerName, orderId, orderNumber });
@@ -314,21 +322,13 @@ export async function webhookFulfillments(request: FastifyRequest, reply: Fastif
 
         const shopDomain = request.headers['x-shopify-shop-domain'] as string;
         if (shopDomain) {
-            const store = await shopifyService.getStoreByDomain(shopDomain);
-            if (store) {
-                // Prefer the canonical order (E.164 phone, order name) over the webhook's
-                // unnormalized destination fields; fall back to destination if the fetch fails.
-                const target = await shopifyService.getOrderNotificationTarget(store.id, fulfillment.order_id);
-                const phone = target?.phone || fulfillment.destination?.phone;
-                if (phone) {
-                    dispatchOrderNotification(orderDeliveredEvent('shopify', store.id, {
-                        customerPhone: phone,
-                        customerName: target?.firstName || fulfillment.destination?.first_name,
-                        orderId: String(fulfillment.order_id),
-                        orderNumber: target?.orderNumber || String(fulfillment.order_id),
-                    }), request.log);
-                }
-            }
+            // Resolve + dispatch AFTER the ACK: the canonical-order lookup is a Shopify
+            // GraphQL round-trip (retry/throttle back-off can exceed Shopify's ~5s webhook
+            // timeout — a late 200 marks the delivery failed and triggers redelivery).
+            // The order_delivered dedup key makes any redelivery double-dispatch safe.
+            void resolveDeliveredTargetAndDispatch(shopDomain, fulfillment.order_id, fulfillment.destination, request).catch(error => {
+                reportWebhookFailure(request, 'fulfillments-dispatch', error);
+            });
         }
 
         return reply.status(200).send({ ok: true });
@@ -336,6 +336,29 @@ export async function webhookFulfillments(request: FastifyRequest, reply: Fastif
         reportWebhookFailure(request, 'fulfillments', error);
         throw error;
     }
+}
+
+async function resolveDeliveredTargetAndDispatch(
+    shopDomain: string,
+    orderId: number,
+    destination: ShopifyFulfillmentBody['destination'],
+    request: FastifyRequest,
+): Promise<void> {
+    const store = await shopifyService.getStoreByDomain(shopDomain);
+    if (!store) return;
+
+    // Prefer the canonical order (E.164 phone, order name) over the webhook's
+    // unnormalized destination fields; fall back to destination if the fetch fails.
+    const target = await shopifyService.getOrderNotificationTarget(store.id, orderId);
+    const phone = target?.phone || destination?.phone;
+    if (!phone) return;
+
+    dispatchOrderNotification(orderDeliveredEvent('shopify', store.id, {
+        customerPhone: phone,
+        customerName: target?.firstName || destination?.first_name,
+        orderId: String(orderId),
+        orderNumber: target?.orderNumber || String(orderId),
+    }), request.log);
 }
 
 // --- GDPR Mandatory Endpoints (HMAC-verified) ---

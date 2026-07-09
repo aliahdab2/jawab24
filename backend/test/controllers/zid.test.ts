@@ -610,7 +610,8 @@ describe('Zid Controller', () => {
 
             await new Promise(r => setTimeout(r, 10));
 
-            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'zid');
+            // product_update, not full_sync — store info doesn't change on a product edit.
+            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1', 'zid', 'product_update');
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 
