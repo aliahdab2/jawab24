@@ -44,3 +44,4 @@ export { usePersistedBoolean } from './usePersistedBoolean';
 export { useSaveKnowledgeBase } from './useSaveKnowledgeBase';
 export { useAiPipelineLabel } from './useAiPipelineLabel';
 export { useCopyToClipboard } from './useCopyToClipboard';
+export { useSubscriptionUsage } from './useSubscriptionUsage';

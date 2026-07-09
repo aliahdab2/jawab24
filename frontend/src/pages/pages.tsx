@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon } from '@/components/ui';
+import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon, UpgradeCTA } from '@/components/ui';
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
 import { BusinessInfoNudgeBanner } from '@/components/pages/BusinessInfoNudgeBanner';
 import { needsBusinessInfo } from '@/utils/kb';
@@ -38,7 +38,7 @@ const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { isWhatsAppVisible } from '@/lib/featureFlags';
 import { captureError } from '@/lib/sentryHelpers';
-import { useWorkspaceRole, useSaveKnowledgeBase } from '@/hooks';
+import { useWorkspaceRole, useSaveKnowledgeBase, useSubscriptionUsage } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -119,6 +119,15 @@ const PagesPage: NextPageWithLayout = () => {
     },
     enabled: isAuthenticated,
   });
+
+  // Plan entitlement: WhatsApp is Business+ only (plans.whatsapp_enabled).
+  // useSSE invalidates the hook's query key on subscription-change events, so
+  // the surface flips live after an upgrade. `undefined` = still loading
+  // (render neither Connect nor the upgrade CTA yet).
+  const { data: usage } = useSubscriptionUsage(isAuthenticated && whatsappVisible);
+  const whatsappEntitled = usage === undefined
+    ? undefined
+    : Boolean(usage?.subscription?.plan?.whatsappEnabled);
 
   const pages = useMemo(() => {
     const raw = pagesRaw ?? [];
@@ -348,6 +357,8 @@ const PagesPage: NextPageWithLayout = () => {
         toast.error(t('subscriptionInactive'));
       } else if (status === 403 && code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
+      } else if (status === 403 && code === 'WHATSAPP_PLAN_REQUIRED') {
+        toast.error(t(iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired')));
       } else if (status === 402 && code === 'TRIAL_ALREADY_USED') {
         toast.error(t('pageTrialUsedBlocked'));
       } else {
@@ -469,6 +480,10 @@ const PagesPage: NextPageWithLayout = () => {
         toast.error(t('whatsappNumberTaken'));
       } else if (err.response?.data?.code === 'WHATSAPP_PIN_MISMATCH') {
         toast.error(t('whatsappPinMismatch'));
+      } else if (err.response?.data?.code === 'WHATSAPP_PLAN_REQUIRED') {
+        // Defense in depth — the UI hides connect for non-entitled plans, but
+        // the backend gate can still fire (e.g. stale tab after a downgrade).
+        toast.error(t(iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired')));
       } else {
         captureError(error, 'Failed to connect WhatsApp', { tags: { page: 'pages', action: 'whatsapp-connect' } });
         toast.error(t('whatsappConnectFailed'));
@@ -478,10 +493,11 @@ const PagesPage: NextPageWithLayout = () => {
     }
   };
 
-  // Single "Connect channel" entry point. With WhatsApp not yet configured the
-  // picker would have one option, so it collapses to the Facebook dialog directly.
+  // Single "Connect channel" entry point. When WhatsApp isn't configured OR
+  // the plan doesn't include it, the picker would have one option, so it
+  // collapses to the Facebook dialog directly.
   const handleOpenConnect = () => {
-    if (whatsappVisible) {
+    if (whatsappVisible && whatsappEntitled === true) {
       setShowChannelPicker(true);
     } else {
       setShowConnectDialog(true);
@@ -822,14 +838,24 @@ const PagesPage: NextPageWithLayout = () => {
                         </span>
                       </div>
                     ) : (isOwner && whatsappVisible && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleConnectWhatsApp(page.id)}
-                        disabled={connectingWhatsApp === page.id}
-                      >
-                        {connectingWhatsApp === page.id ? t('whatsappConnecting') : t('whatsappConnectButton')}
-                      </Button>
+                      whatsappEntitled === true ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleConnectWhatsApp(page.id)}
+                          disabled={connectingWhatsApp === page.id}
+                        >
+                          {connectingWhatsApp === page.id ? t('whatsappConnecting') : t('whatsappConnectButton')}
+                        </Button>
+                      ) : whatsappEntitled === false ? (
+                        // Plan without WhatsApp: route to pricing instead of the
+                        // Meta signup. UpgradeCTA renders nothing on iOS native.
+                        <UpgradeCTA className="flex-shrink-0">
+                          <Button size="sm" variant="secondary">
+                            {t('whatsappUpgradeButton')}
+                          </Button>
+                        </UpgradeCTA>
+                      ) : null // entitlement still loading
                     ))}
                   </div>
                   )}
@@ -1008,7 +1034,7 @@ const PagesPage: NextPageWithLayout = () => {
           setShowChannelPicker(false);
           handleConnectWhatsApp(null);
         }}
-        whatsappAvailable={whatsappVisible}
+        whatsappAvailable={whatsappVisible && whatsappEntitled === true}
         whatsappConnecting={connectingWhatsApp === 'new'}
       />
 

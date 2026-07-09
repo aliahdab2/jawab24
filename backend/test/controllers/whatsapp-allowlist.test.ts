@@ -36,13 +36,14 @@ vi.mock('../../src/services/whatsapp', () => ({
     },
     WhatsAppApiError: class extends Error {},
 }));
-vi.mock('../../src/services/subscriptions', () => ({ subscriptionsService: { canEnablePage: vi.fn() } }));
+vi.mock('../../src/services/subscriptions', () => ({ subscriptionsService: { canEnablePage: vi.fn(), getUserSubscription: vi.fn() } }));
 vi.mock('../../src/services/channelTrial', () => ({ channelTrialService: { evaluate: vi.fn(), record: vi.fn(), channelsForPage: vi.fn().mockReturnValue([]) } }));
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
 vi.mock('../../src/services/auth', () => ({ authService: { getUserById: vi.fn() } }));
 
 import { whatsappController } from '../../src/controllers/whatsapp';
 import { pagesService } from '../../src/services/pages';
+import { subscriptionsService } from '../../src/services/subscriptions';
 
 function buildReply(): FastifyReply {
     return { status: vi.fn().mockReturnThis(), send: vi.fn().mockReturnThis() } as unknown as FastifyReply;
@@ -58,7 +59,13 @@ function buildRequest(): WorkspaceRequest {
 }
 
 describe('WhatsApp connect — canary allowlist gate', () => {
-    beforeEach(() => vi.clearAllMocks());
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Plan gate runs after the allowlist — default entitled so allowlist behavior is isolated.
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(
+            { status: 'active', plan: { slug: 'business', whatsappEnabled: true } } as never,
+        );
+    });
 
     it('403 WHATSAPP_NOT_ALLOWLISTED when the acting user is not on the allowlist', async () => {
         mockWhere.mockResolvedValue([{ email: 'someone.else@example.com' }]);
@@ -89,5 +96,18 @@ describe('WhatsApp connect — canary allowlist gate', () => {
 
         expect(reply.status).toHaveBeenCalledWith(403);
         expect(pagesService.createWhatsAppOnlyPage).not.toHaveBeenCalled();
+    });
+
+    it('allowlisted but on a plan without WhatsApp → 403 WHATSAPP_PLAN_REQUIRED (plan gate after allowlist)', async () => {
+        mockWhere.mockResolvedValue([{ email: 'aliahdab@gmail.com' }]);
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(
+            { status: 'active', plan: { slug: 'starter', whatsappEnabled: false } } as never,
+        );
+        const reply = buildReply();
+        await whatsappController.connect(buildRequest() as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }));
+        expect(pagesService.connectWhatsApp).not.toHaveBeenCalled();
     });
 });

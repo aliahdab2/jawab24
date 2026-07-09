@@ -8,8 +8,8 @@ import type { Plan } from '@jawab24/shared';
  * - Always fetch real plans from API for checkout
  * - Backend validates all payments
  *
- * Last updated: 2026-04-20
- * Source: backend/migrations/0082_update_plan_limits.sql
+ * Last updated: 2026-07-09
+ * Source: backend/src/config/plans.ts (seeded to DB by seed-plans.ts)
  */
 export const FALLBACK_PLANS: Plan[] = [
     {
@@ -51,7 +51,7 @@ export const FALLBACK_PLANS: Plan[] = [
         maxProducts: null,
         facebookEnabled: true,
         instagramEnabled: true,
-        whatsappEnabled: false,
+        whatsappEnabled: true,
         ecommerceEnabled: true,
         showBranding: false,
         prioritySupport: false,
@@ -76,7 +76,7 @@ export const FALLBACK_PLANS: Plan[] = [
         maxProducts: null,
         facebookEnabled: true,
         instagramEnabled: true,
-        whatsappEnabled: false,
+        whatsappEnabled: true,
         ecommerceEnabled: true,
         showBranding: false,
         prioritySupport: true,

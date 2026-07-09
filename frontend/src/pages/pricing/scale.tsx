@@ -16,6 +16,7 @@ import { useSelectPlan } from '@/hooks/useSelectPlan';
 import { Check, Crown, Sparkles } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctionedNonBlocking } from '@/utils/geoCheck';
+import { isWhatsAppMarketable } from '@/lib/featureFlags';
 import { captureError } from '@/lib/sentryHelpers';
 import { DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 import type { NextPageWithLayout } from '../_app';
@@ -128,6 +129,8 @@ function ScalePlanCard({
         <ul className="space-y-2">
           {[
             plan.maxPages === null ? tPricing('featurePagesUnlimited') : tPricing('featurePages', { count: plan.maxPages }),
+            // Scale tiers all include WhatsApp; hidden until public launch.
+            ...(isWhatsAppMarketable() ? [tPricing('featureWhatsApp')] : []),
             tPricing('ecommerceIntegration'),
             tPricing('prioritySupport'),
             tPricing('brandingHidden'),

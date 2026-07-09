@@ -9,6 +9,7 @@ import type { StripeElementLocale } from '@stripe/stripe-js';
 import { getStripePromise, getStripeAppearance } from '@/lib/stripeClient';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
+import { isWhatsAppMarketable } from '@/lib/featureFlags';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 import { useAuthStore } from '@/lib/store';
 import { withOwnerOnly } from '@/hoc';
@@ -610,6 +611,14 @@ function CheckoutPage() {
                                 {plan.maxAiRepliesPerMonth === null ? tPricing('unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {tPlans('aiReplies')}
                               </span>
                             </div>
+                            {isWhatsAppMarketable() && plan.whatsappEnabled && (
+                              <div className="flex items-center gap-2.5">
+                                <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                                <span className="text-foreground/80 text-sm text-start">
+                                  {tPricing('featureWhatsApp')}
+                                </span>
+                              </div>
+                            )}
                             {plan.trialDays > 0 && (
                               <div className="flex items-center gap-2.5">
                                 <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />

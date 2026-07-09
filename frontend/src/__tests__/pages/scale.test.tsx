@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Plan } from '@jawab24/shared';
 
 // --- Router ---------------------------------------------------------------
@@ -63,7 +63,7 @@ function makeScalePlan(overrides: Partial<Plan> = {}): Plan {
         facebookEnabled: true,
         instagramEnabled: true,
         ecommerceEnabled: true,
-        whatsappEnabled: false,
+        whatsappEnabled: true,
         showBranding: false,
         prioritySupport: true,
         trialDays: 0,
@@ -136,6 +136,37 @@ describe('ScalePage (/pricing/scale)', () => {
         render(<ScalePage plans={[makeScalePlan()]} />);
         // Surfaces once usage confirms an active (non-free) subscription.
         expect(await screen.findByRole('button', { name: /add replies/i })).toBeInTheDocument();
+    });
+
+    // --- WhatsApp feature line (marketable = env set AND canary off) -----------
+    describe('WhatsApp feature line', () => {
+        afterEach(() => vi.unstubAllEnvs());
+
+        it('listed once WhatsApp is publicly launched', async () => {
+            vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+            vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+            render(<ScalePage plans={[makeScalePlan()]} />);
+
+            await screen.findByText('30,000');
+            expect(screen.getByText('WhatsApp Auto-Reply')).toBeInTheDocument();
+        });
+
+        it('absent while WhatsApp is dark (no env config)', async () => {
+            render(<ScalePage plans={[makeScalePlan()]} />);
+
+            await screen.findByText('30,000');
+            expect(screen.queryByText('WhatsApp Auto-Reply')).not.toBeInTheDocument();
+        });
+
+        it('absent during the admin-only canary window', async () => {
+            vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+            vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+            vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY', 'true');
+            render(<ScalePage plans={[makeScalePlan()]} />);
+
+            await screen.findByText('30,000');
+            expect(screen.queryByText('WhatsApp Auto-Reply')).not.toBeInTheDocument();
+        });
     });
 
     // --- Mobile tab selector (shared PlanTabSelector, only with ≥2 plans) -------

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PagesPage from '@/pages/pages';
-import { pagesApi, api } from '@/lib/api';
+import { pagesApi, api, subscriptionApi } from '@/lib/api';
 
 // Create mock functions
 const mockToastError = vi.fn();
@@ -37,6 +37,9 @@ vi.mock('@/lib/api', () => ({
     pagesApi: {
         getAll: vi.fn(),
         toggle: vi.fn(),
+    },
+    subscriptionApi: {
+        getUsage: vi.fn(),
     },
     api: {
         patch: vi.fn(),
@@ -88,6 +91,7 @@ vi.mock('@/components/ui', () => ({
             </div>
         ) : null,
     InfoPopover: ({ children }: { children: React.ReactNode; label?: string }) => <>{children}</>,
+    UpgradeCTA: ({ children }: { children: React.ReactNode }) => <div data-testid="upgrade-cta">{children}</div>,
     WhatsAppIcon: () => <svg data-testid="whatsapp-icon" />,
     FacebookIcon: () => <svg data-testid="facebook-icon" />,
     Modal: ({ isOpen, title, children }: { isOpen: boolean; title: string; children: React.ReactNode }) =>
@@ -105,6 +109,13 @@ vi.mock('@/components/knowledge-base/KnowledgeBaseModal', () => ({
 
 const mockedPagesApi = vi.mocked(pagesApi);
 const mockedApi = vi.mocked(api, true);
+const mockedSubscriptionApi = vi.mocked(subscriptionApi);
+
+// Plan entitlement served by useSubscriptionUsage (WhatsApp is Business+ only).
+const mockUsagePlan = (whatsappEnabled: boolean) =>
+    mockedSubscriptionApi.getUsage.mockResolvedValue({
+        data: { data: { subscription: { plan: { whatsappEnabled } } } },
+    } as unknown as Awaited<ReturnType<typeof mockedSubscriptionApi.getUsage>>);
 
 const MOCK_PAGES = [
     {
@@ -338,6 +349,7 @@ describe('PagesPage - WhatsApp', () => {
         mockToastError.mockClear();
         vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        mockUsagePlan(true);
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [WA_PAGE] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
@@ -441,6 +453,7 @@ describe('PagesPage - WhatsApp-only cards', () => {
         mockToastError.mockClear();
         vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        mockUsagePlan(true);
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [WA_ONLY_PAGE] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
@@ -547,6 +560,125 @@ describe('PagesPage - WhatsApp-only cards', () => {
         fireEvent.click(screen.getByText('Connect New Page'));
         expect(screen.queryByTestId('channel-picker-modal')).not.toBeInTheDocument();
         expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+    });
+});
+
+describe('PagesPage - WhatsApp plan gate (Business+ entitlement)', () => {
+    const UNCONNECTED_WA_PAGE = {
+        id: 'page_wa',
+        facebookPageId: 'fb_789',
+        name: 'WA Page',
+        autoReplyEnabled: false,
+        instagramAutoReplyEnabled: false,
+        commentsCount: 0,
+        knowledgeBase: 'We sell things.',
+        isConnected: true,
+        whatsappConnected: false,
+        whatsappPhoneNumberId: null,
+        whatsappDisplayPhoneNumber: null,
+        whatsappAutoReplyEnabled: false,
+    };
+
+    beforeEach(() => {
+        mockToastError.mockClear();
+        vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [UNCONNECTED_WA_PAGE] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockedApi.patch.mockResolvedValue({ data: {} } as unknown as Awaited<ReturnType<typeof mockedApi.patch>>);
+    });
+
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        vi.clearAllMocks();
+    });
+
+    it('non-entitled plan: upgrade CTA replaces the Connect button', async () => {
+        mockUsagePlan(false);
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByTestId('upgrade-cta')).toBeInTheDocument();
+        });
+        expect(screen.getByText('Upgrade to connect')).toBeInTheDocument();
+        expect(screen.queryByText('Connect', { selector: 'button' })).not.toBeInTheDocument();
+    });
+
+    it('non-entitled plan: header connect skips the picker and opens the FB dialog', async () => {
+        mockUsagePlan(false);
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+        // Let the entitlement query settle so the picker decision is plan-aware
+        await waitFor(() => {
+            expect(screen.getByTestId('upgrade-cta')).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByText('Connect channel'));
+        expect(screen.queryByTestId('channel-picker-modal')).not.toBeInTheDocument();
+        expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+    });
+
+    it('entitled plan: Connect button renders as before', async () => {
+        mockUsagePlan(true);
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+
+        await waitFor(() => {
+            expect(screen.getByText('Connect', { selector: 'button' })).toBeInTheDocument();
+        });
+        expect(screen.queryByTestId('upgrade-cta')).not.toBeInTheDocument();
+    });
+
+    it('toggle ON rejected with 403 WHATSAPP_PLAN_REQUIRED shows the plan toast and rolls back', async () => {
+        // Entitlement can go stale (e.g. downgrade in another tab) — the
+        // backend gate is authoritative and the client maps its error code.
+        mockUsagePlan(true);
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: {
+                data: [{
+                    ...UNCONNECTED_WA_PAGE,
+                    whatsappConnected: true,
+                    whatsappPhoneNumberId: 'pn_1',
+                    whatsappDisplayPhoneNumber: '+966 55 000 0000',
+                }],
+            },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockedApi.patch.mockRejectedValue({
+            response: {
+                status: 403,
+                data: { code: 'WHATSAPP_PLAN_REQUIRED', error: 'WhatsApp requires the Business plan or higher.' },
+            },
+        });
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+
+        // Switches on the card: [0] Facebook, [1] WhatsApp — both OFF
+        const allSwitches = screen.getAllByRole('switch');
+        await act(async () => {
+            fireEvent.click(allSwitches[1]); // WhatsApp toggle OFF -> ON
+        });
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalledWith('WhatsApp auto-reply is available on the Business plan and higher. Upgrade to connect your number.');
+        });
+        // Optimistic update rolled back
+        expect(screen.getAllByRole('switch')[1].getAttribute('aria-checked')).toBe('false');
     });
 });
 
