@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect } from 'vitest';
 import { MessageDetailModal } from './MessageDetailModal';
 import { openExternalUrl } from '@/lib/openExternalUrl';
@@ -132,9 +132,28 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    // Name stays primary; the number is a labelled subtitle beneath it.
+    // Name stays primary; the number is a copyable subtitle beneath it.
     expect(screen.getAllByText('Sara').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByLabelText('Phone number')).toHaveTextContent('+46 70 022 47 20');
+    expect(screen.getByRole('button', { name: /Copy number/ })).toHaveTextContent('+46 70 022 47 20');
+  });
+
+  it('copies the number to the clipboard when the phone button is tapped', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        platform="whatsapp"
+        conversation={makeConversation({ senderId: '46700224720', senderName: 'Sara' })}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Copy number/ }));
+
+    expect(writeText).toHaveBeenCalledWith('+46 70 022 47 20');
+    // Affordance flips to the "Copied" confirmation.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument());
   });
 
   it('uses the phone number as the header name when a WhatsApp conversation has no name', () => {
@@ -157,7 +176,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.queryByLabelText('Phone number')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Copy number/ })).not.toBeInTheDocument();
     expect(screen.queryByText('+46 70 022 47 20')).not.toBeInTheDocument();
   });
 

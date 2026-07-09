@@ -43,3 +43,4 @@ export { useConnectedStore } from './useConnectedStore';
 export { usePersistedBoolean } from './usePersistedBoolean';
 export { useSaveKnowledgeBase } from './useSaveKnowledgeBase';
 export { useAiPipelineLabel } from './useAiPipelineLabel';
+export { useCopyToClipboard } from './useCopyToClipboard';

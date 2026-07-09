@@ -13,7 +13,7 @@ import { isKbRelatedFlag, isKbGapFlag, getKbGapQuestion } from '@/utils/flagReas
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import { formatInternationalPhone, resolveCustomerLabel } from '@/utils/phone';
 import { messagesApi } from '@/lib/api';
-import { useHandoffPauseDuration } from '@/hooks';
+import { useHandoffPauseDuration, useCopyToClipboard } from '@/hooks';
 import type { Conversation } from './MessageCard';
 import {
   User,
@@ -28,6 +28,8 @@ import {
   ChevronRight,
   ArrowDown,
   Loader2,
+  Copy,
+  Check,
 } from 'lucide-react';
 import type { Locale } from 'date-fns';
 
@@ -84,6 +86,7 @@ export function MessageDetailModal({
   const customerNumber = platform === 'whatsapp' ? formatInternationalPhone(conversation.senderId) : '';
   // Header/breadcrumb label: name → number → generic. `isPhone` drives dir="ltr".
   const { label: customerLabel, isPhone: labelIsNumber } = resolveCustomerLabel(conversation.senderName, customerNumber, tc('user'));
+  const { copied: numberCopied, copy: copyNumber } = useCopyToClipboard();
 
   // Fetch full conversation (including outgoing replies) regardless of which tab filter
   // was used to find this conversation. Tabs control which conversations appear in the list,
@@ -292,12 +295,23 @@ export function MessageDetailModal({
               <h2 id="message-detail-modal-title" className="text-lg font-semibold text-foreground leading-tight truncate" dir={labelIsNumber ? 'ltr' : undefined}>
                 {customerLabel}
               </h2>
-              {/* Customer phone (WhatsApp only). Shown under the name; when the
-                  name is missing it's already the h2, so don't repeat it here. */}
+              {/* Customer phone (WhatsApp only), tap to copy. Shown under the name;
+                  when the name is missing it's already the h2, so don't repeat it. */}
               {customerNumber && conversation.senderName && (
-                <span dir="ltr" className="block mt-0.5 text-xs text-muted-foreground tabular-nums text-start" aria-label={t('phoneNumber')}>
-                  {customerNumber}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => copyNumber(customerNumber)}
+                  title={numberCopied ? t('copied') : t('copyNumber')}
+                  aria-label={numberCopied ? t('copied') : `${t('copyNumber')}: ${customerNumber}`}
+                  className="group/phone flex items-center gap-1 mt-0.5 text-xs text-muted-foreground hover:text-brand-500 transition-colors"
+                >
+                  <span dir="ltr" className="tabular-nums">{customerNumber}</span>
+                  {numberCopied ? (
+                    <Check className="w-3 h-3 flex-shrink-0 text-brand-500" aria-hidden="true" />
+                  ) : (
+                    <Copy className="w-3 h-3 flex-shrink-0 opacity-0 group-hover/phone:opacity-100 transition-opacity" aria-hidden="true" />
+                  )}
+                </button>
               )}
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-start">
