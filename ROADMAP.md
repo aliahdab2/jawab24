@@ -1,6 +1,6 @@
 # Jawab24 — Product Roadmap
 
-> **Last updated**: 2026-05-31 (execution spine added — see below; the phases are the *menu*, the spine is the *order*)
+> **Last updated**: 2026-07-09 (status refresh — WhatsApp channel SHIPPED behind founder canary; Team UI shipped; ~245 commits reconciled. The execution spine below is kept for history; see the 2026-07-09 status note inside it.)
 > **Purpose**: Strategic feature roadmap based on competitive analysis and product study.
 >
 > **Active near-term focus (2026-05-30):** Ship the **Salla App Store** listing first (Arabic-first / "AI sales rep" wedge); file Meta WhatsApp Embedded Signup in parallel. Shopify + Zid submissions and WhatsApp frontend/templates follow. See `.planning/SALLA_LISTING_BRIEF.md`, `.planning/SALLA_LAUNCH_VALIDATION.md`, and the consolidated launch plan.
@@ -8,6 +8,8 @@
 ---
 
 ## 🧭 Execution Spine — next 6–8 weeks (from 2026-05-31)
+
+> **Status 2026-07-09:** the WhatsApp track of this spine is DONE ahead of the keystone — full channel shipped in #392 (Embedded Signup connect UI, multi-number, voice notes/media) + follow-ups #418/#420/#423 (read receipts, typing indicators)/#424 (sender names, channel badges), currently behind a founder canary (`WHATSAPP_ALLOWLIST`); **Meta App Review for templates submitted 2026-07-08, in review**. Salla submission still pending (assets/marketing sign-off). **The keystone (1d customer-identity map + 1e proactive sender) has NOT started** — cart-recovery/order notifications remain SMS-only. That keystone is now the whole remaining path to LetsBot parity on proactive commerce.
 
 The phases below are a *menu*; this spine is the *order*. Several tracks run in parallel; the **critical path is the keystone** — it unlocks the largest competitive gap (proactive WhatsApp/DM commerce). Week bands are **relative sequencing, not date commitments** — assign real dates to team capacity.
 
@@ -83,14 +85,26 @@ KEYSTONE: 1d customer-identity map ─► 1e proactive sender ─► DM cart-rec
 - Conversation pause/resume (handoff)
 - Multi-tenant workspace infrastructure (invisible to users, ready for team features)
 
-### Competitive Gaps (updated 2026-05-30)
-- ~~No WhatsApp channel~~ — Inbound DMs live through the shared AI pipeline; **frontend connection UI + proactive template messages still pending** (gated on Meta Embedded Signup approval)
+### Competitive Gaps (updated 2026-07-09)
+- ~~No WhatsApp channel~~ — **Full channel SHIPPED** (#392 + #418/#420/#423/#424): Embedded Signup connect UI, multi-number, voice notes/media, read receipts, typing indicators, inbox with customer numbers. Behind founder canary until Meta App Review clears (**templates submitted 2026-07-08, in review**). Proactive template messages (Phase 4 of `WHATSAPP_PLAN.md`) still not implemented.
 - No chatbot flow builder
 - ~~Limited analytics (basic overview only)~~ — **E-commerce analytics dashboard shipped** (`ecommerce-analytics.tsx`); inbox-level smart analytics (Phase 4) still pending
-- No customer profiles/CRM
+- No customer profiles/CRM (inbox now shows WhatsApp customer phone numbers — a label, not a profile)
 - No AI suggested replies in inbox
-- Team features: backend ready, UI not yet exposed (see Phase 6)
+- ~~Team features: backend ready, UI not yet exposed~~ — **`/team` page + email invites shipped** (#224, polish #252/#253/#278)
 - **Proactive DM/WhatsApp cart-recovery & order notifications NOT built** — only the SMS channel is live. Unblocked by the **keystone** (customer-identity mapping + proactive sender) in the Execution Spine above; the notification engine itself is shipped, it just lacks a DM/WhatsApp channel branch.
+
+### Completed Since Last Update (2026-05-31 → 2026-07-09)
+- **WhatsApp channel (full)** — Embedded Signup connect, WhatsApp-only cards, multi-number, voice notes (#392); launch env wiring + runbook (#418), pre-launch security fixes (#420), read receipts + typing indicators (#423), webhook sender names + inbox channel badges (#424); inbox shows WhatsApp customer phone number w/ tap-to-copy. Meta Embedded Signup submission package (#406); **App Review submitted 2026-07-08**.
+- **Post Reply expansion** — any-comment trigger mode (#389, D-021), post picker to arm any post + dashboard discovery nudge (#405), setup-modal redesign (outcome card, tooltips, Settings deep-link), comment-modes clarity (#417)
+- **E-commerce correctness sweep** — order-notification + webhook fixes across Salla/Shopify (+ Zid docs reconcile) (#411); integrations audit P0/P1 (#421) + P2 compliance/hygiene (#422); store reconnect prompts (#320); **native catalog for store-less merchants** (founder canary, #407)
+- **Image understanding in DMs** — customers can send product screenshots/photos, AI answers from them (#396)
+- **Team UI** — dedicated `/team` page + email invites (#224)
+- **Security hardening** — ai-worker shared-secret auth, admin gating, prompt-injection sanitization, CSRF/IDOR fixes (#409, #419)
+- **Billing** — self-service Stripe top-ups, hidden Scale 20K/30K plans, trial-abuse guard tied to connected channel
+- **Bilingual Help Center** (#388); Business Info section limit 8→18 (#415); KB→"Business Info" terminology unified
+- Prompt iterated v37→v52 (gender-aware Arabic, dialect mirroring, price-guard, offer-closing fix); gpt-5.1+ reasoning_effort fix (#412)
+- Android v1.3.14 promoted to production 100%
 
 ### Completed Since Last Update (2026-04-15 → 2026-05-30)
 - E-commerce **SMS customer notifications** live: order confirmed/shipped/delivered, abandoned-cart recovery, review requests, digital delivery — bilingual, dedup'd, merchant-configurable (`services/customerNotifications.ts`)
@@ -242,7 +256,9 @@ All the data is already being collected — it just needs dashboards.
 
 ---
 
-## Phase 5: WhatsApp Integration
+## ~~Phase 5: WhatsApp Integration~~ ✅ SHIPPED (2026-07-04, #392)
+
+> Shipped as a full channel: Embedded Signup connect UI, multi-number, voice notes/media, read receipts + typing indicators (#423), sender names + channel badges (#424), inbox customer phone numbers. Behind founder canary until Meta App Review clears (submitted 2026-07-08). **Remaining:** template messages (proactive sends) + status-callback consumption — tracked in `.planning/WHATSAPP_PLAN.md` Phases 4/6.
 
 **Impact**: Massive | **Effort**: High | **Backend readiness**: Architecture supports it
 
@@ -281,11 +297,11 @@ Backend infrastructure is fully built and running in production (see Completed W
 - `workspace_members` table with RBAC (owner/admin/member) — already in production
 - All business data scoped by `workspaceId` — already working
 
-### 6.2 Remaining: Team Management UI (~2-3 days)
-- Team management page (list members, roles, remove)
-- Invite generation UI (currently API-only)
-- Invite accept page (`/invite/[token]`)
-- Workspace switcher (for users with >1 workspace)
+### ~~6.2 Remaining: Team Management UI~~ ✅ SHIPPED (#224 + #252/#253/#278)
+- ~~Team management page (list members, roles, remove)~~ `/team` page renders `TeamPanel`
+- ~~Invite generation UI (currently API-only)~~ email invites shipped
+- ~~Invite accept page~~ `/invites/accept`
+- Workspace switcher (for users with >1 workspace) — still open
 
 ### 6.3 Remaining: Conversation Assignment (~2 days)
 - Assign conversations to specific agents
@@ -316,6 +332,8 @@ Backend infrastructure is fully built and running in production (see Completed W
 ---
 
 ## Phase 7: Posts-first Surface (Post Reply pre-emptive config)
+
+> **2026-07-09 status: the GOAL of this phase shipped via a different route.** Instead of a dedicated `/posts` sidebar surface, a **post picker inside the comments page** lets merchants arm Post Reply on any recent post *before* the first comment arrives (PR #405: `PostPickerSheet` + `usePostReplySetup` + dashboard discovery nudge; backend `/posts` list API built in #405 and consumed by the picker). Any-comment trigger mode also shipped (#389, D-021) and the setup modal was redesigned. The dedicated Posts page + nav entry specced below was **deliberately not built** — revisit only if the picker proves insufficient. Sections 7.1–7.4 below are kept for the original analysis.
 
 **Impact**: High | **Effort**: Medium | **Backend readiness**: Partial (Instagram `getMedia` exists, Facebook list missing)
 
@@ -366,7 +384,7 @@ Backend infrastructure is fully built and running in production (see Completed W
 | Facebook Messenger | ✅ | ✅ | ✅ | **✅** |
 | Instagram Comments | ✅ | ❌ | ❌ | **✅** |
 | Instagram DM | ✅ | ❌ | ✅ | **✅** |
-| WhatsApp | ✅ | ✅ | ✅ | ✅ (Backend) / ❌ (UI) |
+| WhatsApp | ✅ | ✅ | ✅ | **✅** (shipped #392; founder canary until Meta review clears; templates pending) |
 | Web Chat | ✅ | ✅ | ✅ | ❌ |
 | Email | ✅ | ✅ | ✅ | ✅ (Transactional via Resend) |
 | SMS | ✅ | ❌ | ❌ | ❌ |
@@ -389,11 +407,11 @@ Backend infrastructure is fully built and running in production (see Completed W
 |---|---|---|---|---|
 | Arabic AI | Weak | No | No | **Strong** |
 | Chatbot flows | ✅ | ✅ | ✅ | ❌ |
-| WhatsApp | ✅ | ✅ | ✅ | ✅ (Backend) / UI pending |
-| Team features | ✅ | ✅ | ✅ | Backend ✅, UI pending (Phase 6) |
+| WhatsApp | ✅ | ✅ | ✅ | **✅** (canary; templates pending Meta review) |
+| Team features | ✅ | ✅ | ✅ | **✅** (`/team` page + invites, #224) |
 | AI suggested replies | ✅ | ✅ (Fin) | ✅ (MagicReply) | Partial (Smart Reply button, Phase 2 for multi-suggestion chips) |
 | Customer profiles / CRM | ✅ | ✅ | ✅ | ❌ (Phase 3) |
-| Advanced analytics | ✅ | ✅ | ✅ | Basic (Phase 4) |
+| Advanced analytics | ✅ | ✅ | ✅ | Basic + e-commerce dashboard (inbox analytics = Phase 4) |
 | Price hallucination guard | ❌ | ❌ | ❌ | **✅ Unique** |
 | KB gap detection | ❌ | ❌ | ❌ | **✅ Unique** |
 | Semantic caching | ❌ | ❌ | ❌ | **✅ Unique** |
@@ -416,14 +434,14 @@ Backend infrastructure is fully built and running in production (see Completed W
 
 | Weakness | Impact | Fix | Priority |
 |----------|--------|-----|----------|
-| ~~Only 2 channels~~ | ~~Competitors have 4-6 channels~~ | WhatsApp backend done, UI in Phase 5 | ~~**High**~~ ✅ Partially resolved |
+| ~~Only 2 channels~~ | ~~Competitors have 4-6 channels~~ | ~~WhatsApp backend done, UI in Phase 5~~ WhatsApp SHIPPED (#392, canary; templates pending Meta review) | ~~**High**~~ ✅ Resolved |
 | No web chat widget | Industry standard for websites. Missing = lost leads from website visitors | Future phase | Medium |
 | No chatbot flow builder | ManyChat's core product. Complex to build, but Rules + AI covers 90% of use cases | Not planned (intentional) | Low |
 | Limited analytics | Only basic overview dashboard. Competitors have deep insights | Phase 4: Smart Analytics | Medium |
 | No customer profiles / CRM | No customer history view, tags, or notes. Competitors surface this | Phase 3: Customer Profiles | Medium |
 | No AI suggested replies in inbox | Smart Reply button exists (comments), but competitors show 2-3 AI suggestion chips for agents to pick from | Phase 2: AI Suggestions | **High** |
 | ~~No email channel~~ | ~~Standard for support platforms~~ | Resend transactional email implemented | ~~Low~~ ✅ Resolved |
-| Team UI not exposed | Backend ready but no team management page, invite UI, or role indicators | Phase 6: Team UI (~5-7 days) | Low (on demand) |
+| ~~Team UI not exposed~~ | ~~Backend ready but no team management page, invite UI, or role indicators~~ | `/team` page + email invites shipped (#224; conversation assignment/activity tracking still open — Phase 6.3/6.4) | ~~Low~~ ✅ Mostly resolved |
 | No bulk broadcast / campaigns | LetsBot (WhatsApp-first competitor) sends promotional broadcasts to customer lists; Jawab24 has no broadcast feature at all | Deferred — needs segment builder + scheduler + opt-out/compliance | Low (revisit Q3) |
 
 ### Jawab24's Unique Differentiator

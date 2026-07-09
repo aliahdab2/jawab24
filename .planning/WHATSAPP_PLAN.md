@@ -1,7 +1,7 @@
 # WhatsApp Integration Plan
 
-> **Last updated:** 2026-07-08
-> **Status:** Code-complete for launch — backend (B+C), connect flow (Phase 3) and voice/media (Phase 5 core) MERGED + deployed dark (PR #392, 2026-07-04). Meta App Review submission staged 2026-07-08 (see Phase 2). Approval-day steps: [`docs/WHATSAPP_LAUNCH_RUNBOOK.md`](../docs/WHATSAPP_LAUNCH_RUNBOOK.md). Phases 4 (templates) & 6 (status callbacks) deferred post-launch
+> **Last updated:** 2026-07-09
+> **Status:** Code-complete for launch — backend (B+C), connect flow (Phase 3) and voice/media (Phase 5 core) MERGED + deployed dark (PR #392, 2026-07-04). **Meta App Review SUBMITTED 2026-07-08 (submission 949305008122443, "Review in progress")** — see Phase 2. Approval-day steps: [`docs/WHATSAPP_LAUNCH_RUNBOOK.md`](../docs/WHATSAPP_LAUNCH_RUNBOOK.md). Post-launch fixes already landed: read receipts + typing indicators + outgoing-platform stamping (#423), webhook sender names + inbox channel badges (#424), inbox shows the customer's phone number with tap-to-copy (branch `feat/whatsapp-inbox-customer-number`). Phases 4 (templates) & 6 (inbound status consumption) deferred post-launch
 >
 > **Why this matters strategically:** WhatsApp is the channel LetsBot owns end-to-end. Phase B+C closes the inbound DM gap (text auto-replies work). Phase 4 (template messages) closes the proactive cart-recovery / order-update gap that's LetsBot's biggest revenue feature. Phase 5 (Catalog media) is the WhatsApp equivalent of Messenger/IG rich cards. Phase 6 (status callbacks) gives read receipts that feed the analytics dashboard.
 >
@@ -84,7 +84,7 @@ Jawab24 is a Tech Provider — merchants connect their own WhatsApp Business Acc
 **Meta submission steps (status 2026-07-08):**
 1. ✅ Add WhatsApp product to Facebook App — done (test number +1 555 191-8478 claimed)
 2. ✅ Verify Meta Business Account — verified Tech Provider (business 867483152446840)
-3. ⏳ **App Review for Advanced Access** on `whatsapp_business_messaging` + `whatsapp_business_management` — submission draft `949305008122443` fully staged (screencasts, usage texts, data handling, API test calls made); waiting on Meta's ≤24h API-call registration to unlock Submit, then 3–5 business days review. See `docs/meta-app-review-resubmission.md` § WhatsApp.
+3. ⏳ **App Review for Advanced Access** on `whatsapp_business_messaging` + `whatsapp_business_management` — **SUBMITTED 2026-07-08** (submission `949305008122443`, status "Review in progress"; the hidden blocker was the Renewal-tab allowed-usage certifications — the wizard only saves on Next). Expect 3–5 business days. See `docs/meta-app-review-resubmission.md` § WhatsApp.
 4. On approval: create the Embedded Signup **configuration** and set its ID as `NEXT_PUBLIC_WHATSAPP_CONFIG_ID` → follow the runbook.
 
 > ~~"No App Review needed for WhatsApp — only business verification + Standard Access."~~ **Corrected 2026-07-08:** Standard Access only covers assets *owned by* the developer's own business. Serving *other* businesses' WABAs as a Tech Provider (Embedded Signup onboarding) requires **Advanced Access** via App Review for both permissions — which is exactly the submission above.
@@ -169,7 +169,7 @@ ManyChat model — merchant connects their own WhatsApp Business Account via Fac
 | Sender ID | Facebook user ID | Instagram user ID | Phone number |
 | Max reply length | 2000 chars | 1000 chars | 4096 chars |
 | Sender name API | Graph API profile | Graph API username | No API (from webhook only) |
-| Typing indicator | Supported | Supported | Skipped (needs wamid, not senderId) |
+| Typing indicator | Supported | Supported | ✅ Implemented (#423) — `markAsRead(..., {typing})` at the webhook layer using the wamid; outbound read receipts (blue ticks) sent too. The adapter-level `sendTypingIndicator` stays a no-op by design |
 | 24h window | No limit | No limit | 24h from last customer message |
 | Comments | Yes | Yes | No (DMs only) |
 | Per-message cost | Free | Free | Merchant pays Meta |
@@ -178,14 +178,21 @@ ManyChat model — merchant connects their own WhatsApp Business Account via Fac
 
 ### File Map
 ```
-backend/src/services/whatsapp.ts                    — Cloud API client
+backend/src/services/whatsapp.ts                    — Cloud API client (send, markAsRead + typing, signup exchange)
 backend/src/services/whatsappReply.ts                — Reply service
 backend/src/services/reply/adapters/whatsappAdapter.ts — Platform adapter
 backend/src/services/reply/adapters/shared.ts        — Shared adapter helpers
+backend/src/services/reply/nonTextHandler.ts         — Voice-note transcription + media/non-text handling (Phase 5)
 backend/src/controllers/webhook.ts                   — Webhook handler (WhatsApp branch)
+backend/src/controllers/whatsapp.ts                  — Connect/disconnect/toggle endpoints (Phase 3)
+backend/src/routes/whatsapp.ts                       — Route registration (Phase 3)
 backend/src/workers/replyWorker.ts                   — Job routing (shared processMessageJob)
 backend/src/services/metaWebhooks.ts                 — Webhook subscription
 backend/src/services/pages.ts                        — getPageByWhatsAppPhoneNumberId()
 backend/src/db/schema.ts                             — WhatsApp columns on pages
 packages/shared/src/index.ts                         — Page, Message, ReplyJobData types
+frontend/src/lib/whatsappSignup.ts                   — Embedded Signup launcher
+frontend/src/lib/featureFlags.ts                     — Canary gating (allowlist / admin-only)
+frontend/src/components/WhatsAppNudgeBanner.tsx      — Dashboard nudge
+frontend/src/utils/phone.ts                          — resolveCustomerLabel (inbox customer number display)
 ```

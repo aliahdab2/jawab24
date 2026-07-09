@@ -256,12 +256,14 @@ Salla supports two billing models:
 
 When every box below is ticked, Phase 5 is done.
 
+> **Specs re-scoped 2026-07-09 to Salla's confirmed requirements** (see `SALLA_LAUNCH_ACTIONS.md` §1, confirmed from Salla docs 2026-06-08 — the original list below guessed Shopify-like values). Confirmed format: icon **512×512** PNG/JPEG ≤1 MB (symbol-only, 1:1); **3 App Gallery images @1366×768**; **3 Key Benefits images @1600×1600** (each with title + description); video is an **optional YouTube link ≤2 min** (not an uploaded file); **no separate banner field exists**.
+
 ### Required
-- [ ] App icon 1024×1024 PNG (Arabic-readable at 64×64)
-- [ ] Banner / hero image at Salla-required dimensions (verify in Salla Partners docs)
-- [ ] 4–6 screenshots, **Arabic version**, 1280×720 or higher
-- [ ] 4–6 screenshots, **English version**
-- [ ] Demo video, 60–90s, Arabic narration, Arabic + English captions, ≤30 MB
+- [ ] App icon **512×512** PNG/JPEG ≤1 MB, symbol-only, 1:1 (min 250×250; Arabic-readable when scaled down)
+- [ ] ~~Banner / hero image~~ — no banner field in Salla's listing; visuals = gallery + key-benefit images
+- [ ] **3 App Gallery images, 1366×768** — Arabic set (English variants if the portal supports per-locale assets)
+- [ ] **3 Key Benefits images, 1600×1600** + title + description each, both languages
+- [ ] Demo video — **optional YouTube link, ≤2 min**, Arabic narration, Arabic + English captions
 - [ ] Listing copy (name, tagline, long description) in **Arabic** — final, marketing-approved
 - [ ] Listing copy in **English** — final
 - [ ] Feature bullets in both languages
@@ -290,7 +292,9 @@ Before locking copy/assets, confirm:
 5. **Beta merchant testimonials** — any existing Jawab24 users on Salla we can quote (with permission)? ⏳ OPEN (nice-to-have).
 6. ✅ **Billing model — DECIDED 2026-05-30: (A) Salla-managed billing.** No longer a blocker.
 
-> **Phase 4.2 outcome (2026-06-07):** the order-notification wiring the copy gated behind "قريباً" is now **code-validated against real Salla payloads and merged** (PR #267 parser fix + #268 refactor; order.created/shipped/delivered confirmed; S3 HMAC passed). `cart.abandoned` remains unconfirmed (blocked by Salla's broken maintenance-toggle UI) and there is **no separate shipment webhook** (shipping is conveyed via `order.status.updated` slug). **Copy decision for the team:** order-confirmation/shipped/delivered notifications could be promoted from "قريباً" to a shipped feature IF the in-product enable path is merchant-ready; keep abandoned-cart as "قريباً". Confirm feature-enabled state before changing the description.
+> **Phase 4.2 outcome (2026-06-07):** the order-notification wiring the copy gated behind "قريباً" is now **code-validated against real Salla payloads and merged** (PR #267 parser fix + #268 refactor; order.created/shipped/delivered confirmed; S3 HMAC passed). **Copy decision for the team:** order-confirmation/shipped/delivered notifications could be promoted from "قريباً" to a shipped feature IF the in-product enable path is merchant-ready; keep abandoned-cart as "قريباً". Confirm feature-enabled state before changing the description.
+>
+> **Update 2026-07-09 (post PR #411, merged 07-07):** two facts in the earlier note are superseded. (1) There **IS** a separate shipment webhook now — the app subscribes to `order.shipment.created` (`backend/src/services/salla.ts`), fixed in #411 alongside the Salla shipment-payload parser. (2) The abandoned-cart topic is `abandoned.cart` (not `cart.abandoned`) and it is fully wired — webhook → `abandoned_cart` notification scheduling (`controllers/salla.ts`). It remains **unvalidated against a live cart** (Salla dev-store maintenance-toggle blocker), so abandoned-cart stays "قريباً" in copy. Notification dedup hardened in #411 (unique index, migration 0130) and audit PRs #421/#422 are merged.
 
 ---
 

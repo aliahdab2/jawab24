@@ -26,7 +26,7 @@
 | 5 — Analytics Dashboard (lite) | ✅ **Shipped** (Step 2) | Page at `/ecommerce-analytics`, summary widget in `ConnectedStoreCard`, channel-keyed funnel ready for WhatsApp/DM |
 | 6 — URL Wrapping + Click Tracking | 📋 **Planned** (lands with Step 3) | Closes the LetsBot attribution gap — turns approximate phone-window matching into real click → conversion telemetry |
 | 7 — A/B Template Testing + Per-Template Conversion | 📋 **Planned** (after Step 3) | Depends on Phase 6 click data. Lets merchants split-test message copy and surfaces which template recovers more carts |
-| WhatsApp parity (cross-ref) | 🔗 See `WHATSAPP_PLAN.md` | Backend already wired (Phase B+C ✅). Phase 4 (template messages) is the LetsBot-killer for proactive sends; Phase 6 (status callbacks) gives read receipts that auto-upgrade Phase 5 analytics |
+| WhatsApp parity (cross-ref) | 🔗 See `WHATSAPP_PLAN.md` | **Channel SHIPPED 2026-07-04 (#392, founder canary)** — connect UI, multi-number, voice/media, read receipts + typing (#423). Phase 4 (template messages) is the LetsBot-killer for proactive sends — **Meta App Review submitted 2026-07-08, in review**; inbound status-callback consumption still open |
 
 ## Context
 
@@ -380,16 +380,16 @@ LetsBot's most-loved feature on Salla reviews is "I tested 3 cart recovery messa
 
 ## Cross-reference: WhatsApp parity track
 
-LetsBot's whole product is WhatsApp. The remaining LetsBot-parity gaps for *that* channel are tracked in [`WHATSAPP_PLAN.md`](./WHATSAPP_PLAN.md), not here. Status as of 2026-04-25:
+LetsBot's whole product is WhatsApp. The remaining LetsBot-parity gaps for *that* channel are tracked in [`WHATSAPP_PLAN.md`](./WHATSAPP_PLAN.md), not here. Status as of 2026-07-09 (channel shipped 2026-07-04, PR #392, behind founder canary):
 
 | WhatsApp phase | Status | Why it matters for the LetsBot story |
 |---|---|---|
 | Phase B+C (text DMs through pipeline) | ✅ Done | Foundation — same `messageProcessor` as FB/IG, AI replies work out of the box |
-| Phase 2 (Meta Tech Provider verification) | ❌ Not started | Calendar bottleneck — paperwork takes 1–2 weeks |
-| Phase 3 (frontend connection UI) | ❌ Not started | Required for merchant onboarding |
-| Phase 4 (template messages) | ❌ Not started | **The LetsBot killer.** Proactive WhatsApp sends (cart recovery, order updates) require pre-approved templates. Phase 4 of the WhatsApp plan + Phase 2/3 of this plan are the matched pair |
-| Phase 5 (media messages) | ❌ Not started | Rich product cards on WhatsApp (Catalog API integration) — equivalent to Phase 1b on Messenger/IG |
-| Phase 6 (status callbacks) | ❌ Not started | Read receipts → feeds Phase 5 analytics here, no extra work needed |
+| Phase 2 (Meta Tech Provider verification) | ✅ Done | Embedded Signup submission package (#406); **Meta App Review submitted 2026-07-08, in review** — clearing it opens the canary |
+| Phase 3 (frontend connection UI) | ✅ Shipped (#392) | Embedded Signup connect, WhatsApp-only cards, multi-number |
+| Phase 4 (template messages) | ⏳ In Meta review (submitted 2026-07-08); **no template code written yet** | **The LetsBot killer.** Proactive WhatsApp sends (cart recovery, order updates) require pre-approved templates. Phase 4 of the WhatsApp plan + Phase 2/3 of this plan are the matched pair |
+| Phase 5 (media messages) | ✅ Core shipped (#392) — voice notes + inbound media; Catalog API rich cards still open | Rich product cards on WhatsApp (Catalog API integration) — equivalent to Phase 1b on Messenger/IG |
+| Phase 6 (status callbacks) | ◐ Partial — **outbound** read receipts + typing indicators shipped (#423); **inbound** `statuses` consumption (delivery/read into analytics) still open | Read receipts → feeds Phase 5 analytics here, no extra work needed |
 
 **Coordination note:** when WhatsApp Phase 4 + 6 ship, Phase 5 analytics in this plan automatically gains read-receipt + per-template-variant data for WhatsApp. The channel-keyed funnel structure shipped in Step 2 already accommodates this — no new schema migration.
 
@@ -409,7 +409,7 @@ LetsBot's whole product is WhatsApp. The remaining LetsBot-parity gaps for *that
 | 6 | URL Wrapping + Click Tracking | High (attribution) | ~1.5 days | 📋 Lands with a *compliant* proactive channel |
 | 7 | A/B Template Testing | Medium (retention) | ~4 days | 📋 After Phase 6 has data |
 | 4 | Enhanced AI Tools (recommendations + alerts) | Medium | ~5 days | ⏸️ Deferred until usage demands it |
-| WA | WhatsApp Phases 2/3/4/5/6 | Very High (LetsBot parity) | ~3 weeks code + paperwork | 📋 See `WHATSAPP_PLAN.md` |
+| WA | WhatsApp Phases 2/3/4/5/6 | Very High (LetsBot parity) | ~3 weeks code + paperwork | ✅ 2/3/5 shipped (#392, canary); 4 in Meta review; 6 partial — see `WHATSAPP_PLAN.md` |
 
 **Active roadmap from here:** the production check (2026-06-13) shows **e-commerce adoption is the bottleneck** — only 2/82 pages have a store connected and the order-status tools have 0 invocations. So the near-term focus is **store-connection onboarding/activation**, not more tool features. Inbound Auto-Resolve is fully specced and **PARKED** until usage exists. DM cart recovery stays parked pending a compliant Meta channel (Marketing Messages opt-in for promo; Utility Templates for transactional). **SMS** covers broad-reach recovery/notifications today; **WhatsApp** template messages remain the real proactive-channel bet.
 
