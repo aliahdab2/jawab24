@@ -6,6 +6,7 @@
   "repliedToday": "تم الرد اليوم",
   "needsAttention": "تحتاج اهتمام",
   "msgCount": "{count, plural, zero {لا رسائل} one {رسالة واحدة} two {رسالتان} few {# رسائل} many {# رسالة} other {# رسالة}}",
+  "phoneNumber": "رقم الهاتف",
   "conversationCount": "{count, plural, zero {لا محادثات} one {محادثة واحدة} two {محادثتان} few {# محادثات} many {# محادثة} other {# محادثة}} · {msgCount, plural, zero {لا رسائل} one {رسالة واحدة} two {رسالتان} few {# رسائل} many {# رسالة} other {# رسالة}}",
   "needsHuman": "يحتاج تدخل بشري",
   "noMessages": "لا توجد رسائل بعد",

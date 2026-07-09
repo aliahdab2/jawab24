@@ -14,6 +14,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { formatMessageTime } from '@/utils/dateUtils';
+import { formatInternationalPhone } from '@/utils/phone';
 import { renderMessageText, stripImageDescription } from '@/utils/renderMessageText';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
 import type { Message } from '@/lib/api';
@@ -71,6 +72,14 @@ export const MessageCard = React.memo(function MessageCard({
   // may carry a defaulted platform.
   const isWhatsApp = conv.messages.some(m => m.platform === 'whatsapp');
 
+  // WhatsApp display names are self-set and often blank. When there's no name,
+  // the wa_id (senderId) IS the customer's phone number — far more useful than
+  // "Unknown User". Facebook/Instagram senderIds are opaque PSIDs, never a
+  // number, so this fallback is WhatsApp-only.
+  const waNumber = isWhatsApp ? formatInternationalPhone(conv.senderId) : '';
+  const displayLabel = conv.senderName || waNumber || tc('unknownUser');
+  const labelIsNumber = !conv.senderName && !!waNumber;
+
   // Inline status badge
   const statusBadge = conv.pauseStatus?.paused ? (
     <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-violet border text-[10px] font-bold uppercase tracking-wide">
@@ -100,7 +109,7 @@ export const MessageCard = React.memo(function MessageCard({
     <div
       role="button"
       tabIndex={0}
-      aria-label={tMessages('openConversation', { name: conv.senderName || tc('unknownUser') })}
+      aria-label={tMessages('openConversation', { name: displayLabel })}
       className={clsx(
         'group relative flex items-start gap-3 sm:gap-4 px-3.5 sm:px-5 py-3 sm:py-4 bg-card rounded-2xl cursor-pointer',
         'border border-transparent hover:border-theme-border',
@@ -131,7 +140,7 @@ export const MessageCard = React.memo(function MessageCard({
         {/* Row 1: Name (+ channel badge) + time */}
         <div className="flex items-center gap-2">
           <span className="flex-1 min-w-0 flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <span className="min-w-0 truncate">{conv.senderName || tc('unknownUser')}</span>
+            <span className="min-w-0 truncate" dir={labelIsNumber ? 'ltr' : undefined}>{displayLabel}</span>
             {isWhatsApp && (
               <span title="WhatsApp" className="flex-shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#25D366] text-white">
                 <WhatsAppIcon className="w-2.5 h-2.5" aria-label="WhatsApp" />

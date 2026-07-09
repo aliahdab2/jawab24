@@ -123,6 +123,44 @@ describe('MessageDetailModal', () => {
     expect(screen.getAllByText('TestUser').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('shows the customer phone number under the name for WhatsApp conversations', () => {
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        platform="whatsapp"
+        conversation={makeConversation({ senderId: '46700224720', senderName: 'Sara' })}
+      />
+    );
+
+    // Name stays primary; the number is a labelled subtitle beneath it.
+    expect(screen.getAllByText('Sara').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByLabelText('Phone number')).toHaveTextContent('+46 70 022 47 20');
+  });
+
+  it('uses the phone number as the header name when a WhatsApp conversation has no name', () => {
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        platform="whatsapp"
+        conversation={makeConversation({ senderId: '46700224720', senderName: null })}
+      />
+    );
+
+    expect(screen.getAllByText('+46 70 022 47 20').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not show a phone number for non-WhatsApp conversations', () => {
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        conversation={makeConversation({ senderId: '46700224720', senderName: 'Ali' })}
+      />
+    );
+
+    expect(screen.queryByLabelText('Phone number')).not.toBeInTheDocument();
+    expect(screen.queryByText('+46 70 022 47 20')).not.toBeInTheDocument();
+  });
+
   it('shows reply textarea and send button', () => {
     render(
       <MessageDetailModal

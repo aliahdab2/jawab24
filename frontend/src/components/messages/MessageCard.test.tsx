@@ -393,4 +393,58 @@ describe('MessageCard', () => {
       expect(screen.queryByLabelText('WhatsApp')).not.toBeInTheDocument();
     });
   });
+
+  describe('customer identity (WhatsApp number)', () => {
+    it('falls back to the formatted phone number when a WhatsApp conversation has no name', () => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            senderId: '46700224720',
+            senderName: null,
+            messages: [makeMessage({ platform: 'whatsapp', senderName: null })],
+            lastMessage: makeMessage({ platform: 'whatsapp', senderName: null }),
+          })}
+        />
+      );
+
+      expect(screen.getByText('+46 70 022 47 20')).toBeInTheDocument();
+      expect(screen.queryByText('Unknown User')).not.toBeInTheDocument();
+    });
+
+    it('prefers the WhatsApp display name over the number when a name exists', () => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            senderId: '46700224720',
+            senderName: 'Sara',
+            messages: [makeMessage({ platform: 'whatsapp' })],
+            lastMessage: makeMessage({ platform: 'whatsapp' }),
+          })}
+        />
+      );
+
+      expect(screen.getByText('Sara')).toBeInTheDocument();
+      expect(screen.queryByText('+46 70 022 47 20')).not.toBeInTheDocument();
+    });
+
+    it('never renders a Facebook PSID as a phone number (keeps Unknown User)', () => {
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            // Digits, but a Facebook PSID must never be shown as a dialable number.
+            senderId: '46700224720',
+            senderName: null,
+            messages: [makeMessage({ platform: 'facebook', senderName: null })],
+            lastMessage: makeMessage({ platform: 'facebook', senderName: null }),
+          })}
+        />
+      );
+
+      expect(screen.getByText('Unknown User')).toBeInTheDocument();
+      expect(screen.queryByText('+46 70 022 47 20')).not.toBeInTheDocument();
+    });
+  });
 });

@@ -6,6 +6,7 @@
   "repliedToday": "Replied Today",
   "needsAttention": "Needs attention",
   "msgCount": "{count, plural, one {# message} other {# messages}}",
+  "phoneNumber": "Phone number",
   "conversationCount": "{count, plural, one {# conversation} other {# conversations}} · {msgCount, plural, one {# message} other {# messages}}",
   "needsHuman": "Needs Human",
   "noMessages": "No Messages Yet",
