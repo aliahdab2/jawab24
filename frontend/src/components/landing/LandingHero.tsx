@@ -10,7 +10,7 @@ import {
 import { useTranslations } from 'next-intl';
 import { AnimatePresence, motion, type Variants } from 'framer-motion';
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui';
+import { Button, WhatsAppIcon } from '@/components/ui';
 
 export function ShopifyIcon({ className }: { className?: string }) {
   return (
@@ -297,6 +297,10 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
                 <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>{t('platforms.instagram')}</span>
               </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-whatsapp font-bold text-sm sm:text-base transition-all cursor-default">
+                <WhatsAppIcon className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
+                <span>{t('platforms.whatsapp')}</span>
+              </div>
               <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-shopify font-bold text-sm sm:text-base transition-all cursor-default">
                 <ShopifyIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>{t('platforms.shopify')}</span>
@@ -344,6 +348,14 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
                 <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
                   <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
                     <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="absolute -start-4 sm:-start-8 top-[6%] animate-float-orbit z-10">
+                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
+                  <div className="w-full h-full rounded-full bg-[#25D366] flex items-center justify-center">
+                    <WhatsAppIcon className="w-5 h-5 sm:w-7 sm:h-7 text-white" aria-hidden="true" />
                   </div>
                 </div>
               </div>
