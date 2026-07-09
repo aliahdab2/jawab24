@@ -207,7 +207,7 @@ Source of truth: `registerWebhooks` in `services/shopify.ts` (paired with `SHOPI
 | `test/services/shopify.test.ts` | Service logic, webhook registration, KB enrichment |
 | `test/services/shopify.orders.test.ts` | Order/shipment/inventory tools, `getOrderNotificationTarget`, THROTTLED handling |
 | `test/services/shopifyApiVersion.test.ts` | API-version sunset guard |
-| `test/services/shopifyCrypto.test.ts` | AES-256-GCM encrypt/decrypt, tamper detection |
+| `test/services/ecommerceCrypto.test.ts` | AES-256-GCM encrypt/decrypt, tamper detection (shared token crypto) |
 | `test/integrations/webhookTopicDrift.test.ts` | Adapter topic list matches what's registered |
 | `test/integration/ecommerce-sync.test.ts` | Full sync + webhook product path against real Postgres |
 
