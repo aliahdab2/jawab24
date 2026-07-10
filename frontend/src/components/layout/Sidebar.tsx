@@ -28,7 +28,7 @@ import { BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui'
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 import { isNativePlatform } from '@/lib/capacitor';
-import { PHONE_AUTH_ENABLED, isWhatsAppEnabled, isCatalogVisible } from '@/lib/featureFlags';
+import { PHONE_AUTH_ENABLED, isWhatsAppVisible, isCatalogVisible } from '@/lib/featureFlags';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -124,11 +124,13 @@ export function resolveNavKey(
     key: string,
     tNav: (k: string) => string,
     tPricing: (k: string) => string,
+    isAdmin: boolean,
 ): string {
     // "My Pages" becomes "Channels" only once WhatsApp is live (the screen then
-    // holds a channel beyond Facebook pages). Master-switch gated so a dark
-    // deploy keeps the current label. Covers sidebar + mobile nav (both callers).
-    if (key === 'nav.pages') return tNav(isWhatsAppEnabled() ? 'channels' : 'pages');
+    // holds a channel beyond Facebook pages). Canary-aware (isWhatsAppVisible,
+    // not isWhatsAppEnabled) so the admin-only pilot window doesn't leak the
+    // rename to regular users. Covers sidebar + mobile nav (both callers).
+    if (key === 'nav.pages') return tNav(isWhatsAppVisible(isAdmin) ? 'channels' : 'pages');
     if (key.startsWith('nav.')) return tNav(key.replace('nav.', ''));
     if (key.startsWith('pricing.')) return tPricing(key.replace('pricing.', ''));
     return key;
@@ -349,7 +351,7 @@ export const Sidebar = memo(function Sidebar() {
   const isDemoUser = useIsDemoUser();
   const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(user) });
 
-  const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing);
+  const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing, isAdmin);
 
   const handleLogout = useCallback(() => {
     logout();

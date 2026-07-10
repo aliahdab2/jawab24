@@ -456,7 +456,7 @@ function MobileMenuOverlay({
     group.items.map((item) => ({
       path: item.href,
       icon: item.icon,
-      label: resolveNavKey(item.key, tNav, tPricing),
+      label: resolveNavKey(item.key, tNav, tPricing, isAdmin),
     }))
   );
 

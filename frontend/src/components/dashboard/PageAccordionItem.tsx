@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { ChannelBadges } from '@/components/ui';
-import { isWhatsAppEnabled } from '@/lib/featureFlags';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { getPageAvatarUrl } from '@/utils/pageUrl';
 import type { Page } from '@jawab24/shared';
@@ -23,6 +22,9 @@ interface PageAccordionItemProps {
   onImgError: () => void;
   pendingCount: number;
   animationDelay: number;
+  /** Canary-aware WhatsApp visibility (isWhatsAppVisible at the page level) —
+      gates the channel badges so the admin-only pilot doesn't leak to users. */
+  whatsappVisible: boolean;
 }
 
 export function PageAccordionItem({
@@ -33,6 +35,7 @@ export function PageAccordionItem({
   onImgError,
   pendingCount,
   animationDelay,
+  whatsappVisible,
 }: PageAccordionItemProps) {
   const tDash = useTranslations('dashboard');
   const tc = useTranslations('common');
@@ -125,9 +128,10 @@ export function PageAccordionItem({
         </div>
 
         {/* Channel fingerprint — colored = replying, muted = connected but off.
-            Master-switch gated: no badges until WhatsApp is live (or this page
-            already has a number), so a dark deploy looks like today. */}
-        {(isWhatsAppEnabled() || page.whatsappConnected) && (
+            Canary-aware: no badges until WhatsApp is visible to THIS viewer (or
+            this page already has a number — a live number is never hidden), so
+            a dark deploy and the admin-only pilot both look like today. */}
+        {(whatsappVisible || page.whatsappConnected) && (
           <ChannelBadges page={page} labels={badgeLabels} />
         )}
 

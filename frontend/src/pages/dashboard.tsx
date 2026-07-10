@@ -32,7 +32,7 @@ import clsx from 'clsx';
 import type { Comment, Page } from '@jawab24/shared';
 import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, AiUsageWarningBanner, SetupChecklistCard, type NeedsAttentionItem } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
-import { isWhatsAppEnabled } from '@/lib/featureFlags';
+import { isWhatsAppVisible } from '@/lib/featureFlags';
 import { getPageExternalUrl } from '@/utils/pageUrl';
 import { isKbFilled } from '@/utils/kb';
 import { hasMultipleActiveChannels } from '@/utils/channels';
@@ -152,6 +152,9 @@ const DashboardPage: NextPageWithLayout = () => {
   };
   const { isAuthenticated, fbToken, user } = useAuthStore();
   const { isOwner } = useWorkspaceRole();
+  // Canary-aware: during the admin-only pilot window the WhatsApp surface
+  // (headings, channel badges) must stay hidden from regular users.
+  const whatsappVisible = isWhatsAppVisible(user?.isAdmin ?? false);
   const { setOnboardingVisible } = useUIStore();
   const isDemoUser = useIsDemoUser();
   const queryClient = useQueryClient();
@@ -971,8 +974,8 @@ const DashboardPage: NextPageWithLayout = () => {
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">
             <div className="p-5 sm:p-6 border-b border-theme-border bg-background/50">
-              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{isWhatsAppEnabled() ? t('topPagesChannels') : t('topPages')}</h2>
-              <p className="text-sm font-medium text-muted-foreground mt-1">{isWhatsAppEnabled() ? t('topPagesChannelsDesc') : t('topPagesDesc')}</p>
+              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{whatsappVisible ? t('topPagesChannels') : t('topPages')}</h2>
+              <p className="text-sm font-medium text-muted-foreground mt-1">{whatsappVisible ? t('topPagesChannelsDesc') : t('topPagesDesc')}</p>
             </div>
             <div className={clsx(
               'divide-y divide-theme-border',
@@ -994,6 +997,7 @@ const DashboardPage: NextPageWithLayout = () => {
                     onImgError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
                     pendingCount={pendingCount}
                     animationDelay={(i + 5) * 0.1}
+                    whatsappVisible={whatsappVisible}
                   />
                 );
               }) : (
