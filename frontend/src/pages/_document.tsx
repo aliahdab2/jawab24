@@ -144,7 +144,8 @@ export default function MyDocument({ locale }: DocProps) {
               "foundingDate": "2024",
               "numberOfEmployees": {
                 "@type": "QuantitativeValue",
-                "value": "1-10"
+                "minValue": 1,
+                "maxValue": 10
               },
               "contactPoint": {
                 "@type": "ContactPoint",
