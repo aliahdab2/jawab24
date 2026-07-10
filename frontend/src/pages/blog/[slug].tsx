@@ -205,7 +205,7 @@ function RelatedPostCard({ post, locale }: { post: RelatedPostMeta; locale: stri
       className="group block rounded-xl border border-theme-border bg-card p-5 transition-all duration-200 hover:border-brand-300 hover:shadow-md"
     >
       <span className="text-xs font-medium uppercase tracking-wider text-brand-500 mb-2 block">
-        {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations')}
+        {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations' | 'category.statistics' | 'category.caseStudies')}
       </span>
       <h3 className="font-semibold text-foreground group-hover:text-brand-500 transition-colors mb-2 line-clamp-2">
         {post.frontmatter.title}
@@ -326,7 +326,7 @@ export default function BlogPostPage({
         {/* Category + meta */}
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-4">
           <span className="text-xs font-semibold uppercase tracking-wider text-brand-500">
-            {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations')}
+            {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations' | 'category.statistics' | 'category.caseStudies')}
           </span>
           <span className="text-subtle" aria-hidden="true">&middot;</span>
           <time dateTime={post.date} className="flex items-center gap-1.5">

@@ -10,6 +10,12 @@ export interface BlogPost {
 
 export const BLOG_POSTS: BlogPost[] = [
   {
+    slug: 'case-study-damascus-training-institute',
+    date: '2026-07-10',
+    category: 'caseStudies',
+    readingTime: 6,
+  },
+  {
     slug: 'whatsapp-auto-reply-jawab24',
     date: '2026-07-09',
     category: 'integrations',
