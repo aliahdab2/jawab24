@@ -157,6 +157,11 @@ Do **not** wait for WhatsApp. But the portal shows **no approved-but-unpublished
 ~~WhatsApp is a fast-follow **v1.1** update (gated on Meta Embedded Signup, weeks out)~~ **SUPERSEDED 2026-07-05: WhatsApp SHIPPED on `main` (#392 — Embedded Signup connect, multi-number, voice notes)** and the founder decided to claim it as shipped in the listing copy. It is currently behind a founder canary (`WHATSAPP_ALLOWLIST` + `NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY`); **opening the canary is a submission-day precondition** (see critical path #6). The launch wedge is now WhatsApp + FB/IG — stronger vs the WhatsApp-only competitors (LetsBot, Javna).
 
 ## Critical path recap
+
+> **Executable version: [`docs/SALLA_SUBMISSION_RUNBOOK.md`](../docs/SALLA_SUBMISSION_RUNBOOK.md)** (added 2026-07-10) — the
+> in-order Phase 0→3 checklist with env switches, portal cross-checks, paste-ready v2 short
+> description, dry-run observation list, and kill switch. This section stays as the strategic recap.
+
 1. **Complete Partners ID verification** (gates the submission form; needs passport PDF + payout bank details — see portal recon above). Start now; verification review time unknown.
 2. ~~Send §1 to Salla support~~ **OPTIONAL (decided 2026-07-03):** docs + portal recon already settle the strategy (no hold control visible → assume auto-publish → submit-when-ready). Send the email only if you want written confirmation; do not block on it.
 3. **Easy-Mode dry-run on the DEV app (Jawab24-Dev 1565152053)** — switch it to Easy Mode in the portal, reinstall on the dev store, verify `app.store.authorize` lands, then try the OAuth authorize redirect → empirically settles DECISIONS.md D-012; engineering then ships the confirmed claim binding dormant behind the flag (go-live becomes a flag flip).
