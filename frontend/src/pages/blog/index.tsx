@@ -31,7 +31,7 @@ function PostCard({ post, featured = false }: { post: PostWithMeta; featured?: b
         {/* Category + Date */}
         <div className="flex items-center gap-3 mb-3">
           <span className="text-xs font-medium uppercase tracking-wider text-brand-400">
-            {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations')}
+            {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations' | 'category.statistics' | 'category.caseStudies')}
           </span>
           <span className="text-xs text-muted-foreground">
             {new Date(post.date).toLocaleDateString(locale === 'en' ? 'en-US' : 'ar-SA-u-nu-latn', {
