@@ -24,10 +24,13 @@ interface SelectProps {
   compact?: boolean;
 }
 
-function LabelWithBadge({ label, badge, badgeTone = 'brand' }: { label: string; badge?: string; badgeTone?: 'brand' | 'muted' }) {
+function LabelWithBadge({ label, badge, badgeTone = 'brand', truncate = false }: { label: string; badge?: string; badgeTone?: 'brand' | 'muted'; truncate?: boolean }) {
   return (
     <span className="flex-1 flex items-center gap-2 min-w-0">
-      <span className="truncate">{label}</span>
+      {/* Default selects wrap so the full option text is always readable (long
+          labels like "رد على التعليق + رسالة خاصة" were clipped next to their
+          badge on narrow screens). Compact filter pills keep single-line truncation. */}
+      <span className={truncate ? 'truncate' : 'min-w-0 break-words'}>{label}</span>
       {badge && (
         <span className={clsx(
           'text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0',
@@ -119,6 +122,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
           label={selectedOption ? selectedOption.label : (placeholder ?? '')}
           badge={selectedOption?.badge}
           badgeTone={selectedOption?.badgeTone}
+          truncate={compact}
         />
         <ChevronDown 
           className={clsx(
@@ -159,7 +163,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
                   idx > 0 && "border-t border-theme-border/50"
                 )}
               >
-                <LabelWithBadge label={option.label} badge={option.badge} badgeTone={option.badgeTone} />
+                <LabelWithBadge label={option.label} badge={option.badge} badgeTone={option.badgeTone} truncate={compact} />
                 {option.value === value && (
                   <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                 )}
