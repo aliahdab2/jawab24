@@ -21,10 +21,17 @@ export interface Competitor {
 /**
  * Feature keys used across all comparisons.
  * Translation keys follow: compare.feat.<key>
+ *
+ * 'postReplies' = unlimited keyword comment auto-replies included in the base
+ * subscription at no extra cost. Cells verified against competitor pricing/docs
+ * on 2026-07-11: ManyChat & Chatfuel meter automations by contacts/usage
+ * (automations stop at the cap), Tidio & Botpress have no native comment
+ * automation, Speedly includes comment replies in its subscription.
  */
 export const FEATURE_KEYS = [
   'arabicDialects',
   'aiSmartReplies',
+  'postReplies',
   'shopifyIntegration',
   'sallaIntegration',
   'priceVerification',
@@ -46,6 +53,7 @@ export const COMPETITORS: Record<string, Competitor> = {
     features: {
       arabicDialects: { jawab24: true, competitor: false },
       aiSmartReplies: { jawab24: true, competitor: true },
+      postReplies: { jawab24: true, competitor: false },
       shopifyIntegration: { jawab24: true, competitor: true },
       sallaIntegration: { jawab24: true, competitor: false },
       priceVerification: { jawab24: true, competitor: false },
@@ -54,7 +62,7 @@ export const COMPETITORS: Record<string, Competitor> = {
       businessHours: { jawab24: true, competitor: true },
       rtlInterface: { jawab24: true, competitor: false },
       freeTrialDays: { jawab24: true, competitor: true },
-      startingPrice: { jawab24: '$15/mo', competitor: '$15/mo' },
+      startingPrice: { jawab24: '$15/mo', competitor: '$14/mo' },
     },
   },
   chatfuel: {
@@ -64,6 +72,7 @@ export const COMPETITORS: Record<string, Competitor> = {
     features: {
       arabicDialects: { jawab24: true, competitor: false },
       aiSmartReplies: { jawab24: true, competitor: true },
+      postReplies: { jawab24: true, competitor: false },
       shopifyIntegration: { jawab24: true, competitor: true },
       sallaIntegration: { jawab24: true, competitor: false },
       priceVerification: { jawab24: true, competitor: false },
@@ -82,6 +91,7 @@ export const COMPETITORS: Record<string, Competitor> = {
     features: {
       arabicDialects: { jawab24: true, competitor: false },
       aiSmartReplies: { jawab24: true, competitor: true },
+      postReplies: { jawab24: true, competitor: false },
       shopifyIntegration: { jawab24: true, competitor: true },
       sallaIntegration: { jawab24: true, competitor: false },
       priceVerification: { jawab24: true, competitor: false },
@@ -100,6 +110,7 @@ export const COMPETITORS: Record<string, Competitor> = {
     features: {
       arabicDialects: { jawab24: true, competitor: false },
       aiSmartReplies: { jawab24: true, competitor: true },
+      postReplies: { jawab24: true, competitor: false },
       shopifyIntegration: { jawab24: true, competitor: false },
       sallaIntegration: { jawab24: true, competitor: false },
       priceVerification: { jawab24: true, competitor: false },
@@ -118,6 +129,7 @@ export const COMPETITORS: Record<string, Competitor> = {
     features: {
       arabicDialects: { jawab24: true, competitor: true },
       aiSmartReplies: { jawab24: true, competitor: true },
+      postReplies: { jawab24: true, competitor: true },
       shopifyIntegration: { jawab24: true, competitor: false },
       sallaIntegration: { jawab24: true, competitor: false },
       priceVerification: { jawab24: true, competitor: false },

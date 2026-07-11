@@ -73,6 +73,8 @@
   "featureAiRepliesUnlimited": "Unlimited Smart Replies",
   "featureCommentToDm": "Comment-to-DM Automation",
   "featurePostRepliesUnlimited": "Unlimited Post Replies",
+  "featurePostRepliesIncluded": "Included in every plan at no extra cost",
+  "postRepliesIncludedNote": "Unlimited Post Replies — included in every plan at no extra cost",
   "featureShopify": "Shopify, Salla & Zid Integration",
   "shopifyBadge": "Includes Shopify, Salla & Zid Integration",
   "ecommerceBadgeTitle": "E-commerce Integration",
