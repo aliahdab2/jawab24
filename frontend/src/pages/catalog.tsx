@@ -21,7 +21,7 @@ function CatalogPageInner() {
   const { isAuthenticated, user, _hasHydrated } = useAuthStore();
   const canSee = isCatalogVisible(user);
 
-  // Founder-only canary (mirrors the Stores page guard): deep links fail
+  // Platform-admin canary (mirrors the Stores page guard): deep links fail
   // closed — anyone outside the allowlist is bounced to the dashboard. Wait
   // for store hydration so we don't bounce the founder on first paint.
   useEffect(() => {

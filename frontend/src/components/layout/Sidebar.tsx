@@ -159,9 +159,9 @@ export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boo
   // Store listing, Salla/Zid backend reliability parity). Once those land
   // we'll drop the gate. Page-level guard in pages/integrations.tsx mirrors
   // this so deep-links also fail closed.
-  // Products & Services (native catalog) is founder-only during the canary
-  // (isCatalogVisible email allowlist — narrower than the Stores admin gate).
-  // Once dogfooded we widen, then drop the gate (Phase D).
+  // Products & Services (native catalog) is platform-admin-only during the
+  // canary (isCatalogVisible — same gate as Stores). Once dogfooded we drop
+  // the gate (Phase D).
   const overviewItems = [
     { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
     { key: 'nav.pages', href: '/pages', icon: FileText },

@@ -12,7 +12,7 @@ import { KnowledgeBaseModal } from './KnowledgeBaseModal';
 
 const { push, authState } = vi.hoisted(() => ({
   push: vi.fn(),
-  authState: { user: { email: 'someone@example.com' } as { email: string } | null },
+  authState: { user: { isAdmin: false } as { isAdmin?: boolean } | null },
 }));
 
 vi.mock('next/router', () => ({
@@ -55,19 +55,19 @@ async function renderAndSave(p: Page = page()) {
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
-  authState.user = { email: 'someone@example.com' };
+  authState.user = { isAdmin: false };
 });
 
 describe('KnowledgeBaseModal — catalog import CTA gating', () => {
-  it('shows NO catalog CTA for a user outside the canary allowlist', async () => {
+  it('shows NO catalog CTA for a non-admin user (the canary gate)', async () => {
     await renderAndSave();
     expect(screen.queryByText('Organize into Products & Services')).not.toBeInTheDocument();
     // Pre-import copy stays for everyone else.
     expect(screen.getByText(/Soon you'll be able to store these/)).toBeInTheDocument();
   });
 
-  it('shows the CTA for the canary account and hands off draft + navigation', async () => {
-    authState.user = { email: 'aliahdab@gmail.com' };
+  it('shows the CTA for a platform admin and hands off draft + navigation', async () => {
+    authState.user = { isAdmin: true };
     const { onClose } = await renderAndSave();
 
     fireEvent.click(screen.getByText('Organize into Products & Services'));
@@ -81,8 +81,8 @@ describe('KnowledgeBaseModal — catalog import CTA gating', () => {
     expect(push).toHaveBeenCalledWith('/catalog?page=page-1&import=1');
   });
 
-  it('hides the CTA on store-linked pages even for the canary account', async () => {
-    authState.user = { email: 'aliahdab@gmail.com' };
+  it('hides the CTA on store-linked pages even for a platform admin', async () => {
+    authState.user = { isAdmin: true };
     await renderAndSave(page({ ecommerceStoreId: 'store-1' }));
     expect(screen.queryByText('Organize into Products & Services')).not.toBeInTheDocument();
   });

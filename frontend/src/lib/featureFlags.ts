@@ -65,16 +65,15 @@ export function isWhatsAppMarketable(): boolean {
 }
 
 /**
- * TEMP (catalog canary, founder call 2026-07-07): the native-catalog surface
- * (/catalog page + its nav entry) is visible ONLY to the founder's own account
- * while dogfooding — deliberately narrower than the platform-admin gate Stores
- * uses, so other admins/team members don't see a half-launched surface. The
- * backend CRUD stays auth + workspace-admin gated regardless; this flag only
- * hides the UI. Rollout path: widen the allowlist → swap to `isAdmin` →
- * delete the gate at GA (tracked in the catalog plan, Phase D).
+ * TEMP (catalog canary): the native-catalog surface (/catalog page, its nav
+ * entry, the KB price-list-warning import CTA) is visible only to PLATFORM
+ * admins — same gate as the Stores page — so the founder can dogfood the
+ * catalog + bulk import from any admin account while every customer sees a
+ * byte-identical app. Widened from the founder-email allowlist on 2026-07-11
+ * (owner call: "keep it dark, but admin so I can test"). The backend CRUD
+ * stays auth + workspace-admin gated regardless; this flag only hides the UI.
+ * Remaining rollout path: delete the gate at GA (catalog plan, Phase D).
  */
-const CATALOG_CANARY_EMAILS = ['aliahdab@gmail.com'];
-export function isCatalogVisible(user: { email?: string } | null | undefined): boolean {
-  const email = user?.email?.toLowerCase().trim();
-  return !!email && CATALOG_CANARY_EMAILS.includes(email);
+export function isCatalogVisible(user: { isAdmin?: boolean } | null | undefined): boolean {
+  return user?.isAdmin === true;
 }
