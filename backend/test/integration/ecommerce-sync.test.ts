@@ -42,6 +42,7 @@ import {
     deleteSingleProduct,
     replaceProductsAndRebuildSummary,
     PRODUCT_SAFETY_CAP,
+    getAllActiveStores,
     type WebhookRegistrationResult,
 } from '../../src/services/ecommerce';
 import { syncProducts, mapShopifyWebhookProduct, SHOPIFY_API_VERSION } from '../../src/services/shopify';
@@ -213,6 +214,34 @@ describe('createStore — tokens encrypted at rest', () => {
         expect(rows[0].uninstalledAt).toBeNull();
         expect(rows[0].storeName).toBe('New Name');
         expect(decrypt(rows[0].accessToken, rows[0].accessTokenIv)).toBe('token-two');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// getAllActiveStores — demo stores excluded from real-API iterators
+// ---------------------------------------------------------------------------
+
+describe('getAllActiveStores — demo store exclusion', () => {
+    it('omits demo-seeded stores (platformData.demo) so the sync cron never hits their placeholder tokens', async () => {
+        const { store: realStore } = await createConnectedStore();
+
+        const user = await createTestUser({ facebookId: uniq('fb'), email: `${uniq('demo')}@test.com` });
+        const workspace = await createTestWorkspace(user.id);
+        const [demoStore] = await testDb.insert(schema.ecommerceStores).values({
+            userId: user.id,
+            workspaceId: workspace.id,
+            platform: 'shopify',
+            storeDomain: `${uniq('demo-store')}.myshopify.com`,
+            accessToken: 'demo_token_placeholder', // not real ciphertext — decrypt() throws
+            accessTokenIv: '0'.repeat(32),
+            platformData: { planName: 'basic', demo: true },
+            isActive: true,
+        }).returning({ id: schema.ecommerceStores.id });
+
+        const activeIds = (await getAllActiveStores('shopify')).map(s => s.id);
+
+        expect(activeIds).toContain(realStore.id);
+        expect(activeIds).not.toContain(demoStore.id);
     });
 });
 

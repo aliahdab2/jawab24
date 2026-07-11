@@ -17,6 +17,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { redis } from '../lib/redis';
 import { config } from '../config';
 import { getStoreById, updateStoreTokens, markStoreNeedsReauth } from './ecommerce';
+import { isDemoStore } from './demoStore';
 
 const LOCK_WAIT_DELAY_MS = 2000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -165,7 +166,13 @@ export async function getStoresNeedingTokenRefresh(platform: 'salla' | 'zid') {
         );
         if (notEasyMode) conditions.push(notEasyMode);
     }
-    return db.select({ id: ecommerceStores.id }).from(ecommerceStores).where(and(...conditions));
+    const rows = await db.select({ id: ecommerceStores.id, platformData: ecommerceStores.platformData })
+        .from(ecommerceStores)
+        .where(and(...conditions));
+    // Demo-seeded stores hold undecryptable placeholder tokens — a refresh
+    // attempt can only fail (and captureError-spam Sentry). JS filter, not SQL:
+    // see services/demoStore.ts.
+    return rows.filter(row => !isDemoStore(row)).map(({ id }) => ({ id }));
 }
 
 /**

@@ -9,6 +9,7 @@ import { eq, and, lt, gt, sql, desc, isNotNull, notInArray } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers, customerNotificationsLog } from '../db/schema';
 import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceCrypto';
+import { isDemoStore } from './demoStore';
 import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { redisScanDelete } from '../lib/redis';
@@ -67,6 +68,11 @@ export async function registerWebhooksWithPersist(
     platform: EcommercePlatform,
     registerFn: () => Promise<WebhookRegistrationResult>,
 ): Promise<WebhookRegistrationResult> {
+    // Demo stores hold placeholder tokens — registerFn would throw on decrypt,
+    // persist a failed status, and enqueue pointless retries. No-op instead.
+    if (isDemoStore(await getStoreById(storeId))) {
+        return { registered: [], failed: [], lastAttempt: new Date().toISOString() };
+    }
     try {
         const status = await registerFn();
         await saveWebhookStatus(storeId, status);
@@ -236,14 +242,22 @@ export async function getStoreByWorkspaceAny(platform: EcommercePlatform, worksp
 /**
  * Get all active stores, optionally filtered by platform.
  * Used by the scheduled sync to refresh inventory across all connected stores.
+ * Demo-seeded stores are excluded — their placeholder tokens can't be decrypted,
+ * so any real-API call against them is guaranteed to fail. The filter runs in
+ * JS via isDemoStore() (see services/demoStore.ts for why not SQL).
  */
 export async function getAllActiveStores(platform?: EcommercePlatform): Promise<Array<{ id: string; platform: string }>> {
     const conditions = platform
         ? and(eq(ecommerceStores.isActive, true), eq(ecommerceStores.platform, platform))
         : eq(ecommerceStores.isActive, true);
-    return db.select({ id: ecommerceStores.id, platform: ecommerceStores.platform })
+    const rows = await db.select({
+        id: ecommerceStores.id,
+        platform: ecommerceStores.platform,
+        platformData: ecommerceStores.platformData,
+    })
         .from(ecommerceStores)
         .where(conditions);
+    return rows.filter(row => !isDemoStore(row)).map(({ id, platform: p }) => ({ id, platform: p }));
 }
 
 /**

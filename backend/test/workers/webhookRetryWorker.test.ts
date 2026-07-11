@@ -122,4 +122,17 @@ describe.each(PLATFORMS)('webhookRetryWorker (%s)', (platform) => {
         expect(mockRegistryGet).not.toHaveBeenCalled();
         expect(mockSaveWebhookStatus).not.toHaveBeenCalled();
     });
+
+    it('skips demo stores — placeholder tokens cannot be decrypted (JAWAB24-BACKEND-19)', async () => {
+        mockGetStoreById.mockResolvedValue({
+            id: 'store-demo', isActive: true, storeDomain: 'demo-electronics.myshopify.com',
+            accessToken: 'demo_token_placeholder', accessTokenIv: '0'.repeat(32),
+            platformData: { demo: true },
+        });
+
+        await capturedProcessor!({ id: 'job-1', data: { storeId: 'store-demo', platform } });
+
+        expect(mockRegistryGet).not.toHaveBeenCalled();
+        expect(mockSaveWebhookStatus).not.toHaveBeenCalled();
+    });
 });

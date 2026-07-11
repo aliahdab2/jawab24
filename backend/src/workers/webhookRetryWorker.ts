@@ -2,6 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { config } from '../config';
 import { WEBHOOK_RETRY_QUEUE, WebhookRetryJobData } from '../lib/webhookRetryQueue';
 import { getStoreById, saveWebhookStatus } from '../services/ecommerce';
+import { isDemoStore } from '../services/demoStore';
 import { integrationRegistry } from '../integrations/registry';
 import { captureError } from '../utils/sentryHelpers';
 import { Logger, noopLogger } from '../types';
@@ -25,6 +26,12 @@ async function processJob(job: Job<WebhookRetryJobData>): Promise<void> {
     const store = await getStoreById(storeId);
     if (!store || !store.isActive) {
         logger.info('[WebhookRetry] Store missing or inactive — skipping', { storeId });
+        return;
+    }
+    if (isDemoStore(store)) {
+        // Placeholder token can't be decrypted — retrying would only burn
+        // attempts and fire a webhook-retry-exhausted Sentry alert.
+        logger.info('[WebhookRetry] Demo store — skipping', { storeId });
         return;
     }
 

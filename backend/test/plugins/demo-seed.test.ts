@@ -99,4 +99,30 @@ describe('seedDemoData', () => {
         // Should NOT have called update for pages (they are new)
         // The first select returns [] so no update is triggered for pages
     });
+
+    it('seeds e-commerce stores with platformData.demo so real-API paths skip them', async () => {
+        // Regression for JAWAB24-BACKEND-19: the demo stores' placeholder tokens are
+        // not real ciphertext; without this marker the sync cron / webhook paths
+        // pick them up and fail on decrypt. Store seeding only runs for pages that
+        // resolve, so use the refresh path with the store-linked pages present.
+        const existingPages = [
+            { id: 'page-electronics', facebookPageId: 'demo_page_electronics', name: 'OLD STORE' },
+            { id: 'page-fashion', facebookPageId: 'demo_page_fashion', name: 'OLD FASHION' },
+        ];
+        vi.mocked(db.select).mockReturnValue(mockSelectChain(existingPages) as any);
+        const insertChain = mockInsertChain();
+        vi.mocked(db.insert).mockReturnValue(insertChain as any);
+        vi.mocked(db.update).mockReturnValue(mockUpdateChain() as any);
+        vi.mocked(db.delete).mockReturnValue(mockDeleteChain() as any);
+
+        await seedDemoData('user-123', 'ws-123');
+
+        const storeInserts = vi.mocked(insertChain.values).mock.calls
+            .map(([values]) => values)
+            .filter((values: any) => values?.storeDomain && values?.accessToken);
+        expect(storeInserts).toHaveLength(2); // Shopify + Salla
+        for (const store of storeInserts) {
+            expect(store.platformData.demo).toBe(true);
+        }
+    });
 });

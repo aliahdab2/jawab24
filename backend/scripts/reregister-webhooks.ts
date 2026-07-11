@@ -19,6 +19,7 @@ import { db } from '../src/db';
 import { ecommerceStores } from '../src/db/schema';
 import { and, eq } from 'drizzle-orm';
 import { registerWebhooksWithPersist, type EcommercePlatform } from '../src/services/ecommerce';
+import { isDemoStore } from '../src/services/demoStore';
 import { integrationRegistry } from '../src/integrations';
 
 const PLATFORMS: EcommercePlatform[] = ['shopify', 'salla', 'zid'];
@@ -37,6 +38,10 @@ async function reregisterForPlatform(platform: EcommercePlatform): Promise<void>
     console.log(`[${platform}] ${stores.length} active store(s)`);
 
     for (const store of stores) {
+        if (isDemoStore(store)) {
+            console.log(`  ⏭️  ${store.storeDomain} — demo store, skipping`);
+            continue;
+        }
         try {
             const status = await registerWebhooksWithPersist(
                 store.id,

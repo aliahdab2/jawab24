@@ -1071,13 +1071,15 @@ const DEMO_NOTIFICATIONS = [
 const DEMO_SHOPIFY_STORE = {
     platform: 'shopify' as const,
     storeDomain: 'demo-electronics.myshopify.com',
-    accessToken: 'demo_token_placeholder', // not used — demo doesn't call Shopify API
+    accessToken: 'demo_token_placeholder', // not real ciphertext — decrypt() would throw
     accessTokenIv: '00000000000000000000000000000000', // 32 hex chars = valid IV format
     storeName: 'متجر الإلكترونيات',
     storeEmail: 'demo@demo-electronics.myshopify.com',
     storeCurrency: 'SAR',
     storeTimezone: 'Asia/Riyadh',
-    platformData: { planName: 'basic' },
+    // demo: true excludes this store from every real-API path (scheduled sync,
+    // webhook registration/retry, token refresh) — see services/demoStore.ts.
+    platformData: { planName: 'basic', demo: true },
     productCount: 5,
     productSummary: `Store: https://demo-electronics.myshopify.com\nTop Products:\niPhone 15 Pro — 3,800 - 4,500 SAR — 128GB، 256GB، 512GB — أسود، أبيض، تيتانيوم — in stock — https://demo-electronics.myshopify.com/products/iphone-15-pro\nSamsung Galaxy S24 — 2,900 - 3,400 SAR — 256GB، 512GB — أسود، فضي — in stock — https://demo-electronics.myshopify.com/products/samsung-galaxy-s24\nMacBook Air M3 — 5,200 - 6,500 SAR — 13 بوصة، 15 بوصة — فضي، رمادي — low stock — https://demo-electronics.myshopify.com/products/macbook-air-m3\nAirPods Pro (الجيل الثاني) — 850 SAR — in stock — https://demo-electronics.myshopify.com/products/airpods-pro-2\nكفر حماية iPhone 15 — 120 - 180 SAR — أسود، أبيض، أزرق، أحمر، شفاف — in stock — https://demo-electronics.myshopify.com/products/iphone-15-case`,
     policiesSummary: `ضمان: سنة كاملة على جميع المنتجات\nإرجاع: 14 يوم\nتوصيل: 2-3 أيام عمل داخل الرياض، مجاني للطلبات فوق 500 ريال\nدفع: بطاقة، تحويل، الدفع عند الاستلام`,
@@ -1092,7 +1094,7 @@ const DEMO_SALLA_STORE = {
     storeEmail: 'info@gulf-fashion.salla.sa',
     storeCurrency: 'SAR',
     storeTimezone: 'Asia/Riyadh',
-    platformData: { merchant_id: 'demo_salla_merchant' },
+    platformData: { merchant_id: 'demo_salla_merchant', demo: true },
     productCount: 6,
     productSummary: `Store: https://gulf-fashion.salla.sa\nTop Products:\nعباية كلاسيك سوداء — 450 SAR — S، M، L، XL — أسود — in stock — https://gulf-fashion.salla.sa/products/classic-black-abaya\nعباية مطرزة فاخرة — 750 - 950 SAR — S، M، L، XL، XXL — أسود، كحلي — in stock — https://gulf-fashion.salla.sa/products/embroidered-luxury-abaya\nثوب رجالي قطن مصري — 280 - 450 SAR — 52، 54، 56، 58، 60 — أبيض — in stock — https://gulf-fashion.salla.sa/products/egyptian-cotton-thobe\nبشت رجالي فاخر — 1,200 - 2,500 SAR — 56، 58، 60 — بيج، بني — low stock — https://gulf-fashion.salla.sa/products/luxury-bisht\nعطر عود ملكي — 350 SAR — 100ml — in stock — https://gulf-fashion.salla.sa/products/royal-oud-perfume\nطقم أطفال عيد — 180 - 250 SAR — 4-6، 7-9، 10-12 سنة — أبيض، بيج — in stock — https://gulf-fashion.salla.sa/products/kids-eid-set`,
     policiesSummary: `استبدال واسترجاع: 14 يوم من تاريخ الاستلام\nتوصيل: 3-5 أيام عمل لجميع مناطق المملكة\nتوصيل مجاني: للطلبات فوق 300 ريال\nطرق الدفع: بطاقة ائتمان، مدى، Apple Pay، الدفع عند الاستلام`,
