@@ -89,12 +89,17 @@ export class CatalogExtractor {
      * Validate every model row through the SAME Zod schema as manual entry
      * (CatalogItemSchema, incl. Arabic-Indic price normalization) — a proposed
      * row the manual form would reject must never reach the review sheet.
-     * Duplicate names (the model repeating a row) keep the first occurrence.
+     *
+     * Dedupe is EXACT-row only (name + price + description): real lists in any
+     * vertical reuse one name across variants — sizes, schedules, trims (first
+     * seen live: a course schedule listing the same course at two prices) —
+     * and those must all survive; only the model literally repeating a row is
+     * dropped (keep the first occurrence).
      */
     private postProcess(raw: RawExtract): { items: CatalogItemInput[]; dropped: number } {
         const rows = Array.isArray(raw.items) ? raw.items : [];
         const items: CatalogItemInput[] = [];
-        const seenNames = new Set<string>();
+        const seen = new Set<string>();
         let dropped = 0;
 
         for (const row of rows) {
@@ -107,12 +112,16 @@ export class CatalogExtractor {
                 dropped += 1;
                 continue;
             }
-            const key = parsed.data.name.trim().toLowerCase();
-            if (seenNames.has(key)) {
+            const key = [
+                parsed.data.name.trim().toLowerCase(),
+                parsed.data.price ?? '',
+                (parsed.data.description ?? '').trim().toLowerCase(),
+            ].join('|');
+            if (seen.has(key)) {
                 dropped += 1;
                 continue;
             }
-            seenNames.add(key);
+            seen.add(key);
             items.push(parsed.data);
         }
         return { items, dropped };

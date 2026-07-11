@@ -76,20 +76,30 @@ describe('catalogExtractor', () => {
         expect(result.dropped).toBe(3);
     });
 
-    it('dedupes rows the model repeated (case/whitespace-insensitive, keeps the first)', async () => {
+    it('dedupes only EXACT repeats — same-name variants at different prices survive', async () => {
+        // Universal pattern, any vertical: a size/schedule/trim variant reuses the
+        // offering's name. Course schedule (the case that caught this) + product sizes.
         mockReply({
             items: [
-                { name: 'دورة ICDL', price: '3500' },
-                { name: ' دورة icdl ', price: '9999' },
+                { name: 'حلاقة نسائية', price: '35,000', description: 'صباحي' },
+                { name: ' حلاقة نسائية ', price: '٣٥٠٠٠', description: 'صباحي' }, // exact repeat, format variance
+                { name: 'حلاقة نسائية', price: '75,000', description: 'الأحد فقط' }, // schedule variant — must survive
+                { name: 'تيشيرت قطن', price: '100', currency: 'ريال', description: 'مقاس M' },
+                { name: 'تيشيرت قطن', price: '120', currency: 'ريال', description: 'مقاس XL' }, // size variant — must survive
                 { name: 'دورة أخرى' },
             ],
         });
 
         const result = await catalogExtractor.extract('x', CTX);
 
-        expect(result.items.map(i => i.name)).toEqual(['دورة ICDL', 'دورة أخرى']);
-        expect(result.items[0].price).toBe(3500); // first occurrence wins
-        expect(result.dropped).toBe(1);
+        expect(result.items.map(i => [i.name, i.price])).toEqual([
+            ['حلاقة نسائية', 35000],
+            ['حلاقة نسائية', 75000],
+            ['تيشيرت قطن', 100],
+            ['تيشيرت قطن', 120],
+            ['دورة أخرى', null],
+        ]);
+        expect(result.dropped).toBe(1); // only the literal repeat
     });
 
     it(`caps proposals at ${MAX_EXTRACT_ITEMS} and counts the overflow as dropped`, async () => {
