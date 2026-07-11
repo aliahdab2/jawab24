@@ -23,12 +23,26 @@ vi.mock('../../src/services/catalog', async (importOriginal) => {
             createCatalogItem: vi.fn(),
             updateCatalogItem: vi.fn(),
             deleteCatalogItem: vi.fn(),
+            getCatalogCapacity: vi.fn(),
+            createCatalogItemsBatch: vi.fn(),
         },
     };
 });
 vi.mock('../../src/services/activation', () => ({
     recordActivationEvent: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('../../src/services/catalogExtractor', () => ({
+    catalogExtractor: { extract: vi.fn() },
+}));
+vi.mock('../../src/lib/dailyCap', () => ({
+    dailyCapKey: (prefix: string, id: string) => `${prefix}:${id}:2026-01-01`,
+    checkDailyCap: vi.fn().mockResolvedValue({ allowed: true, used: 0, limit: 30 }),
+    incrementDailyCap: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
+
+import { catalogExtractor } from '../../src/services/catalogExtractor';
+import { checkDailyCap } from '../../src/lib/dailyCap';
 
 const state = { authed: true, role: 'admin' as string };
 
@@ -72,6 +86,8 @@ describe('Catalog routes — security wiring', () => {
         for (const [method, url] of [
             ['GET', `/pages/${PAGE}/catalog`],
             ['POST', `/pages/${PAGE}/catalog`],
+            ['POST', `/pages/${PAGE}/catalog/extract`],
+            ['POST', `/pages/${PAGE}/catalog/batch`],
             ['PATCH', `/pages/${PAGE}/catalog/${ITEM}`],
             ['DELETE', `/pages/${PAGE}/catalog/${ITEM}`],
         ] as const) {
@@ -90,6 +106,8 @@ describe('Catalog routes — security wiring', () => {
 
         for (const [method, url] of [
             ['POST', `/pages/${PAGE}/catalog`],
+            ['POST', `/pages/${PAGE}/catalog/extract`],
+            ['POST', `/pages/${PAGE}/catalog/batch`],
             ['PATCH', `/pages/${PAGE}/catalog/${ITEM}`],
             ['DELETE', `/pages/${PAGE}/catalog/${ITEM}`],
         ] as const) {
@@ -99,6 +117,8 @@ describe('Catalog routes — security wiring', () => {
         expect(catalogService.createCatalogItem).not.toHaveBeenCalled();
         expect(catalogService.updateCatalogItem).not.toHaveBeenCalled();
         expect(catalogService.deleteCatalogItem).not.toHaveBeenCalled();
+        expect(catalogExtractor.extract).not.toHaveBeenCalled();
+        expect(catalogService.createCatalogItemsBatch).not.toHaveBeenCalled();
     });
 
     it('404s (not 403) for a page outside the workspace — no existence leak', async () => {
@@ -149,5 +169,142 @@ describe('Catalog routes — security wiring', () => {
         const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog`, payload: { name: 'خوذة' } });
         expect(res.statusCode).toBe(201);
         expect(JSON.parse(res.payload)).toMatchObject({ id: ITEM, name: 'خوذة' });
+    });
+});
+
+describe('Catalog import endpoints — extract + batch', () => {
+    let app: ReturnType<typeof fastify>;
+    const LONG_TEXT = 'دورة ICDL ٣٥٠٠ ل.س — دورة فوتوشوب ٥٠٠٠ ل.س';
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        state.authed = true;
+        state.role = 'admin';
+        vi.mocked(checkDailyCap).mockResolvedValue({ allowed: true, used: 0, limit: 30 });
+        vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 300, pageUserId: 'user-1' } as never);
+        app = fastify();
+        app.register(catalogRoutes);
+        await app.ready();
+    });
+
+    it('declares a per-route rate limit on /extract (the only paid route)', async () => {
+        const probe = fastify();
+        const configs: Record<string, unknown> = {};
+        probe.addHook('onRoute', (route) => {
+            if (route.method === 'POST') configs[route.url] = route.config;
+        });
+        probe.register(catalogRoutes);
+        await probe.ready();
+        expect(configs['/pages/:pageId/catalog/extract']).toMatchObject({ rateLimit: { max: 5, timeWindow: '1 minute' } });
+    });
+
+    it('400s extract when text is too short or missing — before any service call', async () => {
+        for (const payload of [{ text: 'short' }, {}]) {
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/extract`, payload });
+            expect(res.statusCode).toBe(400);
+        }
+        expect(catalogService.getCatalogCapacity).not.toHaveBeenCalled();
+        expect(catalogExtractor.extract).not.toHaveBeenCalled();
+    });
+
+    it('403s extract on a full page WITHOUT spending an LLM call', async () => {
+        vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 0, pageUserId: 'user-1' } as never);
+        const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/extract`, payload: { text: LONG_TEXT } });
+        expect(res.statusCode).toBe(403);
+        expect(JSON.parse(res.payload).code).toBe('CATALOG_LIMIT_REACHED');
+        expect(catalogExtractor.extract).not.toHaveBeenCalled();
+    });
+
+    it('404s extract for a foreign page; 409s for a store page — no LLM spend either way', async () => {
+        vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue(null);
+        const notFound = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/extract`, payload: { text: LONG_TEXT } });
+        expect(notFound.statusCode).toBe(404);
+
+        vi.mocked(catalogService.getCatalogCapacity).mockRejectedValue(new CatalogStoreConflictError());
+        const store = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/extract`, payload: { text: LONG_TEXT } });
+        expect(store.statusCode).toBe(409);
+        expect(JSON.parse(store.payload).code).toBe('PAGE_HAS_STORE');
+        expect(catalogExtractor.extract).not.toHaveBeenCalled();
+    });
+
+    it('429s at the daily cap; 503s FAIL-CLOSED when the quota check is unavailable', async () => {
+        vi.mocked(checkDailyCap).mockResolvedValue({ allowed: false, used: 30, limit: 30 });
+        const capped = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/extract`, payload: { text: LONG_TEXT } });
+        expect(capped.statusCode).toBe(429);
+        expect(JSON.parse(capped.payload).code).toBe('daily_limit_reached');
+
+        vi.mocked(checkDailyCap).mockRejectedValue(new Error('redis down'));
+        const down = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/extract`, payload: { text: LONG_TEXT } });
+        expect(down.statusCode).toBe(503);
+        expect(JSON.parse(down.payload).code).toBe('quota_check_unavailable');
+        expect(catalogExtractor.extract).not.toHaveBeenCalled();
+    });
+
+    it('200s extract with proposals sliced to remaining capacity and an overflow count', async () => {
+        vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 2, pageUserId: 'user-1' } as never);
+        vi.mocked(catalogExtractor.extract).mockResolvedValue({
+            items: [
+                { type: 'course', name: 'دورة ICDL', price: 3500, currency: 'ل.س', description: null, isAvailable: true },
+                { type: 'course', name: 'دورة فوتوشوب', price: 5000, currency: 'ل.س', description: null, isAvailable: true },
+                { type: 'course', name: 'دورة إكسل', price: 2000, currency: 'ل.س', description: null, isAvailable: true },
+            ],
+            dropped: 1,
+            truncated: false,
+        });
+
+        const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/extract`, payload: { text: LONG_TEXT } });
+
+        expect(res.statusCode).toBe(200);
+        const body = JSON.parse(res.payload);
+        expect(body.items).toHaveLength(2);
+        expect(body.overflow).toBe(1);
+        expect(body.dropped).toBe(1);
+        expect(body.remainingCapacity).toBe(2);
+        expect(body.truncated).toBe(false);
+    });
+
+    it('400s batch with per-index field paths on one bad row', async () => {
+        const res = await app.inject({
+            method: 'POST', url: `/pages/${PAGE}/catalog/batch`,
+            payload: { items: [{ name: 'ok' }, { name: '' }] },
+        });
+        expect(res.statusCode).toBe(400);
+        const body = JSON.parse(res.payload);
+        expect(body.error).toBe('Validation failed');
+        expect(JSON.stringify(body.details)).toContain('items.1.name');
+        expect(catalogService.createCatalogItemsBatch).not.toHaveBeenCalled();
+    });
+
+    it('maps batch service outcomes: 404 foreign page, 403 limit, 409 store', async () => {
+        const payload = { items: [{ name: 'x' }] };
+
+        vi.mocked(catalogService.createCatalogItemsBatch).mockResolvedValue(null);
+        expect((await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/batch`, payload })).statusCode).toBe(404);
+
+        vi.mocked(catalogService.createCatalogItemsBatch).mockRejectedValue(new CatalogLimitError());
+        const limit = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/batch`, payload });
+        expect(limit.statusCode).toBe(403);
+        expect(JSON.parse(limit.payload).code).toBe('CATALOG_LIMIT_REACHED');
+
+        vi.mocked(catalogService.createCatalogItemsBatch).mockRejectedValue(new CatalogStoreConflictError());
+        const store = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/batch`, payload });
+        expect(store.statusCode).toBe(409);
+        expect(JSON.parse(store.payload).code).toBe('PAGE_HAS_STORE');
+    });
+
+    it('201s batch with { data: items } and fires ONE activation event', async () => {
+        const rows = [{ id: ITEM, name: 'a' }, { id: '33333333-3333-3333-3333-333333333333', name: 'b' }];
+        vi.mocked(catalogService.createCatalogItemsBatch).mockResolvedValue({ items: rows, pageUserId: 'user-1' } as never);
+
+        const res = await app.inject({
+            method: 'POST', url: `/pages/${PAGE}/catalog/batch`,
+            payload: { items: [{ name: 'a' }, { name: 'b' }] },
+        });
+
+        expect(res.statusCode).toBe(201);
+        expect(JSON.parse(res.payload).data).toHaveLength(2);
+        const { recordActivationEvent } = await import('../../src/services/activation');
+        expect(recordActivationEvent).toHaveBeenCalledTimes(1);
+        expect(recordActivationEvent).toHaveBeenCalledWith('user-1', 'kb_filled', { source: 'catalog' });
     });
 });

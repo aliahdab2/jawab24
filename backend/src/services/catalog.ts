@@ -174,6 +174,66 @@ class CatalogService {
     }
 
     /**
+     * How many more items the page can take. Gates the import extract endpoint
+     * BEFORE any LLM spend. Same null/throw semantics as the other methods:
+     * null = page not in workspace (404), store pages throw (409).
+     */
+    async getCatalogCapacity(workspaceId: string, pageId: string) {
+        const page = await this.resolvePage(workspaceId, pageId);
+        if (!page) return null;
+        if (page.ecommerceStoreId) throw new CatalogStoreConflictError();
+
+        const [{ value: existing }] = await db
+            .select({ value: count() })
+            .from(catalogItems)
+            .where(eq(catalogItems.pageId, pageId));
+        return { remaining: Math.max(0, MAX_CATALOG_ITEMS_PER_PAGE - existing), pageUserId: page.userId };
+    }
+
+    /**
+     * Create many items in ONE transaction — the import flow's save step.
+     * All-or-nothing: the capacity check runs INSIDE the transaction (unlike
+     * single-create's pre-check, a 100-row batch racing another writer matters),
+     * and a limit breach rolls back every row. One cache bump for the whole
+     * batch instead of N.
+     */
+    async createCatalogItemsBatch(workspaceId: string, pageId: string, items: CreateCatalogItemDTO[]) {
+        const page = await this.resolvePage(workspaceId, pageId);
+        if (!page) return null;
+        if (page.ecommerceStoreId) throw new CatalogStoreConflictError();
+
+        const created = await db.transaction(async (tx) => {
+            const [{ value: existing }] = await tx
+                .select({ value: count() })
+                .from(catalogItems)
+                .where(eq(catalogItems.pageId, pageId));
+            if (existing + items.length > MAX_CATALOG_ITEMS_PER_PAGE) throw new CatalogLimitError();
+
+            const [{ base }] = await tx
+                .select({ base: sql<number>`COALESCE(MAX(${catalogItems.sortOrder}) + 1, 0)` })
+                .from(catalogItems)
+                .where(eq(catalogItems.pageId, pageId));
+
+            const rows = await tx
+                .insert(catalogItems)
+                .values(items.map((data, i) => ({
+                    pageId,
+                    type: data.type ?? 'product',
+                    name: data.name,
+                    description: data.description ?? null,
+                    price: typeof data.price === 'number' ? data.price.toFixed(2) : null,
+                    currency: data.currency ?? null,
+                    isAvailable: data.isAvailable ?? true,
+                    sortOrder: base + i, // append after the merchant's existing order
+                })))
+                .returning();
+            await pagesService.invalidatePageCaches(pageId, tx);
+            return rows;
+        });
+        return { items: created, pageUserId: page.userId };
+    }
+
+    /**
      * Render the page's catalog for the <product_catalog> prompt block.
      * Returns undefined when the page has no items (the block is omitted and the
      * prompt stays byte-identical to today — the Phase B inertness guarantee).

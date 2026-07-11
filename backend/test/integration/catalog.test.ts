@@ -143,6 +143,81 @@ describe('catalogService — integration', () => {
         ).rejects.toThrow(CatalogLimitError);
     });
 
+    it('batch-creates in one transaction: appended sortOrder, ONE cache bump', async () => {
+        const { user, workspace, page } = await makePage();
+        // Pre-existing manual item so the batch has an order to continue from.
+        await catalogService.createCatalogItem(workspace.id, page.id, { name: 'قائم مسبقًا' });
+        const vBefore = await kbActiveVersionOf(page.id);
+
+        const created = await catalogService.createCatalogItemsBatch(workspace.id, page.id, [
+            { name: 'دورة ICDL', type: 'course', price: 3500, currency: 'ل.س' },
+            { name: 'دورة فوتوشوب', type: 'course', price: 5000, currency: 'ل.س' },
+            { name: 'استشارة', type: 'service' },
+        ]);
+
+        expect(created).not.toBeNull();
+        expect(created!.pageUserId).toBe(user.id);
+        expect(created!.items.map(i => i.sortOrder)).toEqual([1, 2, 3]); // continues after the existing 0
+        expect(created!.items[0].price).toBe('3500.00');
+        expect(created!.items[2].price).toBeNull(); // price on request
+
+        // Exactly ONE bump for the whole batch — not one per row.
+        expect(await kbActiveVersionOf(page.id)).toBe(vBefore + 1);
+        expect(await catalogService.listCatalogItems(workspace.id, page.id)).toHaveLength(4);
+    });
+
+    it('batch is all-or-nothing at the cap: a breaching batch inserts ZERO rows', async () => {
+        const { workspace, page } = await makePage();
+        await testDb.insert(schema.catalogItems).values(
+            Array.from({ length: MAX_CATALOG_ITEMS_PER_PAGE - 1 }, (_, i) => ({
+                pageId: page.id, name: `item-${i}`, sortOrder: i,
+            })),
+        );
+        const vBefore = await kbActiveVersionOf(page.id);
+
+        // 299 existing + 2 → over the cap → rollback, nothing lands.
+        await expect(
+            catalogService.createCatalogItemsBatch(workspace.id, page.id, [{ name: 'أ' }, { name: 'ب' }]),
+        ).rejects.toThrow(CatalogLimitError);
+        expect(await catalogService.listCatalogItems(workspace.id, page.id)).toHaveLength(MAX_CATALOG_ITEMS_PER_PAGE - 1);
+        expect(await kbActiveVersionOf(page.id)).toBe(vBefore); // failed batch must not bump caches
+
+        // 299 + 1 fits exactly.
+        const fits = await catalogService.createCatalogItemsBatch(workspace.id, page.id, [{ name: 'الأخير' }]);
+        expect(fits!.items).toHaveLength(1);
+        expect(await catalogService.listCatalogItems(workspace.id, page.id)).toHaveLength(MAX_CATALOG_ITEMS_PER_PAGE);
+    });
+
+    it('batch mirrors the single-write guards: null for foreign workspace, throws on store pages', async () => {
+        const { user, workspace, page } = await makePage();
+        const otherWorkspace = await createTestWorkspace((await createTestUser()).id);
+        expect(await catalogService.createCatalogItemsBatch(otherWorkspace.id, page.id, [{ name: 'x' }])).toBeNull();
+        expect(await catalogService.getCatalogCapacity(otherWorkspace.id, page.id)).toBeNull();
+
+        const [store] = await testDb.insert(schema.ecommerceStores).values({
+            userId: user.id, workspaceId: workspace.id, platform: 'salla',
+            storeDomain: `store-${Date.now()}.test`, accessToken: 'enc-token', accessTokenIv: 'iv',
+        }).returning({ id: schema.ecommerceStores.id });
+        await testDb.update(schema.pages).set({ ecommerceStoreId: store.id }).where(eq(schema.pages.id, page.id));
+
+        await expect(
+            catalogService.createCatalogItemsBatch(workspace.id, page.id, [{ name: 'ممنوع' }]),
+        ).rejects.toThrow(CatalogStoreConflictError);
+        await expect(
+            catalogService.getCatalogCapacity(workspace.id, page.id),
+        ).rejects.toThrow(CatalogStoreConflictError);
+    });
+
+    it('reports remaining capacity for the extract pre-check', async () => {
+        const { user, workspace, page } = await makePage();
+        expect(await catalogService.getCatalogCapacity(workspace.id, page.id))
+            .toEqual({ remaining: MAX_CATALOG_ITEMS_PER_PAGE, pageUserId: user.id });
+
+        await catalogService.createCatalogItemsBatch(workspace.id, page.id, [{ name: 'أ' }, { name: 'ب' }]);
+        expect((await catalogService.getCatalogCapacity(workspace.id, page.id))!.remaining)
+            .toBe(MAX_CATALOG_ITEMS_PER_PAGE - 2);
+    });
+
     it('builds the prompt block from stored rows and returns undefined when empty', async () => {
         const { workspace, page } = await makePage();
         expect(await catalogService.buildCatalogPromptBlock(page.id)).toBeUndefined();

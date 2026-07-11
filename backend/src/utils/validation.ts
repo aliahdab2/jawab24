@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
 
 /**
  * Validation Schemas for API Requests
@@ -165,6 +166,20 @@ export const CatalogItemUpdateSchema = z.object({
 
 export type CatalogItemInput = z.infer<typeof CatalogItemSchema>;
 export type CatalogItemUpdateInput = z.infer<typeof CatalogItemUpdateSchema>;
+
+/** POST /pages/:pageId/catalog/extract body. 16k mirrors the KB / file-extractor
+ *  output cap — anything a merchant can paste or upload today fits. Min 10 keeps
+ *  accidental fragments from burning an LLM call. */
+export const CatalogExtractSchema = z.object({
+    text: z.string().trim().min(10, 'Text too short to extract from').max(16_000, 'Text too long (max 16,000 characters)'),
+});
+
+/** POST /pages/:pageId/catalog/batch body: the reviewed import rows. Each item
+ *  re-runs the full create schema (incl. PriceInput normalization) — the client
+ *  may have edited rows after extraction. */
+export const CatalogBatchSchema = z.object({
+    items: z.array(CatalogItemSchema).min(1, 'At least one item is required').max(MAX_CATALOG_ITEMS_PER_PAGE),
+});
 
 // ==========================================
 // Generic ID Validation
