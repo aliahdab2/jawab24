@@ -23,10 +23,29 @@
     "currency": "Currency",
     "descriptionOptional": "Description (optional)",
     "descriptionPlaceholder": "Anything useful the customer should know",
-    "available": "In stock"
+    "available": "In stock",
+    "startsAt": "Start date (optional)",
+    "endsAt": "End date (optional)",
+    "details": "Details (optional)",
+    "detailLabel": "Detail",
+    "detailValue": "Value",
+    "addDetail": "Add a detail",
+    "removeDetail": "Remove this detail"
+  },
+  "suggestedDetails": {
+    "product": "Brand",
+    "service": "Duration",
+    "course": "Duration|Level",
+    "vehicle": "Year|Mileage|Condition"
+  },
+  "badges": {
+    "ended": "Ended",
+    "startsOn": "Starts {date}",
+    "endsOn": "Ends {date}"
   },
   "errors": {
-    "nameRequired": "Please enter a name for this item"
+    "nameRequired": "Please enter a name for this item",
+    "dateOrder": "End date can’t be before the start date"
   },
   "types": {
     "product": "Product",

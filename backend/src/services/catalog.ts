@@ -1,8 +1,8 @@
 import { db } from '../db';
 import { catalogItems, pages } from '../db/schema';
-import { and, asc, count, eq, sql } from 'drizzle-orm';
+import { and, asc, count, eq, isNull, or, sql } from 'drizzle-orm';
 import { MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
-import type { CatalogItemType } from '@jawab24/shared';
+import type { CatalogItemAttribute, CatalogItemType } from '@jawab24/shared';
 import { pagesService } from './pages';
 
 /**
@@ -45,6 +45,10 @@ export interface CreateCatalogItemDTO {
     price?: number | null;
     currency?: string | null;
     isAvailable?: boolean;
+    /** 'YYYY-MM-DD' calendar dates (validated upstream by CatalogDateInput). */
+    startsAt?: string | null;
+    endsAt?: string | null;
+    attributes?: CatalogItemAttribute[] | null;
 }
 
 export type UpdateCatalogItemDTO = Partial<CreateCatalogItemDTO> & { sortOrder?: number };
@@ -121,6 +125,9 @@ class CatalogService {
                     price: typeof data.price === 'number' ? data.price.toFixed(2) : null,
                     currency: data.currency ?? null,
                     isAvailable: data.isAvailable ?? true,
+                    startsAt: data.startsAt ?? null,
+                    endsAt: data.endsAt ?? null,
+                    attributes: data.attributes ?? null,
                     // Append to the end of the merchant's list.
                     sortOrder: sql`COALESCE((SELECT MAX(${catalogItems.sortOrder}) + 1 FROM ${catalogItems} WHERE ${catalogItems.pageId} = ${pageId}), 0)`,
                 })
@@ -143,6 +150,9 @@ class CatalogService {
         if (data.price !== undefined) values.price = typeof data.price === 'number' ? data.price.toFixed(2) : null;
         if (data.currency !== undefined) values.currency = data.currency;
         if (data.isAvailable !== undefined) values.isAvailable = data.isAvailable;
+        if (data.startsAt !== undefined) values.startsAt = data.startsAt;
+        if (data.endsAt !== undefined) values.endsAt = data.endsAt;
+        if (data.attributes !== undefined) values.attributes = data.attributes;
         if (data.sortOrder !== undefined) values.sortOrder = data.sortOrder;
 
         return db.transaction(async (tx) => {
@@ -224,6 +234,9 @@ class CatalogService {
                     price: typeof data.price === 'number' ? data.price.toFixed(2) : null,
                     currency: data.currency ?? null,
                     isAvailable: data.isAvailable ?? true,
+                    startsAt: data.startsAt ?? null,
+                    endsAt: data.endsAt ?? null,
+                    attributes: data.attributes ?? null,
                     sortOrder: base + i, // append after the merchant's existing order
                 })))
                 .returning();
@@ -237,12 +250,19 @@ class CatalogService {
      * Render the page's catalog for the <product_catalog> prompt block.
      * Returns undefined when the page has no items (the block is omitted and the
      * prompt stays byte-identical to today — the Phase B inertness guarantee).
+     *
+     * Items past their endsAt are EXCLUDED here (kb_chunks valid_until
+     * precedent) — the AI must never offer an ended cohort/offer. They stay in
+     * the merchant UI with an "Ended" badge until edited or deleted.
      */
     async buildCatalogPromptBlock(pageId: string): Promise<string | undefined> {
         const items = await db
             .select()
             .from(catalogItems)
-            .where(eq(catalogItems.pageId, pageId))
+            .where(and(
+                eq(catalogItems.pageId, pageId),
+                or(isNull(catalogItems.endsAt), sql`${catalogItems.endsAt} >= CURRENT_DATE`),
+            ))
             .orderBy(asc(catalogItems.sortOrder), asc(catalogItems.createdAt))
             .limit(MAX_CATALOG_ITEMS_PER_PAGE);
         return renderCatalogPromptBlock(items);
@@ -257,6 +277,11 @@ export interface CatalogPromptItem {
     price: string | null;
     currency: string | null;
     isAvailable: boolean;
+    /** 'YYYY-MM-DD' or null. Rendered verbatim — the model reasons against the
+     *  prompt's "Today's date" line (D-006), no date math here. */
+    startsAt?: string | null;
+    endsAt?: string | null;
+    attributes?: CatalogItemAttribute[] | null;
 }
 
 /**
@@ -272,12 +297,19 @@ export interface CatalogPromptItem {
 export function renderCatalogPromptBlock(items: CatalogPromptItem[]): string | undefined {
     if (items.length === 0) return undefined;
 
-    const renderItem = (item: CatalogPromptItem, withDescription: boolean): string => {
+    const renderItem = (item: CatalogPromptItem, withDetails: boolean): string => {
         const tag = TYPE_TAGS[(item.type as CatalogItemType)] ?? '';
         const parts = [`${tag}${item.name}`];
         parts.push(item.price !== null ? `${formatPrice(item.price)}${item.currency ? ` ${item.currency}` : ''}` : 'price on request');
         parts.push(item.isAvailable ? 'in stock' : 'out of stock');
-        if (withDescription && item.description) {
+        // Dates survive every degradation tier — tiny, and semantically critical
+        // (the model judges past/upcoming against its "Today's date" line).
+        if (item.startsAt) parts.push(`starts ${item.startsAt}`);
+        if (item.endsAt) parts.push(`ends ${item.endsAt}`);
+        if (withDetails && item.attributes) {
+            for (const attr of item.attributes) parts.push(`${attr.label}: ${attr.value}`);
+        }
+        if (withDetails && item.description) {
             parts.push(item.description.length > PROMPT_DESCRIPTION_MAX_CHARS
                 ? `${item.description.slice(0, PROMPT_DESCRIPTION_MAX_CHARS)}…`
                 : item.description);
@@ -285,8 +317,8 @@ export function renderCatalogPromptBlock(items: CatalogPromptItem[]): string | u
         return `- ${parts.join(' — ')}`;
     };
 
-    const render = (withDescription: boolean): string =>
-        ['Items this business offers (merchant-entered):', ...items.map(i => renderItem(i, withDescription))].join('\n');
+    const render = (withDetails: boolean): string =>
+        ['Items this business offers (merchant-entered):', ...items.map(i => renderItem(i, withDetails))].join('\n');
 
     let block = render(true);
     if (block.length > PROMPT_BLOCK_MAX_CHARS) block = render(false);

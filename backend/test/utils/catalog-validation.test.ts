@@ -11,6 +11,9 @@ describe('CatalogItemSchema', () => {
             price: null,
             currency: null,
             isAvailable: true,
+            startsAt: null,
+            endsAt: null,
+            attributes: null,
         });
     });
 

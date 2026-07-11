@@ -23,10 +23,29 @@
     "currency": "العملة",
     "descriptionOptional": "الوصف (اختياري)",
     "descriptionPlaceholder": "أي تفاصيل مفيدة يحتاجها العميل",
-    "available": "متوفر حاليًا"
+    "available": "متوفر حاليًا",
+    "startsAt": "تاريخ البدء (اختياري)",
+    "endsAt": "تاريخ الانتهاء (اختياري)",
+    "details": "تفاصيل إضافية (اختياري)",
+    "detailLabel": "التفصيلة",
+    "detailValue": "القيمة",
+    "addDetail": "أضف تفصيلة",
+    "removeDetail": "احذف هذه التفصيلة"
+  },
+  "suggestedDetails": {
+    "product": "الماركة",
+    "service": "المدة",
+    "course": "المدة|المستوى",
+    "vehicle": "سنة الصنع|الممشى|الحالة"
+  },
+  "badges": {
+    "ended": "منتهٍ",
+    "startsOn": "يبدأ {date}",
+    "endsOn": "ينتهي {date}"
   },
   "errors": {
-    "nameRequired": "اكتب اسم العنصر أولًا"
+    "nameRequired": "اكتب اسم العنصر أولًا",
+    "dateOrder": "تاريخ الانتهاء لا يمكن أن يسبق تاريخ البدء"
   },
   "types": {
     "product": "منتج",

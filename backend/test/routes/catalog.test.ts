@@ -140,6 +140,18 @@ describe('Catalog routes — security wiring', () => {
         expect(catalogService.createCatalogItem).not.toHaveBeenCalled();
     });
 
+    it('400s malformed or inverted dates (create is strict — the extractor path sanitizes instead)', async () => {
+        for (const payload of [
+            { name: 'x', startsAt: '11/07/2026' },                       // wrong format
+            { name: 'x', startsAt: '2026-13-45' },                        // impossible date
+            { name: 'x', startsAt: '2026-09-20', endsAt: '2026-08-10' },  // inverted window
+        ]) {
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog`, payload });
+            expect(res.statusCode, JSON.stringify(payload)).toBe(400);
+        }
+        expect(catalogService.createCatalogItem).not.toHaveBeenCalled();
+    });
+
     it('403s with CATALOG_LIMIT_REACHED at the cap', async () => {
         vi.mocked(catalogService.createCatalogItem).mockRejectedValue(new CatalogLimitError());
         const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog`, payload: { name: 'x' } });

@@ -4000,7 +4000,26 @@ const TEST_CASES: TestCase[] = [
     { id: 686, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'كم سعر دورة صيانة الموتوسيكلات؟', page: 'moto', expected: { flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'], replyContainsAny: ['1200', '١٢٠٠', '1,200'] }, notes: 'Course-type item ([course] tag) — generic types answer like products.' },
     { id: 687, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'بكم الهوندا CG المستعملة؟', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'], replyContainsAny: ['5500', '٥٥٠٠', '5,500'] }, notes: 'Vehicle-type item ([vehicle] tag) — the used-bike listing.' },
     { id: 688, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'وين موقعكم؟', page: 'moto', expected: { confidence: ['high'], replyContainsAny: ['العزيزية', 'الرياض'] }, notes: 'Feature-must-not-distort guard (v1 post-mortem lesson 4): an off-topic question on a catalog page still answers from KB text normally.' },
+    // Flexible-fields cases (dates + attributes). The dated fixture course is
+    // seeded at today+30 (relative, never stale) and /auth/demo re-seeds on
+    // login, so the eval-run date matches the seed date.
+    { id: 689, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'متى تبدأ دورة الميكانيك المتقدمة؟', page: 'moto', expected: { flagsAbsent: ['info_not_in_kb'], replyContainsAny: mechCourseStartForms(), replyNotContains: ['لا أعرف', 'لا تتوفر لدي معلومات'] }, notes: 'startsAt renders as "starts YYYY-MM-DD" in the block — must answer the date (any digit form), not deflect.' },
+    { id: 690, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'بكم عرض الشتاء طقم الجاكيت مع القفازات؟', page: 'moto', expected: { replyNotContains: ['199', '١٩٩'], replyContainsAny: ['انتهى', 'منتهي', 'غير متوفر', 'ما عاد', 'لم يعد', 'مو متوفر', 'للأسف', 'حالياً غير', 'ما عندنا', 'لا يوجد'] }, notes: 'Expired offer (endsAt 10 days past) is EXCLUDED from the prompt block — the AI must never quote its price; complete catalog → honest not-available.' },
+    { id: 691, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'كم مدة دورة الميكانيك المتقدمة؟', page: 'moto', expected: { flagsAbsent: ['info_not_in_kb'], replyContainsAny: ['٦ أسابيع', '6 أسابيع', 'ستة أسابيع', '٦ اسابيع', '6 اسابيع'] }, notes: 'المدة lives ONLY in the item\'s attributes (not description) — proves the label:value fragment path.' },
 ];
+
+/** Accepted textual forms of the dated fixture course's start date (seeded at
+ *  today+30 by seedMotoshopCatalog — recomputed here at run time; /auth/demo
+ *  re-seeds on login so both sides agree). Covers Latin + Arabic-Indic digits
+ *  and the bare day-of-month for replies that reformat the ISO date. */
+function mechCourseStartForms(): string[] {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    const iso = d.toLocaleDateString('en-CA'); // YYYY-MM-DD
+    const day = String(d.getDate());
+    const toArabicIndic = (s: string) => s.replace(/\d/g, (digit) => '٠١٢٣٤٥٦٧٨٩'[Number(digit)]);
+    return [iso, day, toArabicIndic(day)];
+}
 
 // ---------------------------------------------------------------------------
 // Evaluation logic

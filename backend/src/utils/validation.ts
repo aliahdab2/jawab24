@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
+import { MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEM_ATTRIBUTES, MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
 
 /**
  * Validation Schemas for API Requests
@@ -138,6 +138,52 @@ const PriceInput = z.preprocess((raw) => {
     return Number.isFinite(num) ? num : raw; // unparseable → fails z.number() with a clear error
 }, z.number().min(0, 'Price must be non-negative').max(9_999_999_999.99).nullable());
 
+/** True only for a date whose Y-M-D parts round-trip — "2026-13-45" fails
+ *  instead of rolling over into a different month. Exported for the catalog
+ *  extractor's pre-sanitize step (drop a bad date FIELD, not the whole row). */
+export function isRealCalendarDate(s: string): boolean {
+    const [y, m, d] = s.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/** 'YYYY-MM-DD' calendar date (day granularity is the product semantics —
+ *  course cohorts and offer expiries; DATE column, no timezone drift).
+ *  ''/undefined → null = "not set". */
+const CatalogDateInput = z.preprocess(
+    (raw) => (raw === '' || raw === undefined ? null : raw),
+    z.string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
+        .refine(isRealCalendarDate, 'Invalid calendar date')
+        .nullable(),
+);
+
+/** Label+value details. Lenient by design (the extractor and the form both
+ *  feed this): non-string sides are coerced, blank rows dropped, overflow
+ *  sliced to the cap — a bad detail must never sink the whole item. */
+const CatalogAttributesInput = z.preprocess(
+    (raw) => {
+        if (raw === null || raw === undefined) return null;
+        if (!Array.isArray(raw)) return raw; // let the array schema reject it
+        const rows = raw
+            .map((r) => {
+                if (!r || typeof r !== 'object') return null;
+                const { label, value } = r as { label?: unknown; value?: unknown };
+                return {
+                    label: typeof label === 'string' || typeof label === 'number' ? String(label).trim() : '',
+                    value: typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '',
+                };
+            })
+            .filter((r): r is { label: string; value: string } => !!r && r.label !== '' && r.value !== '')
+            .slice(0, MAX_CATALOG_ITEM_ATTRIBUTES);
+        return rows.length === 0 ? null : rows;
+    },
+    z.array(z.object({
+        label: z.string().min(1).max(30),
+        value: z.string().min(1).max(100),
+    })).max(MAX_CATALOG_ITEM_ATTRIBUTES).nullable(),
+);
+
 export const CatalogItemSchema = z.object({
     type: z.enum(['product', 'service', 'course', 'vehicle', 'custom']).default('product'),
     name: z.string().trim().min(1, 'Name is required').max(200),
@@ -147,11 +193,19 @@ export const CatalogItemSchema = z.object({
     currency: z.string().trim().max(10).nullable().optional()
         .transform(v => (v === '' ? null : v ?? null)),
     isAvailable: z.boolean().default(true),
-});
+    startsAt: CatalogDateInput.optional().transform(v => v ?? null),
+    endsAt: CatalogDateInput.optional().transform(v => v ?? null),
+    attributes: CatalogAttributesInput.optional().transform(v => v ?? null),
+}).refine(
+    (item) => !item.startsAt || !item.endsAt || item.endsAt >= item.startsAt,
+    { message: 'End date must not be before the start date', path: ['endsAt'] },
+);
 
 /** PATCH body: any subset of the create fields, plus list reordering.
  *  '' → null mirrors the create schema so an update can't store empty strings
- *  (omitted fields stay undefined = unchanged). */
+ *  (omitted fields stay undefined = unchanged). Cross-field date order is NOT
+ *  checked here (a partial update can't see the other date) — the UI validates
+ *  it, and the prompt renderer tolerates an inverted pair. */
 export const CatalogItemUpdateSchema = z.object({
     type: z.enum(['product', 'service', 'course', 'vehicle', 'custom']).optional(),
     name: z.string().trim().min(1).max(200).optional(),
@@ -161,6 +215,9 @@ export const CatalogItemUpdateSchema = z.object({
     currency: z.string().trim().max(10).nullable().optional()
         .transform(v => (v === '' ? null : v)),
     isAvailable: z.boolean().optional(),
+    startsAt: CatalogDateInput.optional(),
+    endsAt: CatalogDateInput.optional(),
+    attributes: CatalogAttributesInput.optional(),
     sortOrder: z.number().int().min(0).optional(),
 }).refine(body => Object.keys(body).length > 0, { message: 'At least one field is required' });
 

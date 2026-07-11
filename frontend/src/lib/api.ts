@@ -199,6 +199,10 @@ export interface CatalogItemInput {
   price?: string | number | null;
   currency?: string | null;
   isAvailable?: boolean;
+  /** 'YYYY-MM-DD' calendar dates (course cohort start / offer expiry). */
+  startsAt?: string | null;
+  endsAt?: string | null;
+  attributes?: { label: string; value: string }[] | null;
 }
 
 // Posts API

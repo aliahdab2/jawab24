@@ -228,4 +228,49 @@ describe('catalogService — integration', () => {
         const block = await catalogService.buildCatalogPromptBlock(page.id);
         expect(block).toContain('- كاوتش ميشلان — 220 EGP — in stock');
     });
+
+    it('round-trips dates (as strings) and attributes (jsonb) through create and update', async () => {
+        const { workspace, page } = await makePage();
+
+        const created = await catalogService.createCatalogItem(workspace.id, page.id, {
+            name: 'دورة ميكانيك متقدمة', type: 'course', price: 1800, currency: 'ريال',
+            startsAt: '2026-08-10', endsAt: '2026-09-20',
+            attributes: [{ label: 'المدة', value: '٦ أسابيع' }, { label: 'المستوى', value: 'متقدم' }],
+        });
+        expect(created!.item.startsAt).toBe('2026-08-10'); // drizzle date() → string, no tz drift
+        expect(created!.item.endsAt).toBe('2026-09-20');
+        expect(created!.item.attributes).toEqual([
+            { label: 'المدة', value: '٦ أسابيع' }, { label: 'المستوى', value: 'متقدم' },
+        ]);
+
+        const updated = await catalogService.updateCatalogItem(workspace.id, page.id, created!.item.id, {
+            endsAt: null, attributes: [{ label: 'المدة', value: '٨ أسابيع' }],
+        });
+        expect(updated!.endsAt).toBeNull();
+        expect(updated!.startsAt).toBe('2026-08-10'); // untouched field survives
+        expect(updated!.attributes).toEqual([{ label: 'المدة', value: '٨ أسابيع' }]);
+    });
+
+    it('excludes expired items from the prompt block but keeps them listed for the merchant', async () => {
+        const { workspace, page } = await makePage();
+        const past = new Date(); past.setDate(past.getDate() - 10);
+        const future = new Date(); future.setDate(future.getDate() + 10);
+        const iso = (d: Date) => d.toLocaleDateString('en-CA');
+
+        await catalogService.createCatalogItemsBatch(workspace.id, page.id, [
+            { name: 'عرض منتهٍ', price: 199, endsAt: iso(past) },
+            { name: 'عرض ساري', price: 299, endsAt: iso(future) },
+            { name: 'بلا تاريخ', price: 99 },
+        ]);
+
+        const block = await catalogService.buildCatalogPromptBlock(page.id);
+        expect(block).not.toContain('عرض منتهٍ'); // the AI can never offer it
+        expect(block).toContain('عرض ساري');
+        expect(block).toContain(`ends ${iso(future)}`);
+        expect(block).toContain('بلا تاريخ');
+
+        // Merchant list still shows all three (badge tells them why).
+        const items = await catalogService.listCatalogItems(workspace.id, page.id);
+        expect(items).toHaveLength(3);
+    });
 });

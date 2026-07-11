@@ -358,6 +358,17 @@ export const MAX_CATALOG_ITEMS_PER_PAGE = 300;
  *  anything a merchant can paste or upload fits in one extraction. */
 export const MAX_CATALOG_IMPORT_CHARS = 16_000;
 
+/** A label+value detail on a catalog item ("المدة: ٦ أسابيع", "سنة الصنع: 2019").
+ *  Free text by design — the AI consumes these only as rendered prompt TEXT, so
+ *  labels need no stable key semantics; the UI merely SUGGESTS per-type labels. */
+export interface CatalogItemAttribute {
+  label: string;
+  value: string;
+}
+
+/** Per-item cap on attributes — keeps the form and the prompt line scannable. */
+export const MAX_CATALOG_ITEM_ATTRIBUTES = 6;
+
 /** One thing a business offers, entered by the merchant (no e-commerce store needed).
  *  Rendered into the AI's <product_catalog> prompt block; never exposed via AI tools. */
 export interface CatalogItem {
@@ -372,6 +383,11 @@ export interface CatalogItem {
   /** Merchant-uploaded photo (Release 2); shown to customers as a DM card. */
   imageUrl: string | null;
   isAvailable: boolean;
+  /** 'YYYY-MM-DD' calendar dates (course cohort start / offer expiry). A passed
+   *  endsAt hides the item from the AI prompt; the UI shows an "Ended" badge. */
+  startsAt: string | null;
+  endsAt: string | null;
+  attributes: CatalogItemAttribute[] | null;
   sortOrder: number;
   createdAt: string | Date | null;
   updatedAt: string | Date | null;

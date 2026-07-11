@@ -10,7 +10,7 @@ import { FileUploadButton } from '@/components/knowledge-base/FileUploadButton';
 import { catalogApi, type CatalogExtractResponse } from '@/lib/api';
 import { MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEMS_PER_PAGE, type CatalogItemType } from '@jawab24/shared';
 import {
-  CatalogItemFields, draftFromInput, draftToInput, type CatalogItemDraft,
+  CatalogItemFields, draftDatesInvalid, draftFromInput, draftToInput, todayISODate, type CatalogItemDraft,
 } from './CatalogItemFields';
 
 /** Below this the extract button stays disabled — mirrors the backend Zod min,
@@ -97,6 +97,12 @@ export function CatalogImportSheet({ pageId, initialText, onDone, onClose }: Cat
     const blank = activeRows.find((r) => !r.draft.name.trim());
     if (blank) {
       patchRow(blank.id, { expanded: true, nameError: true });
+      return;
+    }
+    // Inverted dates: expand the row — the end-date field shows the inline error.
+    const badDates = activeRows.find((r) => draftDatesInvalid(r.draft));
+    if (badDates) {
+      patchRow(badDates.id, { expanded: true });
       return;
     }
 
@@ -202,6 +208,11 @@ export function CatalogImportSheet({ pageId, initialText, onDone, onClose }: Cat
                           {!row.draft.isAvailable && (
                             <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                               {t('availability.out')}
+                            </span>
+                          )}
+                          {row.draft.endsAt !== '' && row.draft.endsAt < todayISODate() && (
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                              {t('badges.ended')}
                             </span>
                           )}
                         </div>

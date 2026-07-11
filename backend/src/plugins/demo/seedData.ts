@@ -274,6 +274,12 @@ const DEMO_CATALOG_ITEMS: {
     price?: number;
     currency?: string;
     isAvailable?: boolean;
+    /** Day offsets from seed time (kept relative so the fixture NEVER goes
+     *  stale — the exact failure mode the catalog date fields exist to kill).
+     *  Positive = future, negative = past. */
+    startsInDays?: number;
+    endsInDays?: number;
+    attributes?: { label: string; value: string }[];
 }[] = [
     { type: 'product', name: 'دبل صدمات NJT', description: 'يناسب معظم الموتوسيكلات الصيني والهندي', price: 350, currency: 'ريال' },
     { type: 'product', name: 'طرمبة بنزين هوندا أصلية', price: 95, currency: 'ريال', isAvailable: false },
@@ -294,6 +300,12 @@ const DEMO_CATALOG_ITEMS: {
     { type: 'vehicle', name: 'موتوسيكل مستعمل — سوزوكي GN 2021', description: 'ماشي 9 آلاف كم، وكالة', price: 8200, currency: 'ريال' },
     { type: 'vehicle', name: 'سكوتر هوندا PCX 2022', description: 'نظيف جداً، صيانة وكالة منتظمة', price: 11500, currency: 'ريال', isAvailable: false },
     { type: 'course', name: 'دورة صيانة الموتوسيكلات للمبتدئين', description: '4 أسابيع، 3 أيام أسبوعياً، شهادة حضور معتمدة', price: 1200, currency: 'ريال' },
+    // Dated course (Cat 62 date/attribute cases): startsAt renders into the
+    // block; المدة lives ONLY in attributes so eval #691 proves that path.
+    { type: 'course', name: 'دورة ميكانيك متقدمة', price: 1800, currency: 'ريال', startsInDays: 30, attributes: [{ label: 'المدة', value: '٦ أسابيع' }, { label: 'المستوى', value: 'متقدم' }] },
+    // Expired offer (Cat 62 expiry case): endsAt in the past → EXCLUDED from
+    // the prompt block; the AI must not quote its price (eval #690).
+    { type: 'product', name: 'عرض الشتاء — طقم جاكيت مع قفازات', price: 199, currency: 'ريال', endsInDays: -10 },
     { type: 'service', name: 'فحص شامل قبل الشراء', description: 'فحص كامل للمحرك والهيكل والكهرباء', price: 150, currency: 'ريال' },
     { type: 'service', name: 'صيانة دورية (زيت + فلاتر + فحص)', description: 'تشمل زيت المحرك وفلتر الهواء وفحص عام', currency: 'ريال' },
     { type: 'service', name: 'تركيب قطع الغيار', description: 'مجاني لأي قطعة مشتراة من المعرض' },
@@ -306,6 +318,13 @@ const DEMO_CATALOG_ITEMS: {
  * Delete-then-reseed the motoshop fixture's catalog rows (idempotent on both
  * the create and refresh paths, mirroring how messages are refreshed).
  */
+/** Seed-time 'YYYY-MM-DD' at a day offset from today (local server day). */
+function isoDateFromToday(offsetDays: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    return d.toLocaleDateString('en-CA');
+}
+
 async function seedMotoshopCatalog(pageId: string): Promise<void> {
     await db.delete(catalogItems).where(eq(catalogItems.pageId, pageId));
     await db.insert(catalogItems).values(
@@ -317,6 +336,9 @@ async function seedMotoshopCatalog(pageId: string): Promise<void> {
             price: item.price !== undefined ? item.price.toFixed(2) : null,
             currency: item.currency ?? null,
             isAvailable: item.isAvailable ?? true,
+            startsAt: item.startsInDays !== undefined ? isoDateFromToday(item.startsInDays) : null,
+            endsAt: item.endsInDays !== undefined ? isoDateFromToday(item.endsInDays) : null,
+            attributes: item.attributes ?? null,
             sortOrder: i,
         })),
     );

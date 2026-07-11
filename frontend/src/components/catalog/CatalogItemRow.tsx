@@ -2,6 +2,7 @@ import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import type { CatalogItem, CatalogItemType } from '@jawab24/shared';
+import { todayISODate } from './CatalogItemFields';
 
 interface CatalogItemRowProps {
   item: CatalogItem;
@@ -38,14 +39,28 @@ export function CatalogItemRow({ item, isFirst, isLast, disabled, onEdit, onDele
         </button>
       </div>
 
-      {/* Name + type + description */}
+      {/* Name + type + dates + description */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <span dir="auto" className="text-sm font-semibold text-foreground">{item.name}</span>
           <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
             {t(`types.${item.type as CatalogItemType}`)}
           </span>
+          {/* Past endsAt: the AI already stopped offering this item (excluded
+              from the prompt block) — the badge tells the merchant why. */}
+          {item.endsAt && item.endsAt < todayISODate() && (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+              {t('badges.ended')}
+            </span>
+          )}
         </div>
+        {(item.startsAt || item.endsAt) && (
+          <p className="text-xs text-muted-foreground mt-0.5" dir="auto">
+            {item.startsAt && t('badges.startsOn', { date: item.startsAt })}
+            {item.startsAt && item.endsAt && ' · '}
+            {item.endsAt && t('badges.endsOn', { date: item.endsAt })}
+          </p>
+        )}
         {item.description && (
           <p dir="auto" className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{item.description}</p>
         )}

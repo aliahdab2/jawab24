@@ -1006,12 +1006,17 @@ User saves settings on frontend
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
 
-> **Native catalog (Stage 2 v2, founder-only canary):** a store-less page CAN
+> **Native catalog (Stage 2 v2, admin canary):** a store-less page CAN
 > still get a `<product_catalog>` block — merchant-entered items from the
 > `/catalog` page (`catalog_items` table), added one-by-one or in bulk via the
 > AI import (paste a price list / upload a file → extract proposals → merchant
-> reviews → save all). The diagram above shows the default store-less page with
-> zero items; the prompt stays byte-identical until the merchant adds some.
+> reviews → save all). Items optionally carry `starts_at`/`ends_at` calendar
+> dates (rendered as `starts/ends YYYY-MM-DD`; an item past its end date is
+> EXCLUDED from the block — the AI can never offer an ended cohort/offer) and
+> flexible label+value details (`attributes` jsonb, type-suggested labels,
+> rendered as `label: value`). The diagram above shows the default store-less
+> page with zero items; the prompt stays byte-identical until the merchant
+> adds some.
 
 ┌────────────────────────────────────────────────────────────────────────┐
 │                    WITH E-COMMERCE STORE                               │

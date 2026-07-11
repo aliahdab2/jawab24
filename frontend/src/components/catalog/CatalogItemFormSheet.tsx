@@ -5,7 +5,7 @@ import { DetailSheet } from '@/components/ui/DetailSheet';
 import { Button } from '@/components/ui';
 import type { CatalogItem } from '@jawab24/shared';
 import type { CatalogItemInput } from '@/lib/api';
-import { CatalogItemFields, draftToInput, makeDraft } from './CatalogItemFields';
+import { CatalogItemFields, draftDatesInvalid, draftToInput, makeDraft } from './CatalogItemFields';
 
 interface CatalogItemFormSheetProps {
   /** null = create mode; an item = edit mode. */
@@ -47,10 +47,11 @@ export function CatalogItemFormSheet({ item, defaultCurrency, saving, onSave, on
       nameRef.current?.focus();
       return;
     }
+    if (draftDatesInvalid(draft)) return; // inline error already visible on the end-date field
     const ok = await onSave(draftToInput(draft), addAnother);
     if (ok && addAnother) {
       // Keep type + currency (Simplicity contract §4/§5); clear the rest and refocus.
-      setDraft((prev) => ({ ...prev, name: '', price: '', description: '', isAvailable: true }));
+      setDraft((prev) => ({ ...prev, name: '', price: '', description: '', isAvailable: true, startsAt: '', endsAt: '', attributes: [] }));
       setShowNameError(false);
       nameRef.current?.focus();
     }

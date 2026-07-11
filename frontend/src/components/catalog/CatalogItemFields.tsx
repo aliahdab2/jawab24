@@ -1,8 +1,9 @@
 import type { RefObject } from 'react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
+import { X } from 'lucide-react';
 import { Input, Textarea } from '@/components/ui';
-import { CATALOG_ITEM_TYPES, type CatalogItem, type CatalogItemType } from '@jawab24/shared';
+import { CATALOG_ITEM_TYPES, MAX_CATALOG_ITEM_ATTRIBUTES, type CatalogItem, type CatalogItemType } from '@jawab24/shared';
 import type { CatalogItemInput } from '@/lib/api';
 
 /**
@@ -18,6 +19,20 @@ export interface CatalogItemDraft {
   currency: string;
   description: string;
   isAvailable: boolean;
+  /** 'YYYY-MM-DD' or '' = not set (native date-input value shape). */
+  startsAt: string;
+  endsAt: string;
+  attributes: Array<{ label: string; value: string }>;
+}
+
+/** Today as local 'YYYY-MM-DD' — for the "Ended" badge comparisons. */
+export function todayISODate(): string {
+  return new Date().toLocaleDateString('en-CA');
+}
+
+/** Both dates set and inverted — callers block submit and show the inline error. */
+export function draftDatesInvalid(draft: CatalogItemDraft): boolean {
+  return draft.startsAt !== '' && draft.endsAt !== '' && draft.endsAt < draft.startsAt;
 }
 
 export function makeDraft(item?: CatalogItem | null, defaults?: { currency?: string }): CatalogItemDraft {
@@ -28,6 +43,9 @@ export function makeDraft(item?: CatalogItem | null, defaults?: { currency?: str
     currency: item?.currency ?? defaults?.currency ?? '',
     description: item?.description ?? '',
     isAvailable: item?.isAvailable ?? true,
+    startsAt: item?.startsAt ?? '',
+    endsAt: item?.endsAt ?? '',
+    attributes: item?.attributes?.map((a) => ({ ...a })) ?? [],
   };
 }
 
@@ -40,11 +58,17 @@ export function draftFromInput(input: CatalogItemInput): CatalogItemDraft {
     currency: input.currency ?? '',
     description: input.description ?? '',
     isAvailable: input.isAvailable ?? true,
+    startsAt: input.startsAt ?? '',
+    endsAt: input.endsAt ?? '',
+    attributes: input.attributes?.map((a) => ({ ...a })) ?? [],
   };
 }
 
 /** Draft → API payload. Callers must reject a blank name first (the one required field). */
 export function draftToInput(draft: CatalogItemDraft): CatalogItemInput {
+  const attributes = draft.attributes
+    .map((a) => ({ label: a.label.trim(), value: a.value.trim() }))
+    .filter((a) => a.label !== '' && a.value !== '');
   return {
     type: draft.type,
     name: draft.name.trim(),
@@ -52,8 +76,15 @@ export function draftToInput(draft: CatalogItemDraft): CatalogItemInput {
     currency: draft.currency.trim() === '' ? null : draft.currency.trim(),
     description: draft.description.trim() === '' ? null : draft.description.trim(),
     isAvailable: draft.isAvailable,
+    startsAt: draft.startsAt === '' ? null : draft.startsAt,
+    endsAt: draft.endsAt === '' ? null : draft.endsAt,
+    attributes: attributes.length === 0 ? null : attributes,
   };
 }
+
+/** Types with suggested detail labels ('custom' has none). The labels
+ *  themselves are i18n strings (pipe-separated) — what's stored is plain text. */
+const SUGGESTED_DETAIL_TYPES: CatalogItemType[] = ['product', 'service', 'course', 'vehicle'];
 
 interface CatalogItemFieldsProps {
   draft: CatalogItemDraft;
@@ -69,6 +100,24 @@ interface CatalogItemFieldsProps {
  */
 export function CatalogItemFields({ draft, onChange, nameError, nameRef }: CatalogItemFieldsProps) {
   const t = useTranslations('catalog');
+
+  // Type-suggested detail labels (Salla-style chips) — i18n pipe-separated
+  // strings, minus the labels already in use. What's stored is the plain text.
+  const usedLabels = new Set(draft.attributes.map((a) => a.label.trim()));
+  const suggestions = SUGGESTED_DETAIL_TYPES.includes(draft.type)
+    ? t(`suggestedDetails.${draft.type}`).split('|').map((s) => s.trim()).filter((s) => s && !usedLabels.has(s))
+    : [];
+
+  const patchAttribute = (index: number, patch: Partial<{ label: string; value: string }>) => {
+    onChange({ attributes: draft.attributes.map((a, i) => (i === index ? { ...a, ...patch } : a)) });
+  };
+  const addAttribute = (label: string) => {
+    if (draft.attributes.length >= MAX_CATALOG_ITEM_ATTRIBUTES) return;
+    onChange({ attributes: [...draft.attributes, { label, value: '' }] });
+  };
+  const removeAttribute = (index: number) => {
+    onChange({ attributes: draft.attributes.filter((_, i) => i !== index) });
+  };
 
   return (
     <div className="space-y-4">
@@ -125,6 +174,84 @@ export function CatalogItemFields({ draft, onChange, nameError, nameRef }: Catal
           onChange={(e) => onChange({ currency: e.target.value })}
           maxLength={10}
         />
+      </div>
+
+      {/* Time-bound offerings (course cohorts, limited offers) — optional for
+          every type. Date inputs read LTR even in RTL (ISO dates + native
+          pickers; same convention as admin/ai-cost). */}
+      <div className="grid grid-cols-2 gap-3">
+        <Input
+          label={t('fields.startsAt')}
+          type="date"
+          dir="ltr"
+          value={draft.startsAt}
+          onChange={(e) => onChange({ startsAt: e.target.value })}
+        />
+        <Input
+          label={t('fields.endsAt')}
+          type="date"
+          dir="ltr"
+          value={draft.endsAt}
+          onChange={(e) => onChange({ endsAt: e.target.value })}
+          error={draftDatesInvalid(draft) ? t('errors.dateOrder') : undefined}
+        />
+      </div>
+
+      {/* Flexible details — label+value pairs. The type suggests labels
+          (chips); anything else is a custom pair. Rendered to the AI as text. */}
+      <div>
+        <span className="label">{t('fields.details')}</span>
+        <div className="space-y-2 mt-1.5">
+          {draft.attributes.map((attr, i) => (
+            <div key={i} className="grid grid-cols-[1fr_1.5fr_auto] gap-2 items-center">
+              <Input
+                aria-label={t('fields.detailLabel')}
+                placeholder={t('fields.detailLabel')}
+                dir="auto"
+                value={attr.label}
+                onChange={(e) => patchAttribute(i, { label: e.target.value })}
+                maxLength={30}
+              />
+              <Input
+                aria-label={t('fields.detailValue')}
+                placeholder={t('fields.detailValue')}
+                dir="auto"
+                value={attr.value}
+                onChange={(e) => patchAttribute(i, { value: e.target.value })}
+                maxLength={100}
+              />
+              <button
+                type="button"
+                onClick={() => removeAttribute(i)}
+                aria-label={t('fields.removeDetail')}
+                className="w-8 h-8 grid place-items-center rounded-lg border border-border text-icon-muted hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+          {draft.attributes.length < MAX_CATALOG_ITEM_ATTRIBUTES && (
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => addAttribute(label)}
+                  className="px-3 py-1 rounded-full text-xs font-medium border border-dashed border-border text-foreground/70 hover:bg-muted transition-colors"
+                >
+                  + {label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => addAttribute('')}
+                className="px-3 py-1 rounded-full text-xs font-medium border border-dashed border-border text-foreground/70 hover:bg-muted transition-colors"
+              >
+                + {t('fields.addDetail')}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <Textarea

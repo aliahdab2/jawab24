@@ -21,7 +21,8 @@ function item(overrides: Partial<CatalogItem> = {}): CatalogItem {
   return {
     id: 'i1', pageId: 'p1', type: 'product', name: 'دبل صدمات NJT',
     description: null, price: '350.00', currency: 'ريال', imageUrl: null,
-    isAvailable: true, sortOrder: 0, createdAt: null, updatedAt: null,
+    isAvailable: true, startsAt: null, endsAt: null, attributes: null,
+    sortOrder: 0, createdAt: null, updatedAt: null,
     ...overrides,
   };
 }
@@ -83,6 +84,45 @@ describe('CatalogManager', () => {
     fireEvent.click(await screen.findByText('Add your first item'));
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
     await waitFor(() => expect(create).not.toHaveBeenCalled());
+  });
+
+  it('creates an item with a start date and a suggested-detail chip (Duration for course type)', async () => {
+    create.mockResolvedValue({ data: item({ id: 'new' }) });
+    renderManager();
+    fireEvent.click(await screen.findByText('Add your first item'));
+
+    fireEvent.change(await screen.findByPlaceholderText('e.g. Front shock absorbers'), { target: { value: 'دورة ميكانيك' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Course' })); // type chip
+    fireEvent.change(screen.getByLabelText('Start date (optional)'), { target: { value: '2026-08-10' } });
+    fireEvent.click(screen.getByRole('button', { name: '+ Duration' })); // suggested chip prefills the label
+    fireEvent.change(screen.getByPlaceholderText('Value'), { target: { value: '6 weeks' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(create).toHaveBeenCalledWith('p1', expect.objectContaining({
+      name: 'دورة ميكانيك', type: 'course', startsAt: '2026-08-10', endsAt: null,
+      attributes: [{ label: 'Duration', value: '6 weeks' }],
+    })));
+  });
+
+  it('blocks saving an inverted date window and shows the inline error', async () => {
+    renderManager();
+    fireEvent.click(await screen.findByText('Add your first item'));
+
+    fireEvent.change(await screen.findByPlaceholderText('e.g. Front shock absorbers'), { target: { value: 'عرض' } });
+    fireEvent.change(screen.getByLabelText('Start date (optional)'), { target: { value: '2026-09-20' } });
+    fireEvent.change(screen.getByLabelText('End date (optional)'), { target: { value: '2026-08-10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('End date can’t be before the start date')).toBeInTheDocument();
+    await waitFor(() => expect(create).not.toHaveBeenCalled());
+  });
+
+  it('shows the Ended badge and the date line for a past-endsAt item', async () => {
+    list.mockResolvedValue({ data: { data: [item({ startsAt: '2026-01-01', endsAt: '2026-01-31' })] } });
+    renderManager();
+    expect(await screen.findByText('Ended')).toBeInTheDocument();
+    expect(screen.getByText(/Starts 2026-01-01/)).toBeInTheDocument();
+    expect(screen.getByText(/Ends 2026-01-31/)).toBeInTheDocument();
   });
 
   it('offers Import beside Add — from the empty state and the list header', async () => {

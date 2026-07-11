@@ -156,4 +156,24 @@ describe('CatalogImportSheet', () => {
     const { toast } = await import('sonner');
     expect(toast.error).toHaveBeenCalled();
   });
+
+  it('carries extracted dates and details through review into the batch payload', async () => {
+    batchCreate.mockResolvedValue({ data: { data: [{}] } });
+    const { onDone } = await reachReview([proposal({
+      name: 'دورة ميكانيك متقدمة',
+      startsAt: '2026-08-10',
+      attributes: [{ label: 'المدة', value: '٦ أسابيع' }],
+    })]);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add 1 item' }));
+
+    await waitFor(() => expect(batchCreate).toHaveBeenCalledWith('p1', [
+      expect.objectContaining({
+        name: 'دورة ميكانيك متقدمة',
+        startsAt: '2026-08-10',
+        attributes: [{ label: 'المدة', value: '٦ أسابيع' }],
+      }),
+    ]));
+    expect(onDone).toHaveBeenCalledWith(1);
+  });
 });
