@@ -132,6 +132,15 @@ describe('getStoresNeedingTokenRefresh — Easy-Mode exclusion (SA-3)', () => {
         const where = mockDbWhere.mock.calls[0][0] as WhereArg;
         expect(where.conditions).toHaveLength(3);
     });
+
+    it('filters out demo-seeded stores in JS — their placeholder tokens cannot be refreshed (JAWAB24-BACKEND-19)', async () => {
+        mockDbWhere.mockResolvedValue([
+            { id: 'real-store', platformData: { merchantId: '123' } },
+            { id: 'demo-store', platformData: { merchant_id: 'demo_salla_merchant', demo: true } },
+        ]);
+        const stores = await getStoresNeedingTokenRefresh('salla');
+        expect(stores).toEqual([{ id: 'real-store' }]);
+    });
 });
 
 describe('refreshAccessToken', () => {

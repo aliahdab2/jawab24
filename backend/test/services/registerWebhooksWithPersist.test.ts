@@ -125,6 +125,22 @@ describe.each(PLATFORMS)('registerWebhooksWithPersist (%s)', (platform) => {
         );
     });
 
+    it('no-ops for demo stores: registerFn never runs, nothing persisted, no retry enqueued', async () => {
+        // Demo-seeded stores (platformData.demo === true) hold placeholder tokens
+        // that are not real ciphertext — calling registerFn would throw on decrypt
+        // and enqueue retries doomed to exhaust (JAWAB24-BACKEND-19).
+        mockDbSelectLimit.mockResolvedValue([{ platformData: { demo: true } }]);
+        const registerFn = vi.fn();
+
+        const result = await registerWebhooksWithPersist(STORE_ID, platform, registerFn);
+
+        expect(registerFn).not.toHaveBeenCalled();
+        expect(result.registered).toEqual([]);
+        expect(result.failed).toEqual([]);
+        expect(mockDbUpdateWhere).not.toHaveBeenCalled();
+        expect(mockEnqueueWebhookRetry).not.toHaveBeenCalled();
+    });
+
     it('does not crash if the retry queue is unavailable (install path stays alive)', async () => {
         const err = new Error('boom');
         const registerFn = vi.fn().mockRejectedValue(err);
