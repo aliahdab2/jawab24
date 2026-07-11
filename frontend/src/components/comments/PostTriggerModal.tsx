@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
 import { MessageCircle, Mail, ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
-import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover, Badge } from '@/components/ui';
+import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
@@ -119,19 +119,26 @@ export function PostTriggerModal({
   // Outcome rows — exactly what the commenter receives, per the workspace delivery
   // mode (from Settings; not overridable here). In dual mode the Post Reply is the
   // PRIVATE message and a SEPARATE static comment is posted publicly — see
-  // reply/sender.ts. Empty reply shows a placeholder in its row. Rows are empty
-  // while the mode is still loading (deliveryMode null) so nothing wrong is shown.
-  const replyTrimmed = reply.trim();
-  const replyRowText = replyTrimmed || t('postTriggerPreviewEmpty');
-  const outcomeRows: { channel: 'private' | 'public'; text: string; fromSettings: boolean; emptyReply: boolean }[] =
+  // reply/sender.ts.
+  //
+  // A row is `verbatim` when the channel delivers the merchant's reply EXACTLY as
+  // typed. For those rows we do NOT echo the reply text — the reply field directly
+  // above is already the rendered preview, so re-showing it is pure duplication; we
+  // only name the channel + caption it. The single non-verbatim payload is the
+  // dual-mode static public comment (the merchant did not author it — it comes from
+  // Settings), so that one is shown in full and deep-links to the field that owns it.
+  //
+  // Rows are empty while the mode is still loading (deliveryMode null) so nothing
+  // wrong is shown.
+  const outcomeRows: { channel: 'private' | 'public'; verbatim: boolean; text?: string; fromSettings?: boolean }[] =
     deliveryMode === 'public'
-      ? [{ channel: 'public', text: replyRowText, fromSettings: false, emptyReply: !replyTrimmed }]
+      ? [{ channel: 'public', verbatim: true }]
       : deliveryMode === 'private'
-        ? [{ channel: 'private', text: replyRowText, fromSettings: false, emptyReply: !replyTrimmed }]
+        ? [{ channel: 'private', verbatim: true }]
         : deliveryMode === 'dual'
           ? [
-              { channel: 'private', text: replyRowText, fromSettings: false, emptyReply: !replyTrimmed },
-              { channel: 'public', text: dualNudge.trim() || t('postTriggerDefaultNudge'), fromSettings: true, emptyReply: false },
+              { channel: 'private', verbatim: true },
+              { channel: 'public', verbatim: false, text: dualNudge.trim() || t('postTriggerDefaultNudge'), fromSettings: true },
             ]
           : [];
 
@@ -321,7 +328,6 @@ export function PostTriggerModal({
                 {deliveryMode === 'private' && t('postTriggerDeliveryPrivate')}
                 {deliveryMode === 'dual' && t('postTriggerDeliveryDual')}
               </InfoPopover>
-              <Badge variant="info" size="sm" className="ms-auto">{t('postTriggerOutcomeLive')}</Badge>
             </div>
             <div className="rounded-xl border border-theme-border overflow-hidden">
               {outcomeRows.map((row, i) => {
@@ -335,21 +341,26 @@ export function PostTriggerModal({
                       <Icon className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
                       {t(labelKey)}
                     </span>
-                    <span
-                      className={clsx('text-sm leading-relaxed whitespace-pre-wrap break-words', row.emptyReply ? 'italic text-muted-foreground' : 'text-foreground')}
-                      dir="auto"
-                    >
-                      {row.text}
-                      {row.fromSettings && (
-                        <Link
-                          href="/settings#comment-reply-mode-label"
-                          className="ms-1.5 align-[1px] inline-flex items-center gap-0.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline whitespace-nowrap"
-                        >
-                          {t('postTriggerOutcomeSettingsLink')}
-                          <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
-                        </Link>
-                      )}
-                    </span>
+                    {row.verbatim ? (
+                      // Verbatim channel — the reply is delivered exactly as typed, so
+                      // we caption the channel instead of echoing the reply field above.
+                      <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
+                        {t('postTriggerOutcomeAsWritten')}
+                      </span>
+                    ) : (
+                      <span className="text-sm leading-relaxed whitespace-pre-wrap break-words text-foreground" dir="auto">
+                        {row.text}
+                        {row.fromSettings && (
+                          <Link
+                            href="/settings#comment-reply-mode-label"
+                            className="ms-1.5 align-[1px] inline-flex items-center gap-0.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:underline whitespace-nowrap"
+                          >
+                            {t('postTriggerOutcomeSettingsLink')}
+                            <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
+                          </Link>
+                        )}
+                      </span>
+                    )}
                   </div>
                 );
               })}

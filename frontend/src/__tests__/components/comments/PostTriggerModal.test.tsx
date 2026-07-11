@@ -48,7 +48,7 @@ import { settingsApi } from '@/lib/api';
 
 const settingsGetMock = vi.mocked(settingsApi.get);
 
-function renderModal() {
+function renderModal(props: Partial<React.ComponentProps<typeof PostTriggerModal>> = {}) {
     const client = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
     });
@@ -60,6 +60,7 @@ function renderModal() {
                 isOpen
                 onClose={() => {}}
                 onSaved={() => {}}
+                {...props}
             />
         </QueryClientProvider>,
     );
@@ -81,6 +82,18 @@ describe('PostTriggerModal — outcome card', () => {
         expect(screen.queryByText('Public comment')).toBeNull();
     });
 
+    // The verbatim channels (private-only, public-only, and the DM half of dual) must
+    // NOT echo the reply text — the reply field above is already the preview. They show
+    // a caption instead, so the same text never appears twice on screen.
+    it('verbatim row captions the channel instead of echoing the reply text', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private' } });
+        renderModal({ triggerReply: 'Unique reply body 12345', triggerType: 'all' });
+        expect(await screen.findByText('The exact text you wrote above')).toBeInTheDocument();
+        // The reply body appears exactly once — in the textarea above — never echoed a
+        // second time in the outcome card. A reintroduced echo would make this 2.
+        expect(screen.getAllByText('Unique reply body 12345')).toHaveLength(1);
+    });
+
     it('public mode: one public-comment row, no private row', async () => {
         settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'public' } });
         renderModal();
@@ -96,6 +109,8 @@ describe('PostTriggerModal — outcome card', () => {
         // Both channels appear...
         expect(screen.getByText('Private message')).toBeInTheDocument();
         expect(screen.getByText('Public comment')).toBeInTheDocument();
+        // ...the private (verbatim) row is captioned, not echoed...
+        expect(screen.getByText('The exact text you wrote above')).toBeInTheDocument();
         // ...the public one is the static default (merchant hasn't customised it)...
         expect(screen.getByText('Details sent via private message 📩')).toBeInTheDocument();
         // ...and it deep-links to the exact comment-reply field in Settings.
