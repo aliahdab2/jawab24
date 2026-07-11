@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { Card, Toggle, Select, InputFieldWrapper, CharCounter } from '@/components/ui';
+import { useTextareaAutoResize } from '@/hooks/useTextareaAutoResize';
 import { TitleWithInfo } from './TitleWithInfo';
 import {
   MessageSquare,
@@ -25,6 +26,15 @@ export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: Se
   const dualNudgeSourceLang = settings.dualReplyNudgeMulti?.sourceLang;
   const dualNudgeIsAutoTranslated = !!(dualNudgeSourceLang && dualNudgeSourceLang !== 'manual' && dualNudgeSourceLang !== settings.dashboardLanguage);
   const dualNudgeRenderedValue = dualNudgeIsAutoTranslated ? '' : dualNudgeInput;
+
+  // Grow the nudge textarea to fit its content so the full message is always
+  // visible (no internal scroll) on narrow screens. minHeight ≈ one line + padding.
+  const { ref: dualNudgeRef, autoResize: dualNudgeAutoResize } = useTextareaAutoResize(48);
+  // Re-fit when the block mounts (dual mode) or the rendered value changes
+  // (e.g. dashboard-language switch swaps the stored per-language text).
+  useEffect(() => {
+    if (settings.commentReplyMode === 'dual') dualNudgeAutoResize();
+  }, [settings.commentReplyMode, dualNudgeRenderedValue, dualNudgeAutoResize]);
 
   return (
     <Card className={clsx(
@@ -160,8 +170,8 @@ export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: Se
               <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-1">{t('dualReplyConfigTitle.improved')}</h4>
               <p className="text-xs text-muted-foreground mb-3">{t('dualReplyConfigDesc')}</p>
               <InputFieldWrapper trailing={<CharCounter value={dualNudgeInput.length} max={80} />}>
-                <input
-                  type="text"
+                <textarea
+                  ref={dualNudgeRef}
                   aria-label={t('dualReplyConfigTitle.improved')}
                   value={dualNudgeRenderedValue}
                   onChange={(e) => {
@@ -176,11 +186,13 @@ export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: Se
                       },
                     });
                   }}
+                  onInput={dualNudgeAutoResize}
                   placeholder={dualNudgeIsAutoTranslated && dualNudgeInput ? dualNudgeInput : t('publicReplyPlaceholder')}
                   dir={dualNudgeRenderedValue ? 'auto' : getLocaleDirection(settings.dashboardLanguage)}
                   maxLength={80}
+                  rows={2}
                   className={clsx(
-                    'w-full bg-transparent border-none p-3 pe-14 rounded-2xl text-sm',
+                    'w-full bg-transparent border-none p-3 pe-14 rounded-2xl text-sm resize-none overflow-hidden',
                     'placeholder:text-muted-foreground placeholder:italic',
                     'focus:outline-none focus:ring-0',
                   )}

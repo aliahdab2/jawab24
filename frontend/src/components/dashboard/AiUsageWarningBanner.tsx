@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import clsx from 'clsx';
 import Link from 'next/link';
-import { AlertTriangle, Sparkles, Info, MessageSquareOff } from 'lucide-react';
+import { AlertTriangle, Sparkles, MessageSquareOff } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
-import { Card, Button, UpgradeCTA } from '@/components/ui';
+import { Card, Button, UpgradeCTA, InfoPopover } from '@/components/ui';
 import { BuyTopUpCTA } from '@/components/billing/BuyTopUpCTA';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { formatQuotaResetDate } from '@/lib/formatDate';
@@ -178,12 +178,13 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
                                         limit: limit.toLocaleString(locale),
                                     })}
                             </span>
-                            <span className="relative group inline-flex">
-                                <Info className="w-3.5 h-3.5 opacity-70 cursor-help" aria-label={tSub('limitBanner.scopeTooltip')} />
-                                <span className="absolute bottom-full start-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 text-[11px] font-normal text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none w-56 text-center z-10 leading-snug">
-                                    {tSub('limitBanner.scopeTooltip')}
-                                </span>
-                            </span>
+                            <InfoPopover
+                                label={tSub('limitBanner.scopeTooltip')}
+                                panelWidth="md"
+                                triggerClassName="opacity-70"
+                            >
+                                {tSub('limitBanner.scopeTooltip')}
+                            </InfoPopover>
                         </span>
                         {/* Reset date on its own line — no separator dot (reads cleaner). */}
                         {resetDate && (

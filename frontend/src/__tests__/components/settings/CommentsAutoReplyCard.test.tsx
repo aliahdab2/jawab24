@@ -129,6 +129,20 @@ describe('CommentsAutoReplyCard — dual-reply nudge dir', () => {
   });
 });
 
+// Regression: the nudge (up to 80 chars) was a single-line <input>, which
+// scroll-truncates long content on narrow screens — the full message was
+// invisible on Android/small phones. It MUST be a wrapping <textarea> so the
+// whole message shows (paired with useTextareaAutoResize to grow to fit).
+describe('CommentsAutoReplyCard — nudge field is a multiline textarea', () => {
+  it('renders the nudge control as a <textarea>, not a single-line input', () => {
+    render(<CommentsAutoReplyCard settings={makeSettings()} setSettings={() => {}} />);
+    const field = screen.getByLabelText('Short comment reply');
+    expect(field.tagName).toBe('TEXTAREA');
+    // Cap still enforced so translation/storage stays within limits.
+    expect(field).toHaveAttribute('maxLength', '80');
+  });
+});
+
 // Regression: the nudge is only ever sent by the backend in dual mode, but the
 // input used to render in public mode too — editable with zero effect.
 describe('CommentsAutoReplyCard — nudge field visibility per mode', () => {

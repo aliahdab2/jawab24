@@ -81,7 +81,7 @@
     "replyRate": "معدل الرد",
     "avgSpeed": "متوسط السرعة",
     "quotaWarning": "{percent}% من الخطة",
-    "quotaExceeded": "تجاوز الحد",
+    "quotaExceeded": "تجاوزت الحد",
     "onTopupLeft": "متبقٍ {balance} من رصيدك الإضافي",
     "smartRepliesTooltip": "الردود المُرسَلة خلال آخر 30 يوماً.",
     "planUsageTooltip": "الردود الذكية المستخدمة في دورة الفوترة الحالية. يُعاد ضبط العدّاد مع بداية الدورة القادمة.",
