@@ -6,6 +6,7 @@ import { messagesService } from '../services/messages';
 import { pagesService, isPageDisconnected } from '../services/pages';
 import { authService } from '../services/auth';
 import { auditLog } from '../services/auditLog';
+import { purgeCustomerData } from '../services/gdprCustomerDeletion';
 import { captureError } from '../utils/sentryHelpers';
 import * as Sentry from '@sentry/node';
 import { handleNonTextMessage, handleWhatsAppNonTextMessage } from '../services/reply/nonTextHandler';
@@ -798,10 +799,32 @@ export class WebhookController {
 
         this.log().info('Facebook data deletion request received', { facebookUserId, confirmationCode });
 
-        // Process deletion asynchronously (don't block the response)
+        // Process deletion asynchronously (don't block the response).
+        // Two independent paths — the requester may be an END CUSTOMER of a
+        // merchant page (sender_id/from_id rows), a MERCHANT login account
+        // (users.facebook_id), or unknown to us. Each path has its own
+        // try/catch so a failure in one never skips the other.
         (async () => {
+            // 1. End-customer rows (conversations, messages, leads, comments, …).
             try {
-                // Find user by Facebook ID
+                const purge = await purgeCustomerData([facebookUserId]);
+                if (purge.totalDeleted > 0) {
+                    this.log().info('End-customer data purged per Facebook request', {
+                        facebookUserId,
+                        confirmationCode,
+                        perTable: purge.perTable,
+                        totalDeleted: purge.totalDeleted,
+                    });
+                }
+            } catch (error) {
+                captureError(error, 'Facebook data deletion failed (customer purge)', {
+                    tags: { service: 'gdpr', source: 'facebook' },
+                    extra: { facebookUserId, confirmationCode },
+                });
+            }
+
+            // 2. Merchant login account.
+            try {
                 const [user] = await db.select({ id: users.id })
                     .from(users)
                     .where(eq(users.facebookId, facebookUserId))
@@ -818,10 +841,10 @@ export class WebhookController {
                     await authService.deleteUser(user.id);
                     this.log().info('User data deleted per Facebook request', { userId: user.id, confirmationCode });
                 } else {
-                    this.log().info('No user found for Facebook data deletion request', { facebookUserId });
+                    this.log().info('No merchant account for Facebook data deletion request', { facebookUserId });
                 }
             } catch (error) {
-                captureError(error, 'Facebook data deletion failed', {
+                captureError(error, 'Facebook data deletion failed (merchant account)', {
                     tags: { service: 'gdpr', source: 'facebook' },
                     extra: { facebookUserId, confirmationCode },
                 });

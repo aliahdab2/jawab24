@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import crypto from 'crypto';
 
 // --- Hoisted mocks (vi.mock factories are hoisted, so variables must be too) ---
-const { mockSelectLimit, mockDeleteUser, mockAuditLog, APP_SECRET } = vi.hoisted(() => ({
+const { mockSelectLimit, mockDeleteUser, mockAuditLog, mockPurgeCustomerData, APP_SECRET } = vi.hoisted(() => ({
     mockSelectLimit: vi.fn().mockResolvedValue([]),
     mockDeleteUser: vi.fn().mockResolvedValue(undefined),
     mockAuditLog: vi.fn().mockResolvedValue(undefined),
+    mockPurgeCustomerData: vi.fn().mockResolvedValue({ perTable: {}, totalDeleted: 0 }),
     APP_SECRET: 'test_app_secret_123',
 }));
 
@@ -65,6 +66,10 @@ vi.mock('../../src/services/auditLog', () => ({
     auditLog: mockAuditLog,
 }));
 
+vi.mock('../../src/services/gdprCustomerDeletion', () => ({
+    purgeCustomerData: mockPurgeCustomerData,
+}));
+
 vi.mock('../../src/utils/sentryHelpers', () => ({
     captureError: vi.fn(),
 }));
@@ -108,6 +113,7 @@ describe('WebhookController.handleDataDeletion', () => {
         vi.clearAllMocks();
         controller = new WebhookController();
         mockSelectLimit.mockResolvedValue([]);
+        mockPurgeCustomerData.mockResolvedValue({ perTable: {}, totalDeleted: 0 });
     });
 
     it('should return 400 when signed_request is missing', async () => {
@@ -204,5 +210,60 @@ describe('WebhookController.handleDataDeletion', () => {
 
         expect(mockDeleteUser).not.toHaveBeenCalled();
         expect(mockAuditLog).not.toHaveBeenCalled();
+    });
+
+    it('should purge end-customer data for the requested ID even when no merchant matches', async () => {
+        mockSelectLimit.mockResolvedValueOnce([]); // not a merchant
+        mockPurgeCustomerData.mockResolvedValueOnce({
+            perTable: { conversations: 1, messages: 12 },
+            totalDeleted: 13,
+        });
+
+        const signedReq = buildSignedRequest({ user_id: 'psid-end-customer-1' });
+        const req = makeRequest({ signed_request: signedReq });
+        const reply = makeReply();
+
+        await controller.handleDataDeletion(req, reply);
+
+        // Response returns immediately regardless of purge outcome
+        expect(reply.statusCode).toBe(200);
+        expect(reply._body).toHaveProperty('confirmation_code');
+
+        await new Promise(r => setTimeout(r, 50));
+
+        expect(mockPurgeCustomerData).toHaveBeenCalledWith(['psid-end-customer-1']);
+        expect(mockDeleteUser).not.toHaveBeenCalled();
+    });
+
+    it('should purge customer data AND delete the merchant when both match', async () => {
+        mockSelectLimit.mockResolvedValueOnce([{ id: 'internal-user-9' }]);
+        mockPurgeCustomerData.mockResolvedValueOnce({
+            perTable: { comments: 2 },
+            totalDeleted: 2,
+        });
+
+        const signedReq = buildSignedRequest({ user_id: 'fb-user-both' });
+        const req = makeRequest({ signed_request: signedReq });
+        const reply = makeReply();
+
+        await controller.handleDataDeletion(req, reply);
+        await new Promise(r => setTimeout(r, 50));
+
+        expect(mockPurgeCustomerData).toHaveBeenCalledWith(['fb-user-both']);
+        expect(mockDeleteUser).toHaveBeenCalledWith('internal-user-9');
+    });
+
+    it('should still run the merchant path when the customer purge throws', async () => {
+        mockPurgeCustomerData.mockRejectedValueOnce(new Error('db down'));
+        mockSelectLimit.mockResolvedValueOnce([{ id: 'internal-user-42' }]);
+
+        const signedReq = buildSignedRequest({ user_id: 'fb-user-777' });
+        const req = makeRequest({ signed_request: signedReq });
+        const reply = makeReply();
+
+        await controller.handleDataDeletion(req, reply);
+        await new Promise(r => setTimeout(r, 50));
+
+        expect(mockDeleteUser).toHaveBeenCalledWith('internal-user-42');
     });
 });

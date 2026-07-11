@@ -86,6 +86,16 @@
   - Controller: `/backend/src/controllers/webhook.ts`
   - Routes: `/backend/src/routes/webhook.ts`
 
+- **Data Deletion (GDPR, Platform Terms 3(d)(i))**:
+  - Real-time callback: `POST /webhook/data-deletion` (signed_request, HMAC-verified). Handles BOTH
+    requester types: end-customer rows purged via `services/gdprCustomerDeletion.ts`
+    (`sender_id`/`from_id` across conversations→cascade messages, pauses, leads, FB/IG comments) and
+    merchant login accounts via `authService.deleteUser` (users.facebook_id). Returns status URL
+    (`/gdpr/deletion-status?code=…`) + confirmation code per Meta spec.
+  - Callback URL must be registered in App Dashboard (Facebook Login settings) — registered 2026-07-11;
+    while unregistered, Meta instead emails batch ID files, processed manually with
+    `backend/scripts/gdpr-batch-delete.ts` (dry-run by default, same shared purge service; kept as fallback).
+
 ---
 
 ### WhatsApp Business (Meta Cloud API)

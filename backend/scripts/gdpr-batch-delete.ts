@@ -44,16 +44,11 @@ import {
     workspaces,
     users,
 } from '../src/db/schema';
+import { CUSTOMER_ID_TARGETS, purgeCustomerData } from '../src/services/gdprCustomerDeletion';
 
 // Each end-customer table that stores a platform user identifier we must purge.
-const TARGETS = [
-    { name: 'conversations', table: conversations, col: conversations.senderId },
-    { name: 'messages', table: messages, col: messages.senderId },
-    { name: 'conversation_pauses', table: conversationPauses, col: conversationPauses.senderId },
-    { name: 'leads', table: leads, col: leads.senderId },
-    { name: 'comments', table: comments, col: comments.fromId },
-    { name: 'instagram_comments', table: instagramComments, col: instagramComments.fromId },
-] as const;
+// Shared with the real-time Meta data-deletion callback (services/gdprCustomerDeletion).
+const TARGETS = CUSTOMER_ID_TARGETS;
 
 // Postgres caps bind parameters (~65535); chunk IN-lists well under that.
 const CHUNK = 1000;
@@ -210,18 +205,6 @@ async function resolveAffectedPages(ids: string[]): Promise<AffectedPage[]> {
         .sort((a, b) => b.matchedRows - a.matchedRows);
 }
 
-async function deleteMatches(target: typeof TARGETS[number], ids: string[]): Promise<number> {
-    let deleted = 0;
-    for (const batch of chunked(ids, CHUNK)) {
-        const removed = await db
-            .delete(target.table)
-            .where(inArray(target.col, batch))
-            .returning({ id: target.table.id });
-        deleted += removed.length;
-    }
-    return deleted;
-}
-
 async function main() {
     const args = process.argv.slice(2);
     const confirm = args.includes('--confirm');
@@ -288,14 +271,10 @@ async function main() {
 
     if (confirm && allMatchedIds.size > 0) {
         console.log('\n--- Deleting ---');
-        // messages before conversations so per-table counts are clean (deleting a
-        // conversation also cascades its messages via messages.conversation_id FK).
-        const order = ['conversation_pauses', 'leads', 'comments', 'instagram_comments', 'messages', 'conversations'];
-        for (const name of order) {
-            const target = TARGETS.find(t => t.name === name)!;
-            const matchedIds = perTable[name].matchedIds;
-            if (matchedIds.length === 0) continue;
-            const deleted = await deleteMatches(target, matchedIds);
+        // Shared purge (services/gdprCustomerDeletion) — deletes children before
+        // conversations so per-table counts stay clean despite the messages FK cascade.
+        const { perTable: deletedPerTable } = await purgeCustomerData([...allMatchedIds]);
+        for (const [name, deleted] of Object.entries(deletedPerTable)) {
             perTable[name].deleted = deleted;
             console.log(`  ${name.padEnd(20)} deleted ${deleted} row(s)`);
         }
