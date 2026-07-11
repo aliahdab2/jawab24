@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { useTranslations } from 'next-intl';
 import { useQuery } from '@tanstack/react-query';
@@ -9,6 +9,7 @@ import { CatalogManager } from '@/components/catalog/CatalogManager';
 import { pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
+import { consumeCatalogImportDraft } from '@/lib/catalogImportDraft';
 import { usePageFilter } from '@/hooks/usePageFilter';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
@@ -53,6 +54,19 @@ function CatalogPageInner() {
     syncFromUrl(router.query.page as string | undefined);
   }, [router.isReady, router.query.page, syncFromUrl]);
 
+  // ?import=1 (Business Info price-list warning CTA): open the import sheet,
+  // prefilled from the sessionStorage draft the CTA wrote (a 16k paste doesn't
+  // fit in a query param). Consumed once + URL cleaned so refresh/back doesn't
+  // re-open the sheet.
+  const [importRequest, setImportRequest] = useState<{ pageId: string; text?: string } | null>(null);
+  useEffect(() => {
+    if (!router.isReady || router.query.import !== '1') return;
+    const targetPage = router.query.page as string | undefined;
+    if (!targetPage) return;
+    setImportRequest({ pageId: targetPage, text: consumeCatalogImportDraft(targetPage) });
+    router.replace(`/catalog?page=${targetPage}`, undefined, { shallow: true });
+  }, [router, router.isReady, router.query.import, router.query.page]);
+
   // Default to the first page once loaded.
   useEffect(() => {
     if (!pageId && validPages.length > 0) updatePageId(validPages[0].id);
@@ -91,7 +105,11 @@ function CatalogPageInner() {
         <EmptyState icon={Tag} title={t('selectPage')} />
       ) : (
         <div className="mt-4">
-          <CatalogManager pageId={selectedPageId} />
+          <CatalogManager
+            pageId={selectedPageId}
+            importRequested={importRequest?.pageId === selectedPageId}
+            importInitialText={importRequest?.pageId === selectedPageId ? importRequest.text : undefined}
+          />
         </div>
       )}
     </>

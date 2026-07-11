@@ -353,6 +353,11 @@ export const CATALOG_ITEM_TYPES: CatalogItemType[] = ['product', 'service', 'cou
  *  Sized so the whole catalog always fits the AI prompt block without retrieval. */
 export const MAX_CATALOG_ITEMS_PER_PAGE = 300;
 
+/** Input cap for the catalog import's extract call (frontend textarea + backend
+ *  Zod agree via this constant). Mirrors the KB / file-extractor output cap, so
+ *  anything a merchant can paste or upload fits in one extraction. */
+export const MAX_CATALOG_IMPORT_CHARS = 16_000;
+
 /** One thing a business offers, entered by the merchant (no e-commerce store needed).
  *  Rendered into the AI's <product_catalog> prompt block; never exposed via AI tools. */
 export interface CatalogItem {

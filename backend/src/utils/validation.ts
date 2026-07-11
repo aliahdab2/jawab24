@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
+import { MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
 
 /**
  * Validation Schemas for API Requests
@@ -167,11 +167,10 @@ export const CatalogItemUpdateSchema = z.object({
 export type CatalogItemInput = z.infer<typeof CatalogItemSchema>;
 export type CatalogItemUpdateInput = z.infer<typeof CatalogItemUpdateSchema>;
 
-/** POST /pages/:pageId/catalog/extract body. 16k mirrors the KB / file-extractor
- *  output cap — anything a merchant can paste or upload today fits. Min 10 keeps
- *  accidental fragments from burning an LLM call. */
+/** POST /pages/:pageId/catalog/extract body. Min 10 keeps accidental fragments
+ *  from burning an LLM call; the max is the shared frontend/backend contract. */
 export const CatalogExtractSchema = z.object({
-    text: z.string().trim().min(10, 'Text too short to extract from').max(16_000, 'Text too long (max 16,000 characters)'),
+    text: z.string().trim().min(10, 'Text too short to extract from').max(MAX_CATALOG_IMPORT_CHARS, `Text too long (max ${MAX_CATALOG_IMPORT_CHARS} characters)`),
 });
 
 /** POST /pages/:pageId/catalog/batch body: the reviewed import rows. Each item

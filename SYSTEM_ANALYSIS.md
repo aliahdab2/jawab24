@@ -1006,6 +1006,13 @@ User saves settings on frontend
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
 
+> **Native catalog (Stage 2 v2, founder-only canary):** a store-less page CAN
+> still get a `<product_catalog>` block — merchant-entered items from the
+> `/catalog` page (`catalog_items` table), added one-by-one or in bulk via the
+> AI import (paste a price list / upload a file → extract proposals → merchant
+> reviews → save all). The diagram above shows the default store-less page with
+> zero items; the prompt stays byte-identical until the merchant adds some.
+
 ┌────────────────────────────────────────────────────────────────────────┐
 │                    WITH E-COMMERCE STORE                               │
 ├────────────────────────────────────────────────────────────────────────┤
@@ -1105,7 +1112,8 @@ Products synced from Shopify/Salla
 
 **بدون متجر إلكتروني:**
 - الذكاء الاصطناعي يحصل فقط على قاعدة المعرفة النصية
-- لا كتالوج منتجات، لا سياسات متجر
+- لا كتالوج منتجات، لا سياسات متجر (افتراضيًا)
+- **الكتالوج الأصلي (تجربة مغلقة للمؤسس):** يمكن للتاجر بلا متجر إدخال عناصره من صفحة `/catalog` — يدويًا أو بالاستيراد الذكي (لصق قائمة أسعار / رفع ملف ← استخراج ← مراجعة ← إضافة الكل) — فتُحقن في كتلة `<product_catalog>` نفسها
 - أسئلة عن المنتجات والأسعار → "خليني أتحقق" (ثقة منخفضة)
 - أسئلة عامة (مواعيد، موقع) → يُجيب إذا كانت في قاعدة المعرفة
 

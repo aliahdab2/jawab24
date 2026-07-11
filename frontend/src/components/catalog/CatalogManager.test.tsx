@@ -5,12 +5,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CatalogItem } from '@jawab24/shared';
 import { CatalogManager } from './CatalogManager';
 
-const { list, create, update, remove } = vi.hoisted(() => ({
+const { list, create, update, remove, extract, batchCreate } = vi.hoisted(() => ({
   list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(),
+  extract: vi.fn(), batchCreate: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  catalogApi: { list, create, update, remove },
+  catalogApi: { list, create, update, remove, extract, batchCreate },
+  kbApi: { extractText: vi.fn() }, // FileUploadButton (inside the import sheet)
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -24,11 +26,11 @@ function item(overrides: Partial<CatalogItem> = {}): CatalogItem {
   };
 }
 
-function renderManager() {
+function renderManager(props: Partial<React.ComponentProps<typeof CatalogManager>> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <CatalogManager pageId="p1" />
+      <CatalogManager pageId="p1" {...props} />
     </QueryClientProvider>,
   );
 }
@@ -81,6 +83,18 @@ describe('CatalogManager', () => {
     fireEvent.click(await screen.findByText('Add your first item'));
     fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
     await waitFor(() => expect(create).not.toHaveBeenCalled());
+  });
+
+  it('offers Import beside Add — from the empty state and the list header', async () => {
+    renderManager();
+    fireEvent.click(await screen.findByRole('button', { name: 'Import a list' }));
+    expect(await screen.findByText('Import your products & services')).toBeInTheDocument();
+  });
+
+  it('auto-opens the import sheet with the prefill when the deep link asks for it', async () => {
+    renderManager({ importRequested: true, importInitialText: 'قص شعر ٥٠ ريال' });
+    expect(await screen.findByText('Import your products & services')).toBeInTheDocument();
+    expect(screen.getByLabelText('Your list')).toHaveValue('قص شعر ٥٠ ريال');
   });
 
   it('deletes an item after confirmation', async () => {

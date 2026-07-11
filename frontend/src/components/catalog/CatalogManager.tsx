@@ -1,22 +1,27 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Tag } from 'lucide-react';
+import { ClipboardPaste, Plus, Tag } from 'lucide-react';
 import { AxiosError } from 'axios';
 import { Button, EmptyState, Skeleton, ConfirmationModal } from '@/components/ui';
 import { catalogApi, type CatalogItemInput } from '@/lib/api';
 import { MAX_CATALOG_ITEMS_PER_PAGE, type CatalogItem } from '@jawab24/shared';
 import { CatalogItemRow } from './CatalogItemRow';
 import { CatalogItemFormSheet } from './CatalogItemFormSheet';
+import { CatalogImportSheet } from './CatalogImportSheet';
 
 interface CatalogManagerProps {
   pageId: string;
+  /** Open the import sheet on mount (deep link from the Business Info warning). */
+  importRequested?: boolean;
+  /** Pre-fill for the import paste box when importRequested is set. */
+  importInitialText?: string;
 }
 
 /** The catalog editor for one page. Host-agnostic (takes pageId via props) so it
  *  can live on the dedicated /catalog page or inside the Business Info modal. */
-export function CatalogManager({ pageId }: CatalogManagerProps) {
+export function CatalogManager({ pageId, importRequested, importInitialText }: CatalogManagerProps) {
   const t = useTranslations('catalog');
   const queryClient = useQueryClient();
   const queryKey = ['catalog', pageId];
@@ -24,6 +29,12 @@ export function CatalogManager({ pageId }: CatalogManagerProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [deleting, setDeleting] = useState<CatalogItem | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+
+  // Deep-link entry: open the import sheet once when the page asks for it.
+  useEffect(() => {
+    if (importRequested) setImportOpen(true);
+  }, [importRequested]);
 
   const { data: items = [], isLoading, isError } = useQuery<CatalogItem[]>({
     queryKey,
@@ -140,21 +151,34 @@ export function CatalogManager({ pageId }: CatalogManagerProps) {
           </div>
           <h3 className="text-base font-semibold text-foreground">{t('empty.title')}</h3>
           <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-md mx-auto">{t('empty.body')}</p>
-          <Button variant="primary" onClick={openAdd}>
-            <Plus className="w-4 h-4 me-1.5" aria-hidden="true" />
-            {t('empty.cta')}
-          </Button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+            <Button variant="primary" onClick={openAdd}>
+              <Plus className="w-4 h-4 me-1.5" aria-hidden="true" />
+              {t('empty.cta')}
+            </Button>
+            {/* The highest-value entry: target merchants arrive with an existing list. */}
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              <ClipboardPaste className="w-4 h-4 me-1.5" aria-hidden="true" />
+              {t('import.cta')}
+            </Button>
+          </div>
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between gap-2 mb-3">
             <span className="text-sm text-muted-foreground tabular-nums">
               {t('limitLabel', { count: items.length, max: MAX_CATALOG_ITEMS_PER_PAGE })}
             </span>
-            <Button variant="primary" size="sm" onClick={openAdd} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
-              <Plus className="w-4 h-4 me-1.5" aria-hidden="true" />
-              {t('add')}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
+                <ClipboardPaste className="w-4 h-4 me-1.5" aria-hidden="true" />
+                {t('import.cta')}
+              </Button>
+              <Button variant="primary" size="sm" onClick={openAdd} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
+                <Plus className="w-4 h-4 me-1.5" aria-hidden="true" />
+                {t('add')}
+              </Button>
+            </div>
           </div>
           <ul className="space-y-2">
             {items.map((item, i) => (
@@ -181,6 +205,19 @@ export function CatalogManager({ pageId }: CatalogManagerProps) {
           saving={createMutation.isPending || updateMutation.isPending}
           onSave={handleSave}
           onClose={() => { setFormOpen(false); setEditing(null); }}
+        />
+      )}
+
+      {importOpen && (
+        <CatalogImportSheet
+          pageId={pageId}
+          initialText={importRequested ? importInitialText : undefined}
+          onDone={(count) => {
+            invalidate();
+            toast.success(t('import.toastImported', { count }));
+            setImportOpen(false);
+          }}
+          onClose={() => setImportOpen(false)}
         />
       )}
 

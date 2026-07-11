@@ -15,7 +15,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItemType } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -169,7 +169,26 @@ export const catalogApi = {
     api.patch(`/pages/${pageId}/catalog/${itemId}`, data),
   remove: (pageId: string, itemId: string) =>
     api.delete(`/pages/${pageId}/catalog/${itemId}`),
+  // Import flow: extract returns PROPOSALS only (nothing persisted); the
+  // reviewed rows are saved all-or-nothing via batchCreate.
+  extract: (pageId: string, text: string) =>
+    api.post<CatalogExtractResponse>(`/pages/${pageId}/catalog/extract`, { text }, { timeout: LONG_RUNNING_TIMEOUT }),
+  batchCreate: (pageId: string, items: CatalogItemInput[]) =>
+    api.post<{ data: CatalogItem[] }>(`/pages/${pageId}/catalog/batch`, { items }),
 };
+
+/** POST /catalog/extract response. Prices come back as numbers (already
+ *  normalized server-side); the review sheet may re-edit them as strings. */
+export interface CatalogExtractResponse {
+  items: CatalogItemInput[];
+  /** Model rows discarded server-side (failed validation, duplicates, over the per-call cap). */
+  dropped: number;
+  /** Proposals cut because the page lacks free slots. */
+  overflow: number;
+  remainingCapacity: number;
+  /** LLM output hit its token cap — the tail of the text may be missing. */
+  truncated: boolean;
+}
 
 /** Client-side create/update payload — price is accepted as a string so the
  *  server can normalize Arabic-Indic digits / separators (Simplicity contract §5). */

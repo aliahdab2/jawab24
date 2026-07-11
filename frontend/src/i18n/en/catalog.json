@@ -63,5 +63,29 @@
     "deleteError": "Couldn’t delete the item. Please try again.",
     "loadError": "Couldn’t load your items. Please refresh.",
     "limitReached": "You’ve reached the {max}-item limit for this page."
+  },
+  "import": {
+    "cta": "Import a list",
+    "title": "Import your products & services",
+    "pasteHint": "Paste your price list as-is — or attach a file — and Jawab will turn it into catalog items you can review before adding.",
+    "pasteLabel": "Your list",
+    "pastePlaceholder": "e.g.\nICDL course 3500\nPhotoshop course 5000\nHaircut 50 SAR",
+    "orUpload": "or attach a PDF, Word, Excel or photo",
+    "extract": "Extract items",
+    "extracting": "Reading your list…",
+    "reviewHint": "{count, plural, one {We found # item. Review it, fix anything, then add it.} other {We found # items. Review them, fix anything, then add them.}}",
+    "droppedNote": "{count, plural, one {# entry couldn’t be read and was skipped.} other {# entries couldn’t be read and were skipped.}}",
+    "overflowNote": "{count, plural, one {# item didn’t fit — your catalog is close to its limit.} other {# items didn’t fit — your catalog is close to its limit.}}",
+    "truncatedNote": "Your list is long — some items near the end may be missing. Add these first, then import the rest.",
+    "emptyResult": "No items found in this text",
+    "emptyResultHint": "Go back and check the text contains your products or services, one per line if possible.",
+    "back": "Back",
+    "remove": "Don’t add this item",
+    "restore": "Restore this item",
+    "addItems": "{count, plural, one {Add # item} other {Add # items}}",
+    "toastImported": "{count, plural, one {# item added to your catalog} other {# items added to your catalog}}",
+    "toastExtractError": "Couldn’t read the list. Please try again.",
+    "toastImportError": "Couldn’t add the items. Please try again.",
+    "toastDailyLimit": "You’ve reached today’s import limit. Please try again tomorrow."
   }
 }
