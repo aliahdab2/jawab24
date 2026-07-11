@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { BookOpen, X, Save, Check, FileText, Eye, MessageCircleQuestion, Lightbulb } from 'lucide-react';
+import { useRouter } from 'next/router';
+import { BookOpen, X, Save, Check, FileText, Eye, MessageCircleQuestion, Lightbulb, ClipboardPaste } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui';
 import { useTranslations } from 'next-intl';
@@ -8,6 +9,9 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { pagesApi } from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
+import { isCatalogVisible } from '@/lib/featureFlags';
+import { writeCatalogImportDraft } from '@/lib/catalogImportDraft';
 import type { Page } from '@jawab24/shared';
 import type { KnowledgeSection, SectionId, CustomSectionId, KbGap, KbWarnings } from './types';
 import { isCustomSection, MAX_CUSTOM_SECTIONS } from './types';
@@ -30,6 +34,11 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   const tKb = useTranslations('kb');
   const tc = useTranslations('common');
   const tPages = useTranslations('pages');
+  const router = useRouter();
+  const { user } = useAuthStore();
+  // Catalog canary gate (cosmetic — the catalog endpoints stay admin-gated
+  // server-side). Outside the allowlist the banner keeps its pre-import shape.
+  const canImportToCatalog = isCatalogVisible(user) && !page.ecommerceStoreId;
 
   const [sections, setSections] = useState<KnowledgeSection[]>([]);
   const [expandedId, setExpandedId] = useState<SectionId | null>(null);
@@ -135,6 +144,16 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
       setKbWarnings(result);
     }
   }, [rawMode, rawText, sections, onSave]);
+
+  // Warning-banner CTA: hand the CURRENT text (the banner only shows post-save,
+  // so it equals the saved KB) to /catalog's import sheet via the sessionStorage
+  // draft — a 16k paste doesn't fit in a query param.
+  const handleMoveToCatalog = useCallback(() => {
+    const text = rawMode ? rawText : serializeSections(sections);
+    writeCatalogImportDraft({ pageId: page.id, text });
+    onClose();
+    router.push(`/catalog?page=${page.id}&import=1`);
+  }, [rawMode, rawText, sections, page.id, onClose, router]);
 
   // Gap approved: append Q&A to "notes" section
   const handleGapApproved = useCallback((gapId: string, answer: string) => {
@@ -274,10 +293,22 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
                     : tKb('catalogWarning.priceListTitle')}
                 </p>
                 <p>
-                  {tKb('catalogWarning.body', {
+                  {tKb(canImportToCatalog ? 'catalogWarning.bodyWithCta' : 'catalogWarning.body', {
                     priceCount: kbWarnings.priceCount,
                   })}
                 </p>
+                {canImportToCatalog && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleMoveToCatalog}
+                    className="mt-2"
+                  >
+                    <ClipboardPaste className="w-3.5 h-3.5 me-1.5" aria-hidden="true" />
+                    {tKb('catalogWarning.cta')}
+                  </Button>
+                )}
               </div>
               <button
                 type="button"
