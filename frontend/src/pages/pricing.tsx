@@ -203,6 +203,7 @@ function PlanCard({
           included={true}
           highlight={true}
           text={t('pricing.featurePostRepliesUnlimited')}
+          subtext={t('pricing.featurePostRepliesIncluded')}
         />
 
         <FeatureRow

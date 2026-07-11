@@ -6,6 +6,7 @@ import {
   BookOpen,
   ShoppingBag,
 } from 'lucide-react';
+import { PostReplyIcon } from '@/utils/postReply';
 import { useTranslations } from 'next-intl';
 import { motion, useInView } from 'framer-motion';
 import { useRef } from 'react';
@@ -48,6 +49,7 @@ export function LandingFeatures() {
     { icon: Zap, title: t('features.instantTitle'), description: t('features.instantDesc') },
     { icon: BookOpen, title: t('features.knowledgeTitle'), description: t('features.knowledgeDesc') },
     { icon: ShoppingBag, title: t('features.ecommerceTitle'), description: t('features.ecommerceDesc') },
+    { icon: PostReplyIcon, title: t('features.postReplyTitle'), description: t('features.postReplyDesc') },
   ];
 
   // Accent colors per card for icon backgrounds
@@ -58,6 +60,7 @@ export function LandingFeatures() {
     'bg-amber-50 text-amber-600 group-hover:bg-amber-600',
     'bg-sky-50 text-sky-600 group-hover:bg-sky-600',
     'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600',
+    'bg-rose-50 text-rose-600 group-hover:bg-rose-600',
   ];
 
   return (

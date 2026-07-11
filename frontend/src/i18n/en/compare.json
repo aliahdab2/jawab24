@@ -22,6 +22,7 @@
   "feat": {
     "arabicDialects": "Arabic Dialect Support (6 families)",
     "aiSmartReplies": "AI-Powered Smart Replies",
+    "postReplies": "Unlimited Post Replies at No Extra Cost",
     "shopifyIntegration": "Shopify Integration",
     "sallaIntegration": "Salla Integration",
     "priceVerification": "Price Hallucination Detection",
@@ -45,7 +46,7 @@
     "faqQ2": "Does ManyChat support Salla stores?",
     "faqA2": "No. ManyChat integrates with Shopify but does not support Salla. Jawab24 supports both Shopify and Salla natively.",
     "faqQ3": "Which is more affordable, Jawab24 or ManyChat?",
-    "faqA3": "Both start at $15/month, but Jawab24's Starter plan includes 1,500 AI replies, Arabic dialect detection, Salla integration, and price hallucination detection at that price — features ManyChat does not offer at any tier."
+    "faqA3": "Jawab24's Starter plan is $15/month and includes 1,500 Smart Replies, unlimited Post Replies, Arabic dialect detection, Salla integration, and price hallucination detection. ManyChat starts at $14/month for just 250 active contacts — automations, including comment-to-DM, stop once you hit the cap, so your cost grows with your audience. Jawab24 never meters Post Replies by audience size."
   },
   "chatfuel": {
     "seoTitle": "Jawab24 vs Chatfuel: Best AI Auto-Reply for Arabic E-Commerce (2026)",

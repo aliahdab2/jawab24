@@ -120,6 +120,19 @@ export function LandingPricing() {
           </motion.div>
         </motion.div>
 
+        {/* Post Replies — included in every plan, spans the whole grid */}
+        <motion.div
+          className="text-center mb-8 sm:mb-12"
+          initial={{ opacity: 1, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 1, y: 20 }}
+          transition={{ duration: 0.5, delay: 0.45 }}
+        >
+          <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full status-brand border text-xs sm:text-sm font-semibold">
+            <Check className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            {tPricing('postRepliesIncludedNote')}
+          </span>
+        </motion.div>
+
         {/* CTA */}
         <motion.div
           className="text-center"

@@ -73,6 +73,8 @@
   "featureAiRepliesUnlimited": "ردود ذكية غير محدودة",
   "featureCommentToDm": "أتمتة التعليقات للرسائل الخاصة",
   "featurePostRepliesUnlimited": "ردود البوست غير محدودة",
+  "featurePostRepliesIncluded": "مشمولة في كل الباقات بلا تكلفة إضافية",
+  "postRepliesIncludedNote": "ردود البوست غير محدودة — مشمولة في كل الباقات بلا تكلفة إضافية",
   "featureShopify": "ربط شوبيفاي وسلة وزد",
   "shopifyBadge": "يشمل ربط شوبيفاي وسلة وزد",
   "ecommerceBadgeTitle": "ربط المتاجر الإلكترونية",
