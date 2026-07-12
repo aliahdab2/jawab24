@@ -1,7 +1,7 @@
 import { makeTrackedOpenAI } from './openaiClient';
 import { config } from '../config';
 import { getModelForUser } from './aiModelResolver';
-import { DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { CATALOG_VERTICAL_DEFAULT_TYPE, DEFAULT_AI_MODEL, type CatalogVertical } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { CatalogItemSchema, isRealCalendarDate, type CatalogItemInput } from '../utils/validation';
 
@@ -28,6 +28,10 @@ export interface CatalogExtractionResult {
     dropped: number;
     /** Output hit max_tokens — some items at the end of the text may be missing. */
     truncated: boolean;
+    /** The AI call itself failed (no/unparseable output) — as opposed to a clean
+     *  "nothing extractable" empty result. The posts-scan must NOT advance its
+     *  last-scanned marker on failure, or those posts are silently lost forever. */
+    failed: boolean;
 }
 
 export interface CatalogExtractionCtx {
@@ -35,6 +39,13 @@ export interface CatalogExtractionCtx {
     pageId?: string;
     /** Optionally pin an OpenAI model (must be a gpt- id for JSON mode). */
     model?: string;
+    /** Page's business vertical — biases the default item type when a row is
+     *  ambiguous ('other' adds nothing and is treated as absent). */
+    vertical?: CatalogVertical;
+    /** Where the text came from. 'posts' (the page scan) adds framing so
+     *  promo captions/contests are skipped but the promoted offering — usually
+     *  priceless by design ("comment for the price") — is still emitted. */
+    source?: 'paste' | 'posts';
 }
 
 /** Raw JSON shape the model is asked to return (pre-validation). */
@@ -75,16 +86,30 @@ export class CatalogExtractor {
      */
     async extract(text: string, ctx: CatalogExtractionCtx): Promise<CatalogExtractionResult> {
         const trimmed = (text || '').trim();
-        if (!trimmed) return { items: [], dropped: 0, truncated: false };
+        if (!trimmed) return { items: [], dropped: 0, truncated: false, failed: false };
 
         // Function replacement: price lists routinely contain `$`, which the
         // string form of replace() would interpret ($&, $', ...) and corrupt.
-        const prompt = CATALOG_EXTRACTION_PROMPT.replace('<TEXT>', () => trimmed);
+        const prompt = this.buildPrompt(ctx).replace('<TEXT>', () => trimmed);
         const { raw, truncated } = await this.callJson(prompt, ctx);
-        if (!raw) return { items: [], dropped: 0, truncated };
+        if (!raw) return { items: [], dropped: 0, truncated, failed: true };
 
         const { items, dropped } = this.postProcess(raw);
-        return { items, dropped, truncated };
+        return { items, dropped, truncated, failed: false };
+    }
+
+    /** Base prompt + context-dependent rule lines (vertical bias, posts framing),
+     *  inserted above the trailing "Input:" marker so they read as rules. */
+    private buildPrompt(ctx: CatalogExtractionCtx): string {
+        const hints: string[] = [];
+        if (ctx.vertical && ctx.vertical !== 'other') {
+            hints.push(`- This merchant's business vertical is "${ctx.vertical}". When an offering's "type" is ambiguous, prefer "${CATALOG_VERTICAL_DEFAULT_TYPE[ctx.vertical]}".`);
+        }
+        if (ctx.source === 'posts') {
+            hints.push('- The input is a series of the merchant\'s recent Facebook posts (each may include text read from its images). Contest announcements, greetings, and engagement bait ("comment/DM for the price") are NOT offerings — but the specific product/course/vehicle a post promotes IS one. Posts often withhold the price on purpose: emit such items with "price": null, never invent one.');
+        }
+        if (hints.length === 0) return CATALOG_EXTRACTION_PROMPT;
+        return CATALOG_EXTRACTION_PROMPT.replace('\nInput:\n', `${hints.join('\n')}\n\nInput:\n`);
     }
 
     /**

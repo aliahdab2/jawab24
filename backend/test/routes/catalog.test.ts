@@ -25,6 +25,8 @@ vi.mock('../../src/services/catalog', async (importOriginal) => {
             deleteCatalogItem: vi.fn(),
             getCatalogCapacity: vi.fn(),
             createCatalogItemsBatch: vi.fn(),
+            getPageVertical: vi.fn(),
+            setPageVertical: vi.fn(),
         },
     };
 });
@@ -34,6 +36,11 @@ vi.mock('../../src/services/activation', () => ({
 vi.mock('../../src/services/catalogExtractor', () => ({
     catalogExtractor: { extract: vi.fn() },
 }));
+vi.mock('../../src/services/catalogScan', () => {
+    // The class must come from THIS mock so the controller's instanceof matches.
+    class CatalogScanUnavailableError extends Error {}
+    return { catalogScanService: { scanPosts: vi.fn() }, CatalogScanUnavailableError };
+});
 vi.mock('../../src/lib/dailyCap', () => ({
     dailyCapKey: (prefix: string, id: string) => `${prefix}:${id}:2026-01-01`,
     checkDailyCap: vi.fn().mockResolvedValue({ allowed: true, used: 0, limit: 30 }),
@@ -42,7 +49,8 @@ vi.mock('../../src/lib/dailyCap', () => ({
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 
 import { catalogExtractor } from '../../src/services/catalogExtractor';
-import { checkDailyCap } from '../../src/lib/dailyCap';
+import { catalogScanService, CatalogScanUnavailableError } from '../../src/services/catalogScan';
+import { checkDailyCap, incrementDailyCap } from '../../src/lib/dailyCap';
 
 const state = { authed: true, role: 'admin' as string };
 
@@ -87,7 +95,9 @@ describe('Catalog routes — security wiring', () => {
             ['GET', `/pages/${PAGE}/catalog`],
             ['POST', `/pages/${PAGE}/catalog`],
             ['POST', `/pages/${PAGE}/catalog/extract`],
+            ['POST', `/pages/${PAGE}/catalog/scan-posts`],
             ['POST', `/pages/${PAGE}/catalog/batch`],
+            ['PATCH', `/pages/${PAGE}/catalog/vertical`],
             ['PATCH', `/pages/${PAGE}/catalog/${ITEM}`],
             ['DELETE', `/pages/${PAGE}/catalog/${ITEM}`],
         ] as const) {
@@ -99,15 +109,18 @@ describe('Catalog routes — security wiring', () => {
     it('lets a plain member READ but not write (403 on POST/PATCH/DELETE)', async () => {
         state.role = 'member';
         vi.mocked(catalogService.listCatalogItems).mockResolvedValue([]);
+        vi.mocked(catalogService.getPageVertical).mockResolvedValue({ effective: 'other', source: 'default' });
 
         const read = await app.inject({ method: 'GET', url: `/pages/${PAGE}/catalog` });
         expect(read.statusCode).toBe(200);
-        expect(JSON.parse(read.payload)).toEqual({ data: [] });
+        expect(JSON.parse(read.payload)).toEqual({ data: [], vertical: { effective: 'other', source: 'default' } });
 
         for (const [method, url] of [
             ['POST', `/pages/${PAGE}/catalog`],
             ['POST', `/pages/${PAGE}/catalog/extract`],
+            ['POST', `/pages/${PAGE}/catalog/scan-posts`],
             ['POST', `/pages/${PAGE}/catalog/batch`],
+            ['PATCH', `/pages/${PAGE}/catalog/vertical`],
             ['PATCH', `/pages/${PAGE}/catalog/${ITEM}`],
             ['DELETE', `/pages/${PAGE}/catalog/${ITEM}`],
         ] as const) {
@@ -117,18 +130,89 @@ describe('Catalog routes — security wiring', () => {
         expect(catalogService.createCatalogItem).not.toHaveBeenCalled();
         expect(catalogService.updateCatalogItem).not.toHaveBeenCalled();
         expect(catalogService.deleteCatalogItem).not.toHaveBeenCalled();
+        expect(catalogService.setPageVertical).not.toHaveBeenCalled();
         expect(catalogExtractor.extract).not.toHaveBeenCalled();
+        expect(catalogScanService.scanPosts).not.toHaveBeenCalled();
         expect(catalogService.createCatalogItemsBatch).not.toHaveBeenCalled();
     });
 
     it('404s (not 403) for a page outside the workspace — no existence leak', async () => {
         vi.mocked(catalogService.listCatalogItems).mockResolvedValue(null);
+        vi.mocked(catalogService.getPageVertical).mockResolvedValue(null);
         vi.mocked(catalogService.createCatalogItem).mockResolvedValue(null);
 
         const read = await app.inject({ method: 'GET', url: `/pages/${PAGE}/catalog` });
         expect(read.statusCode).toBe(404);
         const write = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog`, payload: { name: 'x' } });
         expect(write.statusCode).toBe(404);
+    });
+
+    it('PATCH /vertical validates the enum, persists a valid value, 404s a foreign page', async () => {
+        const bad = await app.inject({ method: 'PATCH', url: `/pages/${PAGE}/catalog/vertical`, payload: { vertical: 'spaceships' } });
+        expect(bad.statusCode).toBe(400);
+        expect(catalogService.setPageVertical).not.toHaveBeenCalled();
+
+        vi.mocked(catalogService.setPageVertical).mockResolvedValue({ effective: 'vehicles', source: 'merchant' });
+        const ok = await app.inject({ method: 'PATCH', url: `/pages/${PAGE}/catalog/vertical`, payload: { vertical: 'vehicles' } });
+        expect(ok.statusCode).toBe(200);
+        expect(JSON.parse(ok.payload)).toEqual({ vertical: { effective: 'vehicles', source: 'merchant' } });
+        expect(catalogService.setPageVertical).toHaveBeenCalledWith('ws-1', PAGE, 'vehicles');
+
+        vi.mocked(catalogService.setPageVertical).mockResolvedValue(null);
+        const foreign = await app.inject({ method: 'PATCH', url: `/pages/${PAGE}/catalog/vertical`, payload: { vertical: 'vehicles' } });
+        expect(foreign.statusCode).toBe(404);
+    });
+
+    describe('POST /scan-posts', () => {
+        beforeEach(() => {
+            vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 100, pageUserId: 'user-1' });
+        });
+
+        it('returns proposals + scan telemetry and counts the daily cap', async () => {
+            vi.mocked(catalogScanService.scanPosts).mockResolvedValue({
+                items: [{ name: 'ASUS ROG Strix G18', type: 'product' } as never],
+                dropped: 1, truncated: false, failed: false, postsScanned: 3, upToDate: false,
+            });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
+            expect(res.statusCode).toBe(200);
+            const body = JSON.parse(res.payload);
+            expect(body.items).toHaveLength(1);
+            expect(body.postsScanned).toBe(3);
+            expect(body.upToDate).toBe(false);
+            expect(catalogScanService.scanPosts).toHaveBeenCalledWith('ws-1', PAGE, { userId: 'user-1' });
+            expect(incrementDailyCap).toHaveBeenCalledTimes(1);
+        });
+
+        it('does NOT count an up-to-date no-op against the daily cap (no paid calls happened)', async () => {
+            vi.mocked(catalogScanService.scanPosts).mockResolvedValue({
+                items: [], dropped: 0, truncated: false, failed: false, postsScanned: 0, upToDate: true,
+            });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.payload).upToDate).toBe(true);
+            expect(incrementDailyCap).not.toHaveBeenCalled();
+        });
+
+        it('429s once the scan daily cap is spent — before any scan work', async () => {
+            vi.mocked(checkDailyCap).mockResolvedValueOnce({ allowed: false, used: 10, limit: 10 });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
+            expect(res.statusCode).toBe(429);
+            expect(catalogScanService.scanPosts).not.toHaveBeenCalled();
+        });
+
+        it('409s PAGE_DISCONNECTED when the page has no usable FB connection', async () => {
+            vi.mocked(catalogScanService.scanPosts).mockRejectedValue(new CatalogScanUnavailableError());
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
+            expect(res.statusCode).toBe(409);
+            expect(JSON.parse(res.payload).code).toBe('PAGE_DISCONNECTED');
+        });
+
+        it('403s CATALOG_LIMIT_REACHED when the catalog is already full — before any scan work', async () => {
+            vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 0, pageUserId: 'user-1' });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
+            expect(res.statusCode).toBe(403);
+            expect(catalogScanService.scanPosts).not.toHaveBeenCalled();
+        });
     });
 
     it('400s an invalid body with the validation envelope (empty name)', async () => {

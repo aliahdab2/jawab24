@@ -1,8 +1,12 @@
 import { db } from '../db';
 import { catalogItems, pages } from '../db/schema';
 import { and, asc, count, eq, isNull, or, sql } from 'drizzle-orm';
-import { MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
-import type { CatalogItemAttribute, CatalogItemType } from '@jawab24/shared';
+import {
+    CATALOG_VERTICALS, MAX_CATALOG_ITEMS_PER_PAGE, mergedBusinessProfile, verticalFromFbCategory,
+} from '@jawab24/shared';
+import type {
+    CatalogItemAttribute, CatalogItemType, CatalogVertical, CatalogVerticalSource, StoredBusinessProfile,
+} from '@jawab24/shared';
 import { pagesService } from './pages';
 
 /**
@@ -36,6 +40,31 @@ export class CatalogStoreConflictError extends Error {
         super('This page gets its catalog from a connected store; manual items are disabled');
         this.name = 'CatalogStoreConflictError';
     }
+}
+
+/** Effective vertical + where it came from — the UI prefill (never asks when
+ *  Facebook already told us the business type). */
+export interface CatalogVerticalInfo {
+    effective: CatalogVertical;
+    source: CatalogVerticalSource;
+}
+
+/**
+ * Pure vertical resolution (unit-testable without db): merchant override wins,
+ * then the FB page category (merged profile — a merchant-edited category also
+ * wins over the FB suggestion), then 'other'. An invalid stored value (enum
+ * drift after a rename) falls through to derivation instead of breaking the UI.
+ */
+export function resolveCatalogVertical(
+    stored: string | null,
+    businessProfile: StoredBusinessProfile,
+): CatalogVerticalInfo {
+    if (stored && (CATALOG_VERTICALS as string[]).includes(stored)) {
+        return { effective: stored as CatalogVertical, source: 'merchant' };
+    }
+    const derived = verticalFromFbCategory(mergedBusinessProfile(businessProfile).category);
+    if (derived) return { effective: derived, source: 'facebook' };
+    return { effective: 'other', source: 'default' };
 }
 
 export interface CreateCatalogItemDTO {
@@ -94,6 +123,32 @@ class CatalogService {
             .where(eq(catalogItems.pageId, pageId))
             .orderBy(asc(catalogItems.sortOrder), asc(catalogItems.createdAt))
             .limit(MAX_CATALOG_ITEMS_PER_PAGE);
+    }
+
+    /** Effective vertical for the page (merchant override → FB category → 'other').
+     *  Null when the page isn't in the workspace (controllers → 404). */
+    async getPageVertical(workspaceId: string, pageId: string): Promise<CatalogVerticalInfo | null> {
+        const [page] = await db
+            .select({ catalogVertical: pages.catalogVertical, businessProfile: pages.businessProfile })
+            .from(pages)
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .limit(1);
+        if (!page) return null;
+        return resolveCatalogVertical(page.catalogVertical, page.businessProfile as StoredBusinessProfile);
+    }
+
+    /**
+     * Merchant override of the vertical. No cache bump — the vertical shapes
+     * catalog-UI defaults and extraction hints only, never the reply prompt.
+     */
+    async setPageVertical(workspaceId: string, pageId: string, vertical: CatalogVertical): Promise<CatalogVerticalInfo | null> {
+        const [updated] = await db
+            .update(pages)
+            .set({ catalogVertical: vertical, updatedAt: new Date() })
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .returning({ id: pages.id });
+        if (!updated) return null;
+        return { effective: vertical, source: 'merchant' };
     }
 
     /**

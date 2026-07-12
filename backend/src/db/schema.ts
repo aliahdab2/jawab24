@@ -201,6 +201,14 @@ export const pages = pgTable('pages', {
     // Business profile — structured data from Facebook sync
     businessProfile: jsonb('business_profile').default({}),
     businessProfileUpdatedAt: timestamp('business_profile_updated_at'),
+    // Catalog vertical (business type shaping catalog defaults). NULL = derive
+    // from the FB page category (business_profile.suggestions.category) via
+    // verticalFromFbCategory; a stored value is a merchant override and wins.
+    catalogVertical: varchar('catalog_vertical', { length: 20 }),
+    // Newest post created_time consumed by the catalog posts-scan. The next scan
+    // only fetches posts newer than this, so re-scans propose new posts' items
+    // instead of re-flooding the review sheet with everything already seen.
+    catalogScanLastPostTime: timestamp('catalog_scan_last_post_time'),
     // Per-page overrides of the workspace lead config (settings.leadStages /
     // settings.leadFields). NULL = inherit the workspace config; a set value is
     // a full replacement for this page. Resolved via resolveEffectiveLeadStages/

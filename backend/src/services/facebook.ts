@@ -21,6 +21,31 @@ const DEFAULT_TOKEN_EXPIRY_MS = 60 * 24 * 60 * 60 * 1000; // 60 days — Faceboo
 const PAGE_BASE_FIELDS = 'id,name,access_token,category,about,phone,single_line_address,hours,website';
 const PAGE_FIELDS_PRIMARY = `${PAGE_BASE_FIELDS},tasks`;
 
+/** Graph attachment node — only the image bits the posts-scan reads. */
+interface GraphAttachment {
+    media_type?: string;
+    media?: { image?: { src?: string } };
+    subattachments?: { data?: GraphAttachment[] };
+}
+
+/** Flatten a post's attachment tree into unique full-res photo URLs. An album's
+ *  parent node repeats the first child image — the Set dedupes it. Videos and
+ *  links carry preview images too; only media_type "photo"/"album" count. */
+function collectAttachmentImages(attachments: unknown): string[] {
+    const nodes = (attachments as { data?: GraphAttachment[] } | undefined)?.data;
+    if (!Array.isArray(nodes)) return [];
+    const urls = new Set<string>();
+    const visit = (node: GraphAttachment) => {
+        const type = node.media_type ?? '';
+        if ((type === 'photo' || type === 'album') && node.media?.image?.src) {
+            urls.add(node.media.image.src);
+        }
+        for (const sub of node.subattachments?.data ?? []) visit(sub);
+    };
+    for (const node of nodes) visit(node);
+    return [...urls];
+}
+
 export class FacebookService {
     private logger: Logger = noopLogger;
 
@@ -437,17 +462,26 @@ export class FacebookService {
      * Returns the id, text, thumbnail, timestamp, and comment count plus a Graph cursor
      * for "load more". Fail-soft: an API error returns an empty page rather than throwing,
      * so a token blip degrades the picker to empty instead of erroring the whole request.
+     *
+     * `fullImages` (catalog posts-scan) additionally requests the attachment tree
+     * and returns every full-resolution image URL per post. `full_picture` alone
+     * is not enough there: it is a single downscaled preview, and album posts
+     * (course schedules, product line-ups) carry their content in subattachments —
+     * low-res thumbnails garble Arabic in Vision OCR (07-11 smoke-test lesson).
      */
     async getPagePosts(
         pageId: string,
         pageAccessToken: string,
-        opts?: { limit?: number; after?: string },
-    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; createdTime: string | null; commentsCount: number | null }>; nextCursor: string | null }> {
+        opts?: { limit?: number; after?: string; fullImages?: boolean },
+    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; imageUrls: string[]; createdTime: string | null; commentsCount: number | null }>; nextCursor: string | null }> {
         try {
+            const attachmentFields = opts?.fullImages
+                ? ',attachments{media_type,media{image{src}},subattachments.limit(20){media_type,media{image{src}}}}'
+                : '';
             const response = await traced('getPagePosts', () =>
                 fbAxios.get(`${FACEBOOK_GRAPH_API}/${pageId}/posts`, {
                     params: {
-                        fields: 'id,message,full_picture,created_time,comments.summary(true).limit(0)',
+                        fields: `id,message,full_picture,created_time,comments.summary(true).limit(0)${attachmentFields}`,
                         limit: opts?.limit ?? 5,
                         ...(opts?.after ? { after: opts.after } : {}),
                         access_token: pageAccessToken,
@@ -459,6 +493,7 @@ export class FacebookService {
                 id: String(p.id),
                 message: (p.message as string) || null,
                 imageUrl: (p.full_picture as string) || null,
+                imageUrls: collectAttachmentImages(p.attachments),
                 createdTime: (p.created_time as string) || null,
                 commentsCount: ((p.comments as { summary?: { total_count?: number } })?.summary?.total_count) ?? null,
             }));

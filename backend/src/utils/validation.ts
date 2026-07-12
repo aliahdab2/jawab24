@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEM_ATTRIBUTES, MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
+import {
+    CATALOG_VERTICALS, MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEM_ATTRIBUTES, MAX_CATALOG_ITEMS_PER_PAGE,
+} from '@jawab24/shared';
+import type { CatalogVertical } from '@jawab24/shared';
 
 /**
  * Validation Schemas for API Requests
@@ -235,6 +238,12 @@ export const CatalogExtractSchema = z.object({
  *  may have edited rows after extraction. */
 export const CatalogBatchSchema = z.object({
     items: z.array(CatalogItemSchema).min(1, 'At least one item is required').max(MAX_CATALOG_ITEMS_PER_PAGE),
+});
+
+/** PATCH /pages/:pageId/catalog/vertical body — merchant override of the
+ *  derived business vertical. Enum from shared so a new vertical is one edit. */
+export const CatalogVerticalSchema = z.object({
+    vertical: z.enum(CATALOG_VERTICALS as [CatalogVertical, ...CatalogVertical[]]),
 });
 
 // ==========================================

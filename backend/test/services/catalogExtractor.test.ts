@@ -26,7 +26,11 @@ function mockReply(obj: unknown, finishReason = 'stop') {
 }
 
 const CTX = { userId: 'user-1', pageId: 'page-1' };
-const EMPTY = { items: [], dropped: 0, truncated: false };
+// Two flavors of empty: a clean "nothing extractable" vs an AI-call failure.
+// The distinction is load-bearing — the posts-scan only advances its bookmark
+// when failed=false (a failure must leave the posts re-scannable).
+const EMPTY = { items: [], dropped: 0, truncated: false, failed: false };
+const EMPTY_FAILED = { items: [], dropped: 0, truncated: false, failed: true };
 
 describe('catalogExtractor', () => {
     beforeEach(() => vi.clearAllMocks());
@@ -111,9 +115,9 @@ describe('catalogExtractor', () => {
         expect(result.dropped).toBe(200 - MAX_EXTRACT_ITEMS);
     });
 
-    it('returns empty on unparseable JSON without throwing', async () => {
+    it('returns empty+failed on unparseable JSON without throwing', async () => {
         mockReply('{"items": [ {"name": "cut off');
-        await expect(catalogExtractor.extract('x', CTX)).resolves.toEqual(EMPTY);
+        await expect(catalogExtractor.extract('x', CTX)).resolves.toEqual(EMPTY_FAILED);
     });
 
     it('returns empty when "items" is missing or not an array', async () => {
@@ -127,7 +131,7 @@ describe('catalogExtractor', () => {
     it('flags truncation (finish_reason=length) and keeps whatever still parsed', async () => {
         // JSON mode usually cuts mid-structure → unparseable → empty items, truncated flag set.
         mockReply('{"items": [{"name": "a"}', 'length');
-        expect(await catalogExtractor.extract('x', CTX)).toEqual({ items: [], dropped: 0, truncated: true });
+        expect(await catalogExtractor.extract('x', CTX)).toEqual({ items: [], dropped: 0, truncated: true, failed: true });
 
         // If the cut happened to land on valid JSON, the parsed items survive.
         mockReply({ items: [{ name: 'a' }] }, 'length');
@@ -141,9 +145,44 @@ describe('catalogExtractor', () => {
         expect(openaiCreateMock).not.toHaveBeenCalled();
     });
 
-    it('returns empty when the model call throws (never propagates)', async () => {
+    it('returns empty+failed when the model call throws (never propagates)', async () => {
         openaiCreateMock.mockRejectedValueOnce(new Error('boom'));
-        await expect(catalogExtractor.extract('x', CTX)).resolves.toEqual(EMPTY);
+        await expect(catalogExtractor.extract('x', CTX)).resolves.toEqual(EMPTY_FAILED);
+    });
+
+    it('marks a parsed-but-empty result as NOT failed (clean "nothing found")', async () => {
+        mockReply({ items: [] });
+        expect(await catalogExtractor.extract('x', CTX)).toEqual(EMPTY);
+    });
+
+    describe('context hints', () => {
+        it('injects the vertical bias line and keeps the base prompt otherwise intact', async () => {
+            mockReply({ items: [] });
+            await catalogExtractor.extract('some list', { ...CTX, vertical: 'vehicles' });
+
+            const prompt = openaiCreateMock.mock.calls[0][0].messages[0].content as string;
+            expect(prompt).toContain('business vertical is "vehicles"');
+            expect(prompt).toContain('prefer "vehicle"');
+            expect(prompt).toContain('Input:\nsome list');
+        });
+
+        it('injects the posts framing (skip promos, emit priceless promoted items)', async () => {
+            mockReply({ items: [] });
+            await catalogExtractor.extract('POST (2026-07-01):\nvisit us!', { ...CTX, source: 'posts' });
+
+            const prompt = openaiCreateMock.mock.calls[0][0].messages[0].content as string;
+            expect(prompt).toContain('recent Facebook posts');
+            expect(prompt).toContain('"price": null');
+        });
+
+        it('adds NO hint lines for the default paste flow or the "other" vertical', async () => {
+            mockReply({ items: [] });
+            await catalogExtractor.extract('plain list', { ...CTX, vertical: 'other' });
+
+            const prompt = openaiCreateMock.mock.calls[0][0].messages[0].content as string;
+            expect(prompt).not.toContain('business vertical');
+            expect(prompt).not.toContain('Facebook posts');
+        });
     });
 
     it('embeds pasted text verbatim — $-sequences must not corrupt the prompt (price lists contain $)', async () => {
