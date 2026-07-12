@@ -619,6 +619,13 @@ export const usage = pgTable('usage', {
     totalCommentsProcessed: integer('total_comments_processed').default(0),
     totalMessagesProcessed: integer('total_messages_processed').default(0),
 
+    // One-period bonus replies. Added to the plan cap when evaluating the
+    // per-period quota — see computeEffectiveAiCap in services/subscriptions.ts.
+    // Resets to 0 with each new usage period. The persistent equivalent
+    // (`top_up_balance` on subscriptions, surviving renewals) is tracked as
+    // future work.
+    bonusReplies: integer('bonus_replies').default(0).notNull(),
+
     // Daily breakdown (JSON for detailed analytics)
     dailyBreakdown: jsonb('daily_breakdown').default({}), // { "2024-01-15": { ai: 10 } }
 

@@ -123,7 +123,9 @@ vi.mock('../../src/services/kb/embedding', () => ({
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         initializeUsagePeriod: vi.fn().mockResolvedValue(undefined),
+        invalidateStatusCache: vi.fn().mockResolvedValue(undefined),
     },
+    ACTIVE_STATUSES: new Set(['active', 'trialing']),
 }));
 
 vi.mock('../../src/services/kb/gap-detector', () => ({
@@ -700,6 +702,171 @@ describe('Admin Routes', () => {
                 (calledEnd.getFullYear() - calledStart.getFullYear()) * 12 +
                 (calledEnd.getMonth() - calledStart.getMonth());
             expect(monthsDiff).toBe(3);
+        });
+
+        // P1.5 behavior: when the customer already has an active subscription,
+        // the admin "upgrade" is a plan change within an ongoing billing period.
+        // Industry best practice — and the rule the Stripe-side path already
+        // follows — is to carry the quota forward and keep the existing renewal
+        // date. The manual path used to always reset; this regression guard
+        // pins the corrected behavior.
+        it('PRESERVES quota and period when the customer has an ACTIVE subscription (plan change)', async () => {
+            const { db } = await import('../../src/db');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            const existingPeriodStart = new Date('2026-05-13T22:41:00Z');
+            const existingPeriodEnd = new Date('2026-06-13T22:41:00Z');
+
+            const userFoundChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ id: TEST_USER_ID, email: 'user@test.com' }]),
+            };
+            const planFoundChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ id: TEST_PLAN_ID, name: 'Pro', slug: 'pro' }]),
+            };
+            const existingActiveSubChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{
+                    id: 'sub-existing',
+                    userId: TEST_USER_ID,
+                    planId: 'plan-starter',
+                    status: 'active',
+                    paymentMethod: 'stripe',
+                    currentPeriodStart: existingPeriodStart,
+                    currentPeriodEnd: existingPeriodEnd,
+                }]),
+            };
+
+            vi.mocked(db.select)
+                .mockReturnValueOnce(userFoundChain as any)
+                .mockReturnValueOnce(planFoundChain as any)
+                .mockReturnValueOnce(existingActiveSubChain as any);
+
+            const updateSetSpy = vi.fn().mockReturnValue({
+                where: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{
+                        id: 'sub-existing',
+                        userId: TEST_USER_ID,
+                        planId: TEST_PLAN_ID,
+                        status: 'active',
+                    }]),
+                }),
+            });
+            vi.mocked(db.update).mockReturnValue({ set: updateSetSpy } as any);
+
+            const auditInsertValues = vi.fn().mockReturnValue({
+                returning: vi.fn().mockResolvedValue([]),
+            });
+            vi.mocked(db.insert).mockReturnValue({ values: auditInsertValues } as any);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: `/admin/users/${TEST_USER_ID}/upgrade`,
+                headers: {
+                    authorization: 'Bearer valid-token',
+                    'content-type': 'application/json',
+                },
+                payload: { planId: TEST_PLAN_ID, periodMonths: 1, paymentMethod: 'stripe' },
+            });
+
+            expect(response.statusCode).toBe(200);
+
+            // CRITICAL: initializeUsagePeriod must NOT have been called on an
+            // active-sub plan change. Resetting the counter mid-period would
+            // give the customer more than they paid for.
+            expect(subscriptionsService.initializeUsagePeriod).not.toHaveBeenCalled();
+
+            // The subscription update must keep the existing period.
+            const updateSetArg = updateSetSpy.mock.calls[0][0];
+            expect(updateSetArg.currentPeriodStart).toEqual(existingPeriodStart);
+            expect(updateSetArg.currentPeriodEnd).toEqual(existingPeriodEnd);
+            expect(updateSetArg.planId).toBe(TEST_PLAN_ID);
+
+            // Audit log must record this as a plan change, not a new subscription.
+            const auditPayload = auditInsertValues.mock.calls[0][0];
+            expect(auditPayload.action).toBe('manual_plan_change');
+            expect(auditPayload.newValue.quotaCarriedOver).toBe(true);
+
+            // Response must surface the flag so the admin UI can show it.
+            const body = JSON.parse(response.payload);
+            expect(body.data.quotaCarriedOver).toBe(true);
+        });
+
+        it('RESETS quota and starts a new period when there is no active subscription (new subscription)', async () => {
+            const { db } = await import('../../src/db');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            const userFoundChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ id: TEST_USER_ID, email: 'user@test.com' }]),
+            };
+            const planFoundChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ id: TEST_PLAN_ID, name: 'Pro', slug: 'pro' }]),
+            };
+            const noExistingSubChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([]),
+            };
+
+            vi.mocked(db.select)
+                .mockReturnValueOnce(userFoundChain as any)
+                .mockReturnValueOnce(planFoundChain as any)
+                .mockReturnValueOnce(noExistingSubChain as any);
+
+            const insertSubValues = vi.fn().mockReturnValue({
+                returning: vi.fn().mockResolvedValue([{
+                    id: 'sub-new',
+                    userId: TEST_USER_ID,
+                    planId: TEST_PLAN_ID,
+                    status: 'active',
+                }]),
+            });
+            const auditInsertValues = vi.fn().mockReturnValue({
+                returning: vi.fn().mockResolvedValue([]),
+            });
+            vi.mocked(db.insert)
+                .mockReturnValueOnce({ values: insertSubValues } as any)
+                .mockReturnValueOnce({ values: auditInsertValues } as any);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: `/admin/users/${TEST_USER_ID}/upgrade`,
+                headers: {
+                    authorization: 'Bearer valid-token',
+                    'content-type': 'application/json',
+                },
+                payload: { planId: TEST_PLAN_ID, periodMonths: 1, paymentMethod: 'manual' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(subscriptionsService.initializeUsagePeriod).toHaveBeenCalledTimes(1);
+
+            const auditPayload = auditInsertValues.mock.calls[0][0];
+            expect(auditPayload.action).toBe('manual_new_subscription');
+            expect(auditPayload.newValue.quotaCarriedOver).toBe(false);
+
+            const body = JSON.parse(response.payload);
+            expect(body.data.quotaCarriedOver).toBe(false);
         });
     });
 

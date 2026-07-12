@@ -328,6 +328,12 @@ export interface Usage {
   aiRepliesCount: number;
   totalCommentsProcessed: number;
   totalMessagesProcessed: number;
+  /**
+   * One-period bonus replies granted on top of the plan cap (admin gift,
+   * one-off promo). Added to `plan.maxAiRepliesPerMonth` when evaluating the
+   * effective per-period quota. Resets to 0 with each new usage period.
+   */
+  bonusReplies: number;
   dailyBreakdown?: Record<string, { ai: number }>;
 }
 

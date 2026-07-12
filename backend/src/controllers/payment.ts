@@ -3,7 +3,7 @@ import { stripeService, DemoUserStripeError } from '../services/stripe';
 import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
 import { subscriptions, users, plans, settings, stripeWebhookEvents } from '../db/schema';
-import { eq, desc, or } from 'drizzle-orm';
+import { eq, desc, or, ilike } from 'drizzle-orm';
 import { config } from '../config';
 import { notificationService } from '../services/notifications';
 import { emailService } from '../services/email';
@@ -873,34 +873,178 @@ export class PaymentController {
     }
 
     /**
-     * Handle subscription created - backup handler in case checkout event missed it
+     * Resolve a Jawab24 plan by either its monthly or yearly Stripe price ID.
+     * Both `handleSubscriptionUpdated` and the self-heal path need this; keep
+     * a single source of truth so a future price-column rename stays one edit.
+     */
+    private async findPlanIdByStripePrice(priceId: string): Promise<string | null> {
+        const [planRow] = await db
+            .select({ id: plans.id })
+            .from(plans)
+            .where(or(eq(plans.stripePriceId, priceId), eq(plans.stripeYearlyPriceId, priceId)))
+            .limit(1);
+        return planRow?.id ?? null;
+    }
+
+    /**
+     * Resolve the local user + plan for a Stripe subscription when the
+     * `checkout.session.completed` event never linked it.
+     *
+     * The link normally happens in `handleCheckoutComplete`, which reads the
+     * userId from `session.client_reference_id`. If that event is missing
+     * (event type not enabled in Stripe Dashboard, signature failure, network
+     * blip), `customer.subscription.created` and `invoice.payment_succeeded`
+     * arrive without any local row — and money is silently lost. This helper
+     * is the fallback resolver: it finds the user by Stripe customer ID, then
+     * by Stripe customer email, and the plan by Stripe price ID.
+     */
+    private async resolveUserAndPlanFromStripeSub(
+        stripeSubscription: Stripe.Subscription,
+        request: FastifyRequest
+    ): Promise<{ userId: string; planId: string } | null> {
+        const stripeCustomerId = stripeSubscription.customer as string | null;
+        if (!stripeCustomerId) {
+            request.log.warn({ subscriptionId: stripeSubscription.id }, 'Self-heal: no Stripe customer on subscription');
+            return null;
+        }
+
+        // 1. Try to find a user already linked to this Stripe customer (covers
+        //    upgrades where one sub on the customer was canceled and a new one
+        //    created — the customer ID stays the same).
+        const [byCustomer] = await db
+            .select({ userId: subscriptions.userId })
+            .from(subscriptions)
+            .where(eq(subscriptions.stripeCustomerId, stripeCustomerId))
+            .limit(1);
+
+        let userId = byCustomer?.userId ?? null;
+
+        // 2. Fall back to Stripe customer email -> users table lookup.
+        if (!userId) {
+            const stripeCustomer = await stripeService.getCustomer(stripeCustomerId);
+            const email = (stripeCustomer as Stripe.Customer & { deleted?: boolean }).deleted
+                ? null
+                : stripeCustomer.email;
+            if (!email) {
+                request.log.warn(
+                    { subscriptionId: stripeSubscription.id, stripeCustomerId },
+                    'Self-heal: Stripe customer has no email'
+                );
+                return null;
+            }
+            // Case-insensitive match: Stripe normalizes emails to lowercase
+            // but our `users.email` reflects whatever the user typed at signup.
+            // Same pattern used in utils/adminSetup.ts.
+            const [user] = await db
+                .select({ id: users.id })
+                .from(users)
+                .where(ilike(users.email, email))
+                .limit(1);
+            if (!user) {
+                request.log.warn(
+                    { subscriptionId: stripeSubscription.id, stripeCustomerId, email },
+                    'Self-heal: no Jawab24 user matches Stripe customer email'
+                );
+                return null;
+            }
+            userId = user.id;
+        }
+
+        // 3. Resolve plan by Stripe price ID. Without a plan we can't insert.
+        const priceId = stripeSubscription.items?.data?.[0]?.price?.id;
+        if (!priceId) {
+            request.log.warn({ subscriptionId: stripeSubscription.id }, 'Self-heal: no price ID on subscription item');
+            return null;
+        }
+        const planId = await this.findPlanIdByStripePrice(priceId);
+        if (!planId) {
+            request.log.warn(
+                { subscriptionId: stripeSubscription.id, priceId },
+                'Self-heal: no Jawab24 plan matches Stripe price ID'
+            );
+            return null;
+        }
+
+        return { userId, planId };
+    }
+
+    /**
+     * Insert a subscription row from a Stripe subscription when none exists.
+     * Returns the inserted row id, or null if the resolver couldn't link a user/plan.
+     */
+    private async insertSubscriptionFromStripe(
+        stripeSubscription: Stripe.Subscription,
+        request: FastifyRequest
+    ): Promise<{ id: string; userId: string; planId: string } | null> {
+        const resolved = await this.resolveUserAndPlanFromStripeSub(stripeSubscription, request);
+        if (!resolved) {
+            captureError(new Error('Stripe webhook self-heal could not link subscription to a user'), 'Stripe webhook self-heal failed', {
+                tags: { service: 'payment', flow: 'webhook_self_heal' },
+                extra: { subscriptionId: stripeSubscription.id, stripeCustomerId: stripeSubscription.customer },
+            });
+            return null;
+        }
+
+        const [inserted] = await db
+            .insert(subscriptions)
+            .values({
+                userId: resolved.userId,
+                planId: resolved.planId,
+                status: stripeSubscription.status,
+                externalSubscriptionId: stripeSubscription.id,
+                paymentMethod: 'stripe',
+                stripeCustomerId: stripeSubscription.customer as string,
+                currentPeriodStart: stripeTsToDate(stripeSubscription.current_period_start),
+                currentPeriodEnd: stripeTsToDate(stripeSubscription.current_period_end),
+                trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
+                cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            })
+            .returning({ id: subscriptions.id });
+
+        await subscriptionsService.invalidateStatusCache(resolved.userId);
+
+        request.log.info(
+            {
+                subscriptionId: stripeSubscription.id,
+                userId: resolved.userId,
+                planId: resolved.planId,
+                rowId: inserted.id,
+            },
+            'Stripe webhook self-heal: created missing subscription row'
+        );
+
+        // Mirror handleCheckoutComplete's welcome email so self-healed subs
+        // also get the branded onboarding email.
+        await this.sendSubscriptionWelcomeEmail(resolved.userId, resolved.planId, stripeSubscription, request);
+
+        return { id: inserted.id, userId: resolved.userId, planId: resolved.planId };
+    }
+
+    /**
+     * Handle subscription created - primary path is `checkout.session.completed`
+     * which creates the linked row; this handler is the backup. If the link
+     * never happened (event missing, signature failure), self-heal here by
+     * resolving the user via Stripe customer ID / email.
      */
     private async handleSubscriptionCreated(
         stripeSubscription: Stripe.Subscription,
         request: FastifyRequest
     ) {
-        // Check if subscription already exists
         const existing = await db
-            .select({ id: subscriptions.id, status: subscriptions.status })
+            .select({ id: subscriptions.id, status: subscriptions.status, userId: subscriptions.userId })
             .from(subscriptions)
             .where(eq(subscriptions.externalSubscriptionId, stripeSubscription.id))
             .limit(1);
 
         if (existing.length > 0) {
-            // Subscription exists, update status if needed
             const currentStatus = existing[0].status;
             const newStatus = stripeSubscription.status;
-
-            // If subscription is active in Stripe but not in DB, update it
             if (newStatus === 'active' && currentStatus !== 'active') {
                 await db
                     .update(subscriptions)
-                    .set({
-                        status: 'active',
-                        updatedAt: new Date(),
-                    })
+                    .set({ status: 'active', updatedAt: new Date() })
                     .where(eq(subscriptions.id, existing[0].id));
-
+                await subscriptionsService.invalidateStatusCache(existing[0].userId);
                 request.log.info(
                     { subscriptionId: stripeSubscription.id, oldStatus: currentStatus },
                     'Subscription status corrected to active'
@@ -911,12 +1055,11 @@ export class PaymentController {
                     'Subscription already exists'
                 );
             }
-        } else {
-            request.log.warn(
-                { subscriptionId: stripeSubscription.id },
-                'Subscription created event received but no matching DB record found'
-            );
+            return;
         }
+
+        // No row — self-heal by resolving user via Stripe customer / email.
+        await this.insertSubscriptionFromStripe(stripeSubscription, request);
     }
 
     /**
@@ -932,14 +1075,8 @@ export class PaymentController {
         const priceId = stripeSubscription.items?.data?.[0]?.price?.id;
         let resolvedPlanId: string | null = null;
         if (priceId) {
-            const [planRow] = await db
-                .select({ id: plans.id })
-                .from(plans)
-                .where(or(eq(plans.stripePriceId, priceId), eq(plans.stripeYearlyPriceId, priceId)))
-                .limit(1);
-            if (planRow) {
-                resolvedPlanId = planRow.id;
-            } else {
+            resolvedPlanId = await this.findPlanIdByStripePrice(priceId);
+            if (!resolvedPlanId) {
                 request.log.warn({ subscriptionId: stripeSubscription.id, priceId }, 'No matching plan for Stripe price');
             }
         }
@@ -969,9 +1106,12 @@ export class PaymentController {
                 { subscriptionId: stripeSubscription.id, status: stripeSubscription.status, planId: resolvedPlanId },
                 'Subscription updated'
             );
-        } else {
-            request.log.warn({ subscriptionId: stripeSubscription.id }, 'Subscription update - no matching record found');
+            return;
         }
+
+        // No row — self-heal. This covers the case where `subscription.updated`
+        // arrives before (or instead of) `subscription.created` / `checkout.session.completed`.
+        await this.insertSubscriptionFromStripe(stripeSubscription, request);
     }
 
     /**
@@ -1051,11 +1191,21 @@ export class PaymentController {
         }
 
         if (!updatedRow) {
-            request.log.error(
+            // No row after retries — self-heal. This is the same nourvacare
+            // failure mode (Stripe collected money, our DB has nothing).
+            request.log.warn(
                 { subscriptionId: stripeSubscriptionId },
-                'Failed to activate subscription - not found after retries'
+                'Payment succeeded but no subscription row found — running self-heal'
             );
-            return;
+            const inserted = await this.insertSubscriptionFromStripe(stripeSubscription, request);
+            if (!inserted) {
+                request.log.error(
+                    { subscriptionId: stripeSubscriptionId },
+                    'Payment succeeded but self-heal could not link to a user'
+                );
+                return;
+            }
+            updatedRow = { id: inserted.id, userId: inserted.userId };
         }
 
         // Reset quota for the new billing period. Skip if Stripe didn't return

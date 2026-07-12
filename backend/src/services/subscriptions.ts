@@ -30,8 +30,8 @@ export function computeCrossedAiThresholds(
     });
 }
 
-/** Statuses that allow AI reply generation. */
-const ACTIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(['active', 'trialing']);
+/** Statuses that allow AI reply generation. Exported so the admin manual-upgrade path can use the same definition when deciding plan-change vs new-subscription. */
+export const ACTIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(['active', 'trialing']);
 /** Cache TTL for subscription status (seconds). Short so payment events reflect quickly. */
 const STATUS_CACHE_TTL = 60;
 
@@ -44,6 +44,21 @@ export function startOfUtcDay(date: Date): Date {
     const d = new Date(date);
     d.setUTCHours(0, 0, 0, 0);
     return d;
+}
+
+/**
+ * Effective AI-reply cap for a usage period = plan cap + any extra granted to
+ * this period (one-time gift / period-bound bonus). Future top-up balance
+ * (persistent across renewals) plugs in here as an additional term.
+ *
+ * Returns `null` for unlimited plans (cap is ignored).
+ */
+export function computeEffectiveAiCap(
+    planLimit: number | null,
+    bonusReplies: number | null | undefined,
+): number | null {
+    if (planLimit === null) return null;
+    return planLimit + Math.max(0, bonusReplies ?? 0);
 }
 
 /**
@@ -333,7 +348,7 @@ export const subscriptionsService = {
         }
 
         const aiUsed = currentUsage?.aiRepliesCount || 0;
-        const aiLimit = plan.maxAiRepliesPerMonth;
+        const aiLimit = computeEffectiveAiCap(plan.maxAiRepliesPerMonth, currentUsage?.bonusReplies);
 
         return {
             currentPeriod: {
@@ -416,7 +431,11 @@ export const subscriptionsService = {
     ): Promise<void> {
         try {
             const subscription = await this.getUserSubscription(userId);
-            const limit = subscription?.plan.maxAiRepliesPerMonth ?? null;
+            const currentUsage = await this.getCurrentUsage(userId);
+            const limit = computeEffectiveAiCap(
+                subscription?.plan.maxAiRepliesPerMonth ?? null,
+                currentUsage?.bonusReplies,
+            );
             const crossed = computeCrossedAiThresholds(oldUsed, newUsed, limit);
             if (crossed.length === 0 || limit === null) return;
 
@@ -475,7 +494,7 @@ export const subscriptionsService = {
         // Check current usage
         const currentUsage = await this.getCurrentUsage(userId);
         const used = currentUsage?.aiRepliesCount || 0;
-        const limit = plan.maxAiRepliesPerMonth;
+        const limit = computeEffectiveAiCap(plan.maxAiRepliesPerMonth, currentUsage?.bonusReplies) as number;
 
         if (used >= limit) {
             // Reset is bound to the usage window (monthly), not the subscription
@@ -795,6 +814,7 @@ export const subscriptionsService = {
             aiRepliesCount: row.aiRepliesCount || 0,
             totalCommentsProcessed: row.totalCommentsProcessed || 0,
             totalMessagesProcessed: row.totalMessagesProcessed || 0,
+            bonusReplies: row.bonusReplies ?? 0,
             dailyBreakdown: (row.dailyBreakdown as Record<string, { ai: number }>) || {},
         };
     },

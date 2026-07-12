@@ -16,7 +16,8 @@ import { WAITLIST_TEMPLATES } from '../utils/waitlistTemplates';
 import { resolveRecipientLanguages } from '../utils/recipientLanguage';
 import { generateUnsubscribeToken } from './waitlist';
 import { runDailyLeadDigest } from '../services/leadDigest';
-import { subscriptionsService } from '../services/subscriptions';
+import { subscriptionsService, ACTIVE_STATUSES } from '../services/subscriptions';
+import type { SubscriptionStatus } from '@jawab24/shared';
 import { analyticsService, type AdminUserAiCostPeriod } from '../services/analytics';
 
 const AI_COST_PERIODS: readonly AdminUserAiCostPeriod[] = ['7d', '30d', '90d', 'this_month', 'last_month'];
@@ -527,22 +528,53 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         .where(eq(subscriptions.userId, userId))
                         .limit(1);
 
-                    // Calculate period dates
-                    const now = new Date();
-                    const periodEnd = new Date(now);
-                    periodEnd.setMonth(periodEnd.getMonth() + periodMonths);
+                    // Two real-world scenarios. They look the same from outside
+                    // ("admin pressed upgrade") but they model different events:
+                    //
+                    //   - PLAN CHANGE: customer already has an active sub and is
+                    //     moving Starter -> Pro (or similar). Industry standard
+                    //     here is to keep the current period and carry quota over;
+                    //     resetting would hand the customer more than they paid
+                    //     for and let them game the cap by cycling plans.
+                    //
+                    //   - NEW SUBSCRIPTION: customer has no active sub (first
+                    //     paid signup, recovery after expiry, out-of-band bank
+                    //     transfer where Stripe never created a subscription).
+                    //     Period starts today, quota starts at zero.
+                    //
+                    // Decision is "is there already an active sub?" — not
+                    // "manual vs Stripe" — so both webhook and admin paths
+                    // converge on the same rule.
+                    const isPlanChange = !!(
+                        existingSubscription &&
+                        ACTIVE_STATUSES.has(existingSubscription.status as SubscriptionStatus)
+                    );
 
-                    // Create or update subscription
+                    const now = new Date();
+                    let periodStart: Date;
+                    let periodEnd: Date;
+
+                    if (isPlanChange && existingSubscription?.currentPeriodEnd) {
+                        // Keep the existing renewal date. Period start stays as
+                        // it was on the previous row so the usage row still maps.
+                        periodStart = existingSubscription.currentPeriodStart ?? now;
+                        periodEnd = existingSubscription.currentPeriodEnd;
+                    } else {
+                        // Brand-new billing relationship — fresh period from today.
+                        periodStart = now;
+                        periodEnd = new Date(now);
+                        periodEnd.setMonth(periodEnd.getMonth() + periodMonths);
+                    }
+
                     let newSubscription;
                     if (existingSubscription) {
-                        // Update existing subscription
                         [newSubscription] = await db
                             .update(subscriptions)
                             .set({
                                 planId,
                                 status: 'active',
                                 paymentMethod,
-                                currentPeriodStart: now,
+                                currentPeriodStart: periodStart,
                                 currentPeriodEnd: periodEnd,
                                 trialEndsAt: null, // Clear any trial
                                 canceledAt: null,
@@ -553,7 +585,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             .where(eq(subscriptions.id, existingSubscription.id))
                             .returning();
                     } else {
-                        // Create new subscription
                         [newSubscription] = await db
                             .insert(subscriptions)
                             .values({
@@ -561,25 +592,30 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                                 planId,
                                 status: 'active',
                                 paymentMethod,
-                                currentPeriodStart: now,
+                                currentPeriodStart: periodStart,
                                 currentPeriodEnd: periodEnd,
                             })
                             .returning();
                     }
 
-                    // Reset quota for the new billing period so the customer
-                    // immediately gets their fresh allowance after renewal.
-                    await subscriptionsService.initializeUsagePeriod(userId, now, periodEnd);
+                    // Only reset the usage period for genuinely-new subscriptions.
+                    // For plan changes the existing period and counter stay put.
+                    if (!isPlanChange) {
+                        await subscriptionsService.initializeUsagePeriod(userId, periodStart, periodEnd);
+                    }
 
-                    // Create audit log
+                    await subscriptionsService.invalidateStatusCache(userId);
+
+                    const action = isPlanChange ? 'manual_plan_change' : 'manual_new_subscription';
                     await db.insert(adminAuditLogs).values({
                         adminUserId,
                         targetUserId: userId,
-                        action: 'manual_upgrade',
+                        action,
                         previousValue: existingSubscription
                             ? {
                                   planId: existingSubscription.planId,
                                   status: existingSubscription.status,
+                                  periodStart: existingSubscription.currentPeriodStart,
                                   periodEnd: existingSubscription.currentPeriodEnd,
                                   paymentMethod: existingSubscription.paymentMethod,
                               }
@@ -589,8 +625,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             planName: plan.name,
                             status: 'active',
                             periodMonths,
+                            periodStart: periodStart.toISOString(),
                             periodEnd: periodEnd.toISOString(),
                             paymentMethod,
+                            quotaCarriedOver: isPlanChange,
                         },
                         paymentReference,
                         note,
@@ -604,8 +642,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             periodMonths,
                             paymentMethod,
                             paymentReference,
+                            isPlanChange,
                         },
-                        'Manual subscription upgrade completed'
+                        isPlanChange
+                            ? 'Manual plan change completed (quota preserved)'
+                            : 'Manual new subscription created (quota reset)'
                     );
 
                     return reply.send({
@@ -615,6 +656,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             subscription: newSubscription,
                             plan,
                             periodEnd: periodEnd.toISOString(),
+                            quotaCarriedOver: isPlanChange,
                         },
                     });
                 } catch (error) {
