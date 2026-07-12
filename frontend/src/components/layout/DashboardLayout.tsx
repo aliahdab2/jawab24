@@ -32,6 +32,13 @@ function isMobileAdminEmail(email?: string | null): boolean {
   return !!email && MOBILE_ADMIN_EMAILS.includes(email.toLowerCase());
 }
 
+// Destinations already one tap away in the persistent mobile bottom nav.
+// Excluded from the "More" overlay so it doesn't duplicate them — which also
+// keeps the overlay grid short enough to fit on one screen without scrolling.
+// Single source of truth for both the overlay grid and the "More" button's
+// active-state highlighting (moreOverlayPaths), so the two can't drift.
+const BOTTOM_NAV_PATHS = ['/dashboard', '/comments', '/messages'];
+
 interface DashboardLayoutProps {
   children: React.ReactNode;
   title?: string;
@@ -81,7 +88,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const moreOverlayPaths = useMemo(
     () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(user) })
       .flatMap((g) => g.items.map((i) => i.href))
-      .filter((href) => !['/dashboard', '/comments', '/messages'].includes(href)),
+      .filter((href) => !BOTTOM_NAV_PATHS.includes(href)),
     [isAdmin, canManageTeam, user],
   );
 
@@ -465,13 +472,16 @@ function MobileMenuOverlay({
 
   const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(overlayUser) });
   const menuItems = [
-    ...navigationGroups.flatMap((group) =>
-      group.items.map((item) => ({
+    ...navigationGroups
+      .flatMap((group) => group.items)
+      // Skip the destinations already in the persistent bottom nav — the
+      // overlay is for everything else. Keeps it scannable in one screen.
+      .filter((item) => !BOTTOM_NAV_PATHS.includes(item.href))
+      .map((item) => ({
         path: item.href,
         icon: item.icon,
         label: resolveNavKey(item.key, tNav, tPricing, isAdmin),
-      }))
-    ),
+      })),
     // Admin dashboard — mobile entry only for allow-listed operator accounts
     // (desktop sidebar shows it for all admins). Page still enforces isAdmin.
     ...(isAdmin && isMobileAdminEmail(user?.email)
@@ -627,14 +637,14 @@ function MobileMenuOverlay({
                   key={item.path}
                   onClick={() => handleNavigate(item.path)}
                   className={clsx(
-                    "flex flex-col items-center justify-center p-4 rounded-2xl transition-all duration-200",
+                    "flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-200",
                     "bg-card border border-theme-border/60",
                     "shadow-[0_4px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
-                    "active:scale-95 min-h-[90px]",
+                    "active:scale-95 min-h-[76px]",
                     router.pathname === item.path && "border-brand-200 bg-brand-50/50"
                   )}
                 >
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 flex items-center justify-center mb-2 text-brand-600">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 flex items-center justify-center mb-1.5 text-brand-600">
                     <item.icon className="w-6 h-6" />
                   </div>
                   <span className="font-bold text-xs text-foreground text-center line-clamp-2">
