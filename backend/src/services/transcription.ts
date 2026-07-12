@@ -284,11 +284,18 @@ class TranscriptionService {
             recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, 'OpenAIApiError');
             // Whisper 400 means the audio bytes themselves are bad (truncated,
             // unsupported codec, etc.). We already fall back gracefully, so
-            // don't page Sentry — but warn so a sudden spike (e.g. our own
-            // buffer handling regresses) remains visible in app logs.
+            // capture as a fingerprinted WARNING (one grouped issue, alert on
+            // frequency) — a sudden spike (e.g. our own buffer handling
+            // regresses) becomes visible in Sentry without paging per event.
             if (error instanceof APIError && error.status === 400) {
                 console.warn('[transcription] OpenAI 400, returning null', {
                     message: error.message,
+                });
+                captureError(error, 'Transcription OpenAI 400', {
+                    level: 'warning',
+                    fingerprint: ['transcription-openai-400'],
+                    tags: { service: 'transcription' },
+                    extra: { message: error.message },
                 });
                 return null;
             }

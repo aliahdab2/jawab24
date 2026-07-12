@@ -132,12 +132,19 @@ describe('imageUnderstandingService.describeFromUrl', () => {
         expect(captureError).not.toHaveBeenCalled();
     });
 
-    it('returns null (no Sentry) on an OpenAI 400 (bad image bytes)', async () => {
+    it('returns null and captures a fingerprinted WARNING on an OpenAI 400 (bad image bytes)', async () => {
         (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: 1000, body: JPEG }));
         mockCreate.mockRejectedValue(new ApiError(400, 'invalid image'));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
         expect(result).toBeNull();
-        expect(captureError).not.toHaveBeenCalled();
+        expect(captureError).toHaveBeenCalledWith(
+            expect.anything(),
+            'Image understanding OpenAI 400',
+            expect.objectContaining({
+                level: 'warning',
+                fingerprint: ['image-understanding-openai-400'],
+            }),
+        );
     });
 
     it('captures to Sentry and returns null on a non-400 OpenAI error', async () => {

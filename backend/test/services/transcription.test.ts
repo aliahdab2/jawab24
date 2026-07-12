@@ -190,7 +190,7 @@ describe('TranscriptionService', () => {
         expect(mockCreate).not.toHaveBeenCalled();
     });
 
-    it('should swallow OpenAI 400 errors without alerting Sentry', async () => {
+    it('should capture OpenAI 400 errors as a fingerprinted WARNING (grouped, not paging)', async () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
         mockCreate.mockRejectedValueOnce(new MockAPIError(400, 'Audio file might be corrupted'));
 
@@ -199,7 +199,14 @@ describe('TranscriptionService', () => {
         const result = await transcriptionService.transcribe('https://example.com/corrupt.mp4');
 
         expect(result).toBeNull();
-        expect(captureError).not.toHaveBeenCalled();
+        expect(captureError).toHaveBeenCalledWith(
+            expect.anything(),
+            'Transcription OpenAI 400',
+            expect.objectContaining({
+                level: 'warning',
+                fingerprint: ['transcription-openai-400'],
+            }),
+        );
     });
 
     it('should still report non-400 OpenAI errors to Sentry', async () => {
