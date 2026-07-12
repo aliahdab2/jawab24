@@ -197,7 +197,7 @@ test.describe('Mobile Navigation', () => {
     await expect(page.getByRole('dialog').getByRole('button', { name: t('nav.leads'), exact: true })).toBeVisible({ timeout: 5000 });
   });
 
-  test('overlay contains all expected nav items', async ({ page }) => {
+  test('overlay contains the non-bottom-nav destinations', async ({ page }) => {
     await setupAuth(page);
     await mockAPIs(page);
     await gotoWithMobileNav(page);
@@ -205,13 +205,29 @@ test.describe('Mobile Navigation', () => {
     await mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true }).click();
     const dialog = page.getByRole('dialog');
 
+    // The overlay surfaces everything NOT already reachable from the bottom nav.
     await expect(dialog.getByRole('button', { name: t('nav.pages'), exact: true })).toBeVisible({ timeout: 5000 });
-    await expect(dialog.getByRole('button', { name: t('nav.comments'), exact: true })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: t('nav.messages'), exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: t('nav.leads'), exact: true })).toBeVisible();
     // Team is workspace owner/admin-only; the default mock user is an owner.
     await expect(dialog.getByRole('button', { name: t('nav.team'), exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: t('nav.settings'), exact: true })).toBeVisible();
+  });
+
+  // Dashboard / Comments / Messages live in the persistent bottom nav, so the
+  // "More" overlay must NOT duplicate them — that redundancy is what forced the
+  // overlay to overflow and scroll. Guards against re-introducing the dupes.
+  test('overlay excludes destinations already in the bottom nav', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page);
+    await gotoWithMobileNav(page);
+
+    await mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    await expect(dialog.getByRole('button', { name: t('nav.dashboard'), exact: true })).not.toBeVisible();
+    await expect(dialog.getByRole('button', { name: t('nav.comments'), exact: true })).not.toBeVisible();
+    await expect(dialog.getByRole('button', { name: t('nav.messages'), exact: true })).not.toBeVisible();
   });
 
   // Team management is workspace owner/admin-only. A plain member should NOT
