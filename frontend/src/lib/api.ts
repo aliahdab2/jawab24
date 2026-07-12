@@ -791,8 +791,17 @@ export const adminApi = {
   },
 
   // On-demand OpenAI cost sync ("Sync now"); { configured:false } when no admin key
+  // Needs LONG_RUNNING_TIMEOUT: this pulls a wide (95-day) window from OpenAI's org
+  // Costs API grouped by api_key_id + line_item — the slowest external call in the
+  // app, and it paginates once history exceeds one page. On the default 15s timeout
+  // the browser aborts mid-flight and shows a false "sync failed" even though the
+  // backend completes and persists every snapshot. Matches every sibling sync above.
   syncAiCosts: async () => {
-    const response = await api.post<{ success: boolean; data: { configured: boolean; synced: number } }>(`/admin/ai-cost/sync`);
+    const response = await api.post<{ success: boolean; data: { configured: boolean; synced: number } }>(
+      `/admin/ai-cost/sync`,
+      undefined,
+      { timeout: LONG_RUNNING_TIMEOUT },
+    );
     return response.data.data;
   },
 
