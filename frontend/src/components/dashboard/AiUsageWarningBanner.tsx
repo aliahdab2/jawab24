@@ -101,7 +101,9 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
     if (isWarning && warning.dismissed) return null;
     if (onTopup && topupNotice.dismissed) return null;
 
-    const resetDate = formatQuotaResetDate(resetsAt, locale);
+    // With time: a merchant staring at a paused-replies banner needs to know
+    // WHEN today/tomorrow it un-pauses, not just the calendar date.
+    const resetDate = formatQuotaResetDate(resetsAt, locale, { withTime: true });
 
     const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
         if (!swipeable) return;
