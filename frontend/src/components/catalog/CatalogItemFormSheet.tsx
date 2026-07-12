@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { X } from 'lucide-react';
 import { DetailSheet } from '@/components/ui/DetailSheet';
 import { Button } from '@/components/ui';
-import type { CatalogItem } from '@jawab24/shared';
+import type { CatalogItem, CatalogItemType } from '@jawab24/shared';
 import type { CatalogItemInput } from '@/lib/api';
 import { CatalogItemFields, draftDatesInvalid, draftToInput, makeDraft } from './CatalogItemFields';
 
@@ -12,6 +12,9 @@ interface CatalogItemFormSheetProps {
   item: CatalogItem | null;
   /** Currency to pre-fill on a fresh create (last used on this page). */
   defaultCurrency?: string;
+  /** Item type preselected on a fresh create — the page vertical's default
+   *  (dealer → vehicle, institute → course). The type chips stay switchable. */
+  defaultType?: CatalogItemType;
   saving: boolean;
   /** Resolves true when the server confirmed the save. `addAnother` keeps the
    *  sheet open — fields are cleared only AFTER success so a failed request
@@ -26,11 +29,11 @@ interface CatalogItemFormSheetProps {
  * for batch entry (retaining type + currency). Lifts above the mobile keyboard
  * via the shared DetailSheet.
  */
-export function CatalogItemFormSheet({ item, defaultCurrency, saving, onSave, onClose }: CatalogItemFormSheetProps) {
+export function CatalogItemFormSheet({ item, defaultCurrency, defaultType, saving, onSave, onClose }: CatalogItemFormSheetProps) {
   const t = useTranslations('catalog');
   const isEdit = item !== null;
 
-  const [draft, setDraft] = useState(() => makeDraft(item, { currency: defaultCurrency }));
+  const [draft, setDraft] = useState(() => makeDraft(item, { currency: defaultCurrency, type: defaultType }));
   const [showNameError, setShowNameError] = useState(false);
 
   const nameRef = useRef<HTMLInputElement>(null);

@@ -60,7 +60,7 @@ export const PAGE_NAMESPACES = {
   leads:              [...DASHBOARD_LAYOUT, 'leads', 'export'],
 
   // 'kb' is required by FileUploadButton inside the import sheet.
-  catalog:            [...DASHBOARD_LAYOUT, 'catalog', 'pages', 'kb'],
+  catalog:            [...DASHBOARD_LAYOUT, 'catalog', 'pages', 'kb', 'testSmartReply'],
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'testSmartReply', 'time', 'onboarding'],
   settings:           [...DASHBOARD_LAYOUT, 'settings', 'testSmartReply', 'time', 'logout'],
   team:               [...DASHBOARD_LAYOUT, 'team'],

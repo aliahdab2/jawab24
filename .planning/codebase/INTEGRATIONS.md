@@ -73,6 +73,12 @@
   - Customer sends a plain image → AI vision description (`imageUnderstanding.describeFromUrl`, gpt-4.1-mini) → fed into the normal reply pipeline (describe-then-enqueue, like voice transcription). Reads Arabic text / product / screenshot content so the bot can answer.
   - Gated by `IMAGE_UNDERSTANDING_ENABLED` env kill switch + per-plan daily cap (shared `lib/dailyCap`); default-on with no per-merchant toggle. Image bytes never stored (only the text description). On denial/failure → placeholder + text-only nudge.
 
+- **Catalog Posts Scan (admin canary, reads page content)**:
+  - `facebookService.getPagePosts(..., { fullImages: true })` extends the `/posts` Graph fields with `attachments{media_type,media{image{src}},subattachments.limit(20){media_type,media{image{src}}}}` — full-resolution album images (the `full_picture` preview alone garbles Arabic in Vision OCR; 07-11 smoke-test lesson)
+  - Image downloads are restricted to Meta CDN hosts (`*.fbcdn.net`, `*.cdninstagram.com`), 5MB cap, 15s timeout; OCR'd via `extractFromImage` under the `catalog_extraction` cost pipeline
+  - Bounded per scan: 25 newest posts, ≤10 Vision calls total, ≤4 images/post; 2/min route rate-limit + 10/day per-user cap (fail-closed)
+  - Re-scan idempotence via `pages.catalog_scan_last_post_time` (bookmark only advances when extraction succeeded)
+
 - **Configuration**:
   - `FACEBOOK_APP_ID` - App identifier (public)
   - `FACEBOOK_APP_SECRET` - OAuth secret (private)

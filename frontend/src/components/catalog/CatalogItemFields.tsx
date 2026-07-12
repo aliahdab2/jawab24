@@ -1,7 +1,7 @@
-import type { RefObject } from 'react';
+import { useState, type RefObject } from 'react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
-import { X } from 'lucide-react';
+import { CalendarPlus, X } from 'lucide-react';
 import { Input, Textarea } from '@/components/ui';
 import { CATALOG_ITEM_TYPES, MAX_CATALOG_ITEM_ATTRIBUTES, type CatalogItem, type CatalogItemType } from '@jawab24/shared';
 import type { CatalogItemInput } from '@/lib/api';
@@ -35,9 +35,9 @@ export function draftDatesInvalid(draft: CatalogItemDraft): boolean {
   return draft.startsAt !== '' && draft.endsAt !== '' && draft.endsAt < draft.startsAt;
 }
 
-export function makeDraft(item?: CatalogItem | null, defaults?: { currency?: string }): CatalogItemDraft {
+export function makeDraft(item?: CatalogItem | null, defaults?: { currency?: string; type?: CatalogItemType }): CatalogItemDraft {
   return {
-    type: item?.type ?? 'product',
+    type: item?.type ?? defaults?.type ?? 'product',
     name: item?.name ?? '',
     price: item?.price ?? '',
     currency: item?.currency ?? defaults?.currency ?? '',
@@ -86,6 +86,12 @@ export function draftToInput(draft: CatalogItemDraft): CatalogItemInput {
  *  themselves are i18n strings (pipe-separated) — what's stored is plain text. */
 const SUGGESTED_DETAIL_TYPES: CatalogItemType[] = ['product', 'service', 'course', 'vehicle'];
 
+/** Types whose offerings are naturally time-bound (course cohorts, booked
+ *  services) — the date fields show by default. Every OTHER type hides them
+ *  behind a "+ add dates" affordance: a shelf product or a car listing must
+ *  never stare at meaningless schedule pickers (the one-size-fits-none fix). */
+const TIME_BOUND_TYPES: CatalogItemType[] = ['course', 'service'];
+
 interface CatalogItemFieldsProps {
   draft: CatalogItemDraft;
   onChange: (patch: Partial<CatalogItemDraft>) => void;
@@ -100,6 +106,14 @@ interface CatalogItemFieldsProps {
  */
 export function CatalogItemFields({ draft, onChange, nameError, nameRef }: CatalogItemFieldsProps) {
   const t = useTranslations('catalog');
+
+  // Dates show for time-bound types, for any item that already carries a date
+  // (an extracted offer expiry must stay visible/editable on every type), or
+  // after the merchant reveals them (limited offers exist in every vertical).
+  // Reveal is sticky for the mount — switching type away never hides set dates.
+  const [datesRevealed, setDatesRevealed] = useState(false);
+  const showDates = TIME_BOUND_TYPES.includes(draft.type)
+    || draft.startsAt !== '' || draft.endsAt !== '' || datesRevealed;
 
   // Type-suggested detail labels (Salla-style chips) — i18n pipe-separated
   // strings, minus the labels already in use. What's stored is the plain text.
@@ -176,26 +190,38 @@ export function CatalogItemFields({ draft, onChange, nameError, nameRef }: Catal
         />
       </div>
 
-      {/* Time-bound offerings (course cohorts, limited offers) — optional for
-          every type. Date inputs read LTR even in RTL (ISO dates + native
-          pickers; same convention as admin/ai-cost). */}
-      <div className="grid grid-cols-2 gap-3">
-        <Input
-          label={t('fields.startsAt')}
-          type="date"
-          dir="ltr"
-          value={draft.startsAt}
-          onChange={(e) => onChange({ startsAt: e.target.value })}
-        />
-        <Input
-          label={t('fields.endsAt')}
-          type="date"
-          dir="ltr"
-          value={draft.endsAt}
-          onChange={(e) => onChange({ endsAt: e.target.value })}
-          error={draftDatesInvalid(draft) ? t('errors.dateOrder') : undefined}
-        />
-      </div>
+      {/* Time-bound offerings (course cohorts, limited offers). Shown by default
+          only where dates are natural (TIME_BOUND_TYPES) — other types get a
+          reveal affordance instead of two always-on pickers. Date inputs read
+          LTR even in RTL (ISO dates + native pickers; same as admin/ai-cost). */}
+      {showDates ? (
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label={t('fields.startsAt')}
+            type="date"
+            dir="ltr"
+            value={draft.startsAt}
+            onChange={(e) => onChange({ startsAt: e.target.value })}
+          />
+          <Input
+            label={t('fields.endsAt')}
+            type="date"
+            dir="ltr"
+            value={draft.endsAt}
+            onChange={(e) => onChange({ endsAt: e.target.value })}
+            error={draftDatesInvalid(draft) ? t('errors.dateOrder') : undefined}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setDatesRevealed(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-dashed border-border text-foreground/70 hover:bg-muted transition-colors"
+        >
+          <CalendarPlus className="w-3.5 h-3.5" aria-hidden="true" />
+          {t('fields.addDates')}
+        </button>
+      )}
 
       {/* Flexible details — label+value pairs. The type suggests labels
           (chips); anything else is a custom pair. Rendered to the AI as text. */}

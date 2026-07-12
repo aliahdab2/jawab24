@@ -4,12 +4,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CatalogItemInput } from '@/lib/api';
 import { CatalogImportSheet } from './CatalogImportSheet';
 
-const { extract, batchCreate } = vi.hoisted(() => ({
-  extract: vi.fn(), batchCreate: vi.fn(),
+const { extract, batchCreate, scanPosts } = vi.hoisted(() => ({
+  extract: vi.fn(), batchCreate: vi.fn(), scanPosts: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  catalogApi: { extract, batchCreate },
+  catalogApi: { extract, batchCreate, scanPosts },
   kbApi: { extractText: vi.fn() }, // FileUploadButton dependency
 }));
 
@@ -65,12 +65,23 @@ describe('CatalogImportSheet', () => {
     expect(screen.getByLabelText('Your list')).toHaveValue(PASTE);
   });
 
-  it('shows extracted proposals for review with name, price and currency', async () => {
+  it('shows extracted proposals for review with the price as an always-visible input', async () => {
     await reachReview([proposal(), proposal({ name: 'دورة فوتوشوب', price: 5000 })]);
     expect(await screen.findByText('دورة ICDL')).toBeInTheDocument();
     expect(screen.getByText('دورة فوتوشوب')).toBeInTheDocument();
-    expect(screen.getByText('3500')).toBeInTheDocument();
+    // The extracted price arrives editable in place — no expand needed.
+    expect(screen.getByDisplayValue('3500')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add 2 items' })).toBeEnabled();
+  });
+
+  it('nudges price completion: counts priceless rows and states the privacy promise', async () => {
+    await reachReview([proposal({ price: null, currency: null }), proposal({ name: 'دورة فوتوشوب', price: 5000 })]);
+    expect(await screen.findByText(/1 item has no price yet/)).toBeInTheDocument();
+    expect(screen.getByText(/Your prices stay private/)).toBeInTheDocument();
+    // Typing a price into the inline box clears the nudge.
+    const priceBoxes = screen.getAllByLabelText('Price (optional)');
+    fireEvent.change(priceBoxes[0], { target: { value: '2500' } });
+    expect(screen.queryByText(/has no price yet/)).not.toBeInTheDocument();
   });
 
   it('surfaces dropped/truncated honestly in the review meta', async () => {
@@ -109,7 +120,7 @@ describe('CatalogImportSheet', () => {
     await waitFor(() => expect(batchCreate).toHaveBeenCalledWith('p1', [
       expect.objectContaining({ name: 'دورة ICDL' }),
     ]));
-    expect(onDone).toHaveBeenCalledWith(1);
+    expect(onDone).toHaveBeenCalledWith(1, 'دورة ICDL');
   });
 
   it('restores a removed row (undoable, not destructive)', async () => {
@@ -120,13 +131,11 @@ describe('CatalogImportSheet', () => {
     expect(screen.getByRole('button', { name: 'Add 1 item' })).toBeEnabled();
   });
 
-  it('sends an edited price (row expands to the shared field editor)', async () => {
+  it('sends a price edited directly in the inline row box (no expand needed)', async () => {
     batchCreate.mockResolvedValue({ data: { data: [{}] } });
     await reachReview([proposal()]);
 
-    fireEvent.click(await screen.findByText('دورة ICDL')); // expand the row
-    const priceInput = screen.getByLabelText('Price (optional)');
-    fireEvent.change(priceInput, { target: { value: '4000' } });
+    fireEvent.change(await screen.findByDisplayValue('3500'), { target: { value: '4000' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add 1 item' }));
 
     await waitFor(() => expect(batchCreate).toHaveBeenCalledWith('p1', [
@@ -134,9 +143,27 @@ describe('CatalogImportSheet', () => {
     ]));
   });
 
+  it('applies the page default currency to rows that got a price but no currency', async () => {
+    batchCreate.mockResolvedValue({ data: { data: [{}] } });
+    extract.mockResolvedValue(extractResponse([
+      proposal({ price: null, currency: null }),                       // stays priceless — no currency forced
+      proposal({ name: 'دورة فوتوشوب', price: 5000, currency: null }), // priced — inherits the default
+    ]));
+    renderSheet({ defaultCurrency: 'ريال' });
+    fireEvent.change(screen.getByLabelText('Your list'), { target: { value: PASTE } });
+    fireEvent.click(screen.getByRole('button', { name: 'Extract items' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add 2 items' }));
+
+    await waitFor(() => expect(batchCreate).toHaveBeenCalledWith('p1', [
+      expect.objectContaining({ name: 'دورة ICDL', price: null, currency: null }),
+      expect.objectContaining({ name: 'دورة فوتوشوب', price: '5000', currency: 'ريال' }),
+    ]));
+  });
+
   it('blocks saving a row edited to a blank name and flags it inline', async () => {
     await reachReview([proposal()]);
-    fireEvent.click(await screen.findByText('دورة ICDL'));
+    fireEvent.click((await screen.findAllByRole('button', { name: /Details/ }))[0]); // expand
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: '   ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add 1 item' }));
 
@@ -174,6 +201,38 @@ describe('CatalogImportSheet', () => {
         attributes: [{ label: 'المدة', value: '٦ أسابيع' }],
       }),
     ]));
-    expect(onDone).toHaveBeenCalledWith(1);
+    expect(onDone).toHaveBeenCalledWith(1, 'دورة ميكانيك متقدمة');
+  });
+
+  describe('scan mode', () => {
+    function scanResponse(items: CatalogItemInput[], meta: Partial<{ postsScanned: number; upToDate: boolean }> = {}) {
+      return { data: { items, dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, postsScanned: 1, upToDate: false, ...meta } };
+    }
+
+    it('fires the scan on mount (exactly once) and lands in review', async () => {
+      scanPosts.mockResolvedValue(scanResponse([proposal({ name: 'كيا ريو 2018', type: 'vehicle', price: null, currency: null })]));
+      renderSheet({ mode: 'scan' });
+
+      expect(screen.getByText('Products from your posts')).toBeInTheDocument();
+      expect(await screen.findByText('كيا ريو 2018')).toBeInTheDocument();
+      expect(scanPosts).toHaveBeenCalledTimes(1);
+      expect(scanPosts).toHaveBeenCalledWith('p1');
+      // No input step in scan mode → no Back button in the review footer.
+      expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
+    });
+
+    it('shows the up-to-date state when no new posts exist since the last scan', async () => {
+      scanPosts.mockResolvedValue(scanResponse([], { postsScanned: 0, upToDate: true }));
+      renderSheet({ mode: 'scan' });
+      expect(await screen.findByText('You’re up to date')).toBeInTheDocument();
+    });
+
+    it('closes with an error toast when the scan fails (nothing typed, nothing lost)', async () => {
+      scanPosts.mockRejectedValue(new Error('boom'));
+      const { onClose } = renderSheet({ mode: 'scan' });
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      const { toast } = await import('sonner');
+      expect(toast.error).toHaveBeenCalled();
+    });
   });
 });

@@ -107,6 +107,7 @@ function CatalogPageInner() {
         <div className="mt-4">
           <CatalogManager
             pageId={selectedPageId}
+            page={validPages.find((p) => p.id === selectedPageId)}
             importRequested={importRequest?.pageId === selectedPageId}
             importInitialText={importRequest?.pageId === selectedPageId ? importRequest.text : undefined}
           />
