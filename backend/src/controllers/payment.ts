@@ -11,6 +11,7 @@ import { isSanctionedGeo } from '../utils/sanctions';
 import { shouldBlockUnknownGeo } from '../middleware/geo';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
 import { stripeTsToDate } from '../utils/stripeTime';
+import { getSubscriptionPeriod } from '../utils/stripeCompat';
 import { dispatchStripeEvent } from './paymentWebhookHandlers';
 
 // Type for authenticated requests
@@ -557,8 +558,9 @@ export class PaymentController {
             // Best-effort local mirror — the subscription.updated webhook is
             // authoritative and will re-write these fields, but updating now
             // means the UI reflects the change without waiting for the event.
-            const updatedPeriodStart = stripeTsToDate(updated.current_period_start);
-            const updatedPeriodEnd = stripeTsToDate(updated.current_period_end);
+            const updatedPeriod = getSubscriptionPeriod(updated);
+            const updatedPeriodStart = stripeTsToDate(updatedPeriod.start);
+            const updatedPeriodEnd = stripeTsToDate(updatedPeriod.end);
             await db
                 .update(subscriptions)
                 .set({

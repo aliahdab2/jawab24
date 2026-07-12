@@ -4,7 +4,10 @@ import { config } from '../config';
 // Initialize Stripe only if keys are provided (optional for preview)
 export const stripe = config.stripe?.secretKey
     ? new Stripe(config.stripe.secretKey, {
-        apiVersion: '2023-10-16',
+        // Keep in lock-step with the SDK's bundled version (stripe/esm/apiVersion.js).
+        // Webhook payload shapes are governed by the *endpoint* version in the
+        // Dashboard, not this pin — utils/stripeCompat.ts absorbs that drift.
+        apiVersion: '2026-06-24.dahlia',
         typescript: true,
     })
     : null;
@@ -79,7 +82,9 @@ export class StripeService {
                 customer_email: userEmail,
                 client_reference_id: userId,
                 mode: 'subscription',
-                ui_mode: 'embedded',
+                // 'embedded' was renamed 'embedded_page' in newer API versions;
+                // it is the same Stripe.js embedded-checkout integration.
+                ui_mode: 'embedded_page',
                 locale: 'auto',
                 payment_method_collection: 'if_required',
                 // Collect VAT IDs and billing address so Stripe can issue VAT-compliant
@@ -217,7 +222,9 @@ export class StripeService {
             payment_settings: {
                 save_default_payment_method: 'on_subscription',
             },
-            expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
+            // confirmation_secret replaces the pre-basil latest_invoice.payment_intent
+            // expansion as the way to obtain the client_secret for the first charge.
+            expand: ['latest_invoice.confirmation_secret', 'pending_setup_intent'],
         };
 
         if (params.trialDays > 0) {
@@ -248,13 +255,13 @@ export class StripeService {
         }
 
         const invoice = subscription.latest_invoice as Stripe.Invoice | null;
-        const paymentIntent = (invoice?.payment_intent as Stripe.PaymentIntent | null);
-        if (!paymentIntent?.client_secret) {
-            throw new Error(`Stripe payment intent missing client_secret for subscription ${subscription.id}`);
+        const clientSecret = invoice?.confirmation_secret?.client_secret;
+        if (!clientSecret) {
+            throw new Error(`Stripe confirmation secret missing client_secret for subscription ${subscription.id}`);
         }
         return {
             subscriptionId: subscription.id,
-            clientSecret: paymentIntent.client_secret,
+            clientSecret,
             type: 'payment',
         };
     }
