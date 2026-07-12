@@ -919,7 +919,7 @@ const DashboardPage: NextPageWithLayout = () => {
                 className={clsx(
                   'flex items-start gap-3 p-4 rounded-2xl border mb-0 transition-all',
                   isEcomVariant
-                    ? 'bg-surface-50 dark:bg-surface-800/50 border-theme-border'
+                    ? 'bg-surface-50 dark:bg-surface-200/50 border-theme-border'
                     : 'bg-brand-50/60 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800'
                 )}
               >

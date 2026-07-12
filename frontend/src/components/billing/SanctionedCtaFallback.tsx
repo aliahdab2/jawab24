@@ -12,7 +12,7 @@ export function SanctionedCtaFallback() {
   const tLanding = useTranslations('landing');
 
   return (
-    <div className="text-center p-3 bg-slate-50 dark:bg-surface-800 rounded-xl border border-theme-border">
+    <div className="text-center p-3 bg-slate-50 dark:bg-surface-200 rounded-xl border border-theme-border">
       <p className="text-xs font-bold text-muted-foreground mb-1">{tPayment('unavailable.message')}</p>
       <a
         href={`https://wa.me/${DEFAULT_SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(tLanding('footer.whatsappMessage'))}`}

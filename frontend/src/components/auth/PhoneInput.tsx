@@ -163,7 +163,7 @@ export function PhoneInput({
                     type="button"
                     onClick={() => setShowDropdown(v => !v)}
                     disabled={disabled}
-                    className="flex items-center gap-1.5 px-3 py-3 border border-e-0 border-surface-300 dark:border-surface-600 rounded-s-xl bg-surface-50 dark:bg-surface-800 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors text-sm font-medium flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
+                    className="flex items-center gap-1.5 px-3 py-3 border border-e-0 border-surface-300 dark:border-surface-600 rounded-s-xl bg-surface-50 dark:bg-surface-200 hover:bg-surface-100 dark:hover:bg-surface-300 transition-colors text-sm font-medium flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
                     aria-haspopup="listbox"
                     aria-expanded={showDropdown}
                     aria-label={`${t('selectCountry')}: ${countryName(selectedCountry.code)}`}

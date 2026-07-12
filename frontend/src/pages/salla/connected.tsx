@@ -95,8 +95,8 @@ export default function SallaConnected() {
         <title>{t('claim.title')}</title>
         <meta name="robots" content="noindex" />
       </Head>
-      <div className="min-h-[100dvh] flex items-center justify-center bg-surface-50 dark:bg-surface-900 px-4 py-10">
-        <div className="w-full max-w-md rounded-3xl border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 p-8 shadow-sm text-center">
+      <div className="min-h-[100dvh] flex items-center justify-center bg-surface-50 px-4 py-10">
+        <div className="w-full max-w-md rounded-3xl border border-surface-200 dark:border-surface-400 bg-white dark:bg-surface-100 p-8 shadow-sm text-center">
           <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl icon-bg-brand">
             <ShoppingBag className="h-7 w-7" aria-hidden="true" />
           </div>

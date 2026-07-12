@@ -97,7 +97,7 @@ export function SetupChecklistCard({ pages, usage }: SetupChecklistCardProps) {
       {/* Progress bar */}
       <div className="px-4 sm:px-5 pt-4">
         <div
-          className="w-full h-1.5 bg-surface-200 dark:bg-surface-700 rounded-full overflow-hidden"
+          className="w-full h-1.5 bg-surface-200 dark:bg-surface-300 rounded-full overflow-hidden"
           role="progressbar"
           aria-valuenow={doneCount}
           aria-valuemin={0}

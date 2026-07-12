@@ -212,7 +212,7 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
                       {t('postPickerActive')}
                     </span>
                   ) : (
-                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-surface-100 dark:bg-surface-800 text-muted-foreground whitespace-nowrap">
+                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-surface-100 dark:bg-surface-200 text-muted-foreground whitespace-nowrap">
                       {t('postPickerSetup')}
                     </span>
                   )}
@@ -246,7 +246,7 @@ function PostThumb({ imageUrl, source }: { imageUrl: string | null; source: Sour
   const Icon = source === 'facebook' ? FacebookIcon : InstagramIcon;
   if (!imageUrl || failed) {
     return (
-      <span className="w-12 h-12 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center flex-shrink-0 text-icon-muted">
+      <span className="w-12 h-12 rounded-lg bg-surface-100 dark:bg-surface-200 flex items-center justify-center flex-shrink-0 text-icon-muted">
         <Icon className="w-5 h-5" aria-hidden="true" />
       </span>
     );
