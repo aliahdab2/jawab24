@@ -278,6 +278,23 @@ describe('Shopify Controller', () => {
             expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid OAuth callback: state mismatch' });
         });
 
+        it('should reject a non-myshopify shop even with a valid nonce (no token exchange)', async () => {
+            // A valid nonce must NOT authorize sending the app client_secret to an
+            // arbitrary host. Regression for the OAuth callback secret-exfil gap.
+            const req = mockRequest({
+                query: { shop: 'attacker.com', code: 'code123', state: 'nonce123' },
+                cookies: { shopifyNonce: 'signed_nonce' },
+                unsignCookie: vi.fn().mockReturnValue({ valid: true, value: 'nonce123' }),
+            });
+            const rep = mockReply();
+
+            await authCallback(req, rep);
+
+            expect(rep.status).toHaveBeenCalledWith(400);
+            expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid OAuth callback: invalid shop domain' });
+            expect(mockExchangeCodeForToken).not.toHaveBeenCalled();
+        });
+
         it('should reject when nonce cookie is missing', async () => {
             const req = mockRequest({
                 query: { shop: 'test.myshopify.com', code: 'code123', state: 'nonce123' },
