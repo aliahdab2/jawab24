@@ -1,3 +1,5 @@
+-- @not-journaled: superseded by seed-plans.ts — config/plans.ts is the source of
+-- truth for price/replies and is upserted on every deploy. Kept for history.
 -- Starter: $15, 500 replies (was 400)
 UPDATE "plans" SET
   "max_ai_replies_per_month" = 500
