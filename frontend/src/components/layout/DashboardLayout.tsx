@@ -501,12 +501,18 @@ function MobileMenuOverlay({
       {/* Menu Container - Different layouts for portrait/landscape */}
       <div
         className={clsx(
-          "absolute bg-card overflow-hidden",
+          // flex column + capped height so the body scrolls INSIDE the sheet
+          // instead of the whole sheet growing past the viewport. Without a cap
+          // the portrait sheet overflowed the top edge on tall menus (admins get
+          // 11 tiles) — clipping the header and first row with no way to reach them.
+          "absolute bg-card overflow-hidden flex flex-col",
           isLandscape
             // Landscape: Centered modal (iOS/Android standard for landscape)
             ? "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl w-[90vw] max-w-[600px] max-h-[85vh] animate-in zoom-in-95 duration-200 px-safe"
-            // Portrait: Bottom sheet (iOS standard) with bottom safe area
-            : "bottom-0 inset-x-0 rounded-t-[24px] animate-in slide-in-from-bottom duration-300 pb-safe"
+            // Portrait: Bottom sheet (iOS standard) with bottom safe area.
+            // dvh (not vh) so the mobile browser URL bar is excluded; leave a
+            // 1.5rem gap below the top safe inset so the backdrop stays visible.
+            : "bottom-0 inset-x-0 rounded-t-[24px] animate-in slide-in-from-bottom duration-300 pb-safe max-h-[calc(100dvh-var(--sai-top)-1.5rem)]"
         )}
         style={{
           boxShadow: isLandscape 
@@ -517,14 +523,14 @@ function MobileMenuOverlay({
       >
         {/* Drag Handle - Portrait only (iOS standard) */}
         {!isLandscape && (
-          <div className="flex justify-center pt-3 pb-1">
+          <div className="flex-shrink-0 flex justify-center pt-3 pb-1">
             <div className="w-10 h-1 rounded-full bg-surface-200" />
           </div>
         )}
 
-        {/* Header */}
+        {/* Header — fixed; the body below it scrolls */}
         <div className={clsx(
-          "flex items-center justify-between border-b border-theme-border",
+          "flex-shrink-0 flex items-center justify-between border-b border-theme-border",
           isLandscape ? "px-5 py-3" : "px-5 py-3"
         )}>
           <h3 className={clsx(
@@ -542,9 +548,9 @@ function MobileMenuOverlay({
           </button>
         </div>
 
-        {/* Content */}
+        {/* Content — the single scroll region inside the capped sheet */}
         <div className={clsx(
-          "overflow-y-auto",
+          "flex-1 min-h-0 overflow-y-auto",
           isLandscape ? "p-4" : "p-5"
         )}>
           {/* Workspace switcher — only when user belongs to multiple workspaces.
