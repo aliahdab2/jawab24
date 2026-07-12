@@ -9,7 +9,7 @@ import {
     InstagramCommentsResponse
 } from '../types';
 
-import { GRAPH_API_BASE } from '../lib/fbAxios';
+import { GRAPH_API_BASE, fbAxios } from '../lib/fbAxios';
 import { DmSendError } from '../utils/fbGraphErrors';
 import { buildMessagePayload, type SendMessageOptions } from './metaMessaging';
 
@@ -31,7 +31,7 @@ export class InstagramService {
         try {
             this.logger.debug('[Instagram] Fetching linked Instagram account', { pageId });
             
-            const response = await axios.get(`${INSTAGRAM_GRAPH_API}/${pageId}`, {
+            const response = await fbAxios.get(`${INSTAGRAM_GRAPH_API}/${pageId}`, {
                 params: {
                     fields: 'instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}',
                     access_token: pageAccessToken,
@@ -72,7 +72,7 @@ export class InstagramService {
         try {
             this.logger.debug('[Instagram] Fetching media', { instagramAccountId });
 
-            const response = await axios.get<InstagramMediaResponse>(
+            const response = await fbAxios.get<InstagramMediaResponse>(
                 `${INSTAGRAM_GRAPH_API}/${instagramAccountId}/media`,
                 {
                     params: {
@@ -104,7 +104,7 @@ export class InstagramService {
         try {
             this.logger.debug('[Instagram] Fetching comments', { mediaId });
             
-            const response = await axios.get<InstagramCommentsResponse>(
+            const response = await fbAxios.get<InstagramCommentsResponse>(
                 `${INSTAGRAM_GRAPH_API}/${mediaId}/comments`,
                 {
                     params: {
@@ -132,7 +132,7 @@ export class InstagramService {
     async getPostContent(mediaId: string, pageAccessToken: string): Promise<string | null> {
         try {
             this.logger.debug('[Instagram] Fetching media content', { mediaId });
-            const response = await axios.get(`${INSTAGRAM_GRAPH_API}/${mediaId}`, {
+            const response = await fbAxios.get(`${INSTAGRAM_GRAPH_API}/${mediaId}`, {
                 params: {
                     fields: 'caption',
                     access_token: pageAccessToken,
@@ -166,7 +166,7 @@ export class InstagramService {
         try {
             this.logger.debug('[Instagram] Replying to comment', { commentId });
             
-            const response = await axios.post(
+            const response = await fbAxios.post(
                 `${INSTAGRAM_GRAPH_API}/${commentId}/replies`,
                 {
                     message,
@@ -197,7 +197,7 @@ export class InstagramService {
         try {
             this.logger.debug('[Instagram] Hiding comment', { commentId });
             
-            await axios.post(
+            await fbAxios.post(
                 `${INSTAGRAM_GRAPH_API}/${commentId}`,
                 {
                     hide: true,
@@ -227,7 +227,7 @@ export class InstagramService {
         try {
             this.logger.debug('[Instagram] Deleting comment', { commentId });
             
-            await axios.delete(
+            await fbAxios.delete(
                 `${INSTAGRAM_GRAPH_API}/${commentId}`,
                 {
                     params: {
@@ -258,7 +258,7 @@ export class InstagramService {
         action: 'typing_on' | 'typing_off',
     ): Promise<void> {
         try {
-            await axios.post(
+            await fbAxios.post(
                 `${INSTAGRAM_GRAPH_API}/me/messages`,
                 {
                     recipient: { id: recipientId },
@@ -307,7 +307,7 @@ export class InstagramService {
         try {
             this.logger.debug('[Instagram] Sending DM', { instagramAccountId, recipientId });
 
-            const response = await axios.post(
+            const response = await fbAxios.post(
                 `${INSTAGRAM_GRAPH_API}/me/messages`,
                 buildMessagePayload(recipientId, { text: message }, opts),
                 { params: { access_token: pageAccessToken } },
@@ -333,7 +333,7 @@ export class InstagramService {
         try {
             this.logger.debug('[Instagram] Fetching conversations', { instagramAccountId });
             
-            const response = await axios.get(
+            const response = await fbAxios.get(
                 `${INSTAGRAM_GRAPH_API}/${instagramAccountId}/conversations`,
                 {
                     params: {

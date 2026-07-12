@@ -22,6 +22,15 @@ const MAX_RETRIES = 2;
 const DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
 const TRANSIENT_RETRY_WAIT_MS = 2_000;
 
+/**
+ * Per-request socket timeout. Graph API calls on the reply hot path must not
+ * hang indefinitely (axios default is 0 = infinite): a stalled socket to
+ * graph.facebook.com would pin a BullMQ reply-worker slot forever. 15s is well
+ * above realistic Graph latency; a timeout surfaces as ECONNABORTED, which the
+ * retry interceptor treats as transient (one short retry before propagating).
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 interface RetryConfig extends InternalAxiosRequestConfig {
     _retryCount?: number;
 }
@@ -32,9 +41,9 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Determine how long to wait before retrying a failed Facebook API call.
- * Returns ms to wait, or 0 to not retry.
+ * Returns ms to wait, or 0 to not retry. Exported for unit testing.
  */
-function getRetryDelay(error: AxiosError): number {
+export function getRetryDelay(error: AxiosError): number {
     const status = error.response?.status;
 
     // HTTP 429 — use Retry-After header or default
@@ -56,16 +65,17 @@ function getRetryDelay(error: AxiosError): number {
     // 5xx server errors — short retry
     if (status && status >= 500) return TRANSIENT_RETRY_WAIT_MS;
 
-    // Network errors — short retry
+    // Network errors — short retry. ECONNABORTED is how axios surfaces a
+    // request-timeout (REQUEST_TIMEOUT_MS), so a timed-out call gets one retry.
     if (!error.response && error.code) {
-        const retryableCodes = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND'];
+        const retryableCodes = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'ECONNABORTED'];
         if (retryableCodes.includes(error.code)) return TRANSIENT_RETRY_WAIT_MS;
     }
 
     return 0;
 }
 
-const instance = axios.create();
+const instance = axios.create({ timeout: REQUEST_TIMEOUT_MS });
 
 // Guard: when axios is auto-mocked in tests, create() returns undefined
 export const fbAxios = instance ?? axios;

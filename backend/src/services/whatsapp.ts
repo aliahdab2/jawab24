@@ -15,6 +15,13 @@ export interface WhatsAppMediaInfo {
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 
 /**
+ * Per-request socket timeout for Cloud API calls. Without it (axios default is
+ * 0 = infinite) a stalled socket to graph.facebook.com would hang a webhook /
+ * send worker indefinitely. Matches fbAxios's REQUEST_TIMEOUT_MS.
+ */
+const WHATSAPP_TIMEOUT_MS = 15_000;
+
+/**
  * Sanitized WhatsApp Cloud API error. Carries only Meta's error code + message
  * — never the axios `config`/`headers`/`request`, which hold the FB app secret
  * (code-exchange `client_secret`) and the WABA bearer token. Throwing this
@@ -90,7 +97,7 @@ class WhatsAppService {
                 type: 'text',
                 text: { body: text },
             },
-            { headers: { Authorization: `Bearer ${accessToken}` } },
+            { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
         ));
         return res.data?.messages?.[0]?.id ?? '';
     }
@@ -116,7 +123,7 @@ class WhatsAppService {
                 message_id: messageId,
                 ...(options.typing ? { typing_indicator: { type: 'text' } } : {}),
             },
-            { headers: { Authorization: `Bearer ${accessToken}` } },
+            { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
         ).catch(() => {
             // Fire-and-forget — receipts are cosmetic and must never block the pipeline
         });
@@ -136,6 +143,7 @@ class WhatsAppService {
                 client_secret: config.facebook.appSecret,
                 code,
             },
+            timeout: WHATSAPP_TIMEOUT_MS,
         }));
         const token = res.data?.access_token;
         if (!token) throw new WhatsAppApiError('Embedded Signup code exchange returned no access_token');
@@ -150,7 +158,7 @@ class WhatsAppService {
         await this.request(() => axios.post(
             `${WHATSAPP_API}/${wabaId}/subscribed_apps`,
             {},
-            { headers: { Authorization: `Bearer ${accessToken}` } },
+            { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
         ));
     }
 
@@ -167,7 +175,7 @@ class WhatsAppService {
                 messaging_product: 'whatsapp',
                 pin: this.derivePin(phoneNumberId),
             },
-            { headers: { Authorization: `Bearer ${accessToken}` } },
+            { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
         ));
     }
 
@@ -190,6 +198,7 @@ class WhatsAppService {
         const res = await this.request(() => axios.get(`${WHATSAPP_API}/${phoneNumberId}`, {
             params: { fields: 'display_phone_number,verified_name' },
             headers: { Authorization: `Bearer ${accessToken}` },
+            timeout: WHATSAPP_TIMEOUT_MS,
         }));
         return {
             displayPhoneNumber: res.data?.display_phone_number ?? '',
@@ -207,6 +216,7 @@ class WhatsAppService {
     async getMediaInfo(mediaId: string, accessToken: string): Promise<WhatsAppMediaInfo> {
         const res = await this.request(() => axios.get(`${WHATSAPP_API}/${mediaId}`, {
             headers: { Authorization: `Bearer ${accessToken}` },
+            timeout: WHATSAPP_TIMEOUT_MS,
         }));
         return {
             url: res.data?.url ?? '',
@@ -221,7 +231,7 @@ class WhatsAppService {
             headers: { Authorization: `Bearer ${accessToken}` },
             responseType: 'arraybuffer',
             maxContentLength: MAX_MEDIA_BYTES,
-            timeout: 15_000,
+            timeout: WHATSAPP_TIMEOUT_MS,
         }));
         const buf = Buffer.from(res.data);
         if (buf.length === 0 || buf.length > MAX_MEDIA_BYTES) return null;
