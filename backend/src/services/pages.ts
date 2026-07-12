@@ -775,6 +775,46 @@ export class PagesService {
     }
 
     /**
+     * Re-ingest a page's CURRENT KB text (+ products) into fresh chunks and activate that version.
+     * The single reliable re-ingest path: `ingestFullPage` transactionally REPLACES the version's
+     * chunks (see pgvector-store upsertChunks) and only flips kbActiveVersion on success, so this is
+     * idempotent and safe to call anytime. Used by the drift reconciler to self-heal pages whose
+     * fire-and-forget ingest (updatePage/addFact/sync/ecommerce) failed and left kbActiveVersion
+     * behind kbVersion. Bounded retry on transient embedding/DB errors. Returns false on failure.
+     */
+    async reingestPage(
+        pageId: string,
+        opts: { ingestion?: KbIngestionService; attempts?: number } = {},
+    ): Promise<boolean> {
+        const ingestion = opts.ingestion ?? getIngestionService();
+        if (!ingestion) return false;
+
+        const [page] = await db
+            .select({ knowledgeBase: pages.knowledgeBase, ecommerceStoreId: pages.ecommerceStoreId, kbVersion: pages.kbVersion })
+            .from(pages)
+            .where(eq(pages.id, pageId))
+            .limit(1);
+        if (!page?.kbVersion) return false;
+
+        const products = await this.fetchProductsForPage(page.ecommerceStoreId);
+        const maxAttempts = Math.max(1, opts.attempts ?? 2);
+        let lastErr: unknown;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                await ingestion.ingestFullPage(pageId, page.knowledgeBase ?? undefined, products, page.kbVersion);
+                return true;
+            } catch (err) {
+                lastErr = err;
+                if (attempt < maxAttempts) await new Promise(res => setTimeout(res, 500 * attempt));
+            }
+        }
+        captureError(lastErr, 'reingestPage failed after retries', {
+            tags: { service: 'kb-ingestion', action: 'reingestPage' }, extra: { pageId },
+        });
+        return false;
+    }
+
+    /**
      * Delete a page
      */
     async deletePage(workspaceId: string, pageId: string) {
