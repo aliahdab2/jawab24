@@ -9,16 +9,25 @@
   "empty": {
     "title": "Add what you sell",
     "body": "Your posts already show what you sell. Let Jawab find your products — then add your prices, and it answers your customers with the exact details.",
-    "exampleName": "Front shock absorbers",
-    "examplePrice": "350",
     "cta": "Add manually",
     "or": "or:"
+  },
+  "exampleItems": {
+    "electronics": "ASUS laptop, 16GB RAM|2400",
+    "fashion": "Classic abaya, black|280",
+    "vehicles": "Kia Rio 2018, 60k km|31500",
+    "education": "ICDL course — beginner level|3500",
+    "restaurant": "Family shawarma platter|55",
+    "beauty": "Haircut & styling session|80",
+    "real_estate": "2-bedroom apartment, city center|65000",
+    "home_goods": "3-seat fabric sofa|1450",
+    "services": "AC cleaning & maintenance|120",
+    "other": "Front shock absorbers|350"
   },
   "limitLabel": "{count} of {max} items",
   "fields": {
     "type": "Type",
     "name": "Name",
-    "namePlaceholder": "e.g. Front shock absorbers",
     "priceOptional": "Price (optional)",
     "pricePlaceholder": "Leave empty for “price on request”",
     "currency": "Currency",
@@ -39,6 +48,13 @@
     "service": "Duration",
     "course": "Duration|Level",
     "vehicle": "Year|Mileage|Condition"
+  },
+  "namePlaceholders": {
+    "product": "e.g. Front shock absorbers",
+    "service": "e.g. AC cleaning & maintenance",
+    "course": "e.g. ICDL course — beginner level",
+    "vehicle": "e.g. Kia Rio 2018, 60k km",
+    "custom": "e.g. Front shock absorbers"
   },
   "badges": {
     "ended": "Ended",

@@ -167,7 +167,9 @@ export function CatalogItemFields({ draft, onChange, nameError, nameRef }: Catal
         dir="auto"
         value={draft.name}
         onChange={(e) => onChange({ name: e.target.value })}
-        placeholder={t('fields.namePlaceholder')}
+        // The example follows the selected type — a dealer is taught with a
+        // car, an institute with a course, never someone else's trade.
+        placeholder={t(`namePlaceholders.${draft.type}`)}
         error={nameError}
         maxLength={200}
       />
