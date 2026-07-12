@@ -189,7 +189,7 @@ export const MessageCard = React.memo(function MessageCard({
         {/* Row 3: Reply preview + method badge */}
         {lastOutgoing && (
           <div className="flex items-center gap-2 mt-1">
-            <span className="flex-shrink-0 w-3.5 h-px bg-surface-200 dark:bg-surface-700 rounded-full" aria-hidden="true" />
+            <span className="flex-shrink-0 w-3.5 h-px bg-surface-200 dark:bg-surface-400 rounded-full" aria-hidden="true" />
             <p className="flex-1 min-w-0 text-xs text-muted-foreground truncate leading-snug" dir="auto">
               {renderMessageText(lastOutgoing.message)}
             </p>

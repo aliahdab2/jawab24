@@ -132,7 +132,7 @@ export function FileUploadButton({
           /* Idle state */
           !extracting && !disabled && 'text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/40 hover:bg-brand-100 dark:hover:bg-brand-900/50',
           /* Extracting state */
-          extracting && 'text-muted-foreground bg-surface-100 dark:bg-surface-800 cursor-wait',
+          extracting && 'text-muted-foreground bg-surface-100 dark:bg-surface-200 cursor-wait',
           /* Disabled */
           disabled && 'opacity-40 cursor-not-allowed',
         )}

@@ -21,6 +21,15 @@ import { tryGetUserId } from '../utils/authHelpers';
 import { captureError } from '../utils/sentryHelpers';
 
 /**
+ * A shop domain must be a `*.myshopify.com` host. Validated on BOTH legs of the
+ * OAuth flow: `authRedirect` (before we build the auth URL) and `authCallback`
+ * (before we POST the app client_secret to the shop). Without the callback-side
+ * check, a caller holding a valid nonce could point `shop` at an arbitrary host
+ * and exfiltrate the app secret via `exchangeCodeForToken`.
+ */
+const SHOPIFY_SHOP_DOMAIN = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/;
+
+/**
  * Tag a Shopify webhook crash for Sentry routing. Shopify retries 5xx
  * webhooks 19 times over 48h then silently gives up — without explicit
  * tags, a handler crash is undetectable from production noise.
@@ -48,7 +57,7 @@ function reportWebhookFailure(
 export async function authRedirect(request: FastifyRequest, reply: FastifyReply) {
     const { shop } = request.query as { shop?: string };
 
-    if (!shop || !/^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shop)) {
+    if (!shop || !SHOPIFY_SHOP_DOMAIN.test(shop)) {
         return reply.status(400).send({ error: 'Invalid shop domain' });
     }
 
@@ -95,6 +104,12 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
 
     if (!shop || !code) {
         return reply.status(400).send({ error: 'Invalid OAuth callback: missing shop or code' });
+    }
+
+    // Re-validate the shop host before any token exchange. A valid nonce alone
+    // must NOT authorize sending the app client_secret to an arbitrary `shop`.
+    if (!SHOPIFY_SHOP_DOMAIN.test(shop)) {
+        return reply.status(400).send({ error: 'Invalid OAuth callback: invalid shop domain' });
     }
 
     // Two validation paths:

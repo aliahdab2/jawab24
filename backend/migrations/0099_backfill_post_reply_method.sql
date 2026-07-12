@@ -1,3 +1,5 @@
+-- @not-journaled: historical one-time backfill of existing rows — a no-op on a
+-- fresh DB (new rows are written with the correct reply_method by app code).
 -- Backfill: distinguish per-post keyword-trigger replies (Post Reply) from
 -- AI-fallback templates. Both previously persisted as reply_method='template',
 -- which conflated them in analytics (the dashboard counted Post Replies as

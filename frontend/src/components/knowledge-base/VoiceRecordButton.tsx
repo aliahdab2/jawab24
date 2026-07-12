@@ -96,7 +96,7 @@ export function VoiceRecordButton({
           /* Recording state */
           isRecording && 'text-white bg-red-500 hover:bg-red-600 shadow-sm',
           /* Transcribing state */
-          isTranscribing && 'text-muted-foreground bg-surface-100 dark:bg-surface-800 cursor-wait',
+          isTranscribing && 'text-muted-foreground bg-surface-100 dark:bg-surface-200 cursor-wait',
           /* Disabled */
           disabled && 'opacity-40 cursor-not-allowed',
         )}

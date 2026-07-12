@@ -527,7 +527,7 @@ export default function LoginPage() {
                       <>
                         {/* Tab selector — hidden once user enters OTP step */}
                         {otpStep === 'phone' && (
-                          <div className="flex rounded-2xl bg-surface-100 dark:bg-surface-800 p-1 gap-1" role="tablist">
+                          <div className="flex rounded-2xl bg-surface-100 dark:bg-surface-200 p-1 gap-1" role="tablist">
                             <button
                               type="button"
                               role="tab"

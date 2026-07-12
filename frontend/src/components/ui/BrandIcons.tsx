@@ -102,7 +102,7 @@ export const PLATFORM_LABEL_KEYS = {
   whatsapp: 'platformWhatsApp',
 } as const;
 
-const MUTED_CLASSES = 'bg-surface-100 text-icon-muted dark:bg-surface-800';
+const MUTED_CLASSES = 'bg-surface-100 text-icon-muted dark:bg-surface-200';
 
 export function PlatformIcon({ platform, size = 'sm', muted = false, ariaLabel, className }: PlatformIconProps) {
   const style = PLATFORM_STYLES[platform] ?? PLATFORM_STYLES.facebook;

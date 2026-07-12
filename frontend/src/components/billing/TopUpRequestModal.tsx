@@ -73,11 +73,11 @@ export function TopUpRequestModal({ isOpen, onClose, userEmail }: TopUpRequestMo
         return (
             <Modal isOpen={isOpen} onClose={onClose} title={t('modal.title')} size="md">
                 <div className="space-y-4" aria-busy="true">
-                    <div className="h-4 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
+                    <div className="h-4 w-3/4 bg-surface-200 dark:bg-surface-300 rounded animate-pulse" />
                     <div className="grid grid-cols-2 gap-3">
                         {PACKS_ORDER.map((p) => <PackSkeleton key={p} />)}
                     </div>
-                    <div className="h-16 bg-surface-100 dark:bg-surface-800 rounded animate-pulse" />
+                    <div className="h-16 bg-surface-100 dark:bg-surface-300 rounded animate-pulse" />
                 </div>
             </Modal>
         );
@@ -312,8 +312,8 @@ function PackSkeleton() {
             aria-hidden="true"
             className="p-4 rounded-lg border-2 border-surface-200 dark:border-surface-700 animate-pulse"
         >
-            <div className="h-3.5 w-24 bg-surface-200 dark:bg-surface-700 rounded mb-2" />
-            <div className="h-6 w-14 bg-surface-200 dark:bg-surface-700 rounded" />
+            <div className="h-3.5 w-24 bg-surface-200 dark:bg-surface-300 rounded mb-2" />
+            <div className="h-6 w-14 bg-surface-200 dark:bg-surface-300 rounded" />
         </div>
     );
 }

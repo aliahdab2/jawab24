@@ -109,6 +109,67 @@ function extractTableName(stmt: string, pattern: RegExp): string | null {
     return match ? match[1].toLowerCase() : null;
 }
 
+/**
+ * A `.sql` file is only applied by `db:migrate` if its tag is listed in
+ * meta/_journal.json. A file that exists on disk but is NOT journaled is
+ * silently never run — so a genuinely-forgotten migration can hide among
+ * intentional manual data-scripts. This check surfaces the drift:
+ *   - journaled tag with no file  → ERROR (drizzle will fail to read it)
+ *   - file not in the journal     → WARNING, unless it declares itself an
+ *                                    intentional manual script with a
+ *                                    `-- @not-journaled` header.
+ */
+const NOT_JOURNALED_MARKER = '@not-journaled';
+
+function checkJournalConsistency(
+    sqlFiles: string[],
+): { errors: string[]; warnings: string[]; info: string[] } {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const info: string[] = [];
+
+    const journalPath = path.join(MIGRATIONS_DIR, 'meta', '_journal.json');
+    if (!fs.existsSync(journalPath)) {
+        warnings.push('meta/_journal.json not found — cannot verify journal/file consistency');
+        return { errors, warnings, info };
+    }
+
+    let journalTags: Set<string>;
+    try {
+        const journal = JSON.parse(fs.readFileSync(journalPath, 'utf-8')) as {
+            entries?: { tag: string }[];
+        };
+        journalTags = new Set((journal.entries ?? []).map(e => e.tag));
+    } catch (err) {
+        errors.push(`meta/_journal.json is not valid JSON: ${(err as Error).message}`);
+        return { errors, warnings, info };
+    }
+
+    const fileTags = new Set(sqlFiles.map(f => f.replace(/\.sql$/, '')));
+
+    for (const tag of journalTags) {
+        if (!fileTags.has(tag)) {
+            errors.push(`Journal references "${tag}" but ${tag}.sql is missing — db:migrate will fail.`);
+        }
+    }
+
+    for (const file of sqlFiles) {
+        const tag = file.replace(/\.sql$/, '');
+        if (journalTags.has(tag)) continue;
+        const content = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf-8');
+        if (content.includes(NOT_JOURNALED_MARKER)) {
+            info.push(`${file} — intentional manual script (${NOT_JOURNALED_MARKER}); not applied by db:migrate.`);
+        } else {
+            warnings.push(
+                `${file} is NOT in meta/_journal.json — db:migrate will NEVER apply it. ` +
+                `Journal it (drizzle-kit generate) or add a "-- ${NOT_JOURNALED_MARKER}" header if it is an intentional manual script.`,
+            );
+        }
+    }
+
+    return { errors, warnings, info };
+}
+
 function validateMigrationFile(
     filePath: string,
     knownTables: Set<string>,
@@ -233,6 +294,24 @@ function validateAllMigrations(): boolean {
 
             console.log('');
         }
+    }
+
+    // --- Journal / file consistency (orphan detection) ---
+    const journal = checkJournalConsistency(migrationFiles);
+    if (journal.errors.length > 0 || journal.warnings.length > 0 || journal.info.length > 0) {
+        console.log('📒 Journal consistency');
+        for (const error of journal.errors) {
+            console.log(`   ❌ ERROR: ${error}`);
+            hasErrors = true;
+        }
+        for (const warning of journal.warnings) {
+            console.log(`   ⚠️  WARNING: ${warning}`);
+            totalWarnings++;
+        }
+        for (const note of journal.info) {
+            console.log(`   ℹ️  ${note}`);
+        }
+        console.log('');
     }
 
     if (hasErrors) {

@@ -333,7 +333,7 @@ export function CommandCenter({
               </div>
               {metric.progressPercent !== undefined && (
                 <div
-                  className="mt-3 h-1 rounded-full bg-surface-100 dark:bg-surface-800 overflow-hidden"
+                  className="mt-3 h-1 rounded-full bg-surface-100 dark:bg-surface-300 overflow-hidden"
                   role="progressbar"
                   aria-valuenow={Math.round(metric.progressPercent)}
                   aria-valuemin={0}

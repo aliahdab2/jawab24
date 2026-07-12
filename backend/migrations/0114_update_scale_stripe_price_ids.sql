@@ -1,3 +1,4 @@
+-- @not-journaled: env-specific LIVE Stripe price IDs — MUST NOT run on test/staging.
 -- Stripe price IDs for the hidden high-volume Scale plans
 --   Scale 20K → $149/mo, Scale 30K → $199/mo (recurring, monthly).
 --
