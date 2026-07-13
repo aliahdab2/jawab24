@@ -141,6 +141,24 @@ const PriceInput = z.preprocess((raw) => {
     return Number.isFinite(num) ? num : raw; // unparseable → fails z.number() with a clear error
 }, z.number().min(0, 'Price must be non-negative').max(9_999_999_999.99).nullable());
 
+/** Currency label as the merchant or extractor writes it next to the price — a
+ *  symbol ($), a short code (EGP), or a spelled-out name that may carry a qualifier
+ *  the region depends on ("ل.س بالعملة القديمة" — Syria's old-vs-new lira is a 100×
+ *  distinction, so the qualifier is load-bearing, not noise). Lenient by the same
+ *  contract as PriceInput and the date/attribute sanitizers: an over-long value is
+ *  TRUNCATED to the cap, NEVER rejected. Currency must never be the field that sinks
+ *  an otherwise-valid item — the original 10-char hard cap silently dropped every
+ *  single row of an Arabic price list whose currency read "ل.س بالعملة القديمة".
+ *  ''/undefined → null ("no currency"). */
+const CATALOG_CURRENCY_MAX = 30;
+const CurrencyInput = z.preprocess((raw) => {
+    if (raw === null || raw === undefined) return null;
+    if (typeof raw !== 'string') return raw; // non-string → let z.string() reject it
+    const trimmed = raw.trim();
+    if (trimmed === '') return null;
+    return trimmed.length > CATALOG_CURRENCY_MAX ? trimmed.slice(0, CATALOG_CURRENCY_MAX) : trimmed;
+}, z.string().max(CATALOG_CURRENCY_MAX).nullable());
+
 /** True only for a date whose Y-M-D parts round-trip — "2026-13-45" fails
  *  instead of rolling over into a different month. Exported for the catalog
  *  extractor's pre-sanitize step (drop a bad date FIELD, not the whole row). */
@@ -193,8 +211,7 @@ export const CatalogItemSchema = z.object({
     description: z.string().trim().max(600).nullable().optional()
         .transform(v => (v === '' ? null : v ?? null)),
     price: PriceInput.optional().transform(v => v ?? null),
-    currency: z.string().trim().max(10).nullable().optional()
-        .transform(v => (v === '' ? null : v ?? null)),
+    currency: CurrencyInput.optional().transform(v => v ?? null),
     isAvailable: z.boolean().default(true),
     startsAt: CatalogDateInput.optional().transform(v => v ?? null),
     endsAt: CatalogDateInput.optional().transform(v => v ?? null),
@@ -215,8 +232,7 @@ export const CatalogItemUpdateSchema = z.object({
     description: z.string().trim().max(600).nullable().optional()
         .transform(v => (v === '' ? null : v)),
     price: PriceInput.optional(),
-    currency: z.string().trim().max(10).nullable().optional()
-        .transform(v => (v === '' ? null : v)),
+    currency: CurrencyInput.optional(),
     isAvailable: z.boolean().optional(),
     startsAt: CatalogDateInput.optional(),
     endsAt: CatalogDateInput.optional(),

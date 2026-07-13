@@ -188,7 +188,7 @@ export function CatalogItemFields({ draft, onChange, nameError, nameRef }: Catal
           dir="auto"
           value={draft.currency}
           onChange={(e) => onChange({ currency: e.target.value })}
-          maxLength={10}
+          maxLength={30}
         />
       </div>
 
