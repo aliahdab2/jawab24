@@ -24,6 +24,9 @@
     "services": "تنظيف وصيانة مكيف|120",
     "other": "دبل صدمات أمامي|350"
   },
+  "example": {
+    "badge": "مثال"
+  },
   "limitLabel": "{count} من {max} عنصر",
   "fields": {
     "type": "النوع",

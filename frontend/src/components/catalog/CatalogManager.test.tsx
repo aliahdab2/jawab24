@@ -52,8 +52,10 @@ describe('CatalogManager', () => {
     expect(await screen.findByRole('button', { name: /Find products in your posts/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add manually' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Import a list' })).toBeInTheDocument();
-    // Ghost example row teaches the shape
+    // Ghost example row teaches the shape — and is labelled so it can't be
+    // mistaken for a real listing.
     expect(screen.getByText('Front shock absorbers')).toBeInTheDocument();
+    expect(screen.getByText('Example')).toBeInTheDocument();
   });
 
   it('renders items with price, currency and an in-stock label', async () => {
