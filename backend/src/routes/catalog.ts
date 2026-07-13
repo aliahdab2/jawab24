@@ -25,6 +25,30 @@ export default async function catalogRoutes(fastify: FastifyInstance) {
             schema: { tags: ['Catalog'], summary: 'Add a catalog item', security: auth },
         }, catalogController.create.bind(catalogController));
 
+        // Import flow. /extract is the only paid (LLM) route in this file —
+        // rate-limited here, daily-capped in the controller; persists nothing.
+        adminRoutes.post('/pages/:pageId/catalog/extract', {
+            schema: { tags: ['Catalog'], summary: 'Extract proposed catalog items from free text (no persistence)', security: auth },
+            config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+        }, catalogController.extract.bind(catalogController));
+
+        // Posts scan — the priciest route here (up to 10 Vision calls + one
+        // extraction per scan), so its rate limit is tighter than /extract's.
+        adminRoutes.post('/pages/:pageId/catalog/scan-posts', {
+            schema: { tags: ['Catalog'], summary: "Read the page's recent posts into proposed catalog items (no persistence)", security: auth },
+            config: { rateLimit: { max: 2, timeWindow: '1 minute' } },
+        }, catalogController.scanPosts.bind(catalogController));
+
+        adminRoutes.post('/pages/:pageId/catalog/batch', {
+            schema: { tags: ['Catalog'], summary: 'Create multiple catalog items in one transaction', security: auth },
+        }, catalogController.batchCreate.bind(catalogController));
+
+        // Registered before the param route: Fastify matches static segments
+        // first anyway, but keeping /vertical above /:itemId makes that explicit.
+        adminRoutes.patch('/pages/:pageId/catalog/vertical', {
+            schema: { tags: ['Catalog'], summary: "Override the page's catalog business vertical", security: auth },
+        }, catalogController.setVertical.bind(catalogController));
+
         adminRoutes.patch('/pages/:pageId/catalog/:itemId', {
             schema: { tags: ['Catalog'], summary: 'Update a catalog item', security: auth },
         }, catalogController.update.bind(catalogController));

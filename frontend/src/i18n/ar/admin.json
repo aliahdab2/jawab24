@@ -220,6 +220,7 @@
     "aiCostPipeline_embedding_ingestion": "فهرسة المعرفة",
     "aiCostPipeline_kb_file_extraction": "استخراج النص من الملفات",
     "aiCostPipeline_operational_facts_extraction": "استخراج معلومات النشاط التجاري",
+    "aiCostPipeline_catalog_extraction": "استخراج عناصر الكتالوج",
     "aiCostPipeline_ecommerce_tools": "أدوات المتجر",
     "aiCostPipeline_playground": "بيئة التجربة",
     "aiCostPipeline_eval": "التقييم",

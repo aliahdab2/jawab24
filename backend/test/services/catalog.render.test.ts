@@ -85,6 +85,41 @@ describe('renderCatalogPromptBlock', () => {
         expect(block).not.toContain('وصف طويل');
     });
 
+    it('renders date fragments verbatim and keeps date-less items byte-identical', () => {
+        const block = renderCatalogPromptBlock([
+            item({ name: 'دورة ميكانيك', type: 'course', startsAt: '2026-08-10', endsAt: '2026-09-20' }),
+            item(), // no dates — must render exactly as before the columns existed
+        ])!;
+        expect(block).toContain('- [course] دورة ميكانيك — 3500 EGP — in stock — starts 2026-08-10 — ends 2026-09-20');
+        expect(block).toContain('- دبل صدمات NJT — 3500 EGP — in stock');
+    });
+
+    it('renders attributes as label: value fragments before the description', () => {
+        const block = renderCatalogPromptBlock([
+            item({
+                name: 'دورة متقدمة', type: 'course', description: 'شهادة معتمدة',
+                attributes: [{ label: 'المدة', value: '٦ أسابيع' }, { label: 'المستوى', value: 'متقدم' }],
+            }),
+        ])!;
+        expect(block).toContain('— المدة: ٦ أسابيع — المستوى: متقدم — شهادة معتمدة');
+    });
+
+    it('drops attributes with descriptions when over budget, but never drops dates', () => {
+        const items = Array.from({ length: 90 }, (_, i) =>
+            item({
+                name: `منتج رقم ${i}`,
+                description: 'وصف طويل جدًا للمنتج يشرح كل التفاصيل والمواصفات المهمة '.repeat(3),
+                attributes: [{ label: 'الماركة', value: 'علامة تجارية مشهورة جدًا' }],
+                startsAt: '2026-08-10',
+            }),
+        );
+        const block = renderCatalogPromptBlock(items)!;
+        expect(block.length).toBeLessThanOrEqual(12000);
+        expect(block).not.toContain('الماركة:');
+        expect(block).not.toContain('وصف طويل');
+        expect(block).toContain('starts 2026-08-10'); // dates survive every tier
+    });
+
     it('truncates at an item boundary with an explicit non-exhaustive tail when even the bare list overflows', () => {
         const items = Array.from({ length: 300 }, (_, i) =>
             item({ name: `منتج بعنوان طويل نسبيًا حتى تكبر القائمة كثيرًا رقم ${i}` }),

@@ -353,6 +353,22 @@ export const CATALOG_ITEM_TYPES: CatalogItemType[] = ['product', 'service', 'cou
  *  Sized so the whole catalog always fits the AI prompt block without retrieval. */
 export const MAX_CATALOG_ITEMS_PER_PAGE = 300;
 
+/** Input cap for the catalog import's extract call (frontend textarea + backend
+ *  Zod agree via this constant). Mirrors the KB / file-extractor output cap, so
+ *  anything a merchant can paste or upload fits in one extraction. */
+export const MAX_CATALOG_IMPORT_CHARS = 16_000;
+
+/** A label+value detail on a catalog item ("المدة: ٦ أسابيع", "سنة الصنع: 2019").
+ *  Free text by design — the AI consumes these only as rendered prompt TEXT, so
+ *  labels need no stable key semantics; the UI merely SUGGESTS per-type labels. */
+export interface CatalogItemAttribute {
+  label: string;
+  value: string;
+}
+
+/** Per-item cap on attributes — keeps the form and the prompt line scannable. */
+export const MAX_CATALOG_ITEM_ATTRIBUTES = 6;
+
 /** One thing a business offers, entered by the merchant (no e-commerce store needed).
  *  Rendered into the AI's <product_catalog> prompt block; never exposed via AI tools. */
 export interface CatalogItem {
@@ -367,9 +383,81 @@ export interface CatalogItem {
   /** Merchant-uploaded photo (Release 2); shown to customers as a DM card. */
   imageUrl: string | null;
   isAvailable: boolean;
+  /** 'YYYY-MM-DD' calendar dates (course cohort start / offer expiry). A passed
+   *  endsAt hides the item from the AI prompt; the UI shows an "Ended" badge. */
+  startsAt: string | null;
+  endsAt: string | null;
+  attributes: CatalogItemAttribute[] | null;
   sortOrder: number;
   createdAt: string | Date | null;
   updatedAt: string | Date | null;
+}
+
+// --- Catalog verticals (business-type shaping) ---
+/** Coarse business vertical for a page's catalog. Shapes DEFAULTS only (preselected
+ *  item type, extractor hint) — never the data model. One generic engine underneath;
+ *  a vertical must never grow its own tables, screens, or required fields. */
+export type CatalogVertical =
+  | 'electronics'
+  | 'fashion'
+  | 'vehicles'
+  | 'education'
+  | 'restaurant'
+  | 'beauty'
+  | 'real_estate'
+  | 'home_goods'
+  | 'services'
+  | 'other';
+
+export const CATALOG_VERTICALS: CatalogVertical[] = [
+  'electronics', 'fashion', 'vehicles', 'education', 'restaurant',
+  'beauty', 'real_estate', 'home_goods', 'services', 'other',
+];
+
+/** The item type a new/extracted item defaults to under each vertical
+ *  (merchant can always switch — the type chips stay). */
+export const CATALOG_VERTICAL_DEFAULT_TYPE: Record<CatalogVertical, CatalogItemType> = {
+  electronics: 'product',
+  fashion: 'product',
+  vehicles: 'vehicle',
+  education: 'course',
+  restaurant: 'product',
+  beauty: 'service',
+  real_estate: 'custom',
+  home_goods: 'product',
+  services: 'service',
+  other: 'product',
+};
+
+/** Where the effective vertical came from — merchant override, the Facebook
+ *  page category, or the fallback when neither resolves. */
+export type CatalogVerticalSource = 'merchant' | 'facebook' | 'default';
+
+/**
+ * Map a Facebook page category (Graph API string, e.g. "Computer company",
+ * "Car dealership") to a catalog vertical. Keyword-based on purpose — Meta has
+ * ~1,500 free-form category labels and localizes them, so exact tables rot.
+ * Specific verticals are tested before generic ones ("Mobile phone repair
+ * service" → electronics, not services). Returns null when nothing matches.
+ */
+export function verticalFromFbCategory(category: string | null | undefined): CatalogVertical | null {
+  if (!category) return null;
+  const c = category.toLowerCase();
+  const rules: Array<[CatalogVertical, RegExp]> = [
+    ['vehicles', /\b(car|cars|auto|automotive|vehicle|motorcycle|motorbike|dealership)\b|سيارات|دراجات/],
+    ['education', /education|school|tutor|training|course|institute|university|college|learning|coaching|kindergarten|تدريب|تعليم|معهد|دورات|مدرسة|جامعة/],
+    ['electronics', /computer|electronic|phone|mobile|laptop|software|gadget|appliance repair|حاسب|حاسوب|كمبيوتر|جوال|هاتف|إلكترون|الكترون/],
+    ['restaurant', /restaurant|cafe|café|coffee|food|bakery|catering|dessert|pizzeria|shawarma|grill|مطعم|كافيه|مقهى|حلويات|مأكولات|مخبز/],
+    ['beauty', /beauty|salon|spa|barber|cosmetic|makeup|nail|hair|تجميل|صالون|حلاق|مكياج/],
+    ['fashion', /clothing|fashion|apparel|shoe|footwear|boutique|jewelry|jewellery|accessor|bags?\b|ملابس|أزياء|أحذية|مجوهرات|إكسسوار|اكسسوار|حقائب/],
+    ['real_estate', /real estate|property|realtor|عقار/],
+    ['home_goods', /furniture|home goods|home decor|homeware|household|kitchenware|أثاث|مفروشات|ديكور/],
+    ['services', /service|repair|maintenance|cleaning|agency|consult|design|marketing|photograph|صيانة|خدمات|تصوير|تنظيف/],
+  ];
+  for (const [vertical, re] of rules) {
+    if (re.test(c)) return vertical;
+  }
+  return null;
 }
 
 // --- Post Reply picker ---

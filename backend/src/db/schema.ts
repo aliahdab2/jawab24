@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, numeric, date, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, numeric, date, check, customType, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
@@ -201,6 +201,14 @@ export const pages = pgTable('pages', {
     // Business profile — structured data from Facebook sync
     businessProfile: jsonb('business_profile').default({}),
     businessProfileUpdatedAt: timestamp('business_profile_updated_at'),
+    // Catalog vertical (business type shaping catalog defaults). NULL = derive
+    // from the FB page category (business_profile.suggestions.category) via
+    // verticalFromFbCategory; a stored value is a merchant override and wins.
+    catalogVertical: varchar('catalog_vertical', { length: 20 }),
+    // Newest post created_time consumed by the catalog posts-scan. The next scan
+    // only fetches posts newer than this, so re-scans propose new posts' items
+    // instead of re-flooding the review sheet with everything already seen.
+    catalogScanLastPostTime: timestamp('catalog_scan_last_post_time'),
     // Per-page overrides of the workspace lead config (settings.leadStages /
     // settings.leadFields). NULL = inherit the workspace config; a set value is
     // a full replacement for this page. Resolved via resolveEffectiveLeadStages/
@@ -1108,6 +1116,19 @@ export const ecommerceProducts = pgTable('ecommerce_products', {
     };
 });
 
+/**
+ * DATE column that always reads back as 'YYYY-MM-DD'. Drizzle's own
+ * `date(..., { mode: 'string' })` is NOT honored here: the postgres.js driver
+ * parses DATE (oid 1082) into a JS Date beneath drizzle, which then leaks
+ * "Tue Jul 21 2026 02:00:00 GMT+0200 …" into consumers (caught by the catalog
+ * prompt-renderer integration test) and re-introduces timezone drift. The
+ * driver hands back UTC midnight, so slicing the ISO form is exact.
+ */
+const isoDateString = customType<{ data: string; driverData: string | Date }>({
+    dataType: () => 'date',
+    fromDriver: (v) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10)),
+});
+
 // 18b. Catalog Items Table — merchant-authored offerings for pages WITHOUT a
 // connected e-commerce store (the store-less majority). One row = one thing the
 // business sells: a product, a service, a course, a vehicle. Generic `type`
@@ -1132,6 +1153,21 @@ export const catalogItems = pgTable('catalog_items', {
     // so the photo rollout needs no second migration.
     imageUrl: text('image_url'),
     isAvailable: boolean('is_available').notNull().default(true),
+    // Time-bound offerings (course cohorts, limited offers). Calendar dates,
+    // not timestamps — day granularity is the product semantics, and DATE
+    // avoids timezone drift. startsAt renders into the prompt ("starts
+    // YYYY-MM-DD", model reasons vs its "Today's date" line, D-006); a passed
+    // endsAt EXCLUDES the row from the prompt block entirely (kb_chunks
+    // valid_until precedent) while the merchant UI keeps it with an "Ended"
+    // badge. Real columns (not attributes JSONB) because expiry is SQL-level.
+    startsAt: isoDateString('starts_at'),
+    endsAt: isoDateString('ends_at'),
+    // Merchant-facing label+value details ("المدة: ٦ أسابيع", "سنة الصنع: 2019").
+    // Curated-by-suggestion, free by design: the AI consumes these only as
+    // rendered TEXT (D-004), so labels need no stable key semantics. Access via
+    // drizzle ONLY — the postgres.js driver double-encodes jsonb, so raw SQL
+    // `->>` over this column silently returns NULL (parked driver bug).
+    attributes: jsonb('attributes').$type<{ label: string; value: string }[]>(),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),

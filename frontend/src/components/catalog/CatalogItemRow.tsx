@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import clsx from 'clsx';
 import { Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
-import type { CatalogItem, CatalogItemType } from '@jawab24/shared';
+import { Toggle } from '@/components/ui';
+import type { CatalogItem } from '@jawab24/shared';
+import { todayISODate } from './CatalogItemFields';
 
 interface CatalogItemRowProps {
   item: CatalogItem;
@@ -11,6 +13,11 @@ interface CatalogItemRowProps {
   onEdit: (item: CatalogItem) => void;
   onDelete: (item: CatalogItem) => void;
   onMove: (item: CatalogItem, direction: 'up' | 'down') => void;
+  /** One-tap availability flip — dealers mark cars sold daily; no form needed. */
+  onToggleAvailability: (item: CatalogItem, enabled: boolean) => void;
+  /** Inline price save (trimmed string; '' = price on request). Server
+   *  normalizes Arabic-Indic digits — pass the raw text through. */
+  onSavePrice: (item: CatalogItem, price: string) => void;
 }
 
 /** "3500.00" → "3500", "49.90" → "49.9" — merchant-facing, no trailing zeros. */
@@ -19,8 +26,34 @@ function formatPrice(price: string): string {
   return Number.isFinite(n) ? String(n) : price;
 }
 
-export function CatalogItemRow({ item, isFirst, isLast, disabled, onEdit, onDelete, onMove }: CatalogItemRowProps) {
+/**
+ * One catalog row, tuned for the two edits merchants make constantly:
+ * price (tap the price → inline input; Enter/blur saves, Escape cancels) and
+ * availability (Toggle). Everything else lives behind the edit pencil. No type
+ * badge — the type shapes the FORM, the merchant shouldn't have to read it.
+ */
+export function CatalogItemRow({
+  item, isFirst, isLast, disabled, onEdit, onDelete, onMove, onToggleAvailability, onSavePrice,
+}: CatalogItemRowProps) {
   const t = useTranslations('catalog');
+
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [priceDraft, setPriceDraft] = useState('');
+
+  const startPriceEdit = () => {
+    if (disabled) return;
+    setPriceDraft(item.price !== null ? formatPrice(item.price) : '');
+    setEditingPrice(true);
+  };
+  const commitPrice = () => {
+    setEditingPrice(false);
+    const next = priceDraft.trim();
+    const current = item.price !== null ? formatPrice(item.price) : '';
+    if (next !== current) onSavePrice(item, next);
+  };
+
+  // Dealers think "sold", shops think "out of stock" — same flag, honest words.
+  const outLabel = item.type === 'vehicle' ? t('availability.sold') : t('availability.out');
 
   return (
     <li className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
@@ -38,38 +71,79 @@ export function CatalogItemRow({ item, isFirst, isLast, disabled, onEdit, onDele
         </button>
       </div>
 
-      {/* Name + type + description */}
+      {/* Name + dates + description */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <span dir="auto" className="text-sm font-semibold text-foreground">{item.name}</span>
-          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
-            {t(`types.${item.type as CatalogItemType}`)}
-          </span>
+          {/* Past endsAt: the AI already stopped offering this item (excluded
+              from the prompt block) — the badge tells the merchant why. */}
+          {item.endsAt && item.endsAt < todayISODate() && (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+              {t('badges.ended')}
+            </span>
+          )}
         </div>
+        {(item.startsAt || item.endsAt) && (
+          <p className="text-xs text-muted-foreground mt-0.5" dir="auto">
+            {item.startsAt && t('badges.startsOn', { date: item.startsAt })}
+            {item.startsAt && item.endsAt && ' · '}
+            {item.endsAt && t('badges.endsOn', { date: item.endsAt })}
+          </p>
+        )}
         {item.description && (
           <p dir="auto" className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{item.description}</p>
         )}
       </div>
 
-      {/* Price */}
-      <div dir="auto" className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums text-end">
-        {item.price !== null ? (
-          <>
-            {formatPrice(item.price)}
-            {item.currency && <span className="text-xs font-medium text-muted-foreground ms-1">{item.currency}</span>}
-          </>
-        ) : (
-          <span className="text-xs font-medium text-muted-foreground">{t('priceOnRequest')}</span>
-        )}
-      </div>
+      {/* Price — tap to edit in place */}
+      {editingPrice ? (
+        <input
+          aria-label={t('fields.priceOptional')}
+          dir="auto"
+          inputMode="decimal"
+          autoFocus
+          className="input w-24 !py-1.5 text-sm tabular-nums flex-shrink-0"
+          value={priceDraft}
+          onChange={(e) => setPriceDraft(e.target.value)}
+          onBlur={commitPrice}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commitPrice(); }
+            if (e.key === 'Escape') setEditingPrice(false);
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={startPriceEdit}
+          disabled={disabled}
+          aria-label={t('inlinePrice.editLabel', { name: item.name })}
+          dir="auto"
+          className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums text-end px-2 py-1.5 -my-1.5 rounded-lg hover:bg-muted transition-colors disabled:cursor-not-allowed flex-shrink-0"
+        >
+          {item.price !== null ? (
+            <>
+              {formatPrice(item.price)}
+              {item.currency && <span className="text-xs font-medium text-muted-foreground ms-1">{item.currency}</span>}
+            </>
+          ) : (
+            <span className="text-xs font-medium text-muted-foreground underline decoration-dotted underline-offset-4">{t('inlinePrice.addPrice')}</span>
+          )}
+        </button>
+      )}
 
-      {/* Availability pill — green in stock, neutral (muted) out of stock */}
-      <span className={clsx(
-        'text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0',
-        item.isAvailable ? 'status-success' : 'bg-muted text-muted-foreground',
-      )}>
-        {item.isAvailable ? t('availability.in') : t('availability.out')}
-      </span>
+      {/* Availability — one tap. */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <Toggle
+          size="sm"
+          enabled={item.isAvailable}
+          disabled={disabled}
+          onChange={(enabled) => onToggleAvailability(item, enabled)}
+          aria-label={t('inlineAvailability.toggleLabel', { name: item.name })}
+        />
+        <span className="text-[11px] font-semibold text-muted-foreground whitespace-nowrap w-12 text-start">
+          {item.isAvailable ? t('availability.in') : outLabel}
+        </span>
+      </div>
 
       {/* Edit / delete */}
       <div className="flex gap-1 flex-shrink-0">

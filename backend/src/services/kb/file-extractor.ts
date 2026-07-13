@@ -1,10 +1,15 @@
 import { config } from '../../config';
 import { makeTrackedOpenAI } from '../openaiClient';
+import type { AiPipeline } from '../../types/aiPipeline';
 
 /** Caller context for cost attribution. Passed through from the kb-upload route. */
 export interface VisionContext {
     userId: string;
     pageId?: string;
+    /** Cost-attribution tag. Defaults to 'kb_file_extraction' (the KB upload
+     *  flow); the catalog posts-scan passes 'catalog_extraction' so its vision
+     *  spend lands in the same bucket as its extract call. */
+    pipeline?: AiPipeline;
 }
 
 const SCANNED_PDF_THRESHOLD = 50; // chars — below this, PDF is likely scanned/image-based
@@ -231,7 +236,7 @@ export async function extractFromPdfViaVision(buffer: Buffer, ctx: VisionContext
     const openai = makeTrackedOpenAI(apiKey, {
         userId: ctx.userId,
         pageId: ctx.pageId,
-        pipeline: 'kb_file_extraction',
+        pipeline: ctx.pipeline ?? 'kb_file_extraction',
     });
     const pageTexts: string[] = [];
     for (const png of pages) {
@@ -274,7 +279,7 @@ export async function extractFromImage(buffer: Buffer, mimeType: string, ctx: Vi
     const openai = makeTrackedOpenAI(apiKey, {
         userId: ctx.userId,
         pageId: ctx.pageId,
-        pipeline: 'kb_file_extraction',
+        pipeline: ctx.pipeline ?? 'kb_file_extraction',
     });
     const response = await openai.chat.completions.create({
         model: VISION_MODEL,

@@ -21,6 +21,7 @@ export type AiPipeline =
     | 'kb_file_extraction'   // PDF/image OCR for KB ingestion
     | 'image_understanding'  // Customer-sent DM image → text description (vision, gpt-4.1-mini)
     | 'operational_facts_extraction' // KB free-text → structured hours/address/phones (one-time backfill; on-save re-extraction is a deferred follow-up, not yet wired)
+    | 'catalog_extraction'   // Pasted/uploaded free text → proposed catalog items (merchant-reviewed via /catalog import; never auto-saved)
     | 'ecommerce_tools'      // Per-iteration call inside the e-commerce tool loop
     | 'failover'             // Fallback model after circuit breaker opened
     | 'unknown';             // Caller forgot to tag — surfaces in dashboard so we can fix it

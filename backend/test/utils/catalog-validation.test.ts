@@ -11,6 +11,9 @@ describe('CatalogItemSchema', () => {
             price: null,
             currency: null,
             isAvailable: true,
+            startsAt: null,
+            endsAt: null,
+            attributes: null,
         });
     });
 
@@ -24,7 +27,37 @@ describe('CatalogItemSchema', () => {
         expect(CatalogItemSchema.safeParse({ name: 'x', type: 'realestate' }).success).toBe(false);
         expect(CatalogItemSchema.safeParse({ name: 'x'.repeat(201) }).success).toBe(false);
         expect(CatalogItemSchema.safeParse({ name: 'x', description: 'y'.repeat(601) }).success).toBe(false);
-        expect(CatalogItemSchema.safeParse({ name: 'x', currency: 'y'.repeat(11) }).success).toBe(false);
+    });
+
+    describe('currency leniency (a long currency must never sink the row)', () => {
+        const currencyOf = (raw: unknown) => CatalogItemSchema.parse({ name: 'x', currency: raw }).currency;
+
+        it('keeps a spelled-out Arabic currency with a qualifier verbatim', () => {
+            // The exact string that silently dropped every row of a real Syrian price
+            // list: the model returns currency as written ("ل.س بالعملة القديمة"), and
+            // the old-vs-new lira qualifier is a 100× distinction — must be preserved.
+            expect(currencyOf('ل.س بالعملة القديمة')).toBe('ل.س بالعملة القديمة');
+            expect(currencyOf('دولار أمريكي')).toBe('دولار أمريكي');
+        });
+
+        it('accepts symbols and short codes unchanged', () => {
+            expect(currencyOf('$')).toBe('$');
+            expect(currencyOf('EGP')).toBe('EGP');
+            expect(currencyOf('ريال')).toBe('ريال');
+        });
+
+        it('truncates a pathologically long currency instead of rejecting the item', () => {
+            const long = 'ريال'.repeat(20);
+            const parsed = CatalogItemSchema.safeParse({ name: 'x', currency: long });
+            expect(parsed.success).toBe(true);
+            expect(parsed.success && parsed.data.currency!.length).toBe(30);
+        });
+
+        it('treats empty/whitespace as "no currency"', () => {
+            expect(currencyOf('')).toBeNull();
+            expect(currencyOf('   ')).toBeNull();
+            expect(currencyOf(undefined)).toBeNull();
+        });
     });
 
     describe('price normalization (Simplicity contract §5 — accept what merchants type)', () => {

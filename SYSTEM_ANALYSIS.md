@@ -1006,6 +1006,30 @@ User saves settings on frontend
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
 
+> **Native catalog (Stage 2 v2, admin canary):** a store-less page CAN
+> still get a `<product_catalog>` block — merchant-entered items from the
+> `/catalog` page (`catalog_items` table). Entry points, easiest first:
+> **posts scan** (`POST /pages/:id/catalog/scan-posts` — reads the page's
+> recent FB posts incl. full-res attachment images via Vision, extracts
+> proposals; a per-page bookmark `pages.catalog_scan_last_post_time` makes
+> re-scans propose only NEW posts, and the bookmark only advances when the
+> AI call succeeded), **bulk import** (paste a price list / upload a file →
+> extract proposals), and manual add. All paths land in one review sheet
+> shaped as a PRICE-COMPLETION step: merchants deliberately keep prices out
+> of public posts (comment-bait), so proposals arrive priceless and the
+> sheet asks for private prices (only ever sent inside replies — the pitch).
+> A page-level **business vertical** (merchant override in
+> `pages.catalog_vertical`, else derived from the FB page category, else
+> 'other') shapes DEFAULTS only: preselected item type (dealer→vehicle,
+> institute→course), date fields shown only for time-bound types, and an
+> extraction hint. Items optionally carry `starts_at`/`ends_at` calendar
+> dates (rendered as `starts/ends YYYY-MM-DD`; an item past its end date is
+> EXCLUDED from the block — the AI can never offer an ended cohort/offer) and
+> flexible label+value details (`attributes` jsonb, type-suggested labels,
+> rendered as `label: value`). The diagram above shows the default store-less
+> page with zero items; the prompt stays byte-identical until the merchant
+> adds some.
+
 ┌────────────────────────────────────────────────────────────────────────┐
 │                    WITH E-COMMERCE STORE                               │
 ├────────────────────────────────────────────────────────────────────────┤
@@ -1105,7 +1129,8 @@ Products synced from Shopify/Salla
 
 **بدون متجر إلكتروني:**
 - الذكاء الاصطناعي يحصل فقط على قاعدة المعرفة النصية
-- لا كتالوج منتجات، لا سياسات متجر
+- لا كتالوج منتجات، لا سياسات متجر (افتراضيًا)
+- **الكتالوج الأصلي (تجربة مغلقة للمؤسس):** يمكن للتاجر بلا متجر إدخال عناصره من صفحة `/catalog` — بفحص منشورات صفحته (قراءة النصوص وصور المنشورات ← استخراج ← مراجعة) أو بالاستيراد الذكي (لصق قائمة أسعار / رفع ملف) أو يدويًا — فتُحقن في كتلة `<product_catalog>` نفسها. المراجعة مصممة كخطوة «إكمال الأسعار»: الأسعار تبقى خاصة وتُرسل فقط داخل الردود، ونوع النشاط (يُستنتج من تصنيف الصفحة في فيسبوك) يهيّئ النموذج تلقائيًا لكل نشاط
 - أسئلة عن المنتجات والأسعار → "خليني أتحقق" (ثقة منخفضة)
 - أسئلة عامة (مواعيد، موقع) → يُجيب إذا كانت في قاعدة المعرفة
 

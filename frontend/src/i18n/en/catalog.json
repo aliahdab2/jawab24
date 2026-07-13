@@ -1,32 +1,84 @@
 {
   "navTitle": "Products & Services",
   "pageTitle": "Products & Services",
-  "pageSubtitle": "Everything you offer — with type, price and availability — so Jawab answers with the exact details.",
+  "pageSubtitle": "Add what you sell once — and Jawab answers every price and availability question with the right details.",
   "selectPage": "Choose a page",
   "add": "Add",
   "addItem": "Add item",
   "editItem": "Edit item",
   "empty": {
     "title": "Add what you sell",
-    "body": "Add your products, services, courses or anything else you offer. Jawab uses them to answer price and availability questions accurately.",
-    "exampleName": "Front shock absorbers",
-    "examplePrice": "350",
-    "cta": "Add your first item"
+    "body": "Your posts already show what you sell. Let Jawab find your products — then add your prices, and it answers your customers with the exact details.",
+    "cta": "Add manually",
+    "or": "or:"
+  },
+  "exampleItems": {
+    "electronics": "ASUS laptop, 16GB RAM|2400",
+    "fashion": "Classic abaya, black|280",
+    "vehicles": "Kia Rio 2018, 60k km|31500",
+    "education": "ICDL course — beginner level|3500",
+    "restaurant": "Family shawarma platter|55",
+    "beauty": "Haircut & styling session|80",
+    "real_estate": "2-bedroom apartment, city center|65000",
+    "home_goods": "3-seat fabric sofa|1450",
+    "services": "AC cleaning & maintenance|120",
+    "other": "Front shock absorbers|350"
   },
   "limitLabel": "{count} of {max} items",
   "fields": {
     "type": "Type",
     "name": "Name",
-    "namePlaceholder": "e.g. Front shock absorbers",
     "priceOptional": "Price (optional)",
     "pricePlaceholder": "Leave empty for “price on request”",
     "currency": "Currency",
     "descriptionOptional": "Description (optional)",
     "descriptionPlaceholder": "Anything useful the customer should know",
-    "available": "In stock"
+    "available": "In stock",
+    "startsAt": "Start date (optional)",
+    "endsAt": "End date (optional)",
+    "addDates": "Add dates (limited offer or cohort)",
+    "details": "Details (optional)",
+    "detailLabel": "Detail",
+    "detailValue": "Value",
+    "addDetail": "Add a detail",
+    "removeDetail": "Remove this detail"
+  },
+  "suggestedDetails": {
+    "product": "Brand",
+    "service": "Duration",
+    "course": "Duration|Level",
+    "vehicle": "Year|Mileage|Condition"
+  },
+  "namePlaceholders": {
+    "product": "e.g. Front shock absorbers",
+    "service": "e.g. AC cleaning & maintenance",
+    "course": "e.g. ICDL course — beginner level",
+    "vehicle": "e.g. Kia Rio 2018, 60k km",
+    "custom": "e.g. Front shock absorbers"
+  },
+  "badges": {
+    "ended": "Ended",
+    "startsOn": "Starts {date}",
+    "endsOn": "Ends {date}"
+  },
+  "vertical": {
+    "label": "Business type"
+  },
+  "verticalOptions": {
+    "electronics": "Electronics & phones",
+    "fashion": "Fashion & accessories",
+    "vehicles": "Cars & vehicles",
+    "education": "Courses & training",
+    "restaurant": "Restaurant & food",
+    "beauty": "Beauty & salon",
+    "real_estate": "Real estate",
+    "home_goods": "Home & furniture",
+    "services": "Services",
+    "other": "Other"
   },
   "errors": {
-    "nameRequired": "Please enter a name for this item"
+    "nameRequired": "Please enter a name for this item",
+    "dateOrder": "End date can’t be before the start date"
   },
   "types": {
     "product": "Product",
@@ -37,9 +89,20 @@
   },
   "availability": {
     "in": "In stock",
-    "out": "Out of stock"
+    "out": "Out of stock",
+    "sold": "Sold"
   },
-  "priceOnRequest": "Price on request",
+  "inlinePrice": {
+    "editLabel": "Edit price of {name}",
+    "addPrice": "Add price"
+  },
+  "inlineAvailability": {
+    "toggleLabel": "Toggle availability of {name}"
+  },
+  "tryIt": {
+    "action": "Try it now",
+    "question": "How much is {name}?"
+  },
   "actions": {
     "save": "Save",
     "saveAndAddAnother": "Save & add another",
@@ -63,5 +126,44 @@
     "deleteError": "Couldn’t delete the item. Please try again.",
     "loadError": "Couldn’t load your items. Please refresh.",
     "limitReached": "You’ve reached the {max}-item limit for this page."
+  },
+  "import": {
+    "cta": "Import a list",
+    "title": "Import your products & services",
+    "pasteHint": "Paste your price list as-is — or attach a file — and Jawab will turn it into catalog items you can review before adding.",
+    "pasteLabel": "Your list",
+    "pastePlaceholder": "e.g.\nICDL course 3500\nPhotoshop course 5000\nHaircut 50 SAR",
+    "orUpload": "or attach a PDF, Word, Excel or photo",
+    "extract": "Extract items",
+    "extracting": "Reading your list…",
+    "reviewHint": "{count, plural, one {We found # item. Review it, fix anything, then add it.} other {We found # items. Review them, fix anything, then add them.}}",
+    "droppedNote": "{count, plural, one {# entry couldn’t be read and was skipped.} other {# entries couldn’t be read and were skipped.}}",
+    "overflowNote": "{count, plural, one {# item didn’t fit — your catalog is close to its limit.} other {# items didn’t fit — your catalog is close to its limit.}}",
+    "truncatedNote": "Your list is long — some items near the end may be missing. Add these first, then import the rest.",
+    "emptyResult": "No items found in this text",
+    "emptyResultHint": "Go back and check the text contains your products or services, one per line if possible.",
+    "back": "Back",
+    "details": "Details",
+    "remove": "Don’t add this item",
+    "restore": "Restore this item",
+    "addItems": "{count, plural, one {Add # item} other {Add # items}}",
+    "toastImported": "{count, plural, one {# item added to your catalog} other {# items added to your catalog}}",
+    "toastExtractError": "Couldn’t read the list. Please try again.",
+    "toastImportError": "Couldn’t add the items. Please try again.",
+    "toastDailyLimit": "You’ve reached today’s import limit. Please try again tomorrow."
+  },
+  "scan": {
+    "cta": "Find products in your posts",
+    "title": "Products from your posts",
+    "pricePlaceholder": "Price",
+    "scanning": "Reading your recent posts…",
+    "reviewHint": "{count, plural, one {We found # item in your posts. Review it, add the price, then save.} other {We found # items in your posts. Review them, add the prices, then save.}}",
+    "pricelessNote": "{count, plural, one {# item has no price yet — Jawab can only say “ask us” until you add it.} other {# items have no price yet — Jawab can only say “ask us” until you add them.}}",
+    "pricePrivacy": "Your prices stay private — they’re only sent inside replies and messages, never posted publicly.",
+    "emptyResult": "No products found in your recent posts",
+    "emptyResultHint": "You can import a price list or add items manually instead.",
+    "upToDate": "You’re up to date",
+    "upToDateHint": "No new posts since the last scan. Post something new, or add items manually.",
+    "toastError": "Couldn’t read your posts. Please try again."
   }
 }

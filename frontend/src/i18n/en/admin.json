@@ -220,6 +220,7 @@
     "aiCostPipeline_embedding_ingestion": "Knowledge indexing",
     "aiCostPipeline_kb_file_extraction": "File text extraction",
     "aiCostPipeline_operational_facts_extraction": "Business info extraction",
+    "aiCostPipeline_catalog_extraction": "Catalog import extraction",
     "aiCostPipeline_ecommerce_tools": "Store tools",
     "aiCostPipeline_playground": "Playground",
     "aiCostPipeline_eval": "Evaluation",

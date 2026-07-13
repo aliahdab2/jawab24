@@ -15,7 +15,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItemType } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -162,14 +162,55 @@ export const pagesApi = {
 
 // Native catalog API — merchant-authored offerings on a page (no store needed).
 export const catalogApi = {
-  list: (pageId: string) => api.get(`/pages/${pageId}/catalog`),
+  list: (pageId: string) =>
+    api.get<{ data: CatalogItem[]; vertical: CatalogVerticalInfo }>(`/pages/${pageId}/catalog`),
   create: (pageId: string, data: CatalogItemInput) =>
     api.post(`/pages/${pageId}/catalog`, data),
   update: (pageId: string, itemId: string, data: Partial<CatalogItemInput> & { sortOrder?: number }) =>
     api.patch(`/pages/${pageId}/catalog/${itemId}`, data),
   remove: (pageId: string, itemId: string) =>
     api.delete(`/pages/${pageId}/catalog/${itemId}`),
+  setVertical: (pageId: string, vertical: CatalogVertical) =>
+    api.patch<{ vertical: CatalogVerticalInfo }>(`/pages/${pageId}/catalog/vertical`, { vertical }),
+  // Import flow: extract returns PROPOSALS only (nothing persisted); the
+  // reviewed rows are saved all-or-nothing via batchCreate.
+  extract: (pageId: string, text: string) =>
+    api.post<CatalogExtractResponse>(`/pages/${pageId}/catalog/extract`, { text }, { timeout: LONG_RUNNING_TIMEOUT }),
+  // Posts scan: reads the page's recent FB posts (text + images) server-side and
+  // returns PROPOSALS in the same shape as extract — same review-then-batch flow.
+  scanPosts: (pageId: string) =>
+    api.post<CatalogScanResponse>(`/pages/${pageId}/catalog/scan-posts`, {}, { timeout: LONG_RUNNING_TIMEOUT }),
+  batchCreate: (pageId: string, items: CatalogItemInput[]) =>
+    api.post<{ data: CatalogItem[] }>(`/pages/${pageId}/catalog/batch`, { items }),
 };
+
+/** Effective business vertical for a page's catalog + where it came from
+ *  ('merchant' override, mapped 'facebook' page category, or 'default'). */
+export interface CatalogVerticalInfo {
+  effective: CatalogVertical;
+  source: CatalogVerticalSource;
+}
+
+/** POST /catalog/scan-posts response — extract's shape plus scan telemetry. */
+export interface CatalogScanResponse extends CatalogExtractResponse {
+  /** Posts read in this scan (0 = nothing new since the last scan). */
+  postsScanned: number;
+  /** True when no new posts existed since the last scan. */
+  upToDate: boolean;
+}
+
+/** POST /catalog/extract response. Prices come back as numbers (already
+ *  normalized server-side); the review sheet may re-edit them as strings. */
+export interface CatalogExtractResponse {
+  items: CatalogItemInput[];
+  /** Model rows discarded server-side (failed validation, duplicates, over the per-call cap). */
+  dropped: number;
+  /** Proposals cut because the page lacks free slots. */
+  overflow: number;
+  remainingCapacity: number;
+  /** LLM output hit its token cap — the tail of the text may be missing. */
+  truncated: boolean;
+}
 
 /** Client-side create/update payload — price is accepted as a string so the
  *  server can normalize Arabic-Indic digits / separators (Simplicity contract §5). */
@@ -180,6 +221,10 @@ export interface CatalogItemInput {
   price?: string | number | null;
   currency?: string | null;
   isAvailable?: boolean;
+  /** 'YYYY-MM-DD' calendar dates (course cohort start / offer expiry). */
+  startsAt?: string | null;
+  endsAt?: string | null;
+  attributes?: { label: string; value: string }[] | null;
 }
 
 // Posts API
