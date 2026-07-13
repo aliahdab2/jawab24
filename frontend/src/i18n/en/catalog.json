@@ -24,6 +24,9 @@
     "services": "AC cleaning & maintenance|120",
     "other": "Front shock absorbers|350"
   },
+  "example": {
+    "badge": "Example"
+  },
   "limitLabel": "{count} of {max} items",
   "fields": {
     "type": "Type",

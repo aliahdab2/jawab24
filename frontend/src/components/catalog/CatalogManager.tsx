@@ -202,16 +202,27 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
         <div className="rounded-2xl border border-dashed border-border p-6 text-center">
           {/* Ghost example row — teaches the shape by showing it (Simplicity
               contract §8), in the merchant's OWN trade: the example item follows
-              the page's vertical ("name|price" i18n pair, split here). */}
+              the page's vertical ("name|price" i18n pair, split here). The row
+              deliberately mimics a real listing so it teaches; the "Example"
+              badge is what keeps it from reading AS one (a UX review mistook this
+              ghost for live data). The badge sits OUTSIDE the opacity fade so the
+              signal is unmistakable. */}
           {(() => {
             const [exampleName, examplePrice] = t(`exampleItems.${vertical?.effective ?? 'other'}`).split('|');
             return (
-              <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3 opacity-60 mb-5 text-start pointer-events-none select-none">
-                <div className="min-w-0 flex-1">
-                  <span dir="auto" className="text-sm font-semibold text-foreground">{exampleName}</span>
+              <div className="mb-5">
+                <div className="flex mb-1.5">
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    {t('example.badge')}
+                  </span>
                 </div>
-                <span dir="auto" className="text-sm font-semibold text-foreground tabular-nums">{examplePrice}</span>
-                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full status-success">{t('availability.in')}</span>
+                <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3 opacity-60 text-start pointer-events-none select-none">
+                  <div className="min-w-0 flex-1">
+                    <span dir="auto" className="text-sm font-semibold text-foreground">{exampleName}</span>
+                  </div>
+                  <span dir="auto" className="text-sm font-semibold text-foreground tabular-nums">{examplePrice}</span>
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full status-success">{t('availability.in')}</span>
+                </div>
               </div>
             );
           })()}
