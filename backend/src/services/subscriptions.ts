@@ -1041,6 +1041,27 @@ export const subscriptionsService = {
             return { allowed: false, reason: `Subscription is ${subscription.status}`, code: 'subscription_inactive' };
         }
 
+        // Manual (cash/transfer) subscriptions expire on their end date.
+        //
+        // Stripe drives its own expiry: a failed renewal arrives as a webhook that
+        // flips the status to past_due/canceled, which the checks around this one
+        // catch. A manual subscription has no such signal — nothing ever moves it
+        // off 'active'. Without this check it stays entitled forever, and because
+        // getCurrentUsage only matches a usage row while `periodStart <= now <=
+        // periodEnd`, the expired row silently drops out of the window and the
+        // quota reads as 0 again — handing the merchant a fresh monthly allowance
+        // they never paid for. Admin re-grants the period (and the quota) via
+        // manualUpgrade once the cash/transfer actually lands.
+        if (subscription.paymentMethod === 'manual' && subscription.currentPeriodEnd) {
+            if (new Date(subscription.currentPeriodEnd) < new Date()) {
+                return {
+                    allowed: false,
+                    reason: 'Subscription expired. Please renew to continue.',
+                    code: 'subscription_inactive',
+                };
+            }
+        }
+
         if (subscription.status === 'past_due') {
             // 3 days covers Stripe's first payment-retry window (declined card, bank flag)
             // without giving abusers a week of free service every month. Matches Shopify.
@@ -1080,6 +1101,7 @@ export const subscriptionsService = {
             userId: row.userId,
             planId: row.planId,
             status: (row.status || 'active') as SubscriptionStatus,
+            paymentMethod: row.paymentMethod,
             trialEndsAt: row.trialEndsAt,
             currentPeriodStart: row.currentPeriodStart || new Date(),
             currentPeriodEnd: row.currentPeriodEnd,

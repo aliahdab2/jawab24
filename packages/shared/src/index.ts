@@ -609,6 +609,7 @@ export interface Subscription {
   plan?: Plan; // Joined plan data
   status: SubscriptionStatus;
   stripeCustomerId?: string | null;
+  paymentMethod?: string | null; // 'stripe' | 'paypal' | 'manual'
   trialEndsAt?: string | Date | null;
   currentPeriodStart: string | Date;
   currentPeriodEnd?: string | Date | null;
