@@ -165,6 +165,44 @@ function transcriptFromHistory(history: Array<{ role: string; content: string }>
 }
 
 /**
+ * The Agent (assistant) turns that count as the BUSINESS's own published context
+ * for the phone-exclusion gate — i.e. everything up to and including the customer's
+ * latest message, but NOT the reply we generated in RESPONSE to it.
+ *
+ * Why the cutoff: our confirmation reply naturally echoes the customer's own number
+ * back to them ("رح نتواصل معك على الرقم 09…") for them to verify. That reply is
+ * stored as an outgoing (assistant) row BEFORE this fire-and-forget extraction runs
+ * (messageProcessor stores it inside the reply transaction, then calls maybeCaptureLead),
+ * so getConversationHistory returns it here. Feeding it into the business-number
+ * exclusion made extractCustomerPhones misread the customer's OWN number as the
+ * business's and silently drop the whole lead (prod: "الفريق الدمشقي", Majd Alsaleem
+ * shared 931874500, the AI confirmed on that number, no lead was written).
+ *
+ * A prior assistant turn (before the customer's latest message) is legitimate
+ * business context — the customer may quote or paste our published contact line from
+ * it, which is exactly the paste-back case the exclusion must still catch. Only the
+ * trailing assistant turn(s) AFTER the last customer turn are our echo of the current
+ * message. When there is no customer turn on record at all, every assistant turn is
+ * our own published context (nothing for it to echo), so keep them all.
+ *
+ * Merchant-number protection is unaffected: it comes from the KB (getBusinessPhones),
+ * shared-post stripping, and these prior turns — never from our reply to this message.
+ */
+function priorBusinessTurns(history: Array<{ role: string; content: string }>): string[] {
+    // Cut off at the customer's latest turn: assistant turns beyond it are our reply(ies)
+    // to the current message (echoes), not business context. No customer turn on record →
+    // every assistant turn is our own published context (nothing for it to echo), so keep all.
+    let cutoff = history.length;
+    for (let i = history.length - 1; i >= 0; i--) {
+        if (history[i].role === 'user') { cutoff = i; break; }
+    }
+    return history
+        .slice(0, cutoff)
+        .filter(m => m.role === 'assistant')
+        .map(m => m.content);
+}
+
+/**
  * Runtime normalization for a stored extracted_data value. Legacy rows are
  * double-encoded (a jsonb string containing JSON) — Drizzle's jsonb read path
  * usually unwraps that, but this stays defensive so the merge can never crash
@@ -305,13 +343,20 @@ class LeadExtractorService {
                 lines.push(`Customer comment: ${messageText}`);
                 if (replyText) lines.push(`Agent reply: ${replyText}`);
                 conversationText = lines.join('\n');
-                // The post and our reply are merchant-authored — any number there is ours.
-                businessTexts = [postMessage, replyText, ...businessPhones].filter((t): t is string => !!t);
+                // The post is merchant-authored, so any number in it is the business's.
+                // Our reply (replyText) is EXCLUDED here on purpose: it was generated in
+                // response to this comment and naturally echoes the commenter's own number
+                // back, which the exclusion would then misread as the business's and drop
+                // the lead. Merchant numbers our reply publishes are still caught via the
+                // post and the KB (businessPhones). See priorBusinessTurns for the DM path.
+                businessTexts = [postMessage, ...businessPhones].filter((t): t is string => !!t);
             } else {
                 const history = await messagesService.getConversationHistory(pageId, senderId, 20);
                 conversationText = transcriptFromHistory(history);
-                // Our outgoing replies publish the business's own contact number(s).
-                businessTexts = [...history.filter(m => m.role === 'assistant').map(m => m.content), ...businessPhones];
+                // Our outgoing replies publish the business's own contact number(s) — but
+                // NOT the reply we just sent for THIS message, which echoes the customer's
+                // own number back to them. priorBusinessTurns drops that trailing echo.
+                businessTexts = [...priorBusinessTurns(history), ...businessPhones];
             }
 
             // A forwarded post is the merchant's own ad — its numbers are the
