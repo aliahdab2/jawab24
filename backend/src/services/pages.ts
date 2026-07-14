@@ -8,6 +8,7 @@ import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
 import { channelTrialService } from './channelTrial';
+import { logAutoReplyToggle } from './auditLog';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { BusinessProfileSchema } from '../utils/validation';
@@ -1079,6 +1080,15 @@ export class PagesService {
                         .where(eq(pages.id, globalExisting.id))
                         .returning();
                     syncedPages.push(claimed);
+                    // Reclaiming a disconnected page (re)establishes its auto-reply
+                    // state via Facebook — audit it as an fb_sync transition.
+                    logAutoReplyToggle({
+                        pageId: claimed.id,
+                        workspaceId,
+                        userId,
+                        enabled: shouldAutoEnable,
+                        reason: shouldAutoEnable ? 'fb_sync' : 'trial_block',
+                    });
 
                     await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
                 } else if (globalExisting) {
@@ -1150,6 +1160,15 @@ export class PagesService {
                         })
                         .returning();
                     syncedPages.push(created);
+                    // Record the auto-reply state a page is born with at connect
+                    // (previous = null), so its full on/off history starts here.
+                    logAutoReplyToggle({
+                        pageId: created.id,
+                        workspaceId,
+                        userId,
+                        enabled: shouldAutoEnable,
+                        reason: shouldAutoEnable ? 'fb_sync' : 'trial_block',
+                    });
 
                     // Fire-and-forget: ingest KB for new page so RAG retrieval works immediately
                     if (suggestedKnowledgeBase && created?.kbVersion) {
@@ -1203,6 +1222,19 @@ export class PagesService {
                     updatedAt: new Date(),
                 })
                 .where(eq(pages.id, revokedPage.id));
+            // Audit the off-transition when the page was actually replying before
+            // (deselected in the FB permission dialog). Skip already-off pages so a
+            // routine re-sync doesn't emit phantom events.
+            if (revokedPage.autoReplyEnabled) {
+                logAutoReplyToggle({
+                    pageId: revokedPage.id,
+                    workspaceId,
+                    userId,
+                    enabled: false,
+                    previous: true,
+                    reason: 'fb_sync',
+                });
+            }
         }
 
         if (revokedPages.length > 0) {
