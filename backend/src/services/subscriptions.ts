@@ -1041,19 +1041,26 @@ export const subscriptionsService = {
             return { allowed: false, reason: `Subscription is ${subscription.status}`, code: 'subscription_inactive' };
         }
 
-        // Manual (cash/transfer) subscriptions expire on their end date.
+        // Manual (cash/transfer) subscriptions expire when their quota window closes.
         //
         // Stripe drives its own expiry: a failed renewal arrives as a webhook that
         // flips the status to past_due/canceled, which the checks around this one
         // catch. A manual subscription has no such signal — nothing ever moves it
         // off 'active'. Without this check it stays entitled forever, and because
         // getCurrentUsage only matches a usage row while `periodStart <= now <=
-        // periodEnd`, the expired row silently drops out of the window and the
-        // quota reads as 0 again — handing the merchant a fresh monthly allowance
-        // they never paid for. Admin re-grants the period (and the quota) via
-        // manualUpgrade once the cash/transfer actually lands.
+        // periodEnd`, the closed window silently reads as `used = 0` again —
+        // handing the merchant a fresh monthly allowance they never paid for.
+        //
+        // We compare against startOfUtcDay(currentPeriodEnd), NOT the raw instant:
+        // initializeUsagePeriod snaps the usage window's end to UTC midnight, so
+        // the window closes up to ~24h before the subscription's exact end instant.
+        // Using the same snapped boundary keeps entitlement and quota-counting on
+        // ONE clock — otherwise the midnight→instant sliver is exactly where the
+        // free-refill bug lives (window closed, but subscription not "expired" yet).
+        // Admin reopens the window (and the quota) via manualUpgrade once the
+        // cash/transfer lands.
         if (subscription.paymentMethod === 'manual' && subscription.currentPeriodEnd) {
-            if (new Date(subscription.currentPeriodEnd) < new Date()) {
+            if (startOfUtcDay(new Date(subscription.currentPeriodEnd)) < new Date()) {
                 return {
                     allowed: false,
                     reason: 'Subscription expired. Please renew to continue.',
