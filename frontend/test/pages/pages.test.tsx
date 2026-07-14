@@ -216,6 +216,9 @@ describe('PagesPage', () => {
             name: 'Test Page',
             facebookPageId: '123',
             autoReplyEnabled: false,
+            // Has Business Info so the enable-without-info soft gate (D-025) doesn't
+            // intercept — this test covers the basic toggle→API wiring, not the gate.
+            knowledgeBase: 'We are a family-run bakery in Damascus. We sell fresh bread, cakes, and pastries daily from 8am to 8pm.',
           },
         ],
       });
@@ -229,7 +232,7 @@ describe('PagesPage', () => {
       // Find and click the toggle button (role="switch")
       const toggles = screen.getAllByRole('switch');
       expect(toggles.length).toBeGreaterThanOrEqual(1);
-      
+
       fireEvent.click(toggles[0]);
 
       await waitFor(() => {
