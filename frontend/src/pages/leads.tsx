@@ -101,8 +101,10 @@ function FieldChips({ lead, language }: { lead: Lead; language: string }) {
           className="inline-flex items-center gap-1 max-w-full bg-muted rounded-md px-1.5 py-0.5 text-xs text-muted-foreground"
         >
           {isRTLLocale(language) ? f.label_ar : f.label_en}:
-          {/* min-w-0 lets the flex item shrink so truncate actually clips long values */}
-          <span className="font-medium text-foreground truncate min-w-0" title={f.value}>{f.value}</span>
+          {/* min-w-0 lets the flex item shrink so truncate actually clips long values.
+              dir="auto" so a phone value (e.g. +963 951 619 639) renders LTR instead of
+              having its groups reversed by the RTL paragraph, while Arabic values stay RTL. */}
+          <span dir="auto" className="font-medium text-foreground truncate min-w-0" title={f.value}>{f.value}</span>
         </span>
       ))}
     </div>
@@ -332,7 +334,10 @@ function LeadDetailModal({ lead, pages, stages, fieldDefs, onClose, onStatusChan
                     <span className="text-sm text-muted-foreground shrink-0">
                       {isRTLLocale(language) ? f.label_ar : f.label_en}
                     </span>
-                    <span className="text-sm font-medium text-end select-all cursor-text">{f.value || '—'}</span>
+                    {/* dir="auto" so a phone value (no strong-direction chars) renders
+                        LTR — otherwise the RTL paragraph reverses its groups to
+                        "639 619 951 963+". Arabic/Latin values keep their own direction. */}
+                    <span dir="auto" className="text-sm font-medium text-end select-all cursor-text">{f.value || '—'}</span>
                   </div>
                 ))}
               </div>

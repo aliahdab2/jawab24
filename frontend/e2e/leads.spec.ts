@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { t } from './i18n';
+import { t, tAr } from './i18n';
 
 /**
  * Leads Page E2E Tests
@@ -40,6 +40,38 @@ const MOCK_LEAD = {
   intent: 'Interested in pricing',
   createdAt: new Date().toISOString(),
   customFields: {},
+};
+
+// A lead whose AI-extracted fields carry a phone number — the exact case that
+// exposed an RTL bug: an extracted-field value with no direction hint inherits the
+// page's `dir="rtl"`, so bidi reverses the number's space-separated groups
+// (`+963 951 619 639` → `639 619 951 963+`). The fix is `dir="auto"` on the value
+// spans (FieldChips + the detail modal), letting a number render LTR while Arabic
+// values (e.g. دورة حاسوب) stay RTL. Full `Lead` shape (matches `@/lib/api`), unlike
+// the legacy MOCK_LEAD above which only needs to satisfy the export-button tests.
+const FRIEND_PHONE = '+963 951 619 639';
+const PHONE_FIELD_LEAD = {
+  id: 'l-phone',
+  pageId: 'p1',
+  sourceType: 'message',
+  sourceId: 's-phone',
+  senderId: 'sender-phone',
+  senderName: 'Rahma Test',
+  phone: '+963941357142',
+  extractedData: {
+    summary: 'العميلة ترغب في تسجيل نفسها ورفيقتها في دورة حاسوب ICDL',
+    fields: [
+      { key: 'friend_phone', label_en: "Friend's phone", label_ar: 'رقم هاتف الرفيقة', value: FRIEND_PHONE },
+      { key: 'course', label_en: 'Course', label_ar: 'الدورة المهتم بها', value: 'دورة حاسوب ICDL' },
+    ],
+  },
+  status: 'new',
+  subStage: null,
+  customFields: {},
+  extractionStatus: 'completed',
+  needsFollowUp: false,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
 };
 
 function makeUsageMock(planSlug: string, status = 'active') {
@@ -85,9 +117,9 @@ function setupAuth(page: import('@playwright/test').Page) {
 
 function mockAPIs(
   page: import('@playwright/test').Page,
-  options: { planSlug?: string; subscriptionStatus?: string; hasLeads?: boolean } = {},
+  options: { planSlug?: string; subscriptionStatus?: string; hasLeads?: boolean; leadsData?: unknown[] } = {},
 ) {
-  const { planSlug = 'business', subscriptionStatus = 'active', hasLeads = true } = options;
+  const { planSlug = 'business', subscriptionStatus = 'active', hasLeads = true, leadsData } = options;
 
   return page.route('**/api/**', async (route) => {
     const url = route.request().url();
@@ -102,7 +134,7 @@ function mockAPIs(
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([MOCK_PAGE]) });
     }
     if (url.includes('/leads')) {
-      const leads = hasLeads ? [MOCK_LEAD] : [];
+      const leads = leadsData ?? (hasLeads ? [MOCK_LEAD] : []);
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: leads, total: leads.length }) });
     }
     if (url.includes('/workspaces/current/members')) {
@@ -163,5 +195,38 @@ test.describe('Leads — CSV export', () => {
 
     await expect(page.getByRole('button', { name: new RegExp(t('leads.exportCsv')) })).not.toBeVisible({ timeout: 5000 });
     await expect(page.locator('text=Business+')).not.toBeVisible();
+  });
+});
+
+test.describe('Leads — RTL number rendering (dir="auto" guard)', () => {
+  test.beforeEach(async ({ page }) => {
+    page.on('pageerror', (err) => console.warn(`PAGE ERROR: ${err}`));
+  });
+
+  // Regression: an AI-extracted field value that is a phone number must NOT have its
+  // digit groups reversed by the Arabic (RTL) layout. The value spans (list chip +
+  // detail modal) carry dir="auto"; without it the number renders as "639 619 951 963+".
+  // `?lead=<id>` deep-links straight into the open detail modal, so this one render
+  // exercises both the list chips AND the modal row in RTL — no flaky click needed.
+  test('extracted phone-field value renders LTR, not bidi-reversed, in Arabic UI', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, { leadsData: [PHONE_FIELD_LEAD] });
+
+    await page.goto(`/ar/leads?lead=${PHONE_FIELD_LEAD.id}`);
+
+    // Confirm the RTL page and the detail modal both actually rendered, so the modal's
+    // value span (a separate render site from the chips) is genuinely covered.
+    await expect(page.getByRole('heading', { name: tAr('leads.title'), exact: true }).first())
+      .toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
+
+    // Every element whose text is exactly the phone value is a value span (chips in
+    // both layouts + the modal row). Each must declare dir="auto" — that is the fix.
+    const values = page.getByText(FRIEND_PHONE, { exact: true });
+    const count = await values.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      await expect(values.nth(i)).toHaveAttribute('dir', 'auto');
+    }
   });
 });
