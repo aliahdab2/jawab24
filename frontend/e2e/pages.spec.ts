@@ -269,8 +269,10 @@ test.describe('Pages Page', () => {
     const page2FbToggle = allToggles.nth(1);
     await expect(page2FbToggle).toHaveAttribute('aria-checked', 'false');
 
-    // Click to try enabling — should fail with 403
+    // Click to try enabling. page_2 has no Business Info, so the enable-without-info
+    // soft gate (D-025) confirms first — click "Turn on anyway" to reach the API (403).
     await page2FbToggle.click();
+    await page.getByRole('button', { name: t('pages.enableWithoutInfoConfirm') }).click();
 
     // Toast should appear with limit message
     await expect(page.getByText(t('pages.pageLimitReached'), { exact: false }).first()).toBeVisible({ timeout: 5000 });
