@@ -618,6 +618,48 @@ class LeadExtractorService {
     }
 
     /**
+     * Backfill / manual re-extraction: re-run the AI extractor over a lead's full
+     * conversation NOW and merge the result into its card, bypassing the follow-up
+     * window / cooldown / attempt guards. Built to recover leads captured without
+     * structured fields (the July 2026 echo-drop backfill) and as a manual "re-run
+     * extraction" action. Reuses the SAME extraction path as live capture, so cards
+     * match. Deliberately narrow, exactly like maybeReextractLead: touches
+     * `extractedData` only — never `phone` (the gate owns that), `status`, or
+     * `senderName`. `dryRun` returns the extraction result without writing.
+     */
+    async reextractLeadNow(
+        pageId: string,
+        senderId: string,
+        userId: string,
+        opts?: { dryRun?: boolean },
+    ): Promise<{ found: boolean; summary?: string; fields?: LeadField[] }> {
+        const [lead] = await db
+            .select({ id: leads.id, extractedData: leads.extractedData })
+            .from(leads)
+            .where(and(eq(leads.senderId, senderId), eq(leads.pageId, pageId)))
+            .limit(1);
+        if (!lead) return { found: false };
+
+        const history = await messagesService.getConversationHistory(pageId, senderId, 20);
+        if (history.length === 0) return { found: true };
+
+        const conversationText = transcriptFromHistory(history);
+        const aiResult = await this.callExtractionAI(conversationText, { userId, pageId });
+        const merged = mergeExtractedData(
+            normalizeExtractedData(lead.extractedData),
+            { summary: aiResult.summary, fields: aiResult.fields },
+        );
+
+        if (!opts?.dryRun) {
+            await db
+                .update(leads)
+                .set({ extractedData: merged, extractionStatus: 'completed', updatedAt: new Date() })
+                .where(eq(leads.id, lead.id));
+        }
+        return { found: true, summary: merged.summary, fields: merged.fields };
+    }
+
+    /**
      * Shared daily-budget counter: incr, arm a 24h TTL on first hit, compare to
      * the cap. Fail-open on Redis errors — availability over budget precision.
      * Used by both the first-capture and re-extraction budgets so their

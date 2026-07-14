@@ -451,3 +451,55 @@ describe('normalizeExtractedData', () => {
         expect(normalizeExtractedData({ fields: 'nope' })).toEqual({ fields: [] });
     });
 });
+
+describe('reextractLeadNow (backfill / manual re-extraction)', () => {
+    // A thin backfilled card: phone-only summary, empty fields — the echo-drop backfill shape.
+    const THIN_CARD = { id: 'lead-1', extractedData: { summary: 'رقمي 0910000017', fields: [] } };
+
+    it('re-runs extraction over the full history and writes the merged fields', async () => {
+        existingRows.push(THIN_CARD);
+
+        const res = await leadExtractorService.reextractLeadNow('page-1', 'sender-1', 'user-1');
+
+        expect(openaiCreateMock).toHaveBeenCalledTimes(1);
+        expect(res.found).toBe(true);
+        const byKey = Object.fromEntries((res.fields ?? []).map(f => [f.key, f.value]));
+        expect(byKey.size).toBe('A32');
+        expect(byKey.address).toBe('شارع الوادي');
+        expect(capturedUpdates).toHaveLength(1);
+        // Narrow blast radius (same contract as maybeReextractLead): extractedData only.
+        const set = capturedUpdates[0];
+        expect(set).toHaveProperty('extractedData');
+        expect(set).not.toHaveProperty('phone');
+        expect(set).not.toHaveProperty('status');
+        expect(set).not.toHaveProperty('senderName');
+    });
+
+    it('dryRun returns the extraction WITHOUT writing', async () => {
+        existingRows.push(THIN_CARD);
+
+        const res = await leadExtractorService.reextractLeadNow('page-1', 'sender-1', 'user-1', { dryRun: true });
+
+        expect(res.found).toBe(true);
+        expect((res.fields ?? []).length).toBeGreaterThan(0);
+        expect(capturedUpdates).toHaveLength(0);
+    });
+
+    it('bypasses the follow-up window guard (enriches a 30-day-old lead)', async () => {
+        // maybeReextractLead would skip this on the window/attempt guards; reextractLeadNow must not.
+        existingRows.push({ ...THIN_CARD, createdAt: new Date(Date.now() - 30 * 86400000), status: 'new', extractionAttempts: 99 });
+
+        await leadExtractorService.reextractLeadNow('page-1', 'sender-1', 'user-1');
+
+        expect(openaiCreateMock).toHaveBeenCalledTimes(1);
+        expect(capturedUpdates).toHaveLength(1);
+    });
+
+    it('returns found=false and calls no AI when no lead exists', async () => {
+        const res = await leadExtractorService.reextractLeadNow('page-1', 'sender-nope', 'user-1');
+
+        expect(res.found).toBe(false);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+        expect(capturedUpdates).toHaveLength(0);
+    });
+});
