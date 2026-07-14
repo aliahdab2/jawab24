@@ -7,6 +7,7 @@ import { notificationService } from '../services/notifications';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
 import { recordActivationEvent, isBusinessInfoProvided } from '../services/activation';
+import { logAutoReplyToggle } from '../services/auditLog';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -274,14 +275,19 @@ export class PagesController {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { workspaceId, workspaceOwnerId } = req;
+        const { userId } = req.user;
         const { id } = request.params;
         const { enabled } = request.body;
 
         try {
+            // Snapshot the prior state up-front: it drives the enable-time guards
+            // below AND lets us emit an audit event only on a genuine transition.
+            const existingPage = await pagesService.getPage(workspaceId, id);
+            const previousEnabled = existingPage?.autoReplyEnabled ?? null;
+
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
                 // Block enabling if page access was revoked in Facebook
-                const existingPage = await pagesService.getPage(workspaceId, id);
                 if (isPageDisconnected(existingPage)) {
                     return reply.status(400).send({
                         error: 'This page is disconnected. Please reconnect via Facebook to resume auto-replies.',
@@ -329,6 +335,20 @@ export class PagesController {
                 if (page.userId) {
                     void recordActivationEvent(page.userId, 'autoreply_enabled', { pageId: page.id });
                 }
+            }
+            // Audit trail: record WHO flipped auto-reply and WHEN. Support can then
+            // answer "who turned this page on/off again?" with a single query
+            // instead of reconstructing it from row timestamps. Emit only on a real
+            // transition so idempotent re-saves don't create phantom toggle events.
+            if (previousEnabled !== enabled) {
+                logAutoReplyToggle({
+                    pageId: id,
+                    workspaceId,
+                    userId,
+                    enabled,
+                    previous: previousEnabled,
+                    reason: 'user',
+                });
             }
             return reply.send(serializePage(page));
         } catch (error) {

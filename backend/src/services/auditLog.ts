@@ -23,6 +23,7 @@ export type AuditAction =
     | 'rule.deleted'
     | 'page.connected'
     | 'page.disconnected'
+    | 'page.auto_reply_toggled'
     | 'shopify.connected'
     | 'shopify.disconnected'
     | 'shopify.synced'
@@ -32,12 +33,83 @@ export type AuditAction =
     | 'cleanup.ran';
 
 export interface AuditEntry {
-    userId: string;
+    // The acting user. Omitted for system-initiated events with no clear actor
+    // (e.g. an auto-pause fired by the reply pipeline); the `logs.user_id` column
+    // is nullable, and such events are keyed by workspaceId / entityId instead.
+    userId?: string;
     workspaceId?: string;      // Workspace context (when available)
     action: AuditAction;
     entityType?: string;       // 'template', 'rule', 'page', 'settings', etc.
     entityId?: string;         // The specific entity affected
-    metadata?: Record<string, unknown>; // Structured context (no PII)
+    // The page a page-scoped event concerns. Written to the DEDICATED, typed
+    // `logs.page_id` column — NOT metadata. This matters: `logs.metadata` is a
+    // jsonb column the postgres-js layer stores as a double-encoded STRING scalar
+    // (see test/integration/flagMeta.test.ts), so `metadata->>'entityId'` filters
+    // silently return NULL. Filter page-scoped audit by `page_id = …` instead.
+    pageId?: string;
+    metadata?: Record<string, unknown>; // Structured context (no PII) — READ-only:
+    // do not build SQL filters on its sub-keys; see the pageId note above.
+}
+
+/** Why a page's auto-reply switch changed. */
+export type AutoReplyToggleReason =
+    | 'user'         // merchant flipped it in the dashboard
+    | 'auto_pause'   // system paused the page after repeated send failures
+    | 'trial_block'  // channel already used its one free trial → kept off at connect
+    | 'fb_sync';     // Facebook (re)connect / deselect drove the state
+
+export interface AutoReplyToggleEvent {
+    pageId: string;
+    workspaceId?: string;
+    /** The acting user. Pass it for user-initiated changes; OMIT for purely
+     *  system-initiated ones (auto-pause) — `actor` is derived from its presence. */
+    userId?: string;
+    /** The new auto-reply state. */
+    enabled: boolean;
+    /** Prior state when known (null = birth / unknown). Lets a reader tell a real
+     *  transition from a no-op re-save. */
+    previous?: boolean | null;
+    reason: AutoReplyToggleReason;
+    /** Which surface's switch: the FB page (default), Instagram, or WhatsApp. */
+    channel?: 'page' | 'instagram' | 'whatsapp';
+    /** Extra structured context (no PII), merged into metadata. */
+    extra?: Record<string, unknown>;
+}
+
+/**
+ * Single choke point for auditing a change to a page's auto-reply switch.
+ *
+ * Every on/off transition — merchant toggle, system auto-pause, Facebook sync —
+ * funnels through here so the logged shape never drifts between call sites, and
+ * so support can answer "who turned this page on/off, and when?" with one query:
+ *
+ *   SELECT created_at, user_id, metadata FROM logs
+ *   WHERE action = 'page.auto_reply_toggled' AND page_id = '<page-id>'
+ *   ORDER BY created_at DESC;
+ *
+ * The filter is on the typed `page_id` column, NOT `metadata->>` — metadata is
+ * stored double-encoded (see the AuditEntry.pageId note). `actor` is derived: a
+ * known userId ⇒ a user did it, absence ⇒ system.
+ *
+ * Fire-and-forget (delegates to {@link auditLog}) — never blocks or throws.
+ */
+export function logAutoReplyToggle(event: AutoReplyToggleEvent): void {
+    void auditLog({
+        userId: event.userId,
+        workspaceId: event.workspaceId,
+        pageId: event.pageId,
+        action: 'page.auto_reply_toggled',
+        entityType: 'page',
+        entityId: event.pageId,
+        metadata: {
+            enabled: event.enabled,
+            previous: event.previous ?? null,
+            reason: event.reason,
+            actor: event.userId ? 'user' : 'system',
+            channel: event.channel ?? 'page',
+            ...event.extra,
+        },
+    });
 }
 
 /**
@@ -48,6 +120,7 @@ export async function auditLog(entry: AuditEntry): Promise<void> {
         await db.insert(logs).values({
             userId: entry.userId,
             workspaceId: entry.workspaceId,
+            pageId: entry.pageId,
             action: entry.action,
             status: 'audit',
             metadata: {

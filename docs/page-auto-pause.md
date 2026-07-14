@@ -45,12 +45,31 @@ When the counter crosses the threshold (in a single atomic UPDATE):
 1. `auto_reply_enabled = false` — both processors already short-circuit on this flag *before* the OpenAI call ([commentProcessor.ts:104](../backend/src/services/reply/commentProcessor.ts#L104), [messageProcessor.ts:188](../backend/src/services/reply/messageProcessor.ts#L188)). **This is what stops the AI-credit bleed.**
 2. `auto_pause_reason = 'send_rejected'`
 3. `auto_paused_at = NOW()`
+4. A `page.auto_reply_toggled` audit event is emitted (`actor: 'system'`, `reason: 'auto_pause'`) via [logAutoReplyToggle](../backend/src/services/auditLog.ts) — a timestamped record of the pause in the `logs` table, distinct from the standing `auto_pause_reason` column. See [Audit trail](#audit-trail) below.
 
 ### Recovery
 
 The customer toggles auto-reply back on in the UI ([pages.ts toggleAutoReply](../backend/src/services/pages.ts)). The off → on transition clears all three columns, giving the page a fresh start. If the underlying Meta-side issue persists, the counter climbs back to the threshold and the page pauses again — no manual operator intervention required either way.
 
 Disabling auto-reply (on → off) **preserves** the pause-reason audit trail so support can see "this page was auto-paused at X, then the customer toggled it off."
+
+### Audit trail
+
+Every change to a page's auto-reply switch — merchant dashboard toggle, this system auto-pause, and Facebook (re)connect/deselect — emits a single `page.auto_reply_toggled` event through [logAutoReplyToggle](../backend/src/services/auditLog.ts), landing in the `logs` table with detail in `metadata`: `{ enabled, previous, reason, actor, channel }`. `actor` is `'user'` when a merchant/admin initiated it (with the acting `user_id`) and `'system'` when the pipeline did (auto-pause). This means "who turned this page on/off, and when?" is one query —
+
+```sql
+SELECT created_at, user_id, metadata
+FROM logs
+WHERE action = 'page.auto_reply_toggled'
+  AND page_id = '<page-id>'
+ORDER BY created_at DESC;
+```
+
+— instead of reconstructing intent from row `updated_at` timestamps.
+
+> **Why `page_id`, not `metadata->>'entityId'`.** postgres-js stores `logs.metadata` as a double-encoded JSON *string* scalar (`jsonb_typeof = 'string'` — the same footgun documented in [flagMeta.test.ts](../backend/test/integration/flagMeta.test.ts)), so `metadata->>'…'` filters silently return `NULL`. The event is therefore keyed off the typed `page_id` / `user_id` columns; `metadata` is for *reading* the detail once you've selected the rows, never for SQL filtering. Contract pinned by [auditAutoReplyToggle.test.ts](../backend/test/integration/auditAutoReplyToggle.test.ts).
+
+The standing `auto_pause_reason` / `auto_reply_disabled_reason` columns still describe the *current* state; the audit log is the *history*.
 
 ### What the customer sees
 

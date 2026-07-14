@@ -42,6 +42,14 @@ vi.mock('../../src/services/channelTrial', () => ({
     }
 }));
 
+// The audit emit is a fire-and-forget side effect (verified in auditLog.test.ts
+// and pages.controller.test.ts). Stub it here so it doesn't add extra db.insert
+// calls that would skew this suite's insert-count / captured-values assertions.
+vi.mock('../../src/services/auditLog', () => ({
+    logAutoReplyToggle: vi.fn(),
+    auditLog: vi.fn(),
+}));
+
 const mockRedisGet = vi.fn();
 const mockRedisSet = vi.fn().mockResolvedValue('OK');
 vi.mock('../../src/lib/redis', () => ({
