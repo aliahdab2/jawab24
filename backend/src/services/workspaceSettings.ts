@@ -13,8 +13,9 @@ import { PIPELINE_FIELDS, type PipelineField } from './pipelineFields';
 const SETTINGS_CACHE_TTL = 300;
 const cacheKey = (workspaceId: string) => `workspace_settings:v1:${workspaceId}`;
 
-/** Default workspace settings — applied when JSONB fields are empty */
-const DEFAULTS: WorkspaceSettings = {
+/** Default workspace settings — applied when JSONB fields are empty. Exported so the
+ *  new-signup-seed contract test can assert the read-time merge without a DB. */
+export const DEFAULTS: WorkspaceSettings = {
     defaultReplyLanguage: 'ar',
     supportedLanguages: ['en', 'ar'],
     autoDetectLanguage: true,
@@ -43,6 +44,33 @@ const DEFAULTS: WorkspaceSettings = {
     brandVoiceNotes: '',
     brandVoiceNotesMulti: {},
     holdLowConfidence: false,
+};
+
+/**
+ * Explicit settings seeded into a NEW workspace's JSONB at signup
+ * (auth.createDefaultWorkspace). Deliberately DIFFERENT from DEFAULTS: a
+ * brand-new merchant must NOT auto-reply publicly before reviewing their
+ * Business Info — a thin/auto-imported KB produced public "we don't know our
+ * own prices" replies that churned a same-day trial (D-025). So auto-reply
+ * starts OFF on both surfaces, and the comment mode is 'dual' so that when the
+ * merchant does switch it on, the substantive answer goes to a private DM and
+ * the public wall only ever gets a short nudge.
+ *
+ * Only NEW workspaces get these keys written into their JSONB. Existing
+ * workspaces omit them, so the read-time merge ({ ...DEFAULTS, ...jsonb }) still
+ * resolves them to DEFAULTS (true / true / 'public') — existing merchants are
+ * byte-identical, untouched.
+ *
+ * Channel scope: `commentReplyMode` governs FB/IG comment replies only — WhatsApp
+ * has no public comments, so it never consults it. `messagesAutoReply` is the
+ * cross-channel DM switch (FB Messenger, IG DM, and WhatsApp), but WhatsApp stays
+ * additionally gated by its own page-level `whatsappAutoReplyEnabled` (defaults
+ * OFF), so a WhatsApp number never auto-replies until explicitly turned on.
+ */
+export const NEW_SIGNUP_SETTINGS_SEED: Partial<WorkspaceSettings> = {
+    commentsAutoReply: false,
+    messagesAutoReply: false,
+    commentReplyMode: 'dual',
 };
 
 type LegacyRow = Partial<Record<PipelineField, unknown>>;

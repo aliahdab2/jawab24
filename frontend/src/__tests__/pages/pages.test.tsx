@@ -19,8 +19,9 @@ vi.mock('@/i18n/hooks', () => ({
     useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), dateLocale: {}, intlLocale: 'en-US' }),
 }));
 
-// Mutable so individual tests can flip the acting user's platform-admin flag
-// (the enable-without-info soft gate is founder-first, keyed on user.isAdmin).
+// Mutable so individual tests can flip the acting user's platform-admin flag.
+// (The enable-without-info soft gate no longer depends on it — see D-025; isAdmin
+// now only affects WhatsApp visibility and the nudge banner's strong copy.)
 // Read lazily inside useAuthStore, so assignment in a test takes effect on render.
 let mockIsAdmin = false;
 vi.mock('@/lib/store', () => ({
@@ -206,6 +207,10 @@ describe('PagesPage - Toggle Error Handling', () => {
         await act(async () => {
             fireEvent.click(allSwitches[2]); // page_2 FB toggle (OFF -> ON)
         });
+        // page_2 has no Business Info → the D-025 soft gate confirms first; proceed to the API.
+        await act(async () => {
+            fireEvent.click(screen.getByText('Turn on anyway'));
+        });
 
         await waitFor(() => {
             expect(mockToastError).toHaveBeenCalledWith('Page limit reached. Disable another page or upgrade your plan.');
@@ -229,6 +234,9 @@ describe('PagesPage - Toggle Error Handling', () => {
         const allSwitches = screen.getAllByRole('switch');
         await act(async () => {
             fireEvent.click(allSwitches[2]); // page_2 FB toggle (OFF -> ON)
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByText('Turn on anyway'));
         });
 
         await waitFor(() => {
@@ -254,6 +262,9 @@ describe('PagesPage - Toggle Error Handling', () => {
         await act(async () => {
             fireEvent.click(allSwitches[2]); // page_2 FB toggle (OFF -> ON)
         });
+        await act(async () => {
+            fireEvent.click(screen.getByText('Turn on anyway'));
+        });
 
         await waitFor(() => {
             expect(mockToastError).toHaveBeenCalledWith("Your subscription isn't active. Please renew it to continue.");
@@ -277,6 +288,9 @@ describe('PagesPage - Toggle Error Handling', () => {
         // page_2 FB toggle is allSwitches[2]
         await act(async () => {
             fireEvent.click(allSwitches[2]);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByText('Turn on anyway'));
         });
 
         await waitFor(() => {
@@ -322,6 +336,10 @@ describe('PagesPage - Toggle Error Handling', () => {
         // page_1 IG toggle is allSwitches[1] (OFF)
         await act(async () => {
             fireEvent.click(allSwitches[1]);
+        });
+        // page_1's KB is too short to count as Business Info → soft gate confirms first.
+        await act(async () => {
+            fireEvent.click(screen.getByText('Turn on anyway'));
         });
 
         await waitFor(() => {
@@ -673,6 +691,10 @@ describe('PagesPage - WhatsApp plan gate (Business+ entitlement)', () => {
         await act(async () => {
             fireEvent.click(allSwitches[1]); // WhatsApp toggle OFF -> ON
         });
+        // Page has no Business Info → the D-025 soft gate confirms first; proceed to the API.
+        await act(async () => {
+            fireEvent.click(screen.getByText('Turn on anyway'));
+        });
 
         await waitFor(() => {
             expect(mockToastError).toHaveBeenCalledWith('WhatsApp auto-reply is available on the Business plan and higher. Upgrade to connect your number.');
@@ -745,12 +767,14 @@ describe('PagesPage - WhatsApp master switch OFF (dark deploy)', () => {
     });
 });
 
-describe('PagesPage - Enable-without-info soft gate (admin canary)', () => {
+describe('PagesPage - Enable-without-info soft gate (all merchants, D-025)', () => {
     // page_2 in MOCK_PAGES = connected FB page, empty KB, no store, FB toggle OFF
-    // → needsBusinessInfo(page_2) is true, so enabling should confirm first (admins only).
+    // → needsBusinessInfo(page_2) is true, so enabling should confirm first — for
+    // every merchant now (the isAdmin canary was removed when new signups moved to
+    // auto-reply OFF by default).
     beforeEach(() => {
         mockToastError.mockClear();
-        mockIsAdmin = true;
+        mockIsAdmin = false;
 
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: MOCK_PAGES },
@@ -775,7 +799,7 @@ describe('PagesPage - Enable-without-info soft gate (admin canary)', () => {
         });
     };
 
-    it('confirms before enabling on a page with no answer source (admin)', async () => {
+    it('confirms before enabling on a page with no answer source', async () => {
         await clickPage2FacebookToggle();
 
         expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
@@ -805,12 +829,12 @@ describe('PagesPage - Enable-without-info soft gate (admin canary)', () => {
         expect(screen.queryByTestId('confirmation-modal')).not.toBeInTheDocument();
     });
 
-    it('does NOT gate non-admins (canary): toggle proceeds directly', async () => {
+    it('gates non-admins too (rolled out to everyone): confirms before enabling', async () => {
         mockIsAdmin = false;
         await clickPage2FacebookToggle();
 
-        expect(screen.queryByText('Turn on auto-reply without Business Info?')).not.toBeInTheDocument();
-        expect(mockedPagesApi.toggle).toHaveBeenCalledWith('page_2', true);
+        expect(screen.getByText('Turn on auto-reply without Business Info?')).toBeInTheDocument();
+        expect(mockedPagesApi.toggle).not.toHaveBeenCalled();
     });
 
     it('does NOT gate a store-connected page (Salla/Shopify/Zid = answer source)', async () => {
