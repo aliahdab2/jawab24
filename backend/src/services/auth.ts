@@ -13,6 +13,7 @@ import { encryptFbToken, decryptFbToken } from './facebookCrypto';
 import type { User, JWTPayload, AuthResponse } from '../types';
 import { subscriptionsService } from './subscriptions';
 import { recordActivationEvent } from './activation';
+import { NEW_SIGNUP_SETTINGS_SEED } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
 // Secure JWT-like implementation using HMAC
 const ALGORITHM = 'sha256';
@@ -177,7 +178,7 @@ export class AuthService {
                 .values({
                     ownerId: userId,
                     name,
-                    settings: {},
+                    settings: { ...NEW_SIGNUP_SETTINGS_SEED },
                 })
                 .returning();
 
@@ -195,7 +196,7 @@ export class AuthService {
                     .values({
                         ownerId: userId,
                         name,
-                        settings: {},
+                        settings: { ...NEW_SIGNUP_SETTINGS_SEED },
                     })
                     .returning();
 

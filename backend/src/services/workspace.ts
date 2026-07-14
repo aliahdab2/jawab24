@@ -3,6 +3,7 @@ import { db } from '../db';
 import { workspaces, workspaceMembers, users, pages } from '../db/schema';
 import type { WorkspaceRole, WorkspaceSummary } from '@jawab24/shared';
 import { t } from '../utils/i18n';
+import { NEW_SIGNUP_SETTINGS_SEED } from './workspaceSettings';
 
 /** Internal member limit — quietly enforced, no UI for managing this. */
 const MAX_MEMBERS_PER_WORKSPACE = 5;
@@ -41,6 +42,7 @@ export class WorkspaceService {
                 ownerId: userId,
                 name,
                 settings: {
+                    ...NEW_SIGNUP_SETTINGS_SEED,
                     greetingMessageMulti: buildDefaultGreetingMulti(),
                 },
             })
