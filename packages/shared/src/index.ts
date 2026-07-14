@@ -907,7 +907,18 @@ export {
 // (3) two new few-shot examples DEMONSTRATE a clean flat ending — a warm mid-thread answer and an
 // info-not-in-KB answer that stop on the answer (demonstrations beat rules; the prompt previously
 // had no positive pattern for the common case). Prefix bytes change → cache invalidated by the bump.
-export const PROMPT_VERSION = 'v52';
+// v53: first-person voice + channel-aware deflection (root-caused from the drawingartsyria churn,
+// 2026-07-14, D-024). Three STATIC_SYSTEM_PREFIX changes: (1) a GENERAL RESPONSE RULE forbids
+// third-person self-reference ("this page offers…"/«هذه الصفحة تقدّم») — the model was mirroring the
+// grammatical voice of an auto-imported page bio; now it restates KB facts as "we/عندنا". (2) the
+// QUESTION deflection is now channel-aware: a public COMMENT with a gap warmly invites the customer
+// to the DM / a listed contact channel instead of announcing the gap or reciting the page bio; a DM
+// keeps the existing "you ARE the contact — never say 'contact us'" behavior (honest / narrow). (3)
+// Example 4 reworked (comment → invite to DM) + new Example 14 DEMONSTRATES the churn case: a
+// bio-only KB + price question → first-person reply that uses what's known and invites to DM. The
+// callback-promise ban is unchanged (customer-initiated "message us" ≠ "we'll contact you"). Prefix
+// bytes change → flush exact + semantic caches on deploy.
+export const PROMPT_VERSION = 'v53';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
