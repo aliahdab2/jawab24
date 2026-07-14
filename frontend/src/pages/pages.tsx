@@ -307,13 +307,15 @@ const PagesPage: NextPageWithLayout = () => {
 
   /**
    * Soft gate: enabling any channel's auto-reply on a page with no answer source
-   * (no Business Info, no store — `needsBusinessInfo`) means Jawab can only greet
-   * and hand off. Confirm first; never block ("Turn on anyway" proceeds). Gated
-   * founder-first via `user.isAdmin` (canary) — remove the isAdmin condition to
-   * roll out to everyone. Returns true when the confirmation took over.
+   * (no Business Info, no store — `needsBusinessInfo`) means Jawab can only route
+   * the customer to contact us for anything it can't answer. Confirm first; never
+   * block ("Turn on anyway" proceeds). Rolled out to ALL merchants (2026-07-14,
+   * D-025) — previously founder-only canary — because new signups now default to
+   * auto-reply OFF, so the enable moment is exactly where a thin-KB merchant needs
+   * this warning. Returns true when the confirmation took over.
    */
   const gateEnableWithoutInfo = (pageId: string, enabled: boolean, proceed: () => void): boolean => {
-    if (!enabled || !(user?.isAdmin ?? false)) return false;
+    if (!enabled) return false;
     const page = pages.find(p => p.id === pageId);
     if (!page || !needsBusinessInfo(page)) return false;
     setEnableWithoutInfo({ page, proceed });
@@ -650,10 +652,10 @@ const PagesPage: NextPageWithLayout = () => {
               </div>
 
               {/* Business-info nudge — connected page with empty/short KB (and not an e-commerce page).
-                  `strong` shows the honest "can only greet until you add info" copy; gated founder-first
-                  via user.isAdmin (canary) — remove the flag to roll the honest copy out to everyone. */}
+                  `strong` shows the honest "can only route to contact until you add info" copy —
+                  rolled out to ALL merchants (2026-07-14, D-025), previously a founder-only canary. */}
               {needsBusinessInfo(page) && (
-                <BusinessInfoNudgeBanner onAdd={() => openKnowledgeBase(page)} strong={user?.isAdmin ?? false} />
+                <BusinessInfoNudgeBanner onAdd={() => openKnowledgeBase(page)} strong />
               )}
 
               {/* Disconnected Banner — Facebook-backed pages only; a WhatsApp-only
@@ -1092,8 +1094,8 @@ const PagesPage: NextPageWithLayout = () => {
         variant="danger"
       />
       {/* Soft gate: enabling auto-reply on a page with no answer source (no Business
-          Info, no store) — warn that Jawab can only greet; "Turn on anyway" proceeds.
-          Founder-first via user.isAdmin inside gateEnableWithoutInfo (canary). */}
+          Info, no store) — warn that Jawab can only route to contact for anything it
+          can't answer; "Turn on anyway" proceeds. Rolled out to all merchants (D-025). */}
       <ConfirmationModal
         isOpen={!!enableWithoutInfo}
         onClose={() => setEnableWithoutInfo(null)}

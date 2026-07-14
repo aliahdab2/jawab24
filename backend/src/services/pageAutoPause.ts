@@ -3,6 +3,7 @@ import { pages } from '../db/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { DmFailureBucket } from '../utils/fbGraphErrors';
 import { captureError } from '../utils/sentryHelpers';
+import { logAutoReplyToggle } from './auditLog';
 
 /**
  * Auto-pause defense for "dead pages" — pages where Facebook persistently
@@ -62,7 +63,7 @@ export async function recordSendFailure(
     try {
         // Single UPDATE: bump counter, and if it would cross threshold, pause atomically.
         // The CASE WHEN means we don't need a SELECT-then-UPDATE round trip.
-        await db
+        const [row] = await db
             .update(pages)
             .set({
                 consecutiveSendFailures: sql`${pages.consecutiveSendFailures} + 1`,
@@ -73,7 +74,35 @@ export async function recordSendFailure(
                 autoPauseReason: sql`CASE WHEN ${pages.consecutiveSendFailures} + 1 >= ${PAUSE_THRESHOLD} AND ${pages.autoPauseReason} IS NULL THEN 'send_rejected' ELSE ${pages.autoPauseReason} END`,
                 autoPausedAt: sql`CASE WHEN ${pages.consecutiveSendFailures} + 1 >= ${PAUSE_THRESHOLD} AND ${pages.autoPausedAt} IS NULL THEN NOW() ELSE ${pages.autoPausedAt} END`,
             })
-            .where(eq(pages.id, pageId));
+            .where(eq(pages.id, pageId))
+            .returning({
+                id: pages.id,
+                userId: pages.userId,
+                workspaceId: pages.workspaceId,
+                consecutiveSendFailures: pages.consecutiveSendFailures,
+                autoReplyDisabledReason: pages.autoReplyDisabledReason,
+            });
+
+        // Audit the auto-pause the instant it trips. The counter equals exactly
+        // PAUSE_THRESHOLD only on the crossing UPDATE (later failures push it past),
+        // and reason == 'auto_pause' confirms THIS call flipped it (not a page the
+        // merchant had already disabled). Gives support a timestamped "system paused
+        // this page" event instead of only the standing reason column.
+        if (
+            row &&
+            row.consecutiveSendFailures === PAUSE_THRESHOLD &&
+            row.autoReplyDisabledReason === 'auto_pause'
+        ) {
+            // System disable → omit userId so `actor` derives to 'system'.
+            logAutoReplyToggle({
+                pageId: row.id,
+                workspaceId: row.workspaceId ?? undefined,
+                enabled: false,
+                previous: true,
+                reason: 'auto_pause',
+                extra: { bucket },
+            });
+        }
     } catch (err) {
         captureError(err, 'pageAutoPause.recordSendFailure failed', {
             tags: { component: 'pageAutoPause' },

@@ -374,6 +374,79 @@ describe('maybeCaptureLead — business own number echoed back (June 2026 regres
     });
 });
 
+describe('maybeCaptureLead — our reply echoes the customer own number (July 2026 regression)', () => {
+    it('REGRESSION: captures the lead even when our confirmation reply repeats the customer number back', async () => {
+        // Real prod case (page "الفريق الدمشقي للتدريب والتأهيل", customer Majd Alsaleem):
+        // the customer sent "مجد السليم 931874500 دوره اضافر"; the Smart Reply confirmed
+        // registration and ECHOED her number ("…رح نتواصل معك على الرقم 931874500…"). That
+        // reply is stored as an outgoing (assistant) row BEFORE this fire-and-forget
+        // extraction runs, so it comes back in the history below. Before the fix it was
+        // fed into the business-number exclusion, which then read the customer's OWN
+        // number as the business's and wrote NO lead. The reply-to-this-message must be
+        // ignored by the exclusion; the lead must be captured with her number.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValueOnce({
+            timezone: 'Asia/Damascus',
+        } as Awaited<ReturnType<typeof workspaceSettingsService.getSettings>>);
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValueOnce([
+            { role: 'user', content: 'مجد السليم 931874500 دوره اضافر' },
+            {
+                role: 'assistant',
+                content:
+                    'تسجيلك لدورة الأظافر تم بنجاح! 🎉 رح نتواصل معك قريباً على الرقم 931874500 لتأكيد التفاصيل. نورتينا مجد!',
+            },
+        ] as Awaited<ReturnType<typeof messagesService.getConversationHistory>>);
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'مجد السليم 931874500 دوره اضافر' }),
+        );
+
+        expect(capturedInserts).toHaveLength(1);
+        expect(capturedInserts[0].phone).toBe('931874500');
+    });
+
+    it('still excludes a PRIOR assistant turn (paste-back protection is preserved)', async () => {
+        // The discriminator is temporal: an assistant turn BEFORE the customer's latest
+        // message is legitimate business context they may quote/paste (keep excluding it);
+        // only the reply AFTER it is our echo. Here the business line is published in a
+        // prior turn and the customer pastes it — no lead, exactly as before the fix.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValueOnce({
+            timezone: 'Asia/Damascus',
+        } as Awaited<ReturnType<typeof workspaceSettingsService.getSettings>>);
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValueOnce([
+            { role: 'assistant', content: 'للتواصل معنا على الرقم 0937549674' },
+            { role: 'user', content: 'شكراً، 0937549674' },
+        ] as Awaited<ReturnType<typeof messagesService.getConversationHistory>>);
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'شكراً، 0937549674' }),
+        );
+
+        expect(capturedInserts).toHaveLength(0);
+        expect(openaiCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('REGRESSION (comment): captures the lead when our comment reply echoes the commenter number', async () => {
+        // Same root cause on the comment→DM path: replyText is our reply to THIS comment
+        // and echoes the commenter's own number, so it must not feed the business-number
+        // exclusion. The post is still trusted as business context.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValueOnce({
+            timezone: 'Asia/Damascus',
+        } as Awaited<ReturnType<typeof workspaceSettingsService.getSettings>>);
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({
+                sourceType: 'comment',
+                messageText: 'رقمي 0966554433',
+                postMessage: 'دورة الأظافر متوفرة الآن، سجّلي بالتعليقات',
+                replyText: 'يسعدنا تسجيلك! رح نتواصل معك على الرقم 0966554433',
+            }),
+        );
+
+        expect(capturedInserts).toHaveLength(1);
+        expect(capturedInserts[0].phone).toBe('0966554433');
+    });
+});
+
 describe('lead re-engagement (re-shared number)', () => {
     it('upsert conflict clause flags follow-up WITHOUT regressing status (non-destructive)', async () => {
         await leadExtractorService.maybeCaptureLead(baseParams({ messageText: 'رقمي 0934958473' }));

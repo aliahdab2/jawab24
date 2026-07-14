@@ -44,10 +44,16 @@ vi.mock('../../src/services/channelTrial', () => ({
     },
 }));
 
+vi.mock('../../src/services/auditLog', () => ({
+    auditLog: vi.fn(),
+    logAutoReplyToggle: vi.fn(),
+}));
+
 // Import after mocks
 import { pagesController } from '../../src/controllers/pages';
 import { pagesService } from '../../src/services/pages';
 import { subscriptionsService } from '../../src/services/subscriptions';
+import { logAutoReplyToggle } from '../../src/services/auditLog';
 
 describe('Pages Controller', () => {
     let mockRequest: Partial<WorkspaceRequest>;
@@ -237,6 +243,40 @@ describe('Pages Controller', () => {
 
             expect(mockReply.status).toHaveBeenCalledWith(400);
             expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'PAGE_DISCONNECTED' }));
+        });
+
+        it('audits WHO flipped the switch on a real off → on transition', async () => {
+            // Page is currently OFF; merchant turns it ON — this is the exact event
+            // that was previously unrecoverable (no actor/timestamp anywhere).
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok', autoReplyEnabled: false } as any);
+            vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 0, remaining: 5 } as any);
+            vi.mocked(pagesService.toggleAutoReply).mockResolvedValue({ id: 'page-1', autoReplyEnabled: true, facebookPageId: 'fb-1', accessToken: 'tok' } as any);
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { enabled: true };
+
+            await pagesController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
+
+            expect(logAutoReplyToggle).toHaveBeenCalledWith({
+                pageId: 'page-1',
+                workspaceId: 'test_workspace_id',
+                userId: 'user-123',
+                enabled: true,
+                previous: false,
+                reason: 'user',
+            });
+        });
+
+        it('does NOT audit an idempotent re-save (already-on → enable)', async () => {
+            // Same state in and out: must not emit a phantom toggle event.
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok', autoReplyEnabled: true } as any);
+            vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 0, remaining: 5 } as any);
+            vi.mocked(pagesService.toggleAutoReply).mockResolvedValue({ id: 'page-1', autoReplyEnabled: true, facebookPageId: 'fb-1', accessToken: 'tok' } as any);
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { enabled: true };
+
+            await pagesController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
+
+            expect(logAutoReplyToggle).not.toHaveBeenCalled();
         });
     });
 

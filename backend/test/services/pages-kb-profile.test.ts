@@ -56,6 +56,13 @@ vi.mock('../../src/services/kb/operationalFactsExtractor', () => ({
     operationalFactsExtractor: { extract: vi.fn().mockResolvedValue({}) },
 }));
 
+// Stub the fire-and-forget auto-reply audit emit so it doesn't add an extra
+// db.insert(logs) call that would skew this suite's insert assertions.
+vi.mock('../../src/services/auditLog', () => ({
+    logAutoReplyToggle: vi.fn(),
+    auditLog: vi.fn(),
+}));
+
 describe('PR2: KB Versioning + Business Profile', () => {
     beforeEach(() => {
         vi.clearAllMocks();
