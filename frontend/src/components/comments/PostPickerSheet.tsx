@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
-import { Loader2 } from 'lucide-react';
+import { AlignLeft, ImageOff, Loader2 } from 'lucide-react';
 import type { Page, PublishedPost, PublishedPostsResponse } from '@jawab24/shared';
 import { Modal, Button, FacebookIcon, InstagramIcon } from '@/components/ui';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
@@ -194,7 +194,7 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
                   })}
                   className="w-full flex items-center gap-3 rounded-xl border border-theme-border p-2.5 text-start hover:bg-muted/60 transition-colors"
                 >
-                  <PostThumb imageUrl={post.imageUrl} source={post.source} />
+                  <PostThumb imageUrl={post.imageUrl} />
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm font-medium text-foreground truncate" dir="auto">
                       {post.message?.trim() || t('postPickerNoText')}
@@ -238,16 +238,22 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
   );
 }
 
-/** Square thumbnail with a source-tinted placeholder fallback. Facebook/Instagram CDN
- *  URLs are signed and rotate hosts, so a plain lazy <img> with an error fallback is
- *  more robust here than next/image remote patterns; it's a small thumbnail, not LCP. */
-function PostThumb({ imageUrl, source }: { imageUrl: string | null; source: Source }) {
+/** Square thumbnail with a glyph fallback. Facebook/Instagram CDN URLs are signed and
+ *  rotate hosts, so a plain lazy <img> with an error fallback is more robust here than
+ *  next/image remote patterns; it's a small thumbnail, not LCP.
+ *
+ *  Two distinct no-image states, deliberately not the platform logo (which carries no
+ *  recognition value — the list is already scoped to one source):
+ *   - no `full_picture` → genuinely text-only post → a text glyph.
+ *   - image present but load errored → an "image unavailable" glyph, so a transient CDN
+ *     blip doesn't masquerade as a text-only post. */
+function PostThumb({ imageUrl }: { imageUrl: string | null }) {
   const [failed, setFailed] = useState(false);
-  const Icon = source === 'facebook' ? FacebookIcon : InstagramIcon;
   if (!imageUrl || failed) {
+    const Glyph = imageUrl ? ImageOff : AlignLeft;
     return (
       <span className="w-12 h-12 rounded-lg bg-surface-100 dark:bg-surface-200 flex items-center justify-center flex-shrink-0 text-icon-muted">
-        <Icon className="w-5 h-5" aria-hidden="true" />
+        <Glyph className="w-5 h-5" aria-hidden="true" />
       </span>
     );
   }
