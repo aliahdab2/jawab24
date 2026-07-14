@@ -98,15 +98,17 @@ describe('WorkspaceService', () => {
 
             await service.createWorkspace(USER_ID, 'My WS');
 
+            // settings also carries NEW_SIGNUP_SETTINGS_SEED (auto-reply off + dual, D-025);
+            // this test only owns the greeting seeding, so match it with objectContaining.
             expect(valuesMock).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    settings: {
+                    settings: expect.objectContaining({
                         greetingMessageMulti: {
                             ar: 'مرحباً بك! كيف يمكننا مساعدتك اليوم؟',
                             en: 'Hello! How can we help you?',
                             sourceLang: 'default',
                         },
-                    },
+                    }),
                 }),
             );
         });
