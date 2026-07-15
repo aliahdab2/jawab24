@@ -12,21 +12,6 @@
     "cta": "Add manually",
     "or": "or:"
   },
-  "exampleItems": {
-    "electronics": "ASUS laptop, 16GB RAM|2400",
-    "fashion": "Classic abaya, black|280",
-    "vehicles": "Kia Rio 2018, 60k km|31500",
-    "education": "ICDL course — beginner level|3500",
-    "restaurant": "Family shawarma platter|55",
-    "beauty": "Haircut & styling session|80",
-    "real_estate": "2-bedroom apartment, city center|65000",
-    "home_goods": "3-seat fabric sofa|1450",
-    "services": "AC cleaning & maintenance|120",
-    "other": "Front shock absorbers|350"
-  },
-  "example": {
-    "badge": "Example"
-  },
   "limitLabel": "{count} of {max} items",
   "fields": {
     "type": "Type",
