@@ -2,7 +2,7 @@ import axios from 'axios';
 import { and, eq } from 'drizzle-orm';
 import { MAX_CATALOG_IMPORT_CHARS } from '@jawab24/shared';
 import { db } from '../db';
-import { pages } from '../db/schema';
+import { pages, catalogItems } from '../db/schema';
 import { facebookService } from './facebook';
 import { extractFromImage } from './kb/file-extractor';
 import { catalogExtractor, type CatalogExtractionResult } from './catalogExtractor';
@@ -25,7 +25,9 @@ import type { StoredBusinessProfile } from '@jawab24/shared';
  * Re-scan idempotence: pages.catalog_scan_last_post_time bookmarks the newest
  * post consumed; the next scan only proposes NEWER posts' items. The bookmark
  * only advances when extraction actually succeeded — a transient AI failure
- * must not silently swallow a window of posts.
+ * must not silently swallow a window of posts. The bookmark is IGNORED while the
+ * catalog is empty (see scanPosts): "up to date" is meaningless with zero items,
+ * and a first scan that proposed nothing must never lock the page out of re-scanning.
  */
 
 /** Newest posts read per scan. One Graph call; bounds vision spend with
@@ -95,12 +97,26 @@ export class CatalogScanService {
         if (page.ecommerceStoreId) throw new CatalogStoreConflictError();
         if (!page.facebookPageId || !page.accessToken) throw new CatalogScanUnavailableError();
 
+        // The re-scan bookmark means "skip posts I've already reviewed" — it only
+        // makes sense once a catalog EXISTS. With zero items there is nothing to be
+        // "up to date" against, and a first scan that proposed nothing (an
+        // announcements-only window, image-less posts, or a merchant who dismissed
+        // every proposal) still advances the bookmark — which would otherwise lock
+        // an empty page into "all up to date" forever, with no items and no way to
+        // re-scan. So an empty catalog always scans the full recent window.
+        const [existingItem] = await db
+            .select({ id: catalogItems.id })
+            .from(catalogItems)
+            .where(eq(catalogItems.pageId, pageId))
+            .limit(1);
+        const hasCatalog = existingItem !== undefined;
+
         const { posts } = await facebookService.getPagePosts(page.facebookPageId, page.accessToken, {
             limit: MAX_SCAN_POSTS,
             fullImages: true,
         });
 
-        const since = page.catalogScanLastPostTime;
+        const since = hasCatalog ? page.catalogScanLastPostTime : null;
         const fresh = posts.filter((p) => {
             if (!p.createdTime) return false;
             return !since || new Date(p.createdTime) > since;

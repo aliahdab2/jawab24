@@ -199,35 +199,13 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
   return (
     <div>
       {items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border p-6 text-center">
-          {/* Ghost example row — teaches the shape by showing it (Simplicity
-              contract §8), in the merchant's OWN trade: the example item follows
-              the page's vertical ("name|price" i18n pair, split here). The row
-              deliberately mimics a real listing so it teaches; the "Example"
-              badge is what keeps it from reading AS one (a UX review mistook this
-              ghost for live data). The badge sits OUTSIDE the opacity fade so the
-              signal is unmistakable. */}
-          {(() => {
-            const [exampleName, examplePrice] = t(`exampleItems.${vertical?.effective ?? 'other'}`).split('|');
-            return (
-              <div className="mb-5">
-                <div className="flex mb-1.5">
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                    {t('example.badge')}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3 opacity-60 text-start pointer-events-none select-none">
-                  <div className="min-w-0 flex-1">
-                    <span dir="auto" className="text-sm font-semibold text-foreground">{exampleName}</span>
-                  </div>
-                  <span dir="auto" className="text-sm font-semibold text-foreground tabular-nums">{examplePrice}</span>
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full status-success">{t('availability.in')}</span>
-                </div>
-              </div>
-            );
-          })()}
+        <div className="rounded-2xl border border-dashed border-border p-6 sm:p-8 text-center">
+          {/* Standard empty-state anatomy: the mental model + ONE primary action.
+              No mocked-up "example" row — a fake listing with a real-looking
+              price read as live data (to merchants and to a prior UX review),
+              and the scan flow shows the real row shape during review anyway. */}
           <h3 className="text-base font-semibold text-foreground">{t('empty.title')}</h3>
-          <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-md mx-auto">{t('empty.body')}</p>
+          <p className="text-sm text-muted-foreground mt-1 mb-5 max-w-md mx-auto">{t('empty.body')}</p>
           {/* ONE decision: scan. The manual paths exist but read as footnotes —
               an ordinary merchant should never have to weigh three buttons. */}
           <Button variant="primary" onClick={() => setSheetMode('scan')}>

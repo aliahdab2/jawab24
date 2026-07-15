@@ -47,15 +47,15 @@ beforeEach(() => {
 });
 
 describe('CatalogManager', () => {
-  it('shows the teaching empty state: ONE primary scan action, manual paths as footnotes', async () => {
+  it('shows the empty state: ONE primary scan action, manual paths as footnotes', async () => {
     renderManager();
     expect(await screen.findByRole('button', { name: /Find products in your posts/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add manually' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Import a list' })).toBeInTheDocument();
-    // Ghost example row teaches the shape — and is labelled so it can't be
-    // mistaken for a real listing.
-    expect(screen.getByText('Front shock absorbers')).toBeInTheDocument();
-    expect(screen.getByText('Example')).toBeInTheDocument();
+    // No mocked-up "example" row — a fake listing with a real price read as
+    // live data. The scan flow shows the real row shape during review instead.
+    expect(screen.queryByText('Front shock absorbers')).not.toBeInTheDocument();
+    expect(screen.queryByText('Example')).not.toBeInTheDocument();
   });
 
   it('renders items with price, currency and an in-stock label', async () => {

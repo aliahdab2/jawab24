@@ -63,7 +63,7 @@ export function CatalogItemFormSheet({ item, defaultCurrency, defaultType, savin
   const titleId = 'catalog-form-title';
 
   return (
-    <DetailSheet dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId }}>
+    <DetailSheet dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId }} panelClassName="sm:h-auto">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
         <h2 id={titleId} className="text-lg font-semibold text-foreground">
           {isEdit ? t('editItem') : t('addItem')}

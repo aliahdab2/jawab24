@@ -172,9 +172,15 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
 
   const titleId = 'catalog-import-title';
   const inReview = phase === 'review' || phase === 'saving';
+  // The scanning spinner and the empty/up-to-date card are short. Without this
+  // they'd pin to the top of the full-height mobile sheet (a "void" below) and,
+  // on desktop, force the panel to its 90vh cap around a tiny card. sm:h-auto
+  // lets the panel size to content on desktop; justify-center parks the light
+  // phases in the middle on the always-full-height mobile sheet.
+  const contentLight = phase === 'scanning' || (inReview && rows.length === 0);
 
   return (
-    <DetailSheet dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId }}>
+    <DetailSheet dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId }} panelClassName="sm:h-auto">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
         <h2 id={titleId} className="text-lg font-semibold text-foreground">
           {mode === 'scan' ? t('scan.title') : t('import.title')}
@@ -185,7 +191,7 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4" aria-busy={phase === 'extracting' || phase === 'scanning' || phase === 'saving'}>
+      <div className={clsx('flex-1 overflow-y-auto px-5 py-4 flex flex-col', contentLight && 'justify-center')} aria-busy={phase === 'extracting' || phase === 'scanning' || phase === 'saving'}>
         {phase === 'scanning' && (
           <div className="rounded-2xl border border-dashed border-border p-8 text-center" role="status">
             <ScanSearch className="w-8 h-8 mx-auto text-icon-muted" aria-hidden="true" />
