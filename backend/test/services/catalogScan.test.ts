@@ -9,12 +9,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const state = {
     pageRow: undefined as Record<string, unknown> | undefined,
+    /** Rows the catalog-existence probe returns — [] = empty catalog (bookmark
+     *  ignored), non-empty = an established catalog (bookmark respected). */
+    catalogRows: [] as Record<string, unknown>[],
     updates: [] as Record<string, unknown>[],
 };
 
 vi.mock('../../src/db', () => ({
     db: {
-        select: () => ({ from: () => ({ where: () => ({ limit: async () => (state.pageRow ? [state.pageRow] : []) }) }) }),
+        // Two selects run: the page load (projection has `facebookPageId`) and the
+        // catalog-existence probe. Route by projection so order can't confuse them.
+        select: (cols?: Record<string, unknown>) => ({
+            from: () => ({ where: () => ({ limit: async () =>
+                cols && 'facebookPageId' in cols ? (state.pageRow ? [state.pageRow] : []) : state.catalogRows,
+            }) }),
+        }),
         update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { state.updates.push(values); } }) }),
     },
 }));
@@ -77,6 +86,7 @@ describe('catalogScanService.scanPosts', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         state.pageRow = dealerPage();
+        state.catalogRows = [];
         state.updates = [];
         vi.mocked(catalogExtractor.extract).mockResolvedValue(okExtraction as never);
     });
@@ -110,7 +120,8 @@ describe('catalogScanService.scanPosts', () => {
         expect(state.updates[0].catalogScanLastPostTime).toEqual(new Date('2026-07-10T10:00:00+0000'));
     });
 
-    it('is idempotent: posts at/older than the bookmark are skipped → upToDate, no spend, no bookmark write', async () => {
+    it('is idempotent once a catalog exists: posts at/older than the bookmark are skipped → upToDate, no spend, no bookmark write', async () => {
+        state.catalogRows = [{ id: 'item-1' }]; // established catalog → bookmark is honored
         state.pageRow = dealerPage({ catalogScanLastPostTime: new Date('2026-07-11T00:00:00Z') });
         mockPosts([post({ createdTime: '2026-07-10T10:00:00+0000' })]);
 
@@ -119,6 +130,20 @@ describe('catalogScanService.scanPosts', () => {
         expect(result).toMatchObject({ upToDate: true, postsScanned: 0, items: [] });
         expect(catalogExtractor.extract).not.toHaveBeenCalled();
         expect(state.updates).toHaveLength(0);
+    });
+
+    it('EMPTY catalog ignores the bookmark: a first scan that once advanced it can still re-scan the full window', async () => {
+        // The deadlock this fixes: a first scan proposed 0 items but advanced the
+        // bookmark; with the old logic every later scan returned upToDate forever,
+        // stranding the merchant with an empty catalog and no way to re-scan.
+        state.catalogRows = []; // still empty
+        state.pageRow = dealerPage({ catalogScanLastPostTime: new Date('2026-07-11T00:00:00Z') });
+        mockPosts([post({ createdTime: '2026-07-10T10:00:00+0000' })]); // older than the bookmark
+
+        const result = await catalogScanService.scanPosts(WS, PAGE, CTX);
+
+        expect(result).toMatchObject({ upToDate: false, postsScanned: 1, items: okExtraction.items });
+        expect(catalogExtractor.extract).toHaveBeenCalledTimes(1);
     });
 
     it('does NOT advance the bookmark when the AI call failed — the posts stay re-scannable', async () => {
