@@ -202,6 +202,104 @@ export function subscriptionWelcomeEmailTemplate(params: {
 }
 
 /**
+ * Trial lifecycle email — one template, two variants:
+ *  - 'reminder' (T-3 days, pre-expiry): activation-aware. If the merchant has
+ *    used it → value-led recap + "keep it on" CTA. If 0 activity → a "switch it
+ *    on" nudge pointing at the dashboard (targets the activation leak).
+ *  - 'ended' (on/after expiry): win-back — value recap (if any) + upgrade CTA +
+ *    1-click churn-reason feedback links + unsubscribe.
+ * Bilingual/RTL, strings from i18n we control. URLs + feedback labels escaped.
+ */
+export function trialLifecycleEmailTemplate(params: {
+    variant: 'reminder' | 'ended';
+    lang: 'ar' | 'en';
+    activated: boolean;
+    messagesHandled: number;
+    leadsCaptured: number;
+    daysLeft?: number;
+    upgradeUrl: string;
+    dashboardUrl: string;
+    unsubscribeUrl: string;
+    feedbackLinks?: Array<{ label: string; url: string }>;
+}): { subject: string; html: string } {
+    const { variant, lang, activated, messagesHandled, leadsCaptured, upgradeUrl, dashboardUrl, unsubscribeUrl } = params;
+    const rtl = lang === 'ar';
+    const dir = rtl ? 'rtl' : 'ltr';
+    const align = rtl ? 'right' : 'left';
+    const fontFamily = rtl
+        ? "'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
+        : "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+    const days = String(params.daysLeft ?? 3);
+    const recap = t('trialRecapLine', lang, { messages: String(messagesHandled), leads: String(leadsCaptured) });
+
+    let subject: string, heading: string, body: string, ctaLabel: string, ctaUrl: string;
+    if (variant === 'reminder') {
+        if (activated) {
+            subject = t('trialReminderSubject', lang, { days });
+            heading = t('trialReminderHeading', lang, { days });
+            body = `${recap} ${t('trialReminderBody', lang)}`;
+            ctaLabel = t('trialReminderCta', lang);
+            ctaUrl = upgradeUrl;
+        } else {
+            subject = t('trialReminderSubjectInactive', lang, { days });
+            heading = t('trialReminderHeadingInactive', lang);
+            body = t('trialReminderBodyInactive', lang, { days });
+            ctaLabel = t('trialReminderCtaInactive', lang);
+            ctaUrl = dashboardUrl;
+        }
+    } else {
+        subject = t('trialEndedSubject', lang);
+        heading = t('trialEndedHeading', lang);
+        body = activated ? `${recap} ${t('trialEndedBody', lang)}` : t('trialEndedBodyInactive', lang);
+        ctaLabel = t('trialEndedCta', lang);
+        ctaUrl = upgradeUrl;
+    }
+
+    const ctaButton = `<p style="margin:0 0 20px 0;text-align:center;">
+                <a href="${escapeHtml(ctaUrl)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">${ctaLabel}</a>
+              </p>`;
+
+    // Secondary "see full stats" only when they have stats worth seeing.
+    const secondary = activated
+        ? `<p style="margin:0 0 8px 0;text-align:center;"><a href="${escapeHtml(dashboardUrl)}" style="color:#0d9488;text-decoration:underline;font-size:14px;">${t('trialSecondaryCta', lang)}</a></p>`
+        : '';
+
+    // Churn feedback — win-back only.
+    let feedbackBlock = '';
+    if (variant === 'ended' && params.feedbackLinks?.length) {
+        const links = params.feedbackLinks
+            .map(f => `<a href="${escapeHtml(f.url)}" style="display:inline-block;margin:4px;padding:6px 12px;border:1px solid #e4e4e7;border-radius:6px;color:#52525b;text-decoration:none;font-size:13px;">${escapeHtml(f.label)}</a>`)
+            .join('');
+        feedbackBlock = `<div style="margin:24px 0 0 0;padding-top:16px;border-top:1px solid #e4e4e7;">
+                <p style="margin:0 0 8px 0;color:#52525b;font-size:14px;">${t('trialFeedbackPrompt', lang)}</p>
+                <div>${links}</div>
+              </div>`;
+    }
+
+    const signoff = t('trialEmailSignoff', lang);
+    const unsubscribeLabel = t('trialEmailUnsubscribe', lang);
+
+    const html = emailShell({
+        lang,
+        dir,
+        bodyFontFamily: fontFamily,
+        title: subject,
+        preheader: body.slice(0, 150),
+        bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+              <p style="margin:0 0 24px 0;">${body}</p>
+              ${ctaButton}
+              ${secondary}
+              ${feedbackBlock}
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+        footerHtml: `<p style="margin:0 0 8px 0;">${escapeHtml(getBrandName())} &mdash; jawab24.com</p>
+              <p style="margin:0;"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#71717a;text-decoration:underline;font-size:12px;">${unsubscribeLabel}</a></p>`,
+    });
+
+    return { subject, html };
+}
+
+/**
  * Team invite email — sent when an owner/admin invites someone by email.
  *
  * Bilingual by design: the recipient may not have an account yet, so their

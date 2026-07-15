@@ -37,6 +37,7 @@ import workspaceRoutes from "./routes/workspace";
 import { translationRoutes } from "./routes/translation";
 import integrationsRoutes from "./routes/integrations";
 import waitlistRoutes from "./routes/waitlist";
+import trialFeedbackRoutes from "./routes/trialFeedback";
 import sseRoutes from "./routes/sse";
 import customerNotificationRoutes from "./routes/customerNotifications";
 import ecommerceAnalyticsRoutes from "./routes/ecommerceAnalytics";
@@ -57,6 +58,7 @@ import { customerNotificationService } from "./services/customerNotifications";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
+import { setTrialLifecycleLogger, runDailyTrialLifecycleEmails, startTrialLifecycleCron, stopTrialLifecycleCron } from "./services/trialEndedEmail";
 import { captureError } from "./utils/sentryHelpers";
 import { smsService } from "./services/sms";
 import { emailService } from "./services/email";
@@ -291,6 +293,7 @@ const start = async () => {
 
     // Waitlist (public - no auth required)
     await server.register(waitlistRoutes, { prefix: "/waitlist" });
+    await server.register(trialFeedbackRoutes, { prefix: "/trial-feedback" });
 
     // Customer notification templates + log (authenticated)
     await server.register(customerNotificationRoutes);
@@ -361,6 +364,17 @@ const start = async () => {
       runDailyLeadDigest().catch(err => {
         server.log.error(err, '[LeadDigest] Initial run failed');
         captureError(err, '[LeadDigest] Initial run failed', { tags: { cron: 'lead_digest' }, level: 'error' });
+      });
+    }, 5 * 60 * 1000);
+
+    // Trial lifecycle emails — daily: T-3d reminder (activation-aware) + post-expiry
+    // win-back. Per-stage idempotency stamps in the service prevent double-sends.
+    setTrialLifecycleLogger(workerLogger);
+    startTrialLifecycleCron();
+    setTimeout(() => {
+      runDailyTrialLifecycleEmails().catch(err => {
+        server.log.error(err, '[TrialEmail] Initial run failed');
+        captureError(err, '[TrialEmail] Initial run failed', { tags: { cron: 'trial_lifecycle_email' }, level: 'error' });
       });
     }, 5 * 60 * 1000);
 
@@ -549,6 +563,7 @@ const gracefulShutdown = async (signal: string) => {
     // Stop cron jobs
     stopEscalationCron();
     stopTokenRefreshCron();
+    stopTrialLifecycleCron();
 
     // Stop workers (wait for in-progress jobs)
     console.log("⏳ Stopping workers...");

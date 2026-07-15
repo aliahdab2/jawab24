@@ -751,6 +751,12 @@ export const subscriptions = pgTable('subscriptions', {
 
     // Trial info
     trialEndsAt: timestamp('trial_ends_at'),
+    // Idempotency stamps for the trial lifecycle emails (services/trialEndedEmail.ts). Each is set
+    // once its email is sent — or terminally skipped (no email, suppressed) — so a trial is never
+    // emailed twice per stage. Mirror leads.digestEmailedAt. Null = eligible, not yet processed.
+    // Reminder = the T-3-days pre-expiry nudge; Ended = the on/after-expiry win-back.
+    trialReminderEmailedAt: timestamp('trial_reminder_emailed_at'),
+    trialEndedEmailedAt: timestamp('trial_ended_emailed_at'),
 
     // Billing period
     currentPeriodStart: timestamp('current_period_start').defaultNow(),
@@ -774,8 +780,24 @@ export const subscriptions = pgTable('subscriptions', {
         userIdIdx: index('idx_subscriptions_user_id').on(table.userId),
         statusIdx: index('idx_subscriptions_status').on(table.status),
         planIdIdx: index('idx_subscriptions_plan_id').on(table.planId),
+        trialEndsAtIdx: index('idx_subscriptions_trial_ends_at').on(table.trialEndsAt),
     };
 });
+
+// Trial win-back email feedback — one row per merchant who clicked a "why didn't you continue?"
+// reason link in the trial-ended email (services/trialEndedEmail.ts). Doubles as the churn survey
+// for the expired-trial segment. Reason is a fixed enum slug (see TRIAL_FEEDBACK_REASONS).
+export const trialFeedback = pgTable('trial_feedback', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    subscriptionId: uuid('subscription_id').references(() => subscriptions.id, { onDelete: 'set null' }),
+    // Fixed slug: 'too_expensive' | 'didnt_work' | 'too_complex' | 'just_testing' | 'other'
+    reason: varchar('reason', { length: 32 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdIdx: index('idx_trial_feedback_user_id').on(table.userId),
+    createdAtIdx: index('idx_trial_feedback_created_at').on(table.createdAt),
+}));
 
 // 12. Usage Table - Monthly usage tracking
 export const usage = pgTable('usage', {

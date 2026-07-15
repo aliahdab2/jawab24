@@ -1,0 +1,1 @@
+ALTER TABLE "subscriptions" ADD COLUMN "trial_reminder_emailed_at" timestamp;

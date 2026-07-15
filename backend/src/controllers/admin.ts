@@ -630,6 +630,17 @@ export class AdminController {
         }
     }
 
+    async runTrialEmails(request: FastifyRequest, reply: FastifyReply) {
+        try {
+            const { runDailyTrialLifecycleEmails } = await import('../services/trialEndedEmail');
+            const result = await runDailyTrialLifecycleEmails();
+            return reply.send(result);
+        } catch (error) {
+            request.log.error(error, 'Manual trial-emails trigger failed');
+            return reply.status(500).send({ success: false, error: 'Trial email run failed' });
+        }
+    }
+
     /** GET /admin/emails/:id */
     async getEmail(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
         const row = await adminMetricsService.getEmail(request.params.id);

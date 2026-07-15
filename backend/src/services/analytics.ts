@@ -1,6 +1,6 @@
 import { db } from '../db';
-import { comments, posts, instagramComments, instagramMedia, messages, pages, aiUsageLog } from '../db/schema';
-import { eq, and, gte, lt, isNotNull, sql } from 'drizzle-orm';
+import { comments, posts, instagramComments, instagramMedia, messages, pages, aiUsageLog, leads, workspaceMembers } from '../db/schema';
+import { eq, and, gte, lte, lt, isNotNull, inArray, sql } from 'drizzle-orm';
 import { cacheSavingsUsd } from '../config/aiPricing';
 import { isReplyPipeline } from '../types/aiPipeline';
 
@@ -267,6 +267,93 @@ export class AnalyticsService {
 
     async getAiUsage(userId: string, days: number = 30): Promise<AiUsageReport> {
         return this.queryAiUsage(days, userId);
+    }
+
+    /**
+     * Per-merchant usage recap over a fixed [from, to] window — powers the trial
+     * lifecycle emails (services/trialEndedEmail.ts). Counts inbound interactions
+     * handled (DMs + FB/IG comments), replies actually sent, and leads captured
+     * across the owner's pages (direct + workspace, mirroring admin/users.ts
+     * ownedPageIds scoping). `activated` gates the reminder's value-led vs
+     * "switch it on" copy.
+     */
+    async getTrialRecapStats(userId: string, from: Date, to: Date): Promise<{
+        days: number;
+        messagesHandled: number;
+        repliesSent: number;
+        leadsCaptured: number;
+        activated: boolean;
+    }> {
+        const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000));
+
+        const memberships = await db
+            .select({ workspaceId: workspaceMembers.workspaceId })
+            .from(workspaceMembers)
+            .where(eq(workspaceMembers.userId, userId));
+        const workspaceIds = memberships.map(m => m.workspaceId);
+
+        const pageRows = await db
+            .select({ id: pages.id })
+            .from(pages)
+            .where(
+                workspaceIds.length > 0
+                    ? sql`${pages.userId} = ${userId} OR ${pages.workspaceId} IN (${sql.join(workspaceIds.map(w => sql`${w}`), sql`, `)})`
+                    : eq(pages.userId, userId),
+            );
+        const pageIds = pageRows.map(r => r.id);
+
+        if (pageIds.length === 0) {
+            return { days, messagesHandled: 0, repliesSent: 0, leadsCaptured: 0, activated: false };
+        }
+
+        const [dm, fb, ig, leadAgg] = await Promise.all([
+            db.select({
+                count: sql<number>`count(*)::int`,
+                replied: sql<number>`count(*) filter (where ${messages.replied} = true)::int`,
+            }).from(messages).where(and(
+                inArray(messages.pageId, pageIds),
+                eq(messages.direction, 'incoming'),
+                gte(messages.createdTime, from),
+                lte(messages.createdTime, to),
+            )),
+            db.select({
+                count: sql<number>`count(*)::int`,
+                replied: sql<number>`count(*) filter (where ${comments.replied} = true)::int`,
+            }).from(comments)
+                .innerJoin(posts, eq(comments.postId, posts.id))
+                .where(and(
+                    inArray(posts.pageId, pageIds),
+                    gte(comments.createdTime, from),
+                    lte(comments.createdTime, to),
+                )),
+            db.select({
+                count: sql<number>`count(*)::int`,
+                replied: sql<number>`count(*) filter (where ${instagramComments.replied} = true)::int`,
+            }).from(instagramComments)
+                .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+                .where(and(
+                    inArray(instagramMedia.pageId, pageIds),
+                    gte(instagramComments.createdTime, from),
+                    lte(instagramComments.createdTime, to),
+                )),
+            db.select({ count: sql<number>`count(*)::int` })
+                .from(leads).where(and(
+                    inArray(leads.pageId, pageIds),
+                    gte(leads.createdAt, from),
+                    lte(leads.createdAt, to),
+                )),
+        ]);
+
+        const messagesHandled = (dm[0]?.count ?? 0) + (fb[0]?.count ?? 0) + (ig[0]?.count ?? 0);
+        const repliesSent = (dm[0]?.replied ?? 0) + (fb[0]?.replied ?? 0) + (ig[0]?.replied ?? 0);
+        const leadsCaptured = leadAgg[0]?.count ?? 0;
+        return {
+            days,
+            messagesHandled,
+            repliesSent,
+            leadsCaptured,
+            activated: repliesSent > 0 || leadsCaptured > 0,
+        };
     }
 
     private async queryAiUsage(days: number, userId: string): Promise<AiUsageReport> {

@@ -25,6 +25,7 @@ export const PAGE_NAMESPACES = {
   help:               ['help'],
 
   unsubscribe:        ['unsubscribe'],
+  'trial-feedback':   ['trialFeedback'],
 
   // ── Legal pages ───────────────────────────────────────────────
   terms:              ['terms'],

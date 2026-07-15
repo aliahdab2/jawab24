@@ -387,5 +387,26 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             },
             adminController.runLeadDigest,
         );
+
+        adminProtected.post(
+            '/trial-emails/run',
+            {
+                schema: {
+                    description: 'Manually run the trial lifecycle email job (T-3d reminder + post-expiry win-back)',
+                    tags: ['Admin'],
+                    security: auth,
+                    response: {
+                        200: {
+                            type: 'object',
+                            properties: {
+                                reminder: { type: 'object', additionalProperties: true },
+                                winback: { type: 'object', additionalProperties: true },
+                            },
+                        },
+                    },
+                },
+            },
+            adminController.runTrialEmails,
+        );
     });
 }
