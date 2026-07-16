@@ -72,7 +72,13 @@
     "stepEnable": "Turn on auto-reply",
     "stepFirstReply": "Try your first reply",
     "done": "Done",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "pathsTitle": "Start replying automatically",
+    "pathsSubtitle": "Two ways — pick what fits, or use both together",
+    "quickTitle": "Post Reply — ready in a minute",
+    "quickDesc": "Pick a post and write your reply — it works instantly, in your own words. No AI needed.",
+    "quickCta": "Choose a post",
+    "smartTitle": "Smart Replies — AI answers for you"
   },
   "recentMessages": "Recent Messages",
   "noMessagesYet": "No recent messages. Messages will appear here once your pages receive DMs.",

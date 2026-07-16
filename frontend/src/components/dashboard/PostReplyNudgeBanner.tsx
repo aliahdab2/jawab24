@@ -2,7 +2,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { PostReplyIcon } from '@/utils/postReply';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
-import { deriveSetupState } from '@/utils/setupChecklist';
+import { deriveSetupState, type AutoReplyMasters } from '@/utils/setupChecklist';
 import type { Page, UsageSummary } from '@jawab24/shared';
 
 /**
@@ -25,11 +25,14 @@ import type { Page, UsageSummary } from '@jawab24/shared';
 export function PostReplyNudgeBanner({
     pages,
     usage,
+    masters,
     isOwner,
     onTry,
 }: {
     pages: Page[];
     usage: UsageSummary | null;
+    /** Workspace auto-reply masters (D-026) — must match SetupChecklistCard's input. */
+    masters?: AutoReplyMasters | null;
     isOwner: boolean;
     /** Open the post picker (owned by usePostReplySetup on the host page). */
     onTry: () => void;
@@ -40,7 +43,7 @@ export function PostReplyNudgeBanner({
         durationMs: 365 * 24 * 60 * 60 * 1000,
     });
 
-    const setup = deriveSetupState(pages, usage);
+    const setup = deriveSetupState(pages, usage, masters);
     const alreadyUsingPostReply = pages.some((p) => p.hasPostReplyTrigger);
 
     // Only once core setup is done, only if not already using Post Reply, owner-only.

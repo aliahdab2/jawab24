@@ -584,9 +584,21 @@ const DashboardPage: NextPageWithLayout = () => {
         />
       )}
 
-      {/* Activation checklist — "Finish your setup". Hides itself once complete or dismissed.
-          Gated on pages having loaded so we don't flash a 0/4 state during fetch. */}
-      {!pagesLoading && <SetupChecklistCard pages={pages} usage={usage ?? null} />}
+      {/* Two-path onboarding panel — "Start replying automatically". Hides itself once
+          either path is live or when dismissed. Gated on pages AND settings having
+          loaded so the effective auto-reply state (D-026) is never derived from a
+          half-loaded snapshot. */}
+      {!pagesLoading && userSettings !== undefined && (
+        <SetupChecklistCard
+          pages={pages}
+          usage={usage ?? null}
+          masters={{
+            commentsAutoReply: userSettings?.commentsAutoReply ?? true,
+            messagesAutoReply: userSettings?.messagesAutoReply ?? true,
+          }}
+          onTryPostReply={postReplySetup.openPicker}
+        />
+      )}
 
       {/* Command Center — consolidated metrics */}
       <CommandCenter
@@ -969,7 +981,16 @@ const DashboardPage: NextPageWithLayout = () => {
           {/* Post Reply discovery — shows once setup is done and no post has a trigger yet.
               Opens the post picker (owned by postReplySetup) so a merchant can arm any
               recent post, including one with no comments. Self-hides via its own gates. */}
-          <PostReplyNudgeBanner pages={pages} usage={usage ?? null} isOwner={isOwner} onTry={postReplySetup.openPicker} />
+          <PostReplyNudgeBanner
+            pages={pages}
+            usage={usage ?? null}
+            masters={{
+              commentsAutoReply: userSettings?.commentsAutoReply ?? true,
+              messagesAutoReply: userSettings?.messagesAutoReply ?? true,
+            }}
+            isOwner={isOwner}
+            onTry={postReplySetup.openPicker}
+          />
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">

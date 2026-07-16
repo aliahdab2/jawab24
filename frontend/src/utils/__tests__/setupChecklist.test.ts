@@ -85,4 +85,56 @@ describe('deriveSetupState', () => {
     expect(s.allDone).toBe(true);
     expect(s.coreSetupDone).toBe(true);
   });
+
+  // D-026 regression: the workspace masters gate every reply — a page-level
+  // toggle alone must not read as "auto-reply on" (the checklist lie that let
+  // new signups finish setup with a pipeline that never replies).
+  describe('workspace masters (D-026)', () => {
+    it('page-level ON + masters OFF ⇒ autoReplyOn false, coreSetupDone false', () => {
+      const s = deriveSetupState(
+        [page({ knowledgeBase: LONG_KB, autoReplyEnabled: true })],
+        usage(0),
+        { commentsAutoReply: false, messagesAutoReply: false },
+      );
+      expect(s.autoReplyOn).toBe(false);
+      expect(s.coreSetupDone).toBe(false);
+    });
+
+    it('page-level ON + one master ON ⇒ autoReplyOn true (OR semantics)', () => {
+      const s = deriveSetupState(
+        [page({ knowledgeBase: LONG_KB, autoReplyEnabled: true })],
+        usage(0),
+        { commentsAutoReply: false, messagesAutoReply: true },
+      );
+      expect(s.autoReplyOn).toBe(true);
+      expect(s.coreSetupDone).toBe(true);
+    });
+
+    it('masters omitted ⇒ legacy page-level-only behavior', () => {
+      const s = deriveSetupState([page({ knowledgeBase: LONG_KB, autoReplyEnabled: true })], usage(0));
+      expect(s.autoReplyOn).toBe(true);
+    });
+
+    it('masters ON but page-level OFF ⇒ still false (both levels required)', () => {
+      const s = deriveSetupState(
+        [page({ knowledgeBase: LONG_KB, autoReplyEnabled: false })],
+        usage(0),
+        { commentsAutoReply: true, messagesAutoReply: true },
+      );
+      expect(s.autoReplyOn).toBe(false);
+    });
+  });
+
+  // D-027: a configured Post Reply trigger = the quick path is live.
+  describe('postReplyConfigured (D-027)', () => {
+    it('true when any connected page has a trigger', () => {
+      const s = deriveSetupState([page({ hasPostReplyTrigger: true })], usage(0));
+      expect(s.postReplyConfigured).toBe(true);
+    });
+
+    it('ignores triggers on disconnected pages', () => {
+      const s = deriveSetupState([page({ hasPostReplyTrigger: true, isConnected: false })], usage(0));
+      expect(s.postReplyConfigured).toBe(false);
+    });
+  });
 });

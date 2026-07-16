@@ -32,19 +32,55 @@ function makeUsage(usedReplies = 0): UsageSummary {
 describe('SetupChecklistCard', () => {
   beforeEach(() => localStorage.clear());
 
-  it('shows progress and renders incomplete steps as links, completed steps as done', () => {
-    // Only "connect" is done (1 page exists); the other three are incomplete.
-    render(<SetupChecklistCard pages={[makePage()]} usage={makeUsage(0)} />);
+  it('shows the two paths once a page is connected — quick Post Reply CTA + smart-path links', () => {
+    const onTry = vi.fn();
+    render(<SetupChecklistCard pages={[makePage()]} usage={makeUsage(0)} onTryPostReply={onTry} />);
 
-    expect(screen.getByText('Finish your setup (1/4)')).toBeInTheDocument();
-    // Completed step is NOT a link (just a done row)
-    expect(screen.queryByRole('link', { name: 'Connect your page' })).not.toBeInTheDocument();
-    // Incomplete steps are actionable links pointing at the right routes
-    // The Business Info link carries an extra "Most important" badge + hint, so its
-    // accessible name is a superset of the label — match by substring.
+    expect(screen.getByText('Start replying automatically')).toBeInTheDocument();
+    // Quick path: Post Reply, one button, opens the post picker
+    expect(screen.getByText('Post Reply — ready in a minute')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a post' }));
+    expect(onTry).toHaveBeenCalledTimes(1);
+    // Smart path: the two actionable steps with their deep links
+    expect(screen.getByText('Smart Replies — AI answers for you')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Add your Business Info/ })).toHaveAttribute('href', '/pages?openKb=true');
     expect(screen.getByRole('link', { name: 'Turn on auto-reply' })).toHaveAttribute('href', '/settings');
-    expect(screen.getByRole('link', { name: 'Try your first reply' })).toHaveAttribute('href', '/pages?openTestReply=true');
+    // The passive "first reply" step is no longer part of the panel
+    expect(screen.queryByRole('link', { name: 'Try your first reply' })).not.toBeInTheDocument();
+  });
+
+  // THE D-026 regression: page-level toggle ON but workspace masters OFF (the
+  // new-signup default) must NOT count as "auto-reply on" — the old checklist
+  // showed the step done and hid itself while the pipeline was gated off.
+  it('keeps the enable step pending when page-level is ON but the workspace masters are OFF', () => {
+    const pageLevelOn = makePage({ knowledgeBase: LONG_KB, autoReplyEnabled: true });
+    render(
+      <SetupChecklistCard
+        pages={[pageLevelOn]}
+        usage={makeUsage(0)}
+        masters={{ commentsAutoReply: false, messagesAutoReply: false }}
+      />,
+    );
+    // Panel stays visible, enable step is still an actionable link
+    expect(screen.getByRole('link', { name: 'Turn on auto-reply' })).toHaveAttribute('href', '/settings');
+  });
+
+  it('hides once a master is ON with page-level enabled and business info filled (smart path live)', () => {
+    const pageLevelOn = makePage({ knowledgeBase: LONG_KB, autoReplyEnabled: true });
+    const { container } = render(
+      <SetupChecklistCard
+        pages={[pageLevelOn]}
+        usage={makeUsage(0)}
+        masters={{ commentsAutoReply: true, messagesAutoReply: false }}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('hides once a Post Reply trigger is configured (quick path live, D-027)', () => {
+    const withTrigger = makePage({ hasPostReplyTrigger: true });
+    const { container } = render(<SetupChecklistCard pages={[withTrigger]} usage={makeUsage(0)} />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('hides itself entirely once all four steps are complete', () => {
@@ -86,19 +122,19 @@ describe('SetupChecklistCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('with zero pages shows 0/4 and links the connect step to /pages', () => {
+  it('with zero pages collapses to the single connect step linking /pages', () => {
     render(<SetupChecklistCard pages={[]} usage={null} />);
-    expect(screen.getByText('Finish your setup (0/4)')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Connect your page' })).toHaveAttribute('href', '/pages');
+    // No path cards before a page exists
+    expect(screen.queryByText('Post Reply — ready in a minute')).not.toBeInTheDocument();
   });
 
   it('does NOT count a disconnected page as connected', () => {
     // A merchant who connected then lost FB access (isConnected:false) has no
-    // effective setup — every step, including "connect", must read incomplete.
+    // effective setup — the panel must collapse back to the connect step.
     render(<SetupChecklistCard pages={[makePage({ isConnected: false, knowledgeBase: LONG_KB, autoReplyEnabled: true, repliesCount: 5 })]} usage={makeUsage(0)} />);
-    expect(screen.getByText('Finish your setup (0/4)')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Connect your page' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Add your Business Info/ })).toBeInTheDocument();
+    expect(screen.queryByText('Post Reply — ready in a minute')).not.toBeInTheDocument();
   });
 
   it('marks the KB step done when ANY connected page has filled business info', () => {
@@ -106,7 +142,6 @@ describe('SetupChecklistCard', () => {
     const filled = makePage({ id: 'p1', knowledgeBase: LONG_KB });
     const empty = makePage({ id: 'p2', knowledgeBase: null });
     render(<SetupChecklistCard pages={[filled, empty]} usage={makeUsage(0)} />);
-    expect(screen.getByText('Finish your setup (2/4)')).toBeInTheDocument(); // connect + kb
     expect(screen.queryByRole('link', { name: /Add your Business Info/ })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Turn on auto-reply' })).toBeInTheDocument();
   });
