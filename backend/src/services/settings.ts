@@ -128,7 +128,11 @@ export class SettingsService {
                 const value = workspaceRecord[field];
                 if (value !== undefined) overlaid[field] = value;
             }
-            return overlaid as unknown as UserSettings;
+            // The workspace store can hold *Multi values copied verbatim from the
+            // legacy row (drift-heal/backfill), including the double-encoded-string
+            // shape — normalize AFTER overlaying so a string never reaches clients
+            // (whose {...multi} spread would corrupt it into a char-indexed object).
+            return normalizeMultiFields(overlaid as unknown as UserSettings);
         } catch (error) {
             captureError(error, 'overlayWorkspacePipelineFields failed', {
                 tags: { context: 'settings', action: 'workspace-overlay' },
@@ -147,8 +151,32 @@ export class SettingsService {
      * regardless of whether this call comes from the HTTP controller or directly.
      */
     async updateSettings(userId: string, updates: UpdateSettingsDTO): Promise<UserSettings> {
-        // Ensure settings exist
-        await this.getSettings(userId);
+        // Ensure settings exist; the effective (overlaid) state also feeds the
+        // aiEnabled clamp below.
+        const current = await this.getSettings(userId);
+
+        // D-029: aiEnabled is DERIVED (channels-OR) and the new UI has no
+        // standalone master switch — but old clients (shipped mobile builds)
+        // still send aiEnabled independently, and diff-based payloads can carry
+        // it alone. Clamp on write so the zombie state (engine off + channels
+        // on → canned comments, silent DMs, no UI indication) is unrepresentable
+        // regardless of the writer:
+        //  - {aiEnabled:false} with no channel fields = an old client's master-off;
+        //    cascade to both channels to preserve its kill-switch intent;
+        //  - anything else: recompute aiEnabled from the effective channel values.
+        if (updates.aiEnabled !== undefined
+            || updates.commentsAutoReply !== undefined
+            || updates.messagesAutoReply !== undefined) {
+            if (updates.aiEnabled === false
+                && updates.commentsAutoReply === undefined
+                && updates.messagesAutoReply === undefined) {
+                updates = { ...updates, commentsAutoReply: false, messagesAutoReply: false };
+            } else {
+                const comments = updates.commentsAutoReply ?? current.commentsAutoReply;
+                const messages = updates.messagesAutoReply ?? current.messagesAutoReply;
+                updates = { ...updates, aiEnabled: comments || messages };
+            }
+        }
 
         // Convert ISO string timestamps to Date objects for Drizzle
         const dbUpdates: Record<string, unknown> = { ...updates, updatedAt: new Date() };
@@ -184,13 +212,34 @@ export class SettingsService {
      * Each user currently belongs to exactly one workspace (owner role).
      * limit(1) is intentional — multi-workspace would require a separate migration.
      */
+    /**
+     * In-process memo for the userId→workspaceId mapping. The mapping is
+     * effectively immutable (one workspace per user, created at signup), and
+     * since the overlay runs on EVERY settings read — including Redis cache
+     * hits — an uncached SELECT here would put a Postgres roundtrip on all hot
+     * auth/profile paths. Only non-null results are cached so a user whose
+     * workspace appears later isn't pinned to null; entries are one small
+     * string per active user, so unbounded growth is not a concern.
+     */
+    private workspaceIdCache = new Map<string, string>();
+
+    /** Reset the userId→workspaceId memo — the service is a singleton, so unit
+     *  tests that re-mock the membership query must clear it between cases. */
+    clearWorkspaceIdCache(): void {
+        this.workspaceIdCache.clear();
+    }
+
     private async resolveWorkspaceId(userId: string): Promise<string | null> {
+        const cached = this.workspaceIdCache.get(userId);
+        if (cached) return cached;
         const memberships = await db
             .select({ workspaceId: workspaceMembers.workspaceId })
             .from(workspaceMembers)
             .where(eq(workspaceMembers.userId, userId))
             .limit(1);
-        return memberships[0]?.workspaceId ?? null;
+        const workspaceId = memberships[0]?.workspaceId ?? null;
+        if (workspaceId) this.workspaceIdCache.set(userId, workspaceId);
+        return workspaceId;
     }
 
     /**

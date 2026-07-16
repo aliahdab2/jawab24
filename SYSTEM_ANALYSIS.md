@@ -944,6 +944,13 @@ User saves settings on frontend
 └──────────────────────────────────┘
 ```
 
+**Settings UI (D-029):** the Auto-Reply section renders as ONE flat board
+(`AutoReplyBoardCard`): comments/messages Smart-Replies toggles + an always-on
+رد البوست row + the display-mode radiogroup at card level. There is no standalone
+"Enable Smart Replies" switch — `aiEnabled` is derived (`commentsAutoReply ||
+messagesAutoReply`) by the toggles; the DB column remains and the pipeline still
+honors it.
+
 **Read path (D-026):** legacy `GET/PUT /settings` responses serve the pipeline fields
 (`PIPELINE_FIELDS` minus `aiModel`) read-through from the **workspace** JSONB store — the
 store the reply pipeline actually obeys — failing open to the legacy row on any error.

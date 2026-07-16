@@ -5,8 +5,9 @@ import { KeyRound } from 'lucide-react';
  * Reply (Sparkles + violet). Post Reply = KeyRound icon + sky — a different hue
  * from Smart Reply's violet so the two auto-reply types stay tellable apart. Used on
  * the per-post button, the intro banner, the setup modal, the detail-modal keywords,
- * and the reply-source badge. Change the icon/colour here once instead of editing
- * every component (this lived in 5 files and was swapped three times before).
+ * the reply-source badge, and the Settings auto-reply board row. Change the
+ * icon/colour here once instead of editing every component (this lived in 5 files
+ * and was swapped three times before).
  *
  * NOTE: kept under src/utils (not src/lib) because Tailwind's content globs scan
  * src/utils for class-string constants — see tailwind.config.js.

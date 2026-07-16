@@ -34,7 +34,7 @@ import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionIte
 import { captureError } from '@/lib/sentryHelpers';
 import { isWhatsAppVisible } from '@/lib/featureFlags';
 import { getPageExternalUrl } from '@/utils/pageUrl';
-import { isKbFilled } from '@/utils/kb';
+import { isKbFilled, KB_DEEP_LINK } from '@/utils/kb';
 import { hasMultipleActiveChannels } from '@/utils/channels';
 import { formatRelativeTime } from '@/utils/dateUtils';
 import type { NextPageWithLayout } from './_app';
@@ -259,13 +259,20 @@ const DashboardPage: NextPageWithLayout = () => {
     key: SETUP_CHECKLIST_DISMISS_KEY,
     durationMs: SETUP_CHECKLIST_DISMISS_MS,
   });
+  // Single source for the workspace masters passed to every setup-derived
+  // surface (setupState, checklist card, Post Reply nudge). The `?? true`
+  // legacy-default is a semantic decision — keep it in ONE place so the three
+  // consumers can never disagree about the effective state.
+  const masters = useMemo(
+    () => ({
+      commentsAutoReply: userSettings?.commentsAutoReply ?? true,
+      messagesAutoReply: userSettings?.messagesAutoReply ?? true,
+    }),
+    [userSettings],
+  );
   const setupState = useMemo(
-    () =>
-      deriveSetupState(pages, usage ?? null, {
-        commentsAutoReply: userSettings?.commentsAutoReply ?? true,
-        messagesAutoReply: userSettings?.messagesAutoReply ?? true,
-      }),
-    [pages, usage, userSettings],
+    () => deriveSetupState(pages, usage ?? null, masters),
+    [pages, usage, masters],
   );
   const setupPanelVisible =
     !pagesLoading &&
@@ -621,10 +628,7 @@ const DashboardPage: NextPageWithLayout = () => {
         <SetupChecklistCard
           pages={pages}
           usage={usage ?? null}
-          masters={{
-            commentsAutoReply: userSettings?.commentsAutoReply ?? true,
-            messagesAutoReply: userSettings?.messagesAutoReply ?? true,
-          }}
+          masters={masters}
           onTryPostReply={postReplySetup.openPicker}
           dismissed={setupDismiss.dismissed}
           onDismiss={setupDismiss.dismiss}
@@ -983,7 +987,7 @@ const DashboardPage: NextPageWithLayout = () => {
                     {isEcomVariant ? t('kbNudgeEcomBody') : t('kbNudgeBody')}
                   </p>
                   <div className="flex items-center gap-3 mt-2">
-                    <Link href="/pages?openKb=true">
+                    <Link href={KB_DEEP_LINK}>
                       <Button size="sm" variant="primary" className="text-xs">
                         {t('kbNudgeCta')}
                       </Button>
@@ -1011,17 +1015,19 @@ const DashboardPage: NextPageWithLayout = () => {
 
           {/* Post Reply discovery — shows once setup is done and no post has a trigger yet.
               Opens the post picker (owned by postReplySetup) so a merchant can arm any
-              recent post, including one with no comments. Self-hides via its own gates. */}
-          <PostReplyNudgeBanner
-            pages={pages}
-            usage={usage ?? null}
-            masters={{
-              commentsAutoReply: userSettings?.commentsAutoReply ?? true,
-              messagesAutoReply: userSettings?.messagesAutoReply ?? true,
-            }}
-            isOwner={isOwner}
-            onTry={postReplySetup.openPicker}
-          />
+              recent post, including one with no comments. Self-hides via its own gates.
+              Gated on the settings query having resolved (same as the checklist card):
+              with masters defaulted `?? true` mid-flight, a masters-OFF merchant would
+              otherwise get a transient "setup complete" flash. */}
+          {userSettings !== undefined && (
+            <PostReplyNudgeBanner
+              pages={pages}
+              usage={usage ?? null}
+              masters={masters}
+              isOwner={isOwner}
+              onTry={postReplySetup.openPicker}
+            />
+          )}
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">

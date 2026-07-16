@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
+import { cloneElement, isValidElement, type ReactNode } from 'react';
 
 // Setup environment variables for tests
 process.env.NEXT_PUBLIC_FB_APP_ID = 'test-fb-app-id-123456';
@@ -107,6 +108,26 @@ vi.mock('next-intl', () => ({
     t.has = () => true;
     t.raw = (key: string) =>
       ns ? resolveNestedKey(EN_MESSAGES[ns] ?? {}, key) ?? `${ns}.${key}` : key;
+    // Minimal t.rich: resolves the raw string and replaces <tag>chunk</tag> segments
+    // with the render function passed for that tag (e.g. { kb: (chunks) => <Link/> }).
+    t.rich = (key: string, params?: Record<string, unknown>): ReactNode => {
+      const raw = ns
+        ? resolveNestedKey(EN_MESSAGES[ns] ?? {}, key) ?? `${ns}.${key}`
+        : key;
+      const nodes: ReactNode[] = [];
+      const tagRegex = /<(\w+)>([^<]*)<\/\1>/g;
+      let last = 0;
+      let m: RegExpExecArray | null;
+      while ((m = tagRegex.exec(raw))) {
+        if (m.index > last) nodes.push(raw.slice(last, m.index));
+        const renderFn = params?.[m[1]];
+        const rendered: ReactNode = typeof renderFn === 'function' ? renderFn(m[2]) : m[2];
+        nodes.push(isValidElement(rendered) ? cloneElement(rendered, { key: nodes.length }) : rendered);
+        last = m.index + m[0].length;
+      }
+      if (last < raw.length) nodes.push(raw.slice(last));
+      return nodes;
+    };
     return t;
   },
   useLocale: () => 'en',

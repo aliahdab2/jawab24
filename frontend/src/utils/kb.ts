@@ -11,6 +11,14 @@ import { KB_FILLED_MIN_CHARS, isBusinessInfoProvided } from '@jawab24/shared';
 export { KB_FILLED_MIN_CHARS };
 
 /**
+ * Deep-link that opens the Business Info editor on /pages (handled there via
+ * useOpenOnQueryParam). Single constant so the settings board, dashboard nudge,
+ * and setup checklist can't drift if the route/param ever changes. (`openKb` is
+ * the legacy-internal name — the user-facing feature is "Business Info".)
+ */
+export const KB_DEEP_LINK = '/pages?openKb=true';
+
+/**
  * True once a page carries real, merchant-provided business info: enough text
  * (>= KB_FILLED_MIN_CHARS, trimmed) AND content that differs from the Facebook
  * auto-sync snapshot. Delegates to the shared `isBusinessInfoProvided` so the
