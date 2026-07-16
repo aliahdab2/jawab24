@@ -1,7 +1,6 @@
 export { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
 export { DurationPresetPicker } from './DurationPresetPicker';
 export type { DurationOption } from './DurationPresetPicker';
-export { SimpleToggle } from './SimpleToggle';
 export { TitleWithInfo } from './TitleWithInfo';
 export { OrderNotificationsCard } from './OrderNotificationsCard';
 export { LanguageSelector } from './LanguageSelector';

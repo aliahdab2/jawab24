@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, type ReactElement } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
