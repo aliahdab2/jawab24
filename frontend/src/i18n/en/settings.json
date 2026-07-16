@@ -84,7 +84,7 @@
     "publicOnly": "Comment reply only",
     "privateOnly": "Private message only",
     "dualDesc": "A short comment is posted publicly, and the full detailed answer is sent to the customer in a private message.",
-    "publicDesc": "The answer is posted publicly on the comment, kept short to suit comments. No private message is sent.",
+    "publicDesc": "The full detailed answer is posted publicly on the comment. No private message is sent.",
     "privateDesc": "The customer gets the full detailed answer in a private message. Nothing is posted on the comment."
   },
   "replyModeDescription": "Reply on the comment or via private message",
@@ -199,11 +199,12 @@
     "subtitle": "Who replies, and where",
     "comments": "Comments",
     "messages": "Private messages",
-    "smartRepliesSub": "Smart Replies — from your Business Info",
+    "smartRepliesSub": "Smart Replies — from your <kb>Business Info</kb>",
     "postReply": "Post Reply",
     "postReplySub": "You write the reply, on posts you choose",
     "alwaysOn": "Always on",
     "manage": "Manage",
-    "modeQuestion": "Where does the comment reply appear?"
+    "modeQuestion": "Where does the comment reply appear?",
+    "modeScopeNote": "Applies to Smart Replies and Post Reply"
   }
 }

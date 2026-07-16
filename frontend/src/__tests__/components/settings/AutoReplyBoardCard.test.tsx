@@ -57,13 +57,23 @@ describe('AutoReplyBoardCard — the three-row board', () => {
     render(<AutoReplyBoardCard settings={makeSettings({ dashboardLanguage: 'en' })} setSettings={() => {}} />);
 
     // AI rows: toggles (consent required)
-    expect(screen.getByRole('button', { name: /Comments — Smart Replies/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Private messages — Smart Replies/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Comments' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Private messages' })).toBeInTheDocument();
     // Post Reply row: badge + manage link, NO toggle (own words need no switch, D-027)
     expect(screen.getByText('Always on')).toBeInTheDocument();
     // Deep link opens the post picker directly on the comments page
     expect(screen.getByRole('link', { name: /Manage/ })).toHaveAttribute('href', '/comments?openPostReply=true');
     expect(screen.queryByRole('button', { name: /Post Reply/ })).toBeNull();
+  });
+
+  // "from your Business Info" is a doorway to authoring it (KB deep-link), not just copy.
+  it('links "Business Info" in both Smart-Replies subtitles to the KB editor', () => {
+    render(<AutoReplyBoardCard settings={makeSettings({ dashboardLanguage: 'en' })} setSettings={() => {}} />);
+    const kbLinks = screen.getAllByRole('link', { name: 'Business Info' });
+    expect(kbLinks).toHaveLength(2);
+    for (const link of kbLinks) {
+      expect(link).toHaveAttribute('href', '/pages?openKb=true');
+    }
   });
 
   // D-029: aiEnabled is derived — ON exactly when either channel row is on. Kills
@@ -78,13 +88,13 @@ describe('AutoReplyBoardCard — the three-row board', () => {
     );
 
     // Turning the last ON channel OFF → aiEnabled false
-    fireEvent.click(screen.getByRole('button', { name: /Comments — Smart Replies/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Comments' }));
     expect(setSettings).toHaveBeenLastCalledWith(
       expect.objectContaining({ commentsAutoReply: false, aiEnabled: false }),
     );
 
     // Turning a channel ON → aiEnabled true
-    fireEvent.click(screen.getByRole('button', { name: /Private messages — Smart Replies/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Private messages' }));
     expect(setSettings).toHaveBeenLastCalledWith(
       expect.objectContaining({ messagesAutoReply: true, aiEnabled: true }),
     );
@@ -100,9 +110,9 @@ describe('AutoReplyBoardCard — the three-row board', () => {
       />,
     );
     // Rows render from the channel flags (both ON)
-    expect(screen.getByRole('button', { name: /Comments — Smart Replies/ })).toHaveTextContent('ON');
+    expect(screen.getByRole('button', { name: 'Comments' })).toHaveTextContent('ON');
     // Any toggle interaction writes a coherent aiEnabled
-    fireEvent.click(screen.getByRole('button', { name: /Private messages — Smart Replies/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Private messages' }));
     expect(setSettings).toHaveBeenLastCalledWith(
       expect.objectContaining({ messagesAutoReply: false, commentsAutoReply: true, aiEnabled: true }),
     );
@@ -117,6 +127,12 @@ describe('AutoReplyBoardCard — the three-row board', () => {
     expect(group).toBeInTheDocument();
     const radios = screen.getAllByRole('radio');
     expect(radios).toHaveLength(3);
+
+    // Scope caption: the mode styles Smart Replies AND Post Reply comment replies —
+    // stated right under the question and wired as the group's description.
+    const scope = screen.getByText('Applies to Smart Replies and Post Reply');
+    expect(scope).toHaveAttribute('id', 'comment-reply-mode-scope');
+    expect(group).toHaveAttribute('aria-describedby', 'comment-reply-mode-scope');
 
     const publicRadio = radios.find((r) => (r as HTMLInputElement).value === 'public') as HTMLInputElement;
     fireEvent.click(publicRadio);

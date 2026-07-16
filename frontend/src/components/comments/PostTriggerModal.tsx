@@ -4,7 +4,7 @@ import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
-import { MessageCircle, Mail, ArrowUpRight } from 'lucide-react';
+import { MessageSquare, MessageCircle, ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
 import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
@@ -18,16 +18,17 @@ type TriggerMode = 'keyword' | 'all';
 const REPLY_MAX = 1000;
 
 /** Single source for how each delivery channel renders in the outcome rows:
- *  icon (Mail = private DM, MessageCircle = public comment), label key, and pill
- *  colour (private = brand, public = sky). */
+ *  icon matching the app-wide channel glyphs (MessageCircle = DM, exactly as the
+ *  nav's الرسائل الخاصة; MessageSquare = public comment, as the nav's التعليقات),
+ *  label key, and pill colour (private = brand, public = sky). */
 const CHANNEL_META = {
   private: {
-    Icon: Mail,
+    Icon: MessageCircle,
     labelKey: 'postTriggerChannelPrivate',
     pill: 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-700',
   },
   public: {
-    Icon: MessageCircle,
+    Icon: MessageSquare,
     labelKey: 'postTriggerChannelPublic',
     pill: 'text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800',
   },

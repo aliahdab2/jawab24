@@ -81,7 +81,7 @@ const INITIAL_SETTINGS: SettingsState = {
  */
 const SECTION_FIELD_KEYS: Record<'general' | 'autoReply' | 'aiPersonality', (keyof SettingsState)[]> = {
   general: ['dashboardLanguage', 'defaultReplyLanguage', 'autoDetectLanguage'],
-  autoReply: ['aiEnabled', 'commentsAutoReply', 'messagesAutoReply', 'commentReplyMode'],
+  autoReply: ['aiEnabled', 'commentsAutoReply', 'messagesAutoReply', 'commentReplyMode', 'dualReplyNudgeMulti'],
   aiPersonality: ['replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti'],
 };
 

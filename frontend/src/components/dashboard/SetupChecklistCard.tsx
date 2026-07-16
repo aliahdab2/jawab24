@@ -6,6 +6,7 @@ import type { Page, UsageSummary } from '@jawab24/shared';
 import { Card, Button } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { deriveSetupState, type AutoReplyMasters } from '@/utils/setupChecklist';
+import { KB_DEEP_LINK } from '@/utils/kb';
 import { isRTLLocale } from '@/utils/locale';
 
 interface SetupChecklistCardProps {
@@ -175,7 +176,7 @@ export function SetupChecklistCard({
               ) : (
                 <li>
                   <Link
-                    href="/pages?openKb=true"
+                    href={KB_DEEP_LINK}
                     className="group flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-muted/60 transition-colors"
                   >
                     <Circle className="w-5 h-5 flex-shrink-0 text-icon-muted" aria-hidden="true" />
