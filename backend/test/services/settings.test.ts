@@ -100,8 +100,12 @@ const baseSettings = {
 };
 
 describe('Settings Service', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
+        // The singleton memoizes userId→workspaceId; clear it so each case's
+        // membership mock is authoritative.
+        const { settingsService } = await import('../../src/services/settings');
+        settingsService.clearWorkspaceIdCache();
     });
 
     describe('getSettings', () => {
