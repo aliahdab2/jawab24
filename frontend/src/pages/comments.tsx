@@ -110,7 +110,7 @@ const CommentsPage: NextPageWithLayout = () => {
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Fetch pages
-  const { data: pagesData = [] } = useQuery({
+  const { data: pagesData = [], isFetched: pagesFetched } = useQuery({
     queryKey: ['pages'],
     queryFn: async () => {
       const { data } = await pagesApi.getAll();
@@ -128,7 +128,11 @@ const CommentsPage: NextPageWithLayout = () => {
   const openPostReplyPicker = useCallback(() => {
     postReplySetup.openPicker();
   }, [postReplySetup]);
-  useOpenOnQueryParam('openPostReply', pages.length > 0, openPostReplyPicker);
+  // Ready = the pages query SETTLED, not "pages exist": a zero-page merchant
+  // arriving from the Settings Manage link must still get the picker (its
+  // no-active-pages empty state), not a silent dead-end whose un-stripped param
+  // pops the picker minutes later when a background refetch finds pages.
+  useOpenOnQueryParam('openPostReply', pagesFetched, openPostReplyPicker);
   const { pageId, activePages, updatePageId, syncFromUrl } = usePageFilter(pages);
 
   // Get API params based on current filter + page

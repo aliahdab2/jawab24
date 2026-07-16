@@ -17,7 +17,11 @@ export function useOpenOnQueryParam(param: string, ready: boolean, onTrigger: ()
     if (router.query[param] !== 'true') return;
     handledRef.current = true;
     onTrigger();
-    // Clean up the URL without triggering a re-render.
-    router.replace(router.pathname, undefined, { shallow: true });
+    // Clean up the URL without triggering a re-render. Strip ONLY the consumed
+    // param — /comments round-trips ?filter and the open ?comment through the
+    // URL, and a blanket replace(pathname) would silently clobber them.
+    const remaining = { ...router.query };
+    delete remaining[param];
+    router.replace({ pathname: router.pathname, query: remaining }, undefined, { shallow: true });
   }, [router, param, ready, onTrigger]);
 }
