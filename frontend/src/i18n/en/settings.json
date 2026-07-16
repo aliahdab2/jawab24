@@ -89,7 +89,7 @@
     "dualDesc": "A short comment is posted publicly, and the full detailed answer is sent to the customer in a private message.",
     "publicDesc": "The answer is posted publicly on the comment, kept short to suit comments. No private message is sent.",
     "privateDesc": "The customer gets the full detailed answer in a private message. Nothing is posted on the comment.",
-    "postReplyNote": "Post Replies you set on specific posts are delivered the same way — they don't depend on this switch, only on the page's own toggle."
+    "postReplyNote": "Post Replies you set on specific posts follow this mode too (public / private / both). The Reply-to-Comments switch above doesn't affect them — only the page's own toggle does."
   },
   "replyModeDescription": "Reply on the comment or via private message",
   "publicReply": "Comment reply",
