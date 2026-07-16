@@ -97,11 +97,11 @@ test.describe('Settings Page', () => {
     ).toBeVisible({ timeout: 15000 });
   });
 
-  test('should show Comments Auto-Reply section', async ({ page }) => {
+  test('should show the Comments row on the Auto-Reply board', async ({ page }) => {
     await page.goto('/en/settings');
 
     await expect(
-      page.getByText(t('settings.commentsAutoReply')).first()
+      page.getByText(t('settings.autoReplyBoard.comments'), { exact: true }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Toggle should be visible with role="switch"
@@ -109,12 +109,17 @@ test.describe('Settings Page', () => {
     await expect(toggles.first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('should show Messages Auto-Reply section', async ({ page }) => {
+  test('should show the Messages row and always-on Post Reply row', async ({ page }) => {
     await page.goto('/en/settings');
 
     await expect(
-      page.getByText(t('settings.messagesAutoReply')).first()
+      page.getByText(t('settings.autoReplyBoard.messages'), { exact: true }).first()
     ).toBeVisible({ timeout: 15000 });
+
+    // Post Reply row: always-on badge + Manage link, no toggle (D-027/D-029)
+    await expect(
+      page.getByText(t('settings.autoReplyBoard.alwaysOn')).first()
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('should show Advanced Settings when clicked', async ({ page }) => {
