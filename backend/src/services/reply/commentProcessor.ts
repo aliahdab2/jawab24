@@ -188,13 +188,16 @@ export class CommentProcessor {
                 triggerReply: content.triggerReply ?? null,
                 triggerType: content.triggerType ?? 'keyword',
             });
-            const withinBusinessHours = !userSettings.businessHoursOnly
-                || isWithinBusinessHours(
-                    userSettings.businessHoursStart,
-                    userSettings.businessHoursEnd,
-                    userSettings.timezone,
-                );
-            const postReplyEligible = !!postReplyRule && withinBusinessHours;
+            // Rule check first: most comments land on posts with no trigger, so the
+            // business-hours evaluation (an Intl.DateTimeFormat construction) only
+            // runs when a trigger actually exists.
+            const postReplyEligible = !!postReplyRule
+                && (!userSettings.businessHoursOnly
+                    || isWithinBusinessHours(
+                        userSettings.businessHoursStart,
+                        userSettings.businessHoursEnd,
+                        userSettings.timezone,
+                    ));
 
             // 3a. Friend-tag silent-skip — must run before the trigger-keyword branch.
             // The AI path already skips user-tagged comments via preprocessCommentText,
@@ -330,151 +333,148 @@ export class CommentProcessor {
             // and fires on its own (still behind the page/post toggles, subscription
             // gate, business hours, and the any-comment guards below).
             if (postReplyEligible && postReplyRule) {
-                const rule = postReplyRule;
-
-                if (rule) {
-                    const match = matchPostReplyRule(rule, commentMessage);
-                    if (match.matched) {
-                        const { comment, isNew: triggerIsNew } = await adapter.storeComment(
-                            content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags,
-                        );
-                        invalidateWorkspaceStatsCache(workspaceId);
-                        // Mirror the AI path: announce the new comment so the frontend adds it
-                        // to its list cache. Without this, the subsequent `comment:reply_sent`
-                        // patches a cache entry that doesn't exist yet, and a later send
-                        // failure leaves a ghost comment stuck as "Waiting to reply".
-                        publishSSEEvent(userId, 'comment:received', {
-                            commentId: comment.id,
-                            pageId: page.id,
-                            fromName: fromName ?? null,
-                            message: commentMessage,
-                        });
-
-                        // Idempotency guard: a duplicate webhook would otherwise race itself.
-                        // MUST run before the any-comment guard below — a redelivery of an
-                        // already-flagged comment would otherwise re-run the guard and fire a
-                        // duplicate flag + merchant notification on every redelivery.
-                        if (!triggerIsNew && (comment.replied || comment.needsAttention)) {
-                            pipelineMetrics.record(pipeline, 'already_replied');
-                            return { success: false, commentId: comment.id, error: 'Comment already replied' };
-                        }
-                        // Per-comment lock — prevents duplicate webhook races from issuing two
-                        // Graph API replies (FB rejects the second, leaving the comment stuck
-                        // Pending even though the real reply landed). The any-comment guard's
-                        // flag/skip actions run inside the lock too, mirroring the AI path
-                        // (step 4b), so concurrent deliveries can't double-flag either.
-                        const triggerLockToken = await acquireReplyLock(`comment:${page.id}`, platformCommentId);
-                        if (!triggerLockToken) {
-                            pipelineMetrics.record(pipeline, 'lock_contention');
-                            this.logger.info(`[${platform}] Post Reply comment lock held — another worker handling`, { platformCommentId });
-                            return { success: false, commentId: comment.id, error: 'Lock held by another worker' };
-                        }
-                        try {
-                            // Any-comment mode fires on EVERY comment, so — unlike opt-in keyword
-                            // mode — it must run the AI path's skip rules plus a no-AI complaint
-                            // guard before sending, or it would template-reply to friend-tags,
-                            // spam links, and complaints. Keyword mode keeps its original behavior.
-                            if (rule.triggerType === 'all') {
-                                const pre = preprocessCommentText({
-                                    text: commentMessage,
-                                    messageTags,
-                                    ourFacebookPageId: platform === 'facebook' ? platformPageId : undefined,
-                                    hasPostContext: !!content.message,
-                                });
-                                const verdict = evaluateAnyCommentGuard({
-                                    skipReason: pre.skipReason,
-                                    // Same probe as rewriteContentFreeCta: the cleaned text, or the
-                                    // raw comment when cleaning stripped it to empty.
-                                    isContentFree: isContentFree((pre.commentForAI || commentMessage).trim()),
-                                    fallbackIntent: classifyFallbackIntent(commentMessage),
-                                    businessActionFlags: detectBusinessActionFlags(commentMessage),
-                                });
-                                if (verdict.action === 'skip') {
-                                    await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'spam', verdict.reason);
-                                    pipelineMetrics.record(pipeline, 'skipped_spam');
-                                    this.logger.info(`[${platform}] Any-comment Post Reply skipped`, {
-                                        commentId: comment.id, platformCommentId, reason: verdict.reason,
-                                    });
-                                    return { success: true, commentId: comment.id };
-                                }
-                                if (verdict.action === 'flag') {
-                                    await adapter.flagComment(comment.id, verdict.flagReason, undefined);
-                                    notificationService.sendTemplateNotificationToWorkspace(
-                                        workspaceId,
-                                        'flagged_reply',
-                                        { senderName: fromName || 'Unknown', reason: buildNotificationReason(verdict.flagReason, commentMessage) },
-                                        {
-                                            commentId: comment.id,
-                                            type: 'comment',
-                                            deepLink: '/comments?filter=flagged',
-                                            ...(isUrgentNotification(verdict.flagReason) ? { urgent: true } : {}),
-                                        },
-                                    ).catch(err => this.logger.error('Any-comment flag notification failed', { err }));
-                                    pipelineMetrics.record(pipeline, 'skipped_risky');
-                                    this.logger.info(`[${platform}] Any-comment Post Reply flagged for attention`, {
-                                        commentId: comment.id, platformCommentId, flagReason: verdict.flagReason,
-                                    });
-                                    return { success: true, commentId: comment.id };
-                                }
-                                // Handoff pause — the merchant is manually talking to this customer
-                                // (mirrors the AI path's isPaused gate). A canned template must not
-                                // interject into a live human conversation; any-comment fires on
-                                // every comment (sub-comments included) so this is reachable in a
-                                // way keyword mode never was. Leave the comment pending — no send,
-                                // no resolve — the merchant is already engaged with the thread.
-                                if (fromId && await messagesService.isPaused(page.id, fromId, userSettings.handoffPauseDurationMinutes)) {
-                                    pipelineMetrics.record(pipeline, 'handoff_active');
-                                    this.logger.info(`[${platform}] Any-comment Post Reply suppressed — handoff pause active for sender`, {
-                                        commentId: comment.id, platformCommentId, fromId,
-                                    });
-                                    return { success: true, commentId: comment.id };
-                                }
-                                // Per-post cap — an any-comment rule on a viral post would otherwise
-                                // fire on hundreds of comments (public-reply spam / Meta flagging).
-                                // Keyword mode is naturally bounded, so this only guards 'all'.
-                                if (await postReplyCap.isOverCap(page.id, content.id)) {
-                                    await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'spam', 'post_reply_cap_reached');
-                                    pipelineMetrics.record(pipeline, 'post_reply_capped');
-                                    this.logger.info(`[${platform}] Any-comment Post Reply capped for this post`, {
-                                        commentId: comment.id, platformCommentId, pageId: page.id, postId: content.id,
-                                    });
-                                    return { success: true, commentId: comment.id };
-                                }
-                                // action 'send' → fall through to the shared send below.
-                            }
-
-                            const result = await this.sendAndFinalize({
-                                adapter, platform, pipeline,
-                                pageId: page.id, userId, workspaceId,
-                                comment, replyText: rule.triggerReply, replyMethod: 'post_reply',
-                                commentMessage, platformCommentId, platformPageId,
-                                accessToken: page.accessToken, fromId, fromName,
-                                userSettings: userSettings as unknown as Record<string, unknown>,
-                                postMessage: content.message || undefined,
-                                contentId: content.id,
-                                triggerKeyword: match.keyword ?? undefined,
-                                triggerType: rule.triggerType,
-                            });
-                            // Keep the debounce slot only if the reply actually went out
-                            // (skip/flag/pause/cap/failed-send exits leave replyCommitted
-                            // false → the shared release below frees the slot).
-                            replyCommitted = result.success;
-                            // Count a successful any-comment send toward the per-post cap.
-                            if (rule.triggerType === 'all' && result.success) {
-                                await postReplyCap.increment(page.id, content.id);
-                            }
-                            return result;
-                        } finally {
-                            await releaseReplyLock(`comment:${page.id}`, platformCommentId, triggerLockToken).catch(() => { /* TTL will auto-expire */ });
-                        }
-                    }
-                    // Keyword rule set but comment didn't match — fall through to AI so a real
-                    // question on the post still gets answered. (Any-comment always matches, so
-                    // this branch is keyword-only.)
-                    this.logger.info(`[${platform}] Post Reply rule set but comment did not match — falling through to AI`, {
-                        platformCommentId, triggerType: rule.triggerType,
+                const rule = postReplyRule;  // narrowed alias: the guard above proves non-null
+                const match = matchPostReplyRule(rule, commentMessage);
+                if (match.matched) {
+                    const { comment, isNew: triggerIsNew } = await adapter.storeComment(
+                        content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags,
+                    );
+                    invalidateWorkspaceStatsCache(workspaceId);
+                    // Mirror the AI path: announce the new comment so the frontend adds it
+                    // to its list cache. Without this, the subsequent `comment:reply_sent`
+                    // patches a cache entry that doesn't exist yet, and a later send
+                    // failure leaves a ghost comment stuck as "Waiting to reply".
+                    publishSSEEvent(userId, 'comment:received', {
+                        commentId: comment.id,
+                        pageId: page.id,
+                        fromName: fromName ?? null,
+                        message: commentMessage,
                     });
+
+                    // Idempotency guard: a duplicate webhook would otherwise race itself.
+                    // MUST run before the any-comment guard below — a redelivery of an
+                    // already-flagged comment would otherwise re-run the guard and fire a
+                    // duplicate flag + merchant notification on every redelivery.
+                    if (!triggerIsNew && (comment.replied || comment.needsAttention)) {
+                        pipelineMetrics.record(pipeline, 'already_replied');
+                        return { success: false, commentId: comment.id, error: 'Comment already replied' };
+                    }
+                    // Per-comment lock — prevents duplicate webhook races from issuing two
+                    // Graph API replies (FB rejects the second, leaving the comment stuck
+                    // Pending even though the real reply landed). The any-comment guard's
+                    // flag/skip actions run inside the lock too, mirroring the AI path
+                    // (step 4b), so concurrent deliveries can't double-flag either.
+                    const triggerLockToken = await acquireReplyLock(`comment:${page.id}`, platformCommentId);
+                    if (!triggerLockToken) {
+                        pipelineMetrics.record(pipeline, 'lock_contention');
+                        this.logger.info(`[${platform}] Post Reply comment lock held — another worker handling`, { platformCommentId });
+                        return { success: false, commentId: comment.id, error: 'Lock held by another worker' };
+                    }
+                    try {
+                        // Any-comment mode fires on EVERY comment, so — unlike opt-in keyword
+                        // mode — it must run the AI path's skip rules plus a no-AI complaint
+                        // guard before sending, or it would template-reply to friend-tags,
+                        // spam links, and complaints. Keyword mode keeps its original behavior.
+                        if (rule.triggerType === 'all') {
+                            const pre = preprocessCommentText({
+                                text: commentMessage,
+                                messageTags,
+                                ourFacebookPageId: platform === 'facebook' ? platformPageId : undefined,
+                                hasPostContext: !!content.message,
+                            });
+                            const verdict = evaluateAnyCommentGuard({
+                                skipReason: pre.skipReason,
+                                // Same probe as rewriteContentFreeCta: the cleaned text, or the
+                                // raw comment when cleaning stripped it to empty.
+                                isContentFree: isContentFree((pre.commentForAI || commentMessage).trim()),
+                                fallbackIntent: classifyFallbackIntent(commentMessage),
+                                businessActionFlags: detectBusinessActionFlags(commentMessage),
+                            });
+                            if (verdict.action === 'skip') {
+                                await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'spam', verdict.reason);
+                                pipelineMetrics.record(pipeline, 'skipped_spam');
+                                this.logger.info(`[${platform}] Any-comment Post Reply skipped`, {
+                                    commentId: comment.id, platformCommentId, reason: verdict.reason,
+                                });
+                                return { success: true, commentId: comment.id };
+                            }
+                            if (verdict.action === 'flag') {
+                                await adapter.flagComment(comment.id, verdict.flagReason, undefined);
+                                notificationService.sendTemplateNotificationToWorkspace(
+                                    workspaceId,
+                                    'flagged_reply',
+                                    { senderName: fromName || 'Unknown', reason: buildNotificationReason(verdict.flagReason, commentMessage) },
+                                    {
+                                        commentId: comment.id,
+                                        type: 'comment',
+                                        deepLink: '/comments?filter=flagged',
+                                        ...(isUrgentNotification(verdict.flagReason) ? { urgent: true } : {}),
+                                    },
+                                ).catch(err => this.logger.error('Any-comment flag notification failed', { err }));
+                                pipelineMetrics.record(pipeline, 'skipped_risky');
+                                this.logger.info(`[${platform}] Any-comment Post Reply flagged for attention`, {
+                                    commentId: comment.id, platformCommentId, flagReason: verdict.flagReason,
+                                });
+                                return { success: true, commentId: comment.id };
+                            }
+                            // Handoff pause — the merchant is manually talking to this customer
+                            // (mirrors the AI path's isPaused gate). A canned template must not
+                            // interject into a live human conversation; any-comment fires on
+                            // every comment (sub-comments included) so this is reachable in a
+                            // way keyword mode never was. Leave the comment pending — no send,
+                            // no resolve — the merchant is already engaged with the thread.
+                            if (fromId && await messagesService.isPaused(page.id, fromId, userSettings.handoffPauseDurationMinutes)) {
+                                pipelineMetrics.record(pipeline, 'handoff_active');
+                                this.logger.info(`[${platform}] Any-comment Post Reply suppressed — handoff pause active for sender`, {
+                                    commentId: comment.id, platformCommentId, fromId,
+                                });
+                                return { success: true, commentId: comment.id };
+                            }
+                            // Per-post cap — an any-comment rule on a viral post would otherwise
+                            // fire on hundreds of comments (public-reply spam / Meta flagging).
+                            // Keyword mode is naturally bounded, so this only guards 'all'.
+                            if (await postReplyCap.isOverCap(page.id, content.id)) {
+                                await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'spam', 'post_reply_cap_reached');
+                                pipelineMetrics.record(pipeline, 'post_reply_capped');
+                                this.logger.info(`[${platform}] Any-comment Post Reply capped for this post`, {
+                                    commentId: comment.id, platformCommentId, pageId: page.id, postId: content.id,
+                                });
+                                return { success: true, commentId: comment.id };
+                            }
+                            // action 'send' → fall through to the shared send below.
+                        }
+
+                        const result = await this.sendAndFinalize({
+                            adapter, platform, pipeline,
+                            pageId: page.id, userId, workspaceId,
+                            comment, replyText: rule.triggerReply, replyMethod: 'post_reply',
+                            commentMessage, platformCommentId, platformPageId,
+                            accessToken: page.accessToken, fromId, fromName,
+                            userSettings: userSettings as unknown as Record<string, unknown>,
+                            postMessage: content.message || undefined,
+                            contentId: content.id,
+                            triggerKeyword: match.keyword ?? undefined,
+                            triggerType: rule.triggerType,
+                        });
+                        // Keep the debounce slot only if the reply actually went out
+                        // (skip/flag/pause/cap/failed-send exits leave replyCommitted
+                        // false → the shared release below frees the slot).
+                        replyCommitted = result.success;
+                        // Count a successful any-comment send toward the per-post cap.
+                        if (rule.triggerType === 'all' && result.success) {
+                            await postReplyCap.increment(page.id, content.id);
+                        }
+                        return result;
+                    } finally {
+                        await releaseReplyLock(`comment:${page.id}`, platformCommentId, triggerLockToken).catch(() => { /* TTL will auto-expire */ });
+                    }
                 }
+                // Keyword rule set but comment didn't match — fall through to AI so a real
+                // question on the post still gets answered. (Any-comment always matches, so
+                // this branch is keyword-only.)
+                this.logger.info(`[${platform}] Post Reply rule set but comment did not match — falling through to AI`, {
+                    platformCommentId, triggerType: rule.triggerType,
+                });
             }
 
             // 4. Store the comment
