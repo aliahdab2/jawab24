@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { GreetingMessageCard } from '@/components/settings/GreetingMessageCard';
 import { BusinessHoursCard } from '@/components/settings/BusinessHoursCard';
-import { CommentsAutoReplyCard } from '@/components/settings/CommentsAutoReplyCard';
+import { AutoReplyBoardCard } from '@/components/settings/AutoReplyBoardCard';
 import type { SettingsState } from '@/components/settings/types';
 
 vi.mock('@/components/ui', () => ({
@@ -198,7 +198,7 @@ describe('BusinessHoursCard - Away Message', () => {
   });
 });
 
-describe('CommentsAutoReplyCard - Dual Reply Nudge', () => {
+describe('AutoReplyBoardCard - Dual Reply Nudge', () => {
   it('retains typed text in nudge input when auto-translated sourceLang exists', () => {
     let current = makeSettings({
       commentsAutoReply: true,
@@ -207,7 +207,7 @@ describe('CommentsAutoReplyCard - Dual Reply Nudge', () => {
     });
     const setSettings = vi.fn((s: SettingsState) => { current = s; });
     const component = (s: SettingsState) => (
-      <CommentsAutoReplyCard settings={s} setSettings={setSettings} />
+      <AutoReplyBoardCard settings={s} setSettings={setSettings} />
     );
 
     const { rerender } = render(component(current));

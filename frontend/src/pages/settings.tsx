@@ -21,10 +21,9 @@ import { captureError } from '@/lib/sentryHelpers';
 import { useWorkspaceRole, usePersistedBoolean } from '@/hooks';
 import type { NextPageWithLayout } from './_app';
 import {
-  SimpleToggle,
   LanguageSelector,
   ThemeSelector,
-  CommentsAutoReplyCard,
+  AutoReplyBoardCard,
   BusinessHoursCard,
   ReplyDelayCard,
   NotificationsCard,
@@ -433,40 +432,20 @@ const SettingsPage: NextPageWithLayout = () => {
         <ThemeSelector />
       </div>
 
-      {/* Section: Auto-Reply */}
+      {/* Section: Auto-Reply — ONE flat status board (D-029): who replies, and where.
+          The standalone "Enable Smart Replies" switch is gone — aiEnabled is derived
+          inside the board (on exactly when either channel row is on). */}
       <SettingsSectionHeader label={t('sectionAutoReply')} saved={savedSections.has('autoReply')} savedLabel={t('settingsSaved')} className="mb-3" />
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
-        {/* AI master switch — promoted to top of the section because it gates
-            whether the AI Personality section appears below and whether smart
-            replies are generated at all. Channel-level toggles (Comments,
-            Messages) follow underneath. */}
-        <SimpleToggle
-          icon={<Sparkles className="w-7 h-7 landscape:w-6 landscape:h-6" />}
-          title={t('enableAI')}
-          description={t('aiDescriptionImproved')}
-          info={t('aiDescriptionInfo')}
-          enabled={settings.aiEnabled}
-          onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
-          prominent
-        />
-
-        <CommentsAutoReplyCard settings={settings} setSettings={setSettings} fieldErrors={fieldErrors} />
-
-        <div className="space-y-3 landscape:space-y-2">
-          <SimpleToggle
-            icon={<MessageCircle className="w-6 h-6 landscape:w-5 landscape:h-5" />}
-            title={t('messagesAutoReply')}
-            description={t('messagesAutoReplyDesc')}
-            enabled={settings.messagesAutoReply}
-            onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
-          />
-        </div>
+        <AutoReplyBoardCard settings={settings} setSettings={setSettings} fieldErrors={fieldErrors} />
       </div>
 
       {/* Section: AI Personality */}
       <SettingsSectionHeader label={t('sectionAiPersonality')} saved={savedSections.has('aiPersonality')} savedLabel={t('settingsSaved')} className="mb-3" />
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
-        {settings.aiEnabled ? (
+        {/* Gate on the channels (not the derived aiEnabled): personality matters
+            exactly when Smart Replies can fire somewhere (D-029). */}
+        {(settings.commentsAutoReply || settings.messagesAutoReply) ? (
           <ReplyStyleCard
             settings={settings}
             setSettings={setSettings}

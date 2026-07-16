@@ -7,7 +7,7 @@ export { OrderNotificationsCard } from './OrderNotificationsCard';
 export { LanguageSelector } from './LanguageSelector';
 export { buildSettingsUpdatePayload, buildChangedSettingsPayload } from './buildUpdatePayload';
 export { ThemeSelector } from './ThemeSelector';
-export { CommentsAutoReplyCard } from './CommentsAutoReplyCard';
+export { AutoReplyBoardCard } from './AutoReplyBoardCard';
 export { BusinessHoursCard } from './BusinessHoursCard';
 export { ReplyDelayCard } from './ReplyDelayCard';
 export { NotificationsCard } from './NotificationsCard';
