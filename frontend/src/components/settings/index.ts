@@ -1,13 +1,12 @@
 export { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
 export { DurationPresetPicker } from './DurationPresetPicker';
 export type { DurationOption } from './DurationPresetPicker';
-export { SimpleToggle } from './SimpleToggle';
 export { TitleWithInfo } from './TitleWithInfo';
 export { OrderNotificationsCard } from './OrderNotificationsCard';
 export { LanguageSelector } from './LanguageSelector';
 export { buildSettingsUpdatePayload, buildChangedSettingsPayload } from './buildUpdatePayload';
 export { ThemeSelector } from './ThemeSelector';
-export { CommentsAutoReplyCard } from './CommentsAutoReplyCard';
+export { AutoReplyBoardCard } from './AutoReplyBoardCard';
 export { BusinessHoursCard } from './BusinessHoursCard';
 export { ReplyDelayCard } from './ReplyDelayCard';
 export { NotificationsCard } from './NotificationsCard';

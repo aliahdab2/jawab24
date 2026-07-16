@@ -124,6 +124,9 @@ function buildSettingsUpdateChain<T>(updatedRow: T) {
 describe('settingsService.updateSettings → workspace sync', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // The singleton memoizes userId→workspaceId; clear it so each case's
+        // membership mock is authoritative.
+        settingsService.clearWorkspaceIdCache();
     });
 
     afterEach(() => {

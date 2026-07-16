@@ -6,7 +6,7 @@ import { channelTrialService } from '../services/channelTrial';
 import { notificationService } from '../services/notifications';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
-import { recordActivationEvent, isBusinessInfoProvided } from '../services/activation';
+import { recordActivationEvent, recordAutoreplyEnabledIfEffective, isBusinessInfoProvided } from '../services/activation';
 import { logAutoReplyToggle } from '../services/auditLog';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
@@ -331,9 +331,12 @@ export class PagesController {
                     workspaceOwnerId,
                     workspaceId,
                 );
-                // Activation funnel: merchant turned auto-reply on (off → on or first time).
+                // Activation funnel: count as activated only when the pipeline can
+                // actually fire — workspace master ON and this (or another) page
+                // channel-enabled (D-026). The page-level toggle alone used to emit,
+                // over-counting new signups whose master is OFF by default (D-025).
                 if (page.userId) {
-                    void recordActivationEvent(page.userId, 'autoreply_enabled', { pageId: page.id });
+                    void recordAutoreplyEnabledIfEffective(page.userId, workspaceId, { pageId: page.id, source: 'page_toggle' });
                 }
             }
             // Audit trail: record WHO flipped auto-reply and WHEN. Support can then

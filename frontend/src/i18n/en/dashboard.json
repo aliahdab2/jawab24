@@ -63,16 +63,20 @@
   "postReplyNudgeBody": "Auto-reply to everyone who comments on a post — great for giveaways and 'comment for the link' posts. Pick a post to set it up.",
   "postReplyNudgeCta": "Choose a post",
   "setupChecklist": {
-    "titleWithProgress": "Finish your setup ({done}/{total})",
     "subtitle": "A few quick steps to start getting smart replies",
     "stepConnect": "Connect your page",
     "stepKb": "Add your Business Info",
     "stepKbBadge": "Most important",
     "stepKbHint": "Your smart replies are built from this — the more complete it is, the better every reply.",
     "stepEnable": "Turn on auto-reply",
-    "stepFirstReply": "Try your first reply",
     "done": "Done",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "pathsTitle": "Start replying automatically",
+    "pathsSubtitle": "Two ways — pick what fits, or use both together",
+    "quickTitle": "Post Reply — ready in a minute",
+    "quickDesc": "Pick a post and write your reply — it works instantly, in your own words. No AI needed.",
+    "quickCta": "Choose a post",
+    "smartTitle": "Smart Replies — AI answers for you"
   },
   "recentMessages": "Recent Messages",
   "noMessagesYet": "No recent messages. Messages will appear here once your pages receive DMs.",

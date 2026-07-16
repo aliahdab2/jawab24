@@ -78,6 +78,12 @@ vi.mock('../../src/lib/replyLock', () => ({
 vi.mock('../../src/lib/eventBus', () => ({
     publishSSEEvent: vi.fn().mockResolvedValue(undefined),
 }));
+// Only isWithinBusinessHours is replaced (default: within hours) — everything else
+// stays real. Lets the D-027 suite flip "outside business hours" deterministically.
+vi.mock('../../src/utils/settingsHelpers', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../src/utils/settingsHelpers')>();
+    return { ...actual, isWithinBusinessHours: vi.fn().mockReturnValue(true) };
+});
 
 // In-memory pipelineMetrics mock (Redis-backed in production; use counters map in tests)
 const pipelineCounters = vi.hoisted<Record<string, number>>(() => ({}));
@@ -2558,6 +2564,148 @@ describe('CommentProcessor — template reply mode behavior', () => {
             });
             expect(adapter.sendReply).not.toHaveBeenCalled();
             expect(result).toMatchObject({ success: false, error: 'Comments auto-reply disabled' });
+        });
+    });
+
+    // D-027: Post Reply is designed always-on — configuring a trigger IS the
+    // merchant's consent. The workspace master gates the AI (D-025's rationale is
+    // hallucination risk), never the merchant's own verbatim template. Regression
+    // for the D-025 side-effect that silently killed Post Reply for new signups.
+    describe('Post Reply fires with the workspace master OFF (D-027)', () => {
+        const keywordContent = {
+            id: 'content-uuid',
+            autoReplyEnabled: true,
+            message: 'Post body',
+            triggerKeyword: 'code',
+            triggerReply: 'تم إرسال الكود على الخاص 📩',
+            triggerType: 'keyword',
+        };
+
+        beforeEach(() => {
+            // Master OFF — the D-025 new-signup default
+            vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        });
+
+        it('sends the merchant template on a keyword match (the D-025 regression — fails pre-D-027)', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(keywordContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'code please', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+            expect(result.replyText).toBe('تم إرسال الكود على الخاص 📩');
+            expect(result.replyMethod).toBe('post_reply');
+            // AI stays dark — only the merchant's template fired
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+        });
+
+        it('keyword non-match falls through to the (still gated) AI path — no send', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(keywordContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'how much is shipping?', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(result.success).toBe(false);
+        });
+
+        it('no trigger configured → master-off behavior unchanged (AI path stays gated)', async () => {
+            const adapter = createMockAdapter(); // default content: no trigger
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'how much?', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(result.success).toBe(false);
+        });
+
+        it('any-comment mode still runs the spam guard before sending', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    ...keywordContent,
+                    triggerKeyword: null,
+                    triggerType: 'all',
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'follow me for more deals', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            expect(result.success).toBe(true);
+        });
+
+        it('same-sender duplicate is debounced (the claim now covers master-off Post Reply)', async () => {
+            vi.mocked(commentDebounce.tryAcquire).mockResolvedValue(null); // slot already held
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(keywordContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'code please', 'user-1', 'Ali',
+            );
+
+            // Pre-D-027 the debounce block was skipped entirely with the master off;
+            // now the slot is consulted and the duplicate is silently resolved.
+            expect(commentDebounce.tryAcquire).toHaveBeenCalled();
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('respects business hours — no Post Reply outside the merchant schedule', async () => {
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+                id: 'settings-uuid',
+                userId: 'user-uuid',
+                aiEnabled: true,
+                commentsAutoReply: false,
+                businessHoursOnly: true,
+                businessHoursStart: '09:00',
+                businessHoursEnd: '18:00',
+                timezone: 'Asia/Damascus',
+                replyDelay: 0,
+            } as any);
+            const { isWithinBusinessHours } = await import('../../src/utils/settingsHelpers');
+            vi.mocked(isWithinBusinessHours).mockReturnValueOnce(false); // outside hours
+
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(keywordContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'code please', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(result.success).toBe(false);
+        });
+
+        it('subscription gate still runs before Post Reply', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.enforceAutoReplyGate).mockResolvedValue({
+                allowed: false, reason: 'canceled',
+            } as any);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(keywordContent),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'code please', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(result).toMatchObject({ success: false, error: 'Subscription inactive' });
         });
     });
 });

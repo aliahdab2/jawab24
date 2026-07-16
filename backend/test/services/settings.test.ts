@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 import { settingsService } from '../../src/services/settings';
 
+// Workspace-membership rows returned by the mocked db.select chain
+// (resolveWorkspaceId). Default EMPTY: the D-026 overlay short-circuits
+// (no workspace) and every legacy test behaves exactly as before.
+const hoisted = vi.hoisted(() => ({
+    membershipRows: [] as Array<{ workspaceId: string }>,
+}));
+
 // Mock Redis — default to cache miss so existing DB-path tests are unaffected
 vi.mock('../../src/lib/redis', () => ({
     redis: {
@@ -21,6 +28,13 @@ vi.mock('../../src/db', () => ({
         },
         insert: vi.fn(),
         update: vi.fn(),
+        select: vi.fn(() => ({
+            from: () => ({
+                where: () => ({
+                    limit: () => Promise.resolve(hoisted.membershipRows),
+                }),
+            }),
+        })),
     },
 }));
 
@@ -30,10 +44,28 @@ vi.mock('../../src/db/schema', () => ({
         userId: 'user_id',
         updatedAt: 'updated_at',
     },
+    workspaceMembers: {
+        workspaceId: 'workspace_id',
+        userId: 'user_id',
+    },
 }));
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
+}));
+
+// Workspace store (D-026 overlay source). Default getSettings REJECTS so any
+// test that opts into a membership but forgets to mock the store exercises
+// the fail-open path instead of silently overlaying stale data.
+vi.mock('../../src/services/workspaceSettings', () => ({
+    workspaceSettingsService: {
+        getSettings: vi.fn().mockRejectedValue(new Error('workspace store not mocked')),
+        updateSettings: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: vi.fn(),
 }));
 
 const baseSettings = {
@@ -68,8 +100,12 @@ const baseSettings = {
 };
 
 describe('Settings Service', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
+        // The singleton memoizes userId→workspaceId; clear it so each case's
+        // membership mock is authoritative.
+        const { settingsService } = await import('../../src/services/settings');
+        settingsService.clearWorkspaceIdCache();
     });
 
     describe('getSettings', () => {
@@ -590,6 +626,129 @@ describe('Settings Service', () => {
             await expect(
                 settingsService.updateSettings('user_123', { dashboardLanguage: 'en' }),
             ).resolves.not.toThrow();
+        });
+    });
+
+    // D-026: legacy settings reads serve pipeline fields from the WORKSPACE store —
+    // the store the reply pipeline actually obeys. Regression for the D-025 cohort
+    // where the legacy row said masters ON while the pipeline ran OFF, so the
+    // /settings page and dashboard lied to every new signup.
+    describe('workspace pipeline-field overlay (D-026)', () => {
+        beforeEach(() => {
+            hoisted.membershipRows.length = 0;
+        });
+
+        it('serves effective masters from the workspace store (the "API lies to new signups" regression)', async () => {
+            const { db } = await import('../../src/db');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+
+            hoisted.membershipRows.push({ workspaceId: 'ws_1' });
+            // Legacy row: the pre-D-025 defaults — masters ON, mode public
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({ ...baseSettings });
+            // Workspace store: the D-025 new-signup seed — the state the pipeline runs
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+                commentsAutoReply: false,
+                messagesAutoReply: false,
+                commentReplyMode: 'dual',
+            } as any);
+
+            const result = await settingsService.getSettings('user_123');
+
+            expect(result.commentsAutoReply).toBe(false);
+            expect(result.messagesAutoReply).toBe(false);
+            expect(result.commentReplyMode).toBe('dual');
+        });
+
+        it('does NOT overlay aiModel (legacy is authoritative — admin override bypasses sync)', async () => {
+            const { db } = await import('../../src/db');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+
+            hoisted.membershipRows.push({ workspaceId: 'ws_1' });
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({
+                ...baseSettings,
+                aiModel: 'gpt-4.1', // admin-set premium model, legacy table only
+            });
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+                aiModel: 'gpt-4.1-mini', // stale workspace copy
+                commentsAutoReply: true,
+            } as any);
+
+            const result = await settingsService.getSettings('user_123');
+            expect(result.aiModel).toBe('gpt-4.1');
+        });
+
+        it('leaves non-pipeline fields untouched', async () => {
+            const { db } = await import('../../src/db');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+
+            hoisted.membershipRows.push({ workspaceId: 'ws_1' });
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({
+                ...baseSettings,
+                dashboardLanguage: 'ar',
+                notificationsEnabled: true,
+            });
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+                commentsAutoReply: false,
+            } as any);
+
+            const result = await settingsService.getSettings('user_123');
+            expect(result.dashboardLanguage).toBe('ar');
+            expect(result.notificationsEnabled).toBe(true);
+            expect(result.commentsAutoReply).toBe(false);
+        });
+
+        it('fails open to legacy values when the workspace store read throws', async () => {
+            const { db } = await import('../../src/db');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+            const { captureError } = await import('../../src/utils/sentryHelpers');
+
+            hoisted.membershipRows.push({ workspaceId: 'ws_1' });
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({ ...baseSettings });
+            vi.mocked(workspaceSettingsService.getSettings).mockRejectedValue(new Error('redis down'));
+
+            const result = await settingsService.getSettings('user_123');
+
+            // Legacy values survive — a workspace-store hiccup never breaks a read
+            expect(result.commentsAutoReply).toBe(true);
+            expect(result.messagesAutoReply).toBe(true);
+            expect(vi.mocked(captureError)).toHaveBeenCalled();
+        });
+
+        it('is an identity function when the user has no workspace', async () => {
+            const { db } = await import('../../src/db');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+
+            // membershipRows left empty — no workspace
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({ ...baseSettings });
+
+            const result = await settingsService.getSettings('user_123');
+
+            expect(result.commentsAutoReply).toBe(true);
+            expect(vi.mocked(workspaceSettingsService.getSettings)).not.toHaveBeenCalled();
+        });
+
+        it('overlays the value returned by updateSettings (read-after-write consistency)', async () => {
+            const { db } = await import('../../src/db');
+            const { workspaceSettingsService } = await import('../../src/services/workspaceSettings');
+
+            hoisted.membershipRows.push({ workspaceId: 'ws_1' });
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({ ...baseSettings });
+
+            const mockReturning = vi.fn().mockResolvedValue([{ ...baseSettings, replyDelay: 5 }]);
+            const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+            const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+            vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+
+            // Workspace store reflects the synced write
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+                replyDelay: 5,
+                commentsAutoReply: false,
+            } as any);
+
+            const result = await settingsService.updateSettings('user_123', { replyDelay: 5 });
+
+            expect(result.replyDelay).toBe(5);
+            expect(result.commentsAutoReply).toBe(false);
         });
     });
 });

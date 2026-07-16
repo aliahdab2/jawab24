@@ -4,6 +4,7 @@ import { pagesService } from '../services/pages';
 import { instagramService } from '../services/instagram';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
+import { recordAutoreplyEnabledIfEffective } from '../services/activation';
 import { pageGateError } from '../utils/pageGateResponse';
 import { db } from '../db';
 import { instagramMedia, instagramComments } from '../db/schema';
@@ -253,6 +254,12 @@ export class InstagramController {
                     workspaceOwnerId,
                     workspaceId,
                 );
+                // Activation funnel (D-026): same emit as the FB page toggle — the
+                // gate counts instagramAutoReplyEnabled, so an IG-channel enable can
+                // be the step that makes the pipeline effective.
+                if (page.userId) {
+                    void recordAutoreplyEnabledIfEffective(page.userId, workspaceId, { pageId: page.id, source: 'page_toggle' });
+                }
             }
             return reply.send(page);
         } catch (error) {

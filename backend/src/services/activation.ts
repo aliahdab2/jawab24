@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import {
     ACTIVATION_FUNNEL_STEPS,
     KB_FILLED_MIN_CHARS,
@@ -7,8 +7,9 @@ import {
     type ActivationFunnel,
 } from '@jawab24/shared';
 import { db } from '../db';
-import { activationEvents } from '../db/schema';
+import { activationEvents, pages } from '../db/schema';
 import { captureError } from '../utils/sentryHelpers';
+import { workspaceSettingsService } from './workspaceSettings';
 
 /**
  * Activation funnel instrumentation — lightweight, internal product analytics.
@@ -64,6 +65,63 @@ export async function recordActivationEvent(
         captureError(err, 'Failed to record activation event', {
             tags: { context: 'activation' },
             extra: { userId, event },
+        });
+    }
+}
+
+/**
+ * Record 'autoreply_enabled' only when the reply pipeline can actually fire:
+ * a workspace master (comments OR messages) is ON and at least one connected
+ * page has a channel-level toggle enabled (D-026).
+ *
+ * Before D-026 the event fired on the page-level toggle alone, counting
+ * merchants as "activated" while the workspace master (OFF by default for new
+ * signups since D-025) still gated every reply — the funnel over-stated
+ * activation for exactly the cohort it was built to measure.
+ *
+ * Raw master flags only — business hours are deliberately excluded: the funnel
+ * measures "configured on", not "currently within opening hours".
+ *
+ * Callers emit from BOTH transitions (page toggle and settings save);
+ * double-emits are harmless via recordActivationEvent's idempotency. Same
+ * fire-and-forget discipline: never blocks or throws into the caller's path.
+ */
+export async function recordAutoreplyEnabledIfEffective(
+    userId: string,
+    workspaceId: string,
+    metadata: Record<string, unknown> = {},
+): Promise<void> {
+    try {
+        const workspaceSettings = await workspaceSettingsService.getSettings(workspaceId);
+        if (!workspaceSettings.commentsAutoReply && !workspaceSettings.messagesAutoReply) return;
+
+        // Minimal direct query — pagesService.getPages aggregates per-page stats
+        // we don't need on this fire-and-forget path.
+        const workspacePages = await db
+            .select({
+                autoReplyEnabled: pages.autoReplyEnabled,
+                instagramAutoReplyEnabled: pages.instagramAutoReplyEnabled,
+                whatsappAutoReplyEnabled: pages.whatsappAutoReplyEnabled,
+                accessToken: pages.accessToken,
+            })
+            .from(pages)
+            .where(eq(pages.workspaceId, workspaceId));
+
+        // "Connected" mirrors serializePage (controllers/pages.ts): a page can
+        // reply when its FB/IG credential is present (accessToken non-empty).
+        // A WhatsApp channel toggle can only be ON once its number is set up,
+        // so whatsappAutoReplyEnabled alone counts for WhatsApp-only pages.
+        const anyChannelEnabled = workspacePages.some(p =>
+            ((!!p.accessToken && p.accessToken !== '')
+                && (p.autoReplyEnabled || p.instagramAutoReplyEnabled))
+            || p.whatsappAutoReplyEnabled);
+        if (!anyChannelEnabled) return;
+
+        await recordActivationEvent(userId, 'autoreply_enabled', metadata);
+    } catch (err) {
+        captureError(err, 'Failed to record effective autoreply_enabled', {
+            tags: { context: 'activation' },
+            extra: { userId, workspaceId },
         });
     }
 }

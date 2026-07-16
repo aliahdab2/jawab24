@@ -34,7 +34,7 @@ import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionIte
 import { captureError } from '@/lib/sentryHelpers';
 import { isWhatsAppVisible } from '@/lib/featureFlags';
 import { getPageExternalUrl } from '@/utils/pageUrl';
-import { isKbFilled } from '@/utils/kb';
+import { isKbFilled, KB_DEEP_LINK } from '@/utils/kb';
 import { hasMultipleActiveChannels } from '@/utils/channels';
 import { formatRelativeTime } from '@/utils/dateUtils';
 import type { NextPageWithLayout } from './_app';
@@ -43,6 +43,8 @@ const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDe
 import { useConversationActions, useLoadConversation, usePostReplySetup } from '@/hooks';
 import { useWorkspaceRole, useSubscriptionUsage } from '@/hooks';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
+import { deriveSetupState } from '@/utils/setupChecklist';
+import { SETUP_CHECKLIST_DISMISS_KEY, SETUP_CHECKLIST_DISMISS_MS } from '@/components/dashboard/SetupChecklistCard';
 import { useIsDemoUser } from '@/features/demo';
 
 function SectionError({ onRetry }: { onRetry: () => void }) {
@@ -246,6 +248,38 @@ const DashboardPage: NextPageWithLayout = () => {
     },
     enabled: isAuthenticated,
   });
+
+  // Two-path setup panel visibility — computed here (not inside the card) because
+  // it also SUPPRESSES the AutoReplyStatusCard warning: while onboarding is visible
+  // it owns the "not enabled yet" message; a warning banner saying "auto-reply
+  // disabled!" on top of it is the same fact twice with an alarming tone a brand-new
+  // merchant hasn't earned. The banner resumes its watchdog role the moment the
+  // panel is gone (dismissed or a path live).
+  const setupDismiss = useTimedDismiss({
+    key: SETUP_CHECKLIST_DISMISS_KEY,
+    durationMs: SETUP_CHECKLIST_DISMISS_MS,
+  });
+  // Single source for the workspace masters passed to every setup-derived
+  // surface (setupState, checklist card, Post Reply nudge). The `?? true`
+  // legacy-default is a semantic decision — keep it in ONE place so the three
+  // consumers can never disagree about the effective state.
+  const masters = useMemo(
+    () => ({
+      commentsAutoReply: userSettings?.commentsAutoReply ?? true,
+      messagesAutoReply: userSettings?.messagesAutoReply ?? true,
+    }),
+    [userSettings],
+  );
+  const setupState = useMemo(
+    () => deriveSetupState(pages, usage ?? null, masters),
+    [pages, usage, masters],
+  );
+  const setupPanelVisible =
+    !pagesLoading &&
+    userSettings !== undefined &&
+    !setupState.coreSetupDone &&
+    !setupState.postReplyConfigured &&
+    !setupDismiss.dismissed;
 
   const { data: analytics, isError: analyticsError } = useQuery({
     queryKey: ['dashboard-analytics'],
@@ -554,8 +588,10 @@ const DashboardPage: NextPageWithLayout = () => {
         description={`${t('overview')} · ${new Date().toLocaleDateString(intlLocale, { weekday: 'long', month: 'long', day: 'numeric' })}`}
       />
 
-      {/* Smart status message */}
-      {userSettings && (
+      {/* Smart status message — the post-setup watchdog. Suppressed while the
+          two-path setup panel is visible: during onboarding the panel owns the
+          "not enabled yet" message (see setupPanelVisible above). */}
+      {userSettings && !setupPanelVisible && (
         <AutoReplyStatusCard
           activePages={statsData.activePages}
           totalPages={pages.length}
@@ -584,9 +620,20 @@ const DashboardPage: NextPageWithLayout = () => {
         />
       )}
 
-      {/* Activation checklist — "Finish your setup". Hides itself once complete or dismissed.
-          Gated on pages having loaded so we don't flash a 0/4 state during fetch. */}
-      {!pagesLoading && <SetupChecklistCard pages={pages} usage={usage ?? null} />}
+      {/* Two-path onboarding panel — "Start replying automatically". Visibility is
+          lifted (setupPanelVisible) so the AutoReplyStatusCard suppression above can
+          never disagree with the panel; the shared setupDismiss instance makes the
+          banner reappear the moment the panel is dismissed. */}
+      {setupPanelVisible && (
+        <SetupChecklistCard
+          pages={pages}
+          usage={usage ?? null}
+          masters={masters}
+          onTryPostReply={postReplySetup.openPicker}
+          dismissed={setupDismiss.dismissed}
+          onDismiss={setupDismiss.dismiss}
+        />
+      )}
 
       {/* Command Center — consolidated metrics */}
       <CommandCenter
@@ -940,7 +987,7 @@ const DashboardPage: NextPageWithLayout = () => {
                     {isEcomVariant ? t('kbNudgeEcomBody') : t('kbNudgeBody')}
                   </p>
                   <div className="flex items-center gap-3 mt-2">
-                    <Link href="/pages?openKb=true">
+                    <Link href={KB_DEEP_LINK}>
                       <Button size="sm" variant="primary" className="text-xs">
                         {t('kbNudgeCta')}
                       </Button>
@@ -968,8 +1015,19 @@ const DashboardPage: NextPageWithLayout = () => {
 
           {/* Post Reply discovery — shows once setup is done and no post has a trigger yet.
               Opens the post picker (owned by postReplySetup) so a merchant can arm any
-              recent post, including one with no comments. Self-hides via its own gates. */}
-          <PostReplyNudgeBanner pages={pages} usage={usage ?? null} isOwner={isOwner} onTry={postReplySetup.openPicker} />
+              recent post, including one with no comments. Self-hides via its own gates.
+              Gated on the settings query having resolved (same as the checklist card):
+              with masters defaulted `?? true` mid-flight, a masters-OFF merchant would
+              otherwise get a transient "setup complete" flash. */}
+          {userSettings !== undefined && (
+            <PostReplyNudgeBanner
+              pages={pages}
+              usage={usage ?? null}
+              masters={masters}
+              isOwner={isOwner}
+              onTry={postReplySetup.openPicker}
+            />
+          )}
 
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">

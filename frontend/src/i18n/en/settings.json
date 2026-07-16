@@ -8,7 +8,7 @@
   "general": "General",
   "sectionAutoReply": "Auto-Reply",
   "sectionAiPersonality": "Reply Personality",
-  "personalityDisabledHint": "Turn on Smart Replies above to customize your reply tone and brand voice.",
+  "personalityDisabledHint": "Turn on Smart Replies (comments or messages) to customize the reply personality.",
   "account": "Account",
   "notifications": "Notifications",
   "language": "Language",
@@ -17,8 +17,6 @@
   "darkTheme": "Dark",
   "autoTheme": "Auto",
   "aiSettings": "Smart Reply Settings",
-  "enableAI": "Enable Smart Replies",
-  "aiDescription": "Let Smart Reply handle comments and messages automatically",
   "aiModel": "Reply Style",
   "maxTokens": "Reply Length",
   "temperature": "Reply Style",
@@ -82,14 +80,12 @@
   "autoReplyDescription": "Turn automatic replies on or off",
   "webhookRetries": "Webhook Retries",
   "commentReplyMode": {
-    "question": "When someone comments, what should happen?",
     "dual": "Comment reply + private message",
     "publicOnly": "Comment reply only",
     "privateOnly": "Private message only",
     "dualDesc": "A short comment is posted publicly, and the full detailed answer is sent to the customer in a private message.",
-    "publicDesc": "The answer is posted publicly on the comment, kept short to suit comments. No private message is sent.",
-    "privateDesc": "The customer gets the full detailed answer in a private message. Nothing is posted on the comment.",
-    "postReplyNote": "Post Replies you set on specific posts are delivered the same way."
+    "publicDesc": "The full detailed answer is posted publicly on the comment. No private message is sent.",
+    "privateDesc": "The customer gets the full detailed answer in a private message. Nothing is posted on the comment."
   },
   "replyModeDescription": "Reply on the comment or via private message",
   "publicReply": "Comment reply",
@@ -108,14 +104,6 @@
   "dualReplyVariationsHint": "Variations with the same meaning are generated automatically to keep replies fresh",
   "publicReplyPlaceholder": "Details sent in a private message 📩",
   "preview": "Preview",
-  "flowNewComment": "New Comment",
-  "flowPublicReply": "Comment Reply",
-  "flowPrivateMessage": "Smart Reply (DM)",
-  "commentsAutoReply": "Reply to Comments",
-  "commentsAutoReplyDesc": "Auto reply to comments on your page",
-  "commentsAutoReplyInfo": "Choose below how Jawab24 replies: a public comment, a private message, or both.",
-  "messagesAutoReply": "Reply to Messages",
-  "messagesAutoReplyDesc": "Auto reply to private messages",
   "businessHoursDesc": "Auto-reply during work hours, send away message outside",
   "businessHours": {
     "statusActive": "Active",
@@ -198,8 +186,6 @@
     "defaultPreviewText": "Thank you for your comment!"
   },
   "limitFallbackMessagePlaceholder": "Thanks for reaching out! We'll get back to you shortly.",
-  "aiDescriptionImproved": "AI-generated, context-aware replies.",
-  "aiDescriptionInfo": "When on, Jawab24 generates each reply based on the comment or message, your Business Info, and your brand voice. Turn off to stop AI replies — the channel toggles below still apply, and Jawab24 will send your default fallback message instead.",
   "autoTranslateTo": "Auto-translate to",
   "translationSuccess": "Translation completed!",
   "translationFailed": "Translation failed. Please try again.",
@@ -208,5 +194,17 @@
   "businessHoursLabel": "Business Hours & Away Mode",
   "businessHoursErrorMsg": "End time must be after start time",
   "greetingMessageLabel": "Welcome Message",
-  "replyDelayLabel": "Reply Delay"
+  "replyDelayLabel": "Reply Delay",
+  "autoReplyBoard": {
+    "subtitle": "Who replies, and where",
+    "comments": "Comments",
+    "messages": "Private messages",
+    "smartRepliesSub": "Smart Replies — from your <kb>Business Info</kb>",
+    "postReply": "Post Reply",
+    "postReplySub": "You write the reply, on posts you choose",
+    "alwaysOn": "Always on",
+    "manage": "Manage",
+    "modeQuestion": "Where does the comment reply appear?",
+    "modeScopeNote": "Applies to Smart Replies and Post Reply"
+  }
 }

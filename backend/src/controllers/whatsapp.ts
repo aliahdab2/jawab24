@@ -7,6 +7,7 @@ import { pagesService } from '../services/pages';
 import { whatsappService } from '../services/whatsapp';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
+import { recordAutoreplyEnabledIfEffective } from '../services/activation';
 import { pageGateError } from '../utils/pageGateResponse';
 import { serializePage } from './pages';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -367,6 +368,13 @@ export class WhatsAppController {
                     workspaceOwnerId,
                     workspaceId,
                 );
+                // Activation funnel (D-026): same emit as the FB page toggle — the
+                // gate counts whatsappAutoReplyEnabled, and WhatsApp-only pages are
+                // born with every other toggle off, so this endpoint can be the step
+                // that makes the pipeline effective.
+                if (page.userId) {
+                    void recordAutoreplyEnabledIfEffective(page.userId, workspaceId, { pageId: page.id, source: 'page_toggle' });
+                }
             }
             return reply.send(serializePage(page));
         } catch (error) {

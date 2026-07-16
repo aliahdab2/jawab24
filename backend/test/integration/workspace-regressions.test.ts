@@ -127,6 +127,60 @@ describe('Settings → workspaceSettings sync', () => {
     });
 });
 
+// ── 2b. D-029 aiEnabled write clamp — the zombie state is unrepresentable ────
+
+describe('Settings — aiEnabled clamp (D-029)', () => {
+    it('an old-client master-off ({aiEnabled:false} alone) cascades to both channels', async () => {
+        const user = await createTestUser();
+        const ws = await createTestWorkspace(user.id);
+        await settingsService.updateSettings(user.id, { commentsAutoReply: true, messagesAutoReply: true });
+
+        // The shipped mobile builds' standalone toggle sends aiEnabled alone.
+        await settingsService.updateSettings(user.id, { aiEnabled: false });
+
+        const result = await settingsService.getSettings(user.id);
+        expect(result.aiEnabled).toBe(false);
+        expect(result.commentsAutoReply).toBe(false);
+        expect(result.messagesAutoReply).toBe(false);
+        // The pipeline store agrees — no zombie (engine off + channels on).
+        expect(await workspaceSettingsService.isCommentsAutoReplyEnabled(ws.id)).toBe(false);
+    });
+
+    it('aiEnabled is derived from the channels whenever channel flags are in the payload', async () => {
+        const user = await createTestUser();
+        await createTestWorkspace(user.id);
+
+        // Contradictory payload: aiEnabled=false but a channel is being turned ON.
+        await settingsService.updateSettings(user.id, { aiEnabled: false, commentsAutoReply: true });
+        let result = await settingsService.getSettings(user.id);
+        expect(result.aiEnabled).toBe(true);
+
+        // Turning the last channel off derives aiEnabled=false even if omitted.
+        await settingsService.updateSettings(user.id, { commentsAutoReply: false, messagesAutoReply: false });
+        result = await settingsService.getSettings(user.id);
+        expect(result.aiEnabled).toBe(false);
+    });
+});
+
+// ── 2c. D-026 overlay heals string-shaped *Multi values from the workspace store ──
+
+describe('Settings — workspace overlay *Multi coercion', () => {
+    it('returns an object when the workspace store holds a double-encoded string', async () => {
+        const user = await createTestUser();
+        const ws = await createTestWorkspace(user.id);
+
+        // Simulate the known drizzle jsonb-as-string shape copied verbatim into
+        // the workspace store by the drift-heal/backfill.
+        await workspaceSettingsService.updateSettings(ws.id, {
+            dualReplyNudgeMulti: JSON.stringify({ ar: 'تفاصيل بالخاص', sourceLang: 'ar' }) as unknown as Record<string, string>,
+        });
+
+        const result = await settingsService.getSettings(user.id);
+        expect(typeof result.dualReplyNudgeMulti).toBe('object');
+        expect((result.dualReplyNudgeMulti as Record<string, string>).ar).toBe('تفاصيل بالخاص');
+    });
+});
+
 // ── 3. Comments — workspace isolation (IDOR prevention) ──────────────────────
 
 describe('Comments — workspace isolation', () => {

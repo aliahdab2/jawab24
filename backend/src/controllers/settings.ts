@@ -2,6 +2,8 @@ import { FastifyReply } from 'fastify';
 import { settingsService } from '../services/settings';
 import { smartTranslateMultiLang } from '../services/multiLangTranslation';
 import { AuthenticatedRequest } from '../middleware/auth';
+import type { WorkspaceRequest } from '../middleware/workspace';
+import { recordAutoreplyEnabledIfEffective } from '../services/activation';
 import { UpdateSettingsSchema, MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import { validateSchema } from '../utils/validation';
 import { translateText, generateNudgeVariations } from '../services/translation';
@@ -208,6 +210,22 @@ export class SettingsController {
                 updates.brandVoiceNotes = updates.brandVoiceNotesMulti['en'] || updates.brandVoiceNotesMulti['ar'] || '';
             }
             const settings = await settingsService.updateSettings(userId, updates);
+
+            // Activation funnel (D-026): a save that turns an auto-reply master ON
+            // (comments or messages, false→true) is the real activation moment for
+            // new signups — the page-level toggle no longer counts alone.
+            // currentSettings is the effective (workspace-overlaid) state.
+            const wsReq = request as WorkspaceRequest;
+            const prevOn = !!(currentSettings.commentsAutoReply || currentSettings.messagesAutoReply);
+            const nextOn = !!((updates.commentsAutoReply ?? currentSettings.commentsAutoReply)
+                || (updates.messagesAutoReply ?? currentSettings.messagesAutoReply));
+            if (!prevOn && nextOn && wsReq.workspaceId) {
+                void recordAutoreplyEnabledIfEffective(
+                    wsReq.workspaceOwnerId ?? userId,
+                    wsReq.workspaceId,
+                    { source: 'settings' },
+                );
+            }
 
             // Audit trail (fire-and-forget)
             auditLog({

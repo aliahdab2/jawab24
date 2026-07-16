@@ -137,7 +137,7 @@
   "postPickerSetup": "Set up",
   "postPickerNoText": "Post without text",
   "postPickerEmpty": "No recent posts on this page.",
-  "postPickerNoActivePages": "No active pages. Turn on auto-reply for a page to set up Post Reply.",
+  "postPickerNoActivePages": "No active pages. Turn on the page's auto-reply from My Pages first to set up Post Reply.",
   "postPickerError": "Couldn't load your posts. Please try again.",
   "postPickerRetry": "Try again",
   "postPickerLoadMore": "Show more",
