@@ -89,7 +89,7 @@
     "dualDesc": "A short comment is posted publicly, and the full detailed answer is sent to the customer in a private message.",
     "publicDesc": "The answer is posted publicly on the comment, kept short to suit comments. No private message is sent.",
     "privateDesc": "The customer gets the full detailed answer in a private message. Nothing is posted on the comment.",
-    "postReplyNote": "Post Replies you set on specific posts are delivered the same way — and they work even when comment replies are off."
+    "postReplyNote": "Post Replies you set on specific posts are delivered the same way — they don't depend on this switch, only on the page's own toggle."
   },
   "replyModeDescription": "Reply on the comment or via private message",
   "publicReply": "Comment reply",
@@ -112,7 +112,7 @@
   "flowPublicReply": "Comment Reply",
   "flowPrivateMessage": "Smart Reply (DM)",
   "commentsAutoReply": "Reply to Comments",
-  "commentsAutoReplyDesc": "Smart Replies on your page's comments. Post Reply always works — even when this is off.",
+  "commentsAutoReplyDesc": "Smart Replies on your page's comments. Post Reply isn't affected by this switch — it follows the page's own toggle in My Pages.",
   "commentsAutoReplyInfo": "Choose below how Jawab24 replies: a public comment, a private message, or both.",
   "messagesAutoReply": "Reply to Messages",
   "messagesAutoReplyDesc": "Smart Replies on private messages. When off, a new customer gets your away message once.",
@@ -198,7 +198,7 @@
     "defaultPreviewText": "Thank you for your comment!"
   },
   "limitFallbackMessagePlaceholder": "Thanks for reaching out! We'll get back to you shortly.",
-  "aiDescriptionImproved": "The AI engine — writes Smart Replies from your Business Info. Post Reply is separate and always works.",
+  "aiDescriptionImproved": "The AI engine — writes Smart Replies from your Business Info. Post Reply is separate and doesn't need it.",
   "aiDescriptionInfo": "When on, Jawab24 writes each reply from the comment or message, your Business Info, and your brand voice. When off, Smart Replies stop everywhere — the channel switches below control where they go. Post Reply and your ready-made messages are your own words: they don't use AI and aren't affected by this switch.",
   "autoTranslateTo": "Auto-translate to",
   "translationSuccess": "Translation completed!",
