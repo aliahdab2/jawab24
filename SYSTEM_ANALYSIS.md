@@ -944,6 +944,14 @@ User saves settings on frontend
 └──────────────────────────────────┘
 ```
 
+**Read path (D-026):** legacy `GET/PUT /settings` responses serve the pipeline fields
+(`PIPELINE_FIELDS` minus `aiModel`) read-through from the **workspace** JSONB store — the
+store the reply pipeline actually obeys — failing open to the legacy row on any error.
+This keeps the UI truthful for the D-025 new-signup cohort, whose seed (masters OFF,
+mode `dual`) exists only in the workspace store while the legacy columns default ON.
+`aiModel` stays legacy-authoritative (admin override writes the legacy table directly;
+`aiModelResolver` reads it).
+
 ## عربي
 
 ### جدول الإعدادات الكامل

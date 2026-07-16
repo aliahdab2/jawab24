@@ -40,11 +40,31 @@ const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
     en: t('defaultAway', 'en'),
 };
 
+/**
+ * Pipeline fields served from the workspace store on legacy reads (D-026).
+ *
+ * `aiModel` is deliberately EXCLUDED: the admin model override writes the
+ * legacy `settings` table directly (services/admin/users.ts) and the pipeline
+ * resolves the model from that same table via aiModelResolver — so for
+ * `aiModel` the LEGACY store is authoritative and the workspace copy can be
+ * stale. Overlaying it would misreport the model actually in use.
+ */
+const OVERLAY_FIELDS = PIPELINE_FIELDS.filter(f => f !== 'aiModel');
+
 export class SettingsService {
     /**
      * Get user settings, creating default settings if they don't exist.
      * Results are cached in Redis for 5 minutes to reduce DB load on the
      * reply pipeline, which calls this multiple times per incoming message.
+     *
+     * Pipeline-relevant fields are served from the workspace JSONB store —
+     * the store the reply pipeline actually reads — so the API never reports
+     * a state the pipeline doesn't run (D-026). The legacy table's own values
+     * for those fields can diverge (e.g. the D-025 new-signup seed writes
+     * auto-reply OFF only into the workspace store, while the legacy columns
+     * default to ON); for every converged workspace the overlay is an
+     * identity function, because all legacy writers sync to the workspace
+     * store and the drift-heal converges the rest.
      */
     async getSettings(userId: string): Promise<UserSettings> {
         const key = cacheKey(userId);
@@ -53,7 +73,10 @@ export class SettingsService {
         try {
             const cached = await redis.get(key);
             if (cached) {
-                return normalizeMultiFields(JSON.parse(cached) as UserSettings);
+                return this.overlayWorkspacePipelineFields(
+                    userId,
+                    normalizeMultiFields(JSON.parse(cached) as UserSettings),
+                );
             }
         } catch {
             // Redis unavailable — fall through to DB
@@ -76,14 +99,43 @@ export class SettingsService {
         }
         result = normalizeMultiFields(result);
 
-        // Populate cache — fail open
+        // Populate cache — fail open. The cache stores the un-overlaid legacy
+        // record: workspace-side invalidation stays owned by
+        // workspaceSettingsService, whose own 5-min cache bounds staleness.
         try {
             await redis.set(key, JSON.stringify(result), 'EX', SETTINGS_CACHE_TTL);
         } catch {
             // Redis unavailable — continue without caching
         }
 
-        return result;
+        return this.overlayWorkspacePipelineFields(userId, result);
+    }
+
+    /**
+     * Serve pipeline fields from the workspace store (the pipeline's read
+     * target) over the legacy row. Fails open to the legacy values — a
+     * workspace-store hiccup must never break a settings read.
+     */
+    private async overlayWorkspacePipelineFields(userId: string, result: UserSettings): Promise<UserSettings> {
+        try {
+            const workspaceId = await this.resolveWorkspaceId(userId);
+            if (!workspaceId) return result;
+
+            const workspaceSettings = await workspaceSettingsService.getSettings(workspaceId);
+            const workspaceRecord = workspaceSettings as unknown as Record<string, unknown>;
+            const overlaid = { ...result } as Record<string, unknown>;
+            for (const field of OVERLAY_FIELDS) {
+                const value = workspaceRecord[field];
+                if (value !== undefined) overlaid[field] = value;
+            }
+            return overlaid as unknown as UserSettings;
+        } catch (error) {
+            captureError(error, 'overlayWorkspacePipelineFields failed', {
+                tags: { context: 'settings', action: 'workspace-overlay' },
+                extra: { userId },
+            });
+            return result;
+        }
     }
 
     /**
@@ -121,7 +173,24 @@ export class SettingsService {
         // Sync pipeline fields to workspaceSettings so the reply pipeline sees them
         await this.syncPipelineFieldsToWorkspace(userId, updates);
 
-        return result;
+        // Read-after-write consistency: the sync above is awaited, so the
+        // workspace store already reflects this update (D-026).
+        return this.overlayWorkspacePipelineFields(userId, result);
+    }
+
+    /**
+     * Resolve the user's (single) workspace. Shared by the pipeline-field sync
+     * and the read-path overlay.
+     * Each user currently belongs to exactly one workspace (owner role).
+     * limit(1) is intentional — multi-workspace would require a separate migration.
+     */
+    private async resolveWorkspaceId(userId: string): Promise<string | null> {
+        const memberships = await db
+            .select({ workspaceId: workspaceMembers.workspaceId })
+            .from(workspaceMembers)
+            .where(eq(workspaceMembers.userId, userId))
+            .limit(1);
+        return memberships[0]?.workspaceId ?? null;
     }
 
     /**
@@ -138,15 +207,7 @@ export class SettingsService {
             );
             if (Object.keys(pipelineUpdates).length === 0) return;
 
-            // Each user currently belongs to exactly one workspace (owner role).
-            // limit(1) is intentional — multi-workspace sync would require a separate migration.
-            const memberships = await db
-                .select({ workspaceId: workspaceMembers.workspaceId })
-                .from(workspaceMembers)
-                .where(eq(workspaceMembers.userId, userId))
-                .limit(1);
-
-            const workspaceId = memberships[0]?.workspaceId;
+            const workspaceId = await this.resolveWorkspaceId(userId);
             if (!workspaceId) return;
 
             await workspaceSettingsService.updateSettings(workspaceId, pipelineUpdates);
