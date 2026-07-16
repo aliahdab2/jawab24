@@ -1837,7 +1837,7 @@ These are tracked per pipeline (facebook_comment, instagram_comment, facebook_me
 | `no_user` | Page has no associated user | Error |
 | `no_workspace` | Page has no associated workspace | Error |
 | `auto_reply_disabled` | Platform auto-reply toggle off. Comments: if the page was disabled by the SYSTEM (`auto_reply_disabled_reason` = `trial_block`/`auto_pause`, or reserved `plan_limit`) the comment is still stored unreplied (no Graph fetch, no AI); merchant-toggled (`user`, or legacy null) pages drop it silently. DMs are always stored regardless of reason. | Expected |
-| `settings_disabled` | Workspace settings disabled | Expected |
+| `settings_disabled` | Workspace auto-reply master off — AI path only; a configured Post Reply trigger still fires (D-027) | Expected |
 | `post_disabled` | Post/media has auto-reply off | Expected |
 | `media_disabled` | Instagram media auto-reply off | Expected |
 | `debounce_skipped` | Newer message pending, skipped | Normal |

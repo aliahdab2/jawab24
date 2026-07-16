@@ -6,6 +6,7 @@ import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isUrgentNotification, buildNotificationReason, detectBusinessActionFlags } from './urgentFlags';
 import { resolvePostReplyRule, matchPostReplyRule, evaluateAnyCommentGuard } from './postReplyRule';
+import { isWithinBusinessHours } from '../../utils/settingsHelpers';
 import { preprocessCommentText } from './commentPreprocess';
 import { classifyFallbackIntent } from './fallbackClassifier';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
@@ -174,6 +175,27 @@ export class CommentProcessor {
                 return { success: false, commentId: platformCommentId, error: 'Auto-reply disabled for this content' };
             }
 
+            // Post Reply eligibility (D-027): a merchant-configured trigger on this
+            // post fires regardless of the workspace auto-reply master — the master
+            // gates the AI (D-025's hallucination rationale), not the merchant's own
+            // verbatim template. Post Reply is designed always-on: configuring a
+            // trigger IS the merchant's consent. Business hours still apply —
+            // scheduling is a deliberate merchant choice orthogonal to AI risk.
+            // Resolved here (pure, no I/O) so the debounce claim below can cover
+            // Post-Reply-eligible comments even when the master is off.
+            const postReplyRule = resolvePostReplyRule({
+                triggerKeyword: content.triggerKeyword ?? null,
+                triggerReply: content.triggerReply ?? null,
+                triggerType: content.triggerType ?? 'keyword',
+            });
+            const withinBusinessHours = !userSettings.businessHoursOnly
+                || isWithinBusinessHours(
+                    userSettings.businessHoursStart,
+                    userSettings.businessHoursEnd,
+                    userSettings.timezone,
+                );
+            const postReplyEligible = !!postReplyRule && withinBusinessHours;
+
             // 3a. Friend-tag silent-skip — must run before the trigger-keyword branch.
             // The AI path already skips user-tagged comments via preprocessCommentText,
             // but trigger keywords fire earlier and bypassed that guard: a comment like
@@ -259,9 +281,11 @@ export class CommentProcessor {
             // the same comment_id. Distinct from the rate limiter, which counts
             // comments per sender across all posts. Skipped when fromId is missing
             // (pre-registered fan posts) — there's nothing to key on. Applies to
-            // AI, trigger, and template paths uniformly. The slot is released in
-            // the outer `finally` unless a reply was actually sent.
-            if (fromId && isCommentsEnabled) {
+            // AI, trigger, and template paths uniformly — including master-off
+            // Post Reply sends (D-027), which must debounce exactly like any other
+            // reply. The slot is released in the outer `finally` unless a reply
+            // was actually sent.
+            if (fromId && (isCommentsEnabled || postReplyEligible)) {
                 const senderId = fromId;
                 const debounceToken = await commentDebounce.tryAcquire(page.id, content.id, senderId);
                 if (!debounceToken) {
@@ -301,13 +325,12 @@ export class CommentProcessor {
             // still deserve an answer. This mirrors the "comment X to get details"
             // engagement tactic (ManyChat-style) without silencing off-keyword customers.
             // See postReplyRule.ts.
-            // Respects isCommentsEnabled — if workspace auto-reply is off, Post Reply is too.
-            if (isCommentsEnabled) {
-                const rule = resolvePostReplyRule({
-                    triggerKeyword: content.triggerKeyword ?? null,
-                    triggerReply: content.triggerReply ?? null,
-                    triggerType: content.triggerType ?? 'keyword',
-                });
+            // D-027: deliberately NOT gated on isCommentsEnabled — the workspace
+            // master gates the AI; a merchant-configured trigger is explicit consent
+            // and fires on its own (still behind the page/post toggles, subscription
+            // gate, business hours, and the any-comment guards below).
+            if (postReplyEligible && postReplyRule) {
+                const rule = postReplyRule;
 
                 if (rule) {
                     const match = matchPostReplyRule(rule, commentMessage);
