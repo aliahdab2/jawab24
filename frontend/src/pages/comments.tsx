@@ -13,7 +13,7 @@ import { PostReplyIntroBanner } from '@/components/comments/PostReplyIntroBanner
 
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce, usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, usePersistedBoolean, usePostReplySetup } from '@/hooks';
+import { useDebounce, usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver, usePersistedBoolean, usePostReplySetup, useOpenOnQueryParam } from '@/hooks';
 import { commentsApi, pagesApi, postsApi, type CommentsQueryParams } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import {
@@ -122,6 +122,13 @@ const CommentsPage: NextPageWithLayout = () => {
   // Shared Post Reply setup (config modal + picker sheet + safe open flow). Given
   // `pages` so the header "رد البوست" button can open the post picker.
   const postReplySetup = usePostReplySetup(pages);
+  // ?openPostReply=true → open the post picker directly (deep link from the
+  // Settings Auto-Reply board's "Manage" — same pattern as /pages?openKb=true).
+  // Callback identity churn is harmless: the hook one-shots via a ref guard.
+  const openPostReplyPicker = useCallback(() => {
+    postReplySetup.openPicker();
+  }, [postReplySetup]);
+  useOpenOnQueryParam('openPostReply', pages.length > 0, openPostReplyPicker);
   const { pageId, activePages, updatePageId, syncFromUrl } = usePageFilter(pages);
 
   // Get API params based on current filter + page

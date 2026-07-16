@@ -128,7 +128,7 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
             <p className="text-xs text-muted-foreground">{t('autoReplyBoard.postReplySub')}</p>
           </div>
           <Link
-            href="/comments"
+            href="/comments?openPostReply=true"
             className="flex items-center gap-1 text-xs font-bold text-sky-700 dark:text-sky-300 hover:underline flex-shrink-0 min-h-[44px]"
           >
             {t('autoReplyBoard.manage')}

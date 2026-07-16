@@ -38,32 +38,12 @@ const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { isWhatsAppVisible } from '@/lib/featureFlags';
 import { captureError } from '@/lib/sentryHelpers';
-import { useWorkspaceRole, useSaveKnowledgeBase, useSubscriptionUsage } from '@/hooks';
+import { useWorkspaceRole, useSaveKnowledgeBase, useSubscriptionUsage, useOpenOnQueryParam } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { formatRelativeTime } from '@/utils/dateUtils';
 import { getPageAvatarUrl, getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
-
-/**
- * Fire `onTrigger` exactly once when this page is opened with `?<param>=true`
- * (a deep-link, e.g. from the dashboard), once `ready` is true, then strip the
- * param from the URL. Both the Business Info editor and the Test Smart Reply
- * modal open this way — one helper keeps the ref-guard + readiness + URL-cleanup
- * from being copy-pasted per deep-link.
- */
-function useOpenOnQueryParam(param: string, ready: boolean, onTrigger: () => void) {
-  const router = useRouter();
-  const handledRef = useRef(false);
-  useEffect(() => {
-    if (handledRef.current || !router.isReady || !ready) return;
-    if (router.query[param] !== 'true') return;
-    handledRef.current = true;
-    onTrigger();
-    // Clean up the URL without triggering a re-render.
-    router.replace(router.pathname, undefined, { shallow: true });
-  }, [router, param, ready, onTrigger]);
-}
 
 const PagesPage: NextPageWithLayout = () => {
   const t = useTranslations('pages');

@@ -29,6 +29,7 @@ export { useHintDisplay } from './useHintDisplay';
 export { useTextareaAutoResize } from './useTextareaAutoResize';
 export { useClampOverflow } from './useClampOverflow';
 export { usePostReplySetup, type PostReplySetup } from './usePostReplySetup';
+export { useOpenOnQueryParam } from './useOpenOnQueryParam';
 export { useNotificationPoller } from './useNotificationPoller';
 export { useCountdown } from './useCountdown';
 export { usePageFilter } from './usePageFilter';

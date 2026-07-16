@@ -61,7 +61,8 @@ describe('AutoReplyBoardCard — the three-row board', () => {
     expect(screen.getByRole('button', { name: /Private messages — Smart Replies/ })).toBeInTheDocument();
     // Post Reply row: badge + manage link, NO toggle (own words need no switch, D-027)
     expect(screen.getByText('Always on')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Manage/ })).toHaveAttribute('href', '/comments');
+    // Deep link opens the post picker directly on the comments page
+    expect(screen.getByRole('link', { name: /Manage/ })).toHaveAttribute('href', '/comments?openPostReply=true');
     expect(screen.queryByRole('button', { name: /Post Reply/ })).toBeNull();
   });
 
