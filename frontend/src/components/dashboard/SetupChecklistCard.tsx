@@ -15,13 +15,24 @@ interface SetupChecklistCardProps {
   masters?: AutoReplyMasters | null;
   /** Opens the Post Reply post picker (usePostReplySetup on the dashboard). */
   onTryPostReply?: () => void;
+  /**
+   * Optional lifted dismissal state — the dashboard shares one useTimedDismiss
+   * instance between this panel and its AutoReplyStatusCard suppression rule
+   * (the warning banner must reappear the moment the panel is dismissed).
+   * Omitted → the card manages its own dismissal (standalone/tests).
+   */
+  dismissed?: boolean;
+  onDismiss?: () => void;
 }
 
 // 14 days: a dismissed-but-unfinished panel gently re-surfaces. Once either
 // setup path is live the card hides regardless of dismissal, so a set-up
 // merchant never sees it again. No `count` param — we don't want completing
-// a step to un-dismiss the card mid-session.
-const DISMISS_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
+// a step to un-dismiss the card mid-session. Exported so the dashboard can
+// share the same dismissal state (banner-suppression rule).
+export const SETUP_CHECKLIST_DISMISS_KEY = 'setupChecklistDismissedAt';
+export const SETUP_CHECKLIST_DISMISS_MS = 14 * 24 * 60 * 60 * 1000;
+const DISMISS_DURATION_MS = SETUP_CHECKLIST_DISMISS_MS;
 
 /**
  * "Start replying automatically" — the first-onboarding panel. Shows a brand-new
@@ -37,15 +48,26 @@ const DISMISS_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
  * PostReplyNudgeBanner). Before any page is connected it collapses to the
  * single "connect your page" step.
  */
-export function SetupChecklistCard({ pages, usage, masters, onTryPostReply }: SetupChecklistCardProps) {
+export function SetupChecklistCard({
+  pages,
+  usage,
+  masters,
+  onTryPostReply,
+  dismissed: dismissedProp,
+  onDismiss,
+}: SetupChecklistCardProps) {
   const t = useTranslations('dashboard');
   const locale = useLocale();
   const isRTL = isRTLLocale(locale);
 
-  const { dismissed, dismiss } = useTimedDismiss({
-    key: 'setupChecklistDismissedAt',
+  // Internal fallback — used only when the host doesn't lift the dismissal
+  // state (hooks must run unconditionally).
+  const internalDismiss = useTimedDismiss({
+    key: SETUP_CHECKLIST_DISMISS_KEY,
     durationMs: DISMISS_DURATION_MS,
   });
+  const dismissed = dismissedProp ?? internalDismiss.dismissed;
+  const dismiss = onDismiss ?? internalDismiss.dismiss;
 
   // Shared source of truth so this panel and the Post Reply nudge banner never
   // disagree about whether setup is finished.

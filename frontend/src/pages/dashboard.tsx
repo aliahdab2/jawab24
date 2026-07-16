@@ -43,6 +43,8 @@ const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDe
 import { useConversationActions, useLoadConversation, usePostReplySetup } from '@/hooks';
 import { useWorkspaceRole, useSubscriptionUsage } from '@/hooks';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
+import { deriveSetupState } from '@/utils/setupChecklist';
+import { SETUP_CHECKLIST_DISMISS_KEY, SETUP_CHECKLIST_DISMISS_MS } from '@/components/dashboard/SetupChecklistCard';
 import { useIsDemoUser } from '@/features/demo';
 
 function SectionError({ onRetry }: { onRetry: () => void }) {
@@ -246,6 +248,31 @@ const DashboardPage: NextPageWithLayout = () => {
     },
     enabled: isAuthenticated,
   });
+
+  // Two-path setup panel visibility — computed here (not inside the card) because
+  // it also SUPPRESSES the AutoReplyStatusCard warning: while onboarding is visible
+  // it owns the "not enabled yet" message; a warning banner saying "auto-reply
+  // disabled!" on top of it is the same fact twice with an alarming tone a brand-new
+  // merchant hasn't earned. The banner resumes its watchdog role the moment the
+  // panel is gone (dismissed or a path live).
+  const setupDismiss = useTimedDismiss({
+    key: SETUP_CHECKLIST_DISMISS_KEY,
+    durationMs: SETUP_CHECKLIST_DISMISS_MS,
+  });
+  const setupState = useMemo(
+    () =>
+      deriveSetupState(pages, usage ?? null, {
+        commentsAutoReply: userSettings?.commentsAutoReply ?? true,
+        messagesAutoReply: userSettings?.messagesAutoReply ?? true,
+      }),
+    [pages, usage, userSettings],
+  );
+  const setupPanelVisible =
+    !pagesLoading &&
+    userSettings !== undefined &&
+    !setupState.coreSetupDone &&
+    !setupState.postReplyConfigured &&
+    !setupDismiss.dismissed;
 
   const { data: analytics, isError: analyticsError } = useQuery({
     queryKey: ['dashboard-analytics'],
@@ -554,8 +581,10 @@ const DashboardPage: NextPageWithLayout = () => {
         description={`${t('overview')} · ${new Date().toLocaleDateString(intlLocale, { weekday: 'long', month: 'long', day: 'numeric' })}`}
       />
 
-      {/* Smart status message */}
-      {userSettings && (
+      {/* Smart status message — the post-setup watchdog. Suppressed while the
+          two-path setup panel is visible: during onboarding the panel owns the
+          "not enabled yet" message (see setupPanelVisible above). */}
+      {userSettings && !setupPanelVisible && (
         <AutoReplyStatusCard
           activePages={statsData.activePages}
           totalPages={pages.length}
@@ -584,11 +613,11 @@ const DashboardPage: NextPageWithLayout = () => {
         />
       )}
 
-      {/* Two-path onboarding panel — "Start replying automatically". Hides itself once
-          either path is live or when dismissed. Gated on pages AND settings having
-          loaded so the effective auto-reply state (D-026) is never derived from a
-          half-loaded snapshot. */}
-      {!pagesLoading && userSettings !== undefined && (
+      {/* Two-path onboarding panel — "Start replying automatically". Visibility is
+          lifted (setupPanelVisible) so the AutoReplyStatusCard suppression above can
+          never disagree with the panel; the shared setupDismiss instance makes the
+          banner reappear the moment the panel is dismissed. */}
+      {setupPanelVisible && (
         <SetupChecklistCard
           pages={pages}
           usage={usage ?? null}
@@ -597,6 +626,8 @@ const DashboardPage: NextPageWithLayout = () => {
             messagesAutoReply: userSettings?.messagesAutoReply ?? true,
           }}
           onTryPostReply={postReplySetup.openPicker}
+          dismissed={setupDismiss.dismissed}
+          onDismiss={setupDismiss.dismiss}
         />
       )}
 
