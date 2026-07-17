@@ -4006,6 +4006,40 @@ const TEST_CASES: TestCase[] = [
     { id: 689, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'متى تبدأ دورة الميكانيك المتقدمة؟', page: 'moto', expected: { flagsAbsent: ['info_not_in_kb'], replyContainsAny: mechCourseStartForms(), replyNotContains: ['لا أعرف', 'لا تتوفر لدي معلومات'] }, notes: 'startsAt renders as "starts YYYY-MM-DD" in the block — must answer the date (any digit form), not deflect.' },
     { id: 690, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'بكم عرض الشتاء طقم الجاكيت مع القفازات؟', page: 'moto', expected: { replyNotContains: ['199', '١٩٩'], replyContainsAny: ['انتهى', 'منتهي', 'غير متوفر', 'ما عاد', 'لم يعد', 'مو متوفر', 'للأسف', 'حالياً غير', 'ما عندنا', 'لا يوجد'] }, notes: 'Expired offer (endsAt 10 days past) is EXCLUDED from the prompt block — the AI must never quote its price; complete catalog → honest not-available.' },
     { id: 691, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'كم مدة دورة الميكانيك المتقدمة؟', page: 'moto', expected: { flagsAbsent: ['info_not_in_kb'], replyContainsAny: ['٦ أسابيع', '6 أسابيع', 'ستة أسابيع', '٦ اسابيع', '6 اسابيع'] }, notes: 'المدة lives ONLY in the item\'s attributes (not description) — proves the label:value fragment path.' },
+
+    // -----------------------------------------------------------------------
+    // Category 63: Truncation Robustness (July 2026 incident)
+    // A merchant rewrote their Business Info into a verbose sales playbook;
+    // price questions pushed generations past OPENAI_MAX_TOKENS, OpenAI cut
+    // the JSON mid-string (finish_reason 'length'), and customers got NO
+    // reply (~15-17 hot buyers/day silently dropped). The fix retries once
+    // with a brevity instruction. These cases steer the model verbose the
+    // same way (persona notes / explicit exhaustive ask) and assert only
+    // that a reply is DELIVERED — before the fix they FAIL with 'API call
+    // failed' (AiEmptyReplyError); with it they must always PASS. They also
+    // guard future prompt/model changes that re-lengthen replies.
+    // -----------------------------------------------------------------------
+    {
+        id: 692, category: 63, categoryName: 'Truncation Robustness', channel: 'dm',
+        message: 'بكم السعر؟',
+        page: 'fashion',
+        brandVoiceNotes: 'قاعدة إلزامية: عند أي سؤال عن السعر قدّمي العرض الكامل بالتفصيل وبدون اختصار أبداً: اذكري السعر الأساسي والخصم، ثم عدّدي الهدايا الست واحدة واحدة مع شرح كل هدية بجملتين كاملتين على الأقل: العلبة الفاخرة لحفظ المنتج، الحقيبة الخاصة للتنقل، كتيب أسرار الاستخدام، بطاقة ضمان الجودة لسنة كاملة، عينة مجانية من المنتج القادم، وكوبون خصم للطلبية القادمة. ثم اشرحي تفاصيل الشحن المجاني السريع لكل المدن خلال يومين إلى ثلاثة أيام، والدفع عند الاستلام مع إمكانية الفحص، وأن العرض محدود لأول خمس وعشرين عميلة فقط، واختمي بطلب الاسم والعنوان ورقم الهاتف والمقاس المناسب مع سرد القائمة الكاملة للمقاسات المتاحة.',
+        expected: {
+            replyMethod: ['ai'],
+            flagsAbsent: ['invalid_json'],
+        },
+        notes: 'Playbook-steered verbose price reply (the Nourva mechanism, business-agnostic fixture). The only hard assertion is delivery: an empty/truncated-and-dropped reply = API error = FAIL.',
+    },
+    {
+        id: 693, category: 63, categoryName: 'Truncation Robustness', channel: 'dm',
+        message: 'اكتب لي كل التفاصيل الكاملة عن كل الدورات والأسعار والمواعيد وطرق التسجيل والدفع، كل شي بالتفصيل الممل وبدون اختصار',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            flagsAbsent: ['invalid_json'],
+        },
+        notes: 'Customer explicitly demands an exhaustive answer — the longest natural generation path without persona steering. Must always deliver a reply, never silence.',
+    },
 ];
 
 /** Accepted textual forms of the dated fixture course's start date (seeded at

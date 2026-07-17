@@ -763,9 +763,18 @@ export class CommentProcessor {
             if (needsImmediateAttention(error)) {
                 const isRefusal = error instanceof AiRefusalError;
                 const flagReason = isRefusal ? 'ai_refused' : 'ai_empty_reply';
+                // Prefer the worker's specific message (e.g. truncated-after-retry)
+                // over the generic one — it reaches flag_meta and makes the failure
+                // diagnosable without replaying the pipeline.
                 const flagMeta = isRefusal
                     ? { ai_refused: { reason: error.refusalReason } }
-                    : { ai_empty_reply: { reason: 'AI reply was empty after content filtering' } };
+                    : {
+                        ai_empty_reply: {
+                            reason: error instanceof Error && error.message
+                                ? error.message
+                                : 'AI reply was empty after content filtering',
+                        },
+                    };
 
                 try {
                     // Scope: facebook_comment only. Instagram comments live in a

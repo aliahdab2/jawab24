@@ -36,6 +36,24 @@ function estimateTokens(text: string): number {
     return Math.ceil(text.length / 3.5);
 }
 
+/**
+ * Appended to the conversation when the first generation was cut off at
+ * max_tokens (finish_reason 'length') before retrying once. Business-agnostic
+ * on purpose — no merchant specifics and no absolute length targets; the base
+ * prompt already fixes language/persona, this only forces brevity.
+ */
+const TRUNCATION_RETRY_MESSAGE: OpenAI.ChatCompletionMessageParam = {
+    role: 'system',
+    content: 'Your previous attempt was cut off because it exceeded the maximum response length. '
+        + 'Write the reply again concisely: answer the customer\'s message directly in a few short '
+        + 'sentences with only the most essential facts. Keep the same language, persona, and tone.',
+};
+
+/** Sum token counts across the truncated and retried call; undefined only when both are. */
+function addTokens(a?: number, b?: number): number | undefined {
+    return a === undefined && b === undefined ? undefined : (a ?? 0) + (b ?? 0);
+}
+
 export class OpenAIService {
     private client: OpenAI | null = null;
 
@@ -74,121 +92,35 @@ export class OpenAIService {
             // Log token usage for observability
             console.log(JSON.stringify({ event: 'ai_call_token_usage', ...tokenInfo }));
 
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), config.openai.timeoutMs);
+            let completion = await this.createCompletion(messages, request.context?.pipeline);
 
-            let completion: OpenAI.ChatCompletion;
-            try {
-                // withAiMetrics handles attempts / returns / failed_before_log emit.
-                // The outer catch only re-throws timeouts as typed AiTimeoutError
-                // (backend's BullMQ uses the type to decide retry).
-                completion = await withAiMetrics(
+            // Truncation retry — finish_reason 'length' means OpenAI stopped
+            // generating at max_tokens, so the strict-schema JSON envelope is cut
+            // mid-string and can never parse. Merchant Business Info can steer the
+            // model into replies bigger than the completion cap (July 2026: a long
+            // campaign-pitch KB turned price questions into truncated replies →
+            // customers got silence). Retry ONCE with an explicit brevity
+            // instruction appended; the resent prefix is byte-identical, so
+            // OpenAI's prompt cache absorbs most of the input cost. If the retry
+            // is still truncated, fall through — the broken-JSON guard and
+            // empty-reply throw below flag the message exactly as before.
+            // Applies regardless of whether the cut content happens to parse:
+            // a parseable-but-cut reply is still a cut reply.
+            let truncatedUsage: OpenAI.CompletionUsage | undefined;
+            let finishReason = completion.choices[0]?.finish_reason;
+            if (finishReason === 'length') {
+                console.log(JSON.stringify({
+                    event: 'truncated_reply_retry',
+                    pipeline: request.context?.pipeline,
+                    model: config.openai.model,
+                    tokensOut: completion.usage?.completion_tokens,
+                }));
+                truncatedUsage = completion.usage;
+                completion = await this.createCompletion(
+                    [...messages, TRUNCATION_RETRY_MESSAGE],
                     request.context?.pipeline,
-                    config.openai.model,
-                    () => Sentry.startSpan(
-                        { name: 'ai.llm.call', op: 'ai' },
-                        () => this.client!.chat.completions.create({
-                            model: config.openai.model,
-                            messages,
-                            max_tokens: config.openai.maxTokens,
-                            temperature: config.openai.temperature,
-                            top_p: config.openai.topP,
-                            // Penalties intentionally zeroed for structured outputs. With
-                            // `response_format: json_schema` the model MUST reuse tokens like
-                            // `"`, `{`, `:`, and the schema's key names many times per response.
-                            // Non-zero frequency_penalty / presence_penalty bias the model
-                            // against exactly those required tokens, which produces unstable
-                            // output — most visibly, GPT occasionally emitted the entire JSON
-                            // object twice back-to-back, breaking JSON.parse and triggering
-                            // false `invalid_json` flags + medium-confidence downgrades
-                            // (see eval test #46, 2026-05-20). OpenAI's own guidance for
-                            // structured outputs is to leave both penalties at 0; the schema
-                            // is already constraining structure, so penalties have no upside
-                            // here and a real downside.
-                            frequency_penalty: 0,
-                            presence_penalty: 0,
-                            response_format: {
-                                type: 'json_schema',
-                                json_schema: {
-                                    name: 'ai_reply',
-                                    strict: true,
-                                    schema: {
-                                        type: 'object',
-                                        properties: {
-                                            reply: { type: 'string' },
-                                            intent: {
-                                                type: 'string',
-                                                enum: ['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
-                                                       'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT'],
-                                            },
-                                            confidence: {
-                                                type: 'string',
-                                                enum: ['high', 'medium', 'low'],
-                                            },
-                                            flags: {
-                                                type: 'array',
-                                                items: { type: 'string' },
-                                            },
-                                            hedging: { type: 'boolean' },
-                                            // Gender self-report (v53): lets the backend learn a
-                                            // name→gender consensus map and gender-bucket the DM
-                                            // exact cache. Grammar-enforced on every call; only
-                                            // meaningful for Arabic DMs (see promptBuilder).
-                                            gender: {
-                                                type: 'string',
-                                                enum: ['m', 'f', 'unknown'],
-                                            },
-                                            gender_basis: {
-                                                type: 'string',
-                                                enum: ['self', 'name', 'unclear'],
-                                            },
-                                            used_name: { type: 'boolean' },
-                                            language: {
-                                                type: 'string',
-                                                // ISO 639-1 codes. Includes scripts the detector now
-                                                // recognizes via Unicode properties: my (Burmese),
-                                                // th (Thai), zh (Chinese), ja (Japanese), ko (Korean),
-                                                // ru (Russian), hi (Hindi), he (Hebrew). With the
-                                                // prompt instructed to mirror the customer's language
-                                                // rather than fall back to English, strict-mode
-                                                // structured outputs need the enum to actually allow
-                                                // those values — otherwise GPT is forced to lie about
-                                                // what it wrote.
-                                                enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr', 'my', 'th', 'zh', 'ja', 'ko', 'ru', 'hi', 'he'],
-                                            },
-                                        },
-                                        required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'gender', 'gender_basis', 'used_name', 'language'] as const,
-                                        additionalProperties: false,
-                                    },
-                                },
-                            },
-                        }, { signal: controller.signal }),
-                    ),
-                    // Custom classifier — timeouts and quota exhaustion get distinct
-                    // error_classes so the breakdown script can separate them from
-                    // generic API errors. Check by name (not instanceof) so tests can
-                    // mock `openai` without providing the real APIUserAbortError class.
-                    (e) => (e instanceof Error && e.name === 'APIUserAbortError'
-                        ? 'AiTimeoutError'
-                        : isInsufficientQuotaError(e)
-                            ? 'AiQuotaError'
-                            : 'OpenAIApiError'),
                 );
-            } catch (e) {
-                // withAiMetrics already emitted failed_before_log. Re-throw typed
-                // errors so backend BullMQ classifies them correctly.
-                if (e instanceof Error && e.name === 'APIUserAbortError') {
-                    throw new AiTimeoutError(config.openai.timeoutMs);
-                }
-                // 429 insufficient_quota — account out of credit. Throw the typed
-                // error so the backend PARKS the job (long-delay re-enqueue) and
-                // alerts, instead of burning fast retries and flagging the row.
-                if (isInsufficientQuotaError(e)) {
-                    throw new AiQuotaExhaustedError();
-                }
-                throw e;
-            } finally {
-                clearTimeout(timeout);
+                finishReason = completion.choices[0]?.finish_reason;
             }
             // recordAiReturn emitted inside withAiMetrics on success. The
             // post-receive guards below (refusal, empty reply, hedging) run
@@ -233,6 +165,7 @@ export class OpenAIService {
                     console.log(JSON.stringify({
                         event: 'invalid_json_reply',
                         pipeline: request.context?.pipeline,
+                        finishReason,
                         raw: content.slice(0, 300),
                     }));
                 }
@@ -265,17 +198,28 @@ export class OpenAIService {
             const isIntentionalEmpty = validated.intent === 'OFFENSIVE' || validated.intent === 'SPAM_OR_IRRELEVANT';
             if (!validated.reply && !isIntentionalEmpty) {
                 recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'AiEmptyReplyError');
-                throw new AiEmptyReplyError();
+                // The truncation-specific message reaches the backend's flag_meta
+                // (reconstructed from the wire), so a recurrence is diagnosable
+                // without replaying the pipeline.
+                throw new AiEmptyReplyError(finishReason === 'length'
+                    ? 'Reply truncated at the model output limit even after a brevity retry'
+                    : undefined);
             }
 
             return {
                 reply: validated.reply,
                 // Prefer GPT's declared reply language (strict schema), fall back to input-based detection.
                 language: validated.language || request.language || detectedLanguage,
-                tokensUsed: completion.usage?.total_tokens,
-                tokensIn: completion.usage?.prompt_tokens,
-                tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
-                tokensOut: completion.usage?.completion_tokens,
+                // Token counts include the truncated first attempt when a retry
+                // happened — both calls were billed, and ai_usage_log / the admin
+                // cost panel must see the real spend.
+                tokensUsed: addTokens(completion.usage?.total_tokens, truncatedUsage?.total_tokens),
+                tokensIn: addTokens(completion.usage?.prompt_tokens, truncatedUsage?.prompt_tokens),
+                tokensInCached: addTokens(
+                    completion.usage?.prompt_tokens_details?.cached_tokens,
+                    truncatedUsage?.prompt_tokens_details?.cached_tokens,
+                ),
+                tokensOut: addTokens(completion.usage?.completion_tokens, truncatedUsage?.completion_tokens),
                 intent: validated.intent,
                 confidence: validated.confidence,
                 flags: validated.flags,
@@ -296,6 +240,134 @@ export class OpenAIService {
             // via the existing isTransientAiError classifier.
             Sentry.captureException(error instanceof Error ? error : new Error('OpenAI API error'), { tags: { service: 'openai' } });
             throw error;
+        }
+    }
+
+    /**
+     * One chat-completion request with the reply schema, its own timeout, and
+     * its own metrics pair. Every invocation is a separate billed OpenAI
+     * request, so each carries its own withAiMetrics wrap (one attempts +
+     * returns pair per request — the Phase 6.5 counter invariant). The
+     * truncation retry in generateReply is the only second caller.
+     */
+    private async createCompletion(
+        messages: OpenAI.ChatCompletionMessageParam[],
+        pipeline?: string,
+    ): Promise<OpenAI.ChatCompletion> {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), config.openai.timeoutMs);
+
+        try {
+            // withAiMetrics handles attempts / returns / failed_before_log emit.
+            // The catch below only re-throws timeouts as typed AiTimeoutError
+            // (backend's BullMQ uses the type to decide retry).
+            return await withAiMetrics(
+                pipeline,
+                config.openai.model,
+                () => Sentry.startSpan(
+                    { name: 'ai.llm.call', op: 'ai' },
+                    () => this.client!.chat.completions.create({
+                        model: config.openai.model,
+                        messages,
+                        max_tokens: config.openai.maxTokens,
+                        temperature: config.openai.temperature,
+                        top_p: config.openai.topP,
+                        // Penalties intentionally zeroed for structured outputs. With
+                        // `response_format: json_schema` the model MUST reuse tokens like
+                        // `"`, `{`, `:`, and the schema's key names many times per response.
+                        // Non-zero frequency_penalty / presence_penalty bias the model
+                        // against exactly those required tokens, which produces unstable
+                        // output — most visibly, GPT occasionally emitted the entire JSON
+                        // object twice back-to-back, breaking JSON.parse and triggering
+                        // false `invalid_json` flags + medium-confidence downgrades
+                        // (see eval test #46, 2026-05-20). OpenAI's own guidance for
+                        // structured outputs is to leave both penalties at 0; the schema
+                        // is already constraining structure, so penalties have no upside
+                        // here and a real downside.
+                        frequency_penalty: 0,
+                        presence_penalty: 0,
+                        response_format: {
+                            type: 'json_schema',
+                            json_schema: {
+                                name: 'ai_reply',
+                                strict: true,
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        reply: { type: 'string' },
+                                        intent: {
+                                            type: 'string',
+                                            enum: ['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
+                                                   'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT'],
+                                        },
+                                        confidence: {
+                                            type: 'string',
+                                            enum: ['high', 'medium', 'low'],
+                                        },
+                                        flags: {
+                                            type: 'array',
+                                            items: { type: 'string' },
+                                        },
+                                        hedging: { type: 'boolean' },
+                                        // Gender self-report (v53): lets the backend learn a
+                                        // name→gender consensus map and gender-bucket the DM
+                                        // exact cache. Grammar-enforced on every call; only
+                                        // meaningful for Arabic DMs (see promptBuilder).
+                                        gender: {
+                                            type: 'string',
+                                            enum: ['m', 'f', 'unknown'],
+                                        },
+                                        gender_basis: {
+                                            type: 'string',
+                                            enum: ['self', 'name', 'unclear'],
+                                        },
+                                        used_name: { type: 'boolean' },
+                                        language: {
+                                            type: 'string',
+                                            // ISO 639-1 codes. Includes scripts the detector now
+                                            // recognizes via Unicode properties: my (Burmese),
+                                            // th (Thai), zh (Chinese), ja (Japanese), ko (Korean),
+                                            // ru (Russian), hi (Hindi), he (Hebrew). With the
+                                            // prompt instructed to mirror the customer's language
+                                            // rather than fall back to English, strict-mode
+                                            // structured outputs need the enum to actually allow
+                                            // those values — otherwise GPT is forced to lie about
+                                            // what it wrote.
+                                            enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr', 'my', 'th', 'zh', 'ja', 'ko', 'ru', 'hi', 'he'],
+                                        },
+                                    },
+                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'gender', 'gender_basis', 'used_name', 'language'] as const,
+                                    additionalProperties: false,
+                                },
+                            },
+                        },
+                    }, { signal: controller.signal }),
+                ),
+                // Custom classifier — timeouts and quota exhaustion get distinct
+                // error_classes so the breakdown script can separate them from
+                // generic API errors. Check by name (not instanceof) so tests can
+                // mock `openai` without providing the real APIUserAbortError class.
+                (e) => (e instanceof Error && e.name === 'APIUserAbortError'
+                    ? 'AiTimeoutError'
+                    : isInsufficientQuotaError(e)
+                        ? 'AiQuotaError'
+                        : 'OpenAIApiError'),
+            );
+        } catch (e) {
+            // withAiMetrics already emitted failed_before_log. Re-throw typed
+            // errors so backend BullMQ classifies them correctly.
+            if (e instanceof Error && e.name === 'APIUserAbortError') {
+                throw new AiTimeoutError(config.openai.timeoutMs);
+            }
+            // 429 insufficient_quota — account out of credit. Throw the typed
+            // error so the backend PARKS the job (long-delay re-enqueue) and
+            // alerts, instead of burning fast retries and flagging the row.
+            if (isInsufficientQuotaError(e)) {
+                throw new AiQuotaExhaustedError();
+            }
+            throw e;
+        } finally {
+            clearTimeout(timeout);
         }
     }
 
