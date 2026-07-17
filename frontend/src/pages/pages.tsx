@@ -264,23 +264,44 @@ const PagesPage: NextPageWithLayout = () => {
   }, [loading, pages.length, fbToken, isAuthenticated, isOwner, syncing]);
 
   // Deep-link auto-opens (e.g. from the dashboard nudge / setup checklist).
-  const pagesReady = !loading && pages.length > 0;
+  // Ready = the pages query SETTLED, not "pages exist": with zero pages the
+  // handlers below no-op (no modal), the param still gets consumed, and the
+  // page's own connect-a-page empty state explains the situation — instead of
+  // an un-stripped param popping a modal open on a later background refetch.
+  const pagesReady = !loading;
 
-  // ?openKb=true → open the Business Info editor on the first page that needs it
-  // (same canonical predicate as the dashboard nudge, checklist, and "Add info" chip).
+  // ?openKb=true → open the Business Info editor on the first page that NEEDS
+  // it (same canonical predicate as the dashboard nudge, checklist, and "Add
+  // info" chip — their message is "add your missing info").
   const openKbEditor = useCallback(() => {
-    setEditingPage(pages.find(needsBusinessInfo) ?? pages[0]);
+    const target = pages.find(needsBusinessInfo) ?? pages[0];
+    if (!target) return;
+    setEditingPage(target);
     resetSaved();
   }, [pages, resetSaved]);
   useOpenOnQueryParam('openKb', pagesReady, openKbEditor);
+
+  // ?openKbActive=true → open the editor on the merchant's MOST-ACTIVE page —
+  // the page whose info the replies actually use. The Settings board's
+  // «من معلومات نشاطك التجاري» links here: needs-first (openKb) would jump to a
+  // dormant empty page when the active page is already filled, which reads as
+  // the merchant's info having vanished.
+  const openKbEditorActive = useCallback(() => {
+    if (!pages[0]) return;
+    setEditingPage(pages[0]);
+    resetSaved();
+  }, [pages, resetSaved]);
+  useOpenOnQueryParam('openKbActive', pagesReady, openKbEditorActive);
 
   // ?openTestReply=true → open the Test Smart Reply modal (the checklist's "Try
   // your first reply" step), pre-filled with a sample so trying a reply is one
   // click, before any real customer messages — an inbox would just be empty then.
   const openTestReply = useCallback(() => {
     // Test against a connected page — a disconnected one can't generate a reply.
+    const target = pages.find((p) => p.isConnected !== false) ?? pages[0];
+    if (!target) return;
     setTestReplyPrefillSample(true);
-    setTestSmartReplyPage(pages.find((p) => p.isConnected !== false) ?? pages[0]);
+    setTestSmartReplyPage(target);
   }, [pages]);
   useOpenOnQueryParam('openTestReply', pagesReady, openTestReply);
 
