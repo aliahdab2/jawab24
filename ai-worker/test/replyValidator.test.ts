@@ -241,6 +241,31 @@ describe('stripSelfIdentification (Check 6)', () => {
     it('returns empty input unchanged', () => {
         expect(stripSelfIdentification('', 'ar')).toBe('');
     });
+
+    // Regression (prod 2026-07-17): the dot inside "Jawab24.com" was treated as a
+    // sentence boundary, so stripping the brand sentence left the orphaned TLD
+    // fragment "com ممكن يساعدوك أكتر." which was sent to a customer.
+    it('does not split inside a domain — no orphaned "com" fragment survives', () => {
+        const out = stripSelfIdentification(
+            'ما عندي هالمعلومة حالياً، بس فريق Jawab24.com ممكن يساعدوك أكتر.', 'ar');
+        expect(out).not.toMatch(/jawab24/i);
+        expect(out).not.toMatch(/\bcom\b/);
+        // Whole sentence stripped → under 10 useful chars → canned AR fallback.
+        expect(out).toBe('أنا من فريق الصفحة، كيف أقدر أساعدك؟');
+    });
+
+    it('keeps non-offending sentences intact when a domain sentence is stripped', () => {
+        const out = stripSelfIdentification(
+            'You can visit Jawab24.com for details. Our hours are 9 to 5 every weekday here.', 'en');
+        expect(out).not.toMatch(/jawab24|(^|\s)com\b/i);
+        expect(out).toContain('Our hours are 9 to 5');
+    });
+
+    it('does not treat decimals as sentence boundaries', () => {
+        const reply = 'I am a bot. Delivery takes 2.5 days on average for most orders.';
+        const out = stripSelfIdentification(reply, 'en');
+        expect(out).toBe('Delivery takes 2.5 days on average for most orders.');
+    });
 });
 
 describe('validateReply orchestration', () => {
