@@ -64,6 +64,7 @@ vi.mock('../../src/lib/redis', () => ({
         quit: vi.fn(),
         scan: vi.fn().mockResolvedValue(['0', []]),
         del: vi.fn().mockResolvedValue(0),
+        incr: vi.fn().mockResolvedValue(1), // v53 gender-bucket adoption counters
     },
     redisScanDelete: vi.fn().mockResolvedValue(0),
 }));
@@ -1182,12 +1183,14 @@ describe('AI Service', () => {
         describe('save-side downgrade guard', () => {
             it('a bucket-matching, name-free reply saves to the same gender-bucket key it read', async () => {
                 const { getConfidentGender } = await import('../../src/services/genderMap');
+                const { redis } = await import('../../src/lib/redis');
                 vi.mocked(getConfidentGender).mockResolvedValue('m');
                 const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
                     reply: 'أهلاً بك! السعر 50 ريال', language: 'ar',
                     gender: 'm', genderBasis: 'name', usedName: false,
                 });
                 expect(savedKey).toBe(readKey);
+                expect(redis.incr).toHaveBeenCalledWith('metrics:cache:gender_bucket:save_ok');
             });
 
             it('a gender-neutral reply (gender unknown) also saves to the gender bucket', async () => {
@@ -1202,6 +1205,7 @@ describe('AI Service', () => {
 
             it('model-reported name use downgrades the save to the per-name bucket', async () => {
                 const { getConfidentGender } = await import('../../src/services/genderMap');
+                const { redis } = await import('../../src/lib/redis');
                 vi.mocked(getConfidentGender).mockResolvedValue('m');
                 const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
                     reply: 'أهلاً! السعر 50 ريال', language: 'ar',
@@ -1209,6 +1213,7 @@ describe('AI Service', () => {
                 });
                 expect(savedKey).toBeDefined();
                 expect(savedKey).not.toBe(readKey);
+                expect(redis.incr).toHaveBeenCalledWith('metrics:cache:gender_bucket:save_downgrade:used_name');
             });
 
             it('a reply literally embedding the first name downgrades even when the model says usedName:false', async () => {

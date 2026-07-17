@@ -219,8 +219,12 @@ export class AiService {
             if (ctx.genderBucket) {
                 key.push(`g:${ctx.genderBucket}`);
             } else {
+                // 16 hex chars (64 bits), widened from v51's 8: two different names
+                // colliding into one bucket would share gendered replies across names —
+                // at 32 bits that reaches ~50% probability around 77k distinct names.
+                // Widening is free in v53 (the pv: bump retires every old key anyway).
                 const firstName = ctx.senderName.trim().split(/\s+/)[0];
-                if (firstName) key.push(`n:${crypto.createHash('md5').update(firstName).digest('hex').slice(0, 8)}`);
+                if (firstName) key.push(`n:${crypto.createHash('md5').update(firstName).digest('hex').slice(0, 16)}`);
             }
         }
 
@@ -408,6 +412,9 @@ export class AiService {
             cacheCtx.genderBucket = await getConfidentGender(cacheCtx.senderName);
             if (cacheCtx.genderBucket) {
                 this.logger.debug('ai_cache_gender_bucket', { pageId, bucket: cacheCtx.genderBucket });
+                // Prod-visible adoption counter (prod logs at info — debug lines never
+                // land there). Same fire-and-forget pattern as the §13c AI counters.
+                redis.incr('metrics:cache:gender_bucket:read').catch(() => {});
             }
         }
 
@@ -632,7 +639,17 @@ export class AiService {
                         replyEmbedsName,
                         reportedGender: response.data.gender,
                     });
+                    // Prod-visible: the downgrade rate vs save_ok is THE metric that
+                    // decides how much sharing the gender bucket actually recovers
+                    // (high used_name rate = model name-drops too often to share).
+                    // One reason label, first tripped guard wins.
+                    const reason = response.data.usedName !== false ? 'used_name'
+                        : replyEmbedsName ? 'name_substring'
+                            : 'gender_mismatch';
+                    redis.incr(`metrics:cache:gender_bucket:save_downgrade:${reason}`).catch(() => {});
                     saveCacheCtx.genderBucket = null;
+                } else {
+                    redis.incr('metrics:cache:gender_bucket:save_ok').catch(() => {});
                 }
             }
 

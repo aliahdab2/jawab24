@@ -49,7 +49,12 @@ export function genderNameKeyHash(senderName: string): string | null {
     if (!firstToken) return null;
     const normalized = normalizeArabic(firstToken).toLowerCase();
     if (!normalized) return null;
-    return crypto.createHash('md5').update(normalized).digest('hex').slice(0, 8);
+    // 16 hex chars (64 bits), NOT 8: two names colliding here merge their
+    // counters, and a cross-gender merge could confidently mislabel the rarer
+    // name — the exact bug class this map exists to prevent. At 32 bits the
+    // birthday bound reaches ~50% collision probability around 77k distinct
+    // fleet-wide names; at 64 bits it is effectively zero at any scale.
+    return crypto.createHash('md5').update(normalized).digest('hex').slice(0, 16);
 }
 
 const counterKeys = (hash: string): [string, string] => [

@@ -60,7 +60,8 @@ describe('genderMap — fleet-learned first-name→gender consensus (v53)', () =
 
             expect(pipelineMock.incr).toHaveBeenCalledTimes(1);
             const incrKey = pipelineMock.incr.mock.calls[0][0] as string;
-            expect(incrKey).toMatch(/^gender:name:[0-9a-f]{8}:m$/);
+            // 16 hex chars (64-bit) — 8 would collide across the fleet's name space.
+            expect(incrKey).toMatch(/^gender:name:[0-9a-f]{16}:m$/);
 
             // Both m and f TTLs refreshed together so one sibling can't expire
             // while the other persists and skew the ratio.
