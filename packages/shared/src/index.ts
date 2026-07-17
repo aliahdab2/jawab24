@@ -38,6 +38,10 @@ export interface FlagMeta {
     info_not_in_kb?: { question: string };
     price_not_in_kb?: { question: string };
     phone_not_in_kb?: { question: string };
+    // Informational marker on OUTGOING rows only: the ai-worker's truncation
+    // retry auto-shortened this reply before delivery. Drives a quiet inbox
+    // badge; deliberately never set alongside needs_attention.
+    reply_shortened?: Record<string, never>;
     // Open-ended: future flags can add their own namespaced meta here.
     [key: string]: Record<string, unknown> | undefined;
 }

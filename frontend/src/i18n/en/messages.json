@@ -54,5 +54,7 @@
   "resolve": "Resolve",
   "unresolve": "Undo",
   "newMessage": "New message",
-  "openConversation": "Open conversation with {name}"
+  "openConversation": "Open conversation with {name}",
+  "replyShortened": "Auto-shortened",
+  "replyShortenedHint": "This reply was longer than the sending length limit (about 1,000 characters), so a shortened version was delivered automatically. Adding short, direct answers in your Business Info keeps replies full and fast."
 }

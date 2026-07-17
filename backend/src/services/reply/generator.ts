@@ -136,11 +136,20 @@ export function computeReplyFlags(opts: {
     retrievedChunkCount: number;
     /** Whether the full static KB was sent to the model (it can self-assess confidence). */
     hasEffectiveKB: boolean;
-}): { normalizedIntent: string | undefined; flags: string[] } {
+}): { normalizedIntent: string | undefined; flags: string[]; replyShortened: boolean } {
     const { aiFlags, confidence, intent, queryText, ragAttempted, retrievedChunkCount, hasEffectiveKB } = opts;
     const normalizedIntent = normalizeAiIntent(intent);
 
-    const flags = [...(aiFlags || [])];
+    // `reply_shortened` is an informational marker from the ai-worker's
+    // truncation retry: the reply WAS delivered, just auto-shortened to fit the
+    // model output cap. It must never behave like an alarm flag — any unknown
+    // flag left in `flags` lands in flag_reason and trips needsAttention (see
+    // computeNeedsAttention) and from there the flagged_reply push. Strip it
+    // here, the single choke point shared by production and playground, and
+    // surface it separately for the quiet inbox/test-page badge.
+    const rawFlags = aiFlags || [];
+    const replyShortened = rawFlags.includes('reply_shortened');
+    const flags = rawFlags.filter(f => f !== 'reply_shortened');
     if (confidence === 'low' && !flags.includes('low_confidence')) {
         flags.push('low_confidence');
     }
@@ -169,7 +178,7 @@ export function computeReplyFlags(opts: {
         }
     }
 
-    return { normalizedIntent, flags };
+    return { normalizedIntent, flags, replyShortened };
 }
 
 import { t } from '../../utils/i18n';
@@ -324,6 +333,12 @@ export interface GenerateReplyResult {
      * Callers must fall back to text-only when the adapter doesn't support cards.
      */
     productCards?: ProductCard[];
+    /**
+     * The ai-worker auto-shortened this reply (truncation retry) before it was
+     * delivered. Informational only — drives a quiet badge on the outgoing
+     * message; deliberately never part of flagReason/needsAttention.
+     */
+    replyShortened?: boolean;
 }
 
 export interface PlaygroundInput {
@@ -387,6 +402,8 @@ export interface PlaygroundResult {
     tokensUsed: number;
     model: string | null;
     gapRecorded: boolean;
+    /** See GenerateReplyResult.replyShortened — quiet badge signal, never an alarm. */
+    replyShortened: boolean;
 }
 
 /** Lazy-init retrieval service (only created when RAG_MODE != 'off' and OPENAI_API_KEY exists) */
@@ -826,6 +843,7 @@ export class ReplyGenerator {
                     chunksRetrieved: 0, chunks: [], intent: 'SPAM_OR_IRRELEVANT',
                     confidence: null, flags: [], needsAttention: false, cached: false,
                     detectedLanguage: null, tokensUsed: 0, model: null, gapRecorded: false,
+                    replyShortened: false,
                 };
             }
             questionForAI = pre.commentForAI;
@@ -894,7 +912,7 @@ export class ReplyGenerator {
         // 5. Derive flags + intent — shared with processAiResponse (production), so the
         // test tool/eval can't drift from production. Playground skips the billing + gap
         // side effects that processAiResponse layers on top.
-        const { normalizedIntent, flags } = computeReplyFlags({
+        const { normalizedIntent, flags, replyShortened } = computeReplyFlags({
             aiFlags: aiResponse.flags,
             confidence: aiResponse.confidence,
             intent: aiResponse.intent,
@@ -956,6 +974,7 @@ export class ReplyGenerator {
             tokensUsed: aiResponse.tokensUsed || 0,
             model: aiResponse.model || null,
             gapRecorded,
+            replyShortened,
         };
     }
 
@@ -982,7 +1001,7 @@ export class ReplyGenerator {
     ): Promise<GenerateReplyResult> {
         // Derive flags + normalized intent — shared with generateForPlayground so the
         // test tool/eval can't drift from this production path (see computeReplyFlags).
-        const { normalizedIntent, flags } = computeReplyFlags({
+        const { normalizedIntent, flags, replyShortened } = computeReplyFlags({
             aiFlags: aiResponse.flags,
             confidence: aiResponse.confidence,
             intent: aiResponse.intent,
@@ -1035,6 +1054,7 @@ export class ReplyGenerator {
             aiIntent: normalizedIntent,
             confidence: aiResponse.confidence,
             ...(aiResponse.productCards?.length ? { productCards: aiResponse.productCards } : {}),
+            ...(replyShortened ? { replyShortened: true } : {}),
         };
     }
 }

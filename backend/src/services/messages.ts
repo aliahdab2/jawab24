@@ -479,6 +479,10 @@ export class MessagesService {
         senderName?: string,
         originContentId?: string,
         clientMessageId?: string,
+        // Informational metadata for the outgoing bubble (e.g. reply_shortened —
+        // the truncation-retry badge). Distinct from the incoming row's alarm
+        // flagMeta set via markAsReplied; never implies needs_attention.
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
     ): Promise<Message> {
         // Platform unknown in this call — inherit from existing conversation if present,
         // default to 'facebook' otherwise. This is safe because we never overwrite the
@@ -517,6 +521,7 @@ export class MessagesService {
                 replyText,
                 replyMethod,
                 ...(clientMessageId ? { clientMessageId } : {}),
+                ...(flagMeta ? { flagMeta } : {}),
                 repliedAt: new Date(),
                 createdTime: new Date(),
             })

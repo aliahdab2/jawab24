@@ -642,7 +642,7 @@ export class MessageProcessor {
                 );
             // Only replyText is reassigned below (fallback substitution); the rest are const.
             let replyText = generated.replyText;
-            const { replyMethod, needsAttention, flagReason, flagMeta, aiIntent, confidence, productCards } = generated;
+            const { replyMethod, needsAttention, flagReason, flagMeta, aiIntent, confidence, productCards, replyShortened } = generated;
             lap('12-generateReply');
 
             // Capture the original AI-generated reply before any modifications (fallback substitution)
@@ -801,8 +801,14 @@ export class MessageProcessor {
                 // 14. Mark as replied
                 await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent, tx, aiOriginalReply, flagMeta);
 
-                // 15. Store outgoing message
-                const stored = await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, replyText, replyMethod, tx);
+                // 15. Store outgoing message. The reply_shortened marker rides the
+                // OUTGOING row's flagMeta (quiet inbox badge) — the incoming row's
+                // alarm flagMeta above stays untouched by it.
+                const stored = await messagesService.storeOutgoingMessage(
+                    page.id, workspaceId, senderId, replyText, replyMethod, tx,
+                    undefined, undefined, undefined,
+                    replyShortened ? { reply_shortened: {} } : undefined,
+                );
                 outgoingMessage = {
                     id: stored.id,
                     pageId: stored.pageId,

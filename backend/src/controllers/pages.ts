@@ -604,6 +604,11 @@ export class PagesController {
                     latencyMs: Date.now() - startTime,
                     commentReplyMode: channel === 'comment' ? commentReplyMode : null,
                     nudgeText: channel === 'comment' && !isSkipped ? nudgeText : null,
+                    // Customer-safe teaching signal: the reply exceeded the model
+                    // output cap and was auto-shortened by the truncation retry.
+                    // Lets the merchant see the shortening the moment they test
+                    // their Business Info, before any customer is affected.
+                    replyShortened: !isSkipped && result.replyShortened,
                 },
             });
         } catch (error) {

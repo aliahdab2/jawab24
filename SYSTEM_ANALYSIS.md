@@ -2174,7 +2174,7 @@ These are the **actual production defaults** from the codebase (`workspaceSettin
 | **Rate Limit (Messages)** | `10/min` per sender per page | `rate-limiter.ts` |
 | **Comment Flag Threshold** | `> 50 words` → `comment_too_long` flag | `ai-worker/src/services/reply/replyValidator.ts` |
 | **Comment Hard Truncate** | `> 280 chars` → truncate at sentence (public mode only) | `commentProcessor.ts` |
-| **Completion Token Cap** | `500` (`OPENAI_MAX_TOKENS`); `finish_reason: length` → ONE retry with a brevity instruction (prompt-cache-priced); still truncated → `ai_empty_reply` flag with truncation-specific reason | `ai-worker/src/services/openai.ts` |
+| **Completion Token Cap** | `500` (`OPENAI_MAX_TOKENS`); `finish_reason: length` → ONE retry with a brevity instruction (prompt-cache-priced); still truncated → `ai_empty_reply` flag with truncation-specific reason. A successful retry tags the reply `reply_shortened` (informational only — stripped from the alarm flag set in `computeReplyFlags`, never trips needs-attention) → quiet inbox badge (outgoing-row `flag_meta`) + Test Page hint + `replyShortened` on the test-reply response | `ai-worker/src/services/openai.ts`, `backend/src/services/reply/generator.ts` |
 | **Cache TTL** | `30 days` | `ai.ts` |
 | **Reply Lock TTL** | `60 seconds` | `replyLock.ts` |
 | **Handoff Pause** | `15 minutes` | `workspaceSettings.ts` |

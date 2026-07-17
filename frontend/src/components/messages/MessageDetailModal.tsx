@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, DetailSheet } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, DetailSheet, InfoPopover } from '@/components/ui';
 import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -30,6 +30,7 @@ import {
   Loader2,
   Copy,
   Check,
+  Minimize2,
 } from 'lucide-react';
 import type { Locale } from 'date-fns';
 
@@ -413,6 +414,19 @@ export function MessageDetailModal({
                   <span title={formatFullTime(msg.createdAt, dateLocale)}>{formatMessageTime(msg.createdAt, dateLocale)}</span>
                   {msg.direction === 'outgoing' && (
                     <ReplySourceBadge method={msg.replyMethod} variant="detail" />
+                  )}
+                  {/* Quiet informational badge — the reply was auto-shortened by the
+                      truncation retry. Deliberately NOT an alarm (no needs-attention). */}
+                  {msg.direction === 'outgoing' && msg.flagMeta?.reply_shortened && (
+                    <span className="inline-flex items-center gap-1 normal-case tracking-normal font-medium">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border status-info text-[10px]">
+                        <Minimize2 className="w-3 h-3" aria-hidden="true" />
+                        {t('replyShortened')}
+                      </span>
+                      <InfoPopover label={tc('info')} panelWidth="sm">
+                        <p>{t('replyShortenedHint')}</p>
+                      </InfoPopover>
+                    </span>
                   )}
                 </div>
               </div>

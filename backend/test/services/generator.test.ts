@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ReplyGenerator, shouldSkipReply, computeReplyFlags } from '../../src/services/reply/generator';
+import { ReplyGenerator, shouldSkipReply, computeReplyFlags, computeNeedsAttention } from '../../src/services/reply/generator';
 
 // Mock all dependencies
 vi.mock('../../src/services/ai', () => ({
@@ -1223,6 +1223,43 @@ describe('computeReplyFlags', () => {
             ...baseOpts, ragAttempted: false, retrievedChunkCount: 0, hasEffectiveKB: false,
         });
         expect(flags).not.toContain('info_not_in_kb');
+    });
+
+    // reply_shortened is the ai-worker's truncation-retry marker: informational
+    // only. It must be stripped out of the alarm-flag set (any unknown flag left
+    // in `flags` reaches flag_reason AND trips needsAttention for question-like
+    // intents) and surfaced separately for the quiet inbox/test-page badge.
+    describe('reply_shortened extraction (July 2026 truncation-retry badge)', () => {
+        it('strips reply_shortened from flags and surfaces it as replyShortened', () => {
+            const { flags, replyShortened } = computeReplyFlags({
+                ...baseOpts, aiFlags: ['reply_shortened'],
+            });
+            expect(replyShortened).toBe(true);
+            expect(flags).toEqual([]);
+        });
+
+        it('a shortened+delivered QUESTION reply must NOT need attention or carry a flag reason', () => {
+            const { flags, normalizedIntent, replyShortened } = computeReplyFlags({
+                ...baseOpts, intent: 'QUESTION', aiFlags: ['reply_shortened'],
+            });
+            expect(replyShortened).toBe(true);
+            expect(computeNeedsAttention(flags, normalizedIntent)).toBe(false);
+            expect(flags.join(',')).toBe('');
+        });
+
+        it('preserves other flags (and their alarm behavior) alongside the marker', () => {
+            const { flags, normalizedIntent, replyShortened } = computeReplyFlags({
+                ...baseOpts, aiFlags: ['reply_shortened', 'info_not_in_kb'],
+            });
+            expect(replyShortened).toBe(true);
+            expect(flags).toEqual(['info_not_in_kb']);
+            expect(computeNeedsAttention(flags, normalizedIntent)).toBe(true);
+        });
+
+        it('returns replyShortened=false when the marker is absent', () => {
+            const { replyShortened } = computeReplyFlags({ ...baseOpts, aiFlags: ['low_confidence'] });
+            expect(replyShortened).toBe(false);
+        });
     });
 });
 

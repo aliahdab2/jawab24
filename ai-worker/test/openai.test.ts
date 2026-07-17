@@ -370,6 +370,10 @@ describe('OpenAI Service - Structured JSON Response', () => {
             expect(result.reply).toBe('التوصيل مجاني لكل المدن، والعرض يشمل قطعة ثانية هدية.');
             expect(mockCreate).toHaveBeenCalledTimes(2);
 
+            // The delivered-after-retry reply carries the informational marker the
+            // backend turns into the quiet "auto-shortened" badge.
+            expect(result.flags).toContain('reply_shortened');
+
             // The retry appends a brevity system message after the original messages.
             const firstMessages = mockCreate.mock.calls[0][0].messages;
             const retryMessages = mockCreate.mock.calls[1][0].messages;
@@ -419,6 +423,7 @@ describe('OpenAI Service - Structured JSON Response', () => {
             expect(result.reply).toBe('التوصيل مجاني لكل المدن، والعرض يشمل قطعة ثانية هدية.');
             expect(mockCreate).toHaveBeenCalledTimes(1);
             expect(result.tokensUsed).toBe(560);
+            expect(result.flags).not.toContain('reply_shortened');
         });
     });
 

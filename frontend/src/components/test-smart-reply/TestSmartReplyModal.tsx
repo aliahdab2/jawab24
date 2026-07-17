@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslations, useLocale } from 'next-intl';
 import { getLocaleDirection } from '@/utils/locale';
 import clsx from 'clsx';
-import { Send, Loader2, Sparkles, Zap, Ban, Trash2, AlertTriangle, MessageSquare, MessageCircle, X, FileText, ChevronDown } from 'lucide-react';
+import { Send, Loader2, Sparkles, Zap, Ban, Trash2, AlertTriangle, MessageSquare, MessageCircle, X, FileText, ChevronDown, Minimize2 } from 'lucide-react';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
@@ -21,6 +21,9 @@ interface TestMessage {
   latencyMs?: number;
   commentReplyMode?: 'public' | 'private' | 'dual' | null;
   nudgeText?: string | null;
+  /** The reply exceeded the model output cap and was auto-shortened — teaching
+   *  signal so the merchant sees the shortening while editing Business Info. */
+  replyShortened?: boolean;
 }
 
 interface TestSmartReplyModalProps {
@@ -116,6 +119,7 @@ export function TestSmartReplyModal({ page, onClose, initialQuestion }: TestSmar
         latencyMs: result.latencyMs,
         commentReplyMode: result.commentReplyMode,
         nudgeText: result.nudgeText,
+        replyShortened: result.replyShortened,
       };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err) {
@@ -308,6 +312,17 @@ export function TestSmartReplyModal({ page, onClose, initialQuestion }: TestSmar
                           {t('responseTime', { ms: msg.latencyMs })}
                         </span>
                       )}
+                    </div>
+                  )}
+
+                  {/* Teaching hint — the reply was auto-shortened to fit the sending
+                      limit. Informational only, mirrors the addKbHint styling but
+                      with the neutral info tint (this is not a problem to fix NOW,
+                      it's how to get better replies). */}
+                  {msg.role === 'assistant' && msg.replyShortened && (
+                    <div className="flex items-start gap-1.5 mt-1.5 px-2.5 py-1.5 rounded-lg border status-info text-[11px] leading-relaxed max-w-[90%] sm:max-w-[85%]">
+                      <Minimize2 className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                      <span>{t('replyShortenedHint')}</span>
                     </div>
                   )}
                 </div>

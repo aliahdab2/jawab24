@@ -21,5 +21,6 @@
   "quotaExceededIOS": "Monthly smart reply limit reached. Resets at the start of the next billing cycle.",
   "addKbHint": "Add Business Info to this page for better replies",
   "nudge": "Public comment",
-  "private": "Private message"
+  "private": "Private message",
+  "replyShortenedHint": "This reply exceeded the sending length limit (about 1,000 characters) and was auto-shortened. Short, direct answers in your Business Info reach customers in full — and convert better."
 }

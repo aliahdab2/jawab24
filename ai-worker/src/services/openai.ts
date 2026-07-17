@@ -206,6 +206,15 @@ export class OpenAIService {
                     : undefined);
             }
 
+            // Mark replies that only exist thanks to the truncation retry — the
+            // backend strips this into a quiet informational badge (never an
+            // alarm flag) so the merchant can see their Business Info produces
+            // over-long replies. Riding the flags array persists it through both
+            // AI caches for free (cached copies ARE the shortened text).
+            const responseFlags = truncatedUsage
+                ? [...(validated.flags ?? []), 'reply_shortened']
+                : validated.flags;
+
             return {
                 reply: validated.reply,
                 // Prefer GPT's declared reply language (strict schema), fall back to input-based detection.
@@ -222,7 +231,7 @@ export class OpenAIService {
                 tokensOut: addTokens(completion.usage?.completion_tokens, truncatedUsage?.completion_tokens),
                 intent: validated.intent,
                 confidence: validated.confidence,
-                flags: validated.flags,
+                flags: responseFlags,
                 gender: validated.gender,
                 genderBasis: validated.genderBasis,
                 usedName: validated.usedName,
