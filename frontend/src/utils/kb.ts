@@ -11,12 +11,21 @@ import { KB_FILLED_MIN_CHARS, isBusinessInfoProvided } from '@jawab24/shared';
 export { KB_FILLED_MIN_CHARS };
 
 /**
- * Deep-link that opens the Business Info editor on /pages (handled there via
- * useOpenOnQueryParam). Single constant so the settings board, dashboard nudge,
- * and setup checklist can't drift if the route/param ever changes. (`openKb` is
- * the legacy-internal name — the user-facing feature is "Business Info".)
+ * Deep-links that open the Business Info editor on /pages (handled there via
+ * useOpenOnQueryParam). Single constants so the consumers can't drift if the
+ * route/param ever changes. (`openKb` is the legacy-internal name — the
+ * user-facing feature is "Business Info".)
+ *
+ * Two intents, two params:
+ * - KB_DEEP_LINK ("add your missing info" — dashboard nudge, setup checklist):
+ *   opens the first page that NEEDS info (`needsBusinessInfo`).
+ * - KB_DEEP_LINK_ACTIVE ("show me the info my replies use" — the Settings
+ *   board's «من معلومات نشاطك التجاري» links): opens the MOST-ACTIVE page, so a
+ *   merchant with a filled active page never lands on a dormant page's empty
+ *   editor (which reads as their info having vanished).
  */
 export const KB_DEEP_LINK = '/pages?openKb=true';
+export const KB_DEEP_LINK_ACTIVE = '/pages?openKbActive=true';
 
 /**
  * True once a page carries real, merchant-provided business info: enough text

@@ -6,7 +6,7 @@ import { useTextareaAutoResize } from '@/hooks/useTextareaAutoResize';
 import { ArrowLeft } from 'lucide-react';
 import { PostReplyIcon } from '@/utils/postReply';
 import { SmartReplyIcon } from '@/utils/smartReply';
-import { KB_DEEP_LINK } from '@/utils/kb';
+import { KB_DEEP_LINK_ACTIVE } from '@/utils/kb';
 import { useTranslations, useLocale } from 'next-intl';
 import { getLocaleDirection, isRTLLocale } from '@/utils/locale';
 import type { SettingsCardProps } from './types';
@@ -79,7 +79,7 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
   const renderSmartRepliesSub = () => t.rich('autoReplyBoard.smartRepliesSub', {
     kb: (chunks) => (
       <Link
-        href={KB_DEEP_LINK}
+        href={KB_DEEP_LINK_ACTIVE}
         className="underline decoration-dotted underline-offset-2 hover:text-brand-600 dark:hover:text-brand-400"
       >
         {chunks}

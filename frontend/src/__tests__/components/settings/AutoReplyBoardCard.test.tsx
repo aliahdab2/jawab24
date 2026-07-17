@@ -66,13 +66,16 @@ describe('AutoReplyBoardCard — the three-row board', () => {
     expect(screen.queryByRole('button', { name: /Post Reply/ })).toBeNull();
   });
 
-  // "from your Business Info" is a doorway to authoring it (KB deep-link), not just copy.
-  it('links "Business Info" in both Smart-Replies subtitles to the KB editor', () => {
+  // "from your Business Info" is a doorway to the info the replies USE — the
+  // most-active page's editor (openKbActive), not needs-first (openKb): a
+  // merchant with a filled active page must never land on a dormant page's
+  // empty editor, which reads as their info having vanished.
+  it('links "Business Info" in both Smart-Replies subtitles to the active page\'s KB editor', () => {
     render(<AutoReplyBoardCard settings={makeSettings({ dashboardLanguage: 'en' })} setSettings={() => {}} />);
     const kbLinks = screen.getAllByRole('link', { name: 'Business Info' });
     expect(kbLinks).toHaveLength(2);
     for (const link of kbLinks) {
-      expect(link).toHaveAttribute('href', '/pages?openKb=true');
+      expect(link).toHaveAttribute('href', '/pages?openKbActive=true');
     }
   });
 
