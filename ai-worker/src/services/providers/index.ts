@@ -1,6 +1,7 @@
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
 import { config } from '../../config';
 import { openaiService, type GenerateRequest, type GenerateResponse } from '../openai';
+import type { ParsedReply } from '../reply/types';
 import type { LLMProvider } from './types';
 import { OpenAIAdapter } from './openai-adapter';
 import { ClaudeAdapter } from './claude-adapter';
@@ -87,7 +88,7 @@ export async function generateReplyWithProvider(
         });
 
         // Parse structured JSON response
-        let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean };
+        let parsed: ParsedReply;
         try {
             parsed = JSON.parse(result.content);
         } catch {
@@ -114,6 +115,9 @@ export async function generateReplyWithProvider(
             intent: validated.intent,
             confidence: validated.confidence,
             flags: validated.flags,
+            gender: validated.gender,
+            genderBasis: validated.genderBasis,
+            usedName: validated.usedName,
             tokensUsed: result.tokensTotal,
             tokensIn: result.tokensIn,
             tokensInCached: result.tokensInCached,

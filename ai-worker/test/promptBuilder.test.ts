@@ -228,6 +228,27 @@ describe('buildSystemPrompt — Arabic-DM-only gender addressing (+ blast radius
         expect(STATIC_SYSTEM_PREFIX).not.toContain('ARABIC GENDER');
         expect(STATIC_SYSTEM_PREFIX).not.toContain('فاطمة');
     });
+
+    // v53: the model reports its gender decision as structured output. The FIELD
+    // DEFINITIONS live in the static prefix (structure is grammar-enforced on every
+    // call, like `hedging`), but the semantic INSTRUCTION to report stays inside
+    // the Arabic-DM-only directive — same blast-radius bound as v51.
+    it('v53: instructs the gender self-report inside the Arabic-DM directive only', () => {
+        const arDm = suffix(req('كم السعر؟', { channel: 'dm', senderName: 'فاطمة' }, 'ar'));
+        expect(arDm).toContain('Report this decision in your JSON output');
+
+        const arComment = suffix(req('كم السعر؟', { channel: 'comment', senderName: 'فاطمة' }, 'ar'));
+        expect(arComment).not.toContain('Report this decision in your JSON output');
+
+        const enDm = suffix(req('how much?', { channel: 'dm', senderName: 'Sarah' }, 'en'));
+        expect(enDm).not.toContain('Report this decision in your JSON output');
+    });
+
+    it('v53: documents the gender/gender_basis/used_name fields in the static RESPONSE FORMAT block', () => {
+        expect(STATIC_SYSTEM_PREFIX).toContain('"gender"');
+        expect(STATIC_SYSTEM_PREFIX).toContain('"gender_basis"');
+        expect(STATIC_SYSTEM_PREFIX).toContain('"used_name"');
+    });
 });
 
 describe('buildSystemPrompt — brand voice notes', () => {

@@ -787,6 +787,8 @@ After OpenAI returns, the system runs **6 automated checks**:
 | **v27–v30** | 2026-04-03 – 2026-04-15 | Continued prompt refinements, edge case coverage, and tuning. | 97.6% (226 test cases) |
 | **v31–v50** | 2026-04-15 – 2026-06-28 | Iterative refinements (see the per-version comments above `PROMPT_VERSION` in `packages/shared/src/index.ts`): dialect mirroring, stale-date guard, comment-on-post context, KB prompt-cache hoist, anti-robotic sign-off rule. | ~96–97% |
 | **v51** | 2026-07-04 | Gender-aware Arabic addressing, scoped to **Arabic DMs only** (per-call block under `language === 'ar' && isDM`, NOT the shared static prefix — every other language/comment/business gets a v50-identical prompt). Name surfaced + `ARABIC GENDER` directive matching masculine/feminine from name + self-reference, neutral when unclear. Exact cache name-bucketed for DMs; semantic cache bypassed for DMs. See [`DECISIONS.md` D-015](DECISIONS.md). | no-regression vs v50 |
+| **v52** | 2026-07-05 | Source fix for the offer-closing bot-tell ("إذا حابة تفاصيل خبريني"): removed the prompt's three self-contradictions (question-back license beside the ban, `enthusiastic` style license, no clean-ending demonstration) and added two flat-ending few-shot examples in labelled light MSA. Worst-case tic rate 56.7% → 1.7%; deterministic post-strip prototyped and removed as redundant. See D-019/PR #398. | 96.7% (389 tests) |
+| **v53** | 2026-07-17 | Gender self-report as structured output: three new required JSON fields (`gender` m/f/unknown, `gender_basis` self/name/unclear, `used_name`) — field docs in the static RESPONSE FORMAT block, reporting instruction inside the Arabic-DM directive only. Feeds the fleet-learned first-name→gender map (`backend/src/services/genderMap.ts`) that re-buckets the DM exact cache by learned gender (`g:m`/`g:f`) instead of per-name, restoring cross-sender cache sharing lost in v51. Save-side gated by the reply's own labels; kill-switch `AI_GENDER_BUCKET_ENABLED`. See [`DECISIONS.md` D-030](DECISIONS.md). | pending eval |
 
 ### Fallback Classifier (when AI Worker is down)
 
@@ -1356,7 +1358,10 @@ Customer question arrives
 │    PROMPT_VERSION +                  │
 │    customerContext +                 │
 │    model +                           │
-│    brandVoice_hash                   │
+│    brandVoice_hash +                 │
+│    DM bucket (v53: learned gender    │
+│      g:m/g:f via genderMap.ts, else  │
+│      first-name hash — D-030/D-015)  │
 │  )                                   │
 │                                      │
 │  Value: {reply, intent,              │
@@ -1427,6 +1432,7 @@ Customer question arrives
 | Prompt version bumped | New keys (version in hash) | Old entries filtered |
 | Brand voice changed | New keys (voice hash in key) | Old entries filtered (voice hash in metadata) |
 | Model override changed | New keys (model in key) | Old entries filtered (model in metadata) |
+| DM sender name learns its gender (v53) | Reads move from `n:<name>` to `g:m`/`g:f` bucket (old per-name entries age out via TTL) | N/A (DMs bypass semantic cache) |
 
 ## عربي
 

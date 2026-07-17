@@ -306,5 +306,12 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest): Va
     // Check 6: Self-identification — strip any sentence revealing the bot is automated.
     const finalReply = stripSelfIdentification(reply, parsed.language || request.language || 'ar');
 
-    return { ...parsed, reply: finalReply, flags };
+    return {
+        ...parsed,
+        reply: finalReply,
+        flags,
+        // v53 gender self-report: snake_case (model JSON) → camelCase (service contract).
+        genderBasis: parsed.gender_basis,
+        usedName: parsed.used_name,
+    };
 }

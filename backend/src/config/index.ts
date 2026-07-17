@@ -54,6 +54,11 @@ export const config = {
         // the OpenAI call — saves the embedding cost + latency with no impact on the
         // exact-cache path. Flip off ONLY after the cost breakdown confirms ~0 hits.
         semanticCacheEnabled: process.env.AI_SEMANTIC_CACHE_ENABLED !== 'false',
+        // v53 gender-bucketed DM exact cache (see services/genderMap.ts). Default ON.
+        // Kill-switch: AI_GENDER_BUCKET_ENABLED=false instantly reverts DM cache keys
+        // to pure per-name bucketing (v51 behavior) with no deploy — the learning map
+        // keeps accumulating while off, so re-enabling is instant.
+        genderBucketEnabled: process.env.AI_GENDER_BUCKET_ENABLED !== 'false',
         // Always use DEFAULT_AI_MODEL for cost efficiency - not configurable by users
         model: DEFAULT_AI_MODEL,
         // Fallback model when primary provider (OpenAI) is unreachable

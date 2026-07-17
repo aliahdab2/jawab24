@@ -276,6 +276,23 @@ describe('validateReply orchestration', () => {
         expect(out.flags).toContain('reply_lang:en');
     });
 
+    it('v53: passes the gender self-report through, mapping snake_case to camelCase', () => {
+        const out = validateReply(
+            base({ reply: 'أهلاً بكِ', language: 'ar', gender: 'f', gender_basis: 'name', used_name: false }),
+            req('كم السعر؟'),
+        );
+        expect(out.gender).toBe('f');
+        expect(out.genderBasis).toBe('name');
+        expect(out.usedName).toBe(false);
+    });
+
+    it('v53: absent gender fields stay undefined (old responses / non-emitting paths)', () => {
+        const out = validateReply(base({ reply: 'ok' }), req('hi'));
+        expect(out.gender).toBeUndefined();
+        expect(out.genderBasis).toBeUndefined();
+        expect(out.usedName).toBeUndefined();
+    });
+
     it('Check 1: integrates the price guard into flags', () => {
         const out = validateReply(
             base({ reply: 'السعر 999 ريال', language: 'ar' }),

@@ -60,7 +60,17 @@ export const AI_REPLY_JSON_SCHEMA = {
             type: 'array' as const,
             items: { type: 'string' as const },
         },
+        // Gender self-report (v53) — see the inline schema in openai.ts for semantics.
+        gender: {
+            type: 'string' as const,
+            enum: ['m', 'f', 'unknown'],
+        },
+        gender_basis: {
+            type: 'string' as const,
+            enum: ['self', 'name', 'unclear'],
+        },
+        used_name: { type: 'boolean' as const },
     },
-    required: ['reply', 'intent', 'confidence', 'flags'] as const,
+    required: ['reply', 'intent', 'confidence', 'flags', 'gender', 'gender_basis', 'used_name'] as const,
     additionalProperties: false,
 };
