@@ -321,6 +321,107 @@ describe('OpenAI Service - Structured JSON Response', () => {
             .rejects.toBeInstanceOf(AiEmptyReplyError);
     });
 
+    describe('truncation retry (finish_reason length — July 2026 silent price-questions)', () => {
+        // A long merchant KB script can push the reply past max_tokens: OpenAI cuts
+        // the JSON mid-string and reports finish_reason 'length'. The service must
+        // retry ONCE with a brevity instruction instead of dropping the reply.
+        const truncatedCompletion = {
+            choices: [{
+                message: { content: '{"reply":"عرض اليوم يشمل قطعة ثانية مجاناً وأربع هدايا وتوصيل سري' },
+                finish_reason: 'length',
+            }],
+            usage: { total_tokens: 650, prompt_tokens: 500, completion_tokens: 150 },
+        };
+        const conciseCompletion = {
+            choices: [{
+                message: {
+                    content: JSON.stringify({
+                        reply: 'التوصيل مجاني لكل المدن، والعرض يشمل قطعة ثانية هدية.',
+                        intent: 'QUESTION',
+                        confidence: 'high',
+                        flags: [],
+                    }),
+                },
+                finish_reason: 'stop',
+            }],
+            usage: { total_tokens: 560, prompt_tokens: 510, completion_tokens: 50 },
+        };
+        const testConfig = {
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+            },
+        };
+
+        it('retries once with a brevity instruction and returns the concise reply', async () => {
+            const mockCreate = vi.fn()
+                .mockResolvedValueOnce(truncatedCompletion)
+                .mockResolvedValueOnce(conciseCompletion);
+            vi.doMock('openai', () => ({
+                default: vi.fn().mockImplementation(() => ({
+                    chat: { completions: { create: mockCreate } },
+                })),
+            }));
+            vi.doMock('../src/config', () => testConfig);
+
+            const { OpenAIService: FreshService } = await import('../src/services/openai');
+            const service = new FreshService();
+            const result = await service.generateReply({ comment: 'بكم' });
+
+            expect(result.reply).toBe('التوصيل مجاني لكل المدن، والعرض يشمل قطعة ثانية هدية.');
+            expect(mockCreate).toHaveBeenCalledTimes(2);
+
+            // The retry appends a brevity system message after the original messages.
+            const firstMessages = mockCreate.mock.calls[0][0].messages;
+            const retryMessages = mockCreate.mock.calls[1][0].messages;
+            expect(retryMessages).toHaveLength(firstMessages.length + 1);
+            const appended = retryMessages[retryMessages.length - 1];
+            expect(appended.role).toBe('system');
+            expect(appended.content).toContain('cut off');
+
+            // Both calls were billed — token counts must cover the truncated attempt too.
+            expect(result.tokensUsed).toBe(650 + 560);
+            expect(result.tokensIn).toBe(500 + 510);
+            expect(result.tokensOut).toBe(150 + 50);
+        });
+
+        it('gives up after exactly one retry and throws with a truncation-specific message', async () => {
+            const mockCreate = vi.fn().mockResolvedValue(truncatedCompletion);
+            vi.doMock('openai', () => ({
+                default: vi.fn().mockImplementation(() => ({
+                    chat: { completions: { create: mockCreate } },
+                })),
+            }));
+            vi.doMock('../src/config', () => testConfig);
+
+            const { OpenAIService: FreshService } = await import('../src/services/openai');
+            const { AiEmptyReplyError } = await import('../src/lib/errors');
+            const service = new FreshService();
+
+            const err = await service.generateReply({ comment: 'بكم' }).catch((e: unknown) => e);
+            expect(err).toBeInstanceOf(AiEmptyReplyError);
+            expect((err as Error).message).toContain('truncated');
+            expect(mockCreate).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not retry when the reply completed normally (finish_reason stop)', async () => {
+            const mockCreate = vi.fn().mockResolvedValue(conciseCompletion);
+            vi.doMock('openai', () => ({
+                default: vi.fn().mockImplementation(() => ({
+                    chat: { completions: { create: mockCreate } },
+                })),
+            }));
+            vi.doMock('../src/config', () => testConfig);
+
+            const { OpenAIService: FreshService } = await import('../src/services/openai');
+            const service = new FreshService();
+            const result = await service.generateReply({ comment: 'بكم' });
+
+            expect(result.reply).toBe('التوصيل مجاني لكل المدن، والعرض يشمل قطعة ثانية هدية.');
+            expect(mockCreate).toHaveBeenCalledTimes(1);
+            expect(result.tokensUsed).toBe(560);
+        });
+    });
+
     it('should throw AiEmptyReplyError when validated reply is empty', async () => {
         // PR B contract: no string fallback. Empty after content filter →
         // typed throw so backend flags needs_attention immediately (filter is

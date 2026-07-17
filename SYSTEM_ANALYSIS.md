@@ -2174,6 +2174,7 @@ These are the **actual production defaults** from the codebase (`workspaceSettin
 | **Rate Limit (Messages)** | `10/min` per sender per page | `rate-limiter.ts` |
 | **Comment Flag Threshold** | `> 50 words` → `comment_too_long` flag | `ai-worker/src/services/reply/replyValidator.ts` |
 | **Comment Hard Truncate** | `> 280 chars` → truncate at sentence (public mode only) | `commentProcessor.ts` |
+| **Completion Token Cap** | `500` (`OPENAI_MAX_TOKENS`); `finish_reason: length` → ONE retry with a brevity instruction (prompt-cache-priced); still truncated → `ai_empty_reply` flag with truncation-specific reason | `ai-worker/src/services/openai.ts` |
 | **Cache TTL** | `30 days` | `ai.ts` |
 | **Reply Lock TTL** | `60 seconds` | `replyLock.ts` |
 | **Handoff Pause** | `15 minutes` | `workspaceSettings.ts` |
