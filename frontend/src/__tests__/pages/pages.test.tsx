@@ -24,14 +24,37 @@ vi.mock('@/i18n/hooks', () => ({
 // now only affects WhatsApp visibility and the nudge banner's strong copy.)
 // Read lazily inside useAuthStore, so assignment in a test takes effect on render.
 let mockIsAdmin = false;
+// Mutable so the deep-link tests can start UNauthenticated (pages query
+// disabled) and hydrate mid-test — the RQ v5 race regression below.
+let mockIsAuthenticated = true;
 vi.mock('@/lib/store', () => ({
-    useAuthStore: () => ({
-        isAuthenticated: true,
-        fbToken: 'mock-fb-token',
-        user: { isAdmin: mockIsAdmin },
-    }),
+    useAuthStore: (selector?: (s: Record<string, unknown>) => unknown) => {
+        const state = {
+            isAuthenticated: mockIsAuthenticated,
+            fbToken: 'mock-fb-token',
+            user: { isAdmin: mockIsAdmin },
+            setActiveWorkspace: vi.fn(),
+        };
+        return selector ? selector(state) : state;
+    },
     useUIStore: (selector: (s: Record<string, unknown>) => unknown) =>
         selector({ sidebarOpen: false }),
+}));
+
+// Local router mock with mutable query + spy-able replace — the global setup
+// mock returns a fresh static object per call, unusable for deep-link asserts.
+let mockRouterQuery: Record<string, string> = {};
+const mockRouterReplace = vi.fn();
+vi.mock('next/router', () => ({
+    useRouter: () => ({
+        isReady: true,
+        query: mockRouterQuery,
+        pathname: '/pages',
+        push: vi.fn(),
+        replace: mockRouterReplace,
+        prefetch: vi.fn(),
+        locale: 'en',
+    }),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -105,7 +128,10 @@ vi.mock('@/components/ui', () => ({
 }));
 
 vi.mock('@/components/knowledge-base/KnowledgeBaseModal', () => ({
-    KnowledgeBaseModal: () => null,
+    // Render the target page's name so deep-link tests can assert WHICH page's
+    // editor opened (needs-first vs most-active).
+    KnowledgeBaseModal: ({ page }: { page?: { name?: string } }) =>
+        <div data-testid="kb-modal">{page?.name}</div>,
 }));
 
 const mockedPagesApi = vi.mocked(pagesApi);
@@ -872,5 +898,109 @@ describe('PagesPage - Enable-without-info soft gate (all merchants, D-025)', () 
 
         expect(screen.queryByText('Turn on auto-reply without Business Info?')).not.toBeInTheDocument();
         expect(mockedPagesApi.toggle).toHaveBeenCalledWith('page_2', false);
+    });
+});
+
+// ── Business Info deep-links (?openKb / ?openKbActive) ───────────────────────
+//
+// Two intents, two params (see utils/kb.ts): openKb = needs-first (checklist /
+// dashboard nudge: "add your missing info"); openKbActive = the most-active
+// page (Settings board: "the info my replies use"). Plus the RQ v5 readiness
+// regression: a DISABLED query reports isLoading=false, so gating on !isLoading
+// consumed the param before pages ever loaded, silently swallowing the click.
+describe('PagesPage — Business Info deep-links', () => {
+    // page_active: most-active (auto-reply ON) with a FILLED KB (≥80 chars,
+    // differs from the FB suggestion). page_dormant: needs Business Info.
+    const DEEPLINK_PAGES = [
+        {
+            id: 'page_active',
+            facebookPageId: 'fb_a',
+            name: 'Active Filled Page',
+            autoReplyEnabled: true,
+            instagramAutoReplyEnabled: false,
+            commentsCount: 10,
+            lastActivity: 2000,
+            knowledgeBase: 'We sell handmade abayas. Prices start at 250 SAR. Delivery across KSA within 3 days. Returns accepted within 14 days.',
+            suggestedKnowledgeBase: '',
+        },
+        {
+            id: 'page_dormant',
+            facebookPageId: 'fb_b',
+            name: 'Dormant Empty Page',
+            autoReplyEnabled: false,
+            instagramAutoReplyEnabled: false,
+            commentsCount: 0,
+            lastActivity: 1000,
+            knowledgeBase: '',
+            suggestedKnowledgeBase: '',
+        },
+    ];
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAuthenticated = true;
+        mockRouterQuery = {};
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: DEEPLINK_PAGES },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockUsagePlan(false);
+    });
+
+    afterEach(() => {
+        mockIsAuthenticated = true;
+        mockRouterQuery = {};
+    });
+
+    it('?openKbActive=true opens the MOST-ACTIVE page even when another page needs info', async () => {
+        mockRouterQuery = { openKbActive: 'true' };
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('kb-modal')).toHaveTextContent('Active Filled Page');
+        });
+        expect(mockRouterReplace).toHaveBeenCalledTimes(1);
+    });
+
+    it('?openKb=true keeps needs-first: opens the page missing Business Info', async () => {
+        mockRouterQuery = { openKb: 'true' };
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('kb-modal')).toHaveTextContent('Dormant Empty Page');
+        });
+    });
+
+    it('REGRESSION (RQ v5): a disabled pages query must NOT consume the param', async () => {
+        // Pre-auth-hydration: query disabled → isLoading=false BUT isFetched=false.
+        // Gating readiness on !isLoading fired here, consuming ?openKbActive with
+        // zero pages — the merchant's click evaporated.
+        mockIsAuthenticated = false;
+        mockRouterQuery = { openKbActive: 'true' };
+        const { rerender } = renderPage(<PagesPage />);
+
+        await act(async () => { /* flush effects */ });
+        expect(mockRouterReplace).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('kb-modal')).toBeNull();
+
+        // Auth hydrates → query runs → the SAME un-consumed param now opens the editor.
+        mockIsAuthenticated = true;
+        rerender(<PagesPage />);
+        await waitFor(() => {
+            expect(screen.getByTestId('kb-modal')).toHaveTextContent('Active Filled Page');
+        });
+        expect(mockRouterReplace).toHaveBeenCalledTimes(1);
+    });
+
+    it('zero pages: consumes the param without opening a modal (no delayed pop)', async () => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockRouterQuery = { openKbActive: 'true' };
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(mockRouterReplace).toHaveBeenCalledTimes(1);
+        });
+        expect(screen.queryByTestId('kb-modal')).toBeNull();
     });
 });
