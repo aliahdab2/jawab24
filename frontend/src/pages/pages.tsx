@@ -87,7 +87,7 @@ const PagesPage: NextPageWithLayout = () => {
 
   // ESC key handled inside KnowledgeBaseModal
 
-  const { data: pagesRaw, isLoading: loading, isError: pagesError, refetch: refetchPages } = useQuery({
+  const { data: pagesRaw, isLoading: loading, isFetched: pagesFetched, isError: pagesError, refetch: refetchPages } = useQuery({
     queryKey: ['pages'],
     queryFn: async () => {
       const response = await pagesApi.getAll();
@@ -264,23 +264,50 @@ const PagesPage: NextPageWithLayout = () => {
   }, [loading, pages.length, fbToken, isAuthenticated, isOwner, syncing]);
 
   // Deep-link auto-opens (e.g. from the dashboard nudge / setup checklist).
-  const pagesReady = !loading && pages.length > 0;
+  // Ready = the pages query has SETTLED (isFetched), not "pages exist": with
+  // zero pages the handlers below no-op (no modal), the param still gets
+  // consumed, and the page's own connect-a-page empty state explains the
+  // situation — instead of an un-stripped param popping a modal open on a
+  // later background refetch. isFetched (not !isLoading) matters on RQ v5:
+  // a disabled query (pre-auth-hydration) reports isLoading=false, which
+  // would consume the param before pages ever load, swallowing the click.
+  const pagesReady = pagesFetched;
 
-  // ?openKb=true → open the Business Info editor on the first page that needs it
-  // (same canonical predicate as the dashboard nudge, checklist, and "Add info" chip).
-  const openKbEditor = useCallback(() => {
-    setEditingPage(pages.find(needsBusinessInfo) ?? pages[0]);
+  const openKbEditorFor = useCallback((target: Page | undefined) => {
+    if (!target) return;
+    setEditingPage(target);
     resetSaved();
-  }, [pages, resetSaved]);
+  }, [resetSaved]);
+
+  // ?openKb=true → the first page that NEEDS Business Info (same canonical
+  // predicate as the dashboard nudge, checklist, and "Add info" chip — their
+  // message is "add your missing info").
+  const openKbEditor = useCallback(
+    () => openKbEditorFor(pages.find(needsBusinessInfo) ?? pages[0]),
+    [pages, openKbEditorFor],
+  );
   useOpenOnQueryParam('openKb', pagesReady, openKbEditor);
+
+  // ?openKbActive=true → the merchant's MOST-ACTIVE page — the page whose info
+  // the replies actually use. The Settings board's «من معلومات نشاطك التجاري»
+  // links here: needs-first (openKb) would jump to a dormant empty page when
+  // the active page is already filled, which reads as the merchant's info
+  // having vanished.
+  const openKbEditorActive = useCallback(
+    () => openKbEditorFor(pages[0]),
+    [pages, openKbEditorFor],
+  );
+  useOpenOnQueryParam('openKbActive', pagesReady, openKbEditorActive);
 
   // ?openTestReply=true → open the Test Smart Reply modal (the checklist's "Try
   // your first reply" step), pre-filled with a sample so trying a reply is one
   // click, before any real customer messages — an inbox would just be empty then.
   const openTestReply = useCallback(() => {
     // Test against a connected page — a disconnected one can't generate a reply.
+    const target = pages.find((p) => p.isConnected !== false) ?? pages[0];
+    if (!target) return;
     setTestReplyPrefillSample(true);
-    setTestSmartReplyPage(pages.find((p) => p.isConnected !== false) ?? pages[0]);
+    setTestSmartReplyPage(target);
   }, [pages]);
   useOpenOnQueryParam('openTestReply', pagesReady, openTestReply);
 
