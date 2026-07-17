@@ -204,7 +204,13 @@ export function stripSelfIdentification(reply: string, fallbackLang: string): st
         return reply;
     }
     // Split while preserving sentence delimiters so we can rejoin naturally.
-    const parts = reply.split(/([.!?؟\n]+)/);
+    // A period only terminates a sentence when followed by whitespace or
+    // end-of-string — the dot inside "Jawab24.com" / "example.com" / "2.5"
+    // is NOT a boundary. Without the lookahead, "…فريق Jawab24.com ممكن
+    // يساعدوك أكتر" split at "Jawab24|.|com …", the brand sentence was
+    // stripped, and the orphaned "com ممكن يساعدوك أكتر." fragment was sent
+    // to a real customer (prod, 2026-07-17).
+    const parts = reply.split(/([.!?؟\n]+(?=\s|$))/);
     const kept: string[] = [];
     for (let i = 0; i < parts.length; i += 2) {
         const sentence = parts[i];
