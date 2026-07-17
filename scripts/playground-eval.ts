@@ -56,7 +56,7 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic';
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -4028,7 +4028,7 @@ const TEST_CASES: TestCase[] = [
             replyMethod: ['ai'],
             flagsAbsent: ['invalid_json'],
         },
-        notes: 'Playbook-steered verbose price reply (the Nourva mechanism, business-agnostic fixture). The only hard assertion is delivery: an empty/truncated-and-dropped reply = API error = FAIL.',
+        notes: 'Playbook-steered verbose price reply (the Nourva mechanism, business-agnostic fixture). The only hard assertion is delivery: an empty/truncated-and-dropped reply = API error = FAIL. NOTE: the truncation retry lives in the DEFAULT-model path (openaiService.generateReply); running with EVAL_MODEL=<non-default> exercises the provider path, which has no retry (known gap) — a FAIL there is not a regression of the default path.',
     },
     {
         id: 693, category: 63, categoryName: 'Truncation Robustness', channel: 'dm',
