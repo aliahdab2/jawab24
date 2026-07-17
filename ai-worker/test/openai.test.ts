@@ -1796,14 +1796,50 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         expect(rf.type).toBe('json_schema');
         expect(rf.json_schema.name).toBe('ai_reply');
         expect(rf.json_schema.strict).toBe(true);
-        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags', 'hedging', 'language']);
+        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags', 'hedging', 'gender', 'gender_basis', 'used_name', 'language']);
         expect(rf.json_schema.schema.properties.intent.enum).toEqual([
             'QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
             'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT',
         ]);
         expect(rf.json_schema.schema.properties.confidence.enum).toEqual(['high', 'medium', 'low']);
         expect(rf.json_schema.schema.properties.language.enum).toEqual(['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr', 'my', 'th', 'zh', 'ja', 'ko', 'ru', 'hi', 'he']);
+        // v53 gender self-report — grammar-enforced on every call (see genderMap.ts backend-side).
+        expect(rf.json_schema.schema.properties.gender.enum).toEqual(['m', 'f', 'unknown']);
+        expect(rf.json_schema.schema.properties.gender_basis.enum).toEqual(['self', 'name', 'unclear']);
+        expect(rf.json_schema.schema.properties.used_name).toEqual({ type: 'boolean' });
         expect(rf.json_schema.schema.additionalProperties).toBe(false);
+    });
+
+    it('v53: passes the gender self-report through to the response (snake_case → camelCase)', async () => {
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: JSON.stringify({
+                                reply: 'أهلاً بكِ! السعر 50 ريال', intent: 'QUESTION', confidence: 'high',
+                                flags: [], hedging: false, language: 'ar',
+                                gender: 'f', gender_basis: 'name', used_name: false,
+                            }) } }],
+                            usage: { total_tokens: 50 },
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.4, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const svc = new FreshService();
+        const result = await svc.generateReply({ comment: 'كم السعر؟', language: 'ar' });
+
+        expect(result.gender).toBe('f');
+        expect(result.genderBasis).toBe('name');
+        expect(result.usedName).toBe(false);
     });
 });
 

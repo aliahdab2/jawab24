@@ -17,6 +17,7 @@ import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
 import { classifyFallbackIntent } from './reply/fallbackClassifier';
 import { getModelForUser } from './aiModelResolver';
+import { getConfidentGender, recordGenderObservation } from './genderMap';
 import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError, AiQuotaExhaustedError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
 import { emailService } from './email';
@@ -74,6 +75,16 @@ interface CacheContext {
      * (neutral, and name-bucketing would fragment the high-volume comment cache).
      */
     senderName?: string;
+    /**
+     * v53: consensus gender for `senderName` from the fleet-learned map
+     * (genderMap.getConfidentGender), resolved ONCE per request in generateReply
+     * BEFORE the cache read and inherited by the save context — never re-resolved
+     * at save time, so the bucket can't flip mid-request while the model call is
+     * in flight. When set, buildCacheKey buckets the DM by gender (`g:m`/`g:f`)
+     * instead of by name hash, restoring cross-sender sharing. null/undefined →
+     * per-name bucket (unknown/ambiguous name, kill-switch off, or Redis down).
+     */
+    genderBucket?: 'm' | 'f' | null;
 }
 
 /** Shape returned by a successful exact-cache hit. */
@@ -99,6 +110,16 @@ interface WorkerGenerateResponse {
     /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at the model's cached rate — see aiPricing.ts). */
     tokensInCached?: number;
     tokensOut?: number;
+    /**
+     * v53 gender self-report (see ai-worker systemPrompt): the grammatical gender
+     * the reply's address forms use, what that decision was based on, and whether
+     * the reply embeds the customer's name in any script. Drives the name→gender
+     * learning map and the save-side cache-bucket guard. Absent on older workers
+     * and non-emitting paths → treated as "not reported" (per-name bucket).
+     */
+    gender?: 'm' | 'f' | 'unknown';
+    genderBasis?: 'self' | 'name' | 'unclear';
+    usedName?: boolean;
 }
 
 /**
@@ -184,15 +205,23 @@ export class AiService {
         // byte-identical keys, so only voice-having entries re-warm on rollout.
         if (ctx.brandVoiceHash) key.push(`bv:${ctx.brandVoiceHash}`);
 
-        // DM only: bucket by the customer's first name. DM Arabic replies are gendered
-        // and the model infers gender largely from the name, so two customers with
-        // different names (hence possibly different gender) sending an identical
-        // history-less first message must NOT share a cached reply. First whitespace
-        // token, hashed. Comments and nameless DMs skip this, so their keys — and the
-        // high-volume comment cache — stay byte-identical to before this change.
+        // DM only: bucket by gender when the sender's first name is confidently known
+        // (v53 fleet-learned map — resolved once per request into ctx.genderBucket),
+        // else by the customer's first name. DM Arabic replies are gendered and the
+        // model infers gender largely from the name, so two customers whose names imply
+        // different genders sending an identical history-less first message must NOT
+        // share a cached reply — but two confident-masculine names CAN share one
+        // (gendered self-references live in the message text, which is part of this
+        // key, so bucket + exact text pins the gender decision deterministically).
+        // First whitespace token, hashed. Comments and nameless DMs skip this, so
+        // their keys — and the high-volume comment cache — stay byte-identical.
         if (ctx.channel === 'dm' && ctx.senderName) {
-            const firstName = ctx.senderName.trim().split(/\s+/)[0];
-            if (firstName) key.push(`n:${crypto.createHash('md5').update(firstName).digest('hex').slice(0, 8)}`);
+            if (ctx.genderBucket) {
+                key.push(`g:${ctx.genderBucket}`);
+            } else {
+                const firstName = ctx.senderName.trim().split(/\s+/)[0];
+                if (firstName) key.push(`n:${crypto.createHash('md5').update(firstName).digest('hex').slice(0, 8)}`);
+            }
         }
 
         return crypto.createHash('sha256').update(key.join(':')).digest('hex');
@@ -370,6 +399,18 @@ export class AiService {
             senderName: request.context?.senderName,
         };
 
+        // v53: resolve the DM gender bucket ONCE, before any cache read. The save
+        // context inherits this value (spread below), never re-resolves — the map
+        // may cross its confidence threshold during the ~seconds the GPT call is
+        // in flight, and a read/save bucket flip would strand entries. Failure or
+        // unknown name → undefined → per-name bucket (v51 behavior, always safe).
+        if (config.ai.genderBucketEnabled && cacheCtx.channel === 'dm' && cacheCtx.senderName) {
+            cacheCtx.genderBucket = await getConfidentGender(cacheCtx.senderName);
+            if (cacheCtx.genderBucket) {
+                this.logger.debug('ai_cache_gender_bucket', { pageId, bucket: cacheCtx.genderBucket });
+            }
+        }
+
         // DM conversations with history → skip all caches.
         // The right answer depends on what was said earlier; a cached reply generated
         // without conversation context would ignore prior exchanges and cause hallucinations.
@@ -544,10 +585,57 @@ export class AiService {
                 throw new AiUnavailableError('ai-worker returned fallback_reply flag');
             }
 
+            // v53 learning: feed the model's gender judgment into the fleet name→gender
+            // map. Only pure NAME-based judgments on real Arabic DM traffic count —
+            // `gender_basis === 'self'` is a self-reference override (فاطمة writing
+            // "أنا مهتم") that would poison her name's entry, and eval/playground/
+            // failover pipelines must not teach the map. Fire-and-forget.
+            const senderName = request.context?.senderName;
+            if (
+                pipeline === 'dm_reply' &&
+                request.context?.channel === 'dm' &&
+                senderName &&
+                response.data.language === 'ar' &&
+                response.data.genderBasis === 'name' &&
+                (response.data.gender === 'm' || response.data.gender === 'f')
+            ) {
+                recordGenderObservation(senderName, response.data.gender).catch(() => {});
+            }
+
             // Save to exact cache (scoped by KB version + post context + model).
             // All models cache to their own bucket now — no more skip-when-non-default.
             // Eval pipeline never writes to cache (see `bypassAllCaches` above).
             const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
+
+            // v53 save guard: a reply may land in the shared gender bucket ONLY when
+            // the reply's OWN labels prove it's safe there — never the map alone:
+            //   1. it does not embed the customer's name in any script (model-reported
+            //      `usedName`, plus a normalized-substring check as belt-and-braces —
+            //      "أهلاً فاطمة" must never reach another sender), and
+            //   2. the gender it addresses matches the bucket, or it used no gendered
+            //      forms at all (`unknown` — e.g. "كم السعر" answers, the high-volume
+            //      shared inventory).
+            // Anything else downgrades the SAVE to the per-name bucket; the read side
+            // keeps using the gender bucket, so a downgraded entry just means one
+            // regeneration next time instead of a wrong reply ever being shared.
+            if (saveCacheCtx.genderBucket && senderName) {
+                const firstName = senderName.trim().split(/\s+/)[0] ?? '';
+                const replyEmbedsName = firstName.length > 0 &&
+                    normalizeArabic(aiReply).toLowerCase().includes(normalizeArabic(firstName).toLowerCase());
+                const genderSafe = response.data.gender === saveCacheCtx.genderBucket
+                    || response.data.gender === 'unknown';
+                if (response.data.usedName !== false || replyEmbedsName || !genderSafe) {
+                    this.logger.debug('ai_cache_gender_bucket_save_downgrade', {
+                        pageId,
+                        bucket: saveCacheCtx.genderBucket,
+                        usedName: response.data.usedName,
+                        replyEmbedsName,
+                        reportedGender: response.data.gender,
+                    });
+                    saveCacheCtx.genderBucket = null;
+                }
+            }
+
             if (!bypassAllCaches) {
                 await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
             }

@@ -130,6 +130,19 @@ export class OpenAIService {
                                                 items: { type: 'string' },
                                             },
                                             hedging: { type: 'boolean' },
+                                            // Gender self-report (v53): lets the backend learn a
+                                            // name→gender consensus map and gender-bucket the DM
+                                            // exact cache. Grammar-enforced on every call; only
+                                            // meaningful for Arabic DMs (see promptBuilder).
+                                            gender: {
+                                                type: 'string',
+                                                enum: ['m', 'f', 'unknown'],
+                                            },
+                                            gender_basis: {
+                                                type: 'string',
+                                                enum: ['self', 'name', 'unclear'],
+                                            },
+                                            used_name: { type: 'boolean' },
                                             language: {
                                                 type: 'string',
                                                 // ISO 639-1 codes. Includes scripts the detector now
@@ -144,7 +157,7 @@ export class OpenAIService {
                                                 enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr', 'my', 'th', 'zh', 'ja', 'ko', 'ru', 'hi', 'he'],
                                             },
                                         },
-                                        required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'language'] as const,
+                                        required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'gender', 'gender_basis', 'used_name', 'language'] as const,
                                         additionalProperties: false,
                                     },
                                 },
@@ -202,7 +215,7 @@ export class OpenAIService {
             const detectedLanguage = detectLanguage(request.comment);
 
             // Parse structured JSON response; fall back to plain text if parsing fails
-            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; language?: string };
+            let parsed: ParsedReply;
             try {
                 parsed = JSON.parse(content);
             } catch {
@@ -266,6 +279,9 @@ export class OpenAIService {
                 intent: validated.intent,
                 confidence: validated.confidence,
                 flags: validated.flags,
+                gender: validated.gender,
+                genderBasis: validated.genderBasis,
+                usedName: validated.usedName,
             };
         } catch (error) {
             // Preserve typed errors — they must reach backend's reconstruction

@@ -89,6 +89,18 @@ export interface GenerateResponse {
     intent?: string;
     confidence?: string;
     flags?: string[];
+    /**
+     * v53 gender self-report — the grammatical gender the reply's address forms
+     * actually use ('unknown' = no gendered forms), what that decision was based
+     * on, and whether the reply embeds the customer's name in any script. The
+     * backend uses these to learn a first-name→gender consensus map and to gate
+     * which bucket a reply may be cached in (see backend ai.ts saveToCache guard).
+     * Absent on paths that don't emit them (failover, e-commerce tool loop) —
+     * the backend fail-safes to per-name bucketing.
+     */
+    gender?: 'm' | 'f' | 'unknown';
+    genderBasis?: 'self' | 'name' | 'unclear';
+    usedName?: boolean;
 }
 
 export interface TokenInfo {
@@ -109,6 +121,9 @@ export interface ParsedReply {
     flags?: string[];
     hedging?: boolean;
     language?: string;
+    gender?: 'm' | 'f' | 'unknown';
+    gender_basis?: 'self' | 'name' | 'unclear';
+    used_name?: boolean;
 }
 
 /** Result of validateReply — `hedging` is consumed and dropped. */
@@ -118,4 +133,7 @@ export interface ValidatedReply {
     confidence?: string;
     flags?: string[];
     language?: string;
+    gender?: 'm' | 'f' | 'unknown';
+    genderBasis?: 'self' | 'name' | 'unclear';
+    usedName?: boolean;
 }

@@ -907,7 +907,18 @@ export {
 // (3) two new few-shot examples DEMONSTRATE a clean flat ending — a warm mid-thread answer and an
 // info-not-in-KB answer that stop on the answer (demonstrations beat rules; the prompt previously
 // had no positive pattern for the common case). Prefix bytes change → cache invalidated by the bump.
-export const PROMPT_VERSION = 'v52';
+// v53: the model now REPORTS its v51 gender decision as structured output — three new required JSON
+// fields (`gender` m/f/unknown = the grammatical gender the reply actually addresses, `gender_basis`
+// self/name/unclear = what it was decided from, `used_name` = reply embeds the customer's name in any
+// script). Field definitions live in the shared RESPONSE FORMAT block (structure is grammar-enforced
+// by strict structured outputs); the semantic instruction stays in the Arabic-DM per-call directive.
+// The backend uses the labels to learn a fleet-wide first-name→gender consensus map and re-buckets
+// the DM exact cache by learned gender (`g:m`/`g:f`) instead of per-name (`n:<hash>`) for confident
+// names, restoring cross-sender cache sharing lost in v51. This bump is LOAD-BEARING for the cache:
+// it atomically retires every v52 name-bucketed key so old entries can never collide with the new
+// bucket semantics. Save-side is gated by the reply's own labels (never the map), so a cache hit
+// stays behaviorally indistinguishable from a fresh generation.
+export const PROMPT_VERSION = 'v53';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

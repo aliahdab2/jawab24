@@ -94,6 +94,7 @@ vi.mock('../../src/config', () => ({
             enabled: true,
             cacheEnabled: true,
             semanticCacheEnabled: true,
+            genderBucketEnabled: true,
             serviceUrl: 'http://localhost:3002',
             defaultModel: 'gpt-4-mini',
             model: 'gpt-4.1-mini',
@@ -101,6 +102,14 @@ vi.mock('../../src/config', () => ({
         },
         adminEmails: ['ops@jawab24.com'],
     },
+}));
+
+// Mock the v53 name→gender consensus map — default "unknown name" (null) so every
+// pre-existing test keeps the v51 per-name bucketing behavior. The gender-bucket
+// describe overrides per test. The real module has its own unit tests.
+vi.mock('../../src/services/genderMap', () => ({
+    getConfidentGender: vi.fn().mockResolvedValue(null),
+    recordGenderObservation: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('AI Service', () => {
@@ -1068,6 +1077,215 @@ describe('AI Service', () => {
             const keyWithPost = vi.mocked(redis.set).mock.calls[0][0];
 
             expect(keyNoPost).not.toBe(keyWithPost);
+        });
+    });
+
+    describe('generateReply - DM gender-bucketed exact cache (v53)', () => {
+        // v51 bucketed DM cache keys per first name (correct but zero cross-sender
+        // sharing). v53 buckets confidently-learned names by gender instead. These
+        // tests pin the invariants: sharing within a gender bucket, isolation across
+        // buckets, per-name fallback for unknown names, byte-identical comment keys,
+        // and the save-side downgrade guard that keeps name-embedding / mismatched
+        // replies out of the shared bucket.
+
+        /** Read-side cache key for a DM from `senderName` (cache miss + stubbed worker). */
+        async function dmKeyFor(comment: string, senderName?: string, extraCtx?: Record<string, unknown>): Promise<string> {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockClear();
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(axios.post).mockResolvedValue({
+                data: { reply: 'reply', language: 'ar' },
+            });
+            await service.generateReply({
+                comment,
+                language: 'ar',
+                context: { channel: 'dm', ...(senderName ? { senderName } : {}), ...extraCtx },
+            });
+            return vi.mocked(redis.get).mock.calls[0][0] as string;
+        }
+
+        /** Run one DM generation and return the key read vs the key written. */
+        async function dmReadAndSaveKeys(
+            senderName: string,
+            workerData: Record<string, unknown>,
+        ): Promise<{ readKey: string; savedKey: string | undefined }> {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockClear();
+            vi.mocked(redis.set).mockClear();
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(axios.post).mockResolvedValue({ data: workerData });
+            await service.generateReply({
+                comment: 'كم السعر',
+                language: 'ar',
+                context: { channel: 'dm', senderName, pipeline: 'dm_reply' },
+            });
+            const readKey = vi.mocked(redis.get).mock.calls[0][0] as string;
+            const savedKey = vi.mocked(redis.set).mock.calls
+                .map(call => call[0] as string)
+                .find(key => key.startsWith('cache:ai_reply:'));
+            return { readKey, savedKey };
+        }
+
+        beforeEach(async () => {
+            const { getConfidentGender } = await import('../../src/services/genderMap');
+            vi.mocked(getConfidentGender).mockResolvedValue(null);
+        });
+
+        it('two confidently-masculine names share one cache key (the v53 win)', async () => {
+            const { getConfidentGender } = await import('../../src/services/genderMap');
+            vi.mocked(getConfidentGender).mockResolvedValue('m');
+            expect(await dmKeyFor('كم السعر', 'أحمد')).toBe(await dmKeyFor('كم السعر', 'محمد'));
+        });
+
+        it('masculine and feminine buckets never share a key', async () => {
+            const { getConfidentGender } = await import('../../src/services/genderMap');
+            vi.mocked(getConfidentGender).mockResolvedValueOnce('m').mockResolvedValueOnce('f');
+            expect(await dmKeyFor('كم السعر', 'أحمد')).not.toBe(await dmKeyFor('كم السعر', 'فاطمة'));
+        });
+
+        it('a learned name and an unknown name never share a key (g-bucket vs n-bucket)', async () => {
+            const { getConfidentGender } = await import('../../src/services/genderMap');
+            vi.mocked(getConfidentGender).mockResolvedValueOnce('m').mockResolvedValueOnce(null);
+            expect(await dmKeyFor('كم السعر', 'أحمد')).not.toBe(await dmKeyFor('كم السعر', 'أحمد'));
+        });
+
+        it('unknown names keep v51 per-name isolation', async () => {
+            expect(await dmKeyFor('كم السعر', 'أحمد')).not.toBe(await dmKeyFor('كم السعر', 'محمد'));
+        });
+
+        it('the same unknown name still shares its own bucket (v51 behavior preserved)', async () => {
+            expect(await dmKeyFor('كم السعر', 'أحمد')).toBe(await dmKeyFor('كم السعر', 'أحمد'));
+        });
+
+        it('kill-switch off → per-name bucketing even for a learned name', async () => {
+            const { getConfidentGender } = await import('../../src/services/genderMap');
+            const { config } = await import('../../src/config');
+            vi.mocked(getConfidentGender).mockResolvedValue('m');
+            config.ai.genderBucketEnabled = false;
+            try {
+                expect(await dmKeyFor('كم السعر', 'أحمد')).not.toBe(await dmKeyFor('كم السعر', 'محمد'));
+                expect(getConfidentGender).not.toHaveBeenCalled();
+            } finally {
+                config.ai.genderBucketEnabled = true;
+            }
+        });
+
+        it('comment-channel keys are byte-identical with and without senderName (blast radius)', async () => {
+            const { getConfidentGender } = await import('../../src/services/genderMap');
+            vi.mocked(getConfidentGender).mockResolvedValue('m');
+            const withName = await dmKeyFor('كم السعر', undefined, { channel: 'comment', senderName: 'أحمد' });
+            const withoutName = await dmKeyFor('كم السعر', undefined, { channel: 'comment' });
+            expect(withName).toBe(withoutName);
+            expect(getConfidentGender).not.toHaveBeenCalled();
+        });
+
+        describe('save-side downgrade guard', () => {
+            it('a bucket-matching, name-free reply saves to the same gender-bucket key it read', async () => {
+                const { getConfidentGender } = await import('../../src/services/genderMap');
+                vi.mocked(getConfidentGender).mockResolvedValue('m');
+                const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
+                    reply: 'أهلاً بك! السعر 50 ريال', language: 'ar',
+                    gender: 'm', genderBasis: 'name', usedName: false,
+                });
+                expect(savedKey).toBe(readKey);
+            });
+
+            it('a gender-neutral reply (gender unknown) also saves to the gender bucket', async () => {
+                const { getConfidentGender } = await import('../../src/services/genderMap');
+                vi.mocked(getConfidentGender).mockResolvedValue('m');
+                const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
+                    reply: 'السعر 50 ريال', language: 'ar',
+                    gender: 'unknown', genderBasis: 'unclear', usedName: false,
+                });
+                expect(savedKey).toBe(readKey);
+            });
+
+            it('model-reported name use downgrades the save to the per-name bucket', async () => {
+                const { getConfidentGender } = await import('../../src/services/genderMap');
+                vi.mocked(getConfidentGender).mockResolvedValue('m');
+                const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
+                    reply: 'أهلاً! السعر 50 ريال', language: 'ar',
+                    gender: 'm', genderBasis: 'name', usedName: true,
+                });
+                expect(savedKey).toBeDefined();
+                expect(savedKey).not.toBe(readKey);
+            });
+
+            it('a reply literally embedding the first name downgrades even when the model says usedName:false', async () => {
+                const { getConfidentGender } = await import('../../src/services/genderMap');
+                vi.mocked(getConfidentGender).mockResolvedValue('m');
+                const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
+                    reply: 'أهلاً احمد! السعر 50 ريال', language: 'ar', // alef variant — normalized guard must still catch it
+                    gender: 'm', genderBasis: 'name', usedName: false,
+                });
+                expect(savedKey).toBeDefined();
+                expect(savedKey).not.toBe(readKey);
+            });
+
+            it('a reply gendered against its bucket downgrades', async () => {
+                const { getConfidentGender } = await import('../../src/services/genderMap');
+                vi.mocked(getConfidentGender).mockResolvedValue('m');
+                const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
+                    reply: 'أهلاً بكِ! السعر 50 ريال', language: 'ar',
+                    gender: 'f', genderBasis: 'self', usedName: false,
+                });
+                expect(savedKey).toBeDefined();
+                expect(savedKey).not.toBe(readKey);
+            });
+
+            it('a worker response without the v53 fields downgrades (old worker / failover fail-safe)', async () => {
+                const { getConfidentGender } = await import('../../src/services/genderMap');
+                vi.mocked(getConfidentGender).mockResolvedValue('m');
+                const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
+                    reply: 'أهلاً! السعر 50 ريال', language: 'ar',
+                });
+                expect(savedKey).toBeDefined();
+                expect(savedKey).not.toBe(readKey);
+            });
+        });
+
+        describe('learning gate', () => {
+            async function generateWith(context: Record<string, unknown>, workerData: Record<string, unknown>): Promise<void> {
+                const { redis } = await import('../../src/lib/redis');
+                vi.mocked(redis.get).mockResolvedValue(null);
+                vi.mocked(axios.post).mockResolvedValue({ data: workerData });
+                await service.generateReply({ comment: 'كم السعر', language: 'ar', context });
+            }
+
+            const nameJudgment = {
+                reply: 'أهلاً بك', language: 'ar',
+                gender: 'm', genderBasis: 'name', usedName: false,
+            };
+
+            it('records a name-based judgment from real DM traffic', async () => {
+                const { recordGenderObservation } = await import('../../src/services/genderMap');
+                await generateWith({ channel: 'dm', senderName: 'أحمد', pipeline: 'dm_reply' }, nameJudgment);
+                expect(recordGenderObservation).toHaveBeenCalledWith('أحمد', 'm');
+            });
+
+            it('never learns from self-reference judgments (they would poison the name entry)', async () => {
+                const { recordGenderObservation } = await import('../../src/services/genderMap');
+                await generateWith(
+                    { channel: 'dm', senderName: 'فاطمة', pipeline: 'dm_reply' },
+                    { ...nameJudgment, gender: 'm', genderBasis: 'self' },
+                );
+                expect(recordGenderObservation).not.toHaveBeenCalled();
+            });
+
+            it('never learns from playground traffic', async () => {
+                const { recordGenderObservation } = await import('../../src/services/genderMap');
+                await generateWith({ channel: 'dm', senderName: 'أحمد', pipeline: 'playground' }, nameJudgment);
+                expect(recordGenderObservation).not.toHaveBeenCalled();
+            });
+
+            it('never learns from non-Arabic replies', async () => {
+                const { recordGenderObservation } = await import('../../src/services/genderMap');
+                await generateWith(
+                    { channel: 'dm', senderName: 'Ahmed', pipeline: 'dm_reply' },
+                    { ...nameJudgment, language: 'en' },
+                );
+                expect(recordGenderObservation).not.toHaveBeenCalled();
+            });
         });
     });
 });
