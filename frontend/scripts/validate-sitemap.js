@@ -35,7 +35,7 @@ const SPECIAL_FILES = new Set(['_app', '_document', '_error', '404', '500']);
 const EXCLUDED_ROUTES = new Map([
   ['admin/ai-cost', 'admin panel (auth-gated)'],
   ['admin/customers', 'admin panel (auth-gated)'],
-  ['admin/customers/[userId]', 'admin panel (auth-gated)'],
+  ['admin/customers/detail', 'admin panel (auth-gated)'],
   ['admin/observability', 'admin panel (auth-gated)'],
   ['admin/playground', 'admin panel (auth-gated)'],
   ['admin/waitlist', 'admin panel (auth-gated)'],
