@@ -380,7 +380,7 @@ export class PostsService {
         page: PickerPage,
         source: 'facebook' | 'instagram',
         platformPostId: string,
-    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all' }> {
+    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerImageUrl: string | null }> {
         if (source === 'facebook') {
             const post = await this.findOrCreateFromWebhook(page.id, platformPostId, undefined, page.accessToken);
             return {
@@ -388,6 +388,7 @@ export class PostsService {
                 triggerKeyword: post.triggerKeyword ?? null,
                 triggerReply: post.triggerReply ?? null,
                 triggerType: post.triggerType === 'all' ? 'all' : 'keyword',
+                triggerImageUrl: post.triggerImageUrl ?? null,
             };
         }
         const media = await this.findOrCreateInstagramMedia(page.id, platformPostId);
@@ -396,6 +397,7 @@ export class PostsService {
             triggerKeyword: media.triggerKeyword ?? null,
             triggerReply: media.triggerReply ?? null,
             triggerType: media.triggerType === 'all' ? 'all' : 'keyword',
+            triggerImageUrl: media.triggerImageUrl ?? null,
         };
     }
 
