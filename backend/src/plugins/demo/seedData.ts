@@ -1308,6 +1308,14 @@ export async function seedDemoData(
     await db.delete(pages)
         .where(and(inArray(pages.facebookPageId, demoPageIds), ne(pages.userId, userId)));
 
+    // Same self-heal for the demo e-commerce stores: they hang off the user, not the
+    // pages (pages.ecommerceStoreId is a set-null back-reference), so the page cascade
+    // above doesn't reach them — and (platform, store_domain) is globally unique, so a
+    // stranded store 23505s the insert in seedDemoStore. Products cascade with the store.
+    const demoStoreDomains = [DEMO_SHOPIFY_STORE.storeDomain, DEMO_SALLA_STORE.storeDomain];
+    await db.delete(ecommerceStores)
+        .where(and(inArray(ecommerceStores.storeDomain, demoStoreDomains), ne(ecommerceStores.userId, userId)));
+
     // Check if demo pages already exist for this user
     const existingPages = await db
         .select()
