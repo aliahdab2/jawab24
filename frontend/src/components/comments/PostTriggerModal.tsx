@@ -364,6 +364,9 @@ export function PostTriggerModal({
                   : 'text-muted-foreground',
               )}
               aria-live="polite"
+              // Force LTR so the count reads "8 / 160" and never bidi-flips to "160 / 8"
+              // when the modal sits inside <html dir="rtl">.
+              dir="ltr"
             >
               {reply.length} / {replyMax}
             </span>

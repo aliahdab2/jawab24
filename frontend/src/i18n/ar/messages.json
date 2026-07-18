@@ -33,6 +33,7 @@
   "replyFailedTimeout": "استغرق الطلب وقتاً طويلاً. تحقق من اتصالك وحاول مجدداً.",
   "voiceMessage": "رسالة صوتية",
   "imageMessage": "صورة",
+  "imageAttached": "صورة مرفقة",
   "pauseSmartReply": "إيقاف الرد الذكي",
   "resumeSmartReply": "استئناف الرد الذكي",
   "smartReplyPaused": "الرد الذكي متوقف",

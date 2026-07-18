@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, DetailSheet, InfoPopover } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, ImageAttachedBadge, DetailSheet, InfoPopover } from '@/components/ui';
 import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -428,6 +428,9 @@ export function MessageDetailModal({
                       </InfoPopover>
                     </span>
                   )}
+                  {/* Quiet informational badge — the reply was delivered with an image
+                      attached (Post Reply image card). Deliberately NOT an alarm. */}
+                  {msg.direction === 'outgoing' && msg.flagMeta?.reply_image && <ImageAttachedBadge />}
                 </div>
               </div>
               );
