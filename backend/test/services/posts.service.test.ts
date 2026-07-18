@@ -24,9 +24,37 @@ vi.mock('../../src/services/instagram', () => ({
     },
 }));
 
+vi.mock('../../src/services/imageStorage', () => ({
+    imageStorage: {
+        isConfigured: vi.fn(() => true),
+        put: vi.fn(),
+        remove: vi.fn(),
+    },
+}));
+
+// Small, controllable quota so the over-quota boundary is testable.
+vi.mock('../../src/config', () => ({
+    config: { objectStorage: { quotaBytes: 1000 } },
+}));
+
+vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
+
 // Import after mocking
 const { facebookService } = await import('../../src/services/facebook');
 const { instagramService } = await import('../../src/services/instagram');
+const { imageStorage } = await import('../../src/services/imageStorage');
+const { captureError } = await import('../../src/utils/sentryHelpers');
+
+/** A db.select() chain that resolves at `.from().innerJoin().where()` to `rows`. */
+function selectInnerJoinWhere(rows: unknown) {
+    return {
+        from: vi.fn().mockReturnValue({
+            innerJoin: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(rows),
+            }),
+        }),
+    };
+}
 
 /** Chainable mock helpers */
 function mockInsertChain(returnValue: any) {
@@ -392,6 +420,99 @@ describe('PostsService', () => {
             const result = await postsService.listPublishedPosts(fbOnly, { source: 'instagram' });
             expect(result).toEqual({ posts: [], nextCursor: null });
             expect(instagramService.getMedia).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('updateTrigger — image handling', () => {
+        // Capture the columns written by db.update(...).set(...)
+        let setSpy: ReturnType<typeof vi.fn>;
+        beforeEach(() => {
+            setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+            vi.mocked(db.update).mockReturnValue({ set: setSpy } as any);
+            vi.mocked(imageStorage.put).mockResolvedValue({ url: 'https://cdn/new.jpg', key: 'trigger-images/ws-1/new.jpg' });
+            vi.mocked(imageStorage.remove).mockResolvedValue(true);
+        });
+
+        const owned = (over?: Partial<{ imageKey: string | null; imageBytes: number | null }>) =>
+            [{ id: 'post-1', imageKey: over?.imageKey ?? null, imageBytes: over?.imageBytes ?? null }];
+
+        it('returns not_found when the row is not owned', async () => {
+            vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere([]) as any);
+            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'hi', 'ws-1', 'keyword', { action: 'keep' });
+            expect(res).toEqual({ ok: false, reason: 'not_found' });
+        });
+
+        it('set: uploads first, writes the new columns, deletes the OLD key AFTER commit', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(selectInnerJoinWhere(owned({ imageKey: 'trigger-images/ws-1/old.jpg', imageBytes: 500 })) as any) // ownership
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any)   // posts sum
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any);  // ig sum
+
+            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'عرض', 'ws-1', 'keyword', { action: 'set', buffer: Buffer.alloc(100), mimeType: 'image/jpeg' });
+
+            expect(res).toEqual({ ok: true });
+            expect(imageStorage.put).toHaveBeenCalledOnce();
+            const cols = setSpy.mock.calls[0][0];
+            expect(cols).toMatchObject({ triggerImageUrl: 'https://cdn/new.jpg', triggerImageKey: 'trigger-images/ws-1/new.jpg', triggerImageBytes: 100 });
+            // old key swept only after the DB write
+            expect(imageStorage.remove).toHaveBeenCalledWith('trigger-images/ws-1/old.jpg');
+        });
+
+        it('set: rejects with quota_exceeded and never uploads when over the cap', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(selectInnerJoinWhere(owned()) as any)              // ownership
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '900' }]) as any)   // posts sum
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any);    // ig sum (quota=1000)
+
+            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'hi', 'ws-1', 'keyword', { action: 'set', buffer: Buffer.alloc(200), mimeType: 'image/jpeg' });
+
+            expect(res).toEqual({ ok: false, reason: 'quota_exceeded' });
+            expect(imageStorage.put).not.toHaveBeenCalled();
+            expect(setSpy).not.toHaveBeenCalled();
+        });
+
+        it('set: an upload failure aborts the save (no DB write) and is captured', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(selectInnerJoinWhere(owned({ imageKey: 'old', imageBytes: 10 })) as any)
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any)
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any);
+            vi.mocked(imageStorage.put).mockRejectedValueOnce(new Error('S3 down'));
+
+            await expect(
+                postsService.updateTrigger('post-1', 'facebook', 'k', 'hi', 'ws-1', 'keyword', { action: 'set', buffer: Buffer.alloc(50), mimeType: 'image/png' }),
+            ).rejects.toThrow('S3 down');
+
+            // Old image untouched: no DB update, no delete of the old key.
+            expect(setSpy).not.toHaveBeenCalled();
+            expect(imageStorage.remove).not.toHaveBeenCalled();
+            expect(captureError).toHaveBeenCalled();
+        });
+
+        it('remove: nulls the columns and deletes the old key', async () => {
+            vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned({ imageKey: 'trigger-images/ws-1/x.jpg', imageBytes: 40 })) as any);
+            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'hi', 'ws-1', 'keyword', { action: 'remove' });
+            expect(res).toEqual({ ok: true });
+            expect(setSpy.mock.calls[0][0]).toMatchObject({ triggerImageUrl: null, triggerImageKey: null, triggerImageBytes: null });
+            expect(imageStorage.remove).toHaveBeenCalledWith('trigger-images/ws-1/x.jpg');
+        });
+
+        // H1 regression: the cap applies to the EFFECTIVE image state, so a "keep" on a
+        // row that already has an image rejects a >160 reply — even though the request
+        // body carried no image (the controller's body-only check can't catch this).
+        it('keep with an existing image: rejects a reply longer than 160 chars', async () => {
+            vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned({ imageKey: 'has-image', imageBytes: 100 })) as any);
+            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'x'.repeat(161), 'ws-1', 'keyword', { action: 'keep' });
+            expect(res).toEqual({ ok: false, reason: 'reply_too_long_with_image' });
+            expect(setSpy).not.toHaveBeenCalled();
+        });
+
+        it('keep with an existing image: accepts a reply of 160 chars and leaves image columns untouched', async () => {
+            vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned({ imageKey: 'has-image', imageBytes: 100 })) as any);
+            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'x'.repeat(160), 'ws-1', 'keyword', { action: 'keep' });
+            expect(res).toEqual({ ok: true });
+            expect(imageStorage.put).not.toHaveBeenCalled();
+            // image columns not in the update set (keep)
+            expect(setSpy.mock.calls[0][0]).not.toHaveProperty('triggerImageKey');
         });
     });
 });

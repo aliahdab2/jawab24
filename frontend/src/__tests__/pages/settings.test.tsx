@@ -10,6 +10,14 @@ vi.mock('sonner', () => ({
     toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+// The settings page invalidates the shared ['comment-reply-config'] query on save so
+// the Post Reply modal reflects a mode change immediately. Provide a QueryClient stub
+// (these tests don't wrap in a QueryClientProvider) without touching the rest of the lib.
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@tanstack/react-query')>();
+    return { ...actual, useQueryClient: () => ({ invalidateQueries: vi.fn() }) };
+});
+
 // Create mock functions
 const mockSetLanguage = vi.fn();
 

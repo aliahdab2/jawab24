@@ -1,5 +1,6 @@
 import { FastifyReply } from 'fastify';
 import { settingsService } from '../services/settings';
+import { imageStorage } from '../services/imageStorage';
 import { smartTranslateMultiLang } from '../services/multiLangTranslation';
 import { AuthenticatedRequest } from '../middleware/auth';
 import type { WorkspaceRequest } from '../middleware/workspace';
@@ -63,7 +64,10 @@ export class SettingsController {
 
             const userId = request.user.userId;
             const settings = await settingsService.getSettings(userId);
-            return reply.send(settings);
+            // Server capability flag (not a stored setting): Post Reply image attachments
+            // are available only when object storage is configured. The frontend gates
+            // the image picker on this.
+            return reply.send({ ...settings, triggerImagesEnabled: imageStorage.isConfigured() });
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error getting settings');
             return reply.status(500).send({ error: 'Failed to get settings' });

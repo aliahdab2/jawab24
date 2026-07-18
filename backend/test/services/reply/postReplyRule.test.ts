@@ -20,12 +20,12 @@ describe('resolvePostReplyRule', () => {
             triggerReply: 'تفضل السعر',
             triggerType: 'keyword',
         };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر' });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerImageUrl: null });
     });
 
     it('resolves the per-post any-comment rule (reply set, no keyword)', () => {
         const content: ContentTriggerFields = { triggerKeyword: null, triggerReply: 'DM sent', triggerType: 'all' };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent' });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerImageUrl: null });
     });
 
     it('returns null when the content has no rule', () => {
@@ -140,5 +140,29 @@ describe('validatePostReplyRuleInput', () => {
 
     it('rejects a bad triggerType', () => {
         expect(validatePostReplyRuleInput({ triggerType: 'nope', triggerKeyword: null, triggerReply: 'hi' })).toMatch(/keyword.*all/);
+    });
+
+    it('allows up to 1000 chars without an image', () => {
+        const reply = 'x'.repeat(1000);
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: reply })).toBeNull();
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'x'.repeat(1001) })).toMatch(/1000/);
+    });
+
+    it('tightens the reply cap to 160 when an image is attached', () => {
+        const at160 = 'x'.repeat(160);
+        const over = 'x'.repeat(161);
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: at160, hasImage: true })).toBeNull();
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: over, hasImage: true })).toMatch(/160/);
+    });
+});
+
+describe('resolvePostReplyRule — image', () => {
+    it('carries triggerImageUrl through', () => {
+        const rule = resolvePostReplyRule({ triggerKeyword: null, triggerReply: 'hi', triggerType: 'all', triggerImageUrl: 'https://cdn/x.jpg' });
+        expect(rule?.triggerImageUrl).toBe('https://cdn/x.jpg');
+    });
+    it('defaults triggerImageUrl to null when absent', () => {
+        const rule = resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword' });
+        expect(rule?.triggerImageUrl).toBeNull();
     });
 });

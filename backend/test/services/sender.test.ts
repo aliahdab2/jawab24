@@ -59,6 +59,31 @@ describe('ReplySender', () => {
         vi.mocked(detectLanguageCode).mockReturnValue('ar');
         vi.mocked(fbAxios.post).mockResolvedValue({ data: { id: 'reply_id' } });
         vi.mocked(facebookService.sendPrivateReplyToComment).mockResolvedValue({ recipientId: 'user_456' });
+        vi.mocked(facebookService.sendPrivateReplyCardToComment).mockResolvedValue({ recipientId: 'user_456' });
+    });
+
+    // ─── Image (card) gating — the privacy invariant ────────────────────
+    describe('Image gating', () => {
+        it('public mode: an attached image is NEVER sent as a card (image stays private)', async () => {
+            await sender.sendCommentReply({ ...baseOptions, replyMode: 'public', replyImageUrl: 'https://cdn/x.jpg' });
+            expect(facebookService.sendPrivateReplyCardToComment).not.toHaveBeenCalled();
+            // Public mode still posts the text reply as a public comment (via fbAxios).
+            expect(fbAxios.post).toHaveBeenCalled();
+        });
+
+        it('private mode with an image: sends it as a card, not a plain-text DM', async () => {
+            await sender.sendCommentReply({ ...baseOptions, replyMode: 'private', replyImageUrl: 'https://cdn/x.jpg' });
+            expect(facebookService.sendPrivateReplyCardToComment).toHaveBeenCalledWith(
+                'access_token_abc', 'fb_comment_123', { text: 'Thank you for your feedback!', imageUrl: 'https://cdn/x.jpg' },
+            );
+            expect(facebookService.sendPrivateReplyToComment).not.toHaveBeenCalled();
+        });
+
+        it('no image: uses the plain-text DM path (never the card)', async () => {
+            await sender.sendCommentReply({ ...baseOptions, replyMode: 'private' });
+            expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalled();
+            expect(facebookService.sendPrivateReplyCardToComment).not.toHaveBeenCalled();
+        });
     });
 
     // ─── Demo Mode ───────────────────────────────────────────────────

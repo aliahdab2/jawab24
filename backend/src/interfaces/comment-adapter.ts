@@ -26,6 +26,8 @@ export interface ContentEntity {
     triggerReply?: string | null;
     /** How the per-post trigger fires: 'keyword' (match triggerKeyword) | 'all' (any comment). */
     triggerType?: string | null;
+    /** Attached Post Reply image URL (DM-modes only), or null when none. */
+    triggerImageUrl?: string | null;
 }
 
 /** Context passed to replyGenerator.generateForComment */
@@ -104,6 +106,9 @@ export interface CommentPlatformAdapter {
         userSettings: Record<string, unknown>;
         /** Post/media text — used to detect language when comment is punctuation-only */
         postMessage?: string;
+        /** Post Reply image URL. Delivered ONLY on the DM channel (private/dual) — the
+         *  adapter gates by mode; a public reply never carries it. Undocumented for AI/template. */
+        replyImageUrl?: string | null;
     }): Promise<SendCommentResult>;
 
     /** Mark a stored comment as replied in the database */

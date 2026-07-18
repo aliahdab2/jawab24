@@ -1,7 +1,10 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { postsService } from '../services/posts';
+import { POST_REPLY_IMAGE_MAX_BYTES, POST_REPLY_IMAGE_MIME_TYPES } from '@jawab24/shared';
+import { postsService, type TriggerImageInput } from '../services/posts';
 import { pagesService } from '../services/pages';
 import { validatePostReplyRuleInput } from '../services/reply/postReplyRule';
+import { imageStorage } from '../services/imageStorage';
+import { bufferMatchesMime } from '../services/kb/file-extractor';
 import { UpdatePostDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
 
@@ -217,13 +220,23 @@ export class PostsController {
      * PATCH /posts/:id/trigger
      */
     async updateTrigger(
-        request: FastifyRequest<{ Params: { id: string }; Body: { source: 'facebook' | 'instagram'; triggerKeyword: string | null; triggerReply: string | null; triggerType?: 'keyword' | 'all' } }>,
+        request: FastifyRequest<{
+            Params: { id: string };
+            Body: {
+                source: 'facebook' | 'instagram';
+                triggerKeyword: string | null;
+                triggerReply: string | null;
+                triggerType?: 'keyword' | 'all';
+                // Image intent: absent/undefined = leave as-is; null = remove; object = set a new image.
+                triggerImage?: { base64: string; mimeType: string } | null;
+            };
+        }>,
         reply: FastifyReply,
     ) {
         const req = request as WorkspaceRequest;
         if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
-        const { source, triggerKeyword, triggerReply, triggerType } = request.body;
+        const { source, triggerKeyword, triggerReply, triggerType, triggerImage } = request.body;
 
         if (!['facebook', 'instagram'].includes(source)) {
             return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
@@ -235,27 +248,65 @@ export class PostsController {
         const rawType: string = triggerType ?? 'keyword';
         const keyword = triggerKeyword?.trim() || null;
         const replyText = triggerReply?.trim() || null;
+        const hasImage = triggerImage !== null && triggerImage !== undefined;
+
+        // Reject an image on a feature that isn't configured, before any other work —
+        // the send path can't deliver it, so accepting the upload would be a lie.
+        if (hasImage && !imageStorage.isConfigured()) {
+            return reply.status(400).send({ error: 'Image attachments are not available' });
+        }
 
         try {
             // Clearing the trigger: both keyword and reply empty → remove the rule (fields
-            // nulled, type reset to the default).
+            // nulled, type reset to the default). Any attached image is dropped too.
             if (!keyword && !replyText) {
-                const cleared = await postsService.updateTrigger(id, source, null, null, req.workspaceId, 'keyword');
-                if (!cleared) return reply.status(404).send({ error: 'Post not found' });
+                const cleared = await postsService.updateTrigger(id, source, null, null, req.workspaceId, 'keyword', { action: 'remove' });
+                if (!cleared.ok) return reply.status(404).send({ error: 'Post not found' });
                 return reply.send({ success: true });
             }
 
             // Setting: validate keyword vs any-comment shape via the shared validator. A
             // partial trigger (keyword without a reply) fails here — triggerReply is required.
-            const validationError = validatePostReplyRuleInput({ triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText });
+            // With an image attached the reply cap tightens to 160 (card title+subtitle).
+            const validationError = validatePostReplyRuleInput({ triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText, hasImage });
             if (validationError) return reply.status(400).send({ error: validationError });
+
+            // Decode + validate the image (allowlist, size, magic-byte match) before upload.
+            let imageIntent: TriggerImageInput = triggerImage === null ? { action: 'remove' } : { action: 'keep' };
+            if (triggerImage) {
+                if (typeof triggerImage.base64 !== 'string' || triggerImage.base64.length === 0) {
+                    return reply.status(400).send({ error: 'Invalid image data' });
+                }
+                if (!POST_REPLY_IMAGE_MIME_TYPES.includes(triggerImage.mimeType as typeof POST_REPLY_IMAGE_MIME_TYPES[number])) {
+                    return reply.status(400).send({ error: 'Unsupported image type. Use JPG, PNG, or WEBP' });
+                }
+                const buffer = Buffer.from(triggerImage.base64, 'base64');
+                if (buffer.length === 0) {
+                    return reply.status(400).send({ error: 'Empty image data' });
+                }
+                if (buffer.length > POST_REPLY_IMAGE_MAX_BYTES) {
+                    return reply.status(413).send({ error: 'Image too large (max 2 MB)' });
+                }
+                if (!bufferMatchesMime(buffer, triggerImage.mimeType)) {
+                    return reply.status(400).send({ error: 'file_content_mismatch', message: 'Image contents do not match the declared type.' });
+                }
+                imageIntent = { action: 'set', buffer, mimeType: triggerImage.mimeType };
+            }
 
             // Validation guarantees rawType is 'keyword' | 'all' past this point.
             const type: 'keyword' | 'all' = rawType === 'all' ? 'all' : 'keyword';
             // Any-comment mode stores no keyword.
             const storedKeyword = type === 'all' ? null : keyword;
-            const found = await postsService.updateTrigger(id, source, storedKeyword, replyText, req.workspaceId, type);
-            if (!found) return reply.status(404).send({ error: 'Post not found' });
+            const result = await postsService.updateTrigger(id, source, storedKeyword, replyText, req.workspaceId, type, imageIntent);
+            if (!result.ok) {
+                if (result.reason === 'quota_exceeded') {
+                    return reply.status(413).send({ error: 'image_quota_exceeded', message: 'Image storage limit reached for this workspace' });
+                }
+                if (result.reason === 'reply_too_long_with_image') {
+                    return reply.status(400).send({ error: 'reply_too_long_with_image', message: 'With an image attached, the reply must be 160 characters or fewer' });
+                }
+                return reply.status(404).send({ error: 'Post not found' });
+            }
             return reply.send({ success: true });
         } catch (error) {
             request.log.error(error);

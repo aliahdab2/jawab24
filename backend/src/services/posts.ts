@@ -1,10 +1,36 @@
+import { randomUUID } from 'crypto';
 import { db } from '../db';
 import { posts, pages, instagramMedia } from '../db/schema';
-import { eq, desc, and, inArray, isNotNull } from 'drizzle-orm';
+import { eq, desc, and, inArray, isNotNull, sql } from 'drizzle-orm';
 import { CreatePostDTO, UpdatePostDTO, Logger, noopLogger } from '../types';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
-import type { PublishedPost } from '@jawab24/shared';
+import { imageStorage } from './imageStorage';
+import { config } from '../config';
+import { captureError } from '../utils/sentryHelpers';
+import { POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE, type PublishedPost } from '@jawab24/shared';
+
+/** How the caller wants the Post Reply image handled on this save. */
+export type TriggerImageInput =
+    | { action: 'keep' }                                    // default — leave the image column as-is
+    | { action: 'remove' }                                  // delete the object + null the columns
+    | { action: 'set'; buffer: Buffer; mimeType: string };  // upload + replace
+
+export type UpdateTriggerResult =
+    | { ok: true }
+    | { ok: false; reason: 'not_found' }
+    | { ok: false; reason: 'quota_exceeded' }
+    | { ok: false; reason: 'reply_too_long_with_image' };
+
+/** File extension for a validated image MIME (allowlist mirrors the validator). */
+function extForMime(mime: string): string {
+    switch (mime) {
+        case 'image/jpeg': return 'jpg';
+        case 'image/png': return 'png';
+        case 'image/webp': return 'webp';
+        default: return 'img';
+    }
+}
 
 /** Default number of published posts shown per picker page (owner: "last 5, not more").
  *  "Load more" fetches the next page via the platform Graph cursor. */
@@ -188,34 +214,107 @@ export class PostsService {
         triggerReply: string | null,
         workspaceId: string,
         triggerType: 'keyword' | 'all' = 'keyword',
-    ): Promise<boolean> {
-        if (source === 'instagram') {
-            const owned = await db
-                .select({ id: instagramMedia.id })
-                .from(instagramMedia)
-                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(and(eq(instagramMedia.id, contentId), eq(pages.workspaceId, workspaceId)));
-            if (!owned[0]) return false;
+        image: TriggerImageInput = { action: 'keep' },
+    ): Promise<UpdateTriggerResult> {
+        const table = source === 'instagram' ? instagramMedia : posts;
 
-            await db
-                .update(instagramMedia)
-                .set({ triggerKeyword, triggerReply, triggerType, updatedAt: new Date() })
-                .where(eq(instagramMedia.id, contentId));
-        } else {
-            const owned = await db
-                .select({ id: posts.id })
-                .from(posts)
-                .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(and(eq(posts.id, contentId), eq(pages.workspaceId, workspaceId)));
-            if (!owned[0]) return false;
+        // Ownership + current image, in one query. The current key/bytes drive the
+        // safe-order delete (delete AFTER the row is committed) and the quota delta.
+        const [owned] = await db
+            .select({
+                id: table.id,
+                imageKey: table.triggerImageKey,
+                imageBytes: table.triggerImageBytes,
+            })
+            .from(table)
+            .innerJoin(pages, eq(table.pageId, pages.id))
+            .where(and(eq(table.id, contentId), eq(pages.workspaceId, workspaceId)));
+        if (!owned) return { ok: false, reason: 'not_found' };
 
-            await db
-                .update(posts)
-                .set({ triggerKeyword, triggerReply, triggerType, updatedAt: new Date() })
-                .where(eq(posts.id, contentId));
+        // Clearing the rule (no reply) always drops any attached image too — a cleared
+        // trigger owns no image. Otherwise honor the caller's explicit intent.
+        const clearing = !triggerReply;
+        const effectiveAction = clearing ? 'remove' : image.action;
+
+        // Authoritative 160-char cap: enforce it on the EFFECTIVE image state, not the
+        // request body. A "keep" on a row that already has an image still delivers a
+        // card, so the cap applies — the controller's body-only check can't see that.
+        const willHaveImage = effectiveAction === 'set' || (effectiveAction === 'keep' && !!owned.imageKey);
+        if (willHaveImage && triggerReply && triggerReply.length > POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE) {
+            return { ok: false, reason: 'reply_too_long_with_image' };
         }
 
-        return true;
+        // Columns to write for the image. `undefined` here means "leave as-is" (keep).
+        let imageColumns: { triggerImageUrl: string | null; triggerImageKey: string | null; triggerImageBytes: number | null } | undefined;
+        let keyToDeleteAfterCommit: string | null = null;
+
+        if (effectiveAction === 'set' && image.action === 'set') {
+            // Quota: total workspace image bytes, minus what THIS row already holds
+            // (a replace nets the delta), plus the incoming bytes.
+            const newBytes = image.buffer.length;
+            const workspaceBytes = await this.workspaceImageBytes(workspaceId);
+            const projected = workspaceBytes - (owned.imageBytes ?? 0) + newBytes;
+            if (projected > config.objectStorage.quotaBytes) {
+                return { ok: false, reason: 'quota_exceeded' };
+            }
+            // Upload the NEW object FIRST, so a failed upload aborts the save with the
+            // old image still intact (never a missing live image). Capture the failure
+            // with context — otherwise an S3/R2 outage is an opaque 500.
+            const key = `trigger-images/${workspaceId}/${randomUUID()}.${extForMime(image.mimeType)}`;
+            let stored;
+            try {
+                stored = await imageStorage.put(key, image.buffer, image.mimeType);
+            } catch (err) {
+                captureError(err, 'Post Reply image upload failed', {
+                    fingerprint: ['image-storage-put-failed'],
+                    tags: { component: 'imageStorage', source },
+                    extra: { workspaceId, contentId, bytes: newBytes },
+                });
+                throw err;
+            }
+            imageColumns = { triggerImageUrl: stored.url, triggerImageKey: stored.key, triggerImageBytes: newBytes };
+            // Old object (if any, and different) is swept only AFTER the DB commit.
+            if (owned.imageKey && owned.imageKey !== stored.key) keyToDeleteAfterCommit = owned.imageKey;
+        } else if (effectiveAction === 'remove') {
+            imageColumns = { triggerImageUrl: null, triggerImageKey: null, triggerImageBytes: null };
+            if (owned.imageKey) keyToDeleteAfterCommit = owned.imageKey;
+        }
+        // effectiveAction === 'keep' → imageColumns stays undefined → columns untouched.
+
+        await db
+            .update(table)
+            .set({
+                triggerKeyword,
+                triggerReply,
+                triggerType,
+                ...(imageColumns ?? {}),
+                updatedAt: new Date(),
+            })
+            .where(eq(table.id, contentId));
+
+        // Safe-order delete: the new state is committed; only now drop the superseded
+        // object. Best-effort — a failed delete leaves a harmless orphan, never a
+        // missing live image (imageStorage.remove logs and swallows).
+        if (keyToDeleteAfterCommit) {
+            await imageStorage.remove(keyToDeleteAfterCommit);
+        }
+
+        return { ok: true };
+    }
+
+    /** Sum of trigger-image bytes across a workspace's FB posts + IG media (quota basis). */
+    private async workspaceImageBytes(workspaceId: string): Promise<number> {
+        const [p] = await db
+            .select({ total: sql<string>`coalesce(sum(${posts.triggerImageBytes}), 0)` })
+            .from(posts)
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(eq(pages.workspaceId, workspaceId));
+        const [m] = await db
+            .select({ total: sql<string>`coalesce(sum(${instagramMedia.triggerImageBytes}), 0)` })
+            .from(instagramMedia)
+            .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+            .where(eq(pages.workspaceId, workspaceId));
+        return Number(p?.total ?? 0) + Number(m?.total ?? 0);
     }
 
     /**

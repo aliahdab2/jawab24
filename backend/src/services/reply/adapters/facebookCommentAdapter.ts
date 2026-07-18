@@ -42,6 +42,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             triggerKeyword: post.triggerKeyword ?? null,
             triggerReply: post.triggerReply ?? null,
             triggerType: post.triggerType ?? 'keyword',
+            triggerImageUrl: post.triggerImageUrl ?? null,
         };
     }
 
@@ -72,6 +73,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         fromId?: string;
         userSettings: Record<string, unknown>;
         postMessage?: string;
+        replyImageUrl?: string | null;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
         const isDemo = opts.platformPageId.startsWith('demo_');
@@ -92,6 +94,9 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             replyMode,
             dualReplyNudge,
             isDemo,
+            // Image rides ONLY the DM channel — the sender applies it in the private/dual
+            // branch and never on a public comment.
+            replyImageUrl: opts.replyImageUrl,
         });
     }
 

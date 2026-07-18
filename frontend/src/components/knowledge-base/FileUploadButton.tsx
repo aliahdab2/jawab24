@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { kbApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { useHintDisplay } from '@/hooks/useHintDisplay';
+import { fileToBase64 } from '@/utils/fileToBase64';
 
 // image/* triggers camera option on mobile (iOS/Android)
 const ACCEPTED_TYPES = '.pdf,.docx,.doc,.xlsx,image/*';
@@ -154,19 +155,4 @@ export function FileUploadButton({
       )}
     </div>
   );
-}
-
-/** Convert a File to base64 string (without data URI prefix) */
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Remove "data:...;base64," prefix
-      const base64 = result.split(',')[1] || '';
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }

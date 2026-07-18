@@ -286,6 +286,27 @@ export const config = {
         fromName: process.env.RESEND_FROM_NAME || 'Jawab24',
     },
 
+    // Object storage (S3-compatible) — merchant-uploaded images (Post Reply trigger
+    // images today; reply-type-agnostic for future reuse). Provider-agnostic: point
+    // the same code at Backblaze B2 / Cloudflare R2 / AWS S3 / self-hosted MinIO via
+    // env — see backend/docs/OBJECT_STORAGE.md. Feature stays OFF (isConfigured=false)
+    // until every required var is set; the rest of the app boots without it.
+    //   - endpoint EMPTY  → real AWS S3 (region-based addressing)
+    //   - endpoint SET    → B2/R2/MinIO (forces path-style addressing internally)
+    objectStorage: {
+        endpoint: process.env.S3_ENDPOINT || '',
+        region: process.env.S3_REGION || 'us-east-1',
+        bucket: process.env.S3_BUCKET || '',
+        accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
+        // Public base URL the bucket serves objects from (CDN/public endpoint). The
+        // stored image URL is `${publicBaseUrl}/${key}` — this is what Meta fetches.
+        publicBaseUrl: process.env.S3_PUBLIC_BASE_URL || '',
+        // Per-workspace generous abuse-safety cap (NOT a normal-use wall — one image
+        // per post is self-limiting). Default 1 GB ≈ ~500 posts at 2 MB.
+        quotaBytes: parseInt(process.env.POST_REPLY_IMAGE_QUOTA_BYTES || String(1024 * 1024 * 1024), 10),
+    },
+
     // Circuit Breaker (ai-worker HTTP calls)
     circuitBreaker: {
         /** Consecutive failures before opening the circuit (default: 5) */

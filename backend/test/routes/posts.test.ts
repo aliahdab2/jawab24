@@ -8,6 +8,11 @@ import { pagesService } from '../../src/services/pages';
 vi.mock('../../src/services/posts');
 vi.mock('../../src/services/pages');
 vi.mock('../../src/services/comments');
+// Image attachments require object storage configured — force it ON so the controller's
+// image-validation branches are exercised (isConfigured() reads real env otherwise).
+vi.mock('../../src/services/imageStorage', () => ({
+    imageStorage: { isConfigured: vi.fn(() => true), put: vi.fn(), remove: vi.fn() },
+}));
 vi.mock('../../src/middleware/auth', () => ({
     authenticate: async (req: any) => {
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
@@ -134,7 +139,7 @@ describe('Posts Routes', () => {
 
     describe('PATCH /posts/:id/trigger', () => {
         it('should set trigger keyword and reply', async () => {
-            vi.mocked(postsService.updateTrigger).mockResolvedValue(true);
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
 
             const response = await app.inject({
                 method: 'PATCH',
@@ -143,11 +148,11 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id', 'keyword');
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id', 'keyword', { action: 'keep' });
         });
 
         it('should clear trigger when both values are null', async () => {
-            vi.mocked(postsService.updateTrigger).mockResolvedValue(true);
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
 
             const response = await app.inject({
                 method: 'PATCH',
@@ -156,7 +161,8 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id', 'keyword');
+            // Clearing the rule also drops any attached image.
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id', 'keyword', { action: 'remove' });
         });
 
         it('should return 400 for invalid source', async () => {
@@ -191,7 +197,7 @@ describe('Posts Routes', () => {
         });
 
         it('should set an any-comment trigger (no keyword stored)', async () => {
-            vi.mocked(postsService.updateTrigger).mockResolvedValue(true);
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
 
             const response = await app.inject({
                 method: 'PATCH',
@@ -200,11 +206,11 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', null, 'DM sent!', 'test_workspace_id', 'all');
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', null, 'DM sent!', 'test_workspace_id', 'all', { action: 'keep' });
         });
 
         it('should return 404 when post not found or not owned', async () => {
-            vi.mocked(postsService.updateTrigger).mockResolvedValue(false);
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: false, reason: 'not_found' });
 
             const response = await app.inject({
                 method: 'PATCH',
@@ -213,6 +219,66 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(404);
+        });
+    });
+
+    describe('PATCH /posts/:id/trigger — image validation', () => {
+        // Minimal buffer with the PNG magic signature so bufferMatchesMime passes for image/png.
+        const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        const validPng = (padBytes = 64) => Buffer.concat([PNG_SIG, Buffer.alloc(padBytes)]).toString('base64');
+        const patch = (triggerImage: unknown) => app.inject({
+            method: 'PATCH', url: '/posts/post_1/trigger',
+            payload: { source: 'facebook', triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', triggerImage },
+        });
+
+        beforeEach(() => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+        });
+
+        it('rejects an unsupported MIME type with 400', async () => {
+            const res = await patch({ base64: validPng(), mimeType: 'image/gif' });
+            expect(res.statusCode).toBe(400);
+            expect(postsService.updateTrigger).not.toHaveBeenCalled();
+        });
+
+        it('rejects a missing/empty base64 with 400', async () => {
+            expect((await patch({ mimeType: 'image/png' })).statusCode).toBe(400);
+            expect((await patch({ base64: '', mimeType: 'image/png' })).statusCode).toBe(400);
+        });
+
+        it('rejects an oversize image with 413', async () => {
+            const res = await patch({ base64: validPng(2 * 1024 * 1024 + 10), mimeType: 'image/png' });
+            expect(res.statusCode).toBe(413);
+        });
+
+        it('rejects a magic-byte / declared-type mismatch with 400', async () => {
+            const notAPng = Buffer.from('this is plain text, not a png').toString('base64');
+            const res = await patch({ base64: notAPng, mimeType: 'image/png' });
+            expect(res.statusCode).toBe(400);
+            expect(postsService.updateTrigger).not.toHaveBeenCalled();
+        });
+
+        it('accepts a valid image and forwards a set intent to the service', async () => {
+            const res = await patch({ base64: validPng(), mimeType: 'image/png' });
+            expect(res.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(
+                'post_1', 'facebook', 'k', 'hi', 'test_workspace_id', 'keyword',
+                expect.objectContaining({ action: 'set', mimeType: 'image/png' }),
+            );
+        });
+
+        it('maps quota_exceeded to 413', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: false, reason: 'quota_exceeded' });
+            const res = await patch({ base64: validPng(), mimeType: 'image/png' });
+            expect(res.statusCode).toBe(413);
+            expect(JSON.parse(res.body).error).toBe('image_quota_exceeded');
+        });
+
+        it('maps reply_too_long_with_image to 400', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: false, reason: 'reply_too_long_with_image' });
+            const res = await patch({ base64: validPng(), mimeType: 'image/png' });
+            expect(res.statusCode).toBe(400);
+            expect(JSON.parse(res.body).error).toBe('reply_too_long_with_image');
         });
     });
 

@@ -227,6 +227,7 @@ After any feature addition, integration, or architectural change, update these d
 | `SYSTEM_ANALYSIS.md` | New platform, resolved gap, changed status |
 | `.planning/codebase/INTEGRATIONS.md` | New/changed integration details |
 | `.planning/codebase/ARCHITECTURE.md` | Structural changes to how the system is built |
+| `backend/docs/OBJECT_STORAGE.md` | Anything about merchant image storage — provider, backups, key rotation, the `ImageStorage` S3 abstraction (see D-032) |
 
 Rules:
 - Never leave a doc saying "Planned" or "Not implemented" after shipping the feature

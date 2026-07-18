@@ -44,9 +44,11 @@ type MetaButton =
 
 interface MetaTemplateElement {
     title: string;
-    subtitle: string;
+    subtitle?: string;
     image_url: string;
-    default_action: { type: 'web_url'; url: string };
+    // Optional: product cards deep-link to the product; a Post Reply image card has
+    // no destination, so it omits this.
+    default_action?: { type: 'web_url'; url: string };
     buttons?: MetaButton[];
 }
 
@@ -83,17 +85,76 @@ export function buildGenericTemplateElements(cards: ProductCard[]): MetaTemplate
  * Build the shared Graph API request body for a /me/messages send.
  * Callers POST this as-is to either the Messenger or Instagram /me/messages endpoint.
  */
-export function buildMessagePayload(
-    recipientId: string,
-    message: { text: string } | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } },
-    opts?: SendMessageOptions,
-): Record<string, unknown> {
+type MetaRecipient = { id: string } | { comment_id: string };
+type MetaMessage =
+    | { text: string }
+    | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } };
+
+/** The shared /me/messages request envelope (recipient + message + messaging_type/tag).
+ *  Single source so text sends, product cards, and image cards can't drift. */
+function buildMeMessageEnvelope(recipient: MetaRecipient, message: MetaMessage, opts?: SendMessageOptions): Record<string, unknown> {
     return {
-        recipient: { id: recipientId },
+        recipient,
         message,
         messaging_type: opts?.messagingType ?? 'RESPONSE',
         ...(opts?.tag ? { tag: opts.tag } : {}),
     };
+}
+
+/** Wrap a single generic-template element into a send-ready message body. */
+function templateMessage(element: MetaTemplateElement): MetaMessage {
+    return { attachment: { type: 'template', payload: { template_type: 'generic', elements: [element] } } };
+}
+
+export function buildMessagePayload(
+    recipientId: string,
+    message: MetaMessage,
+    opts?: SendMessageOptions,
+): Record<string, unknown> {
+    return buildMeMessageEnvelope({ id: recipientId }, message, opts);
+}
+
+/**
+ * Split a Post Reply caption into a card title (≤80) + optional subtitle (≤80).
+ * Meta requires a non-empty title; the subtitle is included only when the text
+ * overflows the title. Splits at a word boundary so a word is never cut mid-way.
+ * The reply is validated ≤160 upstream, so both halves fit.
+ */
+export function splitCardText(text: string): { title: string; subtitle?: string } {
+    const trimmed = text.trim();
+    const max = META_TEMPLATE_LIMITS.maxTitleChars;
+    if (trimmed.length <= max) {
+        // Meta rejects an empty title — fall back to a single space if somehow blank.
+        return { title: trimmed || ' ' };
+    }
+    const boundary = trimmed.lastIndexOf(' ', max);
+    const splitAt = boundary > 0 ? boundary : max; // no space in range → hard cut
+    const title = trimmed.slice(0, splitAt).trim() || trimmed.slice(0, max);
+    const subtitle = trimmed.slice(splitAt).trim().slice(0, META_TEMPLATE_LIMITS.maxSubtitleChars);
+    return subtitle ? { title, subtitle } : { title };
+}
+
+/**
+ * Build a single Generic Template element for a Post Reply image card: image on top,
+ * caption split across title/subtitle. No `default_action` (the image isn't a link).
+ * Reply-type-agnostic — reusable by any future image-carrying reply.
+ */
+export function buildImageCardElement(opts: { text: string; imageUrl: string }): MetaTemplateElement {
+    const { title, subtitle } = splitCardText(opts.text);
+    return {
+        title: title.slice(0, META_TEMPLATE_LIMITS.maxTitleChars),
+        image_url: opts.imageUrl,
+        ...(subtitle ? { subtitle } : {}),
+    };
+}
+
+/** Build the /me/messages body for a single-element generic-template (image card). */
+export function buildImageCardPayload(
+    recipient: MetaRecipient,
+    element: MetaTemplateElement,
+    opts?: SendMessageOptions,
+): Record<string, unknown> {
+    return buildMeMessageEnvelope(recipient, templateMessage(element), opts);
 }
 
 /** Build the Generic Template attachment body for a product-card send. */

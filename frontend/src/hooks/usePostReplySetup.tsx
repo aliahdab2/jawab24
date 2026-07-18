@@ -25,6 +25,7 @@ interface PostReplyTarget {
   keyword: string | null;
   reply: string | null;
   type: string | null;
+  imageUrl: string | null;
 }
 
 export interface PostReplySetup {
@@ -65,7 +66,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
   const openForPublishedPost = useCallback(async (picked: PickedPost): Promise<void> => {
     try {
       const { data } = await postsApi.ensurePost(picked.pageId, picked.source, picked.platformPostId);
-      const content = data as { id: string; triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null };
+      const content = data as { id: string; triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null; triggerImageUrl?: string | null };
       setPickerOpen(false);
       setTarget({
         postId: content.id,
@@ -74,6 +75,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         keyword: content.triggerKeyword ?? null,
         reply: content.triggerReply ?? null,
         type: content.triggerType ?? null,
+        imageUrl: content.triggerImageUrl ?? null,
       });
     } catch (err) {
       captureError(err, 'usePostReplySetup.openForPublishedPost', { tags: { action: 'post-reply-setup' } });
@@ -89,7 +91,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         queryFn: () =>
           postsApi
             .getById(comment.postId!)
-            .then((r) => r.data as { triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null }),
+            .then((r) => r.data as { triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null; triggerImageUrl?: string | null }),
       });
       setTarget({
         postId: comment.postId,
@@ -98,6 +100,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         keyword: post?.triggerKeyword ?? null,
         reply: post?.triggerReply ?? null,
         type: post?.triggerType ?? null,
+        imageUrl: post?.triggerImageUrl ?? null,
       });
       return true;
     } catch (err) {
@@ -135,6 +138,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
           triggerKeyword={target.keyword}
           triggerReply={target.reply}
           triggerType={target.type}
+          triggerImageUrl={target.imageUrl}
           isOpen
           onClose={close}
           onSaved={onSaved}
