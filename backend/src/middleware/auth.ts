@@ -97,14 +97,18 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
 
 /**
  * Auth endpoints that (re)establish identity from a one-time credential in the
- * request body — a Facebook OAuth `code` or access token — NOT from the session
- * cookie. CSRF is inapplicable here and must not gate them:
- *   - The OAuth code is itself the anti-forgery token: an attacker can't obtain a
- *     valid one for the victim, and the endpoint mints a fresh session from it,
- *     ignoring any ambient `token` cookie.
- *   - They are called from the /auth/callback page via raw `fetch` (not the axios
- *     client that attaches X-CSRF-Token), so a returning user whose browser still
- *     holds a valid `token` cookie would otherwise be 403'd out of logging in.
+ * request body — a Facebook OAuth `code`/access token, a phone OTP — or from
+ * nothing at all (demo login mints a fresh demo session). None of them derive
+ * authority from the session cookie, so CSRF is inapplicable and must not gate
+ * them:
+ *   - The OAuth code / OTP is itself the anti-forgery token: an attacker can't
+ *     obtain a valid one for the victim, and the endpoint mints a fresh session
+ *     from it, ignoring any ambient `token` cookie.
+ *   - They are called from public pages before login, so a returning user whose
+ *     browser still holds a lingering `token` cookie (but whose client doesn't
+ *     attach X-CSRF-Token) would otherwise be 403'd out of logging in. This
+ *     happened in production (2026-07-18): demo login, OTP request, and logout
+ *     all returned 403 for visitors with a stale session cookie.
  *   - sameSite:strict on the `token` cookie stays the primary cross-site defense
  *     (a cross-site forged request cannot send it at all).
  */
@@ -112,6 +116,9 @@ const CSRF_EXEMPT_ROUTES = new Set<string>([
     '/auth/facebook',
     '/auth/facebook/native',
     '/auth/facebook/link',
+    '/auth/demo',
+    '/auth/phone/request',
+    '/auth/phone/verify',
 ]);
 
 /**

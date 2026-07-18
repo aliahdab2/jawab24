@@ -99,7 +99,7 @@ Each service is independently deployable but shares:
 4. **Data Fetching**:
    - **Axios client** (`src/lib/api.ts`):
      - Authenticated instance: auto-adds token, CSRF protection, workspace scoping
-     - Public instance: for unauth endpoints
+     - Public instance: for unauth endpoints (still attaches X-CSRF-Token on mutations — it rides the session cookie via withCredentials, so logout/waitlist need it)
      - Interceptors: auth 401 handling, retry logic, timeout
    - **React Query** (`@tanstack/react-query`):
      - Caching, refetching, optimistic updates

@@ -12,7 +12,7 @@
  * NOTE: When adding new API types, ensure they match the backend DTOs exactly.
  */
 
-import axios, { AxiosRequestConfig } from 'axios';
+import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
 import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource } from '@jawab24/shared';
@@ -59,8 +59,26 @@ addTimeoutConfig(publicApi, 15000);
 const LONG_RUNNING_TIMEOUT = 60000;
 
 /**
+ * Add CSRF token for state-changing requests (POST, PUT, PATCH, DELETE).
+ * CSRF cookie is set by the backend alongside the HttpOnly auth cookie.
+ *
+ * Needed on BOTH axios instances: publicApi also rides the session cookie
+ * (withCredentials), so the backend enforces CSRF on its mutations too
+ * whenever a `token` cookie is present — e.g. logout, or a logged-in user
+ * submitting the waitlist form.
+ */
+function attachCsrfToken(config: InternalAxiosRequestConfig): void {
+  if (document.cookie && config.method && ['post', 'put', 'patch', 'delete'].includes(config.method.toLowerCase())) {
+    const match = document.cookie.match(new RegExp('(^| )csrfToken=([^;]+)'));
+    if (match) {
+      config.headers['X-CSRF-Token'] = match[2];
+    }
+  }
+}
+
+/**
  * Request Interceptor - Adds auth token and CSRF token
- * 
+ *
  * Token Strategy:
  * - Web (cookies): HttpOnly cookies auto-sent, add CSRF token for mutations
  * - Mobile (native): Bearer token from localStorage
@@ -73,14 +91,7 @@ api.interceptors.request.use((config) => {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Web: Add CSRF token for state-changing requests (POST, PUT, PATCH, DELETE)
-    // CSRF cookie is set by the backend alongside the HttpOnly auth cookie
-    if (document.cookie && config.method && ['post', 'put', 'patch', 'delete'].includes(config.method.toLowerCase())) {
-      const match = document.cookie.match(new RegExp('(^| )csrfToken=([^;]+)'));
-      if (match) {
-        config.headers['X-CSRF-Token'] = match[2];
-      }
-    }
+    attachCsrfToken(config);
 
     // Workspace scoping: tell the backend which workspace this request is for.
     // Imported lazily to avoid circular dependency (store imports api, api imports store).
@@ -95,6 +106,15 @@ api.interceptors.request.use((config) => {
     } catch {
       // Store not yet initialized — continue without header
     }
+  }
+  return config;
+});
+
+// publicApi mutations (logout, waitlist, …) also need the CSRF header —
+// no Bearer/workspace headers here, this stays the unauthenticated client.
+publicApi.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    attachCsrfToken(config);
   }
   return config;
 });

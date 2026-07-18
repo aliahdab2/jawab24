@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Initialize Sentry FIRST (before other imports)
-import { initSentry, Sentry } from "./lib/sentry";
+import { initSentry, Sentry, rateLimitCaptureMessage } from "./lib/sentry";
 initSentry();
 
 import fastify from "fastify";
@@ -237,14 +237,16 @@ const start = async () => {
       }),
       onExceeded: (request: { ip: string; url: string; headers: Record<string, string | string[] | undefined> }) => {
         // Fingerprint by IP + URL so repeated hits group into one Sentry issue
-        // rather than flooding with individual events.
+        // rather than flooding with individual events. The message comes from
+        // rateLimitCaptureMessage() — it must not match SENTRY_IGNORE_ERRORS,
+        // or this capture is silently dropped (see lib/sentry.ts).
         Sentry.withScope((scope) => {
           scope.setFingerprint(['rate-limit-exceeded', request.url, request.ip]);
           scope.setLevel('warning');
           scope.setTag('url', request.url);
           scope.setExtra('ip', request.ip);
           scope.setExtra('workspaceId', request.headers['x-workspace-id']);
-          Sentry.captureMessage(`Rate limit exceeded: ${request.url}`);
+          Sentry.captureMessage(rateLimitCaptureMessage(request.url));
         });
       },
     });

@@ -269,6 +269,8 @@ export default function AuthCallback() {
       const isAuthExpired = backendCode === 'INVALID_TOKEN' || backendCode === 'AUTH_FAILED';
       // Facebook returned an OAuth error (expired/replayed code, invalid token) — user-actionable, not a bug
       const isFbOauthFailed = backendCode === 'FACEBOOK_OAUTH_FAILED';
+      // Backend rate limiter said no — show a translated message, not the raw English body
+      const isRateLimited = backendCode === 'RATE_LIMIT_EXCEEDED';
 
       // Network blips, timeouts, expired/invalid sessions, and FB OAuth errors are not actionable — skip Sentry to avoid noise
       if (!isNetworkError && !isTimeout && !isAuthExpired && !isFbOauthFailed) {
@@ -278,6 +280,8 @@ export default function AuthCallback() {
       let errorMessage = t('loginError');
       if (isNetworkError) {
         errorMessage = tErrors('networkError');
+      } else if (isRateLimited) {
+        errorMessage = tErrors('tooManyRequests');
       } else if (isTimeout) {
         errorMessage = err instanceof Error ? err.message : t('loginTimeout');
       } else if (err instanceof Error && err.message) {
