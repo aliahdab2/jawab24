@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { commentsService } from '../services/comments';
+import { invalidateEndpointStatsCaches } from '../services/statsCache';
 import { UpdateCommentDTO } from '../types';
 import { parseInboxFilters, parseLimit } from '../lib/queryParsers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -151,6 +152,9 @@ export class CommentsController {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
             const comment = await commentsService.markAsReplied(id, replyText, 'manual', language);
+            // User-initiated mutation — the UI refetches stats right away, so drop
+            // the cached aggregation now (unthrottled, unlike the pipeline path).
+            invalidateEndpointStatsCaches(req.workspaceId);
             return reply.send(comment);
         } catch (error) {
             request.log.error(error);
@@ -197,6 +201,7 @@ export class CommentsController {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
             await commentsService.deleteComment(id);
+            invalidateEndpointStatsCaches(req.workspaceId);
             return reply.status(204).send();
         } catch (error) {
             request.log.error(error);
@@ -218,6 +223,7 @@ export class CommentsController {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
             await commentsService.resolveComment(id);
+            invalidateEndpointStatsCaches(req.workspaceId);
             return reply.send({ success: true });
         } catch (error) {
             request.log.error(error);
@@ -239,6 +245,7 @@ export class CommentsController {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
             await commentsService.unresolveComment(id);
+            invalidateEndpointStatsCaches(req.workspaceId);
             return reply.send({ success: true });
         } catch (error) {
             request.log.error(error);

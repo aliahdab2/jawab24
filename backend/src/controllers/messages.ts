@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { messagesService } from '../services/messages';
 import { conversationsService } from '../services/conversations';
 import { pagesService, isPageDisconnected } from '../services/pages';
+import { invalidateEndpointStatsCaches } from '../services/statsCache';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
 import { whatsappService } from '../services/whatsapp';
@@ -358,6 +359,9 @@ export class MessagesController {
         // 4. Mark the original message as replied (manual). Only this path has an
         // incoming row to mark — the conversation-level send skips this step.
         await messagesService.markAsReplied(message.id, trimmed, 'manual');
+        // User-initiated mutation — the UI refetches stats right away, so drop
+        // the cached aggregation now (unthrottled, unlike the pipeline path).
+        invalidateEndpointStatsCaches(req.workspaceId);
 
         return reply.send(outgoing);
         // Unexpected errors propagate to the global errorHandler, which reports them to Sentry.
@@ -601,6 +605,7 @@ export class MessagesController {
             }
 
             const count = await messagesService.resolveConversation(pageId, senderId);
+            invalidateEndpointStatsCaches(req.workspaceId);
             return reply.send({ success: true, resolved: count });
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error resolving conversation');
@@ -638,6 +643,7 @@ export class MessagesController {
             }
 
             const count = await messagesService.unresolveConversation(pageId, senderId);
+            invalidateEndpointStatsCaches(req.workspaceId);
             return reply.send({ success: true, unresolved: count });
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error unresolving conversation');

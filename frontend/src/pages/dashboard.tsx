@@ -288,6 +288,10 @@ const DashboardPage: NextPageWithLayout = () => {
       return (res.data ?? null) as AnalyticsOverview | null;
     },
     enabled: isAuthenticated,
+    // 30-day aggregation — the heaviest dashboard query and the least
+    // time-sensitive. Long staleTime keeps it out of the mount/refocus
+    // refetch burst (see also the scoped invalidation in _app.tsx).
+    staleTime: 15 * 60 * 1000,
   });
 
   // Daily Smart-Reply (AI call) volume — feeds the inline sparkline on the
@@ -299,6 +303,8 @@ const DashboardPage: NextPageWithLayout = () => {
       return (res.data ?? null) as AiUsageReport | null;
     },
     enabled: isAuthenticated,
+    // Same reasoning as dashboard-analytics above.
+    staleTime: 15 * 60 * 1000,
   });
 
   const { data: needsActionComments } = useQuery({

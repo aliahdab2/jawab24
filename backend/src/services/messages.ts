@@ -5,9 +5,30 @@ import { ConversationMessage } from '../types';
 import { Message } from '@jawab24/shared';
 import { conversationPauseService } from './conversationPause';
 import { conversationsService, type Platform } from './conversations';
+import { ENDPOINT_STATS_CACHE_TTL, messagesStatsCacheKey, withStatsCache } from './statsCache';
 
 /** DB connection or transaction — methods accepting this can participate in a transaction. */
 type DbConn = typeof db;
+
+export interface MessageStats {
+    total: number;
+    replied: number;
+    pending: number;
+    resolved: number;
+    needsAttention: number;
+    actionRequired: number;
+    autoReplied: number;
+    repliedToday: number;
+    byMethod: { template: number; ai: number; manual: number; postReply: number };
+    // Today's replies split by method — feeds the dashboard's "Replied Today"
+    // breakdown line (Smart vs Post Reply). Only the two methods the UI shows.
+    repliedTodayByMethod: { ai: number; postReply: number };
+    // Conversation-level counts (COUNT DISTINCT sender_id) for tab labels
+    convTotal: number;
+    convActionRequired: number;
+    convAutoReplied: number;
+    convHandled: number;
+}
 
 export interface CreateMessageDTO {
     pageId: string;
@@ -841,25 +862,16 @@ export class MessagesService {
      * Get message statistics
      * Uses PostgreSQL FILTER (WHERE ...) to get all counts in a single query
      */
-    async getStats(workspaceId: string, options?: { pageId?: string }): Promise<{
-        total: number;
-        replied: number;
-        pending: number;
-        resolved: number;
-        needsAttention: number;
-        actionRequired: number;
-        autoReplied: number;
-        repliedToday: number;
-        byMethod: { template: number; ai: number; manual: number; postReply: number };
-        // Today's replies split by method — feeds the dashboard's "Replied Today"
-        // breakdown line (Smart vs Post Reply). Only the two methods the UI shows.
-        repliedTodayByMethod: { ai: number; postReply: number };
-        // Conversation-level counts (COUNT DISTINCT sender_id) for tab labels
-        convTotal: number;
-        convActionRequired: number;
-        convAutoReplied: number;
-        convHandled: number;
-    }> {
+    async getStats(workspaceId: string, options?: { pageId?: string }): Promise<MessageStats> {
+        // The aggregation below scans the workspace's full message history
+        // (hundreds of thousands of rows for large workspaces), so the
+        // workspace-wide variant is cached briefly. Page-filtered calls are
+        // rare and skip the cache. Invalidation: see services/statsCache.ts.
+        const cacheKey = options?.pageId ? null : messagesStatsCacheKey(workspaceId);
+        return withStatsCache(cacheKey, ENDPOINT_STATS_CACHE_TTL, () => this.computeStats(workspaceId, options));
+    }
+
+    private async computeStats(workspaceId: string, options?: { pageId?: string }): Promise<MessageStats> {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 

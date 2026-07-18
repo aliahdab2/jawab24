@@ -14,13 +14,12 @@ import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { BusinessProfileSchema } from '../utils/validation';
 import { redis } from '../lib/redis';
+import { STATS_CACHE_TTL, pagesStatsCacheKey, allStatsCacheKeys } from './statsCache';
 import { maybeEncryptToken, safeDecryptToken } from './facebookCrypto';
 import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { PgVectorStore } from './kb/pgvector-store';
 
-/** How long workspace stats stay cached in Redis (seconds). */
-const STATS_CACHE_TTL = 300;
 /** Minimum interval between cache invalidations per workspace (seconds). */
 const STATS_INVALIDATION_THROTTLE = 30;
 
@@ -309,7 +308,7 @@ export class PagesService {
         // `repliesCount` and `breakdown` cover auto-replies only
         // (ai + template + post_reply) — the metric measures platform
         // automation, not merchant-driven manual handling.
-        const cacheKey = `stats:workspace:${workspaceId}:v2`;
+        const cacheKey = pagesStatsCacheKey(workspaceId);
         const statsMap = new Map<string, PageStats>();
         const countByMethod = (table: typeof comments | typeof instagramComments | typeof messages, method: string) =>
             sql<number>`count(*) FILTER (WHERE ${table.replied} = true AND ${table.replyMethod} = ${method})`;
@@ -1425,7 +1424,10 @@ export function invalidateWorkspaceStatsCache(workspaceId: string): void {
     // If the key already exists (recently invalidated), the DEL is skipped.
     redis.set(throttleKey, '1', 'EX', STATS_INVALIDATION_THROTTLE, 'NX').then((result) => {
         if (result === 'OK') {
-            redis.del(`stats:workspace:${workspaceId}`).catch(() => {});
+            // Delete via the shared key builders — a previous version hardcoded the
+            // key here and silently stopped matching when the cache key was bumped
+            // to :v2, turning invalidation into a no-op.
+            redis.del(...allStatsCacheKeys(workspaceId)).catch(() => {});
         }
     }).catch(() => {});
 }

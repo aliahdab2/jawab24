@@ -3,6 +3,20 @@ import { comments, posts, pages, logs, instagramComments, instagramMedia } from 
 import { eq, desc, sql, and } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
 import { detectLanguageCode } from '../utils/language';
+import { ENDPOINT_STATS_CACHE_TTL, commentsStatsCacheKey, withStatsCache } from './statsCache';
+
+export interface CommentStats {
+    total: number;
+    replied: number;
+    unreplied: number;
+    needsAttention: number;
+    actionRequired: number;
+    resolved: number;
+    repliedToday: number;
+    replyRate: string;
+    byMethod: { template: number; ai: number; manual: number; postReply: number };
+    repliedTodayByMethod: { ai: number; postReply: number };
+}
 
 export class CommentsService {
     /**
@@ -456,7 +470,15 @@ export class CommentsService {
      * Get comment statistics for a user
      * Uses PostgreSQL FILTER (WHERE ...) to get all counts in a single query per table
      */
-    async getStats(workspaceId: string, options?: { pageId?: string }) {
+    async getStats(workspaceId: string, options?: { pageId?: string }): Promise<CommentStats> {
+        // Full-history aggregation over FB + IG comments — cached briefly for the
+        // workspace-wide variant (page-filtered calls are rare and skip the cache).
+        // Invalidation: see services/statsCache.ts.
+        const cacheKey = options?.pageId ? null : commentsStatsCacheKey(workspaceId);
+        return withStatsCache(cacheKey, ENDPOINT_STATS_CACHE_TTL, () => this.computeStats(workspaceId, options));
+    }
+
+    private async computeStats(workspaceId: string, options?: { pageId?: string }): Promise<CommentStats> {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const pageId = options?.pageId;
