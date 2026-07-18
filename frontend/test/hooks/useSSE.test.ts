@@ -42,6 +42,16 @@ vi.mock('@/lib/store', () => ({
         }),
 }));
 
+// ── Lead-alerts preference mock ───────────────────────────────────────────────
+// useSSE gates the lead:captured / lead:re_engaged toasts on this setting
+// («تنبيهات العملاء المحتملين الجدد»). Real hook uses useQuery, which would need
+// a QueryClientProvider — mock it with a controllable flag instead.
+
+let mockLeadAlertsEnabled = true;
+vi.mock('@/hooks/useLeadAlertsEnabled', () => ({
+    useLeadAlertsEnabled: () => mockLeadAlertsEnabled,
+}));
+
 // ── React Query mock ──────────────────────────────────────────────────────────
 
 const mockInvalidateQueries = vi.fn();
@@ -123,6 +133,7 @@ describe('useSSE', () => {
     beforeEach(() => {
         mockIsAuthenticated = true;
         mockIsNative = false;
+        mockLeadAlertsEnabled = true;
         mockPathname = '/dashboard';
         MockEventSource.instance = null;
         vi.clearAllMocks();
@@ -469,6 +480,44 @@ describe('useSSE', () => {
         expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['leads'] });
         expect(mockIncrementNewLeads).toHaveBeenCalledTimes(1);
         expect(mockToast).toHaveBeenCalledTimes(1);
+    });
+
+    // Regression (2026-07-19): «تنبيهات العملاء المحتملين الجدد» off still toasted —
+    // the backend gated only the push. The toggle must silence the instant toast
+    // while keeping data freshness (count invalidation) and the passive badge.
+    it('lead:captured with alerts muted → no toast, but badge and count invalidation stay', async () => {
+        mockLeadAlertsEnabled = false;
+        mockPathname = '/dashboard';
+        const { unmount: u } = await mountSSE();
+        unmount = u;
+
+        act(() => {
+            MockEventSource.instance!.dispatch('lead:captured', {
+                leadId: 'l1', pageId: 'p1', senderName: 'Noor', phone: '+966500000000',
+            });
+        });
+        flushDebounce();
+
+        expect(mockToast).not.toHaveBeenCalled();
+        expect(mockIncrementNewLeads).toHaveBeenCalledTimes(1);
+        expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['leads-count'] });
+    });
+
+    it('lead:re_engaged with alerts muted → no toast, count invalidation stays', async () => {
+        mockLeadAlertsEnabled = false;
+        mockPathname = '/dashboard';
+        const { unmount: u } = await mountSSE();
+        unmount = u;
+
+        act(() => {
+            MockEventSource.instance!.dispatch('lead:re_engaged', {
+                leadId: 'l1', pageId: 'p1', senderName: 'Noor', phone: '+966500000000', reason: 'reshared_contact',
+            });
+        });
+        flushDebounce();
+
+        expect(mockToast).not.toHaveBeenCalled();
+        expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['leads-counts'] });
     });
 
     // ── Resilience ────────────────────────────────────────────────────────────

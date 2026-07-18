@@ -6,6 +6,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
 import { createDebouncedInvalidator } from '@/lib/queryInvalidation';
+import { useLeadAlertsEnabled } from './useLeadAlertsEnabled';
 import type { SSEEvent, Page, Comment } from '@jawab24/shared';
 import type { Message } from '@/lib/api';
 
@@ -115,6 +116,14 @@ export function useSSE(): void {
     // without making connectSSE depend on router (which changes on every navigation).
     const routerRef = useRef(router);
     useEffect(() => { routerRef.current = router; });
+
+    // «تنبيهات العملاء المحتملين الجدد» — the backend gates the FCM push on this
+    // setting; the in-app lead toasts must honor it too (they were the leak that
+    // made the toggle look broken). Ref-mirrored so the long-lived SSE handlers
+    // read the current value without re-registering listeners.
+    const leadAlertsEnabled = useLeadAlertsEnabled();
+    const leadAlertsEnabledRef = useRef(leadAlertsEnabled);
+    useEffect(() => { leadAlertsEnabledRef.current = leadAlertsEnabled; });
 
     /** Rate-limited toast — max 1 per TOAST_THROTTLE ms */
     const showToast = useCallback(
@@ -294,11 +303,15 @@ export function useSSE(): void {
                 const event: SSEEvent<'lead:captured'> = JSON.parse(e.data);
                 invalidateListAndStats({ listKey: ['leads'], statsKey: ['leads-count'], pageRoute: '/leads' });
                 if (!isOnPage('/leads')) {
+                    // Badge stays (passive counter, like the bell row the backend keeps
+                    // when muted); only the instant toast honors the alerts toggle.
                     incrementNewLeads();
-                    showToast(
-                        t('newLead', { name: event.data.senderName || event.data.phone }),
-                        { label: t('view'), onClick: () => routerRef.current.push('/leads') },
-                    );
+                    if (leadAlertsEnabledRef.current) {
+                        showToast(
+                            t('newLead', { name: event.data.senderName || event.data.phone }),
+                            { label: t('view'), onClick: () => routerRef.current.push('/leads') },
+                        );
+                    }
                 }
             } catch { /* malformed event — ignore */ }
         });
@@ -310,7 +323,9 @@ export function useSSE(): void {
             try {
                 const event: SSEEvent<'lead:re_engaged'> = JSON.parse(e.data);
                 invalidateListAndStats({ listKey: ['leads'], statsKey: ['leads-counts'], pageRoute: '/leads' });
-                if (!isOnPage('/leads')) {
+                // Same gate as lead:captured — the backend gates this event's push
+                // by the same newLeadAlertsEnabled setting.
+                if (!isOnPage('/leads') && leadAlertsEnabledRef.current) {
                     showToast(
                         t('leadReturned', { name: event.data.senderName || event.data.phone || '' }),
                         { label: t('view'), onClick: () => routerRef.current.push('/leads') },

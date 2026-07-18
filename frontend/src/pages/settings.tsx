@@ -326,6 +326,9 @@ const SettingsPage: NextPageWithLayout = () => {
       // query that the Post Reply modal reads (useCommentReplyMode). Invalidate it so a
       // mode change is reflected immediately instead of after the 5-min staleTime.
       queryClient.invalidateQueries({ queryKey: ['comment-reply-config'] });
+      // Same for the lead-alerts toggle feeding useSSE's toast gate (useLeadAlertsEnabled)
+      // — muting «تنبيهات العملاء المحتملين الجدد» must silence toasts immediately.
+      queryClient.invalidateQueries({ queryKey: ['lead-alerts-enabled'] });
 
       setSaved(true);
       setSavedSections(changedSections);
