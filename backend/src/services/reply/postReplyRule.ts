@@ -5,7 +5,6 @@ import {
     POST_REPLY_MAX_KEYWORDS,
     POST_REPLY_MAX_KEYWORD_LEN,
     POST_REPLY_MAX_REPLY_LEN,
-    POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE,
 } from '@jawab24/shared';
 import type { CommentSkipReason } from './commentPreprocess';
 
@@ -92,25 +91,24 @@ export interface PostReplyRuleInput {
     triggerType: string;            // expected 'keyword' | 'all'
     triggerKeyword: string | null;  // already trimmed by the caller, or null
     triggerReply: string | null;    // already trimmed by the caller, or null
-    hasImage?: boolean;             // an image is attached → reply cap is 160, not 1000
 }
 
 /**
  * Validate a Post Reply rule payload. Returns an error message when invalid, or null
  * when valid. Callers handle "clear the rule" (no reply) separately — this validates
- * the SET case only.
- *   - keyword mode: reply required (≤1000, or ≤160 with an image), 1–10 keywords, ≤100 chars each.
- *   - any-comment mode: reply required (≤1000, or ≤160 with an image); keyword must be absent.
+ * the SET case only. The reply cap is a flat 1000 chars whether or not an image is
+ * attached (an image is sent as its own message, so it never eats into the text budget).
+ *   - keyword mode: reply required (≤1000), 1–10 keywords, ≤100 chars each.
+ *   - any-comment mode: reply required (≤1000); keyword must be absent.
  */
 export function validatePostReplyRuleInput(input: PostReplyRuleInput): string | null {
-    const { triggerType, triggerKeyword, triggerReply, hasImage } = input;
+    const { triggerType, triggerKeyword, triggerReply } = input;
     if (triggerType !== 'keyword' && triggerType !== 'all') {
         return 'triggerType must be "keyword" or "all"';
     }
     if (!triggerReply) return 'triggerReply is required';
-    const replyCap = hasImage ? POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE : POST_REPLY_MAX_REPLY_LEN;
-    if (triggerReply.length > replyCap) {
-        return `triggerReply must be ${replyCap} characters or fewer${hasImage ? ' when an image is attached' : ''}`;
+    if (triggerReply.length > POST_REPLY_MAX_REPLY_LEN) {
+        return `triggerReply must be ${POST_REPLY_MAX_REPLY_LEN} characters or fewer`;
     }
     if (triggerType === 'all') {
         if (triggerKeyword) return 'triggerKeyword must be empty when triggerType is "all"';

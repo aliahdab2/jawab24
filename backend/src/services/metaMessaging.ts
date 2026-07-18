@@ -46,10 +46,8 @@ interface MetaTemplateElement {
     title: string;
     subtitle?: string;
     image_url: string;
-    // Tapping the card opens this URL. Product cards deep-link to the product; a Post
-    // Reply image card points at the image itself so the customer can open the full,
-    // uncropped picture (the inline card thumbnail is cropped to ~1.91:1).
-    default_action?: { type: 'web_url'; url: string; webview_height_ratio?: 'full' | 'tall' | 'compact' };
+    // Optional: product cards deep-link to the product.
+    default_action?: { type: 'web_url'; url: string };
     buttons?: MetaButton[];
 }
 
@@ -89,10 +87,11 @@ export function buildGenericTemplateElements(cards: ProductCard[]): MetaTemplate
 type MetaRecipient = { id: string } | { comment_id: string };
 type MetaMessage =
     | { text: string }
+    | { attachment: { type: 'image'; payload: { url: string; is_reusable?: boolean } } }
     | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } };
 
 /** The shared /me/messages request envelope (recipient + message + messaging_type/tag).
- *  Single source so text sends, product cards, and image cards can't drift. */
+ *  Single source so text sends, image attachments, and product cards can't drift. */
 function buildMeMessageEnvelope(recipient: MetaRecipient, message: MetaMessage, opts?: SendMessageOptions): Record<string, unknown> {
     return {
         recipient,
@@ -102,9 +101,16 @@ function buildMeMessageEnvelope(recipient: MetaRecipient, message: MetaMessage, 
     };
 }
 
-/** Wrap a single generic-template element into a send-ready message body. */
-function templateMessage(element: MetaTemplateElement): MetaMessage {
-    return { attachment: { type: 'template', payload: { template_type: 'generic', elements: [element] } } };
+/**
+ * A native image-attachment message: the FULL, uncropped image the customer can tap to
+ * open fullscreen (a generic-template card would crop to ~1.91:1 and split the caption).
+ * Post Reply delivers this as its OWN message alongside the plain-text reply, because
+ * Meta's Messenger/IG API has no single message type that carries body text + a full
+ * image. `is_reusable: false` — the image is fetched by URL per send (no attachment_id
+ * caching yet; see OBJECT_STORAGE.md).
+ */
+export function imageAttachmentMessage(url: string): MetaMessage {
+    return { attachment: { type: 'image', payload: { url, is_reusable: false } } };
 }
 
 export function buildMessagePayload(
@@ -113,54 +119,6 @@ export function buildMessagePayload(
     opts?: SendMessageOptions,
 ): Record<string, unknown> {
     return buildMeMessageEnvelope({ id: recipientId }, message, opts);
-}
-
-/**
- * Split a Post Reply caption into a card title (≤80) + optional subtitle (≤80).
- * Meta requires a non-empty title; the subtitle is included only when the text
- * overflows the title. Splits at a word boundary so a word is never cut mid-way.
- * The reply is validated ≤160 upstream, so both halves fit.
- */
-export function splitCardText(text: string): { title: string; subtitle?: string } {
-    const trimmed = text.trim();
-    const max = META_TEMPLATE_LIMITS.maxTitleChars;
-    if (trimmed.length <= max) {
-        // Meta rejects an empty title — fall back to a single space if somehow blank.
-        return { title: trimmed || ' ' };
-    }
-    const boundary = trimmed.lastIndexOf(' ', max);
-    const splitAt = boundary > 0 ? boundary : max; // no space in range → hard cut
-    const title = trimmed.slice(0, splitAt).trim() || trimmed.slice(0, max);
-    const subtitle = trimmed.slice(splitAt).trim().slice(0, META_TEMPLATE_LIMITS.maxSubtitleChars);
-    return subtitle ? { title, subtitle } : { title };
-}
-
-/**
- * Build a single Generic Template element for a Post Reply image card: image on top,
- * caption split across title/subtitle. No `default_action` (the image isn't a link).
- * Reply-type-agnostic — reusable by any future image-carrying reply.
- */
-export function buildImageCardElement(opts: { text: string; imageUrl: string }): MetaTemplateElement {
-    const { title, subtitle } = splitCardText(opts.text);
-    return {
-        title: title.slice(0, META_TEMPLATE_LIMITS.maxTitleChars),
-        image_url: opts.imageUrl,
-        // Make the card tappable → opens the full, uncropped image (the inline thumbnail
-        // is cropped to ~1.91:1, unreadable for a portrait doc and lossy for a product
-        // photo). A plain web_url (no messenger_extensions) needs no domain whitelisting.
-        // Shared by both the FB and IG Post Reply image cards.
-        default_action: { type: 'web_url', url: opts.imageUrl, webview_height_ratio: 'full' },
-        ...(subtitle ? { subtitle } : {}),
-    };
-}
-
-/** Build the /me/messages body for a single-element generic-template (image card). */
-export function buildImageCardPayload(
-    recipient: MetaRecipient,
-    element: MetaTemplateElement,
-    opts?: SendMessageOptions,
-): Record<string, unknown> {
-    return buildMeMessageEnvelope(recipient, templateMessage(element), opts);
 }
 
 /** Build the Generic Template attachment body for a product-card send. */
@@ -198,6 +156,36 @@ export async function sendMetaProductCards(
             fbAxios.post<{ message_id?: string }>(
                 `${GRAPH_API_BASE}/me/messages`,
                 buildProductCardPayload(recipientId, cards, opts),
+                { params: { access_token: pageAccessToken } },
+            ),
+        );
+        return response.data.message_id;
+    } catch (error) {
+        if (axios.isAxiosError(error)) {
+            throw DmSendError.fromAxios(error, 'Meta API error');
+        }
+        throw error;
+    }
+}
+
+/**
+ * Send a native image attachment via Meta's /me/messages endpoint. Used by BOTH Messenger
+ * and Instagram (identical endpoint + payload) — the second message of a Post Reply that
+ * carries an image, delivered to the PSID after the text reply. Meta fetches the public
+ * `imageUrl` server-side. Returns the message ID when Meta provides one. On axios errors,
+ * throws a `DmSendError` that downstream failure handling already understands.
+ */
+export async function sendMetaImageAttachment(
+    pageAccessToken: string,
+    recipientId: string,
+    imageUrl: string,
+    opts?: SendMessageOptions,
+): Promise<string | undefined> {
+    try {
+        const response = await tracedExternalCall('meta', 'sendImageAttachment', () =>
+            fbAxios.post<{ message_id?: string }>(
+                `${GRAPH_API_BASE}/me/messages`,
+                buildMessagePayload(recipientId, imageAttachmentMessage(imageUrl), opts),
                 { params: { access_token: pageAccessToken } },
             ),
         );

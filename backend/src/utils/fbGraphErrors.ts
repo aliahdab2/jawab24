@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { captureError } from './sentryHelpers';
 
 /**
  * Classification of why a DM send failed. Drives fallback behavior in sender.ts
@@ -482,31 +481,3 @@ export function needsImmediateAttention(err: unknown): boolean {
     return err instanceof AiRefusalError || err instanceof AiEmptyReplyError;
 }
 
-/**
- * Send a rich card with a plain-text fallback, sharing ONE behavior across the FB and
- * IG comment→DM paths. On a NON-transient card failure, retries as plain text so the
- * merchant's reply still lands (the rich content is dropped, not the whole reply). A
- * transient failure rethrows so the reply job retries the whole send. Defining this
- * once guarantees both platforms fall back identically.
- */
-export async function sendCardWithTextFallback<T>(
-    platform: FbPlatform,
-    sendCard: () => Promise<T>,
-    sendText: () => Promise<T>,
-): Promise<T> {
-    try {
-        return await sendCard();
-    } catch (cardError) {
-        if (classifyDmError(cardError, platform).bucket === 'transient') throw cardError;
-        // Non-transient: the image is dropped but the text still lands. Surface it as a
-        // warning so the drop rate is OBSERVABLE — otherwise the merchant believes the
-        // image was delivered and we'd never see the failure. Grouped by fingerprint so
-        // an at-scale rejection (e.g. Meta refusing the card shape) shows as one issue.
-        captureError(cardError, 'Post Reply image card rejected; fell back to text DM', {
-            level: 'warning',
-            fingerprint: ['post-reply-image-card-dropped'],
-            tags: { component: 'postReplyImage', platform },
-        });
-        return sendText();
-    }
-}

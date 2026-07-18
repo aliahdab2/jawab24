@@ -12,11 +12,17 @@ Cloudflare R2, AWS S3, or self-hosted MinIO) is chosen entirely by env. Swapping
 provider is an env change with **zero code change**.
 
 **Who uses it today:** Post Reply trigger images (an image attached to a per-post
-keyword reply, delivered on the DM channel as a Meta card). The service is
+keyword reply, delivered on the DM channel). On Messenger/Instagram it is sent as
+**two messages** — the reply text, then a **native image attachment**
+(`metaMessaging.imageAttachmentMessage` via the shared `sendMetaImageAttachment`), so
+the customer gets the full uniform text plus a full, uncropped, tap-to-open image.
+(Meta's Messenger/IG API has no single "image + caption" message; a generic-template
+card was tried first but cropped the image and split/capped the text — see the git
+history. WhatsApp, when added, sends one message with a native caption.) The service is
 **deliberately reply-type-agnostic** — a future "Smart Reply with image" feature is
-expected to reuse it and the card send path (`metaMessaging.buildImageCardElement`)
-as-is; the only net-new work then is the AI image-*selection* problem (a merchant
-image library + retrieval), not this plumbing. **The door was left open on purpose.**
+expected to reuse it and the image send path as-is; the only net-new work then is the AI
+image-*selection* problem (a merchant image library + retrieval), not this plumbing.
+**The door was left open on purpose.**
 
 **Model = ManyChat, right-sized:** per-file size cap only, no total-storage wall,
 reference-based auto-cleanup. A central reusable media-library UI is intentionally
@@ -156,10 +162,25 @@ See the broader secret-rotation practice for cadence.
   rows whose object is missing (investigate) and bucket objects with no DB row
   (safe-to-clean orphans). Run before any bulk cleanup.
 
-## 9. Delivery constraints (why the reply caps at 160 with an image)
+## 9. Delivery (two messages: text, then a native image)
 
-FB allows only ONE message per comment→DM private reply. Image + text therefore ride a
-single Meta generic-template card: title (≤80) + subtitle (≤80) = **160 chars**. The
-backend validator enforces 160 with an image (1000 without); the frontend hard-blocks
-Save above it (never truncates). On non-transient card-send failure the send path
-falls back to a plain-text DM so the reply still lands (image dropped, not the reply).
+Meta's Messenger/IG API has no single message type that carries body text **and** a full
+image, so a Post Reply with an image is delivered as **two messages**:
+
+1. **The reply text** — sent first. On Facebook this is the one-shot private reply to the
+   comment (`sendPrivateReplyToComment`), which returns the customer's PSID; on Instagram
+   it is a direct message to the commenter's PSID. This is the reliable, primary delivery.
+2. **The image** — a native image attachment (`sendMetaImageAttachment`) to that PSID,
+   sent **best-effort**: the text already landed, so an image failure is logged
+   (`captureError`, fingerprint `post-reply-image-attachment-failed`) and never throws —
+   throwing would retry the job and re-fire the one-shot private reply, which Meta rejects.
+
+Because the image is its own message, the reply text keeps the **flat 1000-char cap**
+whether or not an image is attached (no shorter "with image" limit). The
+`flagMeta.reply_image` dashboard badge is set only when the image send actually succeeded
+(`imageDelivered`), so it never claims an image the customer didn't receive.
+
+A generic-template *card* was tried first (image + title/subtitle in one bubble) but it
+cropped the image to ~1.91:1 and split/capped the caption at 160 chars — see git history.
+WhatsApp, when added, will send a single message with a native `caption` (handled in its
+own adapter; the storage + picker are reused unchanged).

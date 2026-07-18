@@ -133,6 +133,16 @@ describe('PostTriggerModal — outcome card', () => {
         expect(screen.queryByText('Details sent via private message 📩')).toBeNull();
     });
 
+    // The image is delivered as its OWN message (not a caption on a card), so the preview
+    // must say so — it's the WYSIWYG signal that the reply is two messages, not one card.
+    it('with an image attached (DM mode): preview shows the image is sent as a separate message', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private', triggerImagesEnabled: true } });
+        renderModal({ triggerReply: 'Here is the schedule', triggerImageUrl: 'https://cdn/x.jpg' });
+        expect(await screen.findByText('The image is sent as a separate message')).toBeInTheDocument();
+        // The stored image is previewed (full, not a cropped card thumbnail).
+        expect(document.querySelector('img[src="https://cdn/x.jpg"]')).not.toBeNull();
+    });
+
     it('shows no outcome card while settings are loading', () => {
         settingsGetMock.mockImplementation(() => new Promise(() => {}));
         renderModal();

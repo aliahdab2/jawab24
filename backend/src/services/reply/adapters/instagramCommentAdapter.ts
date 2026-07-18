@@ -4,7 +4,8 @@ import { instagramService } from '../../instagram';
 import { pickNudgeVariation } from '../nudge';
 import { detectLanguageCode, detectCommentLanguage } from '../../../utils/language';
 import { stripCommentNoise } from '../../../utils/commentText';
-import { classifyDmError, sendCardWithTextFallback, type DmFailure } from '../../../utils/fbGraphErrors';
+import { classifyDmError, type DmFailure } from '../../../utils/fbGraphErrors';
+import { deliverReplyImageBestEffort } from '../postReplyImage';
 import { t } from '../../../utils/i18n';
 import { db } from '../../../db';
 import { instagramComments } from '../../../db/schema';
@@ -113,6 +114,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         const dualReplyNudge = pickNudgeVariation(variationsMulti, effectiveLang);
 
         let dmFailure: DmFailure | undefined;
+        let imageDelivered = false;
 
         // DM send (private + dual modes). Image (Post Reply only) rides ONLY here.
         if (replyMode === 'private' || replyMode === 'dual') {
@@ -121,19 +123,19 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
                 return { success: false, error: 'Cannot send DM: commenter ID not available' };
             }
             try {
+                // Text first — the reliable, primary delivery (sent to the commenter's PSID).
+                await instagramService.sendDirectMessage(
+                    opts.platformPageId, opts.fromId, opts.replyText, opts.accessToken,
+                );
+                // An attached image (Post Reply only) follows as its OWN native-image message —
+                // full, uncropped, tap-to-open. Best-effort (the text already delivered); see
+                // deliverReplyImageBestEffort for why it never throws.
                 if (opts.replyImageUrl) {
-                    // Card (image + caption) with a shared text-DM fallback on non-transient
-                    // card failure — so the reply still lands (image dropped, not the reply).
-                    const { platformPageId, fromId, replyText, accessToken, replyImageUrl } = opts;
-                    await sendCardWithTextFallback(
-                        'instagram',
-                        () => instagramService.sendDirectMessageCard(platformPageId, fromId!, { text: replyText, imageUrl: replyImageUrl }, accessToken),
-                        () => instagramService.sendDirectMessage(platformPageId, fromId!, replyText, accessToken),
-                    );
-                } else {
-                    await instagramService.sendDirectMessage(
-                        opts.platformPageId, opts.fromId, opts.replyText, opts.accessToken,
-                    );
+                    imageDelivered = await deliverReplyImageBestEffort(opts.accessToken, opts.fromId, opts.replyImageUrl, {
+                        platform: 'instagram',
+                        component: 'instagramCommentAdapter',
+                        extra: { platformCommentId: opts.platformCommentId, replyMode },
+                    });
                 }
             } catch (error) {
                 dmFailure = classifyDmError(error, 'instagram');
@@ -161,7 +163,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
 
         // Private mode: on DM failure, DO NOT fall back to public (privacy-first).
         if (replyMode === 'private') {
-            if (!dmFailure) return { success: true };
+            if (!dmFailure) return { success: true, imageDelivered };
             return { success: false, dmFailure, suppressedPublic: true, error: `DM failed: ${dmFailure.bucket}` };
         }
 
@@ -174,7 +176,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             } catch {
                 // nudge failure is logged at higher levels; DM already succeeded
             }
-            return { success: true };
+            return { success: true, imageDelivered };
         }
 
         // DM failed in dual mode — nudge only for window_expired, nothing otherwise.

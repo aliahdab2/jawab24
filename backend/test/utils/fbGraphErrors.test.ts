@@ -4,7 +4,6 @@ import {
     classifyDmError,
     isTransientFbError,
     DmSendError,
-    sendCardWithTextFallback,
     isTransientAiError,
     AiUnavailableError,
     AiToolLoopExhaustedError,
@@ -393,31 +392,3 @@ describe('needsImmediateAttention — bypass retry, flag merchant directly', () 
     });
 });
 
-describe('sendCardWithTextFallback', () => {
-    it('returns the card result on success and never calls the text fallback', async () => {
-        const sendText = vi.fn();
-        const result = await sendCardWithTextFallback('facebook', async () => 'card-ok', sendText);
-        expect(result).toBe('card-ok');
-        expect(sendText).not.toHaveBeenCalled();
-    });
-
-    it('falls back to text on a NON-transient card failure and returns the text result', async () => {
-        // code 10 / subcode 2534014 → customer_refused (non-transient)
-        const cardErr = new DmSendError('blocked', { code: 10, subcode: 2534014 });
-        const result = await sendCardWithTextFallback(
-            'facebook',
-            async () => { throw cardErr; },
-            async () => 'text-ok',
-        );
-        expect(result).toBe('text-ok');
-    });
-
-    it('rethrows a TRANSIENT card failure without attempting the text fallback', async () => {
-        const transient = new DmSendError('rate limit', { code: 613 }); // 613 → transient
-        const sendText = vi.fn();
-        await expect(
-            sendCardWithTextFallback('instagram', async () => { throw transient; }, sendText),
-        ).rejects.toBe(transient);
-        expect(sendText).not.toHaveBeenCalled();
-    });
-});

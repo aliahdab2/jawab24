@@ -1672,7 +1672,7 @@ describe('CommentProcessor — template reply mode behavior', () => {
         );
     });
 
-    it('dual mode — a Post Reply with an image stamps the reply_image marker on both outgoing rows', async () => {
+    it('dual mode — a delivered Post Reply image stamps the reply_image marker on both outgoing rows', async () => {
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
         const adapter = createMockAdapter({
             findOrCreateContent: vi.fn().mockResolvedValue({
@@ -1684,7 +1684,8 @@ describe('CommentProcessor — template reply mode behavior', () => {
                 triggerType: 'keyword',
                 triggerImageUrl: 'https://cdn/invoice.jpg',
             }),
-            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-img' }),
+            // The marker is driven by the ACTUAL delivery outcome, not merely "an image was set".
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-img', imageDelivered: true }),
         });
 
         await commentProcessor.processComment(
@@ -1697,6 +1698,32 @@ describe('CommentProcessor — template reply mode behavior', () => {
         // ...and so does the comment reply (markAsReplied's final flagMeta arg).
         const markCall = vi.mocked(adapter.markAsReplied).mock.calls[0];
         expect(markCall[markCall.length - 1]).toEqual({ reply_image: {} });
+    });
+
+    it('dual mode — an image whose send FAILED (imageDelivered=false) records NO reply_image marker', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+        const adapter = createMockAdapter({
+            findOrCreateContent: vi.fn().mockResolvedValue({
+                id: 'content-uuid',
+                autoReplyEnabled: true,
+                message: 'Post body',
+                triggerKeyword: 'فاتورة',
+                triggerReply: 'الفاتورة',
+                triggerType: 'keyword',
+                triggerImageUrl: 'https://cdn/invoice.jpg',
+            }),
+            // Text delivered, image send failed → the badge must stay off (honest).
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-img', imageDelivered: false }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'فاتورة', 'from-id-9', 'Noor',
+        );
+
+        const storeCall = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+        expect(storeCall[9]).toBeUndefined();
+        const markCall = vi.mocked(adapter.markAsReplied).mock.calls[0];
+        expect(markCall[markCall.length - 1]).toBeUndefined();
     });
 
     it('dual mode — a flagged NON-image reply keeps its flagMeta on the comment but never leaks it onto the outgoing DM row', async () => {

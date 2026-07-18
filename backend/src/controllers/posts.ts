@@ -267,8 +267,9 @@ export class PostsController {
 
             // Setting: validate keyword vs any-comment shape via the shared validator. A
             // partial trigger (keyword without a reply) fails here — triggerReply is required.
-            // With an image attached the reply cap tightens to 160 (card title+subtitle).
-            const validationError = validatePostReplyRuleInput({ triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText, hasImage });
+            // The reply cap is a flat 1000 whether or not an image is attached (the image is
+            // sent as its own message, so it doesn't eat into the text budget).
+            const validationError = validatePostReplyRuleInput({ triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText });
             if (validationError) return reply.status(400).send({ error: validationError });
 
             // Decode + validate the image (allowlist, size, magic-byte match) before upload.
@@ -301,9 +302,6 @@ export class PostsController {
             if (!result.ok) {
                 if (result.reason === 'quota_exceeded') {
                     return reply.status(413).send({ error: 'image_quota_exceeded', message: 'Image storage limit reached for this workspace' });
-                }
-                if (result.reason === 'reply_too_long_with_image') {
-                    return reply.status(400).send({ error: 'reply_too_long_with_image', message: 'With an image attached, the reply must be 160 characters or fewer' });
                 }
                 return reply.status(404).send({ error: 'Post not found' });
             }

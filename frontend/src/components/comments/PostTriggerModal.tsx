@@ -8,7 +8,6 @@ import {
   POST_REPLY_MAX_KEYWORDS,
   POST_REPLY_MAX_KEYWORD_LEN,
   POST_REPLY_MAX_REPLY_LEN as REPLY_MAX,
-  POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE as REPLY_MAX_WITH_IMAGE,
   POST_REPLY_IMAGE_MAX_BYTES,
   POST_REPLY_IMAGE_MIME_TYPES,
 } from '@jawab24/shared';
@@ -98,7 +97,9 @@ export function PostTriggerModal({
   const hasStoredImage = !!initialImageUrl && !imageRemoved;
   // Image that will actually be DELIVERED: only in DM modes, and only if one is set.
   const hasImage = imagesEnabled && isDmMode && (imageFile !== null || hasStoredImage);
-  const replyMax = hasImage ? REPLY_MAX_WITH_IMAGE : REPLY_MAX;
+  // The reply cap is a flat 1000 whether or not an image is attached — the image is sent
+  // as its own message, so it never shortens the text budget.
+  const replyMax = REPLY_MAX;
   const replyOverLimit = reply.length > replyMax;
   // Preview source: the freshly picked file (object URL) or the stored image.
   const imagePreviewSrc = imageObjectUrl ?? (hasStoredImage ? initialImageUrl! : null);
@@ -162,10 +163,6 @@ export function PostTriggerModal({
     }
     if (!reply.trim()) {
       toast.error(t('postTriggerReplyRequired'));
-      return;
-    }
-    if (replyOverLimit) {
-      toast.error(t('postTriggerImageReplyTooLong'));
       return;
     }
     const keywordArg = mode === 'all' ? null : keywords.join(', ');
@@ -378,19 +375,12 @@ export function PostTriggerModal({
             placeholder={mode === 'all' ? t('postTriggerAllReplyPlaceholder') : t('postTriggerReplyPlaceholder')}
             dir="auto"
             rows={4}
-            // Hard ceiling stays 1000; the 160 image-cap is a soft over-limit that blocks
-            // Save (with a warning) rather than truncating the merchant's text.
+            // Flat 1000-char ceiling whether or not an image is attached — the image is
+            // sent as its own message, so it never shortens the text budget.
             maxLength={REPLY_MAX}
             className="leading-relaxed"
             style={{ fieldSizing: 'content', resize: 'none', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
           />
-          {/* Over-limit: hard-block save. Describe the ACTUAL behavior (blocked), not a
-              truncation we don't do. Two exits: trim, or remove the image. */}
-          {replyOverLimit && hasImage && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg alert-warning text-xs leading-relaxed" role="alert">
-              <span>{t('postTriggerImageReplyTooLong')}</span>
-            </div>
-          )}
         </div>
 
         {/* Image affordance — only when the feature is configured server-side. */}
@@ -419,8 +409,9 @@ export function PostTriggerModal({
             <div className="rounded-xl border border-theme-border overflow-hidden">
               {outcomeRows.map((row, i) => {
                 const { Icon, labelKey, pill } = CHANNEL_META[row.channel];
-                // The private row previews the actual DM card when an image is attached.
-                const showCard = row.channel === 'private' && hasImage && imagePreviewSrc;
+                // On the private (DM) row with an image, preview EXACTLY what's delivered:
+                // the reply text as one message, then the full image as a separate message.
+                const showImage = row.channel === 'private' && hasImage && imagePreviewSrc;
                 return (
                   <div
                     key={row.channel}
@@ -430,12 +421,17 @@ export function PostTriggerModal({
                       <Icon className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
                       {t(labelKey)}
                     </span>
-                    {showCard ? (
-                      <div className="rounded-lg border border-theme-border overflow-hidden max-w-[220px]">
-                        <img src={imagePreviewSrc!} alt="" className="w-full h-28 object-cover" />
-                        <div className="px-2.5 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words text-foreground" dir="auto">
-                          {reply.trim() || t('postTriggerReplyPlaceholder')}
+                    {showImage ? (
+                      <div className="flex flex-col gap-1.5">
+                        {/* Message 1 — the reply text, one uniform style (as written). */}
+                        <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
+                          {t('postTriggerOutcomeAsWritten')}
+                        </span>
+                        {/* Message 2 — the full, uncropped image, sent on its own. */}
+                        <div className="rounded-lg border border-theme-border overflow-hidden max-w-[160px] bg-surface-50 dark:bg-surface-800">
+                          <img src={imagePreviewSrc!} alt="" className="w-full max-h-40 object-contain" />
                         </div>
+                        <span className="text-[11px] text-subtle">{t('postTriggerOutcomeImageNote')}</span>
                       </div>
                     ) : row.verbatim ? (
                       <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">

@@ -274,12 +274,6 @@ describe('Posts Routes', () => {
             expect(JSON.parse(res.body).error).toBe('image_quota_exceeded');
         });
 
-        it('maps reply_too_long_with_image to 400', async () => {
-            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: false, reason: 'reply_too_long_with_image' });
-            const res = await patch({ base64: validPng(), mimeType: 'image/png' });
-            expect(res.statusCode).toBe(400);
-            expect(JSON.parse(res.body).error).toBe('reply_too_long_with_image');
-        });
     });
 
     describe('GET /pages/:pageId/published-posts', () => {

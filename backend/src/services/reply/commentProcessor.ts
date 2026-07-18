@@ -958,9 +958,12 @@ export class CommentProcessor {
             return { success: false, commentId: comment.id, error: sendResult.error };
         }
 
-        // Post Reply image cards deliver an image alongside the text. Record a quiet
-        // "image attached" marker on the OUTGOING rows so both threads show a badge — the
-        // merchant otherwise can't tell the reply carried an image. Never an alarm.
+        // A Post Reply with an image sends it as its own native-image message alongside the
+        // text. Record a quiet "image attached" marker on the OUTGOING rows so both threads
+        // show a badge — the merchant otherwise can't tell the reply carried an image. Never
+        // an alarm. Driven by `imageDelivered` (the image send actually SUCCEEDED), not merely
+        // "an image was attached" — an image whose send failed leaves the text delivered but
+        // no badge, keeping the badge honest.
         //
         // Two DISTINCT targets, deliberately not the same object:
         //   • the stored DM row (message thread) gets ONLY the reply_image marker. It
@@ -969,7 +972,7 @@ export class CommentProcessor {
         //     outgoing bubble (they'd show a KB-gap badge / match flagMeta filters there).
         //   • the comment row merges reply_image INTO its own flagMeta (additive), since
         //     that row legitimately holds the reply's needs-attention flags.
-        const hasReplyImage = !!opts.replyImageUrl;
+        const hasReplyImage = sendResult.imageDelivered === true;
         const messageFlagMeta = hasReplyImage ? { reply_image: {} as Record<string, never> } : undefined;
         const commentFlagMeta = hasReplyImage
             ? { ...(flagMeta ?? {}), reply_image: {} as Record<string, never> }

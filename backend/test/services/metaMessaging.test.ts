@@ -3,9 +3,7 @@ import {
     buildGenericTemplateElements,
     buildMessagePayload,
     buildProductCardPayload,
-    buildImageCardElement,
-    buildImageCardPayload,
-    splitCardText,
+    imageAttachmentMessage,
     META_TEMPLATE_LIMITS,
 } from '../../src/services/metaMessaging';
 import type { ProductCard } from '@jawab24/shared';
@@ -97,64 +95,20 @@ describe('metaMessaging', () => {
         });
     });
 
-    describe('splitCardText', () => {
-        it('keeps short text as title only (no subtitle)', () => {
-            expect(splitCardText('Order now 🔥')).toEqual({ title: 'Order now 🔥' });
-        });
-
-        it('splits long text at a word boundary into title + subtitle', () => {
-            const text = 'a'.repeat(50) + ' ' + 'b'.repeat(50);
-            const { title, subtitle } = splitCardText(text);
-            expect(title).toBe('a'.repeat(50));
-            expect(subtitle).toBe('b'.repeat(50));
-            expect(title.length).toBeLessThanOrEqual(META_TEMPLATE_LIMITS.maxTitleChars);
-        });
-
-        it('hard-cuts when there is no space within the title range', () => {
-            const text = 'x'.repeat(100);
-            const { title, subtitle } = splitCardText(text);
-            expect(title.length).toBe(META_TEMPLATE_LIMITS.maxTitleChars);
-            expect(subtitle).toBe('x'.repeat(20));
-        });
-
-        it('never yields an empty title', () => {
-            expect(splitCardText('   ').title).toBe(' ');
-        });
-    });
-
-    describe('buildImageCardElement', () => {
-        it('builds a single element whose card is tappable to open the full image', () => {
-            const el = buildImageCardElement({ text: 'Hello', imageUrl: 'https://cdn/x.jpg' });
-            expect(el.image_url).toBe('https://cdn/x.jpg');
-            expect(el.title).toBe('Hello');
-            // The whole card deep-links to the image itself so the customer can open the
-            // full, uncropped picture (the inline thumbnail is cropped to ~1.91:1).
-            expect(el.default_action).toEqual({
-                type: 'web_url',
-                url: 'https://cdn/x.jpg',
-                webview_height_ratio: 'full',
+    describe('imageAttachmentMessage', () => {
+        it('builds a native image attachment message (not a template card)', () => {
+            expect(imageAttachmentMessage('https://cdn/x.jpg')).toEqual({
+                attachment: { type: 'image', payload: { url: 'https://cdn/x.jpg', is_reusable: false } },
             });
         });
 
-        it('caps title at the Meta limit', () => {
-            const el = buildImageCardElement({ text: 'z'.repeat(200), imageUrl: 'https://cdn/x.jpg' });
-            expect(el.title.length).toBeLessThanOrEqual(META_TEMPLATE_LIMITS.maxTitleChars);
-        });
-    });
-
-    describe('buildImageCardPayload', () => {
-        it('addresses a comment via recipient.comment_id (FB private reply)', () => {
-            const el = buildImageCardElement({ text: 'Hi', imageUrl: 'https://cdn/x.jpg' });
-            const payload = buildImageCardPayload({ comment_id: 'c-1' }, el) as Record<string, unknown>;
-            expect(payload.recipient).toEqual({ comment_id: 'c-1' });
-            const elements = ((payload.message as Record<string, unknown>).attachment as { payload: { elements: unknown[] } }).payload.elements;
-            expect(elements).toHaveLength(1);
-        });
-
-        it('addresses a DM via recipient.id (IG)', () => {
-            const el = buildImageCardElement({ text: 'Hi', imageUrl: 'https://cdn/x.jpg' });
-            const payload = buildImageCardPayload({ id: 'u-1' }, el) as Record<string, unknown>;
-            expect(payload.recipient).toEqual({ id: 'u-1' });
+        it('rides the shared envelope addressed to a PSID (recipient.id) with the RESPONSE default', () => {
+            const payload = buildMessagePayload('user-1', imageAttachmentMessage('https://cdn/x.jpg')) as Record<string, unknown>;
+            expect(payload.recipient).toEqual({ id: 'user-1' });
+            expect(payload.messaging_type).toBe('RESPONSE');
+            const attachment = (payload.message as Record<string, unknown>).attachment as Record<string, unknown>;
+            expect(attachment.type).toBe('image');
+            expect((attachment.payload as Record<string, unknown>).url).toBe('https://cdn/x.jpg');
         });
     });
 });

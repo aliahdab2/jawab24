@@ -7,7 +7,7 @@ import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse,
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
 import { DmSendError, FacebookApiError } from '../utils/fbGraphErrors';
-import { buildMessagePayload, buildImageCardElement, buildImageCardPayload, type SendMessageOptions } from './metaMessaging';
+import { buildMessagePayload, type SendMessageOptions } from './metaMessaging';
 export type { MessagingType, SendMessageOptions } from './metaMessaging';
 
 const traced = <T>(method: string, fn: () => Promise<T>) =>
@@ -393,33 +393,6 @@ export class FacebookService {
         }
     }
 
-    /**
-     * Send a private reply to a comment as a single generic-template CARD (image on
-     * top + caption). FB allows only ONE message per comment, so image + text ride one
-     * card. Same `recipient.comment_id` addressing as the text variant; errors wrap
-     * into DmSendError identically so downstream failure handling is unchanged.
-     */
-    async sendPrivateReplyCardToComment(
-        pageAccessToken: string,
-        commentId: string,
-        opts: { text: string; imageUrl: string },
-    ): Promise<{ recipientId: string }> {
-        try {
-            const element = buildImageCardElement(opts);
-            const body = buildImageCardPayload({ comment_id: commentId }, element);
-            const response = await traced('sendPrivateReplyCardToComment', () =>
-                fbAxios.post<{ recipient_id: string }>(`${FACEBOOK_GRAPH_API}/me/messages`, body, {
-                    params: { access_token: pageAccessToken },
-                }),
-            );
-            return { recipientId: response.data.recipient_id };
-        } catch (error) {
-            if (axios.isAxiosError(error)) {
-                throw DmSendError.fromAxios(error, 'Facebook API error', { verboseDetail: true });
-            }
-            throw error;
-        }
-    }
 
     /**
      * Send a private message to a user.
