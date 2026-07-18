@@ -42,6 +42,11 @@ export interface FlagMeta {
     // retry auto-shortened this reply before delivery. Drives a quiet inbox
     // badge; deliberately never set alongside needs_attention.
     reply_shortened?: Record<string, never>;
+    // Informational marker on OUTGOING rows only: this reply was delivered with an
+    // image attached (Post Reply image card). Drives a quiet "image attached" badge
+    // in the comment + message threads so the merchant can tell the reply carried an
+    // image; deliberately never set alongside needs_attention.
+    reply_image?: Record<string, never>;
     // Open-ended: future flags can add their own namespaced meta here.
     [key: string]: Record<string, unknown> | undefined;
 }

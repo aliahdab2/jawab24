@@ -33,6 +33,7 @@
   "replyFailedTimeout": "The request took too long. Check your connection and try again.",
   "voiceMessage": "Voice message",
   "imageMessage": "Photo",
+  "imageAttached": "Image attached",
   "pauseSmartReply": "Pause Smart Reply",
   "resumeSmartReply": "Resume Smart Reply",
   "smartReplyPaused": "Smart Reply Paused",

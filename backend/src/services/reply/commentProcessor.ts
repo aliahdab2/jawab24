@@ -958,6 +958,23 @@ export class CommentProcessor {
             return { success: false, commentId: comment.id, error: sendResult.error };
         }
 
+        // Post Reply image cards deliver an image alongside the text. Record a quiet
+        // "image attached" marker on the OUTGOING rows so both threads show a badge — the
+        // merchant otherwise can't tell the reply carried an image. Never an alarm.
+        //
+        // Two DISTINCT targets, deliberately not the same object:
+        //   • the stored DM row (message thread) gets ONLY the reply_image marker. It
+        //     previously carried no flagMeta at all; the comment's needs-attention flags
+        //     (info_not_in_kb, dm_failed, …) are comment-scoped and must NOT leak onto the
+        //     outgoing bubble (they'd show a KB-gap badge / match flagMeta filters there).
+        //   • the comment row merges reply_image INTO its own flagMeta (additive), since
+        //     that row legitimately holds the reply's needs-attention flags.
+        const hasReplyImage = !!opts.replyImageUrl;
+        const messageFlagMeta = hasReplyImage ? { reply_image: {} as Record<string, never> } : undefined;
+        const commentFlagMeta = hasReplyImage
+            ? { ...(flagMeta ?? {}), reply_image: {} as Record<string, never> }
+            : flagMeta;
+
         // Store outgoing DM so conversation history exists for future messages from this sender.
         // Pass fromName — the commenter's display name from the webhook — so the conversation's
         // senderName is filled in even when the customer only commented (never DM'd us first).
@@ -966,7 +983,7 @@ export class CommentProcessor {
             messagesService.storeOutgoingMessage(
                 pageId, workspaceId, sendResult.dmRecipientId, replyText,
                 replyMethod as 'template' | 'ai' | 'manual' | 'post_reply',
-                undefined, fromName, contentId,
+                undefined, fromName, contentId, undefined, messageFlagMeta,
             )
                 .catch(err => this.logger.error('[CommentProcessor] Failed to store outgoing DM', { err, pageId, fromId }));
         }
@@ -982,7 +999,7 @@ export class CommentProcessor {
             flagReason,
             aiIntent,
             aiOriginalReply,
-            flagMeta,
+            commentFlagMeta,
         );
 
         publishSSEEvent(userId, 'comment:reply_sent', {

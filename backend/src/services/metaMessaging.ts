@@ -46,9 +46,10 @@ interface MetaTemplateElement {
     title: string;
     subtitle?: string;
     image_url: string;
-    // Optional: product cards deep-link to the product; a Post Reply image card has
-    // no destination, so it omits this.
-    default_action?: { type: 'web_url'; url: string };
+    // Tapping the card opens this URL. Product cards deep-link to the product; a Post
+    // Reply image card points at the image itself so the customer can open the full,
+    // uncropped picture (the inline card thumbnail is cropped to ~1.91:1).
+    default_action?: { type: 'web_url'; url: string; webview_height_ratio?: 'full' | 'tall' | 'compact' };
     buttons?: MetaButton[];
 }
 
@@ -144,6 +145,11 @@ export function buildImageCardElement(opts: { text: string; imageUrl: string }):
     return {
         title: title.slice(0, META_TEMPLATE_LIMITS.maxTitleChars),
         image_url: opts.imageUrl,
+        // Make the card tappable → opens the full, uncropped image (the inline thumbnail
+        // is cropped to ~1.91:1, unreadable for a portrait doc and lossy for a product
+        // photo). A plain web_url (no messenger_extensions) needs no domain whitelisting.
+        // Shared by both the FB and IG Post Reply image cards.
+        default_action: { type: 'web_url', url: opts.imageUrl, webview_height_ratio: 'full' },
         ...(subtitle ? { subtitle } : {}),
     };
 }

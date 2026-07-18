@@ -1667,7 +1667,65 @@ describe('CommentProcessor — template reply mode behavior', () => {
             undefined,
             'Ali Ahdab',
             'content-uuid',
+            undefined, // clientMessageId — n/a for comment→DM
+            undefined, // flagMeta — no image on this AI reply, so no reply_image marker
         );
+    });
+
+    it('dual mode — a Post Reply with an image stamps the reply_image marker on both outgoing rows', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+        const adapter = createMockAdapter({
+            findOrCreateContent: vi.fn().mockResolvedValue({
+                id: 'content-uuid',
+                autoReplyEnabled: true,
+                message: 'Post body',
+                triggerKeyword: 'فاتورة',
+                triggerReply: 'الفاتورة',
+                triggerType: 'keyword',
+                triggerImageUrl: 'https://cdn/invoice.jpg',
+            }),
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-img' }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'فاتورة', 'from-id-9', 'Noor',
+        );
+
+        // The stored DM (message thread) carries the quiet informational marker...
+        const storeCall = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+        expect(storeCall[9]).toEqual({ reply_image: {} });
+        // ...and so does the comment reply (markAsReplied's final flagMeta arg).
+        const markCall = vi.mocked(adapter.markAsReplied).mock.calls[0];
+        expect(markCall[markCall.length - 1]).toEqual({ reply_image: {} });
+    });
+
+    it('dual mode — a flagged NON-image reply keeps its flagMeta on the comment but never leaks it onto the outgoing DM row', async () => {
+        // Regression: the reply_image marker work must not start propagating the comment's
+        // needs-attention flagMeta (info_not_in_kb, dm_failed, …) onto the outgoing DM row,
+        // which historically carried no flagMeta at all.
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'Here is some info.',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'info_not_in_kb',
+            flagMeta: { info_not_in_kb: { question: 'What are your hours?' } },
+            aiIntent: 'QUESTION',
+        });
+        const adapter = createMockAdapter({
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-flag' }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'What are your hours?', 'from-id-8', 'Sam',
+        );
+
+        // Outgoing DM row carries NO flagMeta (no image → no marker, and no leak of the flag).
+        const storeCall = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+        expect(storeCall[9]).toBeUndefined();
+        // The comment row keeps its own needs-attention flag.
+        const markCall = vi.mocked(adapter.markAsReplied).mock.calls[0];
+        expect(markCall[markCall.length - 1]).toEqual({ info_not_in_kb: { question: 'What are your hours?' } });
     });
 
     it('dual mode — passes undefined fromName through when the webhook did not supply one', async () => {

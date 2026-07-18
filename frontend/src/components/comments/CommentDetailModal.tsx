@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, DetailSheet } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge, ImageAttachedBadge, DetailSheet } from '@/components/ui';
 import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { ReplyFeedback } from './ReplyFeedback';
 import { PostContextCard } from './PostContextCard';
@@ -365,6 +365,9 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 <div className="flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter text-brand-500">
                   <span title={formatFullTime(comment.repliedAt, dateLocale)}>{formatMessageTime(comment.repliedAt, dateLocale)}</span>
                   <ReplySourceBadge method={comment.replyMethod} variant="detail" />
+                  {/* Quiet informational badge — the reply was delivered with an image
+                      attached (Post Reply image card). Deliberately NOT an alarm. */}
+                  {comment.flagMeta?.reply_image && <ImageAttachedBadge />}
                 </div>
                 {comment.replyMethod === 'ai' && <ReplyFeedback commentId={comment.id} />}
               </div>

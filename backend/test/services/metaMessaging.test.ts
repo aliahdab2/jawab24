@@ -123,11 +123,17 @@ describe('metaMessaging', () => {
     });
 
     describe('buildImageCardElement', () => {
-        it('builds a single element with the image and NO default_action', () => {
+        it('builds a single element whose card is tappable to open the full image', () => {
             const el = buildImageCardElement({ text: 'Hello', imageUrl: 'https://cdn/x.jpg' });
             expect(el.image_url).toBe('https://cdn/x.jpg');
             expect(el.title).toBe('Hello');
-            expect(el.default_action).toBeUndefined();
+            // The whole card deep-links to the image itself so the customer can open the
+            // full, uncropped picture (the inline thumbnail is cropped to ~1.91:1).
+            expect(el.default_action).toEqual({
+                type: 'web_url',
+                url: 'https://cdn/x.jpg',
+                webview_height_ratio: 'full',
+            });
         });
 
         it('caps title at the Meta limit', () => {
