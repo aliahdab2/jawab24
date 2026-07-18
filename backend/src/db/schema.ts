@@ -328,6 +328,11 @@ export const posts = pgTable('posts', {
      *  'all' = any comment (triggerKeyword ignored). 'all' still runs the skip-rule +
      *  complaint guards before sending (see commentProcessor step 3b). */
     triggerType: varchar('trigger_type', { length: 20 }).default('keyword').notNull(),
+    /** Post Reply image (DM-modes only): public URL Meta fetches, storage key for deletion,
+     *  and decoded byte size for the per-workspace quota SUM. See services/imageStorage.ts. */
+    triggerImageUrl: text('trigger_image_url'),
+    triggerImageKey: text('trigger_image_key'),
+    triggerImageBytes: integer('trigger_image_bytes'),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
@@ -355,6 +360,11 @@ export const instagramMedia = pgTable('instagram_media', {
     /** How the per-post trigger fires: 'keyword' = only comments matching triggerKeyword;
      *  'all' = any comment (triggerKeyword ignored). See posts.triggerType. */
     triggerType: varchar('trigger_type', { length: 20 }).default('keyword').notNull(),
+    /** Post Reply image (DM-modes only): public URL Meta fetches, storage key for deletion,
+     *  and decoded byte size for the per-workspace quota SUM. See services/imageStorage.ts. */
+    triggerImageUrl: text('trigger_image_url'),
+    triggerImageKey: text('trigger_image_key'),
+    triggerImageBytes: integer('trigger_image_bytes'),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),

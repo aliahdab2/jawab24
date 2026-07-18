@@ -134,7 +134,7 @@ describe('Posts Routes', () => {
 
     describe('PATCH /posts/:id/trigger', () => {
         it('should set trigger keyword and reply', async () => {
-            vi.mocked(postsService.updateTrigger).mockResolvedValue(true);
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
 
             const response = await app.inject({
                 method: 'PATCH',
@@ -143,11 +143,11 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id', 'keyword');
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id', 'keyword', { action: 'keep' });
         });
 
         it('should clear trigger when both values are null', async () => {
-            vi.mocked(postsService.updateTrigger).mockResolvedValue(true);
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
 
             const response = await app.inject({
                 method: 'PATCH',
@@ -156,7 +156,8 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id', 'keyword');
+            // Clearing the rule also drops any attached image.
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id', 'keyword', { action: 'remove' });
         });
 
         it('should return 400 for invalid source', async () => {
@@ -191,7 +192,7 @@ describe('Posts Routes', () => {
         });
 
         it('should set an any-comment trigger (no keyword stored)', async () => {
-            vi.mocked(postsService.updateTrigger).mockResolvedValue(true);
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
 
             const response = await app.inject({
                 method: 'PATCH',
@@ -200,11 +201,11 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', null, 'DM sent!', 'test_workspace_id', 'all');
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', null, 'DM sent!', 'test_workspace_id', 'all', { action: 'keep' });
         });
 
         it('should return 404 when post not found or not owned', async () => {
-            vi.mocked(postsService.updateTrigger).mockResolvedValue(false);
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: false, reason: 'not_found' });
 
             const response = await app.inject({
                 method: 'PATCH',

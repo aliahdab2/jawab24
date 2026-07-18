@@ -65,7 +65,8 @@ describe('SettingsController', () => {
             await settingsController.get(mockRequest as any, mockReply as any);
 
             expect(settingsService.getSettings).toHaveBeenCalledWith('user-123');
-            expect(mockReply.send).toHaveBeenCalledWith(settings);
+            // Response spreads settings + the server capability flag (object storage off in tests).
+            expect(mockReply.send).toHaveBeenCalledWith({ ...settings, triggerImagesEnabled: false });
         });
 
         it('should return 401 when user is not authenticated', async () => {

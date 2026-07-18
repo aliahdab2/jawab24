@@ -3,19 +3,29 @@ import clsx from 'clsx';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
-import { parseKeywords } from '@jawab24/shared';
-import { MessageSquare, MessageCircle, ArrowUpRight } from 'lucide-react';
+import {
+  parseKeywords,
+  POST_REPLY_MAX_KEYWORDS,
+  POST_REPLY_MAX_KEYWORD_LEN,
+  POST_REPLY_MAX_REPLY_LEN as REPLY_MAX,
+  POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE as REPLY_MAX_WITH_IMAGE,
+  POST_REPLY_IMAGE_MAX_BYTES,
+  POST_REPLY_IMAGE_MIME_TYPES,
+} from '@jawab24/shared';
+import { MessageSquare, MessageCircle, ArrowUpRight, ImagePlus, Lock, X } from 'lucide-react';
 import Link from 'next/link';
 import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
-import { useCommentReplyMode, useDualReplyNudge } from '@/hooks/useCommentReplyMode';
+import { captureError } from '@/lib/sentryHelpers';
+import { useCommentReplyMode, useDualReplyNudge, useTriggerImagesEnabled } from '@/hooks/useCommentReplyMode';
+import { fileToBase64 } from '@/utils/fileToBase64';
 
 type TriggerMode = 'keyword' | 'all';
 
-/** Max length of the reply message — mirrored by the textarea cap and the counter. */
-const REPLY_MAX = 1000;
+// Reply/keyword/image limits are the SINGLE source of truth in @jawab24/shared —
+// the backend validator enforces the same values (no frontend/backend drift).
 
 /** Single source for how each delivery channel renders in the outcome rows:
  *  icon matching the app-wide channel glyphs (MessageCircle = DM, exactly as the
@@ -41,6 +51,7 @@ interface PostTriggerModalProps {
   triggerKeyword?: string | null;
   triggerReply?: string | null;
   triggerType?: string | null;
+  triggerImageUrl?: string | null;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -53,6 +64,7 @@ export function PostTriggerModal({
   triggerKeyword: initialKeyword,
   triggerReply: initialReply,
   triggerType: initialType,
+  triggerImageUrl: initialImageUrl,
   isOpen,
   onClose,
   onSaved,
@@ -61,35 +73,87 @@ export function PostTriggerModal({
   const tc = useTranslations('common');
   const deliveryMode = useCommentReplyMode();
   const dualNudge = useDualReplyNudge();
+  const imagesEnabled = useTriggerImagesEnabled();
 
   const [mode, setMode] = useState<TriggerMode>(() => (initialType === 'all' ? 'all' : 'keyword'));
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
   const [reply, setReply] = useState(initialReply ?? '');
   const [confirmingClear, setConfirmingClear] = useState(false);
+
+  // Image state. Two sources of truth, resolved into the picker:
+  //  - `imageFile`: a newly picked file pending upload (base64 sent on save)
+  //  - `initialImageUrl` + `imageRemoved`: the already-saved image and whether the
+  //    merchant removed it this session.
+  // The affordance is a small text button (image is optional, low-emphasis) that opens
+  // the native file dialog directly — no space-consuming dropzone.
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageObjectUrl, setImageObjectUrl] = useState<string | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Roving-tabindex focus targets for the mode radiogroup (arrow-key navigation).
   const modeRefs = useRef<Record<TriggerMode, HTMLButtonElement | null>>({ keyword: null, all: null });
 
-  // Sync when modal opens with fresh values
+  const isDmMode = deliveryMode === 'private' || deliveryMode === 'dual';
+  // The stored image is still attached unless removed this session.
+  const hasStoredImage = !!initialImageUrl && !imageRemoved;
+  // Image that will actually be DELIVERED: only in DM modes, and only if one is set.
+  const hasImage = imagesEnabled && isDmMode && (imageFile !== null || hasStoredImage);
+  const replyMax = hasImage ? REPLY_MAX_WITH_IMAGE : REPLY_MAX;
+  const replyOverLimit = reply.length > replyMax;
+  // Preview source: the freshly picked file (object URL) or the stored image.
+  const imagePreviewSrc = imageObjectUrl ?? (hasStoredImage ? initialImageUrl! : null);
+
+  // Sync when modal opens with fresh values (also reset image session state).
   useEffect(() => {
     if (isOpen) {
       setMode(initialType === 'all' ? 'all' : 'keyword');
       setKeywords(parseKeywords(initialKeyword));
       setReply(initialReply ?? '');
+      setImageFile(null);
+      setImageObjectUrl(null);
+      setImageRemoved(false);
     }
   }, [isOpen, initialKeyword, initialReply, initialType]);
 
+  // Revoke the object URL when it changes / unmounts to avoid leaking blob memory.
+  useEffect(() => {
+    return () => { if (imageObjectUrl) URL.revokeObjectURL(imageObjectUrl); };
+  }, [imageObjectUrl]);
+
   const onSaveSuccess = useCallback(() => { onSaved(); onClose(); }, [onSaved, onClose]);
-  const { handle: runSave, saving: savingSave } = useSaveHandler({
-    context: 'PostTriggerModal.handleSave',
-    successMessage: t('postTriggerSaved'),
-    onSuccess: onSaveSuccess,
-  });
+  // Save is handled manually (not via useSaveHandler) so the quota error can show its
+  // OWN message instead of the generic one — the hook always toasts tc('error').
+  const [savingSave, setSavingSave] = useState(false);
   const { handle: runClear, saving: savingClear } = useSaveHandler({
     context: 'PostTriggerModal.handleClear',
     successMessage: t('postTriggerCleared'),
     onSuccess: onSaveSuccess,
   });
   const saving = savingSave || savingClear;
+
+  function pickFile(file: File) {
+    if (!POST_REPLY_IMAGE_MIME_TYPES.includes(file.type as typeof POST_REPLY_IMAGE_MIME_TYPES[number])) {
+      toast.error(t('postTriggerImageBadType'));
+      return;
+    }
+    if (file.size > POST_REPLY_IMAGE_MAX_BYTES) {
+      toast.error(t('postTriggerImageTooLarge'));
+      return;
+    }
+    if (imageObjectUrl) URL.revokeObjectURL(imageObjectUrl);
+    setImageFile(file);
+    setImageObjectUrl(URL.createObjectURL(file));
+    setImageRemoved(false);
+  }
+
+  function removeImage() {
+    if (imageObjectUrl) URL.revokeObjectURL(imageObjectUrl);
+    setImageFile(null);
+    setImageObjectUrl(null);
+    // Mark the stored image (if any) for removal on save.
+    setImageRemoved(true);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
 
   async function handleSave() {
     if (mode === 'keyword' && keywords.length === 0) {
@@ -100,8 +164,42 @@ export function PostTriggerModal({
       toast.error(t('postTriggerReplyRequired'));
       return;
     }
+    if (replyOverLimit) {
+      toast.error(t('postTriggerImageReplyTooLong'));
+      return;
+    }
     const keywordArg = mode === 'all' ? null : keywords.join(', ');
-    await runSave(() => postsApi.updateTrigger(postId, source, keywordArg, reply.trim(), mode));
+
+    // Resolve the image intent for the backend: a new file → set; an existing image
+    // removed → null; otherwise undefined (leave as-is). Never send an image when the
+    // feature is off — the send path can't deliver it.
+    let imageArg: { base64: string; mimeType: string } | null | undefined;
+    if (imagesEnabled) {
+      if (imageFile) {
+        imageArg = { base64: await fileToBase64(imageFile), mimeType: imageFile.type };
+      } else if (imageRemoved && initialImageUrl) {
+        imageArg = null;
+      }
+    }
+
+    setSavingSave(true);
+    try {
+      await postsApi.updateTrigger(postId, source, keywordArg, reply.trim(), mode, imageArg);
+      toast.success(t('postTriggerSaved'));
+      onSaveSuccess();
+    } catch (err) {
+      // Quota is the one save error worth a specific message (mirrors KB limit UX);
+      // everything else falls back to the generic error toast.
+      const status = (err as { response?: { status?: number; data?: { error?: string } } })?.response;
+      if (status?.status === 413 && status?.data?.error === 'image_quota_exceeded') {
+        toast.error(t('postTriggerImageQuota'));
+      } else {
+        captureError(err, 'PostTriggerModal.handleSave');
+        toast.error(tc('error'));
+      }
+    } finally {
+      setSavingSave(false);
+    }
   }
 
   function requestClear() {
@@ -121,16 +219,6 @@ export function PostTriggerModal({
   // mode (from Settings; not overridable here). In dual mode the Post Reply is the
   // PRIVATE message and a SEPARATE static comment is posted publicly — see
   // reply/sender.ts.
-  //
-  // A row is `verbatim` when the channel delivers the merchant's reply EXACTLY as
-  // typed. For those rows we do NOT echo the reply text — the reply field directly
-  // above is already the rendered preview, so re-showing it is pure duplication; we
-  // only name the channel + caption it. The single non-verbatim payload is the
-  // dual-mode static public comment (the merchant did not author it — it comes from
-  // Settings), so that one is shown in full and deep-links to the field that owns it.
-  //
-  // Rows are empty while the mode is still loading (deliveryMode null) so nothing
-  // wrong is shown.
   const outcomeRows: { channel: 'private' | 'public'; verbatim: boolean; text?: string; fromSettings?: boolean }[] =
     deliveryMode === 'public'
       ? [{ channel: 'public', verbatim: true }]
@@ -144,9 +232,6 @@ export function PostTriggerModal({
           : [];
 
   const footer = (
-    // Mobile: primary action goes full-width on top (col-reverse ⇒ Save above
-    // Remove), a strong thumb target on the fullscreen sheet. Desktop: inline
-    // row — Remove at the start edge, Save at the end.
     <div
       className={clsx(
         'flex flex-col-reverse gap-2 sm:flex-row sm:items-center',
@@ -166,7 +251,7 @@ export function PostTriggerModal({
       )}
       <Button
         onClick={handleSave}
-        disabled={saving}
+        disabled={saving || replyOverLimit}
         loading={savingSave}
         className="w-full sm:w-auto"
       >
@@ -181,14 +266,8 @@ export function PostTriggerModal({
       onClose={onClose}
       title={hasActiveTrigger ? t('postTriggerEdit') : t('postTriggerCta')}
       titleIcon={<PostReplyIcon className={clsx('w-5 h-5', postReplyIconClass)} aria-hidden="true" />}
-      // Header actions: a compact "active" pill in edit mode (replaces the old
-      // full-width badge row — same info, no body space) + the "what it is" tooltip
-      // (available on demand, never occupying the form flow).
       titleAction={
         <span className="flex items-center gap-1.5">
-          {/* Bespoke (not the shared Badge): "Post Reply active" is sky app-wide —
-              the comment-card active state + post-context header — and Badge has no
-              sky variant. Single instance, so no duplication. */}
           {hasActiveTrigger && (
             <span
               title={t('postTriggerActive')}
@@ -208,15 +287,9 @@ export function PostTriggerModal({
       footer={footer}
     >
       <div className="flex flex-col gap-4">
-        {/* Post preview — the post this reply is configured for. Clamped to 3 lines
-            (keeps the keyword + reply fields above the fold on mobile) with a show-more
-            toggle for long posts. */}
         {postMessage && <PostContextCard postMessage={postMessage} clampLines={3} />}
 
-        {/* Trigger mode: match keywords vs reply to any comment.
-            Not wrapped in FormField — its <label htmlFor> needs a labelable control,
-            and a radiogroup div isn't one; aria-labelledby is the correct association.
-            WAI-ARIA radio semantics: roving tabindex + arrow keys move the selection. */}
+        {/* Trigger mode: match keywords vs reply to any comment. */}
         <div className="flex flex-col gap-1.5">
           <span id="trigger-mode-label" className="text-sm font-medium text-foreground">
             {t('postTriggerMode')}
@@ -232,7 +305,6 @@ export function PostTriggerModal({
                 tabIndex={mode === m ? 0 : -1}
                 onClick={() => setMode(m)}
                 onKeyDown={(e) => {
-                  // Two options — any arrow key moves selection (and focus) to the other.
                   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
                     e.preventDefault();
                     const other: TriggerMode = m === 'keyword' ? 'all' : 'keyword';
@@ -265,8 +337,8 @@ export function PostTriggerModal({
               value={keywords}
               onChange={setKeywords}
               placeholder={t('postTriggerKeywordPlaceholder')}
-              maxKeywords={10}
-              maxLength={100}
+              maxKeywords={POST_REPLY_MAX_KEYWORDS}
+              maxLength={POST_REPLY_MAX_KEYWORD_LEN}
             />
           </FormField>
         )}
@@ -278,9 +350,7 @@ export function PostTriggerModal({
           </div>
         )}
 
-        {/* Reply textarea — label row carries a live character counter (the field
-            is capped at REPLY_MAX; the count turns amber as it approaches the limit
-            so the wall is never hit blind). */}
+        {/* Reply textarea — the counter cap flips to 160 while an image is attached. */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between gap-2">
             <label htmlFor="trigger-reply" className="text-sm font-medium text-foreground">
@@ -289,13 +359,13 @@ export function PostTriggerModal({
             <span
               className={clsx(
                 'text-xs tabular-nums',
-                reply.length >= REPLY_MAX ? 'text-destructive'
-                  : reply.length > REPLY_MAX * 0.9 ? 'text-amber-600 dark:text-amber-400'
+                replyOverLimit ? 'text-destructive font-semibold'
+                  : reply.length > replyMax * 0.9 ? 'text-amber-600 dark:text-amber-400'
                   : 'text-muted-foreground',
               )}
               aria-live="polite"
             >
-              {reply.length} / {REPLY_MAX}
+              {reply.length} / {replyMax}
             </span>
           </div>
           <Textarea
@@ -305,21 +375,34 @@ export function PostTriggerModal({
             placeholder={mode === 'all' ? t('postTriggerAllReplyPlaceholder') : t('postTriggerReplyPlaceholder')}
             dir="auto"
             rows={4}
+            // Hard ceiling stays 1000; the 160 image-cap is a soft over-limit that blocks
+            // Save (with a warning) rather than truncating the merchant's text.
             maxLength={REPLY_MAX}
             className="leading-relaxed"
-            // resize:none is set inline, not via a class: the base Textarea hardcodes
-            // `resize-y`, which wins over a `resize-none` class in Tailwind's cascade and
-            // leaves a resize grip in the corner (a stray "dot" in the RTL bottom corner).
-            // The field auto-sizes via fieldSizing, so manual resize is never wanted here.
             style={{ fieldSizing: 'content', resize: 'none', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
           />
+          {/* Over-limit: hard-block save. Describe the ACTUAL behavior (blocked), not a
+              truncation we don't do. Two exits: trim, or remove the image. */}
+          {replyOverLimit && hasImage && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg alert-warning text-xs leading-relaxed" role="alert">
+              <span>{t('postTriggerImageReplyTooLong')}</span>
+            </div>
+          )}
         </div>
 
-        {/* Outcome card — what the commenter actually receives, one row per channel.
-            Hidden until the delivery mode resolves (deliveryMode !== null) so a wrong
-            delivery claim is never shown. The "how it's delivered" sentence sits in an
-            info tooltip; in dual mode the static public comment links to the exact
-            Settings field that owns it. */}
+        {/* Image affordance — only when the feature is configured server-side. */}
+        {imagesEnabled && (
+          <ImageAffordance
+            isDmMode={isDmMode}
+            previewSrc={imagePreviewSrc}
+            fileInputRef={fileInputRef}
+            onPick={pickFile}
+            onRemove={removeImage}
+            t={t}
+          />
+        )}
+
+        {/* Outcome card — what the commenter actually receives, one row per channel. */}
         {deliveryMode !== null && (
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-1.5">
@@ -333,6 +416,8 @@ export function PostTriggerModal({
             <div className="rounded-xl border border-theme-border overflow-hidden">
               {outcomeRows.map((row, i) => {
                 const { Icon, labelKey, pill } = CHANNEL_META[row.channel];
+                // The private row previews the actual DM card when an image is attached.
+                const showCard = row.channel === 'private' && hasImage && imagePreviewSrc;
                 return (
                   <div
                     key={row.channel}
@@ -342,9 +427,14 @@ export function PostTriggerModal({
                       <Icon className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
                       {t(labelKey)}
                     </span>
-                    {row.verbatim ? (
-                      // Verbatim channel — the reply is delivered exactly as typed, so
-                      // we caption the channel instead of echoing the reply field above.
+                    {showCard ? (
+                      <div className="rounded-lg border border-theme-border overflow-hidden max-w-[220px]">
+                        <img src={imagePreviewSrc!} alt="" className="w-full h-28 object-cover" />
+                        <div className="px-2.5 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words text-foreground" dir="auto">
+                          {reply.trim() || t('postTriggerReplyPlaceholder')}
+                        </div>
+                      </div>
+                    ) : row.verbatim ? (
                       <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
                         {t('postTriggerOutcomeAsWritten')}
                       </span>
@@ -380,5 +470,83 @@ export function PostTriggerModal({
         loading={savingClear}
       />
     </Modal>
+  );
+}
+
+/**
+ * Low-emphasis, SPACE-EFFICIENT image affordance. The image is optional and most
+ * merchants skip it, so it never takes a big dropzone: it's a small text button that
+ * opens the native file dialog directly, becoming a compact thumbnail chip once a file
+ * is chosen. In public mode it is a locked hint (images are DM-only) with a DELIBERATE
+ * link to Settings — NOT a one-click toggle, because `commentReplyMode` is a
+ * workspace-wide setting that also governs Smart AI reply delivery.
+ */
+function ImageAffordance(props: {
+  isDmMode: boolean;
+  previewSrc: string | null;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onPick: (file: File) => void;
+  onRemove: () => void;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const { isDmMode, previewSrc, fileInputRef, onPick, onRemove, t } = props;
+
+  // Public mode → small locked hint. The image needs DM delivery; changing that mode is
+  // a workspace-wide decision (affects Smart AI too), so we LINK to Settings rather than
+  // flip it silently from here.
+  if (!isDmMode) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+          {t('postTriggerImageLockedHint')}
+        </span>
+        <Link
+          href="/settings#comment-reply-mode-label"
+          className="inline-flex items-center gap-0.5 font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+        >
+          {t('postTriggerOutcomeSettingsLink')}
+          <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onPick(f); }}
+      />
+      {previewSrc ? (
+        // Compact attached-image chip: small thumbnail + remove.
+        <div className="inline-flex items-center gap-2.5 rounded-lg border border-surface-200 dark:border-surface-700 p-1.5 pe-2.5">
+          <img src={previewSrc} alt="" className="w-9 h-9 rounded-md object-cover flex-shrink-0" />
+          <span className="text-xs text-muted-foreground">{t('postTriggerImageDmOnly')}</span>
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={t('postTriggerImageRemove')}
+            className="inline-flex items-center rounded-md p-1 text-destructive hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
+      ) : (
+        // Small, low-emphasis trigger → opens the native file dialog directly.
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="inline-flex items-center gap-1.5 self-start rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
+        >
+          <ImagePlus className="w-4 h-4" aria-hidden="true" />
+          {t('postTriggerImageAdd')}
+          <span className="font-normal text-subtle">{t('postTriggerImageOptional')}</span>
+        </button>
+      )}
+    </div>
   );
 }

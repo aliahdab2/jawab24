@@ -3,7 +3,7 @@ import { fbAxios } from '../../lib/fbAxios';
 import { Logger, noopLogger } from '../../types';
 import { config } from '../../config';
 import { t } from '../../utils/i18n';
-import { classifyDmError, type DmFailure } from '../../utils/fbGraphErrors';
+import { classifyDmError, sendCardWithTextFallback, type DmFailure } from '../../utils/fbGraphErrors';
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
@@ -19,6 +19,9 @@ export interface SendCommentReplyOptions {
     dualReplyNudge?: string;
     /** If true, skip Facebook API calls (for demo mode) */
     isDemo?: boolean;
+    /** Post Reply image URL — sent as a card on the DM channel only (private/dual).
+     *  On non-transient card failure we fall back to a plain-text DM. */
+    replyImageUrl?: string | null;
 }
 
 export interface SendReplyResult {
@@ -71,7 +74,8 @@ export class ReplySender {
             accessToken,
             replyMode,
             dualReplyNudge,
-            isDemo = false
+            isDemo = false,
+            replyImageUrl,
         } = options;
 
         if (isDemo) {
@@ -82,12 +86,25 @@ export class ReplySender {
         let dmRecipientId: string | undefined;
         let dmFailure: DmFailure | undefined;
 
-        // DM send (private + dual modes)
+        // DM send (private + dual modes). An image (Post Reply only) rides ONLY here —
+        // never on the public branch below.
         if (replyMode === 'private' || replyMode === 'dual') {
             try {
-                const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
-                dmRecipientId = dm.recipientId;
-                this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId });
+                if (replyImageUrl) {
+                    // FB allows one message per comment → image + caption go as one card,
+                    // with a shared text-DM fallback on non-transient card failure.
+                    const dm = await sendCardWithTextFallback(
+                        'facebook',
+                        () => facebookService.sendPrivateReplyCardToComment(accessToken, facebookCommentId, { text: replyText, imageUrl: replyImageUrl }),
+                        () => facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText),
+                    );
+                    dmRecipientId = dm.recipientId;
+                    this.logger.info('[Sender] Private image-card reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId });
+                } else {
+                    const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
+                    dmRecipientId = dm.recipientId;
+                    this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId });
+                }
             } catch (error) {
                 dmFailure = classifyDmError(error, 'facebook');
                 this.logFailure(facebookCommentId, replyMode, dmFailure);

@@ -22,6 +22,12 @@ interface CommentReplyConfig {
    * useDualReplyNudge.
    */
   dualNudgeByLang: Record<string, string>;
+  /**
+   * Server capability: whether Post Reply image attachments are available (object
+   * storage is configured backend-side). The image picker is gated on this — when
+   * false, the feature is hidden entirely.
+   */
+  imagesEnabled: boolean;
 }
 
 /**
@@ -39,7 +45,7 @@ function useCommentReplyConfig() {
       const mode = raw === 'public' || raw === 'private' || raw === 'dual' ? raw : null;
       const multi = data?.dualReplyNudgeMulti;
       const dualNudgeByLang = multi && typeof multi === 'object' ? (multi as Record<string, string>) : {};
-      return { mode, dualNudgeByLang };
+      return { mode, dualNudgeByLang, imagesEnabled: data?.triggerImagesEnabled === true };
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -49,6 +55,12 @@ function useCommentReplyConfig() {
 export function useCommentReplyMode(): CommentReplyMode | null {
   const { data } = useCommentReplyConfig();
   return data?.mode ?? null;
+}
+
+/** Whether Post Reply image attachments are available (object storage configured). */
+export function useTriggerImagesEnabled(): boolean {
+  const { data } = useCommentReplyConfig();
+  return data?.imagesEnabled ?? false;
 }
 
 /**

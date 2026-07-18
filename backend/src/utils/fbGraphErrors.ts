@@ -480,3 +480,23 @@ export function isTransientAiError(err: unknown): boolean {
 export function needsImmediateAttention(err: unknown): boolean {
     return err instanceof AiRefusalError || err instanceof AiEmptyReplyError;
 }
+
+/**
+ * Send a rich card with a plain-text fallback, sharing ONE behavior across the FB and
+ * IG comment→DM paths. On a NON-transient card failure, retries as plain text so the
+ * merchant's reply still lands (the rich content is dropped, not the whole reply). A
+ * transient failure rethrows so the reply job retries the whole send. Defining this
+ * once guarantees both platforms fall back identically.
+ */
+export async function sendCardWithTextFallback<T>(
+    platform: FbPlatform,
+    sendCard: () => Promise<T>,
+    sendText: () => Promise<T>,
+): Promise<T> {
+    try {
+        return await sendCard();
+    } catch (cardError) {
+        if (classifyDmError(cardError, platform).bucket === 'transient') throw cardError;
+        return sendText();
+    }
+}

@@ -187,6 +187,7 @@ export class CommentProcessor {
                 triggerKeyword: content.triggerKeyword ?? null,
                 triggerReply: content.triggerReply ?? null,
                 triggerType: content.triggerType ?? 'keyword',
+                triggerImageUrl: content.triggerImageUrl ?? null,
             });
             // Rule check first: most comments land on posts with no trigger, so the
             // business-hours evaluation (an Intl.DateTimeFormat construction) only
@@ -455,6 +456,7 @@ export class CommentProcessor {
                             contentId: content.id,
                             triggerKeyword: match.keyword ?? undefined,
                             triggerType: rule.triggerType,
+                            replyImageUrl: rule.triggerImageUrl,
                         });
                         // Keep the debounce slot only if the reply actually went out
                         // (skip/flag/pause/cap/failed-send exits leave replyCommitted
@@ -892,6 +894,9 @@ export class CommentProcessor {
         triggerKeyword?: string;
         /** Post Reply analytics — how the rule fired ('keyword' | 'all'). Only set on the post_reply path. */
         triggerType?: 'keyword' | 'all';
+        /** Post Reply image URL — delivered only on the DM channel (adapter gates by mode).
+         *  Only ever set on the post_reply path. */
+        replyImageUrl?: string | null;
     }): Promise<CommentResult> {
         const {
             adapter, platform, pipeline, pageId, userId, workspaceId,
@@ -910,6 +915,7 @@ export class CommentProcessor {
             fromId,
             userSettings,
             postMessage: opts.postMessage,
+            replyImageUrl: opts.replyImageUrl,
         });
 
         if (!sendResult.success) {

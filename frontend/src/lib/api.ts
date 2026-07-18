@@ -240,7 +240,12 @@ export const postsApi = {
     triggerKeyword: string | null,
     triggerReply: string | null,
     triggerType: 'keyword' | 'all' = 'keyword',
-  ) => api.patch(`/posts/${id}/trigger`, { source, triggerKeyword, triggerReply, triggerType }),
+    // Image intent: undefined = leave as-is; null = remove; object = set a new image.
+    triggerImage?: { base64: string; mimeType: string } | null,
+  ) => api.patch(`/posts/${id}/trigger`, {
+    source, triggerKeyword, triggerReply, triggerType,
+    ...(triggerImage !== undefined ? { triggerImage } : {}),
+  }),
   // Post Reply picker: recent published posts for a page (per platform) + their
   // trigger state, paginated via the platform Graph cursor.
   getPublishedPosts: (pageId: string, opts?: { source?: 'facebook' | 'instagram'; after?: string }) =>

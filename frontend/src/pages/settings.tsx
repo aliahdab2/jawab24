@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -146,6 +147,7 @@ const SettingsPage: NextPageWithLayout = () => {
   // where they landed (the option is otherwise easy to miss in a dense section).
   const [highlightFallback, setHighlightFallback] = useState(false);
   const advancedExpanded = showAdvanced || forceAdvanced;
+  const queryClient = useQueryClient();
   const [settings, setSettings] = useState<SettingsState>({ ...INITIAL_SETTINGS, dashboardLanguage: language });
   const [initialSettings, setInitialSettings] = useState<SettingsState>({ ...INITIAL_SETTINGS, dashboardLanguage: language });
   const [saving, setSaving] = useState(false);
@@ -319,6 +321,11 @@ const SettingsPage: NextPageWithLayout = () => {
         setSettings(updatedSettings);
         setInitialSettings(updatedSettings);
       }
+
+      // The comment-reply mode / dual-nudge here feed the shared ['comment-reply-config']
+      // query that the Post Reply modal reads (useCommentReplyMode). Invalidate it so a
+      // mode change is reflected immediately instead of after the 5-min staleTime.
+      queryClient.invalidateQueries({ queryKey: ['comment-reply-config'] });
 
       setSaved(true);
       setSavedSections(changedSections);

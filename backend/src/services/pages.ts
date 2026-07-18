@@ -6,6 +6,7 @@ import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyK
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
+import { imageStorage } from './imageStorage';
 import { subscriptionsService } from './subscriptions';
 import { channelTrialService } from './channelTrial';
 import { logAutoReplyToggle } from './auditLog';
@@ -819,9 +820,28 @@ export class PagesService {
      * Delete a page
      */
     async deletePage(workspaceId: string, pageId: string) {
+        // Collect Post Reply image keys BEFORE the cascade delete drops the rows, so
+        // the stored objects don't orphan. Ownership is enforced by the delete's WHERE.
+        const [ownedPage] = await db
+            .select({ id: pages.id })
+            .from(pages)
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
+        if (!ownedPage) return;
+
+        const imageKeys = [
+            ...(await db.select({ key: posts.triggerImageKey }).from(posts).where(eq(posts.pageId, pageId))),
+            ...(await db.select({ key: instagramMedia.triggerImageKey }).from(instagramMedia).where(eq(instagramMedia.pageId, pageId))),
+        ].map(r => r.key).filter((k): k is string => !!k);
+
         await db
             .delete(pages)
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
+
+        // Best-effort object cleanup after the DB commit (imageStorage.remove logs and
+        // swallows). A missed delete leaves a harmless orphan swept by the audit script.
+        for (const key of imageKeys) {
+            await imageStorage.remove(key);
+        }
     }
 
     /**

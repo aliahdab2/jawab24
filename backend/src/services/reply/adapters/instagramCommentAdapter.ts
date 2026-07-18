@@ -4,7 +4,7 @@ import { instagramService } from '../../instagram';
 import { pickNudgeVariation } from '../nudge';
 import { detectLanguageCode, detectCommentLanguage } from '../../../utils/language';
 import { stripCommentNoise } from '../../../utils/commentText';
-import { classifyDmError, type DmFailure } from '../../../utils/fbGraphErrors';
+import { classifyDmError, sendCardWithTextFallback, type DmFailure } from '../../../utils/fbGraphErrors';
 import { t } from '../../../utils/i18n';
 import { db } from '../../../db';
 import { instagramComments } from '../../../db/schema';
@@ -48,6 +48,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             triggerKeyword: media.triggerKeyword ?? null,
             triggerReply: media.triggerReply ?? null,
             triggerType: media.triggerType ?? 'keyword',
+            triggerImageUrl: media.triggerImageUrl ?? null,
         };
     }
 
@@ -102,6 +103,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         fromId?: string;
         userSettings: Record<string, unknown>;
         postMessage?: string;
+        replyImageUrl?: string | null;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
         // Strip @mentions/URLs before language detection — their Latin characters
@@ -112,16 +114,27 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
 
         let dmFailure: DmFailure | undefined;
 
-        // DM send (private + dual modes)
+        // DM send (private + dual modes). Image (Post Reply only) rides ONLY here.
         if (replyMode === 'private' || replyMode === 'dual') {
             if (!opts.fromId) {
                 // Not a DM-send failure (we never called IG API) — pre-flight validation error.
                 return { success: false, error: 'Cannot send DM: commenter ID not available' };
             }
             try {
-                await instagramService.sendDirectMessage(
-                    opts.platformPageId, opts.fromId, opts.replyText, opts.accessToken,
-                );
+                if (opts.replyImageUrl) {
+                    // Card (image + caption) with a shared text-DM fallback on non-transient
+                    // card failure — so the reply still lands (image dropped, not the reply).
+                    const { platformPageId, fromId, replyText, accessToken, replyImageUrl } = opts;
+                    await sendCardWithTextFallback(
+                        'instagram',
+                        () => instagramService.sendDirectMessageCard(platformPageId, fromId!, { text: replyText, imageUrl: replyImageUrl }, accessToken),
+                        () => instagramService.sendDirectMessage(platformPageId, fromId!, replyText, accessToken),
+                    );
+                } else {
+                    await instagramService.sendDirectMessage(
+                        opts.platformPageId, opts.fromId, opts.replyText, opts.accessToken,
+                    );
+                }
             } catch (error) {
                 dmFailure = classifyDmError(error, 'instagram');
                 if (dmFailure.bucket === 'customer_refused' || dmFailure.bucket === 'window_expired') {

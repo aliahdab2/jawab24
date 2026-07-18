@@ -784,6 +784,12 @@ export {
     ALLOWED_AI_MODELS,
     isAllowedAiModel,
     type AllowedAiModel,
+    POST_REPLY_MAX_KEYWORDS,
+    POST_REPLY_MAX_KEYWORD_LEN,
+    POST_REPLY_MAX_REPLY_LEN,
+    POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE,
+    POST_REPLY_IMAGE_MAX_BYTES,
+    POST_REPLY_IMAGE_MIME_TYPES,
 } from './constants';
 
 // --- Phase 6.5 P1 diagnostic counters ---

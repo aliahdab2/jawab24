@@ -918,3 +918,12 @@ All webhooks use HMAC-SHA256 signature verification:
 - **Versioning**: `versionName` from `--version`/`--bump`; `versionCode = major*10000 + minor*100 + patch` (deterministic, injected via `-PappVersionName/-PappVersionCode`). The `build.gradle` literals are the "last released" fallback.
 - **Note**: Play Console's old "API access" page was removed by Google — service accounts are created in Google Cloud Console and invited via Play Console → Users and permissions.
 
+
+## Object Storage (S3-compatible) — merchant images
+
+- **What**: merchant-uploaded images (today: Post Reply trigger images, delivered on the DM channel as a Meta card). Reply-type-agnostic; a future Smart-Reply-with-image reuses it.
+- **Abstraction**: `backend/src/services/imageStorage.ts` — a thin provider-agnostic S3 wrapper (`@aws-sdk/client-s3`; `put`/`remove`/`isConfigured` only). Provider (Backblaze B2 / Cloudflare R2 / AWS S3 / self-hosted MinIO) is chosen entirely by env — swap is env-only, zero code change.
+- **Config**: `S3_ENDPOINT` (empty ⇒ real AWS; set ⇒ B2/R2/MinIO path-style), `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BASE_URL`. Feature OFF until all required vars set (`isConfigured()`).
+- **Current provider**: Backblaze B2 (reuses the DB-backup account). Public bucket; Meta fetches images from `S3_PUBLIC_BASE_URL/{key}`. No blobs in Postgres (only `trigger_image_url/key/bytes` columns), no bytes on the prod host.
+- **Lifecycle**: reference-based (image lives as long as its Post Reply; delete-on-replace/remove + `pagesService.deletePage` cleanup; orphan audit `scripts/audit-trigger-images.ts`). See D-032.
+- **Full runbook** (setup, provider switch, backups, key rotation, GDPR): `backend/docs/OBJECT_STORAGE.md`.
