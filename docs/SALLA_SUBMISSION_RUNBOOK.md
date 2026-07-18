@@ -29,6 +29,18 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
       international (non-KSA) bank with SWIFT/IBAN, holder name matching passport in English.
       Portal → dropdown by your name → Account Settings → Verify My Account.
       Start immediately: review time unknown, longest lead item.
+- [ ] **Send the publish-timing email to Salla support** (`SALLA_LAUNCH_ACTIONS.md` §1, AR
+      draft ready; Partners portal support channel). **Owner decision 2026-07-18: target
+      approval-in-hand WITHOUT public launch.** Salla's answer picks the path:
+      - **Hold possible** → submit as soon as Phase 0 clears (approval banked; publish
+        manually when ready).
+      - **Auto-publish on approval** (the current assumption — portal shows no hold
+        control) → submission itself is the launch decision: submit when comfortable
+        being listed, knowing an unpromoted listing gets near-zero traffic (soft launch),
+        and that pulling a live app back requires a booked Salla meeting.
+      Either way the Phase 1 preconditions (WhatsApp canary, env flips incl. the claim
+      flag ON) bind to **submission/review time**, not to the marketing push — reviewers
+      see the listing's claims, and installs must be claimable the moment it's visible.
 - [x] **Easy-Mode dry-run on Jawab24-Dev DONE 2026-07-18** (founder via browser extension +
       local ngrok harness). Outcomes (recorded in **D-031**):
       1. **Authorize redirect is DEAD in Easy Mode** — Salla drops the registered redirect
@@ -91,8 +103,10 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
       Fill the 6 sections: Basic Info, App Configurations, App Features, Pricing
       (**Salla-managed billing is mandatory for paid apps** — launch is free-tier-only per the
       2026-05-30 decision, so no billing integration needed), Contact, Service Trial.
-- [ ] Expect **5–10 day review**. Assume **auto-publish on approval** (portal shows no hold
-      control — recon 2026-06-12): submit only when ready to be live.
+- [ ] Expect **5–10 day review**. Publish timing per Salla's answer to the §1 email
+      (owner strategy 2026-07-18: approval-in-hand, hold public go-live). Until Salla says
+      otherwise, assume **auto-publish on approval** (portal shows no hold control — recon
+      2026-06-12) and submit only when ready to be listed.
 
 ## Phase 3 — On approval (go-live verification)
 
