@@ -105,9 +105,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }, authController.deleteAccount);
 
     // Link Facebook account to existing authenticated user (reconnect flow)
-    // Used when a phone-only user connects Facebook pages from within the app
+    // Used when a phone-only user connects Facebook pages from within the app.
+    // Rate limit matches /auth/facebook's posture: each call already requires a
+    // valid session AND a fresh one-time FB OAuth code, so brute force is not a
+    // realistic vector. The previous 5/10min locked out a real merchant
+    // mid-onboarding (2026-07-18: 6 legitimate link round-trips in 9 minutes
+    // while wrestling with Facebook's permission dialog → 429 → bounced to login).
     fastify.post('/auth/facebook/link', {
-        config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+        config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
         schema: {
             tags: ['Auth'],
             summary: 'Link Facebook account to authenticated user',

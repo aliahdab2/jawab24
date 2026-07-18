@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { authService } from '../services/auth';
+import { csrfInvalidCaptureMessage } from '../lib/sentry';
 
 // In-memory throttle: avoid writing last_seen_at more than once per 2 minutes per user.
 // Capped at 10,000 entries to prevent unbounded growth on long-running instances.
@@ -97,21 +98,41 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
 
 /**
  * Auth endpoints that (re)establish identity from a one-time credential in the
- * request body — a Facebook OAuth `code` or access token — NOT from the session
- * cookie. CSRF is inapplicable here and must not gate them:
- *   - The OAuth code is itself the anti-forgery token: an attacker can't obtain a
- *     valid one for the victim, and the endpoint mints a fresh session from it,
- *     ignoring any ambient `token` cookie.
- *   - They are called from the /auth/callback page via raw `fetch` (not the axios
- *     client that attaches X-CSRF-Token), so a returning user whose browser still
- *     holds a valid `token` cookie would otherwise be 403'd out of logging in.
+ * request body — a Facebook OAuth `code`/access token, a phone OTP — or from
+ * nothing at all (demo login mints a fresh demo session). None of them derive
+ * authority from the session cookie, so CSRF is inapplicable and must not gate
+ * them:
+ *   - The OAuth code / OTP is itself the anti-forgery token: an attacker can't
+ *     obtain a valid one for the victim, and the endpoint mints a fresh session
+ *     from it, ignoring any ambient `token` cookie.
+ *   - They are called from public pages before login, so a returning user whose
+ *     browser still holds a lingering `token` cookie (but whose client doesn't
+ *     attach X-CSRF-Token) would otherwise be 403'd out of logging in. This
+ *     happened in production (2026-07-18): demo login, OTP request, and logout
+ *     all returned 403 for visitors with a stale session cookie.
  *   - sameSite:strict on the `token` cookie stays the primary cross-site defense
  *     (a cross-site forged request cannot send it at all).
+ *
+ * `/auth/phone/link` is deliberately NOT here: it acts on the CURRENT session
+ * (links a phone to the logged-in user) and rides the authenticated `api` client,
+ * so it must keep CSRF (web) / Bearer-skip (app) like any other mutation.
+ *
+ * `/auth/logout` IS here on a different rationale (the standard logout-CSRF
+ * exemption): it only destroys the session. A cross-site forged logout carries
+ * no cookie at all (sameSite:strict), so it is a no-op; and the app must be able
+ * to revoke its server session even though authManager clears localStorage
+ * (dropping the Bearer) before the server call and can't read the cross-host
+ * csrfToken cookie. Blocking it left refresh tokens unrevoked (prod 2026-07-18:
+ * logout 403×3 in 48h).
  */
 const CSRF_EXEMPT_ROUTES = new Set<string>([
     '/auth/facebook',
     '/auth/facebook/native',
     '/auth/facebook/link',
+    '/auth/demo',
+    '/auth/phone/request',
+    '/auth/phone/verify',
+    '/auth/logout',
 ]);
 
 /**
@@ -130,12 +151,25 @@ export async function csrfProtection(request: FastifyRequest, reply: FastifyRepl
         return;
     }
 
-    // CSRF only matters for cookie-authenticated sessions. If there is no auth cookie,
-    // the request is either pure Bearer (mobile/API) or unauthenticated — skip.
-    // Auth-source priority: enforce CSRF whenever the cookie is present, even if an
-    // Authorization header is also sent. The header alone must NOT short-circuit CSRF,
-    // because cookie auth is still a valid auth source server-side and the cookie rides
-    // the request automatically.
+    // A Bearer-authenticated request is never cookie-authenticated, so CSRF (a
+    // defense against AMBIENT cookie credentials) does not apply. This mirrors
+    // authenticate() exactly: it enters the Bearer branch — and never reads the
+    // token cookie — iff the header starts with "Bearer ". A cross-site attacker
+    // cannot attach this header (forms can't set Authorization; fetch requires a
+    // CORS-allowlisted origin + preflight), so a Bearer request is not forgeable
+    // through the ambient cookie. Matching authenticate()'s condition (not merely
+    // "a header exists") keeps CSRF-skip <=> Bearer-auth with no gap: a malformed
+    // non-Bearer Authorization header falls through to the cookie in authenticate(),
+    // so it must NOT skip CSRF here.
+    // (This is why the app — Bearer-authed but unable to read the cross-host
+    // csrfToken cookie into a header — was being 403'd on every mutation.)
+    if (request.headers.authorization?.startsWith('Bearer ')) {
+        return;
+    }
+
+    // CSRF only matters for cookie-authenticated sessions. Past this point the
+    // request has no Bearer header, so a `token` cookie (if any) is the auth source.
+    // No cookie => unauthenticated (authenticate() will 401 it) — nothing to forge.
     // Note: request.cookies may be undefined if cookie plugin hasn't parsed yet.
     if (!request.cookies?.token) {
         return;
@@ -148,6 +182,20 @@ export async function csrfProtection(request: FastifyRequest, reply: FastifyRepl
         || typeof headerToken !== 'string'
         || cookieToken.length !== headerToken.length
         || !crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken))) {
+        // CSRF 403s were invisible until 2026-07-18 (demo/OTP/logout lockouts
+        // found only via nginx logs). Group per route so a misbehaving client
+        // class surfaces as one issue; distinguish "client sent nothing" from
+        // a genuine mismatch — the former is almost always a client-wiring bug.
+        const route = request.routeOptions?.url ?? request.url;
+        Sentry.withScope((scope) => {
+            scope.setFingerprint(['csrf-invalid', route]);
+            scope.setLevel('warning');
+            scope.setTag('route', route);
+            scope.setExtra('ip', request.ip);
+            scope.setExtra('hasCsrfCookie', Boolean(cookieToken));
+            scope.setExtra('hasCsrfHeader', Boolean(headerToken));
+            Sentry.captureMessage(csrfInvalidCaptureMessage(route));
+        });
         return reply.status(403).send({
             error: true,
             message: 'Invalid CSRF token',

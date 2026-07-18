@@ -3,6 +3,44 @@ import * as Sentry from '@sentry/node';
 const isProduction = process.env.NODE_ENV === 'production';
 const sentryDsn = process.env.SENTRY_DSN;
 
+/**
+ * Noisy errors filtered from Sentry. Entries are SUBSTRING matches against the
+ * event message — 'Rate limit exceeded' silences the per-request 429 error
+ * ("Rate limit exceeded. Please try again later.") that would otherwise flood
+ * Sentry once per limited request.
+ *
+ * Exported (with the message builder below) so a test can guarantee the filter
+ * never swallows our intentional telemetry.
+ */
+export const SENTRY_IGNORE_ERRORS = [
+    'Rate limit exceeded',
+    'ECONNREFUSED',
+    'ETIMEDOUT',
+];
+
+/**
+ * Message for the deliberate, fingerprint-grouped capture in the rate limiter's
+ * onExceeded hook (one Sentry issue per url+ip, not one event per request).
+ *
+ * MUST NOT contain any SENTRY_IGNORE_ERRORS substring: the original wording
+ * ("Rate limit exceeded: <url>") matched the filter above, so the telemetry was
+ * silently dropped and a production lockout (2026-07-18, /auth/facebook/link)
+ * was only diagnosable via server access logs.
+ */
+export function rateLimitCaptureMessage(url: string): string {
+    return `429 rate-limited: ${url}`;
+}
+
+/**
+ * Message for the fingerprint-grouped capture when csrfProtection rejects a
+ * mutation (middleware/auth.ts). CSRF 403s were previously invisible — the
+ * 2026-07-18 demo-login/OTP/logout lockouts were only found via nginx access
+ * logs. Same contract as above: must not match SENTRY_IGNORE_ERRORS.
+ */
+export function csrfInvalidCaptureMessage(route: string): string {
+    return `403 CSRF rejected: ${route}`;
+}
+
 export function initSentry() {
     if (!sentryDsn) {
         if (isProduction) {
@@ -22,11 +60,7 @@ export function initSentry() {
         tracesSampleRate: isProduction ? 0.1 : 1.0, // 10% in prod, 100% in dev
 
         // Filter out noisy errors
-        ignoreErrors: [
-            'Rate limit exceeded',
-            'ECONNREFUSED',
-            'ETIMEDOUT',
-        ],
+        ignoreErrors: SENTRY_IGNORE_ERRORS,
 
         // Add extra context
         beforeSend(event) {
