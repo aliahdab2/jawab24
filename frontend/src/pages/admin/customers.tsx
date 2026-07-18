@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 import { Search, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -10,6 +11,7 @@ import { Card } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { useDebounce } from '@/hooks';
 
 interface Customer {
     id: string;
@@ -60,76 +62,65 @@ export default function AdminCustomersPage() {
     const { language, intlLocale } = useLanguage();
     const isRTL = isRTLLocale(language);
 
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [page, setPage] = useState(1);
 
     // Filters
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('');
     const [planFilter, setPlanFilter] = useState<string>('');
-    const [plans, setPlans] = useState<Array<{ id: string; name: string; slug: string; isActive: boolean }>>([]);
 
-    // Debounced search
-    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const debouncedSearch = useDebounce(search, 300);
 
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setDebouncedSearch(search);
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [search]);
-
-    // Load plans for filter dropdown
-    useEffect(() => {
-        const loadPlans = async () => {
+    // Plans for the filter dropdown — effectively static, cache for the session
+    const { data: plans = [] } = useQuery<Array<{ id: string; name: string; slug: string; isActive: boolean }>>({
+        queryKey: ['admin', 'plans'],
+        queryFn: async () => {
             try {
                 const response = await adminApi.getPlans();
-                if (response.success) {
-                    setPlans(response.data);
-                }
+                return response.success ? response.data : [];
             } catch (err) {
                 captureError(err, 'Failed to load plans', { tags: { page: 'admin-customers' } });
+                throw err;
             }
-        };
-        loadPlans();
-    }, []);
+        },
+        staleTime: 10 * 60_000,
+    });
 
-    // Load customers
-    const loadCustomers = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const response = await adminApi.listUsers({
-                page: pagination.page,
-                limit: pagination.limit,
-                search: debouncedSearch || undefined,
-                status: statusFilter || undefined,
-                plan: planFilter || undefined,
-            });
-
-            if (response.success) {
-                setCustomers(response.data);
-                setPagination(response.pagination);
-            } else {
-                setError('Failed to load customers');
+    // Customer list — cached per (page, filters) so navigating back into the
+    // admin section doesn't refetch from scratch; keepPreviousData keeps the
+    // table on screen while the next page/filter loads.
+    const { data: customersPage, isLoading: loading, isError } = useQuery<{
+        success: boolean;
+        data: Customer[];
+        pagination: Pagination;
+    }>({
+        queryKey: ['admin', 'customers', page, debouncedSearch, statusFilter, planFilter],
+        queryFn: async () => {
+            try {
+                const response = await adminApi.listUsers({
+                    page,
+                    limit: 20,
+                    search: debouncedSearch || undefined,
+                    status: statusFilter || undefined,
+                    plan: planFilter || undefined,
+                });
+                if (!response.success) throw new Error('Failed to load customers');
+                return response;
+            } catch (err) {
+                captureError(err, 'Failed to load customers', { tags: { page: 'admin-customers' } });
+                throw err;
             }
-        } catch (err) {
-            setError('Failed to load customers');
-            captureError(err, 'Failed to load customers', { tags: { page: 'admin-customers' } });
-        } finally {
-            setLoading(false);
-        }
-    }, [pagination.page, pagination.limit, debouncedSearch, statusFilter, planFilter]);
-
-    useEffect(() => {
-        loadCustomers();
-    }, [loadCustomers]);
+        },
+        placeholderData: keepPreviousData,
+        staleTime: 60_000,
+    });
+    const customers = customersPage?.data ?? [];
+    const pagination: Pagination = customersPage?.pagination ?? { page, limit: 20, total: 0, totalPages: 0 };
+    const error = isError ? 'Failed to load customers' : null;
 
     // Reset to page 1 when filters change
     useEffect(() => {
-        setPagination(prev => ({ ...prev, page: 1 }));
+        setPage(1);
     }, [debouncedSearch, statusFilter, planFilter]);
 
     const formatDate = (dateStr: string | null) => {
@@ -322,7 +313,7 @@ export default function AdminCustomersPage() {
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                                    onClick={() => setPage(prev => prev - 1)}
                                     disabled={pagination.page <= 1}
                                     className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -332,7 +323,7 @@ export default function AdminCustomersPage() {
                                     {pagination.page} / {pagination.totalPages}
                                 </span>
                                 <button
-                                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                                    onClick={() => setPage(prev => prev + 1)}
                                     disabled={pagination.page >= pagination.totalPages}
                                     className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                                 >

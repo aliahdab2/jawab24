@@ -211,16 +211,20 @@ class AdminUsersService {
 
         if (!user) return null;
 
-        // Per-workspace AI model override (null = follows DEFAULT_AI_MODEL).
-        const [settingsRow] = await db
+        // The blocks below are independent lookups keyed on userId — run them
+        // concurrently instead of awaiting each in sequence (this endpoint used
+        // to pay ~6 serial round-trips before any dependent work).
+        const now = new Date();
+        const [settingsRows, subscriptionRows, userPages, currentUsageRows, membershipRows] = await Promise.all([
+            // Per-workspace AI model override (null = follows DEFAULT_AI_MODEL).
+            db
             .select({ aiModel: settings.aiModel })
             .from(settings)
             .where(eq(settings.userId, userId))
-            .limit(1);
-        const aiModel: string | null = settingsRow?.aiModel ?? null;
+            .limit(1),
 
-        // Subscription with plan limits
-        const [subscription] = await db
+            // Subscription with plan limits
+            db
             .select({
                 id: subscriptions.id,
                 status: subscriptions.status,
@@ -237,11 +241,11 @@ class AdminUsersService {
             .from(subscriptions)
             .leftJoin(plans, eq(subscriptions.planId, plans.id))
             .where(eq(subscriptions.userId, userId))
-            .limit(1);
+            .limit(1),
 
-        // Pages with identifying info + reply state, so support can answer
-        // "why isn't this customer getting replies?" at a glance.
-        const userPages = await db
+            // Pages with identifying info + reply state, so support can answer
+            // "why isn't this customer getting replies?" at a glance.
+            db
             .select({
                 id: pages.id,
                 name: pages.name,
@@ -253,11 +257,10 @@ class AdminUsersService {
                 disconnected: sql<boolean>`(${pages.accessToken} IS NULL OR ${pages.accessToken} = '')`,
             })
             .from(pages)
-            .where(eq(pages.userId, userId));
+            .where(eq(pages.userId, userId)),
 
-        // Current period usage
-        const now = new Date();
-        const [currentUsage] = await db
+            // Current period usage
+            db
             .select({
                 aiRepliesCount: usage.aiRepliesCount,
                 periodStart: usage.periodStart,
@@ -271,20 +274,10 @@ class AdminUsersService {
                     gte(usage.periodEnd, now),
                 ),
             )
-            .limit(1);
+            .limit(1),
 
-        // Lead stats — capture leads from pages owned directly by user OR by any
-        // workspace this user belongs to (covers shared workspaces).
-        let leadStats = {
-            total: 0,
-            today: 0,
-            last7d: 0,
-            last30d: 0,
-            byStatus: { new: 0, contacted: 0, converted: 0 },
-        };
-
-        // Workspace memberships joined to each workspace + its owner.
-        const membershipRows = await db
+            // Workspace memberships joined to each workspace + its owner.
+            db
             .select({
                 workspaceId: workspaces.id,
                 workspaceName: workspaces.name,
@@ -297,23 +290,50 @@ class AdminUsersService {
             .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
             .innerJoin(users, eq(workspaces.ownerId, users.id))
             .where(eq(workspaceMembers.userId, userId))
-            .orderBy(workspaces.createdAt);
+            .orderBy(workspaces.createdAt),
+        ]);
+        const settingsRow = settingsRows[0];
+        const aiModel: string | null = settingsRow?.aiModel ?? null;
+        const subscription = subscriptionRows[0];
+        const currentUsage = currentUsageRows[0];
+
+        // Lead stats — capture leads from pages owned directly by user OR by any
+        // workspace this user belongs to (covers shared workspaces).
+        let leadStats = {
+            total: 0,
+            today: 0,
+            last7d: 0,
+            last30d: 0,
+            byStatus: { new: 0, contacted: 0, converted: 0 },
+        };
+
         const workspaceIds = membershipRows.map(r => r.workspaceId);
 
-        // Member count per workspace — single grouped query, no N+1.
+        // Member count per workspace (single grouped query, no N+1) and the
+        // owned-pages lookup both depend only on workspaceIds — run concurrently.
+        const [countRows, ownedPageIdsRows] = await Promise.all([
+            workspaceIds.length > 0
+                ? db
+                    .select({
+                        workspaceId: workspaceMembers.workspaceId,
+                        count: sql<number>`count(*)::int`,
+                    })
+                    .from(workspaceMembers)
+                    .where(inArray(workspaceMembers.workspaceId, workspaceIds))
+                    .groupBy(workspaceMembers.workspaceId)
+                : Promise.resolve([]),
+            db
+                .select({ id: pages.id })
+                .from(pages)
+                .where(
+                    workspaceIds.length > 0
+                        ? sql`${pages.userId} = ${userId} OR ${pages.workspaceId} IN (${sql.join(workspaceIds.map(w => sql`${w}`), sql`, `)})`
+                        : eq(pages.userId, userId),
+                ),
+        ]);
         const memberCounts = new Map<string, number>();
-        if (workspaceIds.length > 0) {
-            const countRows = await db
-                .select({
-                    workspaceId: workspaceMembers.workspaceId,
-                    count: sql<number>`count(*)::int`,
-                })
-                .from(workspaceMembers)
-                .where(inArray(workspaceMembers.workspaceId, workspaceIds))
-                .groupBy(workspaceMembers.workspaceId);
-            for (const r of countRows) {
-                memberCounts.set(r.workspaceId, r.count);
-            }
+        for (const r of countRows) {
+            memberCounts.set(r.workspaceId, r.count);
         }
 
         // isOwner is derived from the workspace's owner_id FK (authoritative).
@@ -328,23 +348,22 @@ class AdminUsersService {
             memberCount: memberCounts.get(r.workspaceId) ?? 1,
         }));
 
-        const ownedPageIdsRows = await db
-            .select({ id: pages.id })
-            .from(pages)
-            .where(
-                workspaceIds.length > 0
-                    ? sql`${pages.userId} = ${userId} OR ${pages.workspaceId} IN (${sql.join(workspaceIds.map(w => sql`${w}`), sql`, `)})`
-                    : eq(pages.userId, userId),
-            );
         const ownedPageIds = ownedPageIdsRows.map(r => r.id);
 
         // Post Replies actually SENT (replyMethod = 'post_reply'), across FB comments,
         // IG comments and DMs — the same definition the dashboard uses (services/pages.ts).
         // NOT the count of configured trigger rules, and scoped to owned pages
         // (direct + workspace) so workspace-owned pages are not silently zeroed.
+        // Runs together with the lead stats aggregation — all four depend only
+        // on ownedPageIds.
         let postRepliesCount = 0;
         if (ownedPageIds.length > 0) {
-            const [fbPR, igPR, dmPR] = await Promise.all([
+            const startOfToday = new Date(now);
+            startOfToday.setHours(0, 0, 0, 0);
+            const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+            const [fbPR, igPR, dmPR, leadAggRows] = await Promise.all([
                 db.select({ count: sql<number>`count(*)::int` })
                     .from(comments)
                     .innerJoin(posts, eq(comments.postId, posts.id))
@@ -369,29 +388,22 @@ class AdminUsersService {
                         eq(messages.replied, true),
                         eq(messages.replyMethod, 'post_reply'),
                     )),
+                db
+                    .select({
+                        total: sql<number>`count(*)::int`,
+                        today: sql<number>`count(*) filter (where ${leads.createdAt} >= ${startOfToday})::int`,
+                        last7d: sql<number>`count(*) filter (where ${leads.createdAt} >= ${sevenDaysAgo})::int`,
+                        last30d: sql<number>`count(*) filter (where ${leads.createdAt} >= ${thirtyDaysAgo})::int`,
+                        statusNew: sql<number>`count(*) filter (where ${leads.status} = 'new')::int`,
+                        statusContacted: sql<number>`count(*) filter (where ${leads.status} = 'contacted')::int`,
+                        statusConverted: sql<number>`count(*) filter (where ${leads.status} = 'converted')::int`,
+                    })
+                    .from(leads)
+                    .where(inArray(leads.pageId, ownedPageIds)),
             ]);
             postRepliesCount = (fbPR[0]?.count || 0) + (igPR[0]?.count || 0) + (dmPR[0]?.count || 0);
-        }
 
-        if (ownedPageIds.length > 0) {
-            const startOfToday = new Date(now);
-            startOfToday.setHours(0, 0, 0, 0);
-            const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-            const [agg] = await db
-                .select({
-                    total: sql<number>`count(*)::int`,
-                    today: sql<number>`count(*) filter (where ${leads.createdAt} >= ${startOfToday})::int`,
-                    last7d: sql<number>`count(*) filter (where ${leads.createdAt} >= ${sevenDaysAgo})::int`,
-                    last30d: sql<number>`count(*) filter (where ${leads.createdAt} >= ${thirtyDaysAgo})::int`,
-                    statusNew: sql<number>`count(*) filter (where ${leads.status} = 'new')::int`,
-                    statusContacted: sql<number>`count(*) filter (where ${leads.status} = 'contacted')::int`,
-                    statusConverted: sql<number>`count(*) filter (where ${leads.status} = 'converted')::int`,
-                })
-                .from(leads)
-                .where(inArray(leads.pageId, ownedPageIds));
-
+            const agg = leadAggRows[0];
             leadStats = {
                 total: agg?.total || 0,
                 today: agg?.today || 0,

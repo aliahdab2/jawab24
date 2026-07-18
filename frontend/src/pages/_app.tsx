@@ -39,6 +39,18 @@ type AppPropsWithLayout = AppProps & {
   Component: NextPageWithLayout;
 };
 
+// 30-day aggregation queries with long staleTime (see dashboard.tsx). Excluded
+// from the blanket resume/reconnect invalidation below: those fire on every app
+// foreground, and re-running the two heaviest analytics aggregations each time
+// contributes to the burst that can trip the API rate limit. Their data spans
+// 30 days — minutes of staleness is invisible.
+const SLOW_ANALYTICS_KEYS = new Set(['dashboard-analytics', 'dashboard-ai-usage']);
+const invalidateVolatileQueries = (queryClient: QueryClient) => {
+  queryClient.invalidateQueries({
+    predicate: (query) => !SLOW_ANALYTICS_KEYS.has(String(query.queryKey[0])),
+  });
+};
+
 export default function App({ Component, pageProps }: AppPropsWithLayout) {
   const router = useRouter();
   const { locale } = router;
@@ -264,7 +276,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       // Handle app resume - refresh data
       const resumeListener = await App.addListener('appStateChange', ({ isActive }) => {
         if (isActive) {
-          queryClient.invalidateQueries();
+          invalidateVolatileQueries(queryClient);
           // Ensure overlay and style are correct on resume (Best Practice for cold starts)
           StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
           handleRouteChange(routerRef.current.asPath);
@@ -285,7 +297,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       const networkListener = await Network.addListener('networkStatusChange', (status) => {
         setOffline(!status.connected);
         if (status.connected) {
-          queryClient.invalidateQueries();
+          invalidateVolatileQueries(queryClient);
         }
       });
       listenersRef.current.push(() => networkListener.remove());

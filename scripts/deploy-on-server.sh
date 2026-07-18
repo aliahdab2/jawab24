@@ -149,9 +149,13 @@ build_images() {
     export GIT_COMMIT=$(git rev-parse HEAD)
     echo "📝 Git commit: $(git rev-parse --short HEAD)"
 
+    # Deliberately NOT --parallel: the build runs on the same 4-core host that is
+    # serving live traffic (blue-green), and three concurrent no-cache image builds
+    # saturate the CPU and push the box into swap — every page gets slow for the
+    # whole build. Sequential builds keep the site responsive; the deploy itself
+    # just takes a few minutes longer.
     docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build \
         --no-cache \
-        --parallel \
         --build-arg GIT_COMMIT=$GIT_COMMIT
     echo "✅ Images built successfully"
 }

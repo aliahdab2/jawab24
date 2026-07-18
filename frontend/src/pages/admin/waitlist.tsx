@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 import { Search, ChevronLeft, ChevronRight, Mail, Phone, Send, X } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -9,6 +10,7 @@ import { Card, Button, Input, Textarea, Modal, ConfirmationModal } from '@/compo
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { useDebounce } from '@/hooks';
 import { isValidEmail } from '@jawab24/shared';
 import type { WaitlistEmailTemplate } from '@jawab24/shared';
 
@@ -60,24 +62,13 @@ export default function AdminWaitlistPage() {
     const { language, intlLocale } = useLanguage();
     const isRTL = isRTLLocale(language);
 
-    const [entries, setEntries] = useState<WaitlistEntry[]>([]);
-    const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [page, setPage] = useState(1);
 
     // Filters
     const [search, setSearch] = useState('');
     const [featureFilter, setFeatureFilter] = useState<string>('');
-    const [features, setFeatures] = useState<string[]>([]);
 
-    // Debounced search
-    const [debouncedSearch, setDebouncedSearch] = useState('');
-
-    // Subscriber counts (email vs phone-only)
-    const [emailCount, setEmailCount] = useState(0);
-    const [phoneOnlyCount, setPhoneOnlyCount] = useState(0);
-    // Registered-user count (for the audience selector)
-    const [userEmailCount, setUserEmailCount] = useState(0);
+    const debouncedSearch = useDebounce(search, 300);
     // Send target — waitlist (default), registered users, or both
     const [audience, setAudience] = useState<'waitlist' | 'users' | 'both' | 'extras'>('waitlist');
 
@@ -101,48 +92,45 @@ export default function AdminWaitlistPage() {
     // Master-checkbox indeterminate state needs a DOM ref (no HTML attribute equivalent)
     const masterCheckboxRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setDebouncedSearch(search);
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [search]);
-
-    // Load waitlist entries
-    const loadEntries = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const response = await adminApi.getWaitlist({
-                page: pagination.page,
-                limit: pagination.limit,
-                search: debouncedSearch || undefined,
-                feature: featureFilter || undefined,
-            });
-
-            if (response.success) {
-                setEntries(response.data);
-                setPagination(response.pagination);
-                setEmailCount(response.emailCount ?? 0);
-                setPhoneOnlyCount(response.phoneOnlyCount ?? 0);
-                setUserEmailCount(response.userEmailCount ?? 0);
-                if (response.features) {
-                    setFeatures(response.features);
-                }
-            } else {
-                setError(t('waitlist.loadError'));
+    // Waitlist entries — cached per (page, filters) so navigating back into the
+    // admin section doesn't refetch from scratch; keepPreviousData keeps the
+    // table on screen while the next page/filter loads.
+    const { data: waitlistPage, isLoading: loading, isError } = useQuery<{
+        success: boolean;
+        data: WaitlistEntry[];
+        pagination: Pagination;
+        emailCount?: number;
+        phoneOnlyCount?: number;
+        userEmailCount?: number;
+        features?: string[];
+    }>({
+        queryKey: ['admin', 'waitlist', page, debouncedSearch, featureFilter],
+        queryFn: async () => {
+            try {
+                const response = await adminApi.getWaitlist({
+                    page,
+                    limit: 20,
+                    search: debouncedSearch || undefined,
+                    feature: featureFilter || undefined,
+                });
+                if (!response.success) throw new Error('Failed to load waitlist');
+                return response;
+            } catch (err) {
+                captureError(err, 'Failed to load waitlist', { tags: { page: 'admin-waitlist' } });
+                throw err;
             }
-        } catch (err) {
-            setError(t('waitlist.loadError'));
-            captureError(err, 'Failed to load waitlist', { tags: { page: 'admin-waitlist' } });
-        } finally {
-            setLoading(false);
-        }
-    }, [pagination.page, pagination.limit, debouncedSearch, featureFilter, t]);
-
-    useEffect(() => {
-        loadEntries();
-    }, [loadEntries]);
+        },
+        placeholderData: keepPreviousData,
+        staleTime: 60_000,
+    });
+    // Memoized: `entries` feeds useMemo deps below (selection helpers)
+    const entries = useMemo(() => waitlistPage?.data ?? [], [waitlistPage]);
+    const pagination: Pagination = waitlistPage?.pagination ?? { page, limit: 20, total: 0, totalPages: 0 };
+    const emailCount = waitlistPage?.emailCount ?? 0;
+    const phoneOnlyCount = waitlistPage?.phoneOnlyCount ?? 0;
+    const userEmailCount = waitlistPage?.userEmailCount ?? 0;
+    const features = waitlistPage?.features ?? [];
+    const error = isError ? t('waitlist.loadError') : null;
 
     // Lazy-load templates the first time the compose modal opens.
     useEffect(() => {
@@ -174,7 +162,7 @@ export default function AdminWaitlistPage() {
 
     // Reset to page 1 when filters change
     useEffect(() => {
-        setPagination(prev => ({ ...prev, page: 1 }));
+        setPage(1);
     }, [debouncedSearch, featureFilter]);
 
     // ─── Selection helpers ──────────────────────────────────────────────
@@ -530,7 +518,7 @@ export default function AdminWaitlistPage() {
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
-                                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                                    onClick={() => setPage(prev => prev - 1)}
                                     disabled={pagination.page <= 1}
                                     aria-label={t('waitlist.previousPage')}
                                     className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
@@ -541,7 +529,7 @@ export default function AdminWaitlistPage() {
                                     {pagination.page} / {pagination.totalPages}
                                 </span>
                                 <button
-                                    onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                                    onClick={() => setPage(prev => prev + 1)}
                                     disabled={pagination.page >= pagination.totalPages}
                                     aria-label={t('waitlist.nextPage')}
                                     className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
