@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import axios from 'axios';
 import { ShoppingBag, Loader2, XCircle, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { toast } from 'sonner';
@@ -79,8 +80,19 @@ export default function SallaConnected() {
       await sallaApi.claimInstall(pendingId ? { pendingId } : { merchantId });
       if (typeof window !== 'undefined') window.sessionStorage.removeItem(MERCHANT_STORAGE_KEY);
       router.replace('/salla/onboarding');
-    } catch {
-      toast.error(t('claim.error'));
+    } catch (err) {
+      // Ownership binding: the backend proves the claim by matching the logged-in
+      // account's email against the store's registered Salla email (D-012).
+      const code = axios.isAxiosError(err)
+        ? (err.response?.data as { code?: string } | undefined)?.code
+        : undefined;
+      if (code === 'email_mismatch' || code === 'no_email') {
+        toast.error(t('claim.emailMismatch'));
+      } else if (code === 'store_info_unavailable') {
+        toast.error(t('claim.verifyUnavailable'));
+      } else {
+        toast.error(t('claim.error'));
+      }
       setPhase('found');
     }
   }, [merchantId, pendingId, router, t]);

@@ -100,6 +100,7 @@ import {
     claimPendingInstall,
     claimPendingInstallByMerchantId,
     listPendingInstalls,
+    ClaimOwnershipError,
 } from '../../src/services/ecommerce';
 import { encrypt, encryptOptional, decrypt } from '../../src/services/ecommerceCrypto';
 import { pendingEcommerceInstalls, ecommerceStores } from '../../src/db/schema';
@@ -303,5 +304,89 @@ describe('Salla Easy Mode pending install (merchant-id keyed claim)', () => {
         expect(colsArg).not.toHaveProperty('accessToken');
         expect(colsArg).not.toHaveProperty('refreshToken');
         expect(colsArg).not.toHaveProperty('nonce');
+    });
+});
+
+describe('Ownership verifier — Easy Mode claim binding (D-012)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        capturedInserts.length = 0;
+        capturedDeletes.length = 0;
+        capturedSelects.length = 0;
+        // Full RESET (not just clear): rejection tests abort mid-claim, leaving queued
+        // mockResolvedValueOnce entries that clearAllMocks would carry into the next test.
+        mockSelectLimit.mockReset();
+        mockSelectLimit.mockResolvedValue([]);
+        mockListResult.mockResolvedValue([]);
+    });
+
+    /** Stage the 3 selects a claim performs: pending row → getStoreByDomain → workspace. */
+    const stagePendingRow = () => {
+        const accessEnc = encrypt('salla_access_abc');
+        mockSelectLimit
+            .mockResolvedValueOnce([{
+                id: 'pending-own', platform: 'salla', storeDomain: 'demo.salla.sa',
+                accessToken: accessEnc.ciphertext, accessTokenIv: accessEnc.iv,
+                refreshToken: null, refreshTokenIv: null, tokenExpiresAt: null,
+                merchantId: '2108580704',
+                status: 'pending', expiresAt: new Date(Date.now() + 300000),
+            }])
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([{ workspaceId: 'ws-1' }]);
+    };
+
+    it('receives the DECRYPTED access token and the claim proceeds when it returns true', async () => {
+        stagePendingRow();
+        const verifier = vi.fn().mockResolvedValue(true);
+
+        const store = await claimPendingInstall('pending-own', 'user-123', 'salla', undefined, undefined, verifier);
+
+        expect(verifier).toHaveBeenCalledWith('salla_access_abc');
+        expect(store).toBeTruthy();
+        expect(findInsert(ecommerceStores)).toBeDefined();
+        expect(mockUpdateWhere).toHaveBeenCalled(); // pending row marked claimed
+    });
+
+    it('throws ClaimOwnershipError and writes NOTHING when the verifier returns false', async () => {
+        stagePendingRow();
+        const verifier = vi.fn().mockResolvedValue(false);
+
+        await expect(
+            claimPendingInstall('pending-own', 'user-123', 'salla', undefined, undefined, verifier),
+        ).rejects.toBeInstanceOf(ClaimOwnershipError);
+
+        // The pending row stays pending and no store row was created — the merchant
+        // can retry from the right account without re-installing.
+        expect(findInsert(ecommerceStores)).toBeUndefined();
+        expect(mockUpdateWhere).not.toHaveBeenCalled();
+    });
+
+    it('claimPendingInstallByMerchantId enforces the same gate', async () => {
+        stagePendingRow();
+        const verifier = vi.fn().mockResolvedValue(false);
+
+        await expect(
+            claimPendingInstallByMerchantId('2108580704', 'user-123', 'salla', undefined, undefined, verifier),
+        ).rejects.toBeInstanceOf(ClaimOwnershipError);
+        expect(findInsert(ecommerceStores)).toBeUndefined();
+        expect(mockUpdateWhere).not.toHaveBeenCalled();
+    });
+
+    it('propagates a verifier exception without writing (verification unavailable ≠ mismatch)', async () => {
+        stagePendingRow();
+        const verifier = vi.fn().mockRejectedValue(new Error('salla api down'));
+
+        await expect(
+            claimPendingInstall('pending-own', 'user-123', 'salla', undefined, undefined, verifier),
+        ).rejects.toThrow('salla api down');
+        expect(findInsert(ecommerceStores)).toBeUndefined();
+        expect(mockUpdateWhere).not.toHaveBeenCalled();
+    });
+
+    it('claims WITHOUT a verifier keep working (cookie/OAuth flow — ownership proven upstream)', async () => {
+        stagePendingRow();
+        const store = await claimPendingInstall('pending-own', 'user-123', 'salla');
+        expect(store).toBeTruthy();
+        expect(findInsert(ecommerceStores)).toBeDefined();
     });
 });

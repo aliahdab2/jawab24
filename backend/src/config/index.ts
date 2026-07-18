@@ -219,11 +219,17 @@ export const config = {
         webhookSecret: process.env.SALLA_WEBHOOK_SECRET || '',
         scopes: 'offline_access products.read_write settings.read webhooks.read_write orders.read_write',
         // Easy Mode post-install claim endpoints (GET /salla/store/pending, POST /salla/store/claim).
-        // OFF by default: until the merchant-id ownership binding is hardened against Salla's
-        // verified post-install redirect (live round-trip), these would let any logged-in user
-        // claim a known merchant's pending install. Flip to true ONLY after that hardening +
-        // switching the published app to Easy Mode in the Salla Partners portal.
+        // OFF by default. Ownership binding = owner-email match (live 2026-07-18 dry-run proved
+        // the OAuth authorize redirect is DEAD for Easy-Mode apps — redirect URIs unregistered):
+        // at claim time the store's registered email (fetched live with the webhook-pushed token)
+        // must equal the logged-in user's email. Flip to true only when the published app is
+        // switched to Easy Mode in the Salla Partners portal (submission day).
         easyModeClaimEnabled: process.env.SALLA_EASY_MODE_CLAIM_ENABLED === 'true',
+        // Public Salla App Store listing URL (known after approval). When set AND the Easy-Mode
+        // claim flag is on, the merchant-facing "Connect Salla" action redirects here instead of
+        // the OAuth authorize URL — which Salla 404s for Easy-Mode apps (no registered
+        // redirect_uri), so the OAuth connect flow must not be offered for the published app.
+        appStoreUrl: process.env.SALLA_APP_STORE_URL || '',
         // Easy Mode delivers tokens via the app.store.authorize webhook (server-to-server)
         // and RE-fires it to push refreshed tokens. When true, the proactive 6h pull-refresh
         // skips Easy-Mode stores so our OAuth refresh-token grant doesn't race Salla's push

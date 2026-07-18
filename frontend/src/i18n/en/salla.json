@@ -70,6 +70,8 @@
     "goToIntegrations": "Go to integrations",
     "missingMerchant": "Open this page from the Salla App Store after installing Jawab24.",
     "error": "Something went wrong connecting your store. Please try again.",
+    "emailMismatch": "This store is registered to a different email. Sign in to Jawab24 with the account that uses your Salla store's email, then try again.",
+    "verifyUnavailable": "We couldn't verify store ownership with Salla. Open your Salla dashboard, choose “Reauthorize App” for Jawab24, then try again.",
     "retry": "Try again"
   }
 }
