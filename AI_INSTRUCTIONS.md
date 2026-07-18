@@ -376,7 +376,7 @@ npm run translation:validate             # Check i18n files (from frontend/)
 > the wrong database. Plain `npm run test:integration` is the CI variant and trusts the
 > ambient `DATABASE_URL`.
 
-For Shopify integration tests, AI eval, mobile builds, and Android releases — see the `/shopify-dev`, `/eval`, `/build-mobile`, and `/release-android` skills.
+For Shopify integration tests, AI eval, mobile builds, Android releases, and in-browser QA loops (console/network/RTL/i18n checks via Chrome DevTools MCP) — see the `/shopify-dev`, `/eval`, `/build-mobile`, `/release-android`, and `/qa` skills.
 
 ### Releasing a new Android version
 
