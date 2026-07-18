@@ -353,20 +353,22 @@ describe('PostsService', () => {
     describe('ensureContent', () => {
         const page = { id: 'page-1', facebookPageId: 'fb1', instagramAccountId: 'ig1', accessToken: 'tok' };
 
-        it('routes facebook through findOrCreateFromWebhook and returns trigger fields', async () => {
-            vi.mocked(db.select).mockReturnValue(mockSelectChain([{ ...samplePost, triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword' }]) as any);
+        it('routes facebook through findOrCreateFromWebhook and returns trigger fields incl. image URL', async () => {
+            // Regression: the picker flow (ensureContent) must return triggerImageUrl so the
+            // edit modal reopens with the saved image (was dropped → looked "not saved").
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([{ ...samplePost, triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerImageUrl: 'https://cdn/x.jpg' }]) as any);
 
             const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
 
-            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword' });
+            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerImageUrl: 'https://cdn/x.jpg' });
         });
 
-        it('routes instagram through findOrCreateInstagramMedia', async () => {
+        it('routes instagram through findOrCreateInstagramMedia (image URL null when absent)', async () => {
             vi.mocked(db.select).mockReturnValue(mockSelectChain([{ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all' }]) as any);
 
             const result = await postsService.ensureContent(page, 'instagram', 'ig-media-1');
 
-            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all' });
+            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all', triggerImageUrl: null });
         });
     });
 
