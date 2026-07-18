@@ -27,6 +27,10 @@ export default function SallaOnboarding() {
   const t = useTranslations('salla');
   const tc = useTranslations('common');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  // Don't act on isAuthenticated until the persisted store has rehydrated — on a cold load
+  // (refresh / deep-link) it reads false first, which would bounce a logged-in merchant to
+  // /login. Wait for _hasHydrated, matching DashboardLayout (AI_INSTRUCTIONS §12).
+  const _hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [step, setStep] = useState(0);
   const [store, setStore] = useState<EcommerceStore | null>(null);
   const [storeLoading, setStoreLoading] = useState(true);
@@ -40,10 +44,11 @@ export default function SallaOnboarding() {
   const [linking, setLinking] = useState(false);
 
   useEffect(() => {
+    if (!_hasHydrated) return;
     if (!isAuthenticated) {
       router.replace('/login');
     }
-  }, [isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, router]);
 
   // Fetch store info when moving past welcome
   useEffect(() => {

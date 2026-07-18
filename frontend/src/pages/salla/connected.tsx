@@ -26,6 +26,11 @@ export default function SallaConnected() {
   const router = useRouter();
   const t = useTranslations('salla');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  // Salla loads this page (the Easy-Mode App URL) as a fresh full-page navigation, so the
+  // persisted auth store hasn't rehydrated on first paint — isAuthenticated reads false
+  // transiently. Wait for _hasHydrated before deciding, or a logged-in merchant flashes
+  // the "you need to log in" screen. (Same rule as DashboardLayout — AI_INSTRUCTIONS §12.)
+  const _hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [phase, setPhase] = useState<Phase>('checking');
   const [merchantId, setMerchantId] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string | null>(null);
@@ -61,7 +66,7 @@ export default function SallaConnected() {
   }, []);
 
   useEffect(() => {
-    if (!router.isReady) return;
+    if (!router.isReady || !_hasHydrated) return; // keep the 'checking' spinner until auth rehydrates
     if (!isAuthenticated) {
       setPhase('needLogin');
       return;
@@ -71,7 +76,7 @@ export default function SallaConnected() {
       return;
     }
     findPending(merchantId);
-  }, [router.isReady, isAuthenticated, merchantId, findPending]);
+  }, [router.isReady, _hasHydrated, isAuthenticated, merchantId, findPending]);
 
   const handleClaim = useCallback(async () => {
     if (!merchantId) return;
