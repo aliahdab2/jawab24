@@ -9,6 +9,7 @@ import { settingsService } from '../services/settings';
 vi.mock('../services/facebook', () => ({
     facebookService: {
         verifyAccessToken: vi.fn(),
+        getAccessToken: vi.fn(),
         getLongLivedToken: vi.fn(),
         getUserProfile: vi.fn(),
     }
@@ -268,5 +269,70 @@ describe('AuthController - refreshPicture', () => {
 
         expect(mockReply.status).toHaveBeenCalledWith(500);
         expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ error: 'Internal Server Error' }));
+    });
+});
+
+describe('AuthController - linkFacebook demo guard', () => {
+    // Prod incident 2026-07-18: a merchant ran the link flow from inside a demo
+    // session; linkFacebookToUser overwrote the SHARED demo user row with their
+    // real identity, orphaning every demo page and 500ing demo login for everyone.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockRequest: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockReply: any;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockRequest = {
+            user: { userId: 'user-1' },
+            body: { code: 'fb-oauth-code', redirectUri: 'https://jawab24.com/ar/auth/callback' },
+            log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        };
+        mockReply = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn().mockReturnThis(),
+        };
+    });
+
+    it('refuses to link Facebook to a demo account (DEMO_LINK_FORBIDDEN), before any FB call', async () => {
+        vi.mocked(authService.getUserById).mockResolvedValue({
+            id: 'user-1', facebookId: 'demo_user_jawab24', name: 'Demo',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+
+        await authController.linkFacebook(mockRequest, mockReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(403);
+        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'DEMO_LINK_FORBIDDEN' }));
+        expect(facebookService.getAccessToken).not.toHaveBeenCalled();
+    });
+
+    it('refuses to link a phone to a demo account (DEMO_LINK_FORBIDDEN), before OTP verification', async () => {
+        vi.mocked(authService.getUserById).mockResolvedValue({
+            id: 'user-1', facebookId: 'demo_user_jawab24', name: 'Demo',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+        mockRequest.body = { phone: '+218912345678', code: '123456' };
+
+        await authController.linkPhone(mockRequest, mockReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(403);
+        expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'DEMO_LINK_FORBIDDEN' }));
+    });
+
+    it('proceeds past the guard for a real (non-demo) user', async () => {
+        vi.mocked(authService.getUserById).mockResolvedValue({
+            id: 'user-1', facebookId: '1234567890', name: 'Real User',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+        // Fail at the FB exchange with a user-side error so the flow stops in the
+        // 400 branch — proves the guard let a real user through.
+        vi.mocked(facebookService.getAccessToken).mockRejectedValue(new Error('Facebook API error: bad code'));
+
+        await authController.linkFacebook(mockRequest, mockReply);
+
+        expect(facebookService.getAccessToken).toHaveBeenCalledWith('fb-oauth-code', 'https://jawab24.com/ar/auth/callback');
+        expect(mockReply.status).toHaveBeenCalledWith(400);
+        expect(mockReply.send).not.toHaveBeenCalledWith(expect.objectContaining({ code: 'DEMO_LINK_FORBIDDEN' }));
     });
 });

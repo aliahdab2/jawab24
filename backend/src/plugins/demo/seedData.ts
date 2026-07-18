@@ -1,6 +1,6 @@
 import { db } from '../../db';
 import { pages, posts, comments, settings, notifications, messages, ecommerceStores, ecommerceProducts, catalogItems } from '../../db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, ne, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { DAMASCUS_DEMO_KB } from './damascusKb';
@@ -1295,13 +1295,24 @@ export async function seedDemoData(
     logger.info('[DemoData] Starting demo data seed', { userId, locale });
     const DEMO_SETTINGS = buildDemoSettings(locale);
 
+    const demoPageIds = DEMO_PAGES.map(p => p.facebookPageId);
+
+    // Self-heal: delete demo pages stranded under ANOTHER user. facebook_page_id is
+    // globally unique, so a stranded page makes the fresh-seed insert below throw
+    // 23505 on EVERY demo login until reclaimed (prod incident 2026-07-18: a real
+    // merchant linked Facebook from inside a demo session, converting the shared
+    // demo user row into their account and orphaning all demo pages under it).
+    // Deleting (not reassigning) is correct: demo pages are regenerable fixtures,
+    // and their children (comments/messages/posts) cascade — reassigning would
+    // strand child rows' workspace_id in the other user's workspace.
+    await db.delete(pages)
+        .where(and(inArray(pages.facebookPageId, demoPageIds), ne(pages.userId, userId)));
+
     // Check if demo pages already exist for this user
     const existingPages = await db
         .select()
         .from(pages)
         .where(eq(pages.userId, userId));
-
-    const demoPageIds = DEMO_PAGES.map(p => p.facebookPageId);
     const hasExistingDemoPages = existingPages.some(p => p.facebookPageId && demoPageIds.includes(p.facebookPageId));
 
     if (hasExistingDemoPages) {

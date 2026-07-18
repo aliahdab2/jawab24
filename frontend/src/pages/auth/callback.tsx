@@ -271,9 +271,11 @@ export default function AuthCallback() {
       const isFbOauthFailed = backendCode === 'FACEBOOK_OAUTH_FAILED';
       // Backend rate limiter said no — show a translated message, not the raw English body
       const isRateLimited = backendCode === 'RATE_LIMIT_EXCEEDED';
+      // Demo sessions can't link Facebook (would hijack the shared demo account) — user-actionable
+      const isDemoLinkForbidden = backendCode === 'DEMO_LINK_FORBIDDEN';
 
-      // Network blips, timeouts, expired/invalid sessions, and FB OAuth errors are not actionable — skip Sentry to avoid noise
-      if (!isNetworkError && !isTimeout && !isAuthExpired && !isFbOauthFailed) {
+      // Network blips, timeouts, expired/invalid sessions, FB OAuth errors, and demo-link refusals are not actionable — skip Sentry to avoid noise
+      if (!isNetworkError && !isTimeout && !isAuthExpired && !isFbOauthFailed && !isDemoLinkForbidden) {
         captureError(err, 'Auth callback error', { tags: { page: 'auth-callback' } });
       }
 
@@ -282,6 +284,8 @@ export default function AuthCallback() {
         errorMessage = tErrors('networkError');
       } else if (isRateLimited) {
         errorMessage = tErrors('tooManyRequests');
+      } else if (isDemoLinkForbidden) {
+        errorMessage = t('demoLinkForbidden');
       } else if (isTimeout) {
         errorMessage = err instanceof Error ? err.message : t('loginTimeout');
       } else if (err instanceof Error && err.message) {

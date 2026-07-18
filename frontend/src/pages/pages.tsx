@@ -38,6 +38,8 @@ import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { isWhatsAppVisible } from '@/lib/featureFlags';
 import { captureError } from '@/lib/sentryHelpers';
 import { useWorkspaceRole, useSaveKnowledgeBase, useSubscriptionUsage, useOpenOnQueryParam } from '@/hooks';
+import { useIsDemoUser } from '@/features/demo';
+import { authManager } from '@/lib/authManager';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -60,6 +62,7 @@ const PagesPage: NextPageWithLayout = () => {
   // this so no non-founder can reach the Meta signup during the canary window.
   const whatsappVisible = isWhatsAppVisible(user?.isAdmin ?? false);
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
+  const isDemoUser = useIsDemoUser();
   const { canEdit, isOwner } = useWorkspaceRole();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
@@ -221,6 +224,17 @@ const PagesPage: NextPageWithLayout = () => {
   handleSyncRef.current = handleSync;
 
   const handleReconnectFacebook = useCallback(async () => {
+    // A demo session must never run the link-Facebook OAuth: the backend refuses it
+    // (DEMO_LINK_FORBIDDEN) because linking would overwrite the SHARED demo user row
+    // — a real merchant did exactly that in prod (2026-07-18), hijacking the demo
+    // account and breaking demo login for everyone. Exit demo and let them sign in
+    // with Facebook for real (authManager.logout redirects to /login).
+    if (isDemoUser) {
+      toast.info(t('demoConnectRedirect'));
+      await authManager.logout({ reason: 'demo-connect-facebook' });
+      return;
+    }
+
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
     if (!fbAppId) {
       toast.error(t('reconnectFailed'));
@@ -253,7 +267,7 @@ const PagesPage: NextPageWithLayout = () => {
       captureError(error, 'Reconnect failed', { tags: { page: 'pages', action: 'reconnect' } });
       toast.error(t('reconnectFailed'));
     }
-  }, [language, t]);
+  }, [language, t, isDemoUser]);
 
   useEffect(() => {
     if (!loading && pages.length === 0 && fbToken && isAuthenticated && isOwner && !syncing && !syncAttemptedRef.current) {

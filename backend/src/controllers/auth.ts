@@ -17,6 +17,7 @@ import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
 import { SmsCountryUnsupportedError } from '../services/sms';
 import { isValidPhone, isValidEmail, normalizeArabic, isSafeRedirectPath } from '@jawab24/shared';
+import { isDemoFacebookId } from '../utils/demo';
 
 function replyOtpError(result: Exclude<OtpVerifyResult, 'valid'>, reply: FastifyReply) {
     if (result === 'expired') {
@@ -26,6 +27,27 @@ function replyOtpError(result: Exclude<OtpVerifyResult, 'valid'>, reply: Fastify
         return reply.status(429).send({ error: 'too_many_attempts', message: 'Too many attempts, please request a new code' });
     }
     return reply.status(400).send({ error: 'invalid_code', message: 'Incorrect code' });
+}
+
+/** Whether the authenticated user is the shared demo account (see utils/demo.ts). */
+async function isDemoSession(userId: string): Promise<boolean> {
+    const currentUser = await authService.getUserById(userId);
+    return isDemoFacebookId(currentUser?.facebookId);
+}
+
+/**
+ * Refuse identity-linking (Facebook, phone) from a demo session — linking mutates
+ * the SHARED demo user row, hijacking it for everyone (prod incident 2026-07-18).
+ * The log line doubles as a funnel signal: a demo visitor tried to connect a real
+ * identity, i.e. a hot lead the frontend now redirects to the login page.
+ */
+function rejectDemoLink(request: AuthenticatedRequest, reply: FastifyReply, kind: 'facebook' | 'phone') {
+    request.log.warn({ kind }, 'Demo session attempted identity link — refused');
+    return reply.status(403).send({
+        error: true,
+        message: 'Identity cannot be linked to the demo account. Sign in from the login page to create your own account.',
+        code: 'DEMO_LINK_FORBIDDEN',
+    });
 }
 
 export class AuthController {
@@ -687,6 +709,16 @@ export class AuthController {
             return reply.status(400).send({ error: 'code is required' });
         }
 
+        // A demo session must never link a real Facebook account: linking OVERWRITES
+        // the shared demo user row (facebook_id, email, name), converting it into the
+        // linker's account and orphaning every demo page under it — after which demo
+        // seeding 500s for all visitors (prod incident 2026-07-18). Real accounts are
+        // created via /auth/facebook from the login page; the frontend redirects demo
+        // users there instead of starting this flow.
+        if (await isDemoSession(userId)) {
+            return rejectDemoLink(request, reply, 'facebook');
+        }
+
         try {
             // 1. Exchange code for access token
             const accessToken = await facebookService.getAccessToken(code, redirectUri);
@@ -768,6 +800,13 @@ export class AuthController {
         }
         if (!normalizedCode || !/^\d{6}$/.test(normalizedCode)) {
             return reply.status(400).send({ error: 'invalid_request', message: 'phone and code are required' });
+        }
+
+        // Same hijack class as linkFacebook: linking a phone to the SHARED demo user
+        // would route that phone's future OTP logins into the demo account (and steal
+        // the phone from its previous holder via the reassignment below).
+        if (await isDemoSession(userId)) {
+            return rejectDemoLink(request, reply, 'phone');
         }
 
         try {

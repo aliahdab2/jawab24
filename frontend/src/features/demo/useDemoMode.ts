@@ -80,7 +80,9 @@ export function useDemoMode() {
 }
 
 /**
- * Check if current user is in demo mode
+ * Check if current user is in demo mode.
+ * Mirrors the backend's `isDemoFacebookId` (backend/src/utils/demo.ts) — the
+ * `demo_` facebook_id prefix convention must stay in sync on both sides.
  */
 export function useIsDemoUser(): boolean {
   const user = useAuthStore((state) => state.user);

@@ -94,6 +94,7 @@
   "reconnectRequired": "Reconnect Required",
   "reconnectDescription": "Access to this page was revoked in Facebook. Reconnect to resume auto-replies.",
   "reconnectFailed": "Reconnect failed. Please try again.",
+  "demoConnectRedirect": "To connect your Facebook pages, sign in with your Facebook account.",
   "reconnectSuccess": "Page reconnected successfully!",
   "reconnectDialogTitle": "Reconnect Page",
   "reconnectDialogBody": "You'll be redirected to Facebook to re-authorize access to this page. To change pages, click \"Edit previous settings\" on the Facebook screen. After granting permissions, auto-replies will resume automatically.",

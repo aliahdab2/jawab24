@@ -40,8 +40,15 @@ vi.mock('../../src/config', () => ({
     config: { phoneAuthEnabled: true, vonage: { apiKey: '', apiSecret: '', senderId: '' } },
 }));
 
-// Stub all other heavy deps so AuthController imports cleanly
-vi.mock('../../src/services/auth', () => ({ authService: {}, ACCESS_TOKEN_EXPIRY: 900 }));
+// Stub all other heavy deps so AuthController imports cleanly.
+// getUserById feeds the demo-session guard — return a real (non-demo) user so
+// existing linkPhone tests exercise the post-guard flow.
+vi.mock('../../src/services/auth', () => ({
+    authService: {
+        getUserById: vi.fn().mockResolvedValue({ id: 'user-1', facebookId: '1234567890' }),
+    },
+    ACCESS_TOKEN_EXPIRY: 900,
+}));
 vi.mock('../../src/services/cookies', () => ({ cookiesService: {} }));
 vi.mock('../../src/services/refreshToken', () => ({ refreshTokenService: {} }));
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
