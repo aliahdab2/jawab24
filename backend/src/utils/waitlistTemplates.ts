@@ -11,8 +11,22 @@
 import type { WaitlistEmailTemplate } from '@jawab24/shared';
 import { WAITLIST_LAUNCH_AR_HTML } from '../templates/waitlistLaunchAr';
 import { WAITLIST_LAUNCH_EN_HTML } from '../templates/waitlistLaunchEn';
+import { POST_REPLY_UPDATE_AR_HTML } from '../templates/postReplyUpdateAr';
+import { POST_REPLY_UPDATE_EN_HTML } from '../templates/postReplyUpdateEn';
 
 export const WAITLIST_TEMPLATES: WaitlistEmailTemplate[] = [
+    {
+        id: 'post-reply-update-2026-07',
+        name: 'Post Reply update (custom HTML — any-comment + image; language per recipient)',
+        subjectEn: 'What’s new in Jawab24: Post Reply update — reply to every comment, add an image',
+        subjectAr: 'جديد في جواب24: تحديث «رد البوست» — رد على كل تعليق، وأضف صورة',
+        // Plain fallbacks — used only if a recipient's language can't be resolved
+        // AND the resolved-language htmlBody is somehow missing.
+        bodyEn: 'New in Post Reply: reply to everyone who comments (Any-comment mode) and attach an image to your reply. Try it: https://jawab24.com/en/comments',
+        bodyAr: 'جديد في رد البوست: رد تلقائي على كل من يعلّق (وضع «أي تعليق»)، وإمكانية إرفاق صورة مع ردّك. جرّبها: https://jawab24.com/ar/comments',
+        htmlBodyAr: POST_REPLY_UPDATE_AR_HTML,
+        htmlBodyEn: POST_REPLY_UPDATE_EN_HTML,
+    },
     {
         id: 'waitlist-launch',
         name: 'Waitlist launch (custom HTML — sent as-is, language per recipient)',
