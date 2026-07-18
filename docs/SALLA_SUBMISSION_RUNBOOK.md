@@ -29,18 +29,15 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
       international (non-KSA) bank with SWIFT/IBAN, holder name matching passport in English.
       Portal → dropdown by your name → Account Settings → Verify My Account.
       Start immediately: review time unknown, longest lead item.
-- [ ] **Send the publish-timing email to Salla support** (`SALLA_LAUNCH_ACTIONS.md` §1, AR
-      draft ready; Partners portal support channel). **Owner decision 2026-07-18: target
-      approval-in-hand WITHOUT public launch.** Salla's answer picks the path:
-      - **Hold possible** → submit as soon as Phase 0 clears (approval banked; publish
-        manually when ready).
-      - **Auto-publish on approval** (the current assumption — portal shows no hold
-        control) → submission itself is the launch decision: submit when comfortable
-        being listed, knowing an unpromoted listing gets near-zero traffic (soft launch),
-        and that pulling a live app back requires a booked Salla meeting.
-      Either way the Phase 1 preconditions (WhatsApp canary, env flips incl. the claim
-      flag ON) bind to **submission/review time**, not to the marketing push — reviewers
-      see the listing's claims, and installs must be claimable the moment it's visible.
+- [x] **Publish-timing strategy SETTLED (owner, 2026-07-18): no support email — accept
+      auto-publish on approval.** Target is approval-in-hand without a *marketing* launch:
+      submission = willingness to be listed; an unpromoted listing gets near-zero traffic
+      (soft launch), and the public push stays a separate, later decision. Remember pulling
+      a live app back is NOT self-serve (booked Salla meeting once merchants subscribe).
+      The Phase 1 preconditions (WhatsApp canary, env flips incl. the claim flag ON) bind
+      to **submission/review time**, not to the marketing push — reviewers see the
+      listing's claims, and installs must be claimable the moment it's visible.
+      (The §1 email draft in `SALLA_LAUNCH_ACTIONS.md` stays available if ever needed.)
 - [x] **Easy-Mode dry-run on Jawab24-Dev DONE 2026-07-18** (founder via browser extension +
       local ngrok harness). Outcomes (recorded in **D-031**):
       1. **Authorize redirect is DEAD in Easy Mode** — Salla drops the registered redirect
@@ -65,6 +62,9 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
       exactly **3 App Gallery images @ 1366×768**, exactly **3 Key Benefits images @ 1600×1600**
       (each with title + description), **icon 512×512** PNG/JPEG ≤1MB (symbol-only, margin),
       optional **YouTube link ≤2 min**. Include a WhatsApp screenshot — the copy claims it.
+      **Usable drafts EXIST at `docs/store-listing/salla/`** (real AR app UI, verified specs,
+      AR/EN benefit copy in `benefits.md`) — founder review pending; a designer pass is
+      optional polish, not a blocker.
 - [ ] **Support inbox live** + auto-responder pasted (`SALLA_LAUNCH_ACTIONS.md` §2;
       `jawab24.com/help` already live and linked).
 - [ ] **CI green / deploys unblocked**: repo secrets `STRIPE_TEST_PUBLISHABLE_KEY` +
