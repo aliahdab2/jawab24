@@ -7,7 +7,8 @@ import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { imageStorage } from './imageStorage';
 import { config } from '../config';
-import type { PublishedPost } from '@jawab24/shared';
+import { captureError } from '../utils/sentryHelpers';
+import { POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE, type PublishedPost } from '@jawab24/shared';
 
 /** How the caller wants the Post Reply image handled on this save. */
 export type TriggerImageInput =
@@ -18,7 +19,8 @@ export type TriggerImageInput =
 export type UpdateTriggerResult =
     | { ok: true }
     | { ok: false; reason: 'not_found' }
-    | { ok: false; reason: 'quota_exceeded' };
+    | { ok: false; reason: 'quota_exceeded' }
+    | { ok: false; reason: 'reply_too_long_with_image' };
 
 /** File extension for a validated image MIME (allowlist mirrors the validator). */
 function extForMime(mime: string): string {
@@ -234,6 +236,14 @@ export class PostsService {
         const clearing = !triggerReply;
         const effectiveAction = clearing ? 'remove' : image.action;
 
+        // Authoritative 160-char cap: enforce it on the EFFECTIVE image state, not the
+        // request body. A "keep" on a row that already has an image still delivers a
+        // card, so the cap applies — the controller's body-only check can't see that.
+        const willHaveImage = effectiveAction === 'set' || (effectiveAction === 'keep' && !!owned.imageKey);
+        if (willHaveImage && triggerReply && triggerReply.length > POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE) {
+            return { ok: false, reason: 'reply_too_long_with_image' };
+        }
+
         // Columns to write for the image. `undefined` here means "leave as-is" (keep).
         let imageColumns: { triggerImageUrl: string | null; triggerImageKey: string | null; triggerImageBytes: number | null } | undefined;
         let keyToDeleteAfterCommit: string | null = null;
@@ -248,9 +258,20 @@ export class PostsService {
                 return { ok: false, reason: 'quota_exceeded' };
             }
             // Upload the NEW object FIRST, so a failed upload aborts the save with the
-            // old image still intact (never a missing live image).
+            // old image still intact (never a missing live image). Capture the failure
+            // with context — otherwise an S3/R2 outage is an opaque 500.
             const key = `trigger-images/${workspaceId}/${randomUUID()}.${extForMime(image.mimeType)}`;
-            const stored = await imageStorage.put(key, image.buffer, image.mimeType);
+            let stored;
+            try {
+                stored = await imageStorage.put(key, image.buffer, image.mimeType);
+            } catch (err) {
+                captureError(err, 'Post Reply image upload failed', {
+                    fingerprint: ['image-storage-put-failed'],
+                    tags: { component: 'imageStorage', source },
+                    extra: { workspaceId, contentId, bytes: newBytes },
+                });
+                throw err;
+            }
             imageColumns = { triggerImageUrl: stored.url, triggerImageKey: stored.key, triggerImageBytes: newBytes };
             // Old object (if any, and different) is swept only AFTER the DB commit.
             if (owned.imageKey && owned.imageKey !== stored.key) keyToDeleteAfterCommit = owned.imageKey;

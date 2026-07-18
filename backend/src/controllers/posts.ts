@@ -274,6 +274,9 @@ export class PostsController {
             // Decode + validate the image (allowlist, size, magic-byte match) before upload.
             let imageIntent: TriggerImageInput = triggerImage === null ? { action: 'remove' } : { action: 'keep' };
             if (triggerImage) {
+                if (typeof triggerImage.base64 !== 'string' || triggerImage.base64.length === 0) {
+                    return reply.status(400).send({ error: 'Invalid image data' });
+                }
                 if (!POST_REPLY_IMAGE_MIME_TYPES.includes(triggerImage.mimeType as typeof POST_REPLY_IMAGE_MIME_TYPES[number])) {
                     return reply.status(400).send({ error: 'Unsupported image type. Use JPG, PNG, or WEBP' });
                 }
@@ -298,6 +301,9 @@ export class PostsController {
             if (!result.ok) {
                 if (result.reason === 'quota_exceeded') {
                     return reply.status(413).send({ error: 'image_quota_exceeded', message: 'Image storage limit reached for this workspace' });
+                }
+                if (result.reason === 'reply_too_long_with_image') {
+                    return reply.status(400).send({ error: 'reply_too_long_with_image', message: 'With an image attached, the reply must be 160 characters or fewer' });
                 }
                 return reply.status(404).send({ error: 'Post not found' });
             }

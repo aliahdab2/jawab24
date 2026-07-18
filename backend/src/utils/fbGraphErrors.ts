@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { captureError } from './sentryHelpers';
 
 /**
  * Classification of why a DM send failed. Drives fallback behavior in sender.ts
@@ -497,6 +498,15 @@ export async function sendCardWithTextFallback<T>(
         return await sendCard();
     } catch (cardError) {
         if (classifyDmError(cardError, platform).bucket === 'transient') throw cardError;
+        // Non-transient: the image is dropped but the text still lands. Surface it as a
+        // warning so the drop rate is OBSERVABLE — otherwise the merchant believes the
+        // image was delivered and we'd never see the failure. Grouped by fingerprint so
+        // an at-scale rejection (e.g. Meta refusing the card shape) shows as one issue.
+        captureError(cardError, 'Post Reply image card rejected; fell back to text DM', {
+            level: 'warning',
+            fingerprint: ['post-reply-image-card-dropped'],
+            tags: { component: 'postReplyImage', platform },
+        });
         return sendText();
     }
 }

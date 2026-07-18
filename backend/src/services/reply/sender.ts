@@ -99,7 +99,9 @@ export class ReplySender {
                         () => facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText),
                     );
                     dmRecipientId = dm.recipientId;
-                    this.logger.info('[Sender] Private image-card reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId });
+                    // Neutral wording: the card MAY have fallen back to text (the drop is
+                    // captured inside sendCardWithTextFallback) — don't claim "card sent".
+                    this.logger.info('[Sender] Private reply sent (image)', { facebookCommentId, replyMode, recipientId: dmRecipientId });
                 } else {
                     const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
                     dmRecipientId = dm.recipientId;
