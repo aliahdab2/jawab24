@@ -456,7 +456,7 @@ export default function AdminWaitlistPage() {
                                         <th scope="col" className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('waitlist.tableFeature')}
                                         </th>
-                                        <th scope="col" className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <th scope="col" className="hidden sm:table-cell px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('waitlist.tableSignedUp')}
                                         </th>
                                     </tr>
@@ -507,7 +507,7 @@ export default function AdminWaitlistPage() {
                                                         {getFeatureLabel(entry.feature)}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-4 text-sm text-muted-foreground">
+                                                <td className="hidden sm:table-cell px-4 py-4 text-sm text-muted-foreground">
                                                     {formatDate(entry.createdAt)}
                                                 </td>
                                             </tr>

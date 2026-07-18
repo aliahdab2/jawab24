@@ -20,6 +20,13 @@ import {
     type Plan,
 } from '@/components/admin/customer';
 
+// The customer id is carried in the query string (`?userId=…`), NOT a path
+// segment. A dynamic path route (`[userId]`) cannot be statically exported for
+// arbitrary runtime ids: under `output: 'export'` (the mobile Capacitor build)
+// `getStaticPaths` with an empty `paths` + `fallback: 'blocking'` emits no HTML
+// file, so client navigation 404s the page-data fetch and hard-navigates to the
+// SPA root ("back to the main page"). A static route + query param exports a
+// real `detail.html` that works identically on web and in the WebView.
 export default function AdminCustomerDetailPage() {
     const router = useRouter();
     const { userId } = router.query;
@@ -59,9 +66,16 @@ export default function AdminCustomerDetailPage() {
         }
     }, [userId]);
 
-    // Load customer data
+    // Load customer data. Wait for the router to hydrate the query on the
+    // client (`router.isReady`) before deciding the id is missing — on a static
+    // export the first render has an empty query.
     useEffect(() => {
-        if (!userId || typeof userId !== 'string') return;
+        if (!router.isReady) return;
+        if (!userId || typeof userId !== 'string') {
+            setLoading(false);
+            setError('Customer not found');
+            return;
+        }
 
         const loadData = async () => {
             setLoading(true);
@@ -90,7 +104,7 @@ export default function AdminCustomerDetailPage() {
         };
 
         loadData();
-    }, [userId]);
+    }, [router.isReady, userId]);
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return '-';
@@ -204,7 +218,3 @@ export default function AdminCustomerDetailPage() {
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
 export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.adminCustomerDetail]);
-
-export async function getStaticPaths() {
-  return { paths: [], fallback: 'blocking' };
-}

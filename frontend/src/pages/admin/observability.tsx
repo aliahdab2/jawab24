@@ -539,7 +539,7 @@ export default function AdminObservabilityPage() {
                   {/* Service Status */}
                   <Card className="p-4">
                     <h3 className="text-sm font-semibold text-foreground mb-3">{t('observability.serviceStatus')}</h3>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div className="flex items-center gap-3">
                         <Database className="w-4 h-4 text-icon-muted" aria-hidden="true" />
                         <div>

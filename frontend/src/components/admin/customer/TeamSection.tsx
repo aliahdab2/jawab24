@@ -50,7 +50,7 @@ export function TeamSection({ customer, isRTL }: Props) {
                                             {t('customer.membershipMemberOf', { owner: ws.ownerName || ws.ownerEmail || '—' })}
                                         </p>
                                         <Link
-                                            href={`/admin/customers/${ws.ownerId}`}
+                                            href={`/admin/customers/detail?userId=${ws.ownerId}`}
                                             className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 hover:underline mt-1"
                                         >
                                             {t('customer.membershipViewOwner')}

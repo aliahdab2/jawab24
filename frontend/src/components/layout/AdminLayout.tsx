@@ -73,26 +73,29 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                 {/* Admin Header */}
                 <header className="sticky top-0 z-40 bg-zinc-900 text-white shadow-lg">
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div className="flex items-center justify-between h-16">
-                            {/* Left: Back + Title */}
-                            <div className="flex items-center gap-4">
+                        <div className="flex items-center justify-between gap-2 h-16">
+                            {/* Left: Back + Title — shrinks and truncates so it never
+                                pushes the nav off-screen on narrow phones. */}
+                            <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
                                 <Link
                                     href="/dashboard"
-                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors shrink-0"
                                     title={tAdmin('backToDashboard')}
                                 >
                                     <ArrowLeft className={clsx('w-5 h-5', isRTL && 'rotate-180')} />
                                 </Link>
-                                <div className="flex items-center gap-2">
-                                    <Shield className="w-5 h-5 text-brand-400" />
-                                    <span className="font-display font-bold text-lg">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Shield className="w-5 h-5 text-brand-400 shrink-0" />
+                                    <span className="font-display font-bold text-lg truncate">
                                         {tAdmin('title')}
                                     </span>
                                 </div>
                             </div>
 
-                            {/* Right: Admin Nav */}
-                            <nav className="flex items-center gap-1">
+                            {/* Right: Admin Nav — icon-only below sm; scrolls horizontally
+                                on the tightest screens so every section stays reachable
+                                without breaking the fixed-height bar. */}
+                            <nav className="flex items-center gap-1 min-w-0 overflow-x-auto">
                                 {adminNavItems.map((item) => {
                                     const isActive = router.pathname.startsWith(item.href);
                                     return (
@@ -100,7 +103,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                                             key={item.href}
                                             href={item.href}
                                             className={clsx(
-                                                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                                                'flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0',
                                                 isActive
                                                     ? 'bg-brand-600 text-white'
                                                     : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'

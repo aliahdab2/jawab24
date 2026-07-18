@@ -142,7 +142,7 @@ export default function AdminCustomersPage() {
     };
 
     const handleRowClick = (customerId: string) => {
-        router.push(`/admin/customers/${customerId}`);
+        router.push({ pathname: '/admin/customers/detail', query: { userId: customerId } });
     };
 
     return (
@@ -232,19 +232,19 @@ export default function AdminCustomersPage() {
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('customers.tableCustomer')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <th className="hidden lg:table-cell px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('customers.tablePhone')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <th className="hidden sm:table-cell px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('customers.tablePlan')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('customers.tableStatus')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <th className="hidden lg:table-cell px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('customers.tablePeriodEnd')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <th className="hidden md:table-cell px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('customers.tableSignedUp')}
                                         </th>
                                     </tr>
@@ -271,7 +271,7 @@ export default function AdminCustomersPage() {
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-4">
+                                            <td className="hidden lg:table-cell px-4 py-4">
                                                 {customer.phone ? (
                                                     <span className="text-sm text-foreground font-mono" dir="ltr">
                                                         {customer.phone}
@@ -280,7 +280,7 @@ export default function AdminCustomersPage() {
                                                     <span className="text-sm text-muted-foreground">-</span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-4">
+                                            <td className="hidden sm:table-cell px-4 py-4">
                                                 <span className="text-sm font-medium text-foreground/70">
                                                     {customer.subscription?.planName || t('customers.noPlan')}
                                                 </span>
@@ -297,10 +297,10 @@ export default function AdminCustomersPage() {
                                                     <span className="text-muted-foreground text-sm">-</span>
                                                 )}
                                             </td>
-                                            <td className="px-4 py-4 text-sm text-muted-foreground">
+                                            <td className="hidden lg:table-cell px-4 py-4 text-sm text-muted-foreground">
                                                 {formatDate(customer.subscription?.currentPeriodEnd || null)}
                                             </td>
-                                            <td className="px-4 py-4 text-sm text-muted-foreground">
+                                            <td className="hidden md:table-cell px-4 py-4 text-sm text-muted-foreground">
                                                 {formatDate(customer.createdAt)}
                                             </td>
                                         </tr>
