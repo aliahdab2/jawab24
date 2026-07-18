@@ -31,6 +31,16 @@ export function rateLimitCaptureMessage(url: string): string {
     return `429 rate-limited: ${url}`;
 }
 
+/**
+ * Message for the fingerprint-grouped capture when csrfProtection rejects a
+ * mutation (middleware/auth.ts). CSRF 403s were previously invisible — the
+ * 2026-07-18 demo-login/OTP/logout lockouts were only found via nginx access
+ * logs. Same contract as above: must not match SENTRY_IGNORE_ERRORS.
+ */
+export function csrfInvalidCaptureMessage(route: string): string {
+    return `403 CSRF rejected: ${route}`;
+}
+
 export function initSentry() {
     if (!sentryDsn) {
         if (isProduction) {

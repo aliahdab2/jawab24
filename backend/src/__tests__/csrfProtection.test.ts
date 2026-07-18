@@ -58,10 +58,12 @@ describe('csrfProtection', () => {
         reply = makeReply();
     });
 
-    describe('exempt identity-establishing routes', () => {
-        // Each of these mints identity from a body credential (OAuth code, OTP)
+    describe('exempt routes', () => {
+        // The first six mint identity from a body credential (OAuth code, OTP)
         // or from nothing (demo) — never from the session cookie. A stale token
-        // cookie without X-CSRF-Token must NOT block them.
+        // cookie without X-CSRF-Token must NOT block them. /auth/logout is the
+        // standard logout-CSRF exemption: session-destroying only, and a forged
+        // cross-site logout carries no cookie (sameSite:strict) so it's a no-op.
         const exemptRoutes = [
             '/auth/facebook',
             '/auth/facebook/native',
@@ -69,6 +71,7 @@ describe('csrfProtection', () => {
             '/auth/demo',
             '/auth/phone/request',
             '/auth/phone/verify',
+            '/auth/logout',
         ];
 
         it.each(exemptRoutes)('allows POST %s with stale token cookie and no CSRF header', async (route) => {

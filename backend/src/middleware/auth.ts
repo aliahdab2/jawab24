@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { authService } from '../services/auth';
+import { csrfInvalidCaptureMessage } from '../lib/sentry';
 
 // In-memory throttle: avoid writing last_seen_at more than once per 2 minutes per user.
 // Capped at 10,000 entries to prevent unbounded growth on long-running instances.
@@ -115,6 +116,14 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
  * `/auth/phone/link` is deliberately NOT here: it acts on the CURRENT session
  * (links a phone to the logged-in user) and rides the authenticated `api` client,
  * so it must keep CSRF (web) / Bearer-skip (app) like any other mutation.
+ *
+ * `/auth/logout` IS here on a different rationale (the standard logout-CSRF
+ * exemption): it only destroys the session. A cross-site forged logout carries
+ * no cookie at all (sameSite:strict), so it is a no-op; and the app must be able
+ * to revoke its server session even though authManager clears localStorage
+ * (dropping the Bearer) before the server call and can't read the cross-host
+ * csrfToken cookie. Blocking it left refresh tokens unrevoked (prod 2026-07-18:
+ * logout 403×3 in 48h).
  */
 const CSRF_EXEMPT_ROUTES = new Set<string>([
     '/auth/facebook',
@@ -123,6 +132,7 @@ const CSRF_EXEMPT_ROUTES = new Set<string>([
     '/auth/demo',
     '/auth/phone/request',
     '/auth/phone/verify',
+    '/auth/logout',
 ]);
 
 /**
@@ -172,6 +182,20 @@ export async function csrfProtection(request: FastifyRequest, reply: FastifyRepl
         || typeof headerToken !== 'string'
         || cookieToken.length !== headerToken.length
         || !crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken))) {
+        // CSRF 403s were invisible until 2026-07-18 (demo/OTP/logout lockouts
+        // found only via nginx logs). Group per route so a misbehaving client
+        // class surfaces as one issue; distinguish "client sent nothing" from
+        // a genuine mismatch — the former is almost always a client-wiring bug.
+        const route = request.routeOptions?.url ?? request.url;
+        Sentry.withScope((scope) => {
+            scope.setFingerprint(['csrf-invalid', route]);
+            scope.setLevel('warning');
+            scope.setTag('route', route);
+            scope.setExtra('ip', request.ip);
+            scope.setExtra('hasCsrfCookie', Boolean(cookieToken));
+            scope.setExtra('hasCsrfHeader', Boolean(headerToken));
+            Sentry.captureMessage(csrfInvalidCaptureMessage(route));
+        });
         return reply.status(403).send({
             error: true,
             message: 'Invalid CSRF token',

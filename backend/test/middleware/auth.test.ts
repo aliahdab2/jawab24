@@ -259,6 +259,8 @@ describe('CSRF Protection Middleware', () => {
     '/auth/facebook/link',
     '/auth/phone/request',
     '/auth/phone/verify',
+    '/auth/demo',
+    '/auth/logout',
   ])('should skip CSRF for the auth exchange endpoint %s even with a stale token cookie and no header', async (url) => {
     mockRequest.routeOptions = { url };
     mockRequest.cookies = { token: 'stale-session' }; // present, but no csrfToken / header
