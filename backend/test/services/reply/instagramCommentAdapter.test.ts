@@ -10,13 +10,18 @@ vi.mock('../../../src/services/pages', () => ({
 
 const mockReplyToComment = vi.fn();
 const mockSendDirectMessage = vi.fn();
-const mockSendDirectMessageCard = vi.fn();
+const mockSendMetaImageAttachment = vi.fn();
 vi.mock('../../../src/services/instagram', () => ({
     instagramService: {
         replyToComment: (...args: unknown[]) => mockReplyToComment(...args),
         sendDirectMessage: (...args: unknown[]) => mockSendDirectMessage(...args),
-        sendDirectMessageCard: (...args: unknown[]) => mockSendDirectMessageCard(...args),
     },
+}));
+vi.mock('../../../src/services/metaMessaging', () => ({
+    sendMetaImageAttachment: (...args: unknown[]) => mockSendMetaImageAttachment(...args),
+}));
+vi.mock('../../../src/utils/sentryHelpers', () => ({
+    captureError: vi.fn(),
 }));
 
 // Mock DB for direct operations — capture .set() arguments for assertions
@@ -413,7 +418,7 @@ describe('InstagramCommentAdapter', () => {
         beforeEach(() => {
             mockReplyToComment.mockResolvedValue('reply-id');
             mockSendDirectMessage.mockResolvedValue('msg-id');
-            mockSendDirectMessageCard.mockResolvedValue('card-msg-id');
+            mockSendMetaImageAttachment.mockResolvedValue('img-msg-id');
         });
 
         it('public mode: replies on comment only', async () => {
@@ -427,37 +432,43 @@ describe('InstagramCommentAdapter', () => {
 
         // Privacy invariant: an image must NEVER leave the DM channel. In public mode the
         // reply is a public comment, and the image is neither sent nor leaked.
-        it('public mode: an attached image is NOT sent (no card, no DM) — image stays private', async () => {
+        it('public mode: an attached image is NOT sent (no DM) — image stays private', async () => {
             const opts = { ...baseOpts, replyImageUrl: 'https://cdn/x.jpg', userSettings: { commentReplyMode: 'public' } };
             const result = await adapter.sendReply(opts);
 
             expect(result.success).toBe(true);
             expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'Full AI reply text', 'token-123');
-            expect(mockSendDirectMessageCard).not.toHaveBeenCalled();
+            expect(mockSendMetaImageAttachment).not.toHaveBeenCalled();
             expect(mockSendDirectMessage).not.toHaveBeenCalled();
         });
 
-        it('private mode with an image: sends the image as a DM card (not a plain DM)', async () => {
+        it('private mode with an image: sends the text DM first, then the native image', async () => {
             const opts = { ...baseOpts, replyImageUrl: 'https://cdn/x.jpg', userSettings: { commentReplyMode: 'private' } };
             const result = await adapter.sendReply(opts);
 
-            expect(result.success).toBe(true);
-            expect(mockSendDirectMessageCard).toHaveBeenCalledWith(
-                'ig-account-1', 'sender-1', { text: 'Full AI reply text', imageUrl: 'https://cdn/x.jpg' }, 'token-123',
-            );
-            expect(mockSendDirectMessage).not.toHaveBeenCalled();
+            expect(result).toMatchObject({ success: true, imageDelivered: true });
+            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', 'token-123');
+            expect(mockSendMetaImageAttachment).toHaveBeenCalledWith('token-123', 'sender-1', 'https://cdn/x.jpg');
         });
 
-        it('dual mode with an image: DM card + public nudge (nudge carries NO image)', async () => {
+        it('dual mode with an image: text DM + native image + public nudge (nudge carries NO image)', async () => {
             const opts = { ...baseOpts, replyImageUrl: 'https://cdn/x.jpg', userSettings: { commentReplyMode: 'dual' } };
             const result = await adapter.sendReply(opts);
 
-            expect(result.success).toBe(true);
-            expect(mockSendDirectMessageCard).toHaveBeenCalledWith(
-                'ig-account-1', 'sender-1', { text: 'Full AI reply text', imageUrl: 'https://cdn/x.jpg' }, 'token-123',
-            );
+            expect(result).toMatchObject({ success: true, imageDelivered: true });
+            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', 'token-123');
+            expect(mockSendMetaImageAttachment).toHaveBeenCalledWith('token-123', 'sender-1', 'https://cdn/x.jpg');
             // The public nudge is a plain text comment — never the image.
             expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', expect.not.stringContaining('Full AI reply'), 'token-123');
+        });
+
+        it('image send failure: the text DM still delivers, imageDelivered=false, no throw', async () => {
+            mockSendMetaImageAttachment.mockRejectedValueOnce(new Error('image fetch failed'));
+            const opts = { ...baseOpts, replyImageUrl: 'https://cdn/x.jpg', userSettings: { commentReplyMode: 'private' } };
+            const result = await adapter.sendReply(opts);
+
+            expect(result).toMatchObject({ success: true, imageDelivered: false });
+            expect(mockSendDirectMessage).toHaveBeenCalled();
         });
 
         it('private mode: sends DM only', async () => {

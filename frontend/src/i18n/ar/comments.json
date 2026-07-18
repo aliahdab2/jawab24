@@ -128,7 +128,6 @@
   "postTriggerImageRemove": "إزالة",
   "postTriggerImageBadType": "نوع الصورة غير مدعوم. استخدم JPG أو PNG أو WEBP.",
   "postTriggerImageTooLarge": "حجم الصورة كبير جداً (الحد الأقصى ٢ ميغابايت).",
-  "postTriggerImageReplyTooLong": "مع الصورة لا يمكن أن يتجاوز الرد ١٦٠ حرفاً. اختصر النص، أو أزِل الصورة لاستخدام ما يصل إلى ١٠٠٠ حرف.",
   "postTriggerImageQuota": "امتلأت مساحة صور متجرك. تُنظَّف صور البوستات المحذوفة تلقائياً — ويمكنك ترقية باقتك للحصول على مساحة أكبر.",
   "postTriggerImageLockedHint": "الصور متاحة في وضع الرسائل الخاصة",
   "postReplyIntroTitle": "رد تلقائي على المعلّقين",

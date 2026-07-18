@@ -110,6 +110,23 @@ describe('nginx.conf - www redirect (CSP guard)', () => {
     expect(connectSrc).toContain('https://*.analytics.google.com');
     expect(connectSrc).toContain('https://*.googletagmanager.com');
   });
+
+  /**
+   * Media thumbnails must be allow-listed per CDN. Facebook posts come from fbcdn.net,
+   * but Instagram posts are served from cdninstagram.com — omitting it silently breaks
+   * the IG post picker (thumbnails render broken while the FB tab works). Merchant-uploaded
+   * Post Reply images come from the object-storage host. Guards against a "tighten img-src"
+   * regression that would blank these.
+   */
+  it('CSP img-src allows the Meta (FB + IG) CDNs and the object-storage host', () => {
+    const cspMatch = nginxConf.match(/Content-Security-Policy\s+"([^"]+)"/);
+    const csp = (cspMatch as RegExpMatchArray)[1];
+    const imgSrc = (csp.match(/img-src\s+([^;]+)/) as RegExpMatchArray)[1];
+
+    expect(imgSrc).toContain('https://*.fbcdn.net');
+    expect(imgSrc).toContain('https://*.cdninstagram.com');
+    expect(imgSrc).toContain('https://*.backblazeb2.com');
+  });
 });
 
 describe('deploy scripts - nginx upstream keepalive', () => {

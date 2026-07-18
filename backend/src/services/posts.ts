@@ -8,7 +8,7 @@ import { instagramService } from './instagram';
 import { imageStorage } from './imageStorage';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
-import { POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE, type PublishedPost } from '@jawab24/shared';
+import { type PublishedPost } from '@jawab24/shared';
 
 /** How the caller wants the Post Reply image handled on this save. */
 export type TriggerImageInput =
@@ -19,8 +19,7 @@ export type TriggerImageInput =
 export type UpdateTriggerResult =
     | { ok: true }
     | { ok: false; reason: 'not_found' }
-    | { ok: false; reason: 'quota_exceeded' }
-    | { ok: false; reason: 'reply_too_long_with_image' };
+    | { ok: false; reason: 'quota_exceeded' };
 
 /** File extension for a validated image MIME (allowlist mirrors the validator). */
 function extForMime(mime: string): string {
@@ -236,13 +235,8 @@ export class PostsService {
         const clearing = !triggerReply;
         const effectiveAction = clearing ? 'remove' : image.action;
 
-        // Authoritative 160-char cap: enforce it on the EFFECTIVE image state, not the
-        // request body. A "keep" on a row that already has an image still delivers a
-        // card, so the cap applies — the controller's body-only check can't see that.
-        const willHaveImage = effectiveAction === 'set' || (effectiveAction === 'keep' && !!owned.imageKey);
-        if (willHaveImage && triggerReply && triggerReply.length > POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE) {
-            return { ok: false, reason: 'reply_too_long_with_image' };
-        }
+        // Reply length (flat 1000 cap) is validated at the controller before this point —
+        // an attached image is sent as its own message, so it never shortens the text budget.
 
         // Columns to write for the image. `undefined` here means "leave as-is" (keep).
         let imageColumns: { triggerImageUrl: string | null; triggerImageKey: string | null; triggerImageBytes: number | null } | undefined;

@@ -73,6 +73,9 @@ export interface SendCommentResult {
     dmFailure?: import('../utils/fbGraphErrors').DmFailure;
     /** True when the public fallback was intentionally suppressed by the failure bucket. */
     suppressedPublic?: boolean;
+    /** True when a Post Reply image was actually delivered (its own native-image message
+     *  sent after the text). Drives the delivery-accurate "image attached" badge. */
+    imageDelivered?: boolean;
 }
 
 export interface CommentPlatformAdapter {

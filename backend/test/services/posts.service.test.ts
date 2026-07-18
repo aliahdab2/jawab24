@@ -498,17 +498,7 @@ describe('PostsService', () => {
             expect(imageStorage.remove).toHaveBeenCalledWith('trigger-images/ws-1/x.jpg');
         });
 
-        // H1 regression: the cap applies to the EFFECTIVE image state, so a "keep" on a
-        // row that already has an image rejects a >160 reply — even though the request
-        // body carried no image (the controller's body-only check can't catch this).
-        it('keep with an existing image: rejects a reply longer than 160 chars', async () => {
-            vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned({ imageKey: 'has-image', imageBytes: 100 })) as any);
-            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'x'.repeat(161), 'ws-1', 'keyword', { action: 'keep' });
-            expect(res).toEqual({ ok: false, reason: 'reply_too_long_with_image' });
-            expect(setSpy).not.toHaveBeenCalled();
-        });
-
-        it('keep with an existing image: accepts a reply of 160 chars and leaves image columns untouched', async () => {
+        it('keep with an existing image: leaves the image columns untouched', async () => {
             vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned({ imageKey: 'has-image', imageBytes: 100 })) as any);
             const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'x'.repeat(160), 'ws-1', 'keyword', { action: 'keep' });
             expect(res).toEqual({ ok: true });

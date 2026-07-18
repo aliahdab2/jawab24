@@ -3,7 +3,8 @@ import { fbAxios } from '../../lib/fbAxios';
 import { Logger, noopLogger } from '../../types';
 import { config } from '../../config';
 import { t } from '../../utils/i18n';
-import { classifyDmError, sendCardWithTextFallback, type DmFailure } from '../../utils/fbGraphErrors';
+import { classifyDmError, type DmFailure } from '../../utils/fbGraphErrors';
+import { deliverReplyImageBestEffort } from './postReplyImage';
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
@@ -41,6 +42,12 @@ export interface SendReplyResult {
      * Callers use this to avoid logging "public post failed" when we never attempted one.
      */
     suppressedPublic?: boolean;
+    /**
+     * True when a Post Reply image was actually delivered (its own native-image message
+     * sent successfully after the text). Drives the delivery-accurate "image attached"
+     * badge. Undefined/false = no image, or the image send failed (text still delivered).
+     */
+    imageDelivered?: boolean;
 }
 
 /**
@@ -85,27 +92,27 @@ export class ReplySender {
 
         let dmRecipientId: string | undefined;
         let dmFailure: DmFailure | undefined;
+        let imageDelivered = false;
 
         // DM send (private + dual modes). An image (Post Reply only) rides ONLY here —
         // never on the public branch below.
         if (replyMode === 'private' || replyMode === 'dual') {
             try {
+                // The reply TEXT is the one-shot private reply (recipient.comment_id) — always
+                // sent first, and it returns the PSID. It is the reliable, primary delivery.
+                const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
+                dmRecipientId = dm.recipientId;
+                this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId, hasImage: !!replyImageUrl });
+
+                // An attached image (Post Reply only) follows as its OWN native-image message
+                // to the returned PSID — full, uncropped, tap-to-open. Best-effort (the text
+                // already delivered); see deliverReplyImageBestEffort for why it never throws.
                 if (replyImageUrl) {
-                    // FB allows one message per comment → image + caption go as one card,
-                    // with a shared text-DM fallback on non-transient card failure.
-                    const dm = await sendCardWithTextFallback(
-                        'facebook',
-                        () => facebookService.sendPrivateReplyCardToComment(accessToken, facebookCommentId, { text: replyText, imageUrl: replyImageUrl }),
-                        () => facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText),
-                    );
-                    dmRecipientId = dm.recipientId;
-                    // Neutral wording: the card MAY have fallen back to text (the drop is
-                    // captured inside sendCardWithTextFallback) — don't claim "card sent".
-                    this.logger.info('[Sender] Private reply sent (image)', { facebookCommentId, replyMode, recipientId: dmRecipientId });
-                } else {
-                    const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
-                    dmRecipientId = dm.recipientId;
-                    this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId });
+                    imageDelivered = await deliverReplyImageBestEffort(accessToken, dmRecipientId, replyImageUrl, {
+                        platform: 'facebook',
+                        component: 'sender',
+                        extra: { facebookCommentId, replyMode },
+                    });
                 }
             } catch (error) {
                 dmFailure = classifyDmError(error, 'facebook');
@@ -129,7 +136,7 @@ export class ReplySender {
 
         if (replyMode === 'private') {
             if (!dmFailure) {
-                return { success: true, dmRecipientId };
+                return { success: true, dmRecipientId, imageDelivered };
             }
             // DM failed in private mode → DO NOT fall back to public.
             // The reply was generated for DM; posting it publicly would leak content.
@@ -142,7 +149,7 @@ export class ReplySender {
             const publicText = dualReplyNudge || t('dualNudgeDefault', 'ar');
             const ok = await this.postPublicReply(facebookCommentId, publicText, accessToken);
             if (!ok) this.logger.warn('[Sender] Dual mode: nudge post failed', { facebookCommentId });
-            return { success: true, dmRecipientId };
+            return { success: true, dmRecipientId, imageDelivered };
         }
 
         // DM failed in dual mode — only window_expired gets a short nudge.

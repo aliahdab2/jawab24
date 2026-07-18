@@ -11,7 +11,7 @@ import {
 
 import { GRAPH_API_BASE, fbAxios } from '../lib/fbAxios';
 import { DmSendError } from '../utils/fbGraphErrors';
-import { buildMessagePayload, buildImageCardElement, buildImageCardPayload, type SendMessageOptions } from './metaMessaging';
+import { buildMessagePayload, type SendMessageOptions } from './metaMessaging';
 
 const INSTAGRAM_GRAPH_API = GRAPH_API_BASE;
 
@@ -319,40 +319,6 @@ export class InstagramService {
             if (axios.isAxiosError(error)) {
                 const dmError = DmSendError.fromAxios(error, 'Instagram API error');
                 this.logger.error('[Instagram] API Error sending DM', { error: dmError.message });
-                throw dmError;
-            }
-            throw error;
-        }
-    }
-
-    /**
-     * Send a DM as a single generic-template CARD (image + caption) to the commenter.
-     * Uses the standard /me/messages DM endpoint (recipient.id) — the same path our
-     * text comment→DM already rides — so no prior conversation is required. Errors
-     * wrap into DmSendError identically to `sendDirectMessage`.
-     */
-    async sendDirectMessageCard(
-        instagramAccountId: string,
-        recipientId: string,
-        card: { text: string; imageUrl: string },
-        pageAccessToken: string,
-        opts?: SendMessageOptions,
-    ): Promise<string> {
-        try {
-            this.logger.debug('[Instagram] Sending DM card', { instagramAccountId, recipientId });
-            const element = buildImageCardElement(card);
-            const body = buildImageCardPayload({ id: recipientId }, element, opts);
-            const response = await fbAxios.post(
-                `${INSTAGRAM_GRAPH_API}/me/messages`,
-                body,
-                { params: { access_token: pageAccessToken } },
-            );
-            this.logger.info('[Instagram] DM card sent successfully', { messageId: response.data.message_id });
-            return response.data.message_id;
-        } catch (error) {
-            if (axios.isAxiosError(error)) {
-                const dmError = DmSendError.fromAxios(error, 'Instagram API error');
-                this.logger.error('[Instagram] API Error sending DM card', { error: dmError.message });
                 throw dmError;
             }
             throw error;

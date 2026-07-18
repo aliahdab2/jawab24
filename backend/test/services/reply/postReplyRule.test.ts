@@ -142,17 +142,13 @@ describe('validatePostReplyRuleInput', () => {
         expect(validatePostReplyRuleInput({ triggerType: 'nope', triggerKeyword: null, triggerReply: 'hi' })).toMatch(/keyword.*all/);
     });
 
-    it('allows up to 1000 chars without an image', () => {
-        const reply = 'x'.repeat(1000);
-        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: reply })).toBeNull();
-        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'x'.repeat(1001) })).toMatch(/1000/);
-    });
-
-    it('tightens the reply cap to 160 when an image is attached', () => {
-        const at160 = 'x'.repeat(160);
-        const over = 'x'.repeat(161);
-        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: at160, hasImage: true })).toBeNull();
-        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: over, hasImage: true })).toMatch(/160/);
+    it('allows up to 1000 chars, and applies the same cap whether or not an image is attached', () => {
+        const at1000 = 'x'.repeat(1000);
+        const over = 'x'.repeat(1001);
+        // The image is sent as its own message, so it never shortens the text budget —
+        // the cap is a flat 1000 in every case.
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: at1000 })).toBeNull();
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: over })).toMatch(/1000/);
     });
 });
 

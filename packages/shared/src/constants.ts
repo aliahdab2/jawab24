@@ -14,13 +14,10 @@ export const MAX_TEMPLATE_MESSAGE_LENGTH = 1000;
  */
 export const POST_REPLY_MAX_KEYWORDS = 10;
 export const POST_REPLY_MAX_KEYWORD_LEN = 100;
+// A Post Reply with an image sends the text and the image as two separate messages
+// (text message + native image attachment), so the reply keeps the full 1000-char cap —
+// there is no shorter "with image" limit. See backend/docs/OBJECT_STORAGE.md.
 export const POST_REPLY_MAX_REPLY_LEN = 1000;
-/**
- * With an image attached, the reply is delivered as a Meta generic-template card
- * (title ≤80 + subtitle ≤80), so the reply caps at 160. The frontend hard-blocks
- * Save above this; the backend enforces it as the authority.
- */
-export const POST_REPLY_MAX_REPLY_LEN_WITH_IMAGE = 160;
 /** Post Reply image upload limits (DM-modes only). */
 export const POST_REPLY_IMAGE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 export const POST_REPLY_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
