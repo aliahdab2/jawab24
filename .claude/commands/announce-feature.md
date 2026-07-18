@@ -37,19 +37,28 @@ Follow `AI_INSTRUCTIONS.md` §5 and §6 exactly:
 - **Product terminology (never deviate):** "رد ذكي" / Smart Reply — never "AI reply" / "رد الذكاء الاصطناعي" in UI copy. "رد البوست" for Post Reply. "معلومات نشاطك التجاري" for Business Info — never "قاعدة المعرفة" / "Knowledge Base". "الرد التلقائي" for Auto Reply.
 - Keep it short: one-line hook + 1–3 bullets of what's new + one concrete "how to use it" line + a soft CTA to open the app. No changelog dump.
 - Subject: concrete and plain (a plainer subject helps deliverability — a promo-looking subject lands in Gmail Promotions). Example spine: «جديد في جواب24: <الميزة>».
-- Body: valid HTML (it's wrapped in the generic email shell by `waitlistEmailTemplate`). RTL, use `dir="rtl"` on the root wrapper.
 
-Show the drafted **subject + body** to the user in the chat. Iterate until they approve the wording. Do NOT send anything yet.
+> ⚠️ **HTML vs plain text — the trap that bit us (2026-07-18).** The `body` field is **plain text** — `waitlistEmailTemplate` runs `escapeHtml(body)` on it, so any `<h1>`, `<img>`, `<table>` you put there arrives as **literal visible tags**, not rendered HTML (`backend/src/utils/emailTemplates.ts`, the `else` branch). Raw HTML renders **only** through the **custom-HTML template path**: `waitlistEmailTemplate` returns `customHtml` as-is (only substituting `{{UNSUBSCRIBE_URL}}`). So:
+> - **Plain-text announcement** (no styling/images) → use the `body` field. Fine as-is.
+> - **Any styled / image / "teaching" email** → you MUST use a **custom-HTML template** (Step 3). There is no middle ground — HTML in `body` is always escaped.
 
-## Step 3 — Language coverage decision
+Show the drafted **subject + body/HTML** to the user in the chat. Iterate until they approve the wording. Do NOT send anything yet.
 
-Plain `body` is sent to **every** recipient as-is (single language). Per-recipient AR/EN only happens for a **custom-HTML template** (`templateId` with `htmlBodyAr`/`htmlBodyEn`), which is a code change in `waitlistTemplates.ts` + redeploy.
+## Step 3 — Custom-HTML template (required for HTML/image emails; also gives per-KB-language)
 
-Default (recommended for a one-off): **send a single فصحى Arabic body** — the recipient-language fallback is `ar` and the base is Arabic-majority. Only pursue the bilingual path if the user explicitly wants EN merchants served in English:
+Plain `body` is text-only (Step 2 trap). **Any styled or image email — and any bilingual "send by KB language" email — goes through a custom-HTML template.** This is a code change in `backend/src/utils/waitlistTemplates.ts` + redeploy, but it's the only path that renders HTML *and* the only path that routes language per recipient. Both needs, one mechanism.
 
-- **Bilingual path (optional, heavier):** add a new entry to `WAITLIST_TEMPLATES` in `backend/src/utils/waitlistTemplates.ts` with `htmlBodyAr` + `htmlBodyEn` (+ `subjectAr`/`subjectEn`), deploy, then send with `templateId` set. `resolveRecipientLanguages` (`backend/src/utils/recipientLanguage.ts`) picks each merchant's language from their KB chunk languages → `settings.dashboardLanguage` → `ar`. Update the reusable copy here rather than one-off HTML if this announcement type will recur.
+**The custom-HTML contract (get this exact or it breaks):**
+1. `htmlBodyAr` / `htmlBodyEn` must each be a **complete HTML document** — `<!DOCTYPE html><html dir=…><head>…</head><body>…</body></html>`, with its own brand header + footer. It is returned **as-is** (NOT wrapped by the base shell). Model it on `backend/src/templates/waitlistLaunchAr.ts` / `…En.ts`.
+2. Include the literal placeholder **`{{UNSUBSCRIBE_URL}}`** as the unsubscribe link `href` — the renderer substitutes the real per-recipient token. Omit it and merchants get a dead unsubscribe link (CAN-SPAM).
+3. **Images MUST be public URLs — never data-URIs.** Gmail and most clients strip `data:` images, so an embedded-image email arrives with broken images for everyone. Host them first (see below) and reference `https://…` URLs.
+4. Add the entry to `WAITLIST_TEMPLATES` with `subjectAr`/`subjectEn` + `bodyAr`/`bodyEn` (plain-text fallbacks) + `htmlBodyAr`/`htmlBodyEn` (the two docs). Put the docs in `backend/src/templates/<name>Ar.ts` / `…En.ts`.
 
-State which path you're taking and why.
+**Hosting the images (public, reuses prod infra — no secrets handled):** upload each PNG through the prod `imageStorage` (already wired to the public B2 bucket `jawab24-media`). In-container script: `require('/app/backend/dist/services/imageStorage.js').imageStorage.put(key, buf, 'image/png')` → returns `{ url }`. Key scheme `announcements/<slug>/<name>.png`. Then **verify each is anonymously fetchable** (`curl -o /dev/null -w '%{http_code} %{content_type}'` → `200 image/png`) before using it — a private object silently breaks the email.
+
+**Per-recipient language:** `resolveRecipientLanguages` (`backend/src/utils/recipientLanguage.ts`) picks each merchant's language from their KB chunk languages → `settings.dashboardLanguage` → `ar` fallback. This runs automatically for a custom-HTML template — no list-splitting.
+
+**Preview mechanics:** to preview HTML **without deploying**, send the raw HTML doc directly via `emailService.send({ to, subject, html, type: 'transactional' })` (substitute a placeholder unsubscribe URL) to the founder only. The per-KB-language routing can only be exercised through the deployed `templateId` — so after deploy, send one more templated preview to confirm routing.
 
 ## Step 4 — Prod prerequisites (why this must run in prod)
 
