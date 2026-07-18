@@ -272,6 +272,25 @@ describe('ReplySender', () => {
             expect(axiosCall[1]).toEqual({ message: 'تحقق من رسائلك!' });
         });
 
+        // Dual is the common merchant config, and its success return is a SEPARATE code
+        // path from private mode — imageDelivered must survive it or the "image attached"
+        // badge silently dies for dual-mode merchants while every other test stays green.
+        it('dual mode with an image: text DM → native image to the PSID → public nudge, and imageDelivered survives the dual return', async () => {
+            const result = await sender.sendCommentReply({ ...dualOptions, replyImageUrl: 'https://cdn/x.jpg' });
+
+            expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!',
+            );
+            expect(sendMetaImageAttachment).toHaveBeenCalledWith('access_token_abc', 'user_456', 'https://cdn/x.jpg');
+            // The public nudge carries the nudge text only — never the image.
+            expect(fbAxios.post).toHaveBeenCalledWith(
+                `${GRAPH_API}/fb_comment_123/comments`,
+                { message: 'تحقق من رسائلك!' },
+                { params: { access_token: 'access_token_abc' } },
+            );
+            expect(result).toMatchObject({ success: true, dmRecipientId: 'user_456', imageDelivered: true });
+        });
+
         it('should return success when both DM and public succeed', async () => {
             const result = await sender.sendCommentReply(dualOptions);
 
