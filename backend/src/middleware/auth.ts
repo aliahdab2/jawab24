@@ -111,6 +111,10 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
  *     all returned 403 for visitors with a stale session cookie.
  *   - sameSite:strict on the `token` cookie stays the primary cross-site defense
  *     (a cross-site forged request cannot send it at all).
+ *
+ * `/auth/phone/link` is deliberately NOT here: it acts on the CURRENT session
+ * (links a phone to the logged-in user) and rides the authenticated `api` client,
+ * so it must keep CSRF (web) / Bearer-skip (app) like any other mutation.
  */
 const CSRF_EXEMPT_ROUTES = new Set<string>([
     '/auth/facebook',
@@ -137,12 +141,25 @@ export async function csrfProtection(request: FastifyRequest, reply: FastifyRepl
         return;
     }
 
-    // CSRF only matters for cookie-authenticated sessions. If there is no auth cookie,
-    // the request is either pure Bearer (mobile/API) or unauthenticated — skip.
-    // Auth-source priority: enforce CSRF whenever the cookie is present, even if an
-    // Authorization header is also sent. The header alone must NOT short-circuit CSRF,
-    // because cookie auth is still a valid auth source server-side and the cookie rides
-    // the request automatically.
+    // A Bearer-authenticated request is never cookie-authenticated, so CSRF (a
+    // defense against AMBIENT cookie credentials) does not apply. This mirrors
+    // authenticate() exactly: it enters the Bearer branch — and never reads the
+    // token cookie — iff the header starts with "Bearer ". A cross-site attacker
+    // cannot attach this header (forms can't set Authorization; fetch requires a
+    // CORS-allowlisted origin + preflight), so a Bearer request is not forgeable
+    // through the ambient cookie. Matching authenticate()'s condition (not merely
+    // "a header exists") keeps CSRF-skip <=> Bearer-auth with no gap: a malformed
+    // non-Bearer Authorization header falls through to the cookie in authenticate(),
+    // so it must NOT skip CSRF here.
+    // (This is why the app — Bearer-authed but unable to read the cross-host
+    // csrfToken cookie into a header — was being 403'd on every mutation.)
+    if (request.headers.authorization?.startsWith('Bearer ')) {
+        return;
+    }
+
+    // CSRF only matters for cookie-authenticated sessions. Past this point the
+    // request has no Bearer header, so a `token` cookie (if any) is the auth source.
+    // No cookie => unauthenticated (authenticate() will 401 it) — nothing to forge.
     // Note: request.cookies may be undefined if cookie plugin hasn't parsed yet.
     if (!request.cookies?.token) {
         return;
