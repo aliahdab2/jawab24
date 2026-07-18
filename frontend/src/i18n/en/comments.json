@@ -104,7 +104,6 @@
   "postTriggerChannelPrivate": "Private message",
   "postTriggerOutcomeTitle": "What the commenter receives",
   "postTriggerOutcomeAsWritten": "The exact text you wrote above",
-  "postTriggerOutcomeImageNote": "The image is sent as a separate message",
   "postTriggerOutcomeSettingsLink": "Change in Settings",
   "postTriggerDefaultNudge": "Details sent via private message 📩",
   "postTriggerAboutLabel": "About Post Reply",

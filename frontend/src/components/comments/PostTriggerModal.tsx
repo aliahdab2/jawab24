@@ -422,16 +422,16 @@ export function PostTriggerModal({
                       {t(labelKey)}
                     </span>
                     {showImage ? (
+                      // Mirrors the actual delivery: the reply text (as written above),
+                      // then the image as its own message right below — the stacked
+                      // preview shows the sequence, no explanatory note needed.
                       <div className="flex flex-col gap-1.5">
-                        {/* Message 1 — the reply text, one uniform style (as written). */}
                         <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
                           {t('postTriggerOutcomeAsWritten')}
                         </span>
-                        {/* Message 2 — the full, uncropped image, sent on its own. */}
                         <div className="rounded-lg border border-theme-border overflow-hidden max-w-[160px] bg-surface-50 dark:bg-surface-800">
                           <img src={imagePreviewSrc!} alt="" className="w-full max-h-40 object-contain" />
                         </div>
-                        <span className="text-[11px] text-subtle">{t('postTriggerOutcomeImageNote')}</span>
                       </div>
                     ) : row.verbatim ? (
                       <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
