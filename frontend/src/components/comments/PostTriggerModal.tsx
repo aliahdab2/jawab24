@@ -409,8 +409,10 @@ export function PostTriggerModal({
             <div className="rounded-xl border border-theme-border overflow-hidden">
               {outcomeRows.map((row, i) => {
                 const { Icon, labelKey, pill } = CHANNEL_META[row.channel];
-                // On the private (DM) row with an image, preview EXACTLY what's delivered:
-                // the reply text as one message, then the full image as a separate message.
+                // On the private (DM) row with an image, preview the image + reply text as ONE
+                // message — Meta allows only one message on a comment→DM, so it's delivered
+                // together: an inline image card for short replies, or the full text plus a
+                // "view image" button for long ones (see the note below the preview).
                 const showImage = row.channel === 'private' && hasImage && imagePreviewSrc;
                 return (
                   <div
@@ -422,9 +424,9 @@ export function PostTriggerModal({
                       {t(labelKey)}
                     </span>
                     {showImage ? (
-                      // Mirrors the actual delivery: the reply text (as written above),
-                      // then the image as its own message right below — the stacked
-                      // preview shows the sequence, no explanatory note needed.
+                      // Image + reply text arrive TOGETHER in one private message (Meta's
+                      // one-message limit): grouped as a card here, with a note that long
+                      // replies switch to a "view image" button instead of an inline image.
                       <div className="flex flex-col gap-1.5">
                         <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
                           {t('postTriggerOutcomeAsWritten')}
@@ -432,6 +434,9 @@ export function PostTriggerModal({
                         <div className="rounded-lg border border-theme-border overflow-hidden max-w-[160px] bg-surface-50 dark:bg-surface-800">
                           <img src={imagePreviewSrc!} alt="" className="w-full max-h-40 object-contain" />
                         </div>
+                        <span className="text-[11px] leading-snug text-subtle" dir="auto">
+                          {t('postTriggerImageOutcomeNote')}
+                        </span>
                       </div>
                     ) : row.verbatim ? (
                       <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
