@@ -194,7 +194,7 @@ After a user connects their page, you need to subscribe it to webhooks:
 ```bash
 # API call made by backend after page connection
 POST https://graph.facebook.com/v18.0/{page-id}/subscribed_apps
-?subscribed_fields=feed,messages,messaging_postbacks
+?subscribed_fields=feed,messages
 &access_token={page-access-token}
 ```
 

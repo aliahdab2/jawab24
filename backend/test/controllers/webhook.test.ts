@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import crypto from 'crypto';
-import fastify, { type FastifyRequest } from 'fastify';
+import fastify from 'fastify';
 import webhookRoutes from '../../src/routes/webhook';
 
 /** Generate a valid X-Hub-Signature-256 header for a given payload */
@@ -26,11 +26,6 @@ const {
     mockSendPrivateMessage,
     mockSendDirectMessage,
     mockRedisSet,
-    mockRedisIncr,
-    mockGetPost,
-    mockSendTypingIndicator,
-    mockSendMetaImageAttachment,
-    mockAcquireMutex,
 } = vi.hoisted(() => ({
     mockEnqueueComment: vi.fn().mockResolvedValue('mock-job-id'),
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
@@ -43,11 +38,6 @@ const {
     mockSendPrivateMessage: vi.fn().mockResolvedValue(undefined),
     mockSendDirectMessage: vi.fn().mockResolvedValue('msg-id'),
     mockRedisSet: vi.fn().mockResolvedValue('OK'),
-    mockRedisIncr: vi.fn().mockResolvedValue(1),
-    mockGetPost: vi.fn().mockResolvedValue({ id: 'post-1', triggerReply: 'a'.repeat(200), triggerImageUrl: 'https://cdn/x.jpg' }),
-    mockSendTypingIndicator: vi.fn().mockResolvedValue(undefined),
-    mockSendMetaImageAttachment: vi.fn().mockResolvedValue('img-mid'),
-    mockAcquireMutex: vi.fn().mockResolvedValue('lock-token'),
 }));
 
 vi.mock('../../src/lib/replyQueue', () => ({
@@ -61,22 +51,8 @@ vi.mock('../../src/lib/redis', () => ({
     redis: {
         get: vi.fn(),
         set: mockRedisSet,
-        incr: mockRedisIncr,
         quit: vi.fn(),
     },
-}));
-
-vi.mock('../../src/services/posts', () => ({
-    postsService: { getPost: mockGetPost },
-}));
-
-vi.mock('../../src/services/metaMessaging', () => ({
-    sendMetaImageAttachment: mockSendMetaImageAttachment,
-}));
-
-vi.mock('../../src/lib/redisMutex', () => ({
-    acquireMutex: mockAcquireMutex,
-    releaseMutex: vi.fn(),
 }));
 
 vi.mock('../../src/config', () => ({
@@ -118,7 +94,6 @@ vi.mock('../../src/services/messages', () => ({
 vi.mock('../../src/services/facebook', () => ({
     facebookService: {
         sendPrivateMessage: mockSendPrivateMessage,
-        sendTypingIndicator: mockSendTypingIndicator,
     },
 }));
 
@@ -151,14 +126,14 @@ vi.mock('../../src/services/reply/adapters/instagramAdapter', () => ({
 }));
 
 describe('Webhook Controller', () => {
-    let app: ReturnType<typeof fastify>;
+    let app: any;
 
     beforeEach(async () => {
         app = fastify();
 
         // Capture raw body for webhook signature verification
-        app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req: FastifyRequest, body: Buffer, done: (err: Error | null, parsed?: unknown) => void) => {
-            (req as FastifyRequest & { rawBody?: Buffer }).rawBody = body;
+        app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req: any, body: Buffer, done: any) => {
+            req.rawBody = body;
             try {
                 done(null, JSON.parse(body.toString()));
             } catch (err) {
@@ -493,67 +468,6 @@ describe('Webhook Controller', () => {
                     text: 'Hello!',
                 })
             );
-        });
-
-        it('«Read more» postback → delivers full text in-chat (image stays in card) and records it', async () => {
-            const webhookPayload = {
-                object: 'page',
-                entry: [{
-                    id: 'page_123',
-                    time: Date.now(),
-                    messaging: [{
-                        sender: { id: 'psid_9' },
-                        recipient: { id: 'page_123' },
-                        postback: { title: 'اقرأ المزيد', payload: 'pr_more:facebook:post-1', mid: 'pb_1' },
-                    }],
-                }],
-            };
-
-            const response = await app.inject({
-                method: 'POST', url: '/webhook',
-                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
-                payload: webhookPayload,
-            });
-            expect(response.statusCode).toBe(200);
-            await new Promise(resolve => setTimeout(resolve, 50));
-
-            expect(mockAcquireMutex).toHaveBeenCalled();
-            expect(mockGetPost).toHaveBeenCalledWith('post-1', 'ws-1');
-            expect(mockSendPrivateMessage).toHaveBeenCalledWith('token-abc', 'psid_9', 'a'.repeat(200));
-            // Text only — the image stays in the card (tap-to-full), never re-sent on «Read more».
-            expect(mockSendMetaImageAttachment).not.toHaveBeenCalled();
-            expect(mockStoreOutgoingMessage).toHaveBeenCalled();
-            expect(mockRedisIncr).toHaveBeenCalled();
-            // Not a text message → never enqueued as a reply job.
-            expect(mockEnqueueMessage).not.toHaveBeenCalled();
-        });
-
-        it('duplicate postback tap (mutex not acquired) → no-op', async () => {
-            mockAcquireMutex.mockResolvedValueOnce(null); // lock already held
-            const webhookPayload = {
-                object: 'page',
-                entry: [{
-                    id: 'page_123', time: Date.now(),
-                    messaging: [{ sender: { id: 'psid_9' }, recipient: { id: 'page_123' }, postback: { payload: 'pr_more:facebook:post-1', mid: 'pb_dup' } }],
-                }],
-            };
-            await app.inject({ method: 'POST', url: '/webhook', headers: { 'x-hub-signature-256': generateSignature(webhookPayload) }, payload: webhookPayload });
-            await new Promise(resolve => setTimeout(resolve, 50));
-            expect(mockSendPrivateMessage).not.toHaveBeenCalled();
-        });
-
-        it('foreign postback payload (not ours) → ignored', async () => {
-            const webhookPayload = {
-                object: 'page',
-                entry: [{
-                    id: 'page_123', time: Date.now(),
-                    messaging: [{ sender: { id: 'psid_9' }, recipient: { id: 'page_123' }, postback: { payload: 'GET_STARTED', mid: 'pb_x' } }],
-                }],
-            };
-            await app.inject({ method: 'POST', url: '/webhook', headers: { 'x-hub-signature-256': generateSignature(webhookPayload) }, payload: webhookPayload });
-            await new Promise(resolve => setTimeout(resolve, 50));
-            expect(mockAcquireMutex).not.toHaveBeenCalled();
-            expect(mockSendPrivateMessage).not.toHaveBeenCalled();
         });
 
         it('should enqueue comment jobs for new comments', async () => {

@@ -7,8 +7,7 @@ import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse,
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
 import { DmSendError, FacebookApiError } from '../utils/fbGraphErrors';
-import { buildMessagePayload, buildCommentReplyPayload, imageCardMessage, type SendMessageOptions } from './metaMessaging';
-import { POST_REPLY_CARD_CAPTION_MAX } from '@jawab24/shared';
+import { buildMessagePayload, buildCommentReplyPayload, imageCardMessage, textWithLinkButtonMessage, META_TEMPLATE_LIMITS, type SendMessageOptions } from './metaMessaging';
 export type { MessagingType, SendMessageOptions } from './metaMessaging';
 
 const traced = <T>(method: string, fn: () => Promise<T>) =>
@@ -408,15 +407,12 @@ export class FacebookService {
         commentId: string,
         text: string,
         imageUrl: string,
-        readMore: { label: string; payload: string } | null,
-    ): Promise<{ recipientId: string; format: 'card' | 'card_readmore' }> {
-        // The image ALWAYS rides an inline card (image never hidden). A short caption fits the
-        // card title in full; a long one shows a teaser + a «Read more» postback button, and the
-        // full text is delivered as a follow-up DM when the customer taps it (the image stays in
-        // the card — tapped for full size — and is never re-sent).
-        const isLong = text.trim().length > POST_REPLY_CARD_CAPTION_MAX;
-        const readMoreBtn = isLong && readMore ? { title: readMore.label, payload: readMore.payload } : undefined;
-        const message = imageCardMessage(imageUrl, text, readMoreBtn);
+        viewImageLabel: string,
+    ): Promise<{ recipientId: string; format: 'card' | 'button' }> {
+        const useCard = text.trim().length <= META_TEMPLATE_LIMITS.maxTitleChars;
+        const message = useCard
+            ? imageCardMessage(imageUrl, text)
+            : textWithLinkButtonMessage(text, imageUrl, viewImageLabel);
         try {
             const response = await traced('sendPrivateReplyWithImage', () =>
                 fbAxios.post<{ recipient_id: string }>(
@@ -425,7 +421,7 @@ export class FacebookService {
                     { params: { access_token: pageAccessToken } },
                 ),
             );
-            return { recipientId: response.data.recipient_id, format: readMoreBtn ? 'card_readmore' : 'card' };
+            return { recipientId: response.data.recipient_id, format: useCard ? 'card' : 'button' };
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 throw DmSendError.fromAxios(error, 'Facebook API error', { verboseDetail: true });
@@ -665,14 +661,12 @@ export class FacebookService {
             await traced('subscribePageToWebhooks', () =>
                 fbAxios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
                     params: {
-                        // messaging_postbacks: the Post Reply «Read more» button tap. Without it Meta
-                        // never delivers the postback, so existing pages must be re-subscribed.
-                        subscribed_fields: 'feed,messages,messaging_postbacks',
+                        subscribed_fields: 'feed,messages',
                         access_token: pageAccessToken,
                     },
                 }),
             );
-            this.logger.info('[Facebook] Page subscribed to webhooks (feed+messages+postbacks)', { pageId });
+            this.logger.info('[Facebook] Page subscribed to webhooks (feed+messages)', { pageId });
             return true;
         } catch (error) {
             // feed requires pages_manage_metadata — fall back to messages-only if missing
@@ -683,12 +677,12 @@ export class FacebookService {
                     await traced('subscribePageToWebhooks.messagesOnly', () =>
                         fbAxios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
                             params: {
-                                subscribed_fields: 'messages,messaging_postbacks',
+                                subscribed_fields: 'messages',
                                 access_token: pageAccessToken,
                             },
                         }),
                     );
-                    this.logger.info('[Facebook] Page subscribed to webhooks (messages+postbacks only)', { pageId });
+                    this.logger.info('[Facebook] Page subscribed to webhooks (messages only)', { pageId });
                     return true;
                 } catch (retryError) {
                     if (axios.isAxiosError(retryError)) {

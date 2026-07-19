@@ -112,9 +112,6 @@ export interface CommentPlatformAdapter {
         /** Post Reply image URL. Delivered ONLY on the DM channel (private/dual) — the
          *  adapter gates by mode; a public reply never carries it. Undocumented for AI/template. */
         replyImageUrl?: string | null;
-        /** Internal post UUID — lets the adapter build the «Read more» postback payload for a
-         *  long image caption (FB). Only set on the post_reply-with-image path. */
-        postId?: string;
     }): Promise<SendCommentResult>;
 
     /** Mark a stored comment as replied in the database */

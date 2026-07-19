@@ -6,6 +6,7 @@ import {
     buildProductCardPayload,
     imageAttachmentMessage,
     imageCardMessage,
+    textWithLinkButtonMessage,
     META_TEMPLATE_LIMITS,
 } from '../../src/services/metaMessaging';
 import type { ProductCard } from '@jawab24/shared';
@@ -43,20 +44,21 @@ describe('metaMessaging', () => {
             expect(blank.attachment.payload.elements[0].title).toBe(' '); // Meta rejects an empty title
         });
 
-        it('imageCardMessage: long caption → teaser title + a «Read more» POSTBACK button', () => {
-            const msg = imageCardMessage('https://cdn/x.jpg', 'a'.repeat(200), { title: 'اقرأ المزيد', payload: 'pr_more:facebook:post-1' }) as {
-                attachment: { payload: { elements: { title: string; buttons: { type: string; title: string; payload: string }[] }[] } };
+        it('textWithLinkButtonMessage: full text (capped 640) + one web_url button to the image', () => {
+            const msg = textWithLinkButtonMessage('full reply text', 'https://cdn/x.jpg', 'عرض الصورة') as {
+                attachment: { payload: { template_type: string; text: string; buttons: { type: string; title: string; url: string }[] } };
             };
-            const el = msg.attachment.payload.elements[0];
-            expect(el.title).toHaveLength(META_TEMPLATE_LIMITS.maxTitleChars); // teaser
-            expect(el.buttons).toEqual([{ type: 'postback', title: 'اقرأ المزيد', payload: 'pr_more:facebook:post-1' }]);
+            expect(msg.attachment.payload.template_type).toBe('button');
+            expect(msg.attachment.payload.text).toBe('full reply text');
+            expect(msg.attachment.payload.buttons).toEqual([{ type: 'web_url', title: 'عرض الصورة', url: 'https://cdn/x.jpg' }]);
         });
 
-        it('imageCardMessage: caps the «Read more» button title at 20', () => {
-            const msg = imageCardMessage('https://cdn/x.jpg', 'hi', { title: 'z'.repeat(40), payload: 'pr_more:facebook:p1' }) as {
-                attachment: { payload: { elements: { buttons: { title: string }[] }[] } };
+        it('textWithLinkButtonMessage: caps body at 640 and button title at 20', () => {
+            const msg = textWithLinkButtonMessage('y'.repeat(1000), 'https://cdn/x.jpg', 'z'.repeat(40)) as {
+                attachment: { payload: { text: string; buttons: { title: string }[] } };
             };
-            expect(msg.attachment.payload.elements[0].buttons[0].title).toHaveLength(META_TEMPLATE_LIMITS.maxButtonTitleChars);
+            expect(msg.attachment.payload.text).toHaveLength(META_TEMPLATE_LIMITS.maxButtonTemplateTextChars);
+            expect(msg.attachment.payload.buttons[0].title).toHaveLength(META_TEMPLATE_LIMITS.maxButtonTitleChars);
         });
     });
 

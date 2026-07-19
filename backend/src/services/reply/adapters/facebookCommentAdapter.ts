@@ -6,8 +6,6 @@ import { replySender, ReplyMode } from '../sender';
 import { pickNudgeVariation } from '../nudge';
 import { detectCommentLanguage } from '../../../utils/language';
 import { stripCommentNoise } from '../../../utils/commentText';
-import { t } from '../../../utils/i18n';
-import { buildReadMorePayload } from '@jawab24/shared';
 import { mapToPlatformPage } from './shared';
 import type {
     CommentPlatformAdapter,
@@ -76,8 +74,6 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         userSettings: Record<string, unknown>;
         postMessage?: string;
         replyImageUrl?: string | null;
-        /** Internal post UUID — needed to build the «Read more» postback payload for a long image caption. */
-        postId?: string;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
         const isDemo = opts.platformPageId.startsWith('demo_');
@@ -88,13 +84,6 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         const effectiveLang = detectCommentLanguage(stripCommentNoise(opts.commentMessage), opts.postMessage);
         const variationsMulti = opts.userSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined;
         const dualReplyNudge = pickNudgeVariation(variationsMulti, effectiveLang);
-
-        // For a long image caption, the card shows a teaser + a localized «Read more» postback;
-        // the tap (which reaches processPostback) delivers the full text in-chat (the image stays
-        // in the card — tappable to full size — and is never re-sent).
-        const readMore = opts.replyImageUrl && opts.postId
-            ? { label: t('postReplyReadMore', effectiveLang), payload: buildReadMorePayload('facebook', opts.postId) }
-            : null;
 
         return replySender.sendCommentReply({
             facebookCommentId: opts.platformCommentId,
@@ -108,7 +97,8 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             // Image rides ONLY the DM channel — the sender applies it in the private/dual
             // branch and never on a public comment.
             replyImageUrl: opts.replyImageUrl,
-            readMore,
+            // Localizes the image "view image" button label when the caption is too long for a card.
+            replyLang: effectiveLang,
         });
     }
 
