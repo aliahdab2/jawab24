@@ -16,7 +16,12 @@ import {
     allStatsCacheKeys,
     withStatsCache,
     invalidateEndpointStatsCaches,
+    invalidateWorkspaceStatsCache,
+    STATS_INVALIDATION_THROTTLE,
 } from '../services/statsCache';
+
+/** Flush the microtask/macrotask queue so fire-and-forget redis chains settle. */
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 const mockRedis = redis as unknown as {
     get: ReturnType<typeof vi.fn>;
@@ -48,6 +53,39 @@ describe('statsCache', () => {
 
     it('invalidateEndpointStatsCaches deletes messages + comments keys', () => {
         invalidateEndpointStatsCaches('w1');
+        expect(mockRedis.del).toHaveBeenCalledWith(
+            messagesStatsCacheKey('w1'),
+            commentsStatsCacheKey('w1'),
+        );
+    });
+
+    it('invalidateWorkspaceStatsCache drops the endpoint caches UNTHROTTLED (the stuck-counter fix)', async () => {
+        // Throttle window already open: SET NX returns null so the pages-aggregate
+        // DEL is skipped. The endpoint (messages + comments) caches — which back the
+        // inbox "needs action" chip that refetches on every SSE event — MUST still be
+        // dropped, or the chip reads a stale count that sticks (chip N, list 0).
+        mockRedis.set.mockResolvedValueOnce(null);
+        invalidateWorkspaceStatsCache('w1');
+        await flush();
+
+        expect(mockRedis.del).toHaveBeenCalledWith(
+            messagesStatsCacheKey('w1'),
+            commentsStatsCacheKey('w1'),
+        );
+        // pages aggregate NOT dropped while throttled
+        expect(mockRedis.del).not.toHaveBeenCalledWith(pagesStatsCacheKey('w1'));
+    });
+
+    it('invalidateWorkspaceStatsCache drops the pages aggregate only when the throttle window is open', async () => {
+        mockRedis.set.mockResolvedValueOnce('OK');
+        invalidateWorkspaceStatsCache('w1');
+        await flush();
+
+        expect(mockRedis.set).toHaveBeenCalledWith(
+            'stats:throttle:w1', '1', 'EX', STATS_INVALIDATION_THROTTLE, 'NX',
+        );
+        expect(mockRedis.del).toHaveBeenCalledWith(pagesStatsCacheKey('w1'));
+        // endpoint caches still dropped on this path too
         expect(mockRedis.del).toHaveBeenCalledWith(
             messagesStatsCacheKey('w1'),
             commentsStatsCacheKey('w1'),
