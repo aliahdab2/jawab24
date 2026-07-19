@@ -61,39 +61,56 @@ describe('ReplySender', () => {
         vi.mocked(detectLanguageCode).mockReturnValue('ar');
         vi.mocked(fbAxios.post).mockResolvedValue({ data: { id: 'reply_id' } });
         vi.mocked(facebookService.sendPrivateReplyToComment).mockResolvedValue({ recipientId: 'user_456' });
+        vi.mocked(facebookService.sendPrivateReplyWithImage).mockResolvedValue({ recipientId: 'user_456', format: 'button' });
         vi.mocked(sendMetaImageAttachment).mockResolvedValue('img_msg_id');
     });
 
-    // ─── Image delivery — two messages (text then native image), privacy invariant ──
+    // ─── Image delivery — ONE message on a cold comment→DM (Meta allows only one) ──
+    // The image rides the SAME private reply as the text (card or text+button), because a
+    // second follow-up message is rejected until the customer replies. See sendPrivateReplyWithImage.
     describe('Image delivery', () => {
         it('public mode: an attached image is NEVER sent (image stays private to the DM channel)', async () => {
             const result = await sender.sendCommentReply({ ...baseOptions, replyMode: 'public', replyImageUrl: 'https://cdn/x.jpg' });
-            expect(sendMetaImageAttachment).not.toHaveBeenCalled();
+            expect(facebookService.sendPrivateReplyWithImage).not.toHaveBeenCalled();
             // Public mode still posts the text reply as a public comment (via fbAxios).
             expect(fbAxios.post).toHaveBeenCalled();
             expect(result.imageDelivered).toBeFalsy();
         });
 
-        it('private mode with an image: sends the TEXT first, then the native image to the returned PSID', async () => {
+        it('private mode with an image: delivers text + image in ONE private reply (no separate image message)', async () => {
             const result = await sender.sendCommentReply({ ...baseOptions, replyMode: 'private', replyImageUrl: 'https://cdn/x.jpg' });
-            expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
-                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!',
+            expect(facebookService.sendPrivateReplyWithImage).toHaveBeenCalledWith(
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', expect.any(String),
             );
-            expect(sendMetaImageAttachment).toHaveBeenCalledWith('access_token_abc', 'user_456', 'https://cdn/x.jpg');
+            // The doomed second-message image send is never used on this path anymore.
+            expect(sendMetaImageAttachment).not.toHaveBeenCalled();
+            expect(facebookService.sendPrivateReplyToComment).not.toHaveBeenCalled();
             expect(result).toMatchObject({ success: true, dmRecipientId: 'user_456', imageDelivered: true });
         });
 
-        it('image send failure: the text still delivers, no throw, imageDelivered=false', async () => {
-            vi.mocked(sendMetaImageAttachment).mockRejectedValueOnce(new Error('image fetch failed'));
+        it('image reply failure (non-transient): falls back to a plain-text reply, imageDelivered=false, no throw', async () => {
+            vi.mocked(facebookService.sendPrivateReplyWithImage).mockRejectedValueOnce(makeUnknownError());
             const result = await sender.sendCommentReply({ ...baseOptions, replyMode: 'private', replyImageUrl: 'https://cdn/x.jpg' });
-            expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalled();
+            // Fallback: the customer still gets the text.
+            expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!',
+            );
             expect(result).toMatchObject({ success: true, dmRecipientId: 'user_456', imageDelivered: false });
         });
 
-        it('no image: uses the plain-text DM path (no image send)', async () => {
+        it('image reply failure (transient): rethrows so the whole job retries (no text fallback, no partial send)', async () => {
+            vi.mocked(facebookService.sendPrivateReplyWithImage).mockRejectedValueOnce(makeTransientError());
+            await expect(
+                sender.sendCommentReply({ ...baseOptions, replyMode: 'private', replyImageUrl: 'https://cdn/x.jpg' }),
+            ).rejects.toThrow();
+            // Never fall back to text on a transient error — the whole job retries instead.
+            expect(facebookService.sendPrivateReplyToComment).not.toHaveBeenCalled();
+        });
+
+        it('no image: uses the plain-text DM path (no image reply)', async () => {
             await sender.sendCommentReply({ ...baseOptions, replyMode: 'private' });
             expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalled();
-            expect(sendMetaImageAttachment).not.toHaveBeenCalled();
+            expect(facebookService.sendPrivateReplyWithImage).not.toHaveBeenCalled();
         });
     });
 
@@ -275,13 +292,13 @@ describe('ReplySender', () => {
         // Dual is the common merchant config, and its success return is a SEPARATE code
         // path from private mode — imageDelivered must survive it or the "image attached"
         // badge silently dies for dual-mode merchants while every other test stays green.
-        it('dual mode with an image: text DM → native image to the PSID → public nudge, and imageDelivered survives the dual return', async () => {
+        it('dual mode with an image: image+text in ONE private reply → public nudge, and imageDelivered survives the dual return', async () => {
             const result = await sender.sendCommentReply({ ...dualOptions, replyImageUrl: 'https://cdn/x.jpg' });
 
-            expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
-                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!',
+            expect(facebookService.sendPrivateReplyWithImage).toHaveBeenCalledWith(
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', expect.any(String),
             );
-            expect(sendMetaImageAttachment).toHaveBeenCalledWith('access_token_abc', 'user_456', 'https://cdn/x.jpg');
+            expect(sendMetaImageAttachment).not.toHaveBeenCalled();
             // The public nudge carries the nudge text only — never the image.
             expect(fbAxios.post).toHaveBeenCalledWith(
                 `${GRAPH_API}/fb_comment_123/comments`,

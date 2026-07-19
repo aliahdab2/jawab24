@@ -97,6 +97,35 @@ describe('Facebook Service', () => {
         });
     });
 
+    describe('sendPrivateReplyWithImage (Post Reply image — one comment→DM message)', () => {
+        beforeEach(() => {
+            vi.mocked(fbAxios.post).mockResolvedValue({ data: { recipient_id: 'psid_1' } });
+        });
+
+        it('short caption → inline image CARD, addressed to the comment', async () => {
+            const res = await service.sendPrivateReplyWithImage('tok', 'cmt_1', 'كريم غو ريبير', 'https://cdn/x.jpg', 'عرض الصورة');
+            expect(res).toEqual({ recipientId: 'psid_1', format: 'card' });
+            const body = vi.mocked(fbAxios.post).mock.calls[0][1] as {
+                recipient: { comment_id: string };
+                message: { attachment: { payload: { template_type: string; elements: { image_url: string }[] } } };
+            };
+            expect(body.recipient).toEqual({ comment_id: 'cmt_1' });
+            expect(body.message.attachment.payload.template_type).toBe('generic');
+            expect(body.message.attachment.payload.elements[0].image_url).toBe('https://cdn/x.jpg');
+        });
+
+        it('long caption → text + "view image" BUTTON template', async () => {
+            const longText = 'ن'.repeat(120);
+            const res = await service.sendPrivateReplyWithImage('tok', 'cmt_1', longText, 'https://cdn/x.jpg', 'عرض الصورة');
+            expect(res).toEqual({ recipientId: 'psid_1', format: 'button' });
+            const body = vi.mocked(fbAxios.post).mock.calls[0][1] as {
+                message: { attachment: { payload: { template_type: string; buttons: { type: string; url: string }[] } } };
+            };
+            expect(body.message.attachment.payload.template_type).toBe('button');
+            expect(body.message.attachment.payload.buttons[0]).toMatchObject({ type: 'web_url', url: 'https://cdn/x.jpg' });
+        });
+    });
+
     describe('getUserProfile', () => {
         it('should get user profile with picture from Facebook', async () => {
             const mockResponse = {

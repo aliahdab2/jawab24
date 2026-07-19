@@ -36,6 +36,8 @@ export const META_TEMPLATE_LIMITS = {
     maxSubtitleChars: 80,
     maxButtonsPerCard: 3,
     maxButtonTitleChars: 20,
+    // Button Template body text limit (Meta docs).
+    maxButtonTemplateTextChars: 640,
 } as const;
 
 type MetaButton =
@@ -88,7 +90,40 @@ type MetaRecipient = { id: string } | { comment_id: string };
 type MetaMessage =
     | { text: string }
     | { attachment: { type: 'image'; payload: { url: string; is_reusable?: boolean } } }
-    | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } };
+    | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } }
+    | { attachment: { type: 'template'; payload: { template_type: 'button'; text: string; buttons: MetaButton[] } } };
+
+/**
+ * A one-element Generic Template that shows an image INLINE with a short caption — used for
+ * a Post Reply image on a cold comment→DM, where Meta allows only ONE message (so a plain
+ * text + separate image can't both be sent). Caption goes in the (bold) title and is capped
+ * to the card limit; anything longer should use {@link textWithLinkButtonMessage} instead so
+ * no text is silently dropped. Title falls back to a single space because Meta rejects an
+ * empty title.
+ */
+export function imageCardMessage(imageUrl: string, caption: string): MetaMessage {
+    const title = caption.trim().slice(0, META_TEMPLATE_LIMITS.maxTitleChars) || ' ';
+    return { attachment: { type: 'template', payload: { template_type: 'generic', elements: [{ title, image_url: imageUrl }] } } };
+}
+
+/**
+ * A Button Template carrying the FULL reply text (up to 640 chars, all shown) plus a single
+ * web_url button — used for a Post Reply image when the caption is too long for an inline
+ * card. The customer reads the whole reply and taps the button to open the image. One
+ * message, so it is valid on a cold comment→DM.
+ */
+export function textWithLinkButtonMessage(text: string, buttonUrl: string, buttonTitle: string): MetaMessage {
+    return {
+        attachment: {
+            type: 'template',
+            payload: {
+                template_type: 'button',
+                text: text.slice(0, META_TEMPLATE_LIMITS.maxButtonTemplateTextChars),
+                buttons: [{ type: 'web_url', title: buttonTitle.slice(0, META_TEMPLATE_LIMITS.maxButtonTitleChars), url: buttonUrl }],
+            },
+        },
+    };
+}
 
 /** The shared /me/messages request envelope (recipient + message + messaging_type/tag).
  *  Single source so text sends, image attachments, and product cards can't drift. */
@@ -119,6 +154,17 @@ export function buildMessagePayload(
     opts?: SendMessageOptions,
 ): Record<string, unknown> {
     return buildMeMessageEnvelope({ id: recipientId }, message, opts);
+}
+
+/** Build a /me/messages body addressed to a COMMENT (one-shot private reply). Meta allows
+ *  exactly one such message per comment, so the whole reply — text, card, or button
+ *  template — must fit in this single send. */
+export function buildCommentReplyPayload(
+    commentId: string,
+    message: MetaMessage,
+    opts?: SendMessageOptions,
+): Record<string, unknown> {
+    return buildMeMessageEnvelope({ comment_id: commentId }, message, opts);
 }
 
 /** Build the Generic Template attachment body for a product-card send. */
