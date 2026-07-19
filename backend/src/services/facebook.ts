@@ -7,7 +7,7 @@ import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse,
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
 import { DmSendError, FacebookApiError } from '../utils/fbGraphErrors';
-import { buildMessagePayload, type SendMessageOptions } from './metaMessaging';
+import { buildMessagePayload, buildCommentReplyPayload, imageCardMessage, textWithLinkButtonMessage, META_TEMPLATE_LIMITS, type SendMessageOptions } from './metaMessaging';
 export type { MessagingType, SendMessageOptions } from './metaMessaging';
 
 const traced = <T>(method: string, fn: () => Promise<T>) =>
@@ -385,6 +385,43 @@ export class FacebookService {
                 }),
             );
             return { recipientId: response.data.recipient_id };
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                throw DmSendError.fromAxios(error, 'Facebook API error', { verboseDetail: true });
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Send a private reply to a comment that carries a Post Reply IMAGE, in the single
+     * message Meta allows per comment (a follow-up second message is rejected until the
+     * customer replies — the root cause of images never arriving). Chooses the format that
+     * shows the most:
+     *   - caption fits a card title (≤80) → inline image card (image shown in-chat + caption)
+     *   - longer → button template (full text ≤640 + a "view image" web_url button)
+     * `viewImageLabel` is the already-localized button title (caller resolves it via i18n).
+     */
+    async sendPrivateReplyWithImage(
+        pageAccessToken: string,
+        commentId: string,
+        text: string,
+        imageUrl: string,
+        viewImageLabel: string,
+    ): Promise<{ recipientId: string; format: 'card' | 'button' }> {
+        const useCard = text.trim().length <= META_TEMPLATE_LIMITS.maxTitleChars;
+        const message = useCard
+            ? imageCardMessage(imageUrl, text)
+            : textWithLinkButtonMessage(text, imageUrl, viewImageLabel);
+        try {
+            const response = await traced('sendPrivateReplyWithImage', () =>
+                fbAxios.post<{ recipient_id: string }>(
+                    `${FACEBOOK_GRAPH_API}/me/messages`,
+                    buildCommentReplyPayload(commentId, message),
+                    { params: { access_token: pageAccessToken } },
+                ),
+            );
+            return { recipientId: response.data.recipient_id, format: useCard ? 'card' : 'button' };
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 throw DmSendError.fromAxios(error, 'Facebook API error', { verboseDetail: true });

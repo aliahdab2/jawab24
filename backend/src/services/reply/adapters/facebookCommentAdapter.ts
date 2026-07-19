@@ -97,6 +97,8 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             // Image rides ONLY the DM channel — the sender applies it in the private/dual
             // branch and never on a public comment.
             replyImageUrl: opts.replyImageUrl,
+            // Localizes the image "view image" button label when the caption is too long for a card.
+            replyLang: effectiveLang,
         });
     }
 
