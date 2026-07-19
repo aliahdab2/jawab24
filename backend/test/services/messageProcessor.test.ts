@@ -737,7 +737,7 @@ describe('MessageProcessor — subscription inactive', () => {
 // like "تكلفة" or "اوقات الدوام" are classified as SPAM_OR_IRRELEVANT and silently
 // skipped. See commentProcessor for the producer side (sets origin_content_id).
 describe('MessageProcessor — origin post context inheritance', () => {
-    function stubOriginContentRow(row: { message: string; createdAt: Date } | null) {
+    function stubOriginContentRow(row: { message: string | null; createdAt: Date; triggerReply?: string | null } | null) {
         vi.mocked(db.select).mockReturnValueOnce({
             from: vi.fn(() => ({
                 where: vi.fn().mockResolvedValue(row ? [row] : []),
@@ -808,6 +808,81 @@ describe('MessageProcessor — origin post context inheritance', () => {
 
         const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
         expect(contextArg.postMessage).toBe('الفريق الدمشقي — دورة TOT الجديدة!');
+    });
+
+    // The merchant's Post Reply (trigger reply) is merchant-authored just like the post —
+    // both must reach the AI as usable facts. The صيدلية زينب عباس incident (2026-07-19):
+    // 93-char post caption with no price, 914-char Post Reply WITH the price → the AI
+    // deflected a price question and the customer called it fraud.
+    it('composes post text + the merchant Post Reply when the origin post has a trigger reply', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-42',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        stubOriginContentRow({
+            message: 'كريم غو ريبير — منشور قصير',
+            triggerReply: 'تفاصيل المنتج... السعر :38 ألف — متوفر في صيدلية زينب',
+            createdAt: new Date(),
+        });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'السعر لو سمحتي', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(contextArg.postMessage).toContain('كريم غو ريبير — منشور قصير');
+        expect(contextArg.postMessage).toContain("[The merchant's automatic reply already sent to this customer for this post]");
+        expect(contextArg.postMessage).toContain('السعر :38 ألف');
+    });
+
+    it('passes the Post Reply alone when the origin post has no text (image-only post with a trigger)', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-image-only',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        stubOriginContentRow({
+            message: null,
+            triggerReply: 'العرض: قطعتان بسعر 50 ألف',
+            createdAt: new Date(),
+        });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'كم السعر', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(contextArg.postMessage).toContain('العرض: قطعتان بسعر 50 ألف');
+        expect(contextArg.postMessage).toContain("[The merchant's automatic reply");
+    });
+
+    it('caps the post text at 500 chars in the composition so the Post Reply tail always survives', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-long',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        stubOriginContentRow({
+            message: 'p'.repeat(600),
+            triggerReply: 'r'.repeat(900) + ' السعر :38 ألف',
+            createdAt: new Date(),
+        });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'السعر', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        // Post text truncated to 500…
+        expect(contextArg.postMessage).toContain('p'.repeat(500));
+        expect(contextArg.postMessage).not.toContain('p'.repeat(501));
+        // …and the reply's tail (the price) is intact; total fits the ai-worker 1600 cap.
+        expect(contextArg.postMessage).toContain('السعر :38 ألف');
+        expect(contextArg.postMessage!.length).toBeLessThanOrEqual(1600);
     });
 
     it('does NOT pass postMessage when conversation has no originContentId (off-comment DM)', async () => {
