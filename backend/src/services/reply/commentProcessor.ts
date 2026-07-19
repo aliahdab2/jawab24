@@ -916,6 +916,7 @@ export class CommentProcessor {
             userSettings,
             postMessage: opts.postMessage,
             replyImageUrl: opts.replyImageUrl,
+            postId: contentId,
         });
 
         if (!sendResult.success) {

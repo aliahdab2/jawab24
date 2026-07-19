@@ -61,7 +61,7 @@ describe('ReplySender', () => {
         vi.mocked(detectLanguageCode).mockReturnValue('ar');
         vi.mocked(fbAxios.post).mockResolvedValue({ data: { id: 'reply_id' } });
         vi.mocked(facebookService.sendPrivateReplyToComment).mockResolvedValue({ recipientId: 'user_456' });
-        vi.mocked(facebookService.sendPrivateReplyWithImage).mockResolvedValue({ recipientId: 'user_456', format: 'button' });
+        vi.mocked(facebookService.sendPrivateReplyWithImage).mockResolvedValue({ recipientId: 'user_456', format: 'card' });
         vi.mocked(sendMetaImageAttachment).mockResolvedValue('img_msg_id');
     });
 
@@ -80,7 +80,7 @@ describe('ReplySender', () => {
         it('private mode with an image: delivers text + image in ONE private reply (no separate image message)', async () => {
             const result = await sender.sendCommentReply({ ...baseOptions, replyMode: 'private', replyImageUrl: 'https://cdn/x.jpg' });
             expect(facebookService.sendPrivateReplyWithImage).toHaveBeenCalledWith(
-                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', expect.any(String),
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', null,
             );
             // The doomed second-message image send is never used on this path anymore.
             expect(sendMetaImageAttachment).not.toHaveBeenCalled();
@@ -296,7 +296,7 @@ describe('ReplySender', () => {
             const result = await sender.sendCommentReply({ ...dualOptions, replyImageUrl: 'https://cdn/x.jpg' });
 
             expect(facebookService.sendPrivateReplyWithImage).toHaveBeenCalledWith(
-                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', expect.any(String),
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', null,
             );
             expect(sendMetaImageAttachment).not.toHaveBeenCalled();
             // The public nudge carries the nudge text only — never the image.

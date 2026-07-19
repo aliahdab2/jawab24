@@ -36,8 +36,6 @@ export const META_TEMPLATE_LIMITS = {
     maxSubtitleChars: 80,
     maxButtonsPerCard: 3,
     maxButtonTitleChars: 20,
-    // Button Template body text limit (Meta docs).
-    maxButtonTemplateTextChars: 640,
 } as const;
 
 type MetaButton =
@@ -90,50 +88,28 @@ type MetaRecipient = { id: string } | { comment_id: string };
 type MetaMessage =
     | { text: string }
     | { attachment: { type: 'image'; payload: { url: string; is_reusable?: boolean } } }
-    | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } }
-    | { attachment: { type: 'template'; payload: { template_type: 'button'; text: string; buttons: MetaButton[] } } };
+    | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } };
 
 /**
- * A one-element Generic Template that shows an image INLINE with a short caption — used for
- * a Post Reply image on a cold comment→DM, where Meta allows only ONE message (so a plain
- * text + separate image can't both be sent). Caption goes in the (bold) title and is capped
- * to the card limit; anything longer should use {@link textWithLinkButtonMessage} instead so
- * no text is silently dropped. Title falls back to a single space because Meta rejects an
- * empty title.
+ * A one-element Generic Template that shows a Post Reply image INLINE with a caption — the
+ * image is ALWAYS visible (Meta allows only one message on a cold comment→DM). `default_action`
+ * makes the (necessarily ~1.91:1) card image tappable → opens the full-resolution image in the
+ * in-app browser. When the caption is too long to fit the title, the caller passes a `readMore`
+ * postback button: the card shows a teaser, and tapping «Read more» delivers the full text as a
+ * follow-up DM (the tap opens the 24h window). The image is not re-sent — it stays in this card
+ * and is tappable to full size. Title falls back to a single space because Meta rejects an empty title.
  */
-export function imageCardMessage(imageUrl: string, caption: string): MetaMessage {
+export function imageCardMessage(
+    imageUrl: string,
+    caption: string,
+    readMore?: { title: string; payload: string },
+): MetaMessage {
     const title = caption.trim().slice(0, META_TEMPLATE_LIMITS.maxTitleChars) || ' ';
-    // default_action makes the (necessarily small, ~1.91:1) card image TAPPABLE — tapping
-    // opens the full-resolution image in the in-app browser, so the customer can see/zoom it.
-    // Without it the card image is a dead thumbnail (the "click does nothing" complaint).
-    return {
-        attachment: {
-            type: 'template',
-            payload: {
-                template_type: 'generic',
-                elements: [{ title, image_url: imageUrl, default_action: { type: 'web_url', url: imageUrl } }],
-            },
-        },
-    };
-}
-
-/**
- * A Button Template carrying the FULL reply text (up to 640 chars, all shown) plus a single
- * web_url button — used for a Post Reply image when the caption is too long for an inline
- * card. The customer reads the whole reply and taps the button to open the image. One
- * message, so it is valid on a cold comment→DM.
- */
-export function textWithLinkButtonMessage(text: string, buttonUrl: string, buttonTitle: string): MetaMessage {
-    return {
-        attachment: {
-            type: 'template',
-            payload: {
-                template_type: 'button',
-                text: text.slice(0, META_TEMPLATE_LIMITS.maxButtonTemplateTextChars),
-                buttons: [{ type: 'web_url', title: buttonTitle.slice(0, META_TEMPLATE_LIMITS.maxButtonTitleChars), url: buttonUrl }],
-            },
-        },
-    };
+    const element: MetaTemplateElement = { title, image_url: imageUrl, default_action: { type: 'web_url', url: imageUrl } };
+    if (readMore) {
+        element.buttons = [{ type: 'postback', title: readMore.title.slice(0, META_TEMPLATE_LIMITS.maxButtonTitleChars), payload: readMore.payload }];
+    }
+    return { attachment: { type: 'template', payload: { template_type: 'generic', elements: [element] } } };
 }
 
 /** The shared /me/messages request envelope (recipient + message + messaging_type/tag).

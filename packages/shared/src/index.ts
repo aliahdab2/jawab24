@@ -794,6 +794,10 @@ export {
     POST_REPLY_MAX_REPLY_LEN,
     POST_REPLY_IMAGE_MAX_BYTES,
     POST_REPLY_IMAGE_MIME_TYPES,
+    POST_REPLY_CARD_CAPTION_MAX,
+    READ_MORE_PAYLOAD_PREFIX,
+    buildReadMorePayload,
+    parseReadMorePayload,
 } from './constants';
 
 // --- Phase 6.5 P1 diagnostic counters ---
