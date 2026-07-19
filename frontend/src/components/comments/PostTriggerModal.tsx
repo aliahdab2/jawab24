@@ -51,7 +51,7 @@ interface PostTriggerModalProps {
   triggerReply?: string | null;
   triggerType?: string | null;
   triggerImageUrl?: string | null;
-  likeComment?: boolean | null;
+  likeComment?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;

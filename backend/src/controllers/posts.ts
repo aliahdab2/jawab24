@@ -229,8 +229,9 @@ export class PostsController {
                 triggerType?: 'keyword' | 'all';
                 // Image intent: absent/undefined = leave as-is; null = remove; object = set a new image.
                 triggerImage?: { base64: string; mimeType: string } | null;
-                // Like the customer's comment on a successful send. Facebook-only —
-                // silently coerced to false for Instagram (its API can't like comments).
+                // Like the customer's comment on a successful send. Absent = leave as-is
+                // (like triggerImage's keep semantics) so a client that doesn't know the
+                // field can't wipe it. Facebook-only — coerced to false for Instagram.
                 likeComment?: boolean;
             };
         }>,
@@ -252,8 +253,10 @@ export class PostsController {
         const keyword = triggerKeyword?.trim() || null;
         const replyText = triggerReply?.trim() || null;
         const hasImage = triggerImage !== null && triggerImage !== undefined;
-        // Defense in depth: only Facebook posts can carry the like option, whatever the client sent.
-        const likeCommentValue = source === 'facebook' && likeComment === true;
+        // Absent = keep (undefined); present = an explicit set. Only Facebook posts can
+        // carry the like option, so any set is coerced to false for Instagram.
+        const likeCommentIntent: boolean | undefined =
+            likeComment === undefined ? undefined : (source === 'facebook' && likeComment === true);
 
         // Reject an image on a feature that isn't configured, before any other work —
         // the send path can't deliver it, so accepting the upload would be a lie.
@@ -265,7 +268,8 @@ export class PostsController {
             // Clearing the trigger: both keyword and reply empty → remove the rule (fields
             // nulled, type reset to the default). Any attached image is dropped too.
             if (!keyword && !replyText) {
-                const cleared = await postsService.updateTrigger(id, source, null, null, req.workspaceId, 'keyword', { action: 'remove' });
+                // Clearing the rule resets the like option too (a removed trigger owns nothing).
+                const cleared = await postsService.updateTrigger(id, source, null, null, req.workspaceId, 'keyword', { action: 'remove' }, false);
                 if (!cleared.ok) return reply.status(404).send({ error: 'Post not found' });
                 return reply.send({ success: true });
             }
@@ -303,7 +307,7 @@ export class PostsController {
             const type: 'keyword' | 'all' = rawType === 'all' ? 'all' : 'keyword';
             // Any-comment mode stores no keyword.
             const storedKeyword = type === 'all' ? null : keyword;
-            const result = await postsService.updateTrigger(id, source, storedKeyword, replyText, req.workspaceId, type, imageIntent, likeCommentValue);
+            const result = await postsService.updateTrigger(id, source, storedKeyword, replyText, req.workspaceId, type, imageIntent, likeCommentIntent);
             if (!result.ok) {
                 if (result.reason === 'quota_exceeded') {
                     return reply.status(413).send({ error: 'image_quota_exceeded', message: 'Image storage limit reached for this workspace' });

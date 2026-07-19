@@ -214,7 +214,9 @@ export class PostsService {
         workspaceId: string,
         triggerType: 'keyword' | 'all' = 'keyword',
         image: TriggerImageInput = { action: 'keep' },
-        likeComment = false,
+        // undefined = leave the column untouched (keep); a boolean = explicit set.
+        // Facebook-only column, so it's ignored on the instagram branch.
+        likeComment?: boolean,
     ): Promise<UpdateTriggerResult> {
         const table = source === 'instagram' ? instagramMedia : posts;
 
@@ -286,9 +288,10 @@ export class PostsService {
         if (source === 'facebook') {
             // likeComment lives only on posts (the Instagram API can't like comments),
             // so the facebook branch writes it and the instagram branch has no column.
+            // Only write when the caller expressed intent — absent leaves it untouched.
             await db
                 .update(posts)
-                .set({ ...triggerColumns, likeComment })
+                .set({ ...triggerColumns, ...(likeComment !== undefined ? { likeComment } : {}) })
                 .where(eq(posts.id, contentId));
         } else {
             await db

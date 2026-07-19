@@ -188,7 +188,7 @@ export class CommentProcessor {
                 triggerReply: content.triggerReply ?? null,
                 triggerType: content.triggerType ?? 'keyword',
                 triggerImageUrl: content.triggerImageUrl ?? null,
-                likeComment: content.likeComment ?? false,
+                likeComment: content.likeComment,
             });
             // Rule check first: most comments land on posts with no trigger, so the
             // business-hours evaluation (an Intl.DateTimeFormat construction) only
@@ -1028,15 +1028,12 @@ export class CommentProcessor {
         void recordSendSuccess(pageId);
 
         // Post Reply "like the comment" option (ManyChat parity): the page likes the
-        // customer's comment once the reply is out. Best-effort fire-and-forget — a
-        // like failure must never affect the already-sent reply. Demo pages carry a
-        // fake token, so they never hit the Graph API.
+        // customer's comment once the reply is out. Best-effort fire-and-forget — the
+        // adapter method self-logs and never throws (see facebookService.likeComment),
+        // so the call is unawaited with only an unhandled-rejection guard. Demo pages
+        // carry a fake token, so they never hit the Graph API.
         if (opts.likeComment && adapter.likeComment && !platformPageId.startsWith('demo_')) {
-            adapter.likeComment(platformCommentId, accessToken).catch(err =>
-                this.logger.warn(`[${platform}] Post Reply comment like failed (reply unaffected)`, {
-                    err, platformCommentId, pageId,
-                }),
-            );
+            void adapter.likeComment(platformCommentId, accessToken).catch(() => { /* self-logged */ });
         }
 
         // NB: the per-(page, post, sender) debounce slot is claimed atomically at

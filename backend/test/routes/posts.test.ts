@@ -148,7 +148,8 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id', 'keyword', { action: 'keep' }, false);
+            // No likeComment in the body → undefined (keep — never clobber a field the client didn't send).
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id', 'keyword', { action: 'keep' }, undefined);
         });
 
         it('should clear trigger when both values are null', async () => {
@@ -161,8 +162,8 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            // Clearing the rule also drops any attached image.
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id', 'keyword', { action: 'remove' });
+            // Clearing the rule also drops any attached image and resets the like option.
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id', 'keyword', { action: 'remove' }, false);
         });
 
         it('should return 400 for invalid source', async () => {
@@ -175,7 +176,7 @@ describe('Posts Routes', () => {
             expect(response.statusCode).toBe(400);
         });
 
-        it('passes likeComment through for a facebook post', async () => {
+        it('passes an explicit likeComment through for a facebook post', async () => {
             vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
 
             const response = await app.inject({
@@ -188,7 +189,20 @@ describe('Posts Routes', () => {
             expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Details', 'test_workspace_id', 'keyword', { action: 'keep' }, true);
         });
 
-        it('coerces likeComment to false for instagram (its API cannot like comments)', async () => {
+        it('leaves likeComment untouched (undefined) when the field is absent — no lost update for stale clients', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Details', 'test_workspace_id', 'keyword', { action: 'keep' }, undefined);
+        });
+
+        it('coerces an explicit likeComment to false for instagram (its API cannot like comments)', async () => {
             vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
 
             const response = await app.inject({
@@ -232,7 +246,7 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', null, 'DM sent!', 'test_workspace_id', 'all', { action: 'keep' }, false);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', null, 'DM sent!', 'test_workspace_id', 'all', { action: 'keep' }, undefined);
         });
 
         it('should return 404 when post not found or not owned', async () => {
@@ -290,7 +304,7 @@ describe('Posts Routes', () => {
             expect(postsService.updateTrigger).toHaveBeenCalledWith(
                 'post_1', 'facebook', 'k', 'hi', 'test_workspace_id', 'keyword',
                 expect.objectContaining({ action: 'set', mimeType: 'image/png' }),
-                false,
+                undefined,
             );
         });
 

@@ -360,6 +360,7 @@ describe('PostsService', () => {
 
             const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
 
+            // samplePost mock omits like_comment; ensureContent defaults it to false (matches the DB NOT NULL DEFAULT).
             expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerImageUrl: 'https://cdn/x.jpg', likeComment: false });
         });
 
