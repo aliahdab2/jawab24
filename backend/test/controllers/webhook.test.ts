@@ -495,7 +495,7 @@ describe('Webhook Controller', () => {
             );
         });
 
-        it('«Read more» postback → delivers full text in-chat (image stays in card) and records it', async () => {
+        it('«Read more» postback → delivers full text in-chat (image stays in card), no duplicate inbox row', async () => {
             const webhookPayload = {
                 object: 'page',
                 entry: [{
@@ -522,7 +522,9 @@ describe('Webhook Controller', () => {
             expect(mockSendPrivateMessage).toHaveBeenCalledWith('token-abc', 'psid_9', 'a'.repeat(200));
             // Text only — the image stays in the card (tap-to-full), never re-sent on «Read more».
             expect(mockSendMetaImageAttachment).not.toHaveBeenCalled();
-            expect(mockStoreOutgoingMessage).toHaveBeenCalled();
+            // No duplicate inbox row: the comment→DM card send already stored this reply. Storing
+            // again on the tap would show the merchant the same reply twice (the bug we fixed).
+            expect(mockStoreOutgoingMessage).not.toHaveBeenCalled();
             expect(mockRedisIncr).toHaveBeenCalled();
             // Not a text message → never enqueued as a reply job.
             expect(mockEnqueueMessage).not.toHaveBeenCalled();

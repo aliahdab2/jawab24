@@ -435,12 +435,10 @@ export class WebhookController {
             // full-size there), so re-sending it here would duplicate it.
             await facebookService.sendPrivateMessage(token, psid, post.triggerReply);
 
-            // Record the follow-up in the merchant inbox thread (linked to the originating post).
-            await messagesService.storeOutgoingMessage(
-                page.id, page.workspaceId, psid, post.triggerReply, 'post_reply',
-                db, undefined, parsed.postId,
-            ).catch(err => this.log().error('[Postback] storeOutgoingMessage failed', { err }));
-
+            // Do NOT store an inbox row here: the comment→DM card send already persisted this exact
+            // reply as an outgoing `post_reply` message (commentProcessor.sendAndFinalize). Storing
+            // again on the tap would show the merchant the same reply twice. Engagement is tracked
+            // via the tap metric below instead.
             redis.incr('metrics:postreply:readmore_tap').catch(() => { /* metrics never block */ });
         } catch (err) {
             captureError(err, 'processPostback failed', {
