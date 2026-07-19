@@ -20,12 +20,13 @@ export interface SendCommentReplyOptions {
     dualReplyNudge?: string;
     /** If true, skip Facebook API calls (for demo mode) */
     isDemo?: boolean;
-    /** Post Reply image URL — delivered on the DM channel only (private/dual), inside the
-     *  single allowed private reply (image card for short captions, else full text + a
-     *  "view image" button). On non-transient failure we fall back to a plain-text DM. */
+    /** Post Reply image URL — delivered on the DM channel only (private/dual) as an inline
+     *  image card (image is always shown). On non-transient failure we fall back to a plain-text DM. */
     replyImageUrl?: string | null;
-    /** Customer's language for the image "view image" button label (i18n). Defaults to 'ar'. */
-    replyLang?: string;
+    /** Localized «Read more» postback button for a long caption: when set and the caption
+     *  exceeds the card limit, the card shows a teaser + this button; the tap delivers the full
+     *  text in-chat (the image stays in the card). Null/absent → short caption shown in full, no button. */
+    readMore?: { label: string; payload: string } | null;
 }
 
 export interface SendReplyResult {
@@ -87,7 +88,7 @@ export class ReplySender {
             dualReplyNudge,
             isDemo = false,
             replyImageUrl,
-            replyLang,
+            readMore,
         } = options;
 
         if (isDemo) {
@@ -104,14 +105,11 @@ export class ReplySender {
         if (replyMode === 'private' || replyMode === 'dual') {
             try {
                 if (replyImageUrl) {
-                    // Meta allows exactly ONE message on a cold comment→DM (a follow-up second
-                    // message is rejected until the customer replies — the reason images never
-                    // arrived). So the image MUST ride the same single message as the text:
-                    // sendPrivateReplyWithImage picks an inline image card for short captions or a
-                    // full-text + "view image" button otherwise.
+                    // Meta allows exactly ONE message on a cold comment→DM. The image ALWAYS rides
+                    // an inline card (never hidden). A short caption shows in full; a long one shows
+                    // a teaser + «Read more» postback, and the tap delivers the full text in-chat.
                     try {
-                        const viewImageLabel = t('postReplyViewImage', replyLang || 'ar');
-                        const dm = await facebookService.sendPrivateReplyWithImage(accessToken, facebookCommentId, replyText, replyImageUrl, viewImageLabel);
+                        const dm = await facebookService.sendPrivateReplyWithImage(accessToken, facebookCommentId, replyText, replyImageUrl, readMore ?? null);
                         dmRecipientId = dm.recipientId;
                         imageDelivered = true;
                         this.logger.info('[Sender] Private reply with image sent', { facebookCommentId, replyMode, recipientId: dmRecipientId, format: dm.format });

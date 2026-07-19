@@ -4,6 +4,10 @@ import { config } from '../config';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { messagesService } from '../services/messages';
 import { pagesService, isPageDisconnected } from '../services/pages';
+import { postsService } from '../services/posts';
+import { facebookService } from '../services/facebook';
+import { acquireMutex } from '../lib/redisMutex';
+import { parseReadMorePayload } from '@jawab24/shared';
 import { authService } from '../services/auth';
 import { auditLog } from '../services/auditLog';
 import { purgeCustomerData } from '../services/gdprCustomerDeletion';
@@ -59,6 +63,12 @@ interface MessagingEvent {
             type: 'audio' | 'image' | 'video' | 'file' | 'fallback' | 'post' | 'ig_post' | 'reel' | 'ig_reel' | 'sticker';
             payload?: { url?: string; title?: string; id?: string };
         }>;
+    };
+    /** Button tap (e.g. the Post Reply «Read more» button). No `message`; carries the payload. */
+    postback?: {
+        title?: string;
+        payload?: string;
+        mid?: string;
     };
 }
 
@@ -318,6 +328,9 @@ export class WebhookController {
                                 platformTimestamp: messageEvent.timestamp,
                             }, 'facebook', this.log());
                         }
+                    } else if (messageEvent.postback) {
+                        // Button tap (Post Reply «Read more») — deliver the full text in-chat.
+                        await this.processPostback(page, messageEvent);
                     }
                 }
             }
@@ -384,6 +397,55 @@ export class WebhookController {
             this.log().error('Failed to enqueue message', {
                 messageId,
                 error: String(error)
+            });
+        }
+    }
+
+    /**
+     * Process a Post Reply «Read more» button tap. The tap opened Meta's 24h messaging window,
+     * so we deliver the FULL reply text as a follow-up DM (the card only showed a teaser). The
+     * image is NOT re-sent — it is already in the card and tappable to full size there.
+     * Everything is best-effort and must never throw — a webhook that 500s gets redelivered by Meta.
+     */
+    private async processPostback(
+        page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>,
+        event: MessagingEvent,
+    ) {
+        if (!page) return;
+        const psid = event.sender?.id;
+        const parsed = parseReadMorePayload(event.postback?.payload);
+        if (!psid || !parsed) return; // not our button / malformed payload
+        if (!page.workspaceId) return; // legacy orphan page — nothing to attribute the DM to
+
+        // Dedupe rapid double-taps / Meta redeliveries of the same tap.
+        const lockKey = `postback_tap:${page.id}:${psid}:${event.postback?.mid ?? parsed.postId}`;
+        const lock = await acquireMutex(lockKey, 10);
+        if (!lock) return;
+
+        try {
+            const post = await postsService.getPost(parsed.postId, page.workspaceId);
+            if (!post?.triggerReply) {
+                this.log().warn('[Postback] read-more: post or trigger not found', { pageId: page.id, postId: parsed.postId });
+                return;
+            }
+            const token = page.accessToken;
+            await facebookService.sendTypingIndicator(token, psid).catch(() => { /* cosmetic */ });
+
+            // Deliver the full TEXT only. The image is already shown in the card (and tappable to
+            // full-size there), so re-sending it here would duplicate it.
+            await facebookService.sendPrivateMessage(token, psid, post.triggerReply);
+
+            // Record the follow-up in the merchant inbox thread (linked to the originating post).
+            await messagesService.storeOutgoingMessage(
+                page.id, page.workspaceId, psid, post.triggerReply, 'post_reply',
+                db, undefined, parsed.postId,
+            ).catch(err => this.log().error('[Postback] storeOutgoingMessage failed', { err }));
+
+            redis.incr('metrics:postreply:readmore_tap').catch(() => { /* metrics never block */ });
+        } catch (err) {
+            captureError(err, 'processPostback failed', {
+                tags: { component: 'webhook-postback' },
+                extra: { pageId: page.id, postId: parsed.postId },
             });
         }
     }

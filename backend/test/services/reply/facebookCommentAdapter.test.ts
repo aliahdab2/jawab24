@@ -234,7 +234,7 @@ describe('FacebookCommentAdapter', () => {
                 dualReplyNudge: 'Details sent via DM',
                 isDemo: false,
                 replyImageUrl: undefined,
-                replyLang: expect.any(String),
+                readMore: null,
             });
         });
 

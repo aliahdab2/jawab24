@@ -10,6 +10,7 @@ import {
   POST_REPLY_MAX_REPLY_LEN as REPLY_MAX,
   POST_REPLY_IMAGE_MAX_BYTES,
   POST_REPLY_IMAGE_MIME_TYPES,
+  POST_REPLY_CARD_CAPTION_MAX,
 } from '@jawab24/shared';
 import { MessageSquare, MessageCircle, ArrowUpRight, ImagePlus, Lock, X } from 'lucide-react';
 import Link from 'next/link';
@@ -97,10 +98,13 @@ export function PostTriggerModal({
   const hasStoredImage = !!initialImageUrl && !imageRemoved;
   // Image that will actually be DELIVERED: only in DM modes, and only if one is set.
   const hasImage = imagesEnabled && isDmMode && (imageFile !== null || hasStoredImage);
-  // The reply cap is a flat 1000 whether or not an image is attached — the image is sent
-  // as its own message, so it never shortens the text budget.
+  // The editor cap is a flat 1000. When an image is attached, delivery depends on caption
+  // length: ≤ card limit → the card shows the full caption; longer → a teaser + «Read more»,
+  // and the tap delivers the full image + full text (drives the outcome preview below).
   const replyMax = REPLY_MAX;
   const replyOverLimit = reply.length > replyMax;
+  const trimmedReply = reply.trim();
+  const captionIsLong = trimmedReply.length > POST_REPLY_CARD_CAPTION_MAX;
   // Preview source: the freshly picked file (object URL) or the stored image.
   const imagePreviewSrc = imageObjectUrl ?? (hasStoredImage ? initialImageUrl! : null);
 
@@ -424,19 +428,35 @@ export function PostTriggerModal({
                       {t(labelKey)}
                     </span>
                     {showImage ? (
-                      // Image + reply text arrive TOGETHER in one private message (Meta's
-                      // one-message limit): grouped as a card here, with a note that long
-                      // replies switch to a "view image" button instead of an inline image.
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
-                          {t('postTriggerOutcomeAsWritten')}
-                        </span>
-                        <div className="rounded-lg border border-theme-border overflow-hidden max-w-[160px] bg-surface-50 dark:bg-surface-800">
-                          <img src={imagePreviewSrc!} alt="" className="w-full max-h-40 object-contain" />
+                      // What the customer actually receives (Meta allows one message on a cold
+                      // comment→DM). SHORT caption: an image card showing the FULL caption, image
+                      // tap opens it full-size. LONG caption: an image card with a teaser + a
+                      // «Read more» button; the tap delivers the full text in-chat (the image stays
+                      // in the card — tap it for full size — and is never re-sent).
+                      <div className="flex flex-col gap-2">
+                        {/* The card the customer sees first */}
+                        <div className="rounded-lg border border-theme-border overflow-hidden max-w-[200px] bg-surface-50 dark:bg-surface-800">
+                          <img src={imagePreviewSrc!} alt="" className="w-full max-h-28 object-cover" />
+                          <div className="px-2.5 py-2">
+                            <span className="block text-[13px] font-semibold text-foreground" dir="auto">
+                              {captionIsLong
+                                ? `${trimmedReply.slice(0, POST_REPLY_CARD_CAPTION_MAX)}…`
+                                : (trimmedReply || t('postTriggerOutcomeAsWritten'))}
+                            </span>
+                          </div>
+                          {captionIsLong && (
+                            <div className="border-t border-theme-border py-2 text-center text-[12px] font-bold text-brand-600">
+                              {t('postTriggerReadMore')}
+                            </div>
+                          )}
                         </div>
-                        <span className="text-[11px] leading-snug text-subtle" dir="auto">
-                          {t('postTriggerImageOutcomeNote')}
-                        </span>
+                        {captionIsLong ? (
+                          // After «Read more», the full text arrives in-chat (the image is already
+                          // in the card above — tap it for full size). A short note, not the whole text.
+                          <span className="text-[11px] leading-snug text-subtle" dir="auto">{t('postTriggerReadMoreNote')}</span>
+                        ) : (
+                          <span className="text-[11px] leading-snug text-subtle" dir="auto">{t('postTriggerImageTapHint')}</span>
+                        )}
                       </div>
                     ) : row.verbatim ? (
                       <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
