@@ -28,6 +28,9 @@ export interface ContentEntity {
     triggerType?: string | null;
     /** Attached Post Reply image URL (DM-modes only), or null when none. */
     triggerImageUrl?: string | null;
+    /** Post Reply option: like the customer's comment after a successful send.
+     *  Facebook-only column — Instagram content never carries it. */
+    likeComment?: boolean;
 }
 
 /** Context passed to replyGenerator.generateForComment */
@@ -176,4 +179,11 @@ export interface CommentPlatformAdapter {
         message_tags?: Array<{ id: string; name: string; type: 'user' | 'page'; offset: number; length: number }>;
         from?: { id: string; name: string };
     } | null>;
+
+    /**
+     * Like the customer's comment as the page (Post Reply option). Best-effort:
+     * callers fire-and-forget and a failure must never affect the reply.
+     * Only Facebook implements this — the Instagram API has no like endpoint.
+     */
+    likeComment?(platformCommentId: string, accessToken: string): Promise<void>;
 }

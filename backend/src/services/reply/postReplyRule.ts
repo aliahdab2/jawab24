@@ -33,6 +33,9 @@ export interface ContentTriggerFields {
     triggerType: string | null;
     /** Public URL of the attached image (DM-modes only), or null/absent when none. */
     triggerImageUrl?: string | null;
+    /** Like the customer's comment after a successful send. Facebook-only column —
+     *  instagramMedia rows never carry it. */
+    likeComment?: boolean;
 }
 
 export interface EffectivePostReplyRule {
@@ -41,6 +44,8 @@ export interface EffectivePostReplyRule {
     triggerReply: string;
     /** Attached image URL, delivered only on the DM channel (private/dual). */
     triggerImageUrl: string | null;
+    /** Page likes the customer's comment after the reply is sent (Facebook only). */
+    likeComment: boolean;
 }
 
 /**
@@ -60,6 +65,7 @@ export function resolvePostReplyRule(content: ContentTriggerFields): EffectivePo
         triggerKeyword: content.triggerKeyword,
         triggerReply: content.triggerReply,
         triggerImageUrl: content.triggerImageUrl ?? null,
+        likeComment: content.likeComment ?? false,
     };
 }
 

@@ -188,6 +188,7 @@ export class CommentProcessor {
                 triggerReply: content.triggerReply ?? null,
                 triggerType: content.triggerType ?? 'keyword',
                 triggerImageUrl: content.triggerImageUrl ?? null,
+                likeComment: content.likeComment ?? false,
             });
             // Rule check first: most comments land on posts with no trigger, so the
             // business-hours evaluation (an Intl.DateTimeFormat construction) only
@@ -457,6 +458,7 @@ export class CommentProcessor {
                             triggerKeyword: match.keyword ?? undefined,
                             triggerType: rule.triggerType,
                             replyImageUrl: rule.triggerImageUrl,
+                            likeComment: rule.likeComment,
                         });
                         // Keep the debounce slot only if the reply actually went out
                         // (skip/flag/pause/cap/failed-send exits leave replyCommitted
@@ -897,6 +899,10 @@ export class CommentProcessor {
         /** Post Reply image URL — delivered only on the DM channel (adapter gates by mode).
          *  Only ever set on the post_reply path. */
         replyImageUrl?: string | null;
+        /** Post Reply option: like the customer's comment after a successful send.
+         *  Only ever set on the post_reply path; effective only on adapters that
+         *  implement likeComment (Facebook — the Instagram API can't like). */
+        likeComment?: boolean;
     }): Promise<CommentResult> {
         const {
             adapter, platform, pipeline, pageId, userId, workspaceId,
@@ -1020,6 +1026,18 @@ export class CommentProcessor {
         // Defensive auto-pause: any successful send resets the failure streak.
         // Cheap (UPDATE guarded by counter > 0 inside the helper).
         void recordSendSuccess(pageId);
+
+        // Post Reply "like the comment" option (ManyChat parity): the page likes the
+        // customer's comment once the reply is out. Best-effort fire-and-forget — a
+        // like failure must never affect the already-sent reply. Demo pages carry a
+        // fake token, so they never hit the Graph API.
+        if (opts.likeComment && adapter.likeComment && !platformPageId.startsWith('demo_')) {
+            adapter.likeComment(platformCommentId, accessToken).catch(err =>
+                this.logger.warn(`[${platform}] Post Reply comment like failed (reply unaffected)`, {
+                    err, platformCommentId, pageId,
+                }),
+            );
+        }
 
         // NB: the per-(page, post, sender) debounce slot is claimed atomically at
         // the start of processComment (step 3ab), not armed here. A successful send

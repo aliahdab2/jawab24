@@ -125,6 +125,8 @@
   "postTriggerImageAdd": "إضافة صورة",
   "postTriggerImageOptional": "(اختياري)",
   "postTriggerImageDmOnly": "تُرسل في الرسالة الخاصة",
+  "postTriggerLikeComment": "الإعجاب بتعليق العميل",
+  "postTriggerLikeCommentDesc": "تُسجِّل صفحتك إعجابًا بالتعليق عند إرسال الرد. متاح لفيسبوك فقط.",
   "postTriggerImageRemove": "إزالة",
   "postTriggerImageBadType": "نوع الصورة غير مدعوم. استخدم JPG أو PNG أو WEBP.",
   "postTriggerImageTooLarge": "حجم الصورة كبير جداً (الحد الأقصى ٢ ميغابايت).",

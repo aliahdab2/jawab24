@@ -13,7 +13,7 @@ import {
 } from '@jawab24/shared';
 import { MessageSquare, MessageCircle, ArrowUpRight, ImagePlus, Lock, X } from 'lucide-react';
 import Link from 'next/link';
-import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover } from '@/components/ui';
+import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover, Toggle } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
@@ -51,6 +51,7 @@ interface PostTriggerModalProps {
   triggerReply?: string | null;
   triggerType?: string | null;
   triggerImageUrl?: string | null;
+  likeComment?: boolean | null;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -64,6 +65,7 @@ export function PostTriggerModal({
   triggerReply: initialReply,
   triggerType: initialType,
   triggerImageUrl: initialImageUrl,
+  likeComment: initialLikeComment,
   isOpen,
   onClose,
   onSaved,
@@ -77,6 +79,9 @@ export function PostTriggerModal({
   const [mode, setMode] = useState<TriggerMode>(() => (initialType === 'all' ? 'all' : 'keyword'));
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
   const [reply, setReply] = useState(initialReply ?? '');
+  // Like-the-comment option (ManyChat parity). Facebook only — the Instagram API
+  // has no like-comment endpoint, so the row is hidden entirely for IG posts.
+  const [likeEnabled, setLikeEnabled] = useState(initialLikeComment ?? false);
   const [confirmingClear, setConfirmingClear] = useState(false);
 
   // Image state. Two sources of truth, resolved into the picker:
@@ -110,11 +115,12 @@ export function PostTriggerModal({
       setMode(initialType === 'all' ? 'all' : 'keyword');
       setKeywords(parseKeywords(initialKeyword));
       setReply(initialReply ?? '');
+      setLikeEnabled(initialLikeComment ?? false);
       setImageFile(null);
       setImageObjectUrl(null);
       setImageRemoved(false);
     }
-  }, [isOpen, initialKeyword, initialReply, initialType]);
+  }, [isOpen, initialKeyword, initialReply, initialType, initialLikeComment]);
 
   // Revoke the object URL when it changes / unmounts to avoid leaking blob memory.
   useEffect(() => {
@@ -181,7 +187,11 @@ export function PostTriggerModal({
 
     setSavingSave(true);
     try {
-      await postsApi.updateTrigger(postId, source, keywordArg, reply.trim(), mode, imageArg);
+      await postsApi.updateTrigger(
+        postId, source, keywordArg, reply.trim(), mode, imageArg,
+        // Only Facebook posts carry the like option (the row is hidden for Instagram).
+        source === 'facebook' ? likeEnabled : undefined,
+      );
       toast.success(t('postTriggerSaved'));
       onSaveSuccess();
     } catch (err) {
@@ -382,6 +392,27 @@ export function PostTriggerModal({
             style={{ fieldSizing: 'content', resize: 'none', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
           />
         </div>
+
+        {/* Like-the-comment option — Facebook only (the Instagram API can't like
+            comments), so the row simply doesn't exist for IG posts. */}
+        {source === 'facebook' && (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium text-foreground">
+                {t('postTriggerLikeComment')}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t('postTriggerLikeCommentDesc')}
+              </span>
+            </div>
+            <Toggle
+              enabled={likeEnabled}
+              onChange={setLikeEnabled}
+              size="sm"
+              aria-label={t('postTriggerLikeComment')}
+            />
+          </div>
+        )}
 
         {/* Image affordance — only when the feature is configured server-side. */}
         {imagesEnabled && (

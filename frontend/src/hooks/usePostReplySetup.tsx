@@ -26,6 +26,7 @@ interface PostReplyTarget {
   reply: string | null;
   type: string | null;
   imageUrl: string | null;
+  likeComment: boolean;
 }
 
 export interface PostReplySetup {
@@ -66,7 +67,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
   const openForPublishedPost = useCallback(async (picked: PickedPost): Promise<void> => {
     try {
       const { data } = await postsApi.ensurePost(picked.pageId, picked.source, picked.platformPostId);
-      const content = data as { id: string; triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null; triggerImageUrl?: string | null };
+      const content = data as { id: string; triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null; triggerImageUrl?: string | null; likeComment?: boolean };
       setPickerOpen(false);
       setTarget({
         postId: content.id,
@@ -76,6 +77,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         reply: content.triggerReply ?? null,
         type: content.triggerType ?? null,
         imageUrl: content.triggerImageUrl ?? null,
+        likeComment: content.likeComment ?? false,
       });
     } catch (err) {
       captureError(err, 'usePostReplySetup.openForPublishedPost', { tags: { action: 'post-reply-setup' } });
@@ -91,7 +93,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         queryFn: () =>
           postsApi
             .getById(comment.postId!)
-            .then((r) => r.data as { triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null; triggerImageUrl?: string | null }),
+            .then((r) => r.data as { triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null; triggerImageUrl?: string | null; likeComment?: boolean }),
       });
       setTarget({
         postId: comment.postId,
@@ -101,6 +103,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         reply: post?.triggerReply ?? null,
         type: post?.triggerType ?? null,
         imageUrl: post?.triggerImageUrl ?? null,
+        likeComment: post?.likeComment ?? false,
       });
       return true;
     } catch (err) {
@@ -139,6 +142,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
           triggerReply={target.reply}
           triggerType={target.type}
           triggerImageUrl={target.imageUrl}
+          likeComment={target.likeComment}
           isOpen
           onClose={close}
           onSaved={onSaved}

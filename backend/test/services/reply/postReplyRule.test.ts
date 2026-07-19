@@ -20,12 +20,12 @@ describe('resolvePostReplyRule', () => {
             triggerReply: 'تفضل السعر',
             triggerType: 'keyword',
         };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerImageUrl: null });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerImageUrl: null, likeComment: false });
     });
 
     it('resolves the per-post any-comment rule (reply set, no keyword)', () => {
         const content: ContentTriggerFields = { triggerKeyword: null, triggerReply: 'DM sent', triggerType: 'all' };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerImageUrl: null });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerImageUrl: null, likeComment: false });
     });
 
     it('returns null when the content has no rule', () => {
@@ -160,5 +160,16 @@ describe('resolvePostReplyRule — image', () => {
     it('defaults triggerImageUrl to null when absent', () => {
         const rule = resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword' });
         expect(rule?.triggerImageUrl).toBeNull();
+    });
+});
+
+describe('resolvePostReplyRule — likeComment', () => {
+    it('carries likeComment through when set', () => {
+        const rule = resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', likeComment: true });
+        expect(rule?.likeComment).toBe(true);
+    });
+    it('defaults likeComment to false when absent (Instagram rows never carry it)', () => {
+        const rule = resolvePostReplyRule({ triggerKeyword: null, triggerReply: 'hi', triggerType: 'all' });
+        expect(rule?.likeComment).toBe(false);
     });
 });

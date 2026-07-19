@@ -368,6 +368,21 @@ export class FacebookService {
     }
 
     /**
+     * Like a comment as the page (Post Reply "like the comment" option).
+     * `POST /{comment-id}/likes` with the page token — covered by the
+     * `pages_manage_engagement` permission we already hold for comment replies.
+     * Facebook-only: the Instagram API has no like-comment endpoint. Throws on
+     * failure; callers treat the like as best-effort (it must never block a reply).
+     */
+    async likeComment(commentId: string, pageAccessToken: string): Promise<void> {
+        await traced('likeComment', () =>
+            fbAxios.post(`${FACEBOOK_GRAPH_API}/${commentId}/likes`, null, {
+                params: { access_token: pageAccessToken },
+            }),
+        );
+    }
+
+    /**
      * Send a private reply to a Facebook comment.
      * Uses /me/messages with recipient.comment_id which works for any commenter
      * without requiring prior Messenger interaction.

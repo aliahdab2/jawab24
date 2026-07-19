@@ -125,6 +125,8 @@
   "postTriggerImageAdd": "Add an image",
   "postTriggerImageOptional": "(optional)",
   "postTriggerImageDmOnly": "Sent in the private message",
+  "postTriggerLikeComment": "Like the customer's comment",
+  "postTriggerLikeCommentDesc": "Your page likes the comment when the reply is sent. Facebook only.",
   "postTriggerImageRemove": "Remove",
   "postTriggerImageBadType": "Unsupported image type. Use JPG, PNG, or WEBP.",
   "postTriggerImageTooLarge": "Image is too large (max 2 MB).",

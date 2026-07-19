@@ -43,6 +43,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             triggerReply: post.triggerReply ?? null,
             triggerType: post.triggerType ?? 'keyword',
             triggerImageUrl: post.triggerImageUrl ?? null,
+            likeComment: post.likeComment ?? false,
         };
     }
 
@@ -168,6 +169,10 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
 
     async fetchCommentWithTags(platformCommentId: string, accessToken: string) {
         return facebookService.getCommentWithTags(platformCommentId, accessToken);
+    }
+
+    async likeComment(platformCommentId: string, accessToken: string): Promise<void> {
+        await facebookService.likeComment(platformCommentId, accessToken);
     }
 }
 

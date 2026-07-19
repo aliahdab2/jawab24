@@ -214,6 +214,7 @@ export class PostsService {
         workspaceId: string,
         triggerType: 'keyword' | 'all' = 'keyword',
         image: TriggerImageInput = { action: 'keep' },
+        likeComment = false,
     ): Promise<UpdateTriggerResult> {
         const table = source === 'instagram' ? instagramMedia : posts;
 
@@ -275,16 +276,26 @@ export class PostsService {
         }
         // effectiveAction === 'keep' → imageColumns stays undefined → columns untouched.
 
-        await db
-            .update(table)
-            .set({
-                triggerKeyword,
-                triggerReply,
-                triggerType,
-                ...(imageColumns ?? {}),
-                updatedAt: new Date(),
-            })
-            .where(eq(table.id, contentId));
+        const triggerColumns = {
+            triggerKeyword,
+            triggerReply,
+            triggerType,
+            ...(imageColumns ?? {}),
+            updatedAt: new Date(),
+        };
+        if (source === 'facebook') {
+            // likeComment lives only on posts (the Instagram API can't like comments),
+            // so the facebook branch writes it and the instagram branch has no column.
+            await db
+                .update(posts)
+                .set({ ...triggerColumns, likeComment })
+                .where(eq(posts.id, contentId));
+        } else {
+            await db
+                .update(instagramMedia)
+                .set(triggerColumns)
+                .where(eq(instagramMedia.id, contentId));
+        }
 
         // Safe-order delete: the new state is committed; only now drop the superseded
         // object. Best-effort — a failed delete leaves a harmless orphan, never a
@@ -374,7 +385,7 @@ export class PostsService {
         page: PickerPage,
         source: 'facebook' | 'instagram',
         platformPostId: string,
-    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerImageUrl: string | null }> {
+    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerImageUrl: string | null; likeComment: boolean }> {
         if (source === 'facebook') {
             const post = await this.findOrCreateFromWebhook(page.id, platformPostId, undefined, page.accessToken);
             return {
@@ -383,6 +394,7 @@ export class PostsService {
                 triggerReply: post.triggerReply ?? null,
                 triggerType: post.triggerType === 'all' ? 'all' : 'keyword',
                 triggerImageUrl: post.triggerImageUrl ?? null,
+                likeComment: post.likeComment ?? false,
             };
         }
         const media = await this.findOrCreateInstagramMedia(page.id, platformPostId);
@@ -392,6 +404,7 @@ export class PostsService {
             triggerReply: media.triggerReply ?? null,
             triggerType: media.triggerType === 'all' ? 'all' : 'keyword',
             triggerImageUrl: media.triggerImageUrl ?? null,
+            likeComment: false,
         };
     }
 

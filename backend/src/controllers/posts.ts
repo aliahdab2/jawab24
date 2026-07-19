@@ -229,6 +229,9 @@ export class PostsController {
                 triggerType?: 'keyword' | 'all';
                 // Image intent: absent/undefined = leave as-is; null = remove; object = set a new image.
                 triggerImage?: { base64: string; mimeType: string } | null;
+                // Like the customer's comment on a successful send. Facebook-only —
+                // silently coerced to false for Instagram (its API can't like comments).
+                likeComment?: boolean;
             };
         }>,
         reply: FastifyReply,
@@ -236,7 +239,7 @@ export class PostsController {
         const req = request as WorkspaceRequest;
         if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
-        const { source, triggerKeyword, triggerReply, triggerType, triggerImage } = request.body;
+        const { source, triggerKeyword, triggerReply, triggerType, triggerImage, likeComment } = request.body;
 
         if (!['facebook', 'instagram'].includes(source)) {
             return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
@@ -249,6 +252,8 @@ export class PostsController {
         const keyword = triggerKeyword?.trim() || null;
         const replyText = triggerReply?.trim() || null;
         const hasImage = triggerImage !== null && triggerImage !== undefined;
+        // Defense in depth: only Facebook posts can carry the like option, whatever the client sent.
+        const likeCommentValue = source === 'facebook' && likeComment === true;
 
         // Reject an image on a feature that isn't configured, before any other work —
         // the send path can't deliver it, so accepting the upload would be a lie.
@@ -298,7 +303,7 @@ export class PostsController {
             const type: 'keyword' | 'all' = rawType === 'all' ? 'all' : 'keyword';
             // Any-comment mode stores no keyword.
             const storedKeyword = type === 'all' ? null : keyword;
-            const result = await postsService.updateTrigger(id, source, storedKeyword, replyText, req.workspaceId, type, imageIntent);
+            const result = await postsService.updateTrigger(id, source, storedKeyword, replyText, req.workspaceId, type, imageIntent, likeCommentValue);
             if (!result.ok) {
                 if (result.reason === 'quota_exceeded') {
                     return reply.status(413).send({ error: 'image_quota_exceeded', message: 'Image storage limit reached for this workspace' });

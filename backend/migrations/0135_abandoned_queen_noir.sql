@@ -1,0 +1,1 @@
+ALTER TABLE "posts" ADD COLUMN "like_comment" boolean DEFAULT false NOT NULL;
