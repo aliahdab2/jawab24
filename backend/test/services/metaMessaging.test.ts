@@ -28,7 +28,11 @@ describe('metaMessaging', () => {
             };
             expect(msg.attachment.payload.template_type).toBe('generic');
             expect(msg.attachment.payload.elements).toHaveLength(1);
-            expect(msg.attachment.payload.elements[0]).toEqual({ title: 'كريم غو ريبير', image_url: 'https://cdn/x.jpg' });
+            expect(msg.attachment.payload.elements[0]).toEqual({
+                title: 'كريم غو ريبير',
+                image_url: 'https://cdn/x.jpg',
+                default_action: { type: 'web_url', url: 'https://cdn/x.jpg' },
+            });
         });
 
         it('imageCardMessage: caps the title and never emits an empty title', () => {

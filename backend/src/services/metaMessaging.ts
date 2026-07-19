@@ -103,7 +103,18 @@ type MetaMessage =
  */
 export function imageCardMessage(imageUrl: string, caption: string): MetaMessage {
     const title = caption.trim().slice(0, META_TEMPLATE_LIMITS.maxTitleChars) || ' ';
-    return { attachment: { type: 'template', payload: { template_type: 'generic', elements: [{ title, image_url: imageUrl }] } } };
+    // default_action makes the (necessarily small, ~1.91:1) card image TAPPABLE — tapping
+    // opens the full-resolution image in the in-app browser, so the customer can see/zoom it.
+    // Without it the card image is a dead thumbnail (the "click does nothing" complaint).
+    return {
+        attachment: {
+            type: 'template',
+            payload: {
+                template_type: 'generic',
+                elements: [{ title, image_url: imageUrl, default_action: { type: 'web_url', url: imageUrl } }],
+            },
+        },
+    };
 }
 
 /**
