@@ -133,17 +133,33 @@ describe('PostTriggerModal — outcome card', () => {
         expect(screen.queryByText('Details sent via private message 📩')).toBeNull();
     });
 
-    // The image is delivered as its OWN message after the text, and the preview mirrors
-    // that visually: the as-written caption, then the full image below it — no
-    // mechanics-explaining note (the stacked layout IS the signal).
-    it('with an image attached (DM mode): preview shows the text caption, then the full image', async () => {
+    // The image ALWAYS rides an inline card (never hidden). A SHORT caption fits the card in
+    // full, so the preview shows the caption itself + the image + a tap-to-full-size hint.
+    it('with a short caption + image (DM mode): card shows the full caption, the image, and the tap hint', async () => {
         settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private', triggerImagesEnabled: true } });
         renderModal({ triggerReply: 'Here is the schedule', triggerImageUrl: 'https://cdn/x.jpg' });
-        expect(await screen.findByText('The exact text you wrote above')).toBeInTheDocument();
-        // The stored image is previewed (full, not a cropped card thumbnail)...
+        // Await a card-specific element so the async outcome card is rendered before asserting.
+        // (The caption itself renders in the card, but the text also matches the reply textarea,
+        // so the tap hint + image + absence of «Read more» are what uniquely mark the short case.)
+        expect(await screen.findByText('The customer can tap the image to open it full-size.')).toBeInTheDocument();
         expect(document.querySelector('img[src="https://cdn/x.jpg"]')).not.toBeNull();
-        // ...with no delivery-mechanics note cluttering the preview.
-        expect(screen.queryByText(/separate message/i)).toBeNull();
+        // No «Read more» button for a short caption.
+        expect(screen.queryByText('Read more')).toBeNull();
+    });
+
+    // A LONG caption can't fit the card title, so the preview shows a teaser + «Read more»
+    // (the postback path) + the in-chat note instead of the tap hint. (That the image reaches the
+    // customer only once — never re-sent on tap — is a backend guarantee, tested in webhook.test.ts.)
+    it('with a long caption + image (DM mode): card shows a teaser + «Read more» + the in-chat note', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private', triggerImagesEnabled: true } });
+        renderModal({ triggerReply: 'A'.repeat(120), triggerImageUrl: 'https://cdn/x.jpg' });
+        // «Read more» button appears (card-specific — await it first)...
+        expect(await screen.findByText('Read more')).toBeInTheDocument();
+        // ...with the in-chat delivery note and the image in the card...
+        expect(screen.getByText('After the customer taps «Read more», your full reply arrives in the chat.')).toBeInTheDocument();
+        expect(document.querySelector('img[src="https://cdn/x.jpg"]')).not.toBeNull();
+        // ...and the short-caption tap hint is NOT shown in this case.
+        expect(screen.queryByText('The customer can tap the image to open it full-size.')).toBeNull();
     });
 
     it('shows no outcome card while settings are loading', () => {
