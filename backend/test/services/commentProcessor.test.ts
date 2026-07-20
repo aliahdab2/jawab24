@@ -1918,6 +1918,159 @@ describe('CommentProcessor — template reply mode behavior', () => {
         });
     });
 
+    describe('Post Reply — like-the-comment option', () => {
+        beforeEach(() => {
+            // This parent describe leaves getSettings to each test — set a mode here
+            // or processComment bails before the trigger path is reached.
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('public'));
+        });
+
+        const likeContent = {
+            id: 'content-uuid',
+            autoReplyEnabled: true,
+            message: 'Post body',
+            triggerKeyword: 'سجّل',
+            triggerReply: 'مرحباً!',
+            likeComment: true,
+        };
+        /** The like is fire-and-forget — flush the microtask queue so its
+         *  .then/.catch chain has run before asserting. */
+        const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+        it('likes the comment after a successful trigger send', async () => {
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
+                likeComment,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect(likeComment).toHaveBeenCalledWith('comment-1', 'token-123');
+        });
+
+        it('does not like when the option is off', async () => {
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({ ...likeContent, likeComment: false }),
+                likeComment,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect(likeComment).not.toHaveBeenCalled();
+        });
+
+        it('does not like when the send failed', async () => {
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
+                sendReply: vi.fn().mockResolvedValue({ success: false, error: 'send failed' }),
+                likeComment,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(false);
+            expect(likeComment).not.toHaveBeenCalled();
+        });
+
+        it('an adapter without likeComment (Instagram) is a no-op, not a crash', async () => {
+            const adapter = createMockAdapter({
+                platform: 'instagram',
+                findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
+            });
+            // Base factory has no likeComment — mirrors the Instagram adapter.
+            expect(adapter.likeComment).toBeUndefined();
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(true);
+        });
+
+        it('a like failure never affects the already-sent reply', async () => {
+            const likeComment = vi.fn().mockRejectedValue(new Error('graph 403'));
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
+                likeComment,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect(likeComment).toHaveBeenCalled();
+            expect(adapter.markAsReplied).toHaveBeenCalled();
+        });
+
+        it('a like that resolves false records the like_failed pipeline metric', async () => {
+            // The adapter contract never rejects — a Graph failure resolves false
+            // (facebookService.likeComment self-logs). The processor must count it
+            // so a systemic break (revoked permission) is visible in metrics.
+            const likeComment = vi.fn().mockResolvedValue(false);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
+                likeComment,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.like_failed']).toBe(1);
+        });
+
+        it('a successful like records no like_failed metric', async () => {
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
+                likeComment,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.like_failed']).toBeUndefined();
+        });
+
+        it('demo pages never hit the Graph API', async () => {
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
+                likeComment,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'demo_page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect(likeComment).not.toHaveBeenCalled();
+        });
+    });
+
     describe('Post Reply — any-comment mode (triggerType "all")', () => {
         const anyCommentContent = {
             id: 'content-uuid',

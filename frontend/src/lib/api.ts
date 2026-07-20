@@ -262,9 +262,12 @@ export const postsApi = {
     triggerType: 'keyword' | 'all' = 'keyword',
     // Image intent: undefined = leave as-is; null = remove; object = set a new image.
     triggerImage?: { base64: string; mimeType: string } | null,
+    // Like the customer's comment on send (Facebook only — backend coerces to false for Instagram).
+    likeComment?: boolean,
   ) => api.patch(`/posts/${id}/trigger`, {
     source, triggerKeyword, triggerReply, triggerType,
     ...(triggerImage !== undefined ? { triggerImage } : {}),
+    ...(likeComment !== undefined ? { likeComment } : {}),
   }),
   // Post Reply picker: recent published posts for a page (per platform) + their
   // trigger state, paginated via the platform Graph cursor.

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -41,12 +41,16 @@ vi.mock('@/components/ui', () => ({
     InfoPopover: ({ label }: { label: string }) => <button type="button" aria-label={label} />,
     Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     ConfirmationModal: () => null,
+    Toggle: ({ enabled, onChange, 'aria-label': ariaLabel }: { enabled: boolean; onChange: (v: boolean) => void; 'aria-label'?: string }) => (
+        <button type="button" role="switch" aria-checked={enabled} aria-label={ariaLabel} onClick={() => onChange(!enabled)} />
+    ),
 }));
 
 import { PostTriggerModal } from '@/components/comments/PostTriggerModal';
-import { settingsApi } from '@/lib/api';
+import { settingsApi, postsApi } from '@/lib/api';
 
 const settingsGetMock = vi.mocked(settingsApi.get);
+const updateTriggerMock = vi.mocked(postsApi.updateTrigger);
 
 function renderModal(props: Partial<React.ComponentProps<typeof PostTriggerModal>> = {}) {
     const client = new QueryClient({
@@ -173,5 +177,43 @@ describe('PostTriggerModal — outcome card', () => {
         renderModal();
         await waitFor(() => expect(settingsGetMock).toHaveBeenCalled());
         expect(screen.queryByText('What the commenter receives')).toBeNull();
+    });
+});
+
+// The like-the-comment option is Facebook-only (the Instagram API has no
+// like-comment endpoint) — the row is hidden entirely for IG posts.
+describe('PostTriggerModal — like the comment', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private' } });
+    });
+
+    it('renders the toggle (off by default) for a facebook post', async () => {
+        renderModal({ source: 'facebook' });
+        expect(await screen.findByText("Like the customer's comment")).toBeInTheDocument();
+        expect(screen.getByRole('switch', { name: "Like the customer's comment" })).toHaveAttribute('aria-checked', 'false');
+    });
+
+    it('does not render the toggle for an instagram post', async () => {
+        renderModal({ source: 'instagram' });
+        await waitFor(() => expect(settingsGetMock).toHaveBeenCalled());
+        expect(screen.queryByText("Like the customer's comment")).toBeNull();
+    });
+
+    it('hydrates from the saved value', async () => {
+        renderModal({ source: 'facebook', likeComment: true });
+        expect(await screen.findByRole('switch', { name: "Like the customer's comment" })).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('saving sends the toggled value to the API', async () => {
+        updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
+        renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details sent!' });
+
+        fireEvent.click(await screen.findByRole('switch', { name: "Like the customer's comment" }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(updateTriggerMock).toHaveBeenCalledWith(
+            'post-1', 'facebook', null, 'Details sent!', 'all', undefined, true,
+        ));
     });
 });

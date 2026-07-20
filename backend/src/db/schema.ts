@@ -333,6 +333,10 @@ export const posts = pgTable('posts', {
     triggerImageUrl: text('trigger_image_url'),
     triggerImageKey: text('trigger_image_key'),
     triggerImageBytes: integer('trigger_image_bytes'),
+    /** Post Reply option: page likes the customer's comment after a successful trigger send.
+     *  Facebook-only — the Instagram API has no like-comment endpoint, so instagram_media
+     *  has no counterpart column. */
+    likeComment: boolean('like_comment').default(false).notNull(),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),

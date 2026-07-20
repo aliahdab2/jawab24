@@ -19,7 +19,7 @@
   - ✅ `public_profile`, `email` — Always approved
   - ✅ `pages_read_user_content` — Approved (2026-04-07) — read page posts and comments
   - ✅ `pages_read_engagement` — Approved (2026-04-07) — read comments (feed webhooks)
-  - ✅ `pages_manage_engagement` — Approved (2026-04-07) — reply to comments
+  - ✅ `pages_manage_engagement` — Approved (2026-04-07) — reply to comments; also covers the Post Reply like-the-comment option (`POST /{comment-id}/likes`, `facebookService.likeComment`)
   - ✅ `instagram_basic` — Approved (2026-04-07) — Instagram account access
   - ✅ `instagram_manage_comments` — Approved (2026-04-07) — reply to Instagram comments
   - ✅ `instagram_manage_messages` — Approved (2026-04-07) — Instagram DMs

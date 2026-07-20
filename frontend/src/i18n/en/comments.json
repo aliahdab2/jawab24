@@ -125,6 +125,8 @@
   "postTriggerImageAdd": "Add an image",
   "postTriggerImageOptional": "(optional)",
   "postTriggerImageDmOnly": "Sent in the private message with your reply",
+  "postTriggerLikeComment": "Like the customer's comment",
+  "postTriggerLikeCommentDesc": "Your page likes the comment when the reply is sent. Facebook only.",
   "postTriggerReadMore": "Read more",
   "postTriggerReadMoreNote": "After the customer taps «Read more», your full reply arrives in the chat.",
   "postTriggerImageTapHint": "The customer can tap the image to open it full-size.",

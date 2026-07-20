@@ -369,6 +369,38 @@ export class FacebookService {
     }
 
     /**
+     * Like a comment as the page (Post Reply "like the comment" option).
+     * `POST /{comment-id}/likes` with the page token — covered by the
+     * `pages_manage_engagement` permission we already hold for comment replies.
+     * Facebook-only: the Instagram API has no like-comment endpoint.
+     *
+     * Best-effort and self-contained, exactly like sendSenderAction: it uses plain
+     * `axios` (NOT the retrying fbAxios — a cosmetic like must not sleep 60s on a
+     * rate limit inside a fire-and-forget promise), swallows failures, and NEVER
+     * throws so a like can't affect the reply. Logs only status + FB error data —
+     * never the raw AxiosError, whose `config.params` carries the page access token.
+     * Returns whether the like landed, so the caller can count failures
+     * (`like_failed` pipeline metric) without this method ever throwing.
+     */
+    async likeComment(commentId: string, pageAccessToken: string): Promise<boolean> {
+        try {
+            await axios.post(`${FACEBOOK_GRAPH_API}/${encodeURIComponent(commentId)}/likes`, null, {
+                params: { access_token: pageAccessToken },
+                timeout: 15_000,
+            });
+            return true;
+        } catch (error) {
+            const fbError = (error as { response?: { data?: unknown; status?: number } })?.response;
+            this.logger.warn('[Facebook] like comment failed (non-fatal)', {
+                commentId,
+                status: fbError?.status,
+                data: fbError?.data,
+            });
+            return false;
+        }
+    }
+
+    /**
      * Send a private reply to a Facebook comment.
      * Uses /me/messages with recipient.comment_id which works for any commenter
      * without requiring prior Messenger interaction.

@@ -26,6 +26,30 @@ interface PostReplyTarget {
   reply: string | null;
   type: string | null;
   imageUrl: string | null;
+  likeComment: boolean;
+}
+
+/** Trigger state as the posts API returns it (`ensurePost` / `getById`). One shape,
+ *  cast in both fetch paths — extend HERE when a trigger field is added, so the two
+ *  paths can't drift. */
+interface ApiTriggerState {
+  triggerKeyword?: string | null;
+  triggerReply?: string | null;
+  triggerType?: string | null;
+  triggerImageUrl?: string | null;
+  likeComment?: boolean;
+}
+
+/** Normalize API trigger state into the modal-facing target fields (single place
+ *  that owns the `?? null` / `?? false` defaults for both open paths). */
+function toTriggerFields(post: ApiTriggerState | null | undefined): Pick<PostReplyTarget, 'keyword' | 'reply' | 'type' | 'imageUrl' | 'likeComment'> {
+  return {
+    keyword: post?.triggerKeyword ?? null,
+    reply: post?.triggerReply ?? null,
+    type: post?.triggerType ?? null,
+    imageUrl: post?.triggerImageUrl ?? null,
+    likeComment: post?.likeComment ?? false,
+  };
 }
 
 export interface PostReplySetup {
@@ -66,16 +90,13 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
   const openForPublishedPost = useCallback(async (picked: PickedPost): Promise<void> => {
     try {
       const { data } = await postsApi.ensurePost(picked.pageId, picked.source, picked.platformPostId);
-      const content = data as { id: string; triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null; triggerImageUrl?: string | null };
+      const content = data as { id: string } & ApiTriggerState;
       setPickerOpen(false);
       setTarget({
         postId: content.id,
         source: picked.source,
         postMessage: picked.postMessage,
-        keyword: content.triggerKeyword ?? null,
-        reply: content.triggerReply ?? null,
-        type: content.triggerType ?? null,
-        imageUrl: content.triggerImageUrl ?? null,
+        ...toTriggerFields(content),
       });
     } catch (err) {
       captureError(err, 'usePostReplySetup.openForPublishedPost', { tags: { action: 'post-reply-setup' } });
@@ -91,16 +112,13 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         queryFn: () =>
           postsApi
             .getById(comment.postId!)
-            .then((r) => r.data as { triggerKeyword?: string | null; triggerReply?: string | null; triggerType?: string | null; triggerImageUrl?: string | null }),
+            .then((r) => r.data as ApiTriggerState),
       });
       setTarget({
         postId: comment.postId,
         source: comment.source ?? 'facebook',
         postMessage: comment.postMessage,
-        keyword: post?.triggerKeyword ?? null,
-        reply: post?.triggerReply ?? null,
-        type: post?.triggerType ?? null,
-        imageUrl: post?.triggerImageUrl ?? null,
+        ...toTriggerFields(post),
       });
       return true;
     } catch (err) {
@@ -139,6 +157,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
           triggerReply={target.reply}
           triggerType={target.type}
           triggerImageUrl={target.imageUrl}
+          likeComment={target.likeComment}
           isOpen
           onClose={close}
           onSaved={onSaved}

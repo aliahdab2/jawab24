@@ -701,6 +701,45 @@ describe('Facebook Service', () => {
         });
     });
 
+    describe('likeComment', () => {
+        it('POSTs to the comment likes edge with the page token, via plain axios (not the retrying fbAxios)', async () => {
+            vi.mocked(axios.post).mockResolvedValue({ data: { success: true } });
+
+            await expect(service.likeComment('comment_123', 'page_token_abc')).resolves.toBe(true);
+
+            expect(axios.post).toHaveBeenCalledWith(
+                'https://graph.facebook.com/v18.0/comment_123/likes',
+                null,
+                { params: { access_token: 'page_token_abc' }, timeout: 15_000 },
+            );
+            // Cosmetic call — must NOT go through the retrying fbAxios client.
+            expect(fbAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('never throws and never logs the raw error (no page token leak) on failure', async () => {
+            // A real AxiosError carries config.params.access_token — logging the raw
+            // object would leak the page token. The method must log only status + data.
+            const axiosError = Object.assign(new Error('Forbidden'), {
+                isAxiosError: true,
+                config: { params: { access_token: 'SECRET_PAGE_TOKEN' } },
+                response: { status: 403, data: { error: { message: 'permission', code: 200 } } },
+            });
+            vi.mocked(axios.post).mockRejectedValue(axiosError);
+
+            const warn = vi.fn();
+            const svc = new FacebookService();
+            svc.setLogger({ info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() } as never);
+
+            // Must resolve (never throw) so the reply is unaffected — false = like_failed.
+            await expect(svc.likeComment('comment_123', 'SECRET_PAGE_TOKEN')).resolves.toBe(false);
+
+            expect(warn).toHaveBeenCalledTimes(1);
+            const loggedPayload = JSON.stringify(warn.mock.calls[0]);
+            expect(loggedPayload).not.toContain('SECRET_PAGE_TOKEN');
+            expect(loggedPayload).toContain('403');
+        });
+    });
+
     describe('getLongLivedToken', () => {
         it('should exchange short-lived token for long-lived token', async () => {
             const mockResponse = {

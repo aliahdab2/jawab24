@@ -125,6 +125,8 @@
   "postTriggerImageAdd": "إضافة صورة",
   "postTriggerImageOptional": "(اختياري)",
   "postTriggerImageDmOnly": "تُرسل في الرسالة الخاصة مع ردك",
+  "postTriggerLikeComment": "الإعجاب بتعليق العميل",
+  "postTriggerLikeCommentDesc": "تُسجِّل صفحتك إعجابًا بالتعليق عند إرسال الرد. متاح على فيسبوك فقط.",
   "postTriggerReadMore": "اقرأ المزيد",
   "postTriggerReadMoreNote": "بعد أن يضغط العميل «اقرأ المزيد»، يصل ردك الكامل في المحادثة.",
   "postTriggerImageTapHint": "يمكن للعميل الضغط على الصورة لفتحها بالحجم الكامل.",
