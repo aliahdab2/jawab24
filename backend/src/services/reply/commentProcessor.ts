@@ -188,6 +188,7 @@ export class CommentProcessor {
                 triggerKeyword: content.triggerKeyword ?? null,
                 triggerReply: content.triggerReply ?? null,
                 triggerType: content.triggerType ?? 'keyword',
+                triggerExcludeKeyword: content.triggerExcludeKeyword ?? null,
                 triggerImageUrl: content.triggerImageUrl ?? null,
                 likeComment: content.likeComment,
             });

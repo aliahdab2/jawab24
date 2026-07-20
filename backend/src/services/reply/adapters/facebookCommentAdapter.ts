@@ -45,6 +45,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             triggerKeyword: post.triggerKeyword ?? null,
             triggerReply: post.triggerReply ?? null,
             triggerType: post.triggerType ?? 'keyword',
+            triggerExcludeKeyword: post.triggerExcludeKeyword ?? null,
             triggerImageUrl: post.triggerImageUrl ?? null,
             likeComment: post.likeComment,
         };

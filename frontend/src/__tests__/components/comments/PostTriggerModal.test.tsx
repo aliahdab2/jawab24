@@ -29,7 +29,15 @@ vi.mock('@/components/ui', () => ({
         <button onClick={onClick} disabled={disabled}>{children}</button>
     ),
     Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
-    KeywordChipInput: ({ id }: { id?: string }) => <input id={id} />,
+    // Minimal controllable stand-in: comma-splits the typed value into chips on change,
+    // so a test can drive value → onChange without the real chip UI.
+    KeywordChipInput: ({ id, value, onChange }: { id?: string; value?: string[]; onChange?: (v: string[]) => void }) => (
+        <input
+            id={id}
+            value={(value ?? []).join(', ')}
+            onChange={(e) => onChange?.(e.target.value ? e.target.value.split(',').map((s) => s.trim()).filter(Boolean) : [])}
+        />
+    ),
     FormField: ({ label, children }: { label: string; children: ReactNode }) => (
         <div>
             <span>{label}</span>
@@ -212,8 +220,30 @@ describe('PostTriggerModal — like the comment', () => {
         fireEvent.click(await screen.findByRole('switch', { name: "Like the customer's comment" }));
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-        await waitFor(() => expect(updateTriggerMock).toHaveBeenCalledWith(
-            'post-1', 'facebook', null, 'Details sent!', 'all', undefined, true,
-        ));
+        await waitFor(() => expect(updateTriggerMock).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'post-1', source: 'facebook', triggerKeyword: null, triggerReply: 'Details sent!',
+            triggerType: 'all', likeComment: true,
+        })));
+    });
+
+    it('sends exclude keywords entered by the merchant', async () => {
+        updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details sent!' });
+
+        await screen.findByText('Exclude keywords (optional)');
+        const excludeInput = container.querySelector('#trigger-exclude') as HTMLInputElement;
+        fireEvent.change(excludeInput, { target: { value: 'expensive, complaint' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(updateTriggerMock).toHaveBeenCalledWith(expect.objectContaining({
+            triggerExcludeKeyword: 'expensive, complaint',
+        })));
+    });
+
+    it('hydrates saved exclude keywords into the field', async () => {
+        const { container } = renderModal({ source: 'facebook', triggerExcludeKeyword: 'غالي, expensive' });
+        await screen.findByText('Exclude keywords (optional)');
+        const excludeInput = container.querySelector('#trigger-exclude') as HTMLInputElement;
+        expect(excludeInput.value).toBe('غالي, expensive');
     });
 });

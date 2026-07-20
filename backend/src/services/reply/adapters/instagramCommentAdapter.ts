@@ -49,6 +49,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             triggerKeyword: media.triggerKeyword ?? null,
             triggerReply: media.triggerReply ?? null,
             triggerType: media.triggerType ?? 'keyword',
+            triggerExcludeKeyword: media.triggerExcludeKeyword ?? null,
             triggerImageUrl: media.triggerImageUrl ?? null,
         };
     }

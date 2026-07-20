@@ -31,6 +31,9 @@ export interface ContentTriggerFields {
     triggerReply: string | null;
     /** 'keyword' | 'all'. Legacy rows / nulls are treated as 'keyword'. */
     triggerType: string | null;
+    /** Comma-separated veto keywords: a comment containing any of them never fires the
+     *  rule (both trigger modes) and falls through to the AI pipeline. Null/absent = none. */
+    triggerExcludeKeyword?: string | null;
     /** Public URL of the attached image (DM-modes only), or null/absent when none. */
     triggerImageUrl?: string | null;
     /** Like the customer's comment after a successful send. Facebook-only column —
@@ -42,6 +45,8 @@ export interface EffectivePostReplyRule {
     triggerType: PostReplyTriggerType;
     triggerKeyword: string | null;
     triggerReply: string;
+    /** Veto keywords (comma-separated, or null): matching any of them blocks the rule. */
+    triggerExcludeKeyword: string | null;
     /** Attached image URL, delivered only on the DM channel (private/dual). */
     triggerImageUrl: string | null;
     /** Page likes the customer's comment after the reply is sent (Facebook only). */
@@ -64,6 +69,7 @@ export function resolvePostReplyRule(content: ContentTriggerFields): EffectivePo
         triggerType: type,
         triggerKeyword: content.triggerKeyword,
         triggerReply: content.triggerReply,
+        triggerExcludeKeyword: content.triggerExcludeKeyword ?? null,
         triggerImageUrl: content.triggerImageUrl ?? null,
         likeComment: content.likeComment ?? false,
     };
@@ -75,17 +81,25 @@ export type PostReplyMatch =
 
 /**
  * Does a comment satisfy the rule's trigger?
- *   'all'     → any comment matches (keyword: null). The caller then applies the guard.
+ *   Exclude keywords veto FIRST (both modes): a comment containing any excluded keyword
+ *   never matches — it falls through to the AI pipeline like a non-matching comment.
+ *   'all'     → any (non-vetoed) comment matches (keyword: null). The caller then applies the guard.
  *   'keyword' → returns the first matching keyword, else no match.
  * Matching mirrors the long-standing per-post logic (Arabic-normalized, shared
  * matchesKeyword) so behavior is identical to before for keyword rules.
  */
 export function matchPostReplyRule(rule: EffectivePostReplyRule, commentMessage: string): PostReplyMatch {
+    const normalizedComment = normalizeArabic(commentMessage.toLowerCase());
+    if (rule.triggerExcludeKeyword) {
+        const excluded = parseKeywords(rule.triggerExcludeKeyword).some(kw =>
+            matchesKeyword(normalizedComment, normalizeArabic(kw.toLowerCase())),
+        );
+        if (excluded) return { matched: false };
+    }
     if (rule.triggerType === 'all') {
         return { matched: true, keyword: null };
     }
     if (!rule.triggerKeyword) return { matched: false };
-    const normalizedComment = normalizeArabic(commentMessage.toLowerCase());
     const keywords = parseKeywords(rule.triggerKeyword);
     const matchedKeyword = keywords.find(kw =>
         matchesKeyword(normalizedComment, normalizeArabic(kw.toLowerCase())),
@@ -97,6 +111,8 @@ export interface PostReplyRuleInput {
     triggerType: string;            // expected 'keyword' | 'all'
     triggerKeyword: string | null;  // already trimmed by the caller, or null
     triggerReply: string | null;    // already trimmed by the caller, or null
+    /** Veto keywords, already trimmed, or null/absent when none. Valid in both modes. */
+    triggerExcludeKeyword?: string | null;
 }
 
 /**
@@ -106,15 +122,25 @@ export interface PostReplyRuleInput {
  * attached (an image is sent as its own message, so it never eats into the text budget).
  *   - keyword mode: reply required (≤1000), 1–10 keywords, ≤100 chars each.
  *   - any-comment mode: reply required (≤1000); keyword must be absent.
+ *   - both modes: optional exclude keywords, same 10 × 100-char limits.
  */
 export function validatePostReplyRuleInput(input: PostReplyRuleInput): string | null {
-    const { triggerType, triggerKeyword, triggerReply } = input;
+    const { triggerType, triggerKeyword, triggerReply, triggerExcludeKeyword } = input;
     if (triggerType !== 'keyword' && triggerType !== 'all') {
         return 'triggerType must be "keyword" or "all"';
     }
     if (!triggerReply) return 'triggerReply is required';
     if (triggerReply.length > POST_REPLY_MAX_REPLY_LEN) {
         return `triggerReply must be ${POST_REPLY_MAX_REPLY_LEN} characters or fewer`;
+    }
+    if (triggerExcludeKeyword) {
+        const excludes = parseKeywords(triggerExcludeKeyword);
+        if (excludes.length > POST_REPLY_MAX_KEYWORDS) {
+            return `triggerExcludeKeyword must not exceed ${POST_REPLY_MAX_KEYWORDS} keywords`;
+        }
+        if (excludes.some(k => k.length > POST_REPLY_MAX_KEYWORD_LEN)) {
+            return `Each excluded keyword must be ${POST_REPLY_MAX_KEYWORD_LEN} characters or fewer`;
+        }
     }
     if (triggerType === 'all') {
         if (triggerKeyword) return 'triggerKeyword must be empty when triggerType is "all"';

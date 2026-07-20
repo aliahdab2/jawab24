@@ -26,6 +26,8 @@ export interface ContentEntity {
     triggerReply?: string | null;
     /** How the per-post trigger fires: 'keyword' (match triggerKeyword) | 'all' (any comment). */
     triggerType?: string | null;
+    /** Comma-separated veto keywords — a comment containing any never fires the rule. */
+    triggerExcludeKeyword?: string | null;
     /** Attached Post Reply image URL (DM-modes only), or null when none. */
     triggerImageUrl?: string | null;
     /** Post Reply option: like the customer's comment after a successful send.

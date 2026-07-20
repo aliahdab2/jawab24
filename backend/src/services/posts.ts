@@ -21,6 +21,23 @@ export type UpdateTriggerResult =
     | { ok: false; reason: 'not_found' }
     | { ok: false; reason: 'quota_exceeded' };
 
+/** All updateTrigger inputs, keyed by name — the parameter list outgrew positional args. */
+export interface UpdateTriggerOptions {
+    contentId: string;
+    source: 'facebook' | 'instagram';
+    workspaceId: string;
+    triggerKeyword: string | null;
+    triggerReply: string | null;
+    triggerType?: 'keyword' | 'all';
+    /** Image intent — defaults to keep (leave columns untouched). */
+    image?: TriggerImageInput;
+    /** undefined = leave the column untouched (keep); a boolean = explicit set.
+     *  Facebook-only column, so it's ignored on the instagram branch. */
+    likeComment?: boolean;
+    /** Veto keywords: undefined = keep; null = clear; string = set. Both platforms. */
+    triggerExcludeKeyword?: string | null;
+}
+
 /** File extension for a validated image MIME (allowlist mirrors the validator). */
 function extForMime(mime: string): string {
     switch (mime) {
@@ -206,18 +223,18 @@ export class PostsService {
      * source determines which table to target. Verifies ownership before updating.
      * Returns false if the record is not found or not owned by this workspace.
      */
-    async updateTrigger(
-        contentId: string,
-        source: 'facebook' | 'instagram',
-        triggerKeyword: string | null,
-        triggerReply: string | null,
-        workspaceId: string,
-        triggerType: 'keyword' | 'all' = 'keyword',
-        image: TriggerImageInput = { action: 'keep' },
-        // undefined = leave the column untouched (keep); a boolean = explicit set.
-        // Facebook-only column, so it's ignored on the instagram branch.
-        likeComment?: boolean,
-    ): Promise<UpdateTriggerResult> {
+    async updateTrigger(opts: UpdateTriggerOptions): Promise<UpdateTriggerResult> {
+        const {
+            contentId,
+            source,
+            triggerKeyword,
+            triggerReply,
+            workspaceId,
+            triggerType = 'keyword',
+            image = { action: 'keep' } as TriggerImageInput,
+            likeComment,
+            triggerExcludeKeyword,
+        } = opts;
         const table = source === 'instagram' ? instagramMedia : posts;
 
         // Ownership + current image, in one query. The current key/bytes drive the
@@ -282,6 +299,9 @@ export class PostsService {
             triggerKeyword,
             triggerReply,
             triggerType,
+            // Veto keywords exist on both tables. Only write on explicit intent —
+            // absent (undefined) leaves the column untouched (keep semantics).
+            ...(triggerExcludeKeyword !== undefined ? { triggerExcludeKeyword } : {}),
             ...(imageColumns ?? {}),
             updatedAt: new Date(),
         };
@@ -388,7 +408,7 @@ export class PostsService {
         page: PickerPage,
         source: 'facebook' | 'instagram',
         platformPostId: string,
-    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerImageUrl: string | null; likeComment: boolean }> {
+    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerExcludeKeyword: string | null; triggerImageUrl: string | null; likeComment: boolean }> {
         if (source === 'facebook') {
             const post = await this.findOrCreateFromWebhook(page.id, platformPostId, undefined, page.accessToken);
             return {
@@ -396,6 +416,7 @@ export class PostsService {
                 triggerKeyword: post.triggerKeyword ?? null,
                 triggerReply: post.triggerReply ?? null,
                 triggerType: post.triggerType === 'all' ? 'all' : 'keyword',
+                triggerExcludeKeyword: post.triggerExcludeKeyword ?? null,
                 triggerImageUrl: post.triggerImageUrl ?? null,
                 likeComment: post.likeComment ?? false,
             };
@@ -406,6 +427,7 @@ export class PostsService {
             triggerKeyword: media.triggerKeyword ?? null,
             triggerReply: media.triggerReply ?? null,
             triggerType: media.triggerType === 'all' ? 'all' : 'keyword',
+            triggerExcludeKeyword: media.triggerExcludeKeyword ?? null,
             triggerImageUrl: media.triggerImageUrl ?? null,
             likeComment: false,
         };

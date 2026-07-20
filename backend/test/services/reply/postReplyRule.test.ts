@@ -20,12 +20,12 @@ describe('resolvePostReplyRule', () => {
             triggerReply: 'تفضل السعر',
             triggerType: 'keyword',
         };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerImageUrl: null, likeComment: false });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false });
     });
 
     it('resolves the per-post any-comment rule (reply set, no keyword)', () => {
         const content: ContentTriggerFields = { triggerKeyword: null, triggerReply: 'DM sent', triggerType: 'all' };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerImageUrl: null, likeComment: false });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false });
     });
 
     it('returns null when the content has no rule', () => {
@@ -53,6 +53,20 @@ describe('matchPostReplyRule', () => {
     it('keyword does not match unrelated text', () => {
         const rule = { triggerType: 'keyword' as const, triggerKeyword: 'price', triggerReply: 'r' };
         expect(matchPostReplyRule(rule, 'nice photo')).toEqual({ matched: false });
+    });
+
+    it('an excluded keyword vetoes a keyword-mode match (falls through to AI)', () => {
+        const rule = { triggerType: 'keyword' as const, triggerKeyword: 'سعر', triggerReply: 'r', triggerExcludeKeyword: 'غالي, expensive' };
+        // Comment matches the trigger keyword AND an exclude keyword → vetoed.
+        expect(matchPostReplyRule(rule, 'السعر غالي جدا')).toEqual({ matched: false });
+        // Same trigger keyword, no exclude term present → still matches.
+        expect(matchPostReplyRule(rule, 'كم السعر؟')).toEqual({ matched: true, keyword: 'سعر' });
+    });
+
+    it('an excluded keyword vetoes an any-comment match too', () => {
+        const rule = { triggerType: 'all' as const, triggerKeyword: null, triggerReply: 'r', triggerExcludeKeyword: 'شكوى' };
+        expect(matchPostReplyRule(rule, 'عندي شكوى على المنتج')).toEqual({ matched: false });
+        expect(matchPostReplyRule(rule, 'رائع')).toEqual({ matched: true, keyword: null });
     });
 });
 
@@ -149,6 +163,20 @@ describe('validatePostReplyRuleInput', () => {
         // the cap is a flat 1000 in every case.
         expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: at1000 })).toBeNull();
         expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: over })).toMatch(/1000/);
+    });
+
+    it('accepts exclude keywords within the 10-keyword limit (both modes)', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'hi', triggerExcludeKeyword: 'غالي, expensive' })).toBeNull();
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerExcludeKeyword: 'شكوى' })).toBeNull();
+    });
+
+    it('rejects more than 10 exclude keywords', () => {
+        const kw = Array.from({ length: 11 }, (_, i) => `x${i}`).join(',');
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerExcludeKeyword: kw })).toMatch(/exceed 10/);
+    });
+
+    it('rejects an over-long exclude keyword', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerExcludeKeyword: 'y'.repeat(101) })).toMatch(/100 characters/);
     });
 });
 

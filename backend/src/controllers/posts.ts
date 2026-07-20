@@ -233,6 +233,8 @@ export class PostsController {
                 // (like triggerImage's keep semantics) so a client that doesn't know the
                 // field can't wipe it. Facebook-only — coerced to false for Instagram.
                 likeComment?: boolean;
+                // Veto keywords: absent = leave as-is (keep); null/'' = clear; string = set.
+                triggerExcludeKeyword?: string | null;
             };
         }>,
         reply: FastifyReply,
@@ -240,7 +242,7 @@ export class PostsController {
         const req = request as WorkspaceRequest;
         if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
-        const { source, triggerKeyword, triggerReply, triggerType, triggerImage, likeComment } = request.body;
+        const { source, triggerKeyword, triggerReply, triggerType, triggerImage, likeComment, triggerExcludeKeyword } = request.body;
 
         if (!['facebook', 'instagram'].includes(source)) {
             return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
@@ -257,6 +259,9 @@ export class PostsController {
         // carry the like option, so any set is coerced to false for Instagram.
         const likeCommentIntent: boolean | undefined =
             likeComment === undefined ? undefined : (source === 'facebook' && likeComment === true);
+        // Absent = keep (undefined); empty string = clear (null); otherwise trim + set.
+        const excludeIntent: string | null | undefined =
+            triggerExcludeKeyword === undefined ? undefined : (triggerExcludeKeyword?.trim() || null);
 
         // Reject an image on a feature that isn't configured, before any other work —
         // the send path can't deliver it, so accepting the upload would be a lie.
@@ -268,8 +273,13 @@ export class PostsController {
             // Clearing the trigger: both keyword and reply empty → remove the rule (fields
             // nulled, type reset to the default). Any attached image is dropped too.
             if (!keyword && !replyText) {
-                // Clearing the rule resets the like option too (a removed trigger owns nothing).
-                const cleared = await postsService.updateTrigger(id, source, null, null, req.workspaceId, 'keyword', { action: 'remove' }, false);
+                // Clearing the rule resets the like option + veto keywords too (a removed
+                // trigger owns nothing).
+                const cleared = await postsService.updateTrigger({
+                    contentId: id, source, workspaceId: req.workspaceId,
+                    triggerKeyword: null, triggerReply: null, triggerType: 'keyword',
+                    image: { action: 'remove' }, likeComment: false, triggerExcludeKeyword: null,
+                });
                 if (!cleared.ok) return reply.status(404).send({ error: 'Post not found' });
                 return reply.send({ success: true });
             }
@@ -278,7 +288,7 @@ export class PostsController {
             // partial trigger (keyword without a reply) fails here — triggerReply is required.
             // The reply cap is a flat 1000 whether or not an image is attached (the image is
             // sent as its own message, so it doesn't eat into the text budget).
-            const validationError = validatePostReplyRuleInput({ triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText });
+            const validationError = validatePostReplyRuleInput({ triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText, triggerExcludeKeyword: excludeIntent });
             if (validationError) return reply.status(400).send({ error: validationError });
 
             // Decode + validate the image (allowlist, size, magic-byte match) before upload.
@@ -307,7 +317,11 @@ export class PostsController {
             const type: 'keyword' | 'all' = rawType === 'all' ? 'all' : 'keyword';
             // Any-comment mode stores no keyword.
             const storedKeyword = type === 'all' ? null : keyword;
-            const result = await postsService.updateTrigger(id, source, storedKeyword, replyText, req.workspaceId, type, imageIntent, likeCommentIntent);
+            const result = await postsService.updateTrigger({
+                contentId: id, source, workspaceId: req.workspaceId,
+                triggerKeyword: storedKeyword, triggerReply: replyText, triggerType: type,
+                image: imageIntent, likeComment: likeCommentIntent, triggerExcludeKeyword: excludeIntent,
+            });
             if (!result.ok) {
                 if (result.reason === 'quota_exceeded') {
                     return reply.status(413).send({ error: 'image_quota_exceeded', message: 'Image storage limit reached for this workspace' });

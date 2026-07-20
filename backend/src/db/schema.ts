@@ -324,6 +324,9 @@ export const posts = pgTable('posts', {
     triggerKeyword: text('trigger_keyword'),
     /** Per-post engagement trigger: reply sent when any triggerKeyword is matched */
     triggerReply: text('trigger_reply'),
+    /** Comma-separated keywords that VETO the trigger: a comment containing any of them
+     *  never fires the Post Reply (both trigger modes) and falls through to the AI pipeline. */
+    triggerExcludeKeyword: text('trigger_exclude_keyword'),
     /** How the per-post trigger fires: 'keyword' = only comments matching triggerKeyword;
      *  'all' = any comment (triggerKeyword ignored). 'all' still runs the skip-rule +
      *  complaint guards before sending (see commentProcessor step 3b). */
@@ -361,6 +364,8 @@ export const instagramMedia = pgTable('instagram_media', {
     triggerKeyword: text('trigger_keyword'),
     /** Per-post engagement trigger: reply sent when any triggerKeyword is matched */
     triggerReply: text('trigger_reply'),
+    /** Comma-separated veto keywords — see posts.triggerExcludeKeyword. */
+    triggerExcludeKeyword: text('trigger_exclude_keyword'),
     /** How the per-post trigger fires: 'keyword' = only comments matching triggerKeyword;
      *  'all' = any comment (triggerKeyword ignored). See posts.triggerType. */
     triggerType: varchar('trigger_type', { length: 20 }).default('keyword').notNull(),

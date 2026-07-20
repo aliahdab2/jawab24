@@ -51,6 +51,7 @@ interface PostTriggerModalProps {
   triggerKeyword?: string | null;
   triggerReply?: string | null;
   triggerType?: string | null;
+  triggerExcludeKeyword?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
   isOpen: boolean;
@@ -65,6 +66,7 @@ export function PostTriggerModal({
   triggerKeyword: initialKeyword,
   triggerReply: initialReply,
   triggerType: initialType,
+  triggerExcludeKeyword: initialExcludeKeyword,
   triggerImageUrl: initialImageUrl,
   likeComment: initialLikeComment,
   isOpen,
@@ -79,6 +81,9 @@ export function PostTriggerModal({
 
   const [mode, setMode] = useState<TriggerMode>(() => (initialType === 'all' ? 'all' : 'keyword'));
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
+  // Veto keywords (ManyChat parity): a comment containing any of these never fires the
+  // rule and falls through to the AI pipeline. Optional, both trigger modes.
+  const [excludeKeywords, setExcludeKeywords] = useState<string[]>(() => parseKeywords(initialExcludeKeyword));
   const [reply, setReply] = useState(initialReply ?? '');
   // Like-the-comment option (ManyChat parity). Facebook only — the Instagram API
   // has no like-comment endpoint, so the row is hidden entirely for IG posts.
@@ -118,13 +123,14 @@ export function PostTriggerModal({
     if (isOpen) {
       setMode(initialType === 'all' ? 'all' : 'keyword');
       setKeywords(parseKeywords(initialKeyword));
+      setExcludeKeywords(parseKeywords(initialExcludeKeyword));
       setReply(initialReply ?? '');
       setLikeEnabled(initialLikeComment ?? false);
       setImageFile(null);
       setImageObjectUrl(null);
       setImageRemoved(false);
     }
-  }, [isOpen, initialKeyword, initialReply, initialType, initialLikeComment]);
+  }, [isOpen, initialKeyword, initialReply, initialType, initialLikeComment, initialExcludeKeyword]);
 
   // Revoke the object URL when it changes / unmounts to avoid leaking blob memory.
   useEffect(() => {
@@ -191,11 +197,18 @@ export function PostTriggerModal({
 
     setSavingSave(true);
     try {
-      await postsApi.updateTrigger(
-        postId, source, keywordArg, reply.trim(), mode, imageArg,
+      await postsApi.updateTrigger({
+        id: postId,
+        source,
+        triggerKeyword: keywordArg,
+        triggerReply: reply.trim(),
+        triggerType: mode,
+        triggerImage: imageArg,
         // Only Facebook posts carry the like option (the row is hidden for Instagram).
-        source === 'facebook' ? likeEnabled : undefined,
-      );
+        likeComment: source === 'facebook' ? likeEnabled : undefined,
+        // Always send exclude keywords (empty string clears them) — both platforms.
+        triggerExcludeKeyword: excludeKeywords.join(', '),
+      });
       toast.success(t('postTriggerSaved'));
       onSaveSuccess();
     } catch (err) {
@@ -219,7 +232,7 @@ export function PostTriggerModal({
 
   async function handleConfirmClear() {
     setConfirmingClear(false);
-    await runClear(() => postsApi.updateTrigger(postId, source, null, null));
+    await runClear(() => postsApi.updateTrigger({ id: postId, source, triggerKeyword: null, triggerReply: null }));
   }
 
   // A rule is active whenever a reply is set — keyword mode carries keyword+reply,
@@ -396,6 +409,23 @@ export function PostTriggerModal({
             style={{ fieldSizing: 'content', resize: 'none', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
           />
         </div>
+
+        {/* Exclude keywords — optional veto list, both trigger modes. A comment containing
+            any of these skips the Post Reply and falls through to the AI pipeline. */}
+        <FormField
+          label={t('postTriggerExclude')}
+          htmlFor="trigger-exclude"
+          helper={t('postTriggerExcludeHelp')}
+        >
+          <KeywordChipInput
+            id="trigger-exclude"
+            value={excludeKeywords}
+            onChange={setExcludeKeywords}
+            placeholder={t('postTriggerExcludePlaceholder')}
+            maxKeywords={POST_REPLY_MAX_KEYWORDS}
+            maxLength={POST_REPLY_MAX_KEYWORD_LEN}
+          />
+        </FormField>
 
         {/* Like-the-comment option — Facebook only (the Instagram API can't like
             comments), so the row simply doesn't exist for IG posts. */}

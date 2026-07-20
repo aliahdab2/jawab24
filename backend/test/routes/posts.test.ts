@@ -149,7 +149,10 @@ describe('Posts Routes', () => {
 
             expect(response.statusCode).toBe(200);
             // No likeComment in the body → undefined (keep — never clobber a field the client didn't send).
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id', 'keyword', { action: 'keep' }, undefined);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                contentId: 'post_1', source: 'facebook', triggerKeyword: '.', triggerReply: 'Here are the details!',
+                workspaceId: 'test_workspace_id', triggerType: 'keyword', image: { action: 'keep' }, likeComment: undefined,
+            }));
         });
 
         it('should clear trigger when both values are null', async () => {
@@ -162,8 +165,11 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            // Clearing the rule also drops any attached image and resets the like option.
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id', 'keyword', { action: 'remove' }, false);
+            // Clearing the rule also drops any attached image and resets the like option + veto keywords.
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                contentId: 'post_1', source: 'instagram', triggerKeyword: null, triggerReply: null,
+                triggerType: 'keyword', image: { action: 'remove' }, likeComment: false, triggerExcludeKeyword: null,
+            }));
         });
 
         it('should return 400 for invalid source', async () => {
@@ -186,7 +192,9 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Details', 'test_workspace_id', 'keyword', { action: 'keep' }, true);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                contentId: 'post_1', source: 'facebook', triggerReply: 'Details', likeComment: true,
+            }));
         });
 
         it('leaves likeComment untouched (undefined) when the field is absent — no lost update for stale clients', async () => {
@@ -199,7 +207,9 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Details', 'test_workspace_id', 'keyword', { action: 'keep' }, undefined);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                contentId: 'post_1', source: 'facebook', triggerReply: 'Details', likeComment: undefined,
+            }));
         });
 
         it('coerces an explicit likeComment to false for instagram (its API cannot like comments)', async () => {
@@ -212,7 +222,9 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', '.', 'Details', 'test_workspace_id', 'keyword', { action: 'keep' }, false);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                contentId: 'post_1', source: 'instagram', triggerReply: 'Details', likeComment: false,
+            }));
         });
 
         it('should return 400 when keyword is set but reply is null (partial trigger)', async () => {
@@ -246,7 +258,66 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', null, 'DM sent!', 'test_workspace_id', 'all', { action: 'keep' }, undefined);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                contentId: 'post_1', source: 'facebook', triggerKeyword: null, triggerReply: 'DM sent!', triggerType: 'all',
+            }));
+        });
+
+        it('passes exclude keywords through (trimmed) for both platforms', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details', triggerExcludeKeyword: '  غالي, expensive  ' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                contentId: 'post_1', triggerExcludeKeyword: 'غالي, expensive',
+            }));
+        });
+
+        it('clears exclude keywords when an empty string is sent', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details', triggerExcludeKeyword: '' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                triggerExcludeKeyword: null,
+            }));
+        });
+
+        it('leaves exclude keywords untouched (undefined) when the field is absent', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                triggerExcludeKeyword: undefined,
+            }));
+        });
+
+        it('rejects more than 10 exclude keywords with 400', async () => {
+            const kw = Array.from({ length: 11 }, (_, i) => `x${i}`).join(',');
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details', triggerExcludeKeyword: kw },
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(postsService.updateTrigger).not.toHaveBeenCalled();
         });
 
         it('should return 404 when post not found or not owned', async () => {
@@ -301,11 +372,10 @@ describe('Posts Routes', () => {
         it('accepts a valid image and forwards a set intent to the service', async () => {
             const res = await patch({ base64: validPng(), mimeType: 'image/png' });
             expect(res.statusCode).toBe(200);
-            expect(postsService.updateTrigger).toHaveBeenCalledWith(
-                'post_1', 'facebook', 'k', 'hi', 'test_workspace_id', 'keyword',
-                expect.objectContaining({ action: 'set', mimeType: 'image/png' }),
-                undefined,
-            );
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                contentId: 'post_1', source: 'facebook', triggerKeyword: 'k', triggerReply: 'hi',
+                image: expect.objectContaining({ action: 'set', mimeType: 'image/png' }),
+            }));
         });
 
         it('maps quota_exceeded to 413', async () => {
