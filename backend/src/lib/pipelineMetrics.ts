@@ -46,6 +46,7 @@ export type Outcome =
     | 'lock_contention'
     | 'trigger_no_match'
     | 'post_reply_capped'
+    | 'like_failed'
     | 'transient_error_retry'
     | 'ai_failed_immediate_flag'
     | 'ai_parked'

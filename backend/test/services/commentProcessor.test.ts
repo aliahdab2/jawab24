@@ -1938,7 +1938,7 @@ describe('CommentProcessor — template reply mode behavior', () => {
         const flush = () => new Promise((resolve) => setImmediate(resolve));
 
         it('likes the comment after a successful trigger send', async () => {
-            const likeComment = vi.fn().mockResolvedValue(undefined);
+            const likeComment = vi.fn().mockResolvedValue(true);
             const adapter = createMockAdapter({
                 findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
                 likeComment,
@@ -1954,7 +1954,7 @@ describe('CommentProcessor — template reply mode behavior', () => {
         });
 
         it('does not like when the option is off', async () => {
-            const likeComment = vi.fn().mockResolvedValue(undefined);
+            const likeComment = vi.fn().mockResolvedValue(true);
             const adapter = createMockAdapter({
                 findOrCreateContent: vi.fn().mockResolvedValue({ ...likeContent, likeComment: false }),
                 likeComment,
@@ -1970,7 +1970,7 @@ describe('CommentProcessor — template reply mode behavior', () => {
         });
 
         it('does not like when the send failed', async () => {
-            const likeComment = vi.fn().mockResolvedValue(undefined);
+            const likeComment = vi.fn().mockResolvedValue(true);
             const adapter = createMockAdapter({
                 findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
                 sendReply: vi.fn().mockResolvedValue({ success: false, error: 'send failed' }),
@@ -2019,8 +2019,43 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(adapter.markAsReplied).toHaveBeenCalled();
         });
 
+        it('a like that resolves false records the like_failed pipeline metric', async () => {
+            // The adapter contract never rejects — a Graph failure resolves false
+            // (facebookService.likeComment self-logs). The processor must count it
+            // so a systemic break (revoked permission) is visible in metrics.
+            const likeComment = vi.fn().mockResolvedValue(false);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
+                likeComment,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.like_failed']).toBe(1);
+        });
+
+        it('a successful like records no like_failed metric', async () => {
+            const likeComment = vi.fn().mockResolvedValue(true);
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
+                likeComment,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+            await flush();
+
+            expect(result.success).toBe(true);
+            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.like_failed']).toBeUndefined();
+        });
+
         it('demo pages never hit the Graph API', async () => {
-            const likeComment = vi.fn().mockResolvedValue(undefined);
+            const likeComment = vi.fn().mockResolvedValue(true);
             const adapter = createMockAdapter({
                 findOrCreateContent: vi.fn().mockResolvedValue(likeContent),
                 likeComment,

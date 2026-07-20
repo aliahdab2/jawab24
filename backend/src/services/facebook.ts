@@ -379,13 +379,16 @@ export class FacebookService {
      * rate limit inside a fire-and-forget promise), swallows failures, and NEVER
      * throws so a like can't affect the reply. Logs only status + FB error data —
      * never the raw AxiosError, whose `config.params` carries the page access token.
+     * Returns whether the like landed, so the caller can count failures
+     * (`like_failed` pipeline metric) without this method ever throwing.
      */
-    async likeComment(commentId: string, pageAccessToken: string): Promise<void> {
+    async likeComment(commentId: string, pageAccessToken: string): Promise<boolean> {
         try {
-            await axios.post(`${FACEBOOK_GRAPH_API}/${commentId}/likes`, null, {
+            await axios.post(`${FACEBOOK_GRAPH_API}/${encodeURIComponent(commentId)}/likes`, null, {
                 params: { access_token: pageAccessToken },
                 timeout: 15_000,
             });
+            return true;
         } catch (error) {
             const fbError = (error as { response?: { data?: unknown; status?: number } })?.response;
             this.logger.warn('[Facebook] like comment failed (non-fatal)', {
@@ -393,6 +396,7 @@ export class FacebookService {
                 status: fbError?.status,
                 data: fbError?.data,
             });
+            return false;
         }
     }
 

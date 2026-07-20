@@ -11,6 +11,7 @@ import { preprocessCommentText } from './commentPreprocess';
 import { classifyFallbackIntent } from './fallbackClassifier';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
 import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag, isContentFree } from '../../utils/commentText';
+import { isDemoPlatformId } from '../../utils/demo';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
@@ -1032,9 +1033,13 @@ export class CommentProcessor {
         // customer's comment once the reply is out. Best-effort fire-and-forget — the
         // adapter method self-logs and never throws (see facebookService.likeComment),
         // so the call is unawaited with only an unhandled-rejection guard. Demo pages
-        // carry a fake token, so they never hit the Graph API.
-        if (opts.likeComment && adapter.likeComment && !platformPageId.startsWith('demo_')) {
-            void adapter.likeComment(platformCommentId, accessToken).catch(() => { /* self-logged */ });
+        // carry a fake token, so they never hit the Graph API. Failures are counted
+        // (`like_failed`) so a systemic break (revoked permission, API change) shows
+        // up in pipeline metrics instead of only in grep-able logs.
+        if (opts.likeComment && adapter.likeComment && !isDemoPlatformId(platformPageId)) {
+            void adapter.likeComment(platformCommentId, accessToken)
+                .then(liked => { if (!liked) void pipelineMetrics.record(pipeline, 'like_failed'); })
+                .catch(() => { /* self-logged */ });
         }
 
         // NB: the per-(page, post, sender) debounce slot is claimed atomically at

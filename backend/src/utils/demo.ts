@@ -15,5 +15,15 @@
  * sessions via this check.
  */
 export function isDemoFacebookId(facebookId: string | null | undefined): boolean {
-    return facebookId?.startsWith('demo_') ?? false;
+    return isDemoPlatformId(facebookId);
+}
+
+/**
+ * Every seeded demo entity shares the `demo_` platform-id prefix — users
+ * (`demo_user_jawab24`), pages (`demo_page_*`), posts (`demo_post_*`); see
+ * plugins/demo/seedData.ts. Real Meta ids are numeric, so no collision.
+ * Use this anywhere a code path must not hit the real Graph API for demo data.
+ */
+export function isDemoPlatformId(platformId: string | null | undefined): boolean {
+    return platformId?.startsWith('demo_') ?? false;
 }

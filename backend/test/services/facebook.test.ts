@@ -705,7 +705,7 @@ describe('Facebook Service', () => {
         it('POSTs to the comment likes edge with the page token, via plain axios (not the retrying fbAxios)', async () => {
             vi.mocked(axios.post).mockResolvedValue({ data: { success: true } });
 
-            await service.likeComment('comment_123', 'page_token_abc');
+            await expect(service.likeComment('comment_123', 'page_token_abc')).resolves.toBe(true);
 
             expect(axios.post).toHaveBeenCalledWith(
                 'https://graph.facebook.com/v18.0/comment_123/likes',
@@ -730,8 +730,8 @@ describe('Facebook Service', () => {
             const svc = new FacebookService();
             svc.setLogger({ info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() } as never);
 
-            // Must resolve (never throw) so the reply is unaffected.
-            await expect(svc.likeComment('comment_123', 'SECRET_PAGE_TOKEN')).resolves.toBeUndefined();
+            // Must resolve (never throw) so the reply is unaffected — false = like_failed.
+            await expect(svc.likeComment('comment_123', 'SECRET_PAGE_TOKEN')).resolves.toBe(false);
 
             expect(warn).toHaveBeenCalledTimes(1);
             const loggedPayload = JSON.stringify(warn.mock.calls[0]);

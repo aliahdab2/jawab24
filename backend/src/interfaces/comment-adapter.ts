@@ -185,8 +185,9 @@ export interface CommentPlatformAdapter {
 
     /**
      * Like the customer's comment as the page (Post Reply option). Best-effort:
-     * callers fire-and-forget and a failure must never affect the reply.
+     * callers fire-and-forget and a failure must never affect the reply. Resolves
+     * to whether the like landed (never rejects) so callers can count failures.
      * Only Facebook implements this — the Instagram API has no like endpoint.
      */
-    likeComment?(platformCommentId: string, accessToken: string): Promise<void>;
+    likeComment?(platformCommentId: string, accessToken: string): Promise<boolean>;
 }

@@ -6,6 +6,7 @@ import { replySender, ReplyMode } from '../sender';
 import { pickNudgeVariation } from '../nudge';
 import { detectCommentLanguage } from '../../../utils/language';
 import { stripCommentNoise } from '../../../utils/commentText';
+import { isDemoPlatformId } from '../../../utils/demo';
 import { t } from '../../../utils/i18n';
 import { buildReadMorePayload } from '@jawab24/shared';
 import { mapToPlatformPage } from './shared';
@@ -81,7 +82,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         postId?: string;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
-        const isDemo = opts.platformPageId.startsWith('demo_');
+        const isDemo = isDemoPlatformId(opts.platformPageId);
 
         // Pick a nudge variation in the comment's language. Strip @mentions/URLs first —
         // their Latin characters (e.g. "@[id:Hanaa Kanaan]") otherwise pollute detection
@@ -183,8 +184,8 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         return facebookService.getCommentWithTags(platformCommentId, accessToken);
     }
 
-    async likeComment(platformCommentId: string, accessToken: string): Promise<void> {
-        await facebookService.likeComment(platformCommentId, accessToken);
+    async likeComment(platformCommentId: string, accessToken: string): Promise<boolean> {
+        return facebookService.likeComment(platformCommentId, accessToken);
     }
 }
 
