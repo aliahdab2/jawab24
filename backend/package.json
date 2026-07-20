@@ -41,7 +41,7 @@
     "@jawab24/shared": "*",
     "@sentry/node": "^10.35.0",
     "@types/bcrypt": "^6.0.0",
-    "axios": "^1.16.0",
+    "axios": "^1.18.1",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.66.4",
     "countries-and-timezones": "^3.9.0",
