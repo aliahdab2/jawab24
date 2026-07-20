@@ -214,7 +214,7 @@ function buildPerCallBlock(request: GenerateRequest): string {
 - Your tone: ${styleDirective}
 - Channel: ${isDM
         ? (request.context?.postMessage
-            ? 'sending a DM to a customer who commented on a post — use the post content (in [current_post]) as authoritative business info to answer their question'
+            ? 'sending a DM to a customer who commented on a post — [current_post] holds the post content and, when present, the merchant\'s own automatic reply for it; BOTH are merchant-authored, use their facts (price, address, offers, details) as authoritative business info to answer their question'
             : 'chatting with a customer via direct message on Messenger')
         : (request.context?.postMessage
             ? 'replying to a comment on a post — use the post content (in [current_post]) as authoritative business info to answer about the item the customer is asking about'
@@ -298,9 +298,12 @@ ${chunkLines}${buildPoliciesBlock(request)}
     // post must still see the post here, otherwise the model only gets the thin user-prompt
     // label and stalls with a generic "which product?". (This also keeps the DM directive's
     // [current_post] reference honest when an empty-KB page gets a comment-on-post DM.)
-    // Capped at 500 chars (same as the user-prompt post label).
+    // Cap 1600: the backend composes post text (capped 500 at the source) + the merchant's
+    // Post Reply (product-capped 1000) into this field for comment-originated DM threads —
+    // the reply's tail usually carries the price/details, so it must never be sliced away
+    // (a 500 cap here cost a real merchant a price answer → "fraud" accusation, 2026-07-19).
     if (request.context?.postMessage) {
-        prompt += `\n\n[current_post]\n${sanitizeForPrompt(request.context.postMessage).slice(0, 500)}`;
+        prompt += `\n\n[current_post]\n${sanitizeForPrompt(request.context.postMessage).slice(0, 1600)}`;
     }
 
     // Image-message convention. The backend's vision step turns customer photos into

@@ -154,10 +154,32 @@ describe('buildSystemPrompt — DM-replying-to-a-commenter channel variant', () 
         expect(out).toContain('sending a DM to a customer who commented on a post');
     });
 
+    it('grants fact authority to BOTH the post and the merchant\'s auto-reply in the DM directive', () => {
+        const out = suffix(req('price?', { channel: 'dm', postMessage: 'New summer offer!' }));
+        expect(out).toContain('merchant-authored');
+        expect(out).toContain('authoritative business info');
+    });
+
     it('uses the plain Messenger description for a DM without a post', () => {
         const out = suffix(req('price?', { channel: 'dm' }));
         expect(out).toContain('chatting with a customer via direct message on Messenger');
         expect(out).not.toContain('sending a DM to a customer who commented on a post');
+    });
+
+    // The backend composes post text (capped 500 at the source) + the merchant's Post Reply
+    // (product-capped 1000) into postMessage. The [current_post] cap must fit the whole
+    // composition — a price near the END of the reply segment must never be sliced away
+    // (the 500-char cap cost a real merchant a price answer, 2026-07-19).
+    it('keeps the tail of a long composed post+reply block (price at ~1400 chars survives)', () => {
+        const composed = `${'p'.repeat(500)}\n---\n[The merchant's automatic reply already sent to this customer for this post]\n${'r'.repeat(800)} السعر :38 ألف`;
+        const out = suffix(req('price?', { channel: 'dm', postMessage: composed }));
+        expect(out).toContain('[current_post]');
+        expect(out).toContain('السعر :38 ألف');
+    });
+
+    it('still caps a runaway postMessage at 1600 chars', () => {
+        const out = suffix(req('price?', { channel: 'dm', postMessage: 'x'.repeat(2000) + 'SENTINEL' }));
+        expect(out).not.toContain('SENTINEL');
     });
 });
 
@@ -419,15 +441,17 @@ describe('buildSystemPrompt — knowledge block composition', () => {
         expect(out).toContain('Free delivery in Riyadh.');
     });
 
-    it('emits a separate [current_post] block when a KB is present, capped at 500 chars', () => {
+    it('emits a separate [current_post] block when a KB is present, capped at 1600 chars', () => {
         // The post is per-message, so it lives in the per-call block (not inside the hoisted,
-        // cacheable KB block) — but is still emitted as a trusted, labeled source.
+        // cacheable KB block) — but is still emitted as a trusted, labeled source. Cap is 1600:
+        // the backend composes post text (≤500) + the merchant's Post Reply (≤1000) into this
+        // field, and the reply's tail (price/details) must survive.
         const out = suffix(req('hi', {
             knowledgeBase: 'We sell flowers.',
-            postMessage: 'q'.repeat(500) + 'POST_OVERFLOW',
+            postMessage: 'q'.repeat(1600) + 'POST_OVERFLOW',
         }));
         expect(out).toContain('[current_post]');
-        expect(out).toContain('q'.repeat(500));
+        expect(out).toContain('q'.repeat(1600));
         expect(out).not.toContain('POST_OVERFLOW');
     });
 
