@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, render, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { Comment } from '@jawab24/shared';
@@ -11,8 +11,15 @@ vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 vi.mock('@/lib/sentryHelpers', () => ({ captureError: vi.fn() }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 // The hook renders the config modal via next/dynamic; stub it so the test doesn't
-// pull the real component (we assert the modal element exists, not its internals).
-vi.mock('@/components/comments/PostTriggerModal', () => ({ PostTriggerModal: () => null }));
+// pull the real component. The stub captures the `onSaved` prop so a test can invoke
+// the hook's save-invalidation flow without the real modal.
+const mockModal: { onSaved: (() => void) | null } = { onSaved: null };
+vi.mock('@/components/comments/PostTriggerModal', () => ({
+  PostTriggerModal: (props: { onSaved: () => void }) => {
+    mockModal.onSaved = props.onSaved;
+    return null;
+  },
+}));
 
 import { usePostReplySetup } from '@/hooks/usePostReplySetup';
 import { postsApi } from '@/lib/api';
@@ -73,5 +80,39 @@ describe('usePostReplySetup', () => {
     expect(result.current.modal).not.toBeNull();
     act(() => { result.current.close(); });
     expect(result.current.modal).toBeNull();
+  });
+
+  it('onSaved invalidates posts, post-trigger AND published-posts (the picker badge)', async () => {
+    // Regression: the picker's `hasTrigger` badge (مفعّل/إعداد) reads `published-posts`.
+    // If a save doesn't invalidate it, the badge stays stale until a full page reload
+    // (global 5-min staleTime).
+    getById.mockResolvedValue({ data: {} } as never);
+    mockModal.onSaved = null;
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+
+    // A component that both drives the hook and renders its modal node, so the stubbed
+    // PostTriggerModal actually mounts and hands us its `onSaved` prop.
+    let api: ReturnType<typeof usePostReplySetup> | null = null;
+    function Harness() {
+      api = usePostReplySetup();
+      return <>{api.modal}</>;
+    }
+    render(
+      <QueryClientProvider client={qc}>
+        <Harness />
+      </QueryClientProvider>,
+    );
+
+    await act(async () => { await api!.open(comment()); });
+    await waitFor(() => expect(mockModal.onSaved).toBeTypeOf('function'));
+
+    act(() => { mockModal.onSaved!(); });
+
+    const keys = invalidateSpy.mock.calls.map((c) => (c[0] as { queryKey: string[] }).queryKey[0]);
+    expect(keys).toContain('posts');
+    expect(keys).toContain('post-trigger');
+    expect(keys).toContain('published-posts');
   });
 });

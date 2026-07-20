@@ -130,11 +130,14 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
 
   const close = useCallback(() => setTarget(null), []);
 
-  // A save/clear can change trigger state seen by both the bulk posts map (Comments
-  // page card state) and the per-post cache (dashboard), so refresh both.
+  // A save/clear can change trigger state seen by three surfaces: the bulk posts map
+  // (Comments page card state), the per-post cache (dashboard), and the post picker's
+  // `hasTrigger` badge (مفعّل/إعداد). Refresh all three — the global 5-min staleTime
+  // means the picker would otherwise show a stale badge until a full page reload.
   const onSaved = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['posts'] });
     queryClient.invalidateQueries({ queryKey: ['post-trigger'] });
+    queryClient.invalidateQueries({ queryKey: ['published-posts'] });
   }, [queryClient]);
 
   // Null when neither surface is open, so hosts can render `{modal}` inertly.
