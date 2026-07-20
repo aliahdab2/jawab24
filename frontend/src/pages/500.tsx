@@ -5,14 +5,13 @@ import { useTranslations } from 'next-intl';
 import { BrandLogo } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { Home, MessageCircle, RefreshCw, AlertTriangle } from 'lucide-react';
-
-const WHATSAPP_NUMBER = '46700224720';
+import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 
 export default function Custom500() {
   const t = useTranslations('errors');
   const router = useRouter();
 
-  const supportMessage = encodeURIComponent('Hi, I hit a server error on Jawab24 and need help.');
+  const supportHref = buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, 'Hi, I hit a server error on Jawab24 and need help.');
 
   return (
     <>
@@ -71,7 +70,7 @@ export default function Custom500() {
             </Link>
 
             <a
-              href={`https://wa.me/${WHATSAPP_NUMBER}?text=${supportMessage}`}
+              href={supportHref}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-6 py-3 text-muted-foreground font-bold rounded-xl hover:bg-muted transition-colors"

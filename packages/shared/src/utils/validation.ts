@@ -28,6 +28,30 @@ export function isValidHttpUrl(value: string): boolean {
   }
 }
 
+/**
+ * Normalize merchant-typed link input to a valid http(s) URL, or null when it can't
+ * be one. Merchants routinely paste bare domains («mystore.com/offer»); rather than
+ * reject those with a "must start with https://" error, prepend the scheme when the
+ * input plausibly is a web address (a hostname containing a dot). Explicit non-http
+ * schemes (tel:, whatsapp:, ftp:) are NOT rewritten — Meta URL buttons only accept
+ * http(s), so those must fail validation loudly instead of being mangled.
+ */
+export function normalizeHttpUrl(value: string): string | null {
+  const v = value.trim();
+  if (!v) return null;
+  if (isValidHttpUrl(v)) return v;
+  // An explicit scheme that isn't http(s) — don't second-guess it into https://.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return null;
+  try {
+    const u = new URL(`https://${v}`);
+    // Require a dotted hostname so free text («صفحتنا») isn't "rescued" into a
+    // syntactically-valid-but-nonsense URL.
+    return u.hostname.includes('.') ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Returns whether a string is a valid email or E.164 phone number. */
 export function isValidContact(value: string): boolean {
   return isValidEmail(value) || isValidPhone(value);

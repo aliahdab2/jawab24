@@ -54,6 +54,7 @@ vi.mock('@/components/ui', () => ({
     // click-to-open behaviour). So the on-demand explanations stay out of the DOM.
     InfoPopover: ({ label }: { label: string }) => <button type="button" aria-label={label} />,
     Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+    WhatsAppIcon: ({ className }: { className?: string }) => <svg data-testid="whatsapp-icon" className={className} />,
     ConfirmationModal: () => null,
     Toggle: ({ enabled, onChange, 'aria-label': ariaLabel }: { enabled: boolean; onChange: (v: boolean) => void; 'aria-label'?: string }) => (
         <button type="button" role="switch" aria-checked={enabled} aria-label={ariaLabel} onClick={() => onChange(!enabled)} />
@@ -65,6 +66,13 @@ import { settingsApi, postsApi } from '@/lib/api';
 
 const settingsGetMock = vi.mocked(settingsApi.get);
 const updateTriggerMock = vi.mocked(postsApi.updateTrigger);
+
+/** Expand the «More options» disclosure — advanced fields (exclude, button, like,
+ *  image) are collapsed by default for a NEW trigger; tests driving them must open
+ *  the section first, exactly like a merchant would. */
+async function openAdvanced() {
+    fireEvent.click(await screen.findByRole('button', { name: 'More options' }));
+}
 
 function renderModal(props: Partial<React.ComponentProps<typeof PostTriggerModal>> = {}) {
     const client = new QueryClient({
@@ -236,7 +244,8 @@ describe('PostTriggerModal — like the comment', () => {
         updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
         const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details sent!' });
 
-        await screen.findByText('Exclude keywords (optional)');
+        await openAdvanced();
+        await screen.findByText('Exclude keywords');
         const excludeInput = container.querySelector('#trigger-exclude') as HTMLInputElement;
         fireEvent.change(excludeInput, { target: { value: 'expensive, complaint' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -248,7 +257,7 @@ describe('PostTriggerModal — like the comment', () => {
 
     it('hydrates saved exclude keywords into the field', async () => {
         const { container } = renderModal({ source: 'facebook', triggerExcludeKeyword: 'غالي, expensive' });
-        await screen.findByText('Exclude keywords (optional)');
+        await screen.findByText('Exclude keywords');
         const excludeInput = container.querySelector('#trigger-exclude') as HTMLInputElement;
         expect(excludeInput.value).toBe('غالي, expensive');
     });
@@ -264,27 +273,31 @@ describe('PostTriggerModal — CTA button', () => {
 
     it('renders the button fields for a facebook post in a DM mode', async () => {
         renderModal({ source: 'facebook' });
-        expect(await screen.findByText('Add a button (optional)')).toBeInTheDocument();
+        await openAdvanced();
+        expect(await screen.findByText('Add a button')).toBeInTheDocument();
     });
 
     it('does not render the button fields for an instagram post', async () => {
         renderModal({ source: 'instagram' });
+        await openAdvanced();
         await waitFor(() => expect(settingsGetMock).toHaveBeenCalled());
-        expect(screen.queryByText('Add a button (optional)')).toBeNull();
+        expect(screen.queryByText('Add a button')).toBeNull();
     });
 
     it('does not render the button fields in public reply mode', async () => {
         settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'public' } });
         renderModal({ source: 'facebook' });
+        await openAdvanced();
         await waitFor(() => expect(settingsGetMock).toHaveBeenCalled());
-        expect(screen.queryByText('Add a button (optional)')).toBeNull();
+        expect(screen.queryByText('Add a button')).toBeNull();
     });
 
     it('sends the button label + URL on save', async () => {
         updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
         const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
 
-        await screen.findByText('Add a button (optional)');
+        await openAdvanced();
+        await screen.findByText('Add a button');
         fireEvent.change(container.querySelector('#trigger-button-label') as HTMLInputElement, { target: { value: 'Shop now' } });
         fireEvent.change(container.querySelector('#trigger-button-url') as HTMLInputElement, { target: { value: 'https://shop.example/x' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -298,7 +311,8 @@ describe('PostTriggerModal — CTA button', () => {
         updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
         const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
 
-        await screen.findByText('Add a button (optional)');
+        await openAdvanced();
+        await screen.findByText('Add a button');
         fireEvent.change(container.querySelector('#trigger-button-label') as HTMLInputElement, { target: { value: 'Shop now' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -306,11 +320,28 @@ describe('PostTriggerModal — CTA button', () => {
         expect(updateTriggerMock).not.toHaveBeenCalled();
     });
 
+    it('auto-repairs a bare-domain link (no scheme) instead of rejecting it', async () => {
+        updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
+
+        await openAdvanced();
+        await screen.findByText('Add a button');
+        fireEvent.change(container.querySelector('#trigger-button-label') as HTMLInputElement, { target: { value: 'Shop now' } });
+        fireEvent.change(container.querySelector('#trigger-button-url') as HTMLInputElement, { target: { value: 'mystore.com/offer' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(updateTriggerMock).toHaveBeenCalledWith(expect.objectContaining({
+            triggerButtonUrl: 'https://mystore.com/offer',
+        })));
+        expect(toastErrorMock).not.toHaveBeenCalled();
+    });
+
     it('blocks save on an invalid button URL', async () => {
         updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
         const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
 
-        await screen.findByText('Add a button (optional)');
+        await openAdvanced();
+        await screen.findByText('Add a button');
         fireEvent.change(container.querySelector('#trigger-button-label') as HTMLInputElement, { target: { value: 'Shop' } });
         fireEvent.change(container.querySelector('#trigger-button-url') as HTMLInputElement, { target: { value: 'not a url' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -321,8 +352,146 @@ describe('PostTriggerModal — CTA button', () => {
 
     it('hydrates saved button label + URL', async () => {
         const { container } = renderModal({ source: 'facebook', triggerButtonLabel: 'Buy', triggerButtonUrl: 'https://shop.example' });
-        await screen.findByText('Add a button (optional)');
+        await screen.findByText('Add a button');
         expect((container.querySelector('#trigger-button-label') as HTMLInputElement).value).toBe('Buy');
         expect((container.querySelector('#trigger-button-url') as HTMLInputElement).value).toBe('https://shop.example');
+    });
+});
+
+// «More options» disclosure: collapsed for a new trigger so the required path stays
+// short; auto-expanded when the stored trigger already uses an advanced field —
+// collapsing would hide live configuration.
+describe('PostTriggerModal — advanced disclosure', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private' } });
+    });
+
+    it('collapses the power fields for a new trigger, but keeps like + image at top level', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private', triggerImagesEnabled: true } });
+        renderModal({ source: 'facebook' });
+        expect(await screen.findByRole('button', { name: 'More options' })).toHaveAttribute('aria-expanded', 'false');
+        // Power features are tucked away…
+        expect(screen.queryByText('Exclude keywords')).toBeNull();
+        expect(screen.queryByText('Add a button')).toBeNull();
+        // …while the compose-adjacent options stay visible without expanding.
+        // (findBy — the image affordance waits on the settings fetch that carries the flag.)
+        expect(screen.getByText("Like the customer's comment")).toBeInTheDocument();
+        expect(await screen.findByText('Add an image')).toBeInTheDocument();
+    });
+
+    it('auto-expands when the trigger already uses an advanced field', async () => {
+        renderModal({ source: 'facebook', triggerExcludeKeyword: 'spam' });
+        expect(await screen.findByRole('button', { name: 'More options' })).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText('Exclude keywords')).toBeInTheDocument();
+    });
+
+    // The image affordance lives at the TOP LEVEL (composing the message), gated only
+    // by the server capability flag — never hidden behind the disclosure.
+    it('shows the add-image affordance without expanding when the feature is enabled', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private', triggerImagesEnabled: true } });
+        renderModal({ source: 'facebook' });
+        expect(await screen.findByText('Add an image')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'More options' })).toHaveAttribute('aria-expanded', 'false');
+    });
+});
+
+// WhatsApp button kind: the pair is stored in the SAME columns — the URL is a wa.me
+// deep link built from the phone number on save, so the backend and delivery path
+// never change (Messenger has no native WhatsApp button; a wa.me web_url is the
+// industry mechanism).
+describe('PostTriggerModal — WhatsApp button kind', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private' } });
+    });
+
+    it('switching to WhatsApp prefills the default label and swaps URL → phone input', async () => {
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
+        await openAdvanced();
+        await screen.findByText('Add a button');
+        fireEvent.click(screen.getByRole('radio', { name: 'WhatsApp' }));
+        expect((container.querySelector('#trigger-button-label') as HTMLInputElement).value).toBe('Chat on WhatsApp');
+        expect(container.querySelector('#trigger-button-whatsapp')).not.toBeNull();
+        expect(container.querySelector('#trigger-button-url')).toBeNull();
+    });
+
+    it('switching back to link clears the auto-filled WhatsApp label, but keeps a custom one', async () => {
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
+        await openAdvanced();
+        await screen.findByText('Add a button');
+        const label = () => container.querySelector('#trigger-button-label') as HTMLInputElement;
+
+        // Auto-fill on switch to WhatsApp → unwound on switch back to link.
+        fireEvent.click(screen.getByRole('radio', { name: 'WhatsApp' }));
+        expect(label().value).toBe('Chat on WhatsApp');
+        fireEvent.click(screen.getByRole('radio', { name: 'Link' }));
+        expect(label().value).toBe('');
+
+        // A merchant-typed label survives the round-trip in both directions.
+        fireEvent.change(label(), { target: { value: 'Order here' } });
+        fireEvent.click(screen.getByRole('radio', { name: 'WhatsApp' }));
+        expect(label().value).toBe('Order here');
+        fireEvent.click(screen.getByRole('radio', { name: 'Link' }));
+        expect(label().value).toBe('Order here');
+    });
+
+    it('saving builds the wa.me URL from the phone number', async () => {
+        updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
+        await openAdvanced();
+        await screen.findByText('Add a button');
+        fireEvent.click(screen.getByRole('radio', { name: 'WhatsApp' }));
+        fireEvent.change(container.querySelector('#trigger-button-whatsapp') as HTMLInputElement, { target: { value: '+963 944 123 456' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(updateTriggerMock).toHaveBeenCalledWith(expect.objectContaining({
+            triggerButtonLabel: 'Chat on WhatsApp', triggerButtonUrl: 'https://wa.me/963944123456',
+        })));
+    });
+
+    it('blocks save on a local-format number (no country code)', async () => {
+        updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
+        await openAdvanced();
+        await screen.findByText('Add a button');
+        fireEvent.click(screen.getByRole('radio', { name: 'WhatsApp' }));
+        fireEvent.change(container.querySelector('#trigger-button-whatsapp') as HTMLInputElement, { target: { value: '0944123456' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+        expect(updateTriggerMock).not.toHaveBeenCalled();
+    });
+
+    // The outcome card mirrors the FULL delivery — including the button, in both
+    // its positions: under the text bubble (button template) and on the image card.
+    it('previews the button on the private outcome row (text + button case)', async () => {
+        renderModal({ source: 'facebook', triggerButtonLabel: 'Shop now', triggerButtonUrl: 'https://shop.example' });
+        expect(await screen.findByText('What the commenter receives')).toBeInTheDocument();
+        // The label renders in the preview (the inputs hold it as value, not text).
+        expect(screen.getByText('Shop now')).toBeInTheDocument();
+        // Link kind → no WhatsApp glyph.
+        expect(screen.queryByTestId('whatsapp-icon')).toBeNull();
+    });
+
+    it('previews the WhatsApp button with its glyph on the image card (image + button case)', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private', triggerImagesEnabled: true } });
+        renderModal({
+            source: 'facebook',
+            triggerReply: 'Short caption',
+            triggerImageUrl: 'https://cdn/x.jpg',
+            triggerButtonLabel: 'Chat on WhatsApp',
+            triggerButtonUrl: 'https://wa.me/963944123456',
+        });
+        // Card renders (image present) with the button label + WhatsApp glyph on it.
+        expect(await screen.findByText('The customer can tap the image to open it full-size.')).toBeInTheDocument();
+        expect(screen.getByText('Chat on WhatsApp')).toBeInTheDocument();
+        expect(screen.getByTestId('whatsapp-icon')).toBeInTheDocument();
+    });
+
+    it('reopens a stored wa.me button in WhatsApp mode with the number (auto-expanded)', async () => {
+        const { container } = renderModal({ source: 'facebook', triggerButtonLabel: 'Chat on WhatsApp', triggerButtonUrl: 'https://wa.me/963944123456' });
+        await screen.findByText('Add a button');
+        expect(screen.getByRole('radio', { name: 'WhatsApp' })).toHaveAttribute('aria-checked', 'true');
+        expect((container.querySelector('#trigger-button-whatsapp') as HTMLInputElement).value).toBe('+963944123456');
+        expect(container.querySelector('#trigger-button-url')).toBeNull();
     });
 });

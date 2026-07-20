@@ -19,6 +19,7 @@ import {
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { captureError } from '@/lib/sentryHelpers';
+import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 import { useWorkspaceRole, usePersistedBoolean } from '@/hooks';
 import type { NextPageWithLayout } from './_app';
 import {
@@ -579,7 +580,7 @@ const SettingsPage: NextPageWithLayout = () => {
         <div className="bg-card border border-theme-border rounded-2xl p-4 sm:p-5">
           <p className="text-sm text-muted-foreground mb-4">{tc('helpDescription')}</p>
           <a
-            href={`https://wa.me/46700224720?text=${encodeURIComponent(tc('whatsappDefaultMessage'))}`}
+            href={buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, tc('whatsappDefaultMessage'))}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 px-5 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95 text-sm"

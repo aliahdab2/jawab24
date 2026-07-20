@@ -2,8 +2,10 @@ import React from 'react';
 import clsx from 'clsx';
 
 interface FormFieldProps {
-  /** Visible label text */
-  label: string;
+  /** Visible label content — usually a string; may carry a non-interactive adornment
+   *  (e.g. a required marker). Interactive adornments (popovers) must NOT go here:
+   *  they'd sit inside the <label> and steal its click-to-focus behavior. */
+  label: React.ReactNode;
   /** id of the input rendered as children — required so the label is properly associated */
   htmlFor: string;
   /** Optional helper text shown below the input */
