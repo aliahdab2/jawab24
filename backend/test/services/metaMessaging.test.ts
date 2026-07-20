@@ -6,6 +6,7 @@ import {
     buildProductCardPayload,
     imageAttachmentMessage,
     imageCardMessage,
+    buttonTemplateMessage,
     META_TEMPLATE_LIMITS,
 } from '../../src/services/metaMessaging';
 import type { ProductCard } from '@jawab24/shared';
@@ -57,6 +58,41 @@ describe('metaMessaging', () => {
                 attachment: { payload: { elements: { buttons: { title: string }[] }[] } };
             };
             expect(msg.attachment.payload.elements[0].buttons[0].title).toHaveLength(META_TEMPLATE_LIMITS.maxButtonTitleChars);
+        });
+
+        it('imageCardMessage: a CTA rides the card as a web_url button (after «Read more»)', () => {
+            const msg = imageCardMessage('https://cdn/x.jpg', 'a'.repeat(200), { title: 'اقرأ المزيد', payload: 'pr_more:facebook:p1' }, { label: 'تسوّق', url: 'https://shop.example' }) as {
+                attachment: { payload: { elements: { buttons: { type: string; title: string; url?: string; payload?: string }[] }[] } };
+            };
+            expect(msg.attachment.payload.elements[0].buttons).toEqual([
+                { type: 'postback', title: 'اقرأ المزيد', payload: 'pr_more:facebook:p1' },
+                { type: 'web_url', title: 'تسوّق', url: 'https://shop.example' },
+            ]);
+        });
+
+        it('imageCardMessage: a short caption with a CTA has only the CTA button (no «Read more»)', () => {
+            const msg = imageCardMessage('https://cdn/x.jpg', 'hi', undefined, { label: 'Shop', url: 'https://shop.example' }) as {
+                attachment: { payload: { elements: { buttons: { type: string; url?: string }[] }[] } };
+            };
+            expect(msg.attachment.payload.elements[0].buttons).toEqual([{ type: 'web_url', title: 'Shop', url: 'https://shop.example' }]);
+        });
+
+        it('buttonTemplateMessage: text + a single web_url button, text capped at 640', () => {
+            const msg = buttonTemplateMessage('Check this out', { label: 'Shop now', url: 'https://shop.example/x' }) as {
+                attachment: { type: string; payload: { template_type: string; text: string; buttons: { type: string; title: string; url: string }[] } };
+            };
+            expect(msg.attachment.type).toBe('template');
+            expect(msg.attachment.payload.template_type).toBe('button');
+            expect(msg.attachment.payload.text).toBe('Check this out');
+            expect(msg.attachment.payload.buttons).toEqual([{ type: 'web_url', title: 'Shop now', url: 'https://shop.example/x' }]);
+        });
+
+        it('buttonTemplateMessage: caps text at 640 and the label at 20', () => {
+            const msg = buttonTemplateMessage('x'.repeat(700), { label: 'y'.repeat(40), url: 'https://x.example' }) as {
+                attachment: { payload: { text: string; buttons: { title: string }[] } };
+            };
+            expect(msg.attachment.payload.text).toHaveLength(640);
+            expect(msg.attachment.payload.buttons[0].title).toHaveLength(META_TEMPLATE_LIMITS.maxButtonTitleChars);
         });
     });
 

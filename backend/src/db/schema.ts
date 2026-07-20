@@ -340,6 +340,11 @@ export const posts = pgTable('posts', {
      *  Facebook-only — the Instagram API has no like-comment endpoint, so instagram_media
      *  has no counterpart column. */
     likeComment: boolean('like_comment').default(false).notNull(),
+    /** Post Reply CTA button (DM-modes only, Facebook-only): a tappable link under the private
+     *  reply. Label + URL are stored/cleared together (both set = button shown, both null = none).
+     *  instagram_media has no counterpart column (button-template support unverified on IG). */
+    triggerButtonLabel: text('trigger_button_label'),
+    triggerButtonUrl: text('trigger_button_url'),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),

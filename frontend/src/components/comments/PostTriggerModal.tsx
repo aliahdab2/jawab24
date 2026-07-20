@@ -11,10 +11,13 @@ import {
   POST_REPLY_IMAGE_MAX_BYTES,
   POST_REPLY_IMAGE_MIME_TYPES,
   POST_REPLY_CARD_CAPTION_MAX,
+  POST_REPLY_BUTTON_LABEL_MAX,
+  POST_REPLY_BUTTON_TEXT_MAX,
+  isValidHttpUrl,
 } from '@jawab24/shared';
 import { MessageSquare, MessageCircle, ArrowUpRight, ImagePlus, Lock, X } from 'lucide-react';
 import Link from 'next/link';
-import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover, Toggle } from '@/components/ui';
+import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover, Toggle, Input } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
@@ -52,6 +55,8 @@ interface PostTriggerModalProps {
   triggerReply?: string | null;
   triggerType?: string | null;
   triggerExcludeKeyword?: string | null;
+  triggerButtonLabel?: string | null;
+  triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
   isOpen: boolean;
@@ -67,6 +72,8 @@ export function PostTriggerModal({
   triggerReply: initialReply,
   triggerType: initialType,
   triggerExcludeKeyword: initialExcludeKeyword,
+  triggerButtonLabel: initialButtonLabel,
+  triggerButtonUrl: initialButtonUrl,
   triggerImageUrl: initialImageUrl,
   likeComment: initialLikeComment,
   isOpen,
@@ -84,6 +91,10 @@ export function PostTriggerModal({
   // Veto keywords (ManyChat parity): a comment containing any of these never fires the
   // rule and falls through to the AI pipeline. Optional, both trigger modes.
   const [excludeKeywords, setExcludeKeywords] = useState<string[]>(() => parseKeywords(initialExcludeKeyword));
+  // CTA link button (ManyChat "auto-DM a link" parity). DM-modes only + Facebook only.
+  // Label + URL are set/cleared together; an empty pair means no button.
+  const [buttonLabel, setButtonLabel] = useState(initialButtonLabel ?? '');
+  const [buttonUrl, setButtonUrl] = useState(initialButtonUrl ?? '');
   const [reply, setReply] = useState(initialReply ?? '');
   // Like-the-comment option (ManyChat parity). Facebook only — the Instagram API
   // has no like-comment endpoint, so the row is hidden entirely for IG posts.
@@ -108,10 +119,14 @@ export function PostTriggerModal({
   const hasStoredImage = !!initialImageUrl && !imageRemoved;
   // Image that will actually be DELIVERED: only in DM modes, and only if one is set.
   const hasImage = imagesEnabled && isDmMode && (imageFile !== null || hasStoredImage);
-  // The editor cap is a flat 1000. When an image is attached, delivery depends on caption
-  // length: ≤ card limit → the card shows the full caption; longer → a teaser + «Read more»,
-  // and the tap delivers the full image + full text (drives the outcome preview below).
-  const replyMax = REPLY_MAX;
+  // CTA button is Facebook-only + DM-channel-only (the sender gates by mode). "Active"
+  // means both fields are filled — the pair is stored/cleared together.
+  const ctaSupported = source === 'facebook' && isDmMode;
+  const ctaActive = ctaSupported && buttonLabel.trim() !== '' && buttonUrl.trim() !== '';
+  // The editor cap is a flat 1000, EXCEPT when a CTA button rides WITHOUT an image: then the
+  // reply rides a button template, capped at Meta's 640. With an image the button rides the
+  // image card (full caption via «Read more»), so the full cap applies.
+  const replyMax = ctaActive && !hasImage ? POST_REPLY_BUTTON_TEXT_MAX : REPLY_MAX;
   const replyOverLimit = reply.length > replyMax;
   const trimmedReply = reply.trim();
   const captionIsLong = trimmedReply.length > POST_REPLY_CARD_CAPTION_MAX;
@@ -124,13 +139,15 @@ export function PostTriggerModal({
       setMode(initialType === 'all' ? 'all' : 'keyword');
       setKeywords(parseKeywords(initialKeyword));
       setExcludeKeywords(parseKeywords(initialExcludeKeyword));
+      setButtonLabel(initialButtonLabel ?? '');
+      setButtonUrl(initialButtonUrl ?? '');
       setReply(initialReply ?? '');
       setLikeEnabled(initialLikeComment ?? false);
       setImageFile(null);
       setImageObjectUrl(null);
       setImageRemoved(false);
     }
-  }, [isOpen, initialKeyword, initialReply, initialType, initialLikeComment, initialExcludeKeyword]);
+  }, [isOpen, initialKeyword, initialReply, initialType, initialLikeComment, initialExcludeKeyword, initialButtonLabel, initialButtonUrl]);
 
   // Revoke the object URL when it changes / unmounts to avoid leaking blob memory.
   useEffect(() => {
@@ -181,6 +198,24 @@ export function PostTriggerModal({
       toast.error(t('postTriggerReplyRequired'));
       return;
     }
+    // CTA button (FB + DM only): label + URL are all-or-nothing, URL must be http(s), and when
+    // the button rides without an image the reply is capped at 640 (button-template limit).
+    if (ctaSupported) {
+      const label = buttonLabel.trim();
+      const url = buttonUrl.trim();
+      if ((label && !url) || (!label && url)) {
+        toast.error(t('postTriggerButtonIncomplete'));
+        return;
+      }
+      if (url && !isValidHttpUrl(url)) {
+        toast.error(t('postTriggerButtonBadUrl'));
+        return;
+      }
+    }
+    if (replyOverLimit) {
+      toast.error(t('postTriggerReplyTooLong'));
+      return;
+    }
     const keywordArg = mode === 'all' ? null : keywords.join(', ');
 
     // Resolve the image intent for the backend: a new file → set; an existing image
@@ -208,6 +243,11 @@ export function PostTriggerModal({
         likeComment: source === 'facebook' ? likeEnabled : undefined,
         // Always send exclude keywords (empty string clears them) — both platforms.
         triggerExcludeKeyword: excludeKeywords.join(', '),
+        // CTA button (FB + DM only). Send the pair (empty clears) only when the UI is shown;
+        // otherwise omit so a stored button isn't clobbered when editing under another mode.
+        ...(ctaSupported
+          ? { triggerButtonLabel: buttonLabel.trim(), triggerButtonUrl: buttonUrl.trim() }
+          : {}),
       });
       toast.success(t('postTriggerSaved'));
       onSaveSuccess();
@@ -426,6 +466,38 @@ export function PostTriggerModal({
             maxLength={POST_REPLY_MAX_KEYWORD_LEN}
           />
         </FormField>
+
+        {/* CTA link button — Facebook + DM-channel only (the sender delivers it on the private
+            reply; a public comment can't carry a button). Both fields set together or empty. */}
+        {ctaSupported && (
+          <FormField
+            label={t('postTriggerButton')}
+            htmlFor="trigger-button-label"
+            helper={t('postTriggerButtonHelp')}
+          >
+            <div className="flex flex-col gap-2">
+              <Input
+                id="trigger-button-label"
+                value={buttonLabel}
+                onChange={e => setButtonLabel(e.target.value)}
+                placeholder={t('postTriggerButtonLabelPlaceholder')}
+                maxLength={POST_REPLY_BUTTON_LABEL_MAX}
+                dir="auto"
+                aria-label={t('postTriggerButtonLabelAria')}
+              />
+              <Input
+                id="trigger-button-url"
+                type="url"
+                inputMode="url"
+                value={buttonUrl}
+                onChange={e => setButtonUrl(e.target.value)}
+                placeholder={t('postTriggerButtonUrlPlaceholder')}
+                dir="ltr"
+                aria-label={t('postTriggerButtonUrlAria')}
+              />
+            </div>
+          </FormField>
+        )}
 
         {/* Like-the-comment option — Facebook only (the Instagram API can't like
             comments), so the row simply doesn't exist for IG posts. */}

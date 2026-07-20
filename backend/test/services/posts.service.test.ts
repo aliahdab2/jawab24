@@ -361,7 +361,7 @@ describe('PostsService', () => {
             const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
 
             // samplePost mock omits like_comment; ensureContent defaults it to false (matches the DB NOT NULL DEFAULT).
-            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerExcludeKeyword: null, triggerImageUrl: 'https://cdn/x.jpg', likeComment: false });
+            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerExcludeKeyword: null, triggerImageUrl: 'https://cdn/x.jpg', likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null });
         });
 
         it('routes instagram through findOrCreateInstagramMedia (image URL null when absent)', async () => {
@@ -369,7 +369,7 @@ describe('PostsService', () => {
 
             const result = await postsService.ensureContent(page, 'instagram', 'ig-media-1');
 
-            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false });
+            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null });
         });
     });
 
@@ -506,6 +506,41 @@ describe('PostsService', () => {
             expect(imageStorage.put).not.toHaveBeenCalled();
             // image columns not in the update set (keep)
             expect(setSpy.mock.calls[0][0]).not.toHaveProperty('triggerImageKey');
+        });
+
+        it('button + NO image + reply over 640 → button_text_too_long (button template cap)', async () => {
+            vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned()) as any); // no stored image
+            const res = await postsService.updateTrigger({
+                contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1',
+                triggerKeyword: 'k', triggerReply: 'x'.repeat(641), triggerType: 'keyword',
+                image: { action: 'keep' }, triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example',
+            });
+            expect(res).toEqual({ ok: false, reason: 'button_text_too_long' });
+            expect(setSpy).not.toHaveBeenCalled();
+        });
+
+        it('button + a NEW image + reply over 640 → allowed (rides the image card, full cap)', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(selectInnerJoinWhere(owned()) as any)
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any)
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any);
+            const res = await postsService.updateTrigger({
+                contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1',
+                triggerKeyword: 'k', triggerReply: 'x'.repeat(700), triggerType: 'keyword',
+                image: { action: 'set', buffer: Buffer.alloc(100), mimeType: 'image/jpeg' },
+                triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example',
+            });
+            expect(res).toEqual({ ok: true });
+        });
+
+        it('writes the button columns on the facebook branch when intent is present', async () => {
+            vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned()) as any);
+            await postsService.updateTrigger({
+                contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1',
+                triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', image: { action: 'keep' },
+                triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example',
+            });
+            expect(setSpy.mock.calls[0][0]).toMatchObject({ triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example' });
         });
     });
 });

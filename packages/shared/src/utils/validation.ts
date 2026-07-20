@@ -14,6 +14,20 @@ export function isValidEmail(value: string): boolean {
   return EMAIL_REGEX.test(value);
 }
 
+/**
+ * True when `value` is a syntactically valid http(s) URL — the only schemes Meta accepts
+ * for a URL button. Single source of truth for the Post Reply CTA button, used by both the
+ * backend validator and the frontend modal so their notions of "valid" can't drift.
+ */
+export function isValidHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 /** Returns whether a string is a valid email or E.164 phone number. */
 export function isValidContact(value: string): boolean {
   return isValidEmail(value) || isValidPhone(value);

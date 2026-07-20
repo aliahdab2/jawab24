@@ -26,6 +26,8 @@ interface PostReplyTarget {
   reply: string | null;
   type: string | null;
   excludeKeyword: string | null;
+  buttonLabel: string | null;
+  buttonUrl: string | null;
   imageUrl: string | null;
   likeComment: boolean;
 }
@@ -38,18 +40,22 @@ interface ApiTriggerState {
   triggerReply?: string | null;
   triggerType?: string | null;
   triggerExcludeKeyword?: string | null;
+  triggerButtonLabel?: string | null;
+  triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
 }
 
 /** Normalize API trigger state into the modal-facing target fields (single place
  *  that owns the `?? null` / `?? false` defaults for both open paths). */
-function toTriggerFields(post: ApiTriggerState | null | undefined): Pick<PostReplyTarget, 'keyword' | 'reply' | 'type' | 'excludeKeyword' | 'imageUrl' | 'likeComment'> {
+function toTriggerFields(post: ApiTriggerState | null | undefined): Pick<PostReplyTarget, 'keyword' | 'reply' | 'type' | 'excludeKeyword' | 'buttonLabel' | 'buttonUrl' | 'imageUrl' | 'likeComment'> {
   return {
     keyword: post?.triggerKeyword ?? null,
     reply: post?.triggerReply ?? null,
     type: post?.triggerType ?? null,
     excludeKeyword: post?.triggerExcludeKeyword ?? null,
+    buttonLabel: post?.triggerButtonLabel ?? null,
+    buttonUrl: post?.triggerButtonUrl ?? null,
     imageUrl: post?.triggerImageUrl ?? null,
     likeComment: post?.likeComment ?? false,
   };
@@ -160,6 +166,8 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
           triggerReply={target.reply}
           triggerType={target.type}
           triggerExcludeKeyword={target.excludeKeyword}
+          triggerButtonLabel={target.buttonLabel}
+          triggerButtonUrl={target.buttonUrl}
           triggerImageUrl={target.imageUrl}
           likeComment={target.likeComment}
           isOpen

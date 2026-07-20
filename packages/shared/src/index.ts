@@ -68,7 +68,7 @@ export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
 export { isSafeRedirectPath } from './utils/redirect';
 export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
-export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
+export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, isValidHttpUrl, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
 export type { ExtractedPhone } from './utils/validation';
 
 // --- SSE Event Types ---
@@ -795,6 +795,8 @@ export {
     POST_REPLY_IMAGE_MAX_BYTES,
     POST_REPLY_IMAGE_MIME_TYPES,
     POST_REPLY_CARD_CAPTION_MAX,
+    POST_REPLY_BUTTON_LABEL_MAX,
+    POST_REPLY_BUTTON_TEXT_MAX,
     READ_MORE_PAYLOAD_PREFIX,
     buildReadMorePayload,
     parseReadMorePayload,

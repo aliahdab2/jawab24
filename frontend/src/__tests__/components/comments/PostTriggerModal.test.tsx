@@ -8,6 +8,11 @@ vi.mock('@/lib/api', () => ({
     postsApi: { updateTrigger: vi.fn() },
 }));
 
+const toastErrorMock = vi.fn();
+vi.mock('sonner', () => ({
+    toast: { error: (...args: unknown[]) => toastErrorMock(...args), success: vi.fn() },
+}));
+
 vi.mock('@/hooks/useSaveHandler', () => ({
     useSaveHandler: () => ({ handle: vi.fn(), saving: false }),
 }));
@@ -29,6 +34,7 @@ vi.mock('@/components/ui', () => ({
         <button onClick={onClick} disabled={disabled}>{children}</button>
     ),
     Textarea: (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...props} />,
+    Input: ({ label: _label, error: _error, helperText: _helperText, ...props }: { label?: string; error?: string; helperText?: string } & React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
     // Minimal controllable stand-in: comma-splits the typed value into chips on change,
     // so a test can drive value → onChange without the real chip UI.
     KeywordChipInput: ({ id, value, onChange }: { id?: string; value?: string[]; onChange?: (v: string[]) => void }) => (
@@ -245,5 +251,78 @@ describe('PostTriggerModal — like the comment', () => {
         await screen.findByText('Exclude keywords (optional)');
         const excludeInput = container.querySelector('#trigger-exclude') as HTMLInputElement;
         expect(excludeInput.value).toBe('غالي, expensive');
+    });
+});
+
+// The CTA button is Facebook + DM-channel only. The settings mock defaults to
+// commentReplyMode 'private' (a DM mode), so the button UI is visible for FB posts.
+describe('PostTriggerModal — CTA button', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private' } });
+    });
+
+    it('renders the button fields for a facebook post in a DM mode', async () => {
+        renderModal({ source: 'facebook' });
+        expect(await screen.findByText('Add a button (optional)')).toBeInTheDocument();
+    });
+
+    it('does not render the button fields for an instagram post', async () => {
+        renderModal({ source: 'instagram' });
+        await waitFor(() => expect(settingsGetMock).toHaveBeenCalled());
+        expect(screen.queryByText('Add a button (optional)')).toBeNull();
+    });
+
+    it('does not render the button fields in public reply mode', async () => {
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'public' } });
+        renderModal({ source: 'facebook' });
+        await waitFor(() => expect(settingsGetMock).toHaveBeenCalled());
+        expect(screen.queryByText('Add a button (optional)')).toBeNull();
+    });
+
+    it('sends the button label + URL on save', async () => {
+        updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
+
+        await screen.findByText('Add a button (optional)');
+        fireEvent.change(container.querySelector('#trigger-button-label') as HTMLInputElement, { target: { value: 'Shop now' } });
+        fireEvent.change(container.querySelector('#trigger-button-url') as HTMLInputElement, { target: { value: 'https://shop.example/x' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(updateTriggerMock).toHaveBeenCalledWith(expect.objectContaining({
+            triggerButtonLabel: 'Shop now', triggerButtonUrl: 'https://shop.example/x',
+        })));
+    });
+
+    it('blocks save on a half-configured button (label only)', async () => {
+        updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
+
+        await screen.findByText('Add a button (optional)');
+        fireEvent.change(container.querySelector('#trigger-button-label') as HTMLInputElement, { target: { value: 'Shop now' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+        expect(updateTriggerMock).not.toHaveBeenCalled();
+    });
+
+    it('blocks save on an invalid button URL', async () => {
+        updateTriggerMock.mockResolvedValue({ data: { success: true } } as never);
+        const { container } = renderModal({ source: 'facebook', triggerType: 'all', triggerReply: 'Details!' });
+
+        await screen.findByText('Add a button (optional)');
+        fireEvent.change(container.querySelector('#trigger-button-label') as HTMLInputElement, { target: { value: 'Shop' } });
+        fireEvent.change(container.querySelector('#trigger-button-url') as HTMLInputElement, { target: { value: 'not a url' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+        expect(updateTriggerMock).not.toHaveBeenCalled();
+    });
+
+    it('hydrates saved button label + URL', async () => {
+        const { container } = renderModal({ source: 'facebook', triggerButtonLabel: 'Buy', triggerButtonUrl: 'https://shop.example' });
+        await screen.findByText('Add a button (optional)');
+        expect((container.querySelector('#trigger-button-label') as HTMLInputElement).value).toBe('Buy');
+        expect((container.querySelector('#trigger-button-url') as HTMLInputElement).value).toBe('https://shop.example');
     });
 });

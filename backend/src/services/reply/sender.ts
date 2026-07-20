@@ -5,6 +5,7 @@ import { config } from '../../config';
 import { t } from '../../utils/i18n';
 import { classifyDmError, type DmFailure } from '../../utils/fbGraphErrors';
 import { captureError } from '../../utils/sentryHelpers';
+import type { CtaButton } from '../metaMessaging';
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
@@ -27,6 +28,9 @@ export interface SendCommentReplyOptions {
      *  exceeds the card limit, the card shows a teaser + this button; the tap delivers the full
      *  text in-chat (the image stays in the card). Null/absent → short caption shown in full, no button. */
     readMore?: { label: string; payload: string } | null;
+    /** Post Reply CTA link button (DM channel only, Facebook only): label + URL. When set, the
+     *  reply rides a button template (no image) or the image card (with image). Absent → no button. */
+    cta?: CtaButton;
 }
 
 export interface SendReplyResult {
@@ -89,6 +93,7 @@ export class ReplySender {
             isDemo = false,
             replyImageUrl,
             readMore,
+            cta,
         } = options;
 
         if (isDemo) {
@@ -108,8 +113,9 @@ export class ReplySender {
                     // Meta allows exactly ONE message on a cold comment→DM. The image ALWAYS rides
                     // an inline card (never hidden). A short caption shows in full; a long one shows
                     // a teaser + «Read more» postback, and the tap delivers the full text in-chat.
+                    // An optional CTA link button rides the same card.
                     try {
-                        const dm = await facebookService.sendPrivateReplyWithImage(accessToken, facebookCommentId, replyText, replyImageUrl, readMore ?? null);
+                        const dm = await facebookService.sendPrivateReplyWithImage(accessToken, facebookCommentId, replyText, replyImageUrl, readMore ?? null, cta);
                         dmRecipientId = dm.recipientId;
                         imageDelivered = true;
                         this.logger.info('[Sender] Private reply with image sent', { facebookCommentId, replyMode, recipientId: dmRecipientId, format: dm.format });
@@ -118,21 +124,23 @@ export class ReplySender {
                         if (classifyDmError(imgError, 'facebook').bucket === 'transient') throw imgError;
                         // Non-transient (e.g. Meta rejected the template) → fall back to a plain-text
                         // private reply so the customer still gets the reply; the image is dropped
-                        // this time (honest: imageDelivered stays false, so no "image" badge).
+                        // this time (honest: imageDelivered stays false, so no "image" badge). The
+                        // CTA still rides the fallback (button template) so the link isn't lost.
                         captureError(imgError, 'Post Reply image reply failed; sent text only', {
                             fingerprint: ['post-reply-image-reply-failed'],
                             level: 'warning',
                             tags: { platform: 'facebook', component: 'sender' },
                             extra: { facebookCommentId, replyMode },
                         });
-                        const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
+                        const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText, cta);
                         dmRecipientId = dm.recipientId;
                     }
                 } else {
-                    // Plain-text one-shot private reply (recipient.comment_id) — returns the PSID.
-                    const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
+                    // Plain-text (or button-template, with a CTA) one-shot private reply
+                    // (recipient.comment_id) — returns the PSID.
+                    const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText, cta);
                     dmRecipientId = dm.recipientId;
-                    this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId });
+                    this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId, hasCta: !!cta });
                 }
             } catch (error) {
                 dmFailure = classifyDmError(error, 'facebook');

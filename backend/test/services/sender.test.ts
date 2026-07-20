@@ -80,7 +80,7 @@ describe('ReplySender', () => {
         it('private mode with an image: delivers text + image in ONE private reply (no separate image message)', async () => {
             const result = await sender.sendCommentReply({ ...baseOptions, replyMode: 'private', replyImageUrl: 'https://cdn/x.jpg' });
             expect(facebookService.sendPrivateReplyWithImage).toHaveBeenCalledWith(
-                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', null,
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', null, undefined,
             );
             // The doomed second-message image send is never used on this path anymore.
             expect(sendMetaImageAttachment).not.toHaveBeenCalled();
@@ -93,7 +93,7 @@ describe('ReplySender', () => {
             const result = await sender.sendCommentReply({ ...baseOptions, replyMode: 'private', replyImageUrl: 'https://cdn/x.jpg' });
             // Fallback: the customer still gets the text.
             expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
-                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!',
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', undefined,
             );
             expect(result).toMatchObject({ success: true, dmRecipientId: 'user_456', imageDelivered: false });
         });
@@ -185,7 +185,8 @@ describe('ReplySender', () => {
             expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
                 'access_token_abc',
                 'fb_comment_123',
-                'Thank you for your feedback!'
+                'Thank you for your feedback!',
+                undefined,
             );
         });
 
@@ -273,7 +274,8 @@ describe('ReplySender', () => {
             expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
                 'access_token_abc',
                 'fb_comment_123',
-                'Thank you for your feedback!'
+                'Thank you for your feedback!',
+                undefined,
             );
             expect(fbAxios.post).toHaveBeenCalledWith(
                 `${GRAPH_API}/fb_comment_123/comments`,
@@ -296,7 +298,7 @@ describe('ReplySender', () => {
             const result = await sender.sendCommentReply({ ...dualOptions, replyImageUrl: 'https://cdn/x.jpg' });
 
             expect(facebookService.sendPrivateReplyWithImage).toHaveBeenCalledWith(
-                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', null,
+                'access_token_abc', 'fb_comment_123', 'Thank you for your feedback!', 'https://cdn/x.jpg', null, undefined,
             );
             expect(sendMetaImageAttachment).not.toHaveBeenCalled();
             // The public nudge carries the nudge text only — never the image.

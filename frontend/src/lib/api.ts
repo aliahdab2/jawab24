@@ -266,6 +266,9 @@ export const postsApi = {
     likeComment?: boolean;
     // Veto keywords: undefined = leave as-is; '' = clear; string = set.
     triggerExcludeKeyword?: string;
+    // CTA button (Facebook only): '' clears, a value sets; both fields sent together.
+    triggerButtonLabel?: string;
+    triggerButtonUrl?: string;
   }) => api.patch(`/posts/${opts.id}/trigger`, {
     source: opts.source,
     triggerKeyword: opts.triggerKeyword,
@@ -274,6 +277,8 @@ export const postsApi = {
     ...(opts.triggerImage !== undefined ? { triggerImage: opts.triggerImage } : {}),
     ...(opts.likeComment !== undefined ? { likeComment: opts.likeComment } : {}),
     ...(opts.triggerExcludeKeyword !== undefined ? { triggerExcludeKeyword: opts.triggerExcludeKeyword } : {}),
+    ...(opts.triggerButtonLabel !== undefined ? { triggerButtonLabel: opts.triggerButtonLabel } : {}),
+    ...(opts.triggerButtonUrl !== undefined ? { triggerButtonUrl: opts.triggerButtonUrl } : {}),
   }),
   // Post Reply picker: recent published posts for a page (per platform) + their
   // trigger state, paginated via the platform Graph cursor.

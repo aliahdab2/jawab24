@@ -2,9 +2,11 @@ import {
     matchesKeyword,
     normalizeArabic,
     parseKeywords,
+    isValidHttpUrl,
     POST_REPLY_MAX_KEYWORDS,
     POST_REPLY_MAX_KEYWORD_LEN,
     POST_REPLY_MAX_REPLY_LEN,
+    POST_REPLY_BUTTON_LABEL_MAX,
 } from '@jawab24/shared';
 import type { CommentSkipReason } from './commentPreprocess';
 
@@ -39,6 +41,9 @@ export interface ContentTriggerFields {
     /** Like the customer's comment after a successful send. Facebook-only column —
      *  instagramMedia rows never carry it. */
     likeComment?: boolean;
+    /** CTA link button (DM-modes only, Facebook-only): label + URL, stored together. */
+    triggerButtonLabel?: string | null;
+    triggerButtonUrl?: string | null;
 }
 
 export interface EffectivePostReplyRule {
@@ -51,6 +56,8 @@ export interface EffectivePostReplyRule {
     triggerImageUrl: string | null;
     /** Page likes the customer's comment after the reply is sent (Facebook only). */
     likeComment: boolean;
+    /** CTA link button (DM channel, Facebook only): { label, url } when both are set, else null. */
+    cta: { label: string; url: string } | null;
 }
 
 /**
@@ -72,6 +79,10 @@ export function resolvePostReplyRule(content: ContentTriggerFields): EffectivePo
         triggerExcludeKeyword: content.triggerExcludeKeyword ?? null,
         triggerImageUrl: content.triggerImageUrl ?? null,
         likeComment: content.likeComment ?? false,
+        // Button is delivered only when BOTH label and URL are present (they're stored together).
+        cta: content.triggerButtonLabel && content.triggerButtonUrl
+            ? { label: content.triggerButtonLabel, url: content.triggerButtonUrl }
+            : null,
     };
 }
 
@@ -113,7 +124,11 @@ export interface PostReplyRuleInput {
     triggerReply: string | null;    // already trimmed by the caller, or null
     /** Veto keywords, already trimmed, or null/absent when none. Valid in both modes. */
     triggerExcludeKeyword?: string | null;
+    /** CTA button label + URL — both required together, or both null/absent. */
+    triggerButtonLabel?: string | null;
+    triggerButtonUrl?: string | null;
 }
+
 
 /**
  * Validate a Post Reply rule payload. Returns an error message when invalid, or null
@@ -125,7 +140,7 @@ export interface PostReplyRuleInput {
  *   - both modes: optional exclude keywords, same 10 × 100-char limits.
  */
 export function validatePostReplyRuleInput(input: PostReplyRuleInput): string | null {
-    const { triggerType, triggerKeyword, triggerReply, triggerExcludeKeyword } = input;
+    const { triggerType, triggerKeyword, triggerReply, triggerExcludeKeyword, triggerButtonLabel, triggerButtonUrl } = input;
     if (triggerType !== 'keyword' && triggerType !== 'all') {
         return 'triggerType must be "keyword" or "all"';
     }
@@ -141,6 +156,22 @@ export function validatePostReplyRuleInput(input: PostReplyRuleInput): string | 
         if (excludes.some(k => k.length > POST_REPLY_MAX_KEYWORD_LEN)) {
             return `Each excluded keyword must be ${POST_REPLY_MAX_KEYWORD_LEN} characters or fewer`;
         }
+    }
+    // CTA button: label + URL are all-or-nothing. Validate label length, URL scheme, and —
+    // when there's no image — the button-template text cap (Meta's 640, tighter than 1000).
+    if (triggerButtonLabel || triggerButtonUrl) {
+        if (!triggerButtonLabel || !triggerButtonUrl) {
+            return 'triggerButtonLabel and triggerButtonUrl must both be set or both empty';
+        }
+        if (triggerButtonLabel.length > POST_REPLY_BUTTON_LABEL_MAX) {
+            return `triggerButtonLabel must be ${POST_REPLY_BUTTON_LABEL_MAX} characters or fewer`;
+        }
+        if (!isValidHttpUrl(triggerButtonUrl)) {
+            return 'triggerButtonUrl must be a valid http(s) URL';
+        }
+        // The button-template text cap (640, tighter than 1000) applies only when the button
+        // is delivered WITHOUT an image — enforced in postsService.updateTrigger, which knows
+        // the final image state (stored + this request's intent).
     }
     if (triggerType === 'all') {
         if (triggerKeyword) return 'triggerKeyword must be empty when triggerType is "all"';

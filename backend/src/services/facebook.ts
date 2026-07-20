@@ -7,7 +7,7 @@ import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse,
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
 import { DmSendError, FacebookApiError } from '../utils/fbGraphErrors';
-import { buildMessagePayload, buildCommentReplyPayload, imageCardMessage, type SendMessageOptions } from './metaMessaging';
+import { buildMessagePayload, buildCommentReplyPayload, imageCardMessage, buttonTemplateMessage, type CtaButton, type SendMessageOptions } from './metaMessaging';
 import { POST_REPLY_CARD_CAPTION_MAX } from '@jawab24/shared';
 export type { MessagingType, SendMessageOptions } from './metaMessaging';
 
@@ -404,18 +404,20 @@ export class FacebookService {
      * Send a private reply to a Facebook comment.
      * Uses /me/messages with recipient.comment_id which works for any commenter
      * without requiring prior Messenger interaction.
+     *
+     * With a `cta` (Post Reply CTA button, no image attached), the reply rides a Button
+     * Template so the customer gets a tappable link under the text; otherwise a plain
+     * text message. One message only — Meta allows a single send on a cold comment→DM.
      */
-    async sendPrivateReplyToComment(pageAccessToken: string, commentId: string, text: string): Promise<{ recipientId: string }> {
+    async sendPrivateReplyToComment(pageAccessToken: string, commentId: string, text: string, cta?: CtaButton): Promise<{ recipientId: string }> {
         try {
+            const message = cta ? buttonTemplateMessage(text, cta) : { text };
             const response = await traced('sendPrivateReplyToComment', () =>
-                fbAxios.post<{ recipient_id: string }>(`${FACEBOOK_GRAPH_API}/me/messages`, {
-                    recipient: { comment_id: commentId },
-                    message: { text },
-                }, {
-                    params: {
-                        access_token: pageAccessToken,
-                    },
-                }),
+                fbAxios.post<{ recipient_id: string }>(
+                    `${FACEBOOK_GRAPH_API}/me/messages`,
+                    buildCommentReplyPayload(commentId, message),
+                    { params: { access_token: pageAccessToken } },
+                ),
             );
             return { recipientId: response.data.recipient_id };
         } catch (error) {
@@ -441,14 +443,16 @@ export class FacebookService {
         text: string,
         imageUrl: string,
         readMore: { label: string; payload: string } | null,
+        cta?: CtaButton,
     ): Promise<{ recipientId: string; format: 'card' | 'card_readmore' }> {
         // The image ALWAYS rides an inline card (image never hidden). A short caption fits the
         // card title in full; a long one shows a teaser + a «Read more» postback button, and the
         // full text is delivered as a follow-up DM when the customer taps it (the image stays in
-        // the card — tapped for full size — and is never re-sent).
+        // the card — tapped for full size — and is never re-sent). An optional CTA link button
+        // rides the same card alongside «Read more» (≤3 buttons per card).
         const isLong = text.trim().length > POST_REPLY_CARD_CAPTION_MAX;
         const readMoreBtn = isLong && readMore ? { title: readMore.label, payload: readMore.payload } : undefined;
-        const message = imageCardMessage(imageUrl, text, readMoreBtn);
+        const message = imageCardMessage(imageUrl, text, readMoreBtn, cta);
         try {
             const response = await traced('sendPrivateReplyWithImage', () =>
                 fbAxios.post<{ recipient_id: string }>(

@@ -132,6 +132,39 @@ describe('Facebook Service', () => {
             const res = await service.sendPrivateReplyWithImage('tok', 'cmt_1', 'ن'.repeat(120), 'https://cdn/x.jpg', null);
             expect(res.format).toBe('card');
         });
+
+        it('with a CTA → the image card carries the web_url button', async () => {
+            await service.sendPrivateReplyWithImage('tok', 'cmt_1', 'hi', 'https://cdn/x.jpg', null, { label: 'Shop', url: 'https://shop.example' });
+            const body = vi.mocked(fbAxios.post).mock.calls[0][1] as {
+                message: { attachment: { payload: { elements: { buttons: { type: string; url?: string }[] }[] } } };
+            };
+            expect(body.message.attachment.payload.elements[0].buttons).toEqual([{ type: 'web_url', title: 'Shop', url: 'https://shop.example' }]);
+        });
+    });
+
+    describe('sendPrivateReplyToComment (Post Reply text / CTA — one comment→DM message)', () => {
+        beforeEach(() => {
+            vi.mocked(fbAxios.post).mockResolvedValue({ data: { recipient_id: 'psid_1' } });
+        });
+
+        it('no CTA → a plain text message addressed to the comment', async () => {
+            const res = await service.sendPrivateReplyToComment('tok', 'cmt_1', 'Here you go');
+            expect(res).toEqual({ recipientId: 'psid_1' });
+            const body = vi.mocked(fbAxios.post).mock.calls[0][1] as { recipient: { comment_id: string }; message: { text?: string } };
+            expect(body.recipient).toEqual({ comment_id: 'cmt_1' });
+            expect(body.message.text).toBe('Here you go');
+        });
+
+        it('with a CTA → a button template (text + web_url button)', async () => {
+            const res = await service.sendPrivateReplyToComment('tok', 'cmt_1', 'Check this', { label: 'Shop now', url: 'https://shop.example/x' });
+            expect(res).toEqual({ recipientId: 'psid_1' });
+            const body = vi.mocked(fbAxios.post).mock.calls[0][1] as {
+                message: { attachment: { payload: { template_type: string; text: string; buttons: { type: string; title: string; url: string }[] } } };
+            };
+            expect(body.message.attachment.payload.template_type).toBe('button');
+            expect(body.message.attachment.payload.text).toBe('Check this');
+            expect(body.message.attachment.payload.buttons).toEqual([{ type: 'web_url', title: 'Shop now', url: 'https://shop.example/x' }]);
+        });
     });
 
     describe('getUserProfile', () => {

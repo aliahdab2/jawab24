@@ -20,12 +20,12 @@ describe('resolvePostReplyRule', () => {
             triggerReply: 'تفضل السعر',
             triggerType: 'keyword',
         };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, cta: null });
     });
 
     it('resolves the per-post any-comment rule (reply set, no keyword)', () => {
         const content: ContentTriggerFields = { triggerKeyword: null, triggerReply: 'DM sent', triggerType: 'all' };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, cta: null });
     });
 
     it('returns null when the content has no rule', () => {
@@ -178,6 +178,25 @@ describe('validatePostReplyRuleInput', () => {
     it('rejects an over-long exclude keyword', () => {
         expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerExcludeKeyword: 'y'.repeat(101) })).toMatch(/100 characters/);
     });
+
+    it('accepts a complete CTA button (label + valid https URL)', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: 'Shop now', triggerButtonUrl: 'https://shop.example/x' })).toBeNull();
+    });
+
+    it('rejects a half-configured CTA button (label without URL, or URL without label)', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: 'Shop', triggerButtonUrl: null })).toMatch(/both be set/);
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: null, triggerButtonUrl: 'https://x.example' })).toMatch(/both be set/);
+    });
+
+    it('rejects an over-long button label', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: 'x'.repeat(21), triggerButtonUrl: 'https://x.example' })).toMatch(/20 characters/);
+    });
+
+    it('rejects a non-http(s) button URL (javascript:, ftp:, garbage)', () => {
+        for (const url of ['javascript:alert(1)', 'ftp://x.example', 'not a url']) {
+            expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: 'Go', triggerButtonUrl: url })).toMatch(/valid http/);
+        }
+    });
 });
 
 describe('resolvePostReplyRule — image', () => {
@@ -188,6 +207,20 @@ describe('resolvePostReplyRule — image', () => {
     it('defaults triggerImageUrl to null when absent', () => {
         const rule = resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword' });
         expect(rule?.triggerImageUrl).toBeNull();
+    });
+});
+
+describe('resolvePostReplyRule — CTA button', () => {
+    it('resolves cta only when BOTH label and URL are present', () => {
+        const rule = resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://x.example' });
+        expect(rule?.cta).toEqual({ label: 'Shop', url: 'https://x.example' });
+    });
+    it('leaves cta null when only one field is present (defensive against a half-written row)', () => {
+        expect(resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', triggerButtonLabel: 'Shop', triggerButtonUrl: null })?.cta).toBeNull();
+        expect(resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', triggerButtonLabel: null, triggerButtonUrl: 'https://x.example' })?.cta).toBeNull();
+    });
+    it('defaults cta to null when absent', () => {
+        expect(resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword' })?.cta).toBeNull();
     });
 });
 

@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { POST_REPLY_IMAGE_MAX_BYTES, POST_REPLY_IMAGE_MIME_TYPES } from '@jawab24/shared';
+import { POST_REPLY_IMAGE_MAX_BYTES, POST_REPLY_IMAGE_MIME_TYPES, POST_REPLY_BUTTON_TEXT_MAX } from '@jawab24/shared';
 import { postsService, type TriggerImageInput } from '../services/posts';
 import { pagesService } from '../services/pages';
 import { validatePostReplyRuleInput } from '../services/reply/postReplyRule';
@@ -235,6 +235,10 @@ export class PostsController {
                 likeComment?: boolean;
                 // Veto keywords: absent = leave as-is (keep); null/'' = clear; string = set.
                 triggerExcludeKeyword?: string | null;
+                // CTA button (Facebook-only): absent = keep; null/'' = clear; string = set.
+                // Both required together — coerced to false for Instagram (no button columns).
+                triggerButtonLabel?: string | null;
+                triggerButtonUrl?: string | null;
             };
         }>,
         reply: FastifyReply,
@@ -242,7 +246,7 @@ export class PostsController {
         const req = request as WorkspaceRequest;
         if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
-        const { source, triggerKeyword, triggerReply, triggerType, triggerImage, likeComment, triggerExcludeKeyword } = request.body;
+        const { source, triggerKeyword, triggerReply, triggerType, triggerImage, likeComment, triggerExcludeKeyword, triggerButtonLabel, triggerButtonUrl } = request.body;
 
         if (!['facebook', 'instagram'].includes(source)) {
             return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
@@ -263,6 +267,16 @@ export class PostsController {
         const excludeIntent: string | null | undefined =
             triggerExcludeKeyword === undefined ? undefined : (triggerExcludeKeyword?.trim() || null);
 
+        // CTA button (Facebook-only). Absent = keep; empty = clear; string = set. Coerced to a
+        // cleared button for Instagram (no button columns / unverified button-template support).
+        const isFacebook = source === 'facebook';
+        const buttonLabelIntent: string | null | undefined = !isFacebook
+            ? (triggerButtonLabel === undefined ? undefined : null)
+            : (triggerButtonLabel === undefined ? undefined : (triggerButtonLabel?.trim() || null));
+        const buttonUrlIntent: string | null | undefined = !isFacebook
+            ? (triggerButtonUrl === undefined ? undefined : null)
+            : (triggerButtonUrl === undefined ? undefined : (triggerButtonUrl?.trim() || null));
+
         // Reject an image on a feature that isn't configured, before any other work —
         // the send path can't deliver it, so accepting the upload would be a lie.
         if (hasImage && !imageStorage.isConfigured()) {
@@ -279,6 +293,7 @@ export class PostsController {
                     contentId: id, source, workspaceId: req.workspaceId,
                     triggerKeyword: null, triggerReply: null, triggerType: 'keyword',
                     image: { action: 'remove' }, likeComment: false, triggerExcludeKeyword: null,
+                    triggerButtonLabel: null, triggerButtonUrl: null,
                 });
                 if (!cleared.ok) return reply.status(404).send({ error: 'Post not found' });
                 return reply.send({ success: true });
@@ -288,7 +303,11 @@ export class PostsController {
             // partial trigger (keyword without a reply) fails here — triggerReply is required.
             // The reply cap is a flat 1000 whether or not an image is attached (the image is
             // sent as its own message, so it doesn't eat into the text budget).
-            const validationError = validatePostReplyRuleInput({ triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText, triggerExcludeKeyword: excludeIntent });
+            const validationError = validatePostReplyRuleInput({
+                triggerType: rawType, triggerKeyword: keyword, triggerReply: replyText,
+                triggerExcludeKeyword: excludeIntent,
+                triggerButtonLabel: buttonLabelIntent, triggerButtonUrl: buttonUrlIntent,
+            });
             if (validationError) return reply.status(400).send({ error: validationError });
 
             // Decode + validate the image (allowlist, size, magic-byte match) before upload.
@@ -321,10 +340,14 @@ export class PostsController {
                 contentId: id, source, workspaceId: req.workspaceId,
                 triggerKeyword: storedKeyword, triggerReply: replyText, triggerType: type,
                 image: imageIntent, likeComment: likeCommentIntent, triggerExcludeKeyword: excludeIntent,
+                triggerButtonLabel: buttonLabelIntent, triggerButtonUrl: buttonUrlIntent,
             });
             if (!result.ok) {
                 if (result.reason === 'quota_exceeded') {
                     return reply.status(413).send({ error: 'image_quota_exceeded', message: 'Image storage limit reached for this workspace' });
+                }
+                if (result.reason === 'button_text_too_long') {
+                    return reply.status(400).send({ error: 'button_text_too_long', message: `Reply must be ${POST_REPLY_BUTTON_TEXT_MAX} characters or fewer when a button is set without an image` });
                 }
                 return reply.status(404).send({ error: 'Post not found' });
             }

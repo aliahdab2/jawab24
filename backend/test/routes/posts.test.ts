@@ -320,6 +320,68 @@ describe('Posts Routes', () => {
             expect(postsService.updateTrigger).not.toHaveBeenCalled();
         });
 
+        it('passes a CTA button through (trimmed) for a facebook post', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details', triggerButtonLabel: '  Shop now  ', triggerButtonUrl: '  https://shop.example/x  ' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                triggerButtonLabel: 'Shop now', triggerButtonUrl: 'https://shop.example/x',
+            }));
+        });
+
+        it('rejects a half-configured CTA button with 400', async () => {
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details', triggerButtonLabel: 'Shop' },
+            });
+            expect(response.statusCode).toBe(400);
+            expect(postsService.updateTrigger).not.toHaveBeenCalled();
+        });
+
+        it('rejects a non-http(s) CTA URL with 400', async () => {
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details', triggerButtonLabel: 'Go', triggerButtonUrl: 'javascript:alert(1)' },
+            });
+            expect(response.statusCode).toBe(400);
+            expect(postsService.updateTrigger).not.toHaveBeenCalled();
+        });
+
+        it('coerces a CTA button to cleared for instagram (no button columns / unverified support)', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: true });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'instagram', triggerKeyword: '.', triggerReply: 'Details', triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
+                source: 'instagram', triggerButtonLabel: null, triggerButtonUrl: null,
+            }));
+        });
+
+        it('maps the service button_text_too_long result to 400', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: false, reason: 'button_text_too_long' });
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'x'.repeat(700), triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example' },
+            });
+            expect(response.statusCode).toBe(400);
+            expect(JSON.parse(response.body).error).toBe('button_text_too_long');
+        });
+
         it('should return 404 when post not found or not owned', async () => {
             vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: false, reason: 'not_found' });
 
