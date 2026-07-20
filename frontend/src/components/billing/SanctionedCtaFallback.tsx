@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import { DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
+import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 
 /**
  * Shown in place of a payment CTA when the user is in a sanctioned region
@@ -15,7 +15,7 @@ export function SanctionedCtaFallback() {
     <div className="text-center p-3 bg-slate-50 dark:bg-surface-200 rounded-xl border border-theme-border">
       <p className="text-xs font-bold text-muted-foreground mb-1">{tPayment('unavailable.message')}</p>
       <a
-        href={`https://wa.me/${DEFAULT_SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(tLanding('footer.whatsappMessage'))}`}
+        href={buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, tLanding('footer.whatsappMessage'))}
         target="_blank"
         rel="noopener noreferrer"
         className="text-xs text-brand-600 font-bold hover:underline"

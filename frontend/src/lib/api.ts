@@ -254,20 +254,31 @@ export const postsApi = {
   getById: (id: string) => api.get(`/posts/${id}`),
   toggle: (id: string, enabled: boolean) =>
     api.patch(`/posts/${id}/auto-reply`, { enabled }),
-  updateTrigger: (
-    id: string,
-    source: 'facebook' | 'instagram',
-    triggerKeyword: string | null,
-    triggerReply: string | null,
-    triggerType: 'keyword' | 'all' = 'keyword',
+  updateTrigger: (opts: {
+    id: string;
+    source: 'facebook' | 'instagram';
+    triggerKeyword: string | null;
+    triggerReply: string | null;
+    triggerType?: 'keyword' | 'all';
     // Image intent: undefined = leave as-is; null = remove; object = set a new image.
-    triggerImage?: { base64: string; mimeType: string } | null,
+    triggerImage?: { base64: string; mimeType: string } | null;
     // Like the customer's comment on send (Facebook only — backend coerces to false for Instagram).
-    likeComment?: boolean,
-  ) => api.patch(`/posts/${id}/trigger`, {
-    source, triggerKeyword, triggerReply, triggerType,
-    ...(triggerImage !== undefined ? { triggerImage } : {}),
-    ...(likeComment !== undefined ? { likeComment } : {}),
+    likeComment?: boolean;
+    // Veto keywords: undefined = leave as-is; '' = clear; string = set.
+    triggerExcludeKeyword?: string;
+    // CTA button (Facebook only): '' clears, a value sets; both fields sent together.
+    triggerButtonLabel?: string;
+    triggerButtonUrl?: string;
+  }) => api.patch(`/posts/${opts.id}/trigger`, {
+    source: opts.source,
+    triggerKeyword: opts.triggerKeyword,
+    triggerReply: opts.triggerReply,
+    triggerType: opts.triggerType ?? 'keyword',
+    ...(opts.triggerImage !== undefined ? { triggerImage: opts.triggerImage } : {}),
+    ...(opts.likeComment !== undefined ? { likeComment: opts.likeComment } : {}),
+    ...(opts.triggerExcludeKeyword !== undefined ? { triggerExcludeKeyword: opts.triggerExcludeKeyword } : {}),
+    ...(opts.triggerButtonLabel !== undefined ? { triggerButtonLabel: opts.triggerButtonLabel } : {}),
+    ...(opts.triggerButtonUrl !== undefined ? { triggerButtonUrl: opts.triggerButtonUrl } : {}),
   }),
   // Post Reply picker: recent published posts for a page (per platform) + their
   // trigger state, paginated via the platform Graph cursor.

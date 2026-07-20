@@ -20,12 +20,12 @@ describe('resolvePostReplyRule', () => {
             triggerReply: 'تفضل السعر',
             triggerType: 'keyword',
         };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerImageUrl: null, likeComment: false });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'تفضل السعر', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, cta: null });
     });
 
     it('resolves the per-post any-comment rule (reply set, no keyword)', () => {
         const content: ContentTriggerFields = { triggerKeyword: null, triggerReply: 'DM sent', triggerType: 'all' };
-        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerImageUrl: null, likeComment: false });
+        expect(resolvePostReplyRule(content)).toEqual({ triggerType: 'all', triggerKeyword: null, triggerReply: 'DM sent', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, cta: null });
     });
 
     it('returns null when the content has no rule', () => {
@@ -53,6 +53,20 @@ describe('matchPostReplyRule', () => {
     it('keyword does not match unrelated text', () => {
         const rule = { triggerType: 'keyword' as const, triggerKeyword: 'price', triggerReply: 'r' };
         expect(matchPostReplyRule(rule, 'nice photo')).toEqual({ matched: false });
+    });
+
+    it('an excluded keyword vetoes a keyword-mode match (falls through to AI)', () => {
+        const rule = { triggerType: 'keyword' as const, triggerKeyword: 'سعر', triggerReply: 'r', triggerExcludeKeyword: 'غالي, expensive' };
+        // Comment matches the trigger keyword AND an exclude keyword → vetoed.
+        expect(matchPostReplyRule(rule, 'السعر غالي جدا')).toEqual({ matched: false });
+        // Same trigger keyword, no exclude term present → still matches.
+        expect(matchPostReplyRule(rule, 'كم السعر؟')).toEqual({ matched: true, keyword: 'سعر' });
+    });
+
+    it('an excluded keyword vetoes an any-comment match too', () => {
+        const rule = { triggerType: 'all' as const, triggerKeyword: null, triggerReply: 'r', triggerExcludeKeyword: 'شكوى' };
+        expect(matchPostReplyRule(rule, 'عندي شكوى على المنتج')).toEqual({ matched: false });
+        expect(matchPostReplyRule(rule, 'رائع')).toEqual({ matched: true, keyword: null });
     });
 });
 
@@ -150,6 +164,39 @@ describe('validatePostReplyRuleInput', () => {
         expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: at1000 })).toBeNull();
         expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: over })).toMatch(/1000/);
     });
+
+    it('accepts exclude keywords within the 10-keyword limit (both modes)', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'keyword', triggerKeyword: 'سعر', triggerReply: 'hi', triggerExcludeKeyword: 'غالي, expensive' })).toBeNull();
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerExcludeKeyword: 'شكوى' })).toBeNull();
+    });
+
+    it('rejects more than 10 exclude keywords', () => {
+        const kw = Array.from({ length: 11 }, (_, i) => `x${i}`).join(',');
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerExcludeKeyword: kw })).toMatch(/exceed 10/);
+    });
+
+    it('rejects an over-long exclude keyword', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerExcludeKeyword: 'y'.repeat(101) })).toMatch(/100 characters/);
+    });
+
+    it('accepts a complete CTA button (label + valid https URL)', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: 'Shop now', triggerButtonUrl: 'https://shop.example/x' })).toBeNull();
+    });
+
+    it('rejects a half-configured CTA button (label without URL, or URL without label)', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: 'Shop', triggerButtonUrl: null })).toMatch(/both be set/);
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: null, triggerButtonUrl: 'https://x.example' })).toMatch(/both be set/);
+    });
+
+    it('rejects an over-long button label', () => {
+        expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: 'x'.repeat(21), triggerButtonUrl: 'https://x.example' })).toMatch(/20 characters/);
+    });
+
+    it('rejects a non-http(s) button URL (javascript:, ftp:, garbage)', () => {
+        for (const url of ['javascript:alert(1)', 'ftp://x.example', 'not a url']) {
+            expect(validatePostReplyRuleInput({ triggerType: 'all', triggerKeyword: null, triggerReply: 'hi', triggerButtonLabel: 'Go', triggerButtonUrl: url })).toMatch(/valid http/);
+        }
+    });
 });
 
 describe('resolvePostReplyRule — image', () => {
@@ -160,6 +207,20 @@ describe('resolvePostReplyRule — image', () => {
     it('defaults triggerImageUrl to null when absent', () => {
         const rule = resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword' });
         expect(rule?.triggerImageUrl).toBeNull();
+    });
+});
+
+describe('resolvePostReplyRule — CTA button', () => {
+    it('resolves cta only when BOTH label and URL are present', () => {
+        const rule = resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://x.example' });
+        expect(rule?.cta).toEqual({ label: 'Shop', url: 'https://x.example' });
+    });
+    it('leaves cta null when only one field is present (defensive against a half-written row)', () => {
+        expect(resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', triggerButtonLabel: 'Shop', triggerButtonUrl: null })?.cta).toBeNull();
+        expect(resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', triggerButtonLabel: null, triggerButtonUrl: 'https://x.example' })?.cta).toBeNull();
+    });
+    it('defaults cta to null when absent', () => {
+        expect(resolvePostReplyRule({ triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword' })?.cta).toBeNull();
     });
 });
 

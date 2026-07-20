@@ -11,16 +11,20 @@ import {
   POST_REPLY_IMAGE_MAX_BYTES,
   POST_REPLY_IMAGE_MIME_TYPES,
   POST_REPLY_CARD_CAPTION_MAX,
+  POST_REPLY_BUTTON_LABEL_MAX,
+  POST_REPLY_BUTTON_TEXT_MAX,
+  normalizeHttpUrl,
 } from '@jawab24/shared';
-import { MessageSquare, MessageCircle, ArrowUpRight, ImagePlus, Lock, X } from 'lucide-react';
+import { MessageSquare, MessageCircle, ArrowUpRight, ChevronDown, ImagePlus, Lock, X } from 'lucide-react';
 import Link from 'next/link';
-import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover, Toggle } from '@/components/ui';
+import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover, Toggle, Input, WhatsAppIcon } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
 import { captureError } from '@/lib/sentryHelpers';
 import { useCommentReplyMode, useDualReplyNudge, useTriggerImagesEnabled } from '@/hooks/useCommentReplyMode';
 import { fileToBase64 } from '@/utils/fileToBase64';
+import { buildWhatsAppUrl, extractWhatsAppNumber, normalizeInternationalPhone } from '@/lib/whatsapp';
 
 type TriggerMode = 'keyword' | 'all';
 
@@ -51,6 +55,9 @@ interface PostTriggerModalProps {
   triggerKeyword?: string | null;
   triggerReply?: string | null;
   triggerType?: string | null;
+  triggerExcludeKeyword?: string | null;
+  triggerButtonLabel?: string | null;
+  triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
   isOpen: boolean;
@@ -65,6 +72,9 @@ export function PostTriggerModal({
   triggerKeyword: initialKeyword,
   triggerReply: initialReply,
   triggerType: initialType,
+  triggerExcludeKeyword: initialExcludeKeyword,
+  triggerButtonLabel: initialButtonLabel,
+  triggerButtonUrl: initialButtonUrl,
   triggerImageUrl: initialImageUrl,
   likeComment: initialLikeComment,
   isOpen,
@@ -79,11 +89,33 @@ export function PostTriggerModal({
 
   const [mode, setMode] = useState<TriggerMode>(() => (initialType === 'all' ? 'all' : 'keyword'));
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
+  // Veto keywords (ManyChat parity): a comment containing any of these never fires the
+  // rule and falls through to the AI pipeline. Optional, both trigger modes.
+  const [excludeKeywords, setExcludeKeywords] = useState<string[]>(() => parseKeywords(initialExcludeKeyword));
+  // CTA button (ManyChat "auto-DM a link" parity). DM-modes only + Facebook only.
+  // Label + URL are set/cleared together; an empty pair means no button.
+  // Two KINDS share the same stored pair: a plain link, or a WhatsApp contact button
+  // whose URL is a wa.me deep link built from a phone number. Messenger has no native
+  // WhatsApp button — a wa.me web_url IS the industry mechanism (ManyChat/Chatfuel),
+  // so the backend/delivery path is untouched; the kind is inferred from the URL.
+  const initialWaDigits = initialButtonUrl ? extractWhatsAppNumber(initialButtonUrl) : null;
+  const [buttonKind, setButtonKind] = useState<'link' | 'whatsapp'>(initialWaDigits ? 'whatsapp' : 'link');
+  const [buttonLabel, setButtonLabel] = useState(initialButtonLabel ?? '');
+  const [buttonUrl, setButtonUrl] = useState(initialWaDigits ? '' : (initialButtonUrl ?? ''));
+  const [whatsappPhone, setWhatsappPhone] = useState(initialWaDigits ? `+${initialWaDigits}` : '');
   const [reply, setReply] = useState(initialReply ?? '');
   // Like-the-comment option (ManyChat parity). Facebook only — the Instagram API
   // has no like-comment endpoint, so the row is hidden entirely for IG posts.
   const [likeEnabled, setLikeEnabled] = useState(initialLikeComment ?? false);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  // «خيارات إضافية» disclosure — holds the POWER features only (exclude keywords +
+  // CTA button: both need typing/validation). The image and like options stay at the
+  // top level: the image is part of composing the message, the like is a zero-cost
+  // one-tap toggle — burying either kills discovery for no gain. Collapsed for a new
+  // trigger; auto-expanded when the stored trigger already uses an advanced field —
+  // collapsing would hide live configuration.
+  const advancedUsed = !!(initialExcludeKeyword || initialButtonLabel || initialButtonUrl);
+  const [advancedOpen, setAdvancedOpen] = useState(advancedUsed);
 
   // Image state. Two sources of truth, resolved into the picker:
   //  - `imageFile`: a newly picked file pending upload (base64 sent on save)
@@ -97,16 +129,24 @@ export function PostTriggerModal({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // Roving-tabindex focus targets for the mode radiogroup (arrow-key navigation).
   const modeRefs = useRef<Record<TriggerMode, HTMLButtonElement | null>>({ keyword: null, all: null });
+  // Same pattern for the button-kind radiogroup (link / WhatsApp).
+  const kindRefs = useRef<Record<'link' | 'whatsapp', HTMLButtonElement | null>>({ link: null, whatsapp: null });
 
   const isDmMode = deliveryMode === 'private' || deliveryMode === 'dual';
   // The stored image is still attached unless removed this session.
   const hasStoredImage = !!initialImageUrl && !imageRemoved;
   // Image that will actually be DELIVERED: only in DM modes, and only if one is set.
   const hasImage = imagesEnabled && isDmMode && (imageFile !== null || hasStoredImage);
-  // The editor cap is a flat 1000. When an image is attached, delivery depends on caption
-  // length: ≤ card limit → the card shows the full caption; longer → a teaser + «Read more»,
-  // and the tap delivers the full image + full text (drives the outcome preview below).
-  const replyMax = REPLY_MAX;
+  // CTA button is Facebook-only + DM-channel-only (the sender gates by mode). "Active"
+  // means both fields are filled — the pair is stored/cleared together. The "target"
+  // is the kind-specific second half of the pair: a URL, or a WhatsApp phone number.
+  const ctaSupported = source === 'facebook' && isDmMode;
+  const ctaTarget = buttonKind === 'whatsapp' ? whatsappPhone : buttonUrl;
+  const ctaActive = ctaSupported && buttonLabel.trim() !== '' && ctaTarget.trim() !== '';
+  // The editor cap is a flat 1000, EXCEPT when a CTA button rides WITHOUT an image: then the
+  // reply rides a button template, capped at Meta's 640. With an image the button rides the
+  // image card (full caption via «Read more»), so the full cap applies.
+  const replyMax = ctaActive && !hasImage ? POST_REPLY_BUTTON_TEXT_MAX : REPLY_MAX;
   const replyOverLimit = reply.length > replyMax;
   const trimmedReply = reply.trim();
   const captionIsLong = trimmedReply.length > POST_REPLY_CARD_CAPTION_MAX;
@@ -118,13 +158,20 @@ export function PostTriggerModal({
     if (isOpen) {
       setMode(initialType === 'all' ? 'all' : 'keyword');
       setKeywords(parseKeywords(initialKeyword));
+      setExcludeKeywords(parseKeywords(initialExcludeKeyword));
+      const waDigits = initialButtonUrl ? extractWhatsAppNumber(initialButtonUrl) : null;
+      setButtonKind(waDigits ? 'whatsapp' : 'link');
+      setButtonLabel(initialButtonLabel ?? '');
+      setButtonUrl(waDigits ? '' : (initialButtonUrl ?? ''));
+      setWhatsappPhone(waDigits ? `+${waDigits}` : '');
       setReply(initialReply ?? '');
       setLikeEnabled(initialLikeComment ?? false);
+      setAdvancedOpen(!!(initialExcludeKeyword || initialButtonLabel || initialButtonUrl));
       setImageFile(null);
       setImageObjectUrl(null);
       setImageRemoved(false);
     }
-  }, [isOpen, initialKeyword, initialReply, initialType, initialLikeComment]);
+  }, [isOpen, initialKeyword, initialReply, initialType, initialLikeComment, initialExcludeKeyword, initialButtonLabel, initialButtonUrl]);
 
   // Revoke the object URL when it changes / unmounts to avoid leaking blob memory.
   useEffect(() => {
@@ -175,6 +222,44 @@ export function PostTriggerModal({
       toast.error(t('postTriggerReplyRequired'));
       return;
     }
+    // CTA button (FB + DM only): label + target are all-or-nothing, and when the button
+    // rides without an image the reply is capped at 640 (button-template limit).
+    // Link kind: target must be http(s). WhatsApp kind: target is a phone number in
+    // international format, resolved here into the stored wa.me URL — the backend only
+    // ever sees a valid https URL either way.
+    let resolvedButtonUrl = buttonUrl.trim();
+    if (ctaSupported) {
+      const label = buttonLabel.trim();
+      const target = ctaTarget.trim();
+      if ((label && !target) || (!label && target)) {
+        toast.error(t('postTriggerButtonIncomplete'));
+        return;
+      }
+      if (target && buttonKind === 'whatsapp') {
+        const phone = normalizeInternationalPhone(target);
+        if (!phone) {
+          toast.error(t('postTriggerButtonBadWhatsapp'));
+          return;
+        }
+        resolvedButtonUrl = buildWhatsAppUrl(phone);
+      } else if (target) {
+        // Auto-repair rather than reject: merchants paste bare domains
+        // («mystore.com/offer») — normalizeHttpUrl prepends https:// for anything
+        // that plausibly is a web address, so the error only fires on real garbage.
+        const normalized = normalizeHttpUrl(target);
+        if (!normalized) {
+          toast.error(t('postTriggerButtonBadUrl'));
+          return;
+        }
+        resolvedButtonUrl = normalized;
+      } else {
+        resolvedButtonUrl = '';
+      }
+    }
+    if (replyOverLimit) {
+      toast.error(t('postTriggerReplyTooLong'));
+      return;
+    }
     const keywordArg = mode === 'all' ? null : keywords.join(', ');
 
     // Resolve the image intent for the backend: a new file → set; an existing image
@@ -191,11 +276,24 @@ export function PostTriggerModal({
 
     setSavingSave(true);
     try {
-      await postsApi.updateTrigger(
-        postId, source, keywordArg, reply.trim(), mode, imageArg,
+      await postsApi.updateTrigger({
+        id: postId,
+        source,
+        triggerKeyword: keywordArg,
+        triggerReply: reply.trim(),
+        triggerType: mode,
+        triggerImage: imageArg,
         // Only Facebook posts carry the like option (the row is hidden for Instagram).
-        source === 'facebook' ? likeEnabled : undefined,
-      );
+        likeComment: source === 'facebook' ? likeEnabled : undefined,
+        // Always send exclude keywords (empty string clears them) — both platforms.
+        triggerExcludeKeyword: excludeKeywords.join(', '),
+        // CTA button (FB + DM only). Send the pair (empty clears) only when the UI is shown;
+        // otherwise omit so a stored button isn't clobbered when editing under another mode.
+        // WhatsApp kind stores the resolved wa.me URL — same columns, same delivery path.
+        ...(ctaSupported
+          ? { triggerButtonLabel: buttonLabel.trim(), triggerButtonUrl: resolvedButtonUrl }
+          : {}),
+      });
       toast.success(t('postTriggerSaved'));
       onSaveSuccess();
     } catch (err) {
@@ -213,13 +311,27 @@ export function PostTriggerModal({
     }
   }
 
+  function selectButtonKind(kind: 'link' | 'whatsapp') {
+    setButtonKind(kind);
+    // WhatsApp should need only the number: hand the merchant a ready-made label
+    // (editable, ≤20 chars) instead of a second blank field. Switching back to
+    // link unwinds OUR auto-fill (a WhatsApp label on a link button is wrong) —
+    // but only the untouched default; a merchant-typed label survives the switch.
+    const waDefault = t('postTriggerButtonWhatsappDefaultLabel');
+    if (kind === 'whatsapp' && !buttonLabel.trim()) {
+      setButtonLabel(waDefault);
+    } else if (kind === 'link' && buttonLabel.trim() === waDefault) {
+      setButtonLabel('');
+    }
+  }
+
   function requestClear() {
     setConfirmingClear(true);
   }
 
   async function handleConfirmClear() {
     setConfirmingClear(false);
-    await runClear(() => postsApi.updateTrigger(postId, source, null, null));
+    await runClear(() => postsApi.updateTrigger({ id: postId, source, triggerKeyword: null, triggerReply: null }));
   }
 
   // A rule is active whenever a reply is set — keyword mode carries keyword+reply,
@@ -336,10 +448,11 @@ export function PostTriggerModal({
           </div>
         </div>
 
-        {/* Keyword chip input — only in keyword mode */}
+        {/* Keyword chip input — only in keyword mode. Required (with the reply) —
+            marked visually; the actual gate stays the existing save-time toast. */}
         {mode === 'keyword' && (
           <FormField
-            label={t('postTriggerKeyword')}
+            label={<>{t('postTriggerKeyword')} <span className="text-destructive" aria-hidden="true">*</span></>}
             htmlFor="trigger-keyword"
             helper={t('postTriggerKeywordHelp')}
           >
@@ -365,7 +478,7 @@ export function PostTriggerModal({
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between gap-2">
             <label htmlFor="trigger-reply" className="text-sm font-medium text-foreground">
-              {t('postTriggerReply')}
+              {t('postTriggerReply')} <span className="text-destructive" aria-hidden="true">*</span>
             </label>
             <span
               className={clsx(
@@ -397,28 +510,9 @@ export function PostTriggerModal({
           />
         </div>
 
-        {/* Like-the-comment option — Facebook only (the Instagram API can't like
-            comments), so the row simply doesn't exist for IG posts. */}
-        {source === 'facebook' && (
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-medium text-foreground">
-                {t('postTriggerLikeComment')}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {t('postTriggerLikeCommentDesc')}
-              </span>
-            </div>
-            <Toggle
-              enabled={likeEnabled}
-              onChange={setLikeEnabled}
-              size="sm"
-              aria-label={t('postTriggerLikeComment')}
-            />
-          </div>
-        )}
-
-        {/* Image affordance — only when the feature is configured server-side. */}
+        {/* Image affordance — directly under the reply text: attaching an image is part
+            of COMPOSING the message (messenger attachment metaphor), not an advanced
+            tweak. Only rendered when the feature is configured server-side. */}
         {imagesEnabled && (
           <ImageAffordance
             isDmMode={isDmMode}
@@ -429,6 +523,157 @@ export function PostTriggerModal({
             t={t}
           />
         )}
+
+        {/* Like-the-comment option — Facebook only (the Instagram API can't like
+            comments), so the row simply doesn't exist for IG posts. Top-level (not in
+            «خيارات إضافية»): one-tap, zero-config, high-delight — worth its single row. */}
+        {source === 'facebook' && (
+          <div className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              {t('postTriggerLikeComment')}
+              <InfoPopover label={t('postTriggerLikeComment')}>
+                {t('postTriggerLikeCommentDesc')}
+              </InfoPopover>
+            </span>
+            <Toggle
+              enabled={likeEnabled}
+              onChange={setLikeEnabled}
+              size="sm"
+              aria-label={t('postTriggerLikeComment')}
+            />
+          </div>
+        )}
+
+        {/* «خيارات إضافية» — the power features (exclude keywords + CTA button; both
+            need typing/validation), behind one disclosure so the compose path stays
+            short. Auto-expanded when the stored trigger already uses one of them
+            (see advancedOpen init + the isOpen sync effect). */}
+        <div className="rounded-xl border border-theme-border">
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen((o) => !o)}
+            aria-expanded={advancedOpen}
+            aria-controls="post-trigger-advanced"
+            className={clsx(
+              'w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-foreground',
+              'hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors rounded-t-xl',
+              !advancedOpen && 'rounded-b-xl',
+            )}
+          >
+            {t('postTriggerAdvancedTitle')}
+            <ChevronDown
+              className={clsx('w-4 h-4 ms-auto text-icon-muted transition-transform', advancedOpen && 'rotate-180')}
+              aria-hidden="true"
+            />
+          </button>
+          {advancedOpen && (
+            <div id="post-trigger-advanced" className="flex flex-col gap-4 px-3 pb-3.5 pt-1">
+              {/* Exclude keywords — optional veto list, both trigger modes. A comment containing
+                  any of these skips the Post Reply and falls through to the AI pipeline. The
+                  explanation lives in the popover — the label is not inside <label> because a
+                  popover trigger inside one would steal its click-to-focus. */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="trigger-exclude" className="text-sm font-medium text-foreground">
+                    {t('postTriggerExclude')}
+                  </label>
+                  <InfoPopover label={t('postTriggerExclude')}>
+                    {t('postTriggerExcludeHelp')}
+                  </InfoPopover>
+                </div>
+                <KeywordChipInput
+                  id="trigger-exclude"
+                  value={excludeKeywords}
+                  onChange={setExcludeKeywords}
+                  placeholder={t('postTriggerExcludePlaceholder')}
+                  maxKeywords={POST_REPLY_MAX_KEYWORDS}
+                  maxLength={POST_REPLY_MAX_KEYWORD_LEN}
+                />
+              </div>
+
+              {/* CTA button — Facebook + DM-channel only (the sender delivers it on the private
+                  reply; a public comment can't carry a button). Label + target set together or
+                  empty. Two kinds: a plain link, or a WhatsApp contact button whose wa.me URL
+                  is built from a phone number on save (see handleSave). */}
+              {ctaSupported && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span id="trigger-button-kind-label" className="text-sm font-medium text-foreground">
+                      {t('postTriggerButton')}
+                    </span>
+                    <InfoPopover label={t('postTriggerButton')}>
+                      {t('postTriggerButtonHelp')}
+                    </InfoPopover>
+                  </div>
+                  <div role="radiogroup" aria-labelledby="trigger-button-kind-label" className="grid grid-cols-2 gap-2">
+                    {(['link', 'whatsapp'] as const).map((k) => (
+                      <button
+                        key={k}
+                        ref={(el) => { kindRefs.current[k] = el; }}
+                        type="button"
+                        role="radio"
+                        aria-checked={buttonKind === k}
+                        tabIndex={buttonKind === k ? 0 : -1}
+                        onClick={() => selectButtonKind(k)}
+                        onKeyDown={(e) => {
+                          if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                            e.preventDefault();
+                            const other = k === 'link' ? 'whatsapp' : 'link';
+                            selectButtonKind(other);
+                            kindRefs.current[other]?.focus();
+                          }
+                        }}
+                        className={clsx(
+                          'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                          buttonKind === k
+                            ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300'
+                            : 'border-surface-200 dark:border-surface-700 text-muted-foreground hover:bg-surface-50 dark:hover:bg-surface-800',
+                        )}
+                      >
+                        {k === 'link' ? t('postTriggerButtonKindLink') : t('postTriggerButtonKindWhatsapp')}
+                      </button>
+                    ))}
+                  </div>
+                  <Input
+                    id="trigger-button-label"
+                    value={buttonLabel}
+                    onChange={e => setButtonLabel(e.target.value)}
+                    placeholder={t('postTriggerButtonLabelPlaceholder')}
+                    maxLength={POST_REPLY_BUTTON_LABEL_MAX}
+                    dir="auto"
+                    aria-label={t('postTriggerButtonLabelAria')}
+                  />
+                  {buttonKind === 'link' ? (
+                    <Input
+                      id="trigger-button-url"
+                      type="url"
+                      inputMode="url"
+                      value={buttonUrl}
+                      onChange={e => setButtonUrl(e.target.value)}
+                      placeholder={t('postTriggerButtonUrlPlaceholder')}
+                      dir="ltr"
+                      aria-label={t('postTriggerButtonUrlAria')}
+                    />
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      <Input
+                        id="trigger-button-whatsapp"
+                        type="tel"
+                        inputMode="tel"
+                        value={whatsappPhone}
+                        onChange={e => setWhatsappPhone(e.target.value)}
+                        placeholder={t('postTriggerButtonWhatsappPhonePlaceholder')}
+                        dir="ltr"
+                        aria-label={t('postTriggerButtonWhatsappPhoneLabel')}
+                      />
+                      <p className="text-xs text-muted-foreground">{t('postTriggerButtonWhatsappPhoneHelp')}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Outcome card — what the commenter actually receives, one row per channel. */}
         {deliveryMode !== null && (
@@ -480,6 +725,15 @@ export function PostTriggerModal({
                               {t('postTriggerReadMore')}
                             </div>
                           )}
+                          {/* The CTA button rides the SAME card — buttons stack under the
+                              caption, after «Read more» when both are present (matching the
+                              sender's button order on the generic template). */}
+                          {ctaActive && (
+                            <div className="border-t border-theme-border py-2 text-[12px] font-bold text-brand-600 flex items-center justify-center gap-1.5" dir="auto">
+                              {buttonKind === 'whatsapp' && <WhatsAppIcon className="w-3 h-3 flex-shrink-0" aria-hidden="true" />}
+                              {buttonLabel.trim()}
+                            </div>
+                          )}
                         </div>
                         {captionIsLong ? (
                           // After «Read more», the full text arrives in-chat (the image is already
@@ -490,9 +744,27 @@ export function PostTriggerModal({
                         )}
                       </div>
                     ) : row.verbatim ? (
-                      <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
-                        {t('postTriggerOutcomeAsWritten')}
-                      </span>
+                      row.channel === 'private' && ctaActive ? (
+                        // Text + button (no image → button template): the reply bubble with
+                        // the CTA attached beneath — mirrored here so the merchant sees the
+                        // exact delivery, including the kind (link vs WhatsApp glyph).
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
+                            {t('postTriggerOutcomeAsWritten')}
+                          </span>
+                          <span
+                            className="inline-flex items-center justify-center gap-1.5 self-start max-w-[200px] min-w-[120px] rounded-lg border border-theme-border px-3 py-1.5 text-[12px] font-bold text-brand-600"
+                            dir="auto"
+                          >
+                            {buttonKind === 'whatsapp' && <WhatsAppIcon className="w-3 h-3 flex-shrink-0" aria-hidden="true" />}
+                            {buttonLabel.trim()}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm leading-relaxed text-muted-foreground" dir="auto">
+                          {t('postTriggerOutcomeAsWritten')}
+                        </span>
+                      )
                     ) : (
                       <span className="text-sm leading-relaxed whitespace-pre-wrap break-words text-foreground" dir="auto">
                         {row.text}

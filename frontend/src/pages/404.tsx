@@ -6,8 +6,7 @@ import { BrandLogo, Button } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { Home, ArrowLeft, ArrowRight, MessageCircle, Search, HelpCircle } from 'lucide-react';
 import { isRTLLocale } from '@/utils/locale';
-
-const WHATSAPP_NUMBER = '46700224720';
+import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 
 export default function Custom404() {
   const t = useTranslations('errors');
@@ -15,7 +14,7 @@ export default function Custom404() {
   const router = useRouter();
   const isRTL = isRTLLocale(locale);
   const attemptedPath = router.asPath;
-  const supportMessage = encodeURIComponent('Hi, I need help — I reached a broken page on Jawab24.');
+  const supportHref = buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, 'Hi, I need help — I reached a broken page on Jawab24.');
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
 
   return (
@@ -95,7 +94,7 @@ export default function Custom404() {
           {/* Contact support — visible but doesn't compete with main actions */}
           <div className="mt-8 pt-6 border-t border-theme-border">
             <a
-              href={`https://wa.me/${WHATSAPP_NUMBER}?text=${supportMessage}`}
+              href={supportHref}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-brand-600 transition-colors"

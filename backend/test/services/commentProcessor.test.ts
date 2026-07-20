@@ -2071,6 +2071,52 @@ describe('CommentProcessor — template reply mode behavior', () => {
         });
     });
 
+    describe('Post Reply — CTA button', () => {
+        it('passes the resolved cta (label + url) to the adapter sendReply', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'سجّل',
+                    triggerReply: 'مرحباً!',
+                    triggerType: 'keyword',
+                    triggerButtonLabel: 'تسوّق',
+                    triggerButtonUrl: 'https://shop.example',
+                }),
+            });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).toHaveBeenCalledWith(expect.objectContaining({
+                replyCta: { label: 'تسوّق', url: 'https://shop.example' },
+            }));
+        });
+
+        it('passes replyCta=null when only one button field is set (defensive)', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'سجّل',
+                    triggerReply: 'مرحباً!',
+                    triggerType: 'keyword',
+                    triggerButtonLabel: 'تسوّق',
+                    triggerButtonUrl: null,
+                }),
+            });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).toHaveBeenCalledWith(expect.objectContaining({ replyCta: null }));
+        });
+    });
+
     describe('Post Reply — any-comment mode (triggerType "all")', () => {
         const anyCommentContent = {
             id: 'content-uuid',

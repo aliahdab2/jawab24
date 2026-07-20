@@ -22,6 +22,18 @@ export const POST_REPLY_IMAGE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 export const POST_REPLY_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
 /**
+ * Post Reply CTA button (DM-modes only, Facebook only). A tappable link button under the
+ * private reply (ManyChat's "auto-DM a link" pattern). Both label and URL are required
+ * together or the button is absent. Limits mirror Meta's URL-button constraints:
+ *  - label ≤ 20 chars (Messenger button `title` cap)
+ *  - when the button rides a button template (no image attached), the reply text that
+ *    accompanies it is capped at 640 (Meta's button-template `text` limit); with an image
+ *    the button rides the generic image card instead, so the full reply cap still applies.
+ */
+export const POST_REPLY_BUTTON_LABEL_MAX = 20;
+export const POST_REPLY_BUTTON_TEXT_MAX = 640;
+
+/**
  * For an image Post Reply on a cold comment→DM, the caption length at/under which the card
  * shows the FULL caption. Above it, the card shows a teaser + a «Read more» postback button,
  * and the full text is delivered as a follow-up DM when the customer taps (the tap opens Meta's

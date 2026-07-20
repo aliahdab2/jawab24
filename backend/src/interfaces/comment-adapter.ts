@@ -26,6 +26,11 @@ export interface ContentEntity {
     triggerReply?: string | null;
     /** How the per-post trigger fires: 'keyword' (match triggerKeyword) | 'all' (any comment). */
     triggerType?: string | null;
+    /** Comma-separated veto keywords — a comment containing any never fires the rule. */
+    triggerExcludeKeyword?: string | null;
+    /** CTA link button (DM-modes only, Facebook-only): label + URL, stored together. */
+    triggerButtonLabel?: string | null;
+    triggerButtonUrl?: string | null;
     /** Attached Post Reply image URL (DM-modes only), or null when none. */
     triggerImageUrl?: string | null;
     /** Post Reply option: like the customer's comment after a successful send.
@@ -118,6 +123,9 @@ export interface CommentPlatformAdapter {
         /** Internal post UUID — lets the adapter build the «Read more» postback payload for a
          *  long image caption (FB). Only set on the post_reply-with-image path. */
         postId?: string;
+        /** Post Reply CTA link button (DM channel only, Facebook only): label + URL. Only set on
+         *  the post_reply path; the adapter delivers it in the private/dual branch, never public. */
+        replyCta?: { label: string; url: string } | null;
     }): Promise<SendCommentResult>;
 
     /** Mark a stored comment as replied in the database */

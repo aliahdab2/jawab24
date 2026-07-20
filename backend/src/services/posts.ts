@@ -8,7 +8,7 @@ import { instagramService } from './instagram';
 import { imageStorage } from './imageStorage';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
-import { type PublishedPost } from '@jawab24/shared';
+import { POST_REPLY_BUTTON_TEXT_MAX, type PublishedPost } from '@jawab24/shared';
 
 /** How the caller wants the Post Reply image handled on this save. */
 export type TriggerImageInput =
@@ -19,7 +19,29 @@ export type TriggerImageInput =
 export type UpdateTriggerResult =
     | { ok: true }
     | { ok: false; reason: 'not_found' }
-    | { ok: false; reason: 'quota_exceeded' };
+    | { ok: false; reason: 'quota_exceeded' }
+    | { ok: false; reason: 'button_text_too_long' };
+
+/** All updateTrigger inputs, keyed by name — the parameter list outgrew positional args. */
+export interface UpdateTriggerOptions {
+    contentId: string;
+    source: 'facebook' | 'instagram';
+    workspaceId: string;
+    triggerKeyword: string | null;
+    triggerReply: string | null;
+    triggerType?: 'keyword' | 'all';
+    /** Image intent — defaults to keep (leave columns untouched). */
+    image?: TriggerImageInput;
+    /** undefined = leave the column untouched (keep); a boolean = explicit set.
+     *  Facebook-only column, so it's ignored on the instagram branch. */
+    likeComment?: boolean;
+    /** Veto keywords: undefined = keep; null = clear; string = set. Both platforms. */
+    triggerExcludeKeyword?: string | null;
+    /** CTA button label + URL (Facebook-only). undefined = keep; null = clear. Set together
+     *  (the controller enforces both-or-neither); ignored on the instagram branch. */
+    triggerButtonLabel?: string | null;
+    triggerButtonUrl?: string | null;
+}
 
 /** File extension for a validated image MIME (allowlist mirrors the validator). */
 function extForMime(mime: string): string {
@@ -206,18 +228,20 @@ export class PostsService {
      * source determines which table to target. Verifies ownership before updating.
      * Returns false if the record is not found or not owned by this workspace.
      */
-    async updateTrigger(
-        contentId: string,
-        source: 'facebook' | 'instagram',
-        triggerKeyword: string | null,
-        triggerReply: string | null,
-        workspaceId: string,
-        triggerType: 'keyword' | 'all' = 'keyword',
-        image: TriggerImageInput = { action: 'keep' },
-        // undefined = leave the column untouched (keep); a boolean = explicit set.
-        // Facebook-only column, so it's ignored on the instagram branch.
-        likeComment?: boolean,
-    ): Promise<UpdateTriggerResult> {
+    async updateTrigger(opts: UpdateTriggerOptions): Promise<UpdateTriggerResult> {
+        const {
+            contentId,
+            source,
+            triggerKeyword,
+            triggerReply,
+            workspaceId,
+            triggerType = 'keyword',
+            image = { action: 'keep' } as TriggerImageInput,
+            likeComment,
+            triggerExcludeKeyword,
+            triggerButtonLabel,
+            triggerButtonUrl,
+        } = opts;
         const table = source === 'instagram' ? instagramMedia : posts;
 
         // Ownership + current image, in one query. The current key/bytes drive the
@@ -227,6 +251,8 @@ export class PostsService {
                 id: table.id,
                 imageKey: table.triggerImageKey,
                 imageBytes: table.triggerImageBytes,
+                // Facebook-only column; the instagram_media select coalesces it to null below.
+                buttonLabel: source === 'facebook' ? posts.triggerButtonLabel : sql<string | null>`NULL`,
             })
             .from(table)
             .innerJoin(pages, eq(table.pageId, pages.id))
@@ -237,6 +263,22 @@ export class PostsService {
         // trigger owns no image. Otherwise honor the caller's explicit intent.
         const clearing = !triggerReply;
         const effectiveAction = clearing ? 'remove' : image.action;
+
+        // Button-template text cap: a CTA delivered WITHOUT an image rides a button template,
+        // whose text is capped at 640 (tighter than the 1000 editor cap). Resolve the FINAL
+        // image + button state (stored + this request's intent) — only here is it fully known.
+        if (!clearing && triggerReply && source === 'facebook') {
+            const finalHasImage =
+                effectiveAction === 'set' ? true
+                : effectiveAction === 'remove' ? false
+                : !!owned.imageKey; // keep → stored image decides
+            const finalHasButton =
+                triggerButtonLabel !== undefined ? !!triggerButtonLabel   // set/clear this request
+                : !!owned.buttonLabel;                                    // keep → stored button decides
+            if (finalHasButton && !finalHasImage && triggerReply.length > POST_REPLY_BUTTON_TEXT_MAX) {
+                return { ok: false, reason: 'button_text_too_long' };
+            }
+        }
 
         // Reply length (flat 1000 cap) is validated at the controller before this point —
         // an attached image is sent as its own message, so it never shortens the text budget.
@@ -282,16 +324,24 @@ export class PostsService {
             triggerKeyword,
             triggerReply,
             triggerType,
+            // Veto keywords exist on both tables. Only write on explicit intent —
+            // absent (undefined) leaves the column untouched (keep semantics).
+            ...(triggerExcludeKeyword !== undefined ? { triggerExcludeKeyword } : {}),
             ...(imageColumns ?? {}),
             updatedAt: new Date(),
         };
         if (source === 'facebook') {
-            // likeComment lives only on posts (the Instagram API can't like comments),
-            // so the facebook branch writes it and the instagram branch has no column.
-            // Only write when the caller expressed intent — absent leaves it untouched.
+            // likeComment + the CTA button live only on posts (Facebook-only), so the
+            // facebook branch writes them and the instagram branch has no column. Only
+            // write when the caller expressed intent — absent leaves it untouched.
             await db
                 .update(posts)
-                .set({ ...triggerColumns, ...(likeComment !== undefined ? { likeComment } : {}) })
+                .set({
+                    ...triggerColumns,
+                    ...(likeComment !== undefined ? { likeComment } : {}),
+                    ...(triggerButtonLabel !== undefined ? { triggerButtonLabel } : {}),
+                    ...(triggerButtonUrl !== undefined ? { triggerButtonUrl } : {}),
+                })
                 .where(eq(posts.id, contentId));
         } else {
             await db
@@ -388,7 +438,7 @@ export class PostsService {
         page: PickerPage,
         source: 'facebook' | 'instagram',
         platformPostId: string,
-    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerImageUrl: string | null; likeComment: boolean }> {
+    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerExcludeKeyword: string | null; triggerImageUrl: string | null; likeComment: boolean; triggerButtonLabel: string | null; triggerButtonUrl: string | null }> {
         if (source === 'facebook') {
             const post = await this.findOrCreateFromWebhook(page.id, platformPostId, undefined, page.accessToken);
             return {
@@ -396,8 +446,11 @@ export class PostsService {
                 triggerKeyword: post.triggerKeyword ?? null,
                 triggerReply: post.triggerReply ?? null,
                 triggerType: post.triggerType === 'all' ? 'all' : 'keyword',
+                triggerExcludeKeyword: post.triggerExcludeKeyword ?? null,
                 triggerImageUrl: post.triggerImageUrl ?? null,
                 likeComment: post.likeComment ?? false,
+                triggerButtonLabel: post.triggerButtonLabel ?? null,
+                triggerButtonUrl: post.triggerButtonUrl ?? null,
             };
         }
         const media = await this.findOrCreateInstagramMedia(page.id, platformPostId);
@@ -406,8 +459,12 @@ export class PostsService {
             triggerKeyword: media.triggerKeyword ?? null,
             triggerReply: media.triggerReply ?? null,
             triggerType: media.triggerType === 'all' ? 'all' : 'keyword',
+            triggerExcludeKeyword: media.triggerExcludeKeyword ?? null,
             triggerImageUrl: media.triggerImageUrl ?? null,
             likeComment: false,
+            // IG has no button columns (button-template support unverified on IG).
+            triggerButtonLabel: null,
+            triggerButtonUrl: null,
         };
     }
 

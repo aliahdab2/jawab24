@@ -324,6 +324,9 @@ export const posts = pgTable('posts', {
     triggerKeyword: text('trigger_keyword'),
     /** Per-post engagement trigger: reply sent when any triggerKeyword is matched */
     triggerReply: text('trigger_reply'),
+    /** Comma-separated keywords that VETO the trigger: a comment containing any of them
+     *  never fires the Post Reply (both trigger modes) and falls through to the AI pipeline. */
+    triggerExcludeKeyword: text('trigger_exclude_keyword'),
     /** How the per-post trigger fires: 'keyword' = only comments matching triggerKeyword;
      *  'all' = any comment (triggerKeyword ignored). 'all' still runs the skip-rule +
      *  complaint guards before sending (see commentProcessor step 3b). */
@@ -337,6 +340,11 @@ export const posts = pgTable('posts', {
      *  Facebook-only — the Instagram API has no like-comment endpoint, so instagram_media
      *  has no counterpart column. */
     likeComment: boolean('like_comment').default(false).notNull(),
+    /** Post Reply CTA button (DM-modes only, Facebook-only): a tappable link under the private
+     *  reply. Label + URL are stored/cleared together (both set = button shown, both null = none).
+     *  instagram_media has no counterpart column (button-template support unverified on IG). */
+    triggerButtonLabel: text('trigger_button_label'),
+    triggerButtonUrl: text('trigger_button_url'),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
@@ -361,6 +369,8 @@ export const instagramMedia = pgTable('instagram_media', {
     triggerKeyword: text('trigger_keyword'),
     /** Per-post engagement trigger: reply sent when any triggerKeyword is matched */
     triggerReply: text('trigger_reply'),
+    /** Comma-separated veto keywords — see posts.triggerExcludeKeyword. */
+    triggerExcludeKeyword: text('trigger_exclude_keyword'),
     /** How the per-post trigger fires: 'keyword' = only comments matching triggerKeyword;
      *  'all' = any comment (triggerKeyword ignored). See posts.triggerType. */
     triggerType: varchar('trigger_type', { length: 20 }).default('keyword').notNull(),

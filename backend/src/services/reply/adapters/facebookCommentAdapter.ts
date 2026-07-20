@@ -45,6 +45,9 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             triggerKeyword: post.triggerKeyword ?? null,
             triggerReply: post.triggerReply ?? null,
             triggerType: post.triggerType ?? 'keyword',
+            triggerExcludeKeyword: post.triggerExcludeKeyword ?? null,
+            triggerButtonLabel: post.triggerButtonLabel ?? null,
+            triggerButtonUrl: post.triggerButtonUrl ?? null,
             triggerImageUrl: post.triggerImageUrl ?? null,
             likeComment: post.likeComment,
         };
@@ -80,6 +83,8 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         replyImageUrl?: string | null;
         /** Internal post UUID — needed to build the «Read more» postback payload for a long image caption. */
         postId?: string;
+        /** Post Reply CTA link button (DM channel only): label + URL, or null when none. */
+        replyCta?: { label: string; url: string } | null;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
         const isDemo = isDemoPlatformId(opts.platformPageId);
@@ -111,6 +116,8 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             // branch and never on a public comment.
             replyImageUrl: opts.replyImageUrl,
             readMore,
+            // CTA link button — DM channel only (sender gates by mode). Both fields present or absent.
+            cta: opts.replyCta ? { label: opts.replyCta.label, url: opts.replyCta.url } : undefined,
         });
     }
 

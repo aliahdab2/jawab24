@@ -7,6 +7,7 @@ import {
   normalizeArabicIndic,
   isSmsBlockedPhone,
   SMS_BLOCKED_DIAL_PREFIXES,
+  isValidHttpUrl,
 } from '../validation';
 
 describe('extractPhoneFromText', () => {
@@ -177,5 +178,18 @@ describe('isSmsBlockedPhone', () => {
 
   it('lists Syria in the canonical blocklist', () => {
     expect(SMS_BLOCKED_DIAL_PREFIXES).toContain('+963');
+  });
+});
+
+describe('isValidHttpUrl', () => {
+  it('accepts http and https URLs', () => {
+    expect(isValidHttpUrl('https://shop.example/product?id=1')).toBe(true);
+    expect(isValidHttpUrl('http://shop.example')).toBe(true);
+  });
+
+  it('rejects other schemes and malformed input', () => {
+    for (const v of ['javascript:alert(1)', 'ftp://x.example', 'mailto:a@b.com', 'not a url', '', 'shop.example']) {
+      expect(isValidHttpUrl(v)).toBe(false);
+    }
   });
 });

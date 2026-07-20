@@ -14,7 +14,7 @@ import axios from 'axios';
 import { fbAxios, GRAPH_API_BASE } from '../lib/fbAxios';
 import { tracedExternalCall } from '../utils/tracing';
 import { DmSendError } from '../utils/fbGraphErrors';
-import type { ProductCard } from '@jawab24/shared';
+import { POST_REPLY_BUTTON_TEXT_MAX, type ProductCard } from '@jawab24/shared';
 
 /**
  * Meta messaging type hints for /me/messages.
@@ -88,7 +88,34 @@ type MetaRecipient = { id: string } | { comment_id: string };
 type MetaMessage =
     | { text: string }
     | { attachment: { type: 'image'; payload: { url: string; is_reusable?: boolean } } }
-    | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } };
+    | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } }
+    | { attachment: { type: 'template'; payload: { template_type: 'button'; text: string; buttons: MetaButton[] } } };
+
+/** A Post Reply CTA link button: label + destination URL (both required). */
+export interface CtaButton { label: string; url: string; }
+
+/** Build the Messenger URL button for a CTA, with the label defensively truncated. */
+function ctaWebUrlButton(cta: CtaButton): MetaButton {
+    return { type: 'web_url', title: cta.label.slice(0, META_TEMPLATE_LIMITS.maxButtonTitleChars), url: cta.url };
+}
+
+/**
+ * A Button Template: reply text + a single CTA link button, in the one message Meta allows
+ * on a cold comment→DM. Used for a Post Reply CTA when NO image is attached (with an image the
+ * button rides the generic image card instead). Text is capped at Meta's button-template limit.
+ */
+export function buttonTemplateMessage(text: string, cta: CtaButton): MetaMessage {
+    return {
+        attachment: {
+            type: 'template',
+            payload: {
+                template_type: 'button',
+                text: text.slice(0, POST_REPLY_BUTTON_TEXT_MAX) || ' ',
+                buttons: [ctaWebUrlButton(cta)],
+            },
+        },
+    };
+}
 
 /**
  * A one-element Generic Template that shows a Post Reply image INLINE with a caption — the
@@ -103,12 +130,16 @@ export function imageCardMessage(
     imageUrl: string,
     caption: string,
     readMore?: { title: string; payload: string },
+    cta?: CtaButton,
 ): MetaMessage {
     const title = caption.trim().slice(0, META_TEMPLATE_LIMITS.maxTitleChars) || ' ';
     const element: MetaTemplateElement = { title, image_url: imageUrl, default_action: { type: 'web_url', url: imageUrl } };
-    if (readMore) {
-        element.buttons = [{ type: 'postback', title: readMore.title.slice(0, META_TEMPLATE_LIMITS.maxButtonTitleChars), payload: readMore.payload }];
-    }
+    // Up to 3 buttons per card: «Read more» (postback, when the caption is long) then the CTA
+    // (web_url). Order puts the reply-completing action first, the outward link second.
+    const buttons: MetaButton[] = [];
+    if (readMore) buttons.push({ type: 'postback', title: readMore.title.slice(0, META_TEMPLATE_LIMITS.maxButtonTitleChars), payload: readMore.payload });
+    if (cta) buttons.push(ctaWebUrlButton(cta));
+    if (buttons.length) element.buttons = buttons;
     return { attachment: { type: 'template', payload: { template_type: 'generic', elements: [element] } } };
 }
 

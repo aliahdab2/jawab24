@@ -361,7 +361,7 @@ describe('PostsService', () => {
             const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
 
             // samplePost mock omits like_comment; ensureContent defaults it to false (matches the DB NOT NULL DEFAULT).
-            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerImageUrl: 'https://cdn/x.jpg', likeComment: false });
+            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerExcludeKeyword: null, triggerImageUrl: 'https://cdn/x.jpg', likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null });
         });
 
         it('routes instagram through findOrCreateInstagramMedia (image URL null when absent)', async () => {
@@ -369,7 +369,7 @@ describe('PostsService', () => {
 
             const result = await postsService.ensureContent(page, 'instagram', 'ig-media-1');
 
-            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all', triggerImageUrl: null, likeComment: false });
+            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null });
         });
     });
 
@@ -441,7 +441,7 @@ describe('PostsService', () => {
 
         it('returns not_found when the row is not owned', async () => {
             vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere([]) as any);
-            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'hi', 'ws-1', 'keyword', { action: 'keep' });
+            const res = await postsService.updateTrigger({ contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1', triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', image: { action: 'keep' } });
             expect(res).toEqual({ ok: false, reason: 'not_found' });
         });
 
@@ -451,7 +451,7 @@ describe('PostsService', () => {
                 .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any)   // posts sum
                 .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any);  // ig sum
 
-            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'عرض', 'ws-1', 'keyword', { action: 'set', buffer: Buffer.alloc(100), mimeType: 'image/jpeg' });
+            const res = await postsService.updateTrigger({ contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1', triggerKeyword: 'k', triggerReply: 'عرض', triggerType: 'keyword', image: { action: 'set', buffer: Buffer.alloc(100), mimeType: 'image/jpeg' } });
 
             expect(res).toEqual({ ok: true });
             expect(imageStorage.put).toHaveBeenCalledOnce();
@@ -467,7 +467,7 @@ describe('PostsService', () => {
                 .mockReturnValueOnce(selectInnerJoinWhere([{ total: '900' }]) as any)   // posts sum
                 .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any);    // ig sum (quota=1000)
 
-            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'hi', 'ws-1', 'keyword', { action: 'set', buffer: Buffer.alloc(200), mimeType: 'image/jpeg' });
+            const res = await postsService.updateTrigger({ contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1', triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', image: { action: 'set', buffer: Buffer.alloc(200), mimeType: 'image/jpeg' } });
 
             expect(res).toEqual({ ok: false, reason: 'quota_exceeded' });
             expect(imageStorage.put).not.toHaveBeenCalled();
@@ -482,7 +482,7 @@ describe('PostsService', () => {
             vi.mocked(imageStorage.put).mockRejectedValueOnce(new Error('S3 down'));
 
             await expect(
-                postsService.updateTrigger('post-1', 'facebook', 'k', 'hi', 'ws-1', 'keyword', { action: 'set', buffer: Buffer.alloc(50), mimeType: 'image/png' }),
+                postsService.updateTrigger({ contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1', triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', image: { action: 'set', buffer: Buffer.alloc(50), mimeType: 'image/png' } }),
             ).rejects.toThrow('S3 down');
 
             // Old image untouched: no DB update, no delete of the old key.
@@ -493,7 +493,7 @@ describe('PostsService', () => {
 
         it('remove: nulls the columns and deletes the old key', async () => {
             vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned({ imageKey: 'trigger-images/ws-1/x.jpg', imageBytes: 40 })) as any);
-            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'hi', 'ws-1', 'keyword', { action: 'remove' });
+            const res = await postsService.updateTrigger({ contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1', triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', image: { action: 'remove' } });
             expect(res).toEqual({ ok: true });
             expect(setSpy.mock.calls[0][0]).toMatchObject({ triggerImageUrl: null, triggerImageKey: null, triggerImageBytes: null });
             expect(imageStorage.remove).toHaveBeenCalledWith('trigger-images/ws-1/x.jpg');
@@ -501,11 +501,46 @@ describe('PostsService', () => {
 
         it('keep with an existing image: leaves the image columns untouched', async () => {
             vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned({ imageKey: 'has-image', imageBytes: 100 })) as any);
-            const res = await postsService.updateTrigger('post-1', 'facebook', 'k', 'x'.repeat(160), 'ws-1', 'keyword', { action: 'keep' });
+            const res = await postsService.updateTrigger({ contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1', triggerKeyword: 'k', triggerReply: 'x'.repeat(160), triggerType: 'keyword', image: { action: 'keep' } });
             expect(res).toEqual({ ok: true });
             expect(imageStorage.put).not.toHaveBeenCalled();
             // image columns not in the update set (keep)
             expect(setSpy.mock.calls[0][0]).not.toHaveProperty('triggerImageKey');
+        });
+
+        it('button + NO image + reply over 640 → button_text_too_long (button template cap)', async () => {
+            vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned()) as any); // no stored image
+            const res = await postsService.updateTrigger({
+                contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1',
+                triggerKeyword: 'k', triggerReply: 'x'.repeat(641), triggerType: 'keyword',
+                image: { action: 'keep' }, triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example',
+            });
+            expect(res).toEqual({ ok: false, reason: 'button_text_too_long' });
+            expect(setSpy).not.toHaveBeenCalled();
+        });
+
+        it('button + a NEW image + reply over 640 → allowed (rides the image card, full cap)', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(selectInnerJoinWhere(owned()) as any)
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any)
+                .mockReturnValueOnce(selectInnerJoinWhere([{ total: '0' }]) as any);
+            const res = await postsService.updateTrigger({
+                contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1',
+                triggerKeyword: 'k', triggerReply: 'x'.repeat(700), triggerType: 'keyword',
+                image: { action: 'set', buffer: Buffer.alloc(100), mimeType: 'image/jpeg' },
+                triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example',
+            });
+            expect(res).toEqual({ ok: true });
+        });
+
+        it('writes the button columns on the facebook branch when intent is present', async () => {
+            vi.mocked(db.select).mockReturnValueOnce(selectInnerJoinWhere(owned()) as any);
+            await postsService.updateTrigger({
+                contentId: 'post-1', source: 'facebook', workspaceId: 'ws-1',
+                triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', image: { action: 'keep' },
+                triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example',
+            });
+            expect(setSpy.mock.calls[0][0]).toMatchObject({ triggerButtonLabel: 'Shop', triggerButtonUrl: 'https://shop.example' });
         });
     });
 });
