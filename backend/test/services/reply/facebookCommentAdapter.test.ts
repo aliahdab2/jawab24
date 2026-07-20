@@ -233,6 +233,8 @@ describe('FacebookCommentAdapter', () => {
                 replyMode: 'public',
                 dualReplyNudge: 'Details sent via DM',
                 isDemo: false,
+                replyImageUrl: undefined,
+                readMore: null,
             });
         });
 

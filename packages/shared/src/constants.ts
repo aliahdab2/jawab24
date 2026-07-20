@@ -14,13 +14,44 @@ export const MAX_TEMPLATE_MESSAGE_LENGTH = 1000;
  */
 export const POST_REPLY_MAX_KEYWORDS = 10;
 export const POST_REPLY_MAX_KEYWORD_LEN = 100;
-// A Post Reply with an image sends the text and the image as two separate messages
-// (text message + native image attachment), so the reply keeps the full 1000-char cap —
-// there is no shorter "with image" limit. See backend/docs/OBJECT_STORAGE.md.
+// The merchant may write up to 1000 chars. Delivery on a cold comment→DM (one message
+// allowed) depends on length + whether an image is attached — see POST_REPLY_CARD_CAPTION_MAX.
 export const POST_REPLY_MAX_REPLY_LEN = 1000;
 /** Post Reply image upload limits (DM-modes only). */
 export const POST_REPLY_IMAGE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded
 export const POST_REPLY_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+/**
+ * For an image Post Reply on a cold comment→DM, the caption length at/under which the card
+ * shows the FULL caption. Above it, the card shows a teaser + a «Read more» postback button,
+ * and the full text is delivered as a follow-up DM when the customer taps (the tap opens Meta's
+ * 24h window); the image stays in the card (tappable to full size) and is not re-sent. Equals
+ * Meta's generic-template title limit (80). Single source of truth for the backend sender AND
+ * the frontend modal preview so they can't drift.
+ */
+export const POST_REPLY_CARD_CAPTION_MAX = 80;
+
+/**
+ * Postback payload for the Post Reply «Read more» button — `pr_more:<source>:<postId>`.
+ * Meta caps payloads at 1000 chars, so we carry only an id and look the full text + image
+ * up from `posts` at tap time (always current, no stashing).
+ */
+export const READ_MORE_PAYLOAD_PREFIX = 'pr_more';
+
+export function buildReadMorePayload(source: 'facebook' | 'instagram', postId: string): string {
+    return `${READ_MORE_PAYLOAD_PREFIX}:${source}:${postId}`;
+}
+
+export function parseReadMorePayload(
+    payload: string | null | undefined,
+): { source: 'facebook' | 'instagram'; postId: string } | null {
+    if (!payload) return null;
+    const parts = payload.split(':');
+    if (parts.length !== 3 || parts[0] !== READ_MORE_PAYLOAD_PREFIX) return null;
+    const [, source, postId] = parts;
+    if ((source !== 'facebook' && source !== 'instagram') || !postId) return null;
+    return { source, postId };
+}
 
 /**
  * Max length for the Reply Personality / brand-voice note. Unlike the template

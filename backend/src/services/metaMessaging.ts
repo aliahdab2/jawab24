@@ -90,6 +90,28 @@ type MetaMessage =
     | { attachment: { type: 'image'; payload: { url: string; is_reusable?: boolean } } }
     | { attachment: { type: 'template'; payload: { template_type: 'generic'; elements: MetaTemplateElement[] } } };
 
+/**
+ * A one-element Generic Template that shows a Post Reply image INLINE with a caption — the
+ * image is ALWAYS visible (Meta allows only one message on a cold comment→DM). `default_action`
+ * makes the (necessarily ~1.91:1) card image tappable → opens the full-resolution image in the
+ * in-app browser. When the caption is too long to fit the title, the caller passes a `readMore`
+ * postback button: the card shows a teaser, and tapping «Read more» delivers the full text as a
+ * follow-up DM (the tap opens the 24h window). The image is not re-sent — it stays in this card
+ * and is tappable to full size. Title falls back to a single space because Meta rejects an empty title.
+ */
+export function imageCardMessage(
+    imageUrl: string,
+    caption: string,
+    readMore?: { title: string; payload: string },
+): MetaMessage {
+    const title = caption.trim().slice(0, META_TEMPLATE_LIMITS.maxTitleChars) || ' ';
+    const element: MetaTemplateElement = { title, image_url: imageUrl, default_action: { type: 'web_url', url: imageUrl } };
+    if (readMore) {
+        element.buttons = [{ type: 'postback', title: readMore.title.slice(0, META_TEMPLATE_LIMITS.maxButtonTitleChars), payload: readMore.payload }];
+    }
+    return { attachment: { type: 'template', payload: { template_type: 'generic', elements: [element] } } };
+}
+
 /** The shared /me/messages request envelope (recipient + message + messaging_type/tag).
  *  Single source so text sends, image attachments, and product cards can't drift. */
 function buildMeMessageEnvelope(recipient: MetaRecipient, message: MetaMessage, opts?: SendMessageOptions): Record<string, unknown> {
@@ -119,6 +141,17 @@ export function buildMessagePayload(
     opts?: SendMessageOptions,
 ): Record<string, unknown> {
     return buildMeMessageEnvelope({ id: recipientId }, message, opts);
+}
+
+/** Build a /me/messages body addressed to a COMMENT (one-shot private reply). Meta allows
+ *  exactly one such message per comment, so the whole reply — text, card, or button
+ *  template — must fit in this single send. */
+export function buildCommentReplyPayload(
+    commentId: string,
+    message: MetaMessage,
+    opts?: SendMessageOptions,
+): Record<string, unknown> {
+    return buildMeMessageEnvelope({ comment_id: commentId }, message, opts);
 }
 
 /** Build the Generic Template attachment body for a product-card send. */

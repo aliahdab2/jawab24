@@ -2,13 +2,64 @@ import { describe, it, expect } from 'vitest';
 import {
     buildGenericTemplateElements,
     buildMessagePayload,
+    buildCommentReplyPayload,
     buildProductCardPayload,
     imageAttachmentMessage,
+    imageCardMessage,
     META_TEMPLATE_LIMITS,
 } from '../../src/services/metaMessaging';
 import type { ProductCard } from '@jawab24/shared';
 
 describe('metaMessaging', () => {
+    describe('Post Reply image messages (single comment→DM reply)', () => {
+        it('buildCommentReplyPayload addresses the comment (recipient.comment_id)', () => {
+            const payload = buildCommentReplyPayload('cmt-1', { text: 'Hi' });
+            expect(payload).toEqual({
+                recipient: { comment_id: 'cmt-1' },
+                message: { text: 'Hi' },
+                messaging_type: 'RESPONSE',
+            });
+        });
+
+        it('imageCardMessage: inline image + caption in the (capped) title', () => {
+            const msg = imageCardMessage('https://cdn/x.jpg', 'كريم غو ريبير') as {
+                attachment: { payload: { template_type: string; elements: { title: string; image_url: string }[] } };
+            };
+            expect(msg.attachment.payload.template_type).toBe('generic');
+            expect(msg.attachment.payload.elements).toHaveLength(1);
+            expect(msg.attachment.payload.elements[0]).toEqual({
+                title: 'كريم غو ريبير',
+                image_url: 'https://cdn/x.jpg',
+                default_action: { type: 'web_url', url: 'https://cdn/x.jpg' },
+            });
+        });
+
+        it('imageCardMessage: caps the title and never emits an empty title', () => {
+            const long = 'x'.repeat(200);
+            const msg = imageCardMessage('https://cdn/x.jpg', long) as { attachment: { payload: { elements: { title: string }[] } } };
+            expect(msg.attachment.payload.elements[0].title).toHaveLength(META_TEMPLATE_LIMITS.maxTitleChars);
+
+            const blank = imageCardMessage('https://cdn/x.jpg', '   ') as { attachment: { payload: { elements: { title: string }[] } } };
+            expect(blank.attachment.payload.elements[0].title).toBe(' '); // Meta rejects an empty title
+        });
+
+        it('imageCardMessage: long caption → teaser title + a «Read more» POSTBACK button', () => {
+            const msg = imageCardMessage('https://cdn/x.jpg', 'a'.repeat(200), { title: 'اقرأ المزيد', payload: 'pr_more:facebook:post-1' }) as {
+                attachment: { payload: { elements: { title: string; buttons: { type: string; title: string; payload: string }[] }[] } };
+            };
+            const el = msg.attachment.payload.elements[0];
+            expect(el.title).toHaveLength(META_TEMPLATE_LIMITS.maxTitleChars); // teaser
+            expect(el.buttons).toEqual([{ type: 'postback', title: 'اقرأ المزيد', payload: 'pr_more:facebook:post-1' }]);
+        });
+
+        it('imageCardMessage: caps the «Read more» button title at 20', () => {
+            const msg = imageCardMessage('https://cdn/x.jpg', 'hi', { title: 'z'.repeat(40), payload: 'pr_more:facebook:p1' }) as {
+                attachment: { payload: { elements: { buttons: { title: string }[] }[] } };
+            };
+            expect(msg.attachment.payload.elements[0].buttons[0].title).toHaveLength(META_TEMPLATE_LIMITS.maxButtonTitleChars);
+        });
+    });
+
     describe('buildMessagePayload', () => {
         it('defaults messaging_type to RESPONSE and omits tag', () => {
             const payload = buildMessagePayload('user-1', { text: 'Hi' });

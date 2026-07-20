@@ -1419,19 +1419,22 @@ describe('Admin Routes', () => {
             );
         });
 
-        it('omits postMessage from generateForPlayground when channel is dm', async () => {
+        it('forwards postMessage to generateForPlayground for a dm channel (comment-originated DM parity)', async () => {
+            // The production DM pipeline injects the origin post + the merchant's Post Reply
+            // as postMessage for comment-originated threads, so the playground/eval must be
+            // able to exercise the dm+postMessage combination too (previously dropped).
             const { replyGenerator } = await setupAiPath();
 
             await app.inject({
                 method: 'POST',
                 url: '/admin/ai/playground',
                 headers: authHeaders,
-                payload: { pageId: 'page-1', question: 'Hello', channel: 'dm', postMessage: 'Should be ignored' },
+                payload: { pageId: 'page-1', question: 'Hello', channel: 'dm', postMessage: 'Post + merchant reply context' },
             });
 
             const callArg = vi.mocked(replyGenerator.generateForPlayground).mock.calls[0][0];
             expect(callArg).toBeDefined();
-            expect(callArg.postMessage).toBeUndefined();
+            expect(callArg.postMessage).toBe('Post + merchant reply context');
         });
 
         it('passes conversationHistory to generateForPlayground when channel is dm', async () => {

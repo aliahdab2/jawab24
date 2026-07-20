@@ -14,15 +14,15 @@ import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { BusinessProfileSchema } from '../utils/validation';
 import { redis } from '../lib/redis';
-import { STATS_CACHE_TTL, pagesStatsCacheKey, allStatsCacheKeys } from './statsCache';
+import { STATS_CACHE_TTL, pagesStatsCacheKey } from './statsCache';
+// Re-exported for the reply pipeline (commentProcessor/messageProcessor/nonTextHandler),
+// which import it from here. Real implementation lives in statsCache.ts alongside the
+// other stats-cache invalidation helpers.
+export { invalidateWorkspaceStatsCache } from './statsCache';
 import { maybeEncryptToken, safeDecryptToken } from './facebookCrypto';
 import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { PgVectorStore } from './kb/pgvector-store';
-
-/** Minimum interval between cache invalidations per workspace (seconds). */
-const STATS_INVALIDATION_THROTTLE = 30;
-
 
 /** Lazy-init ingestion service (only created when OPENAI_API_KEY exists) */
 let _ingestionService: KbIngestionService | null = null;
@@ -1414,23 +1414,6 @@ export class PagesService {
 }
 
 export const pagesService = new PagesService();
-
-/** Invalidate workspace stats cache so the next dashboard load fetches fresh data.
- *  Throttled: skips if the cache was already invalidated within the last 30 seconds
- *  to avoid defeating the cache under high message volume. */
-export function invalidateWorkspaceStatsCache(workspaceId: string): void {
-    const throttleKey = `stats:throttle:${workspaceId}`;
-    // SET NX EX: only sets if key doesn't exist, auto-expires after the throttle window.
-    // If the key already exists (recently invalidated), the DEL is skipped.
-    redis.set(throttleKey, '1', 'EX', STATS_INVALIDATION_THROTTLE, 'NX').then((result) => {
-        if (result === 'OK') {
-            // Delete via the shared key builders — a previous version hardcoded the
-            // key here and silently stopped matching when the cache key was bumped
-            // to :v2, turning invalidation into a no-op.
-            redis.del(...allStatsCacheKeys(workspaceId)).catch(() => {});
-        }
-    }).catch(() => {});
-}
 
 /** Check if a page's Facebook access has been revoked (empty accessToken sentinel) */
 export function isPageDisconnected(page: { accessToken: string } | null | undefined): boolean {

@@ -44,6 +44,12 @@ import { extractPostId } from '../../utils/instagram';
  *  have the same issue and are out of scope for this pass. */
 const MAX_ORIGIN_POST_AGE_MS = 60 * 24 * 60 * 60 * 1000;
 
+/** Cap for the origin POST text inside the composed [current_post] context. The merchant's
+ *  Post Reply is appended AFTER the post text (uncapped — product-limited to 1000 chars), so
+ *  capping only the post text guarantees the reply's tail (price/details) always survives the
+ *  prompt builder's overall block cap. Mirrors the previous prompt-side 500-char cap. */
+const ORIGIN_POST_TEXT_CAP = 500;
+
 /** Store-then-enrich park (step 11): a sibling attachment from the same sender is
  *  stored as a 'pending' stub the instant its webhook lands, then enriched
  *  asynchronously (vision 6–20s / Whisper / shared-post fetch). A DM whose reply
@@ -1121,10 +1127,20 @@ export class MessageProcessor {
     }
 
     /**
-     * Resolve the originating post/media text for a conversation when the DM
+     * Resolve the originating post/media context for a conversation when the DM
      * thread started from a comment (dual or private mode). Returns undefined
      * when there is no origin link, the referenced row is missing (deleted), or
      * the post is older than MAX_ORIGIN_POST_AGE_MS (staleness guard).
+     *
+     * Returns the post text COMPOSED with the merchant's Post Reply (trigger
+     * reply) when one is configured. Both are merchant-authored, so both are
+     * legitimate fact sources for the [current_post] prompt block — the post
+     * caption is often short/price-less while the Post Reply carries the actual
+     * price/details (the صيدلية زينب عباس incident: 93-char caption, price only
+     * in the 914-char trigger reply → AI deflected a price question and the
+     * customer called it fraud). The post text is capped here so the composed
+     * string's tail (the reply, where the price usually lives) can never be
+     * truncated by the prompt builder's overall cap.
      *
      * Looks up in `posts` (facebook) or `instagram_media` (instagram) based on
      * the conversation's platform. No FK on `origin_content_id` — if the row
@@ -1135,19 +1151,30 @@ export class MessageProcessor {
         if (!conversation?.originContentId) return undefined;
 
         const lookup = conversation.platform === 'instagram'
-            ? db.select({ message: instagramMedia.caption, createdAt: instagramMedia.createdAt })
+            ? db.select({ message: instagramMedia.caption, createdAt: instagramMedia.createdAt, triggerReply: instagramMedia.triggerReply })
                 .from(instagramMedia).where(eq(instagramMedia.id, conversation.originContentId))
-            : db.select({ message: posts.message, createdAt: posts.createdTime })
+            : db.select({ message: posts.message, createdAt: posts.createdTime, triggerReply: posts.triggerReply })
                 .from(posts).where(eq(posts.id, conversation.originContentId));
 
         const [row] = await lookup;
-        if (!row?.message) return undefined;
+        if (!row) return undefined;
+
+        const postText = row.message?.trim();
+        const triggerReply = row.triggerReply?.trim();
+        if (!postText && !triggerReply) return undefined;
 
         const postedAt = row.createdAt ?? null;
         if (!postedAt || Date.now() - postedAt.getTime() >= MAX_ORIGIN_POST_AGE_MS) {
             return undefined;
         }
-        return row.message;
+
+        const parts: string[] = [];
+        if (postText) parts.push(postText.slice(0, ORIGIN_POST_TEXT_CAP));
+        if (triggerReply) {
+            // Trigger replies are product-capped at POST_REPLY_MAX_REPLY_LEN (1000), so no slice here.
+            parts.push(`---\n[The merchant's automatic reply already sent to this customer for this post]\n${triggerReply}`);
+        }
+        return parts.join('\n');
     }
 }
 

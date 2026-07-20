@@ -4040,6 +4040,47 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Customer explicitly demands an exhaustive answer — the longest natural generation path without persona steering. Must always deliver a reply, never silence.',
     },
+
+    // ── Category 64: DM post + Post Reply context (صيدلية زينب عباس incident, 2026-07-19) ──
+    // A comment-originated DM thread carries [current_post] = post text + the merchant's own
+    // Post Reply (composed by messageProcessor.resolveOriginPostMessage). BOTH segments are
+    // merchant-authored → authoritative facts even when the KB doesn't cover them. The incident:
+    // the price lived ONLY in the Post Reply; the AI deflected a price question ("تواصل معنا
+    // على أرقامنا" — with no numbers on file) and the customer called the pharmacy a fraud.
+    // The sentinel facts (47 ألف, معهد الخلود, كرسانا, غو ريبير) exist NOWHERE in the demo
+    // fixtures — the only possible source is the postMessage merchant-reply segment.
+    {
+        id: 700, category: 64, categoryName: 'DM Post-Reply Context', channel: 'dm',
+        message: 'السعر لو سمحتي',
+        page: 'training',
+        postMessage: 'كريم غو ريبير الجديد وصل! 🌿 اكتشفي سر البشرة الصافية\n---\n[The merchant\'s automatic reply already sent to this customer for this post]\nكريم غو ريبير بخلاصة الجينسينغ الكوري — يرمم البشرة ويوحّد اللون.\nالسعر :47 ألف\nمتوفر في صيدلية زينب كرسانا مقابل معهد الخلود',
+        expected: { replyMethod: ['ai'], replyContainsAny: ['47', '٤٧'], flagsAbsent: ['price_not_in_kb'] },
+        notes: 'THE incident case: the price lives ONLY in the merchant-reply segment of [current_post]. Must quote 47 ألف — not deflect to "contact us".',
+    },
+    {
+        id: 701, category: 64, categoryName: 'DM Post-Reply Context', channel: 'dm',
+        message: 'وين ممكن احصل على كريم غو ريبير؟',
+        page: 'training',
+        postMessage: 'كريم غو ريبير الجديد وصل! 🌿\n---\n[The merchant\'s automatic reply already sent to this customer for this post]\nمتوفر في صيدلية زينب كرسانا مقابل معهد الخلود، السعر :47 ألف',
+        expected: { replyMethod: ['ai'], replyContainsAny: ['كرسانا', 'الخلود', 'صيدلية زينب'] },
+        notes: 'Non-price fact (product availability location) from the merchant-reply segment must be quotable too. Product-anchored phrasing — a generic "where are you" would legitimately resolve to the page\'s own KB address instead.',
+    },
+    {
+        id: 702, category: 64, categoryName: 'DM Post-Reply Context', channel: 'dm',
+        message: 'هل عندكم فرع في دبي؟',
+        page: 'training',
+        postMessage: 'كريم غو ريبير الجديد وصل! 🌿\n---\n[The merchant\'s automatic reply already sent to this customer for this post]\nمتوفر في صيدلية زينب كرسانا، السعر :47 ألف',
+        expected: { replyMethod: ['ai'], replyNotContains: ['نعم عندنا فرع في دبي'] },
+        notes: 'Guard: post context grants fact authority, not permission to invent — a question covered by NEITHER the post context NOR the KB must not be confirmed.',
+    },
+    {
+        id: 703, category: 64, categoryName: 'DM Post-Reply Context', channel: 'comment',
+        message: 'كم سعرها؟',
+        page: 'training',
+        postMessage: 'دورة IELTS المكثفة انطلقت! سجل الآن',
+        expected: { replyMethod: ['ai'], intent: ['QUESTION'] },
+        notes: 'Comment-channel regression: a plain (uncomposed) post text behaves exactly as before.',
+    },
 ];
 
 /** Accepted textual forms of the dated fixture course's start date (seeded at

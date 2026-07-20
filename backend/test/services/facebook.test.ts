@@ -97,6 +97,43 @@ describe('Facebook Service', () => {
         });
     });
 
+    describe('sendPrivateReplyWithImage (Post Reply image — one comment→DM message)', () => {
+        beforeEach(() => {
+            vi.mocked(fbAxios.post).mockResolvedValue({ data: { recipient_id: 'psid_1' } });
+        });
+
+        it('short caption → inline image CARD (full caption, no button), addressed to the comment', async () => {
+            const res = await service.sendPrivateReplyWithImage('tok', 'cmt_1', 'كريم غو ريبير', 'https://cdn/x.jpg', { label: 'اقرأ المزيد', payload: 'pr_more:facebook:p1' });
+            expect(res).toEqual({ recipientId: 'psid_1', format: 'card' });
+            const body = vi.mocked(fbAxios.post).mock.calls[0][1] as {
+                recipient: { comment_id: string };
+                message: { attachment: { payload: { template_type: string; elements: { image_url: string; buttons?: unknown[] }[] } } };
+            };
+            expect(body.recipient).toEqual({ comment_id: 'cmt_1' });
+            expect(body.message.attachment.payload.template_type).toBe('generic');
+            expect(body.message.attachment.payload.elements[0].image_url).toBe('https://cdn/x.jpg');
+            // Short caption fits → no «Read more» button.
+            expect(body.message.attachment.payload.elements[0].buttons).toBeUndefined();
+        });
+
+        it('long caption → image CARD with a «Read more» POSTBACK button', async () => {
+            const longText = 'ن'.repeat(120);
+            const res = await service.sendPrivateReplyWithImage('tok', 'cmt_1', longText, 'https://cdn/x.jpg', { label: 'اقرأ المزيد', payload: 'pr_more:facebook:p1' });
+            expect(res).toEqual({ recipientId: 'psid_1', format: 'card_readmore' });
+            const body = vi.mocked(fbAxios.post).mock.calls[0][1] as {
+                message: { attachment: { payload: { template_type: string; elements: { image_url: string; buttons: { type: string; payload: string }[] }[] } } };
+            };
+            expect(body.message.attachment.payload.template_type).toBe('generic');
+            expect(body.message.attachment.payload.elements[0].image_url).toBe('https://cdn/x.jpg');
+            expect(body.message.attachment.payload.elements[0].buttons[0]).toMatchObject({ type: 'postback', payload: 'pr_more:facebook:p1' });
+        });
+
+        it('long caption but no readMore payload → still a card (no button, no crash)', async () => {
+            const res = await service.sendPrivateReplyWithImage('tok', 'cmt_1', 'ن'.repeat(120), 'https://cdn/x.jpg', null);
+            expect(res.format).toBe('card');
+        });
+    });
+
     describe('getUserProfile', () => {
         it('should get user profile with picture from Facebook', async () => {
             const mockResponse = {
@@ -597,7 +634,7 @@ describe('Facebook Service', () => {
                 null,
                 {
                     params: {
-                        subscribed_fields: 'feed,messages',
+                        subscribed_fields: 'feed,messages,messaging_postbacks',
                         access_token: 'page_token_abc',
                     },
                 }
@@ -634,12 +671,12 @@ describe('Facebook Service', () => {
             expect(fbAxios.post).toHaveBeenNthCalledWith(1,
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
-                { params: { subscribed_fields: 'feed,messages', access_token: 'page_token' } },
+                { params: { subscribed_fields: 'feed,messages,messaging_postbacks', access_token: 'page_token' } },
             );
             expect(fbAxios.post).toHaveBeenNthCalledWith(2,
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
-                { params: { subscribed_fields: 'messages', access_token: 'page_token' } },
+                { params: { subscribed_fields: 'messages,messaging_postbacks', access_token: 'page_token' } },
             );
         });
 

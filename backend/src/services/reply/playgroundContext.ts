@@ -147,7 +147,10 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         pageName: page.name ?? undefined,
         productCatalog,
         storePolicies,
-        postMessage: channel === 'comment' ? postMessage : undefined,
+        // Forwarded for BOTH channels: the DM pipeline injects the origin post + the
+        // merchant's Post Reply as [current_post] for comment-originated threads, so the
+        // playground/eval must be able to exercise the dm+postMessage combination too.
+        postMessage: postMessage,
         conversationHistory: channel === 'dm' ? conversationHistory : undefined,
         senderName: channel === 'dm' ? senderName : undefined,
         replyStyle,

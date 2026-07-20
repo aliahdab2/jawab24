@@ -4,7 +4,7 @@ import { Logger, noopLogger } from '../../types';
 import { config } from '../../config';
 import { t } from '../../utils/i18n';
 import { classifyDmError, type DmFailure } from '../../utils/fbGraphErrors';
-import { deliverReplyImageBestEffort } from './postReplyImage';
+import { captureError } from '../../utils/sentryHelpers';
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
@@ -20,9 +20,13 @@ export interface SendCommentReplyOptions {
     dualReplyNudge?: string;
     /** If true, skip Facebook API calls (for demo mode) */
     isDemo?: boolean;
-    /** Post Reply image URL — sent as a card on the DM channel only (private/dual).
-     *  On non-transient card failure we fall back to a plain-text DM. */
+    /** Post Reply image URL — delivered on the DM channel only (private/dual) as an inline
+     *  image card (image is always shown). On non-transient failure we fall back to a plain-text DM. */
     replyImageUrl?: string | null;
+    /** Localized «Read more» postback button for a long caption: when set and the caption
+     *  exceeds the card limit, the card shows a teaser + this button; the tap delivers the full
+     *  text in-chat (the image stays in the card). Null/absent → short caption shown in full, no button. */
+    readMore?: { label: string; payload: string } | null;
 }
 
 export interface SendReplyResult {
@@ -43,9 +47,10 @@ export interface SendReplyResult {
      */
     suppressedPublic?: boolean;
     /**
-     * True when a Post Reply image was actually delivered (its own native-image message
-     * sent successfully after the text). Drives the delivery-accurate "image attached"
-     * badge. Undefined/false = no image, or the image send failed (text still delivered).
+     * True when a Post Reply image was actually delivered (the single private-reply message
+     * — image card or text+button — sent successfully). Drives the delivery-accurate "image
+     * attached" badge. Undefined/false = no image, or the image send failed and we fell back
+     * to a plain-text reply.
      */
     imageDelivered?: boolean;
 }
@@ -83,6 +88,7 @@ export class ReplySender {
             dualReplyNudge,
             isDemo = false,
             replyImageUrl,
+            readMore,
         } = options;
 
         if (isDemo) {
@@ -98,21 +104,35 @@ export class ReplySender {
         // never on the public branch below.
         if (replyMode === 'private' || replyMode === 'dual') {
             try {
-                // The reply TEXT is the one-shot private reply (recipient.comment_id) — always
-                // sent first, and it returns the PSID. It is the reliable, primary delivery.
-                const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
-                dmRecipientId = dm.recipientId;
-                this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId, hasImage: !!replyImageUrl });
-
-                // An attached image (Post Reply only) follows as its OWN native-image message
-                // to the returned PSID — full, uncropped, tap-to-open. Best-effort (the text
-                // already delivered); see deliverReplyImageBestEffort for why it never throws.
                 if (replyImageUrl) {
-                    imageDelivered = await deliverReplyImageBestEffort(accessToken, dmRecipientId, replyImageUrl, {
-                        platform: 'facebook',
-                        component: 'sender',
-                        extra: { facebookCommentId, replyMode },
-                    });
+                    // Meta allows exactly ONE message on a cold comment→DM. The image ALWAYS rides
+                    // an inline card (never hidden). A short caption shows in full; a long one shows
+                    // a teaser + «Read more» postback, and the tap delivers the full text in-chat.
+                    try {
+                        const dm = await facebookService.sendPrivateReplyWithImage(accessToken, facebookCommentId, replyText, replyImageUrl, readMore ?? null);
+                        dmRecipientId = dm.recipientId;
+                        imageDelivered = true;
+                        this.logger.info('[Sender] Private reply with image sent', { facebookCommentId, replyMode, recipientId: dmRecipientId, format: dm.format });
+                    } catch (imgError) {
+                        // Transient → let the outer handler retry the whole job.
+                        if (classifyDmError(imgError, 'facebook').bucket === 'transient') throw imgError;
+                        // Non-transient (e.g. Meta rejected the template) → fall back to a plain-text
+                        // private reply so the customer still gets the reply; the image is dropped
+                        // this time (honest: imageDelivered stays false, so no "image" badge).
+                        captureError(imgError, 'Post Reply image reply failed; sent text only', {
+                            fingerprint: ['post-reply-image-reply-failed'],
+                            level: 'warning',
+                            tags: { platform: 'facebook', component: 'sender' },
+                            extra: { facebookCommentId, replyMode },
+                        });
+                        const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
+                        dmRecipientId = dm.recipientId;
+                    }
+                } else {
+                    // Plain-text one-shot private reply (recipient.comment_id) — returns the PSID.
+                    const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
+                    dmRecipientId = dm.recipientId;
+                    this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId });
                 }
             } catch (error) {
                 dmFailure = classifyDmError(error, 'facebook');
