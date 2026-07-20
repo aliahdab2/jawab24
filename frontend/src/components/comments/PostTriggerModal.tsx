@@ -439,7 +439,7 @@ export function PostTriggerModal({
                   'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                   mode === m
                     ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300'
-                    : 'border-surface-200 dark:border-surface-700 text-muted-foreground hover:bg-surface-50 dark:hover:bg-surface-800',
+                    : 'border-surface-200 dark:border-surface-700 text-muted-foreground hover:bg-surface-50 dark:hover:bg-surface-300',
                 )}
               >
                 {m === 'keyword' ? t('postTriggerModeKeyword') : t('postTriggerModeAll')}
@@ -556,7 +556,7 @@ export function PostTriggerModal({
             aria-controls="post-trigger-advanced"
             className={clsx(
               'w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-foreground',
-              'hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors rounded-t-xl',
+              'hover:bg-surface-50 dark:hover:bg-surface-300 transition-colors rounded-t-xl',
               !advancedOpen && 'rounded-b-xl',
             )}
           >
@@ -627,7 +627,7 @@ export function PostTriggerModal({
                           'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
                           buttonKind === k
                             ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300'
-                            : 'border-surface-200 dark:border-surface-700 text-muted-foreground hover:bg-surface-50 dark:hover:bg-surface-800',
+                            : 'border-surface-200 dark:border-surface-700 text-muted-foreground hover:bg-surface-50 dark:hover:bg-surface-300',
                         )}
                       >
                         {k === 'link' ? t('postTriggerButtonKindLink') : t('postTriggerButtonKindWhatsapp')}
@@ -711,7 +711,7 @@ export function PostTriggerModal({
                       // in the card — tap it for full size — and is never re-sent).
                       <div className="flex flex-col gap-2">
                         {/* The card the customer sees first */}
-                        <div className="rounded-lg border border-theme-border overflow-hidden max-w-[200px] bg-surface-50 dark:bg-surface-800">
+                        <div className="rounded-lg border border-theme-border overflow-hidden max-w-[200px] bg-surface-50 dark:bg-surface-200">
                           <img src={imagePreviewSrc!} alt="" className="w-full max-h-28 object-cover" />
                           <div className="px-2.5 py-2">
                             <span className="block text-[13px] font-semibold text-foreground" dir="auto">
@@ -857,7 +857,7 @@ function ImageAffordance(props: {
             type="button"
             onClick={onRemove}
             aria-label={t('postTriggerImageRemove')}
-            className="inline-flex items-center rounded-md p-1 text-destructive hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
+            className="inline-flex items-center rounded-md p-1 text-destructive hover:bg-surface-50 dark:hover:bg-surface-300 transition-colors"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
