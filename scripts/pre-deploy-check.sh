@@ -230,7 +230,31 @@ AUDIT_FAILED=false
 # Fixed and removed from this allowlist (bumped to patched versions via root overrides):
 #   GHSA-ph9p-34f9-6g65 (tmp ->0.2.7), GHSA-58qx-3vcg-4xpx (ws ->8.21.0),
 #   GHSA-q8mj-m7cp-5q26 (qs ->6.15.2), GHSA-hmw2-7cc7-3qxx (form-data ->4.0.6).
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww"
+# GHSA-f88m-g3jw-g9cj — sharp inherits four libvips CVEs (CVE-2026-33327/33328/35590/35591,
+# high) in the image decoders. Transitive via @vercel/og and next. Reachability: libvips only
+# ever sees images we control. next/image is locked down to a single remotePattern
+# (ui-avatars.com — see frontend/next.config.js), so no merchant-uploaded or arbitrary remote
+# image is ever optimized; @vercel/og renders our own React templates; the rest are our static
+# assets. Exploiting these CVEs requires feeding a malicious image file to the decoder, which
+# no request path does. NOT force-fixable: npm's only offered remedy is `npm audit fix --force`,
+# which installs next@9.3.3 — a six-major downgrade of the framework. A targeted sharp bump to
+# 0.35.x is the real fix; it needs a full lockfile re-resolve under --legacy-peer-deps (the
+# next-intl→next override), so fold it into the next broad dependency refresh and drop this
+# entry then. Revisit immediately if next/image ever gains a remotePattern for merchant content.
+# GHSA-4c8g-83qw-93j6, GHSA-v2hh-gcrm-f6hx — fast-uri host confusion (failed IDN
+# canonicalization / literal-backslash authority delimiter, high). Transitive via
+# fastify -> @fastify/ajv-compiler -> ajv, in BOTH backend and ai-worker. Reachability:
+# ajv calls fast-uri to resolve JSON-Schema $id/$ref URIs, and every schema we compile is
+# developer-authored (Zod -> JSON Schema for route validation). Request bodies are the DATA
+# validated against those schemas, never the URIs parsed by fast-uri. Host confusion matters
+# where a parsed host drives a security or routing decision; ajv makes none — it only keys
+# schema lookups. A patched 3.1.4 exists, but the root override does not take effect without a
+# full lockfile regeneration under --legacy-peer-deps (npm keeps the satisfied transitive pin;
+# invalidating just that entry drops fast-uri from the tree entirely) — the same
+# disproportionate churn documented for GHSA-3jxr above, immediately before a deploy. Fold the
+# bump into the next broad dependency refresh and drop these two entries then. Revisit sooner if
+# any runtime path ever parses attacker-supplied URIs through ajv.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww|GHSA-f88m-g3jw-g9cj|GHSA-4c8g-83qw-93j6|GHSA-v2hh-gcrm-f6hx"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
