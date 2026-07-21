@@ -501,9 +501,6 @@ export const settings = pgTable('settings', {
     businessHoursOnly: boolean('business_hours_only').default(false),
     businessHoursStart: varchar('business_hours_start', { length: 5 }).default('09:00'),
     businessHoursEnd: varchar('business_hours_end', { length: 5 }).default('18:00'),
-    // D-034: keep answering DMs outside business hours (with a follow-up note)
-    // instead of going silent. Only read when businessHoursOnly is on.
-    afterHoursSmartReply: boolean('after_hours_smart_reply').default(true),
     // Placeholder only — every merchant should set this explicitly (the business-hours
     // card prefills the detected zone when hours are switched on). Declared as
     // 'Asia/Riyadh' because that is what production has actually been handing out:

@@ -422,11 +422,9 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   ├── Comments OFF → ❌ Ignore silently (comment still stored) → STOP
 │   └── Messages OFF → Send AWAY MESSAGE (language-matched, once per sender/24h) → STOP
 │
-├── Is businessHoursOnly enabled?
-│   ├── YES → Is it within business hours? (end EXCLUSIVE)
-│   │   └── NO → Comments/Post Reply → ❌ Ignore silently → STOP
-│   │           Messages → afterHoursSmartReply ON  → answer + follow-up note (D-034)
-│   │                      afterHoursSmartReply OFF → AWAY MESSAGE (once per 24h) → STOP
+├── Is the team outside its hours? (businessHoursOnly + window, end EXCLUSIVE)
+│   ├── YES → Reply NORMALLY on every channel; DM replies append the
+│   │         "team will follow up" note (D-035 — hours never gate anything)
 │   └── NO → Continue
 │
 ├── Is there an active HANDOFF PAUSE? (human agent took over)
@@ -875,13 +873,12 @@ This ensures pipeline metrics and downstream guards still function even without 
 | Setting | Type | Default | Where It Affects |
 |---------|------|---------|------------------|
 | **commentsAutoReply** | boolean | true | If false, ignore comments silently (no away message) |
-| **messagesAutoReply** | boolean | true | If false, send away message (language-matched, once per sender per 24h — D-034) |
+| **messagesAutoReply** | boolean | true | If false, send away message (language-matched, once per sender per 24h — D-035). The ONLY switch that silences DMs |
 | **commentReplyMode** | enum | 'public' | `public` = visible comment, `private` = DM, `dual` = both |
 | **dualReplyNudge** | text | "Details sent in DM" | Appended to public reply in dual mode |
-| **businessHoursOnly** | boolean | false | If true, gate replies on business hours. Comments/Post Reply: silent outside them. DMs: see `afterHoursSmartReply` |
+| **businessHoursOnly** | boolean | false | D-035: TEAM hours are configured. Never gates any channel — outside the window, DM replies append a "team follows up" note. Per-shop opening hours are a per-page Business Info fact (D-010), not this |
 | **businessHoursStart** | time | '09:00' | Start of business hours (timezone-aware) |
-| **businessHoursEnd** | time | '18:00' | End of business hours (timezone-aware, EXCLUSIVE — 18:00 closes the day) |
-| **afterHoursSmartReply** | boolean | true | D-034: outside business hours, still answer DMs and append a "team follows up during working hours" note. Off = away message only. DMs only — comments/Post Reply unaffected |
+| **businessHoursEnd** | time | '18:00' | End of team hours (timezone-aware, EXCLUSIVE — 18:00 closes the day) |
 | **timezone** | string | 'Asia/Riyadh' | Used for business hours calculation. A PLACEHOLDER, not a guess — the settings UI seeds the merchant's detected zone when hours are switched on (`PLACEHOLDER_TIMEZONE` in shared/constants) |
 | **aiEnabled** | boolean | true | Master switch: if false, only templates work |
 | **replyDelay** | integer | 0 | Seconds to wait before sending (consolidation) |

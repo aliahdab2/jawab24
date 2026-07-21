@@ -9,14 +9,6 @@ import type { WorkspaceSettings, LeadStagesConfig, LeadCustomFieldDef } from '@j
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
 import { PIPELINE_FIELDS, type PipelineField } from './pipelineFields';
 
-/**
- * Why auto-reply is or isn't active for a channel right now.
- *  - `on`         — reply normally
- *  - `off_master` — the merchant switched this channel off; stay silent
- *  - `off_hours`  — channel is on but we're outside business hours (D-034)
- */
-export type AutoReplyState = 'on' | 'off_master' | 'off_hours';
-
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
 const SETTINGS_CACHE_TTL = 300;
 const cacheKey = (workspaceId: string) => `workspace_settings:v1:${workspaceId}`;
@@ -36,7 +28,6 @@ export const DEFAULTS: WorkspaceSettings = {
     businessHoursOnly: false,
     businessHoursStart: '09:00',
     businessHoursEnd: '18:00',
-    afterHoursSmartReply: true,
     // Must match the settings-table column default (see schema.ts) so a workspace
     // whose JSONB predates an explicit timezone reads the same value the row has.
     timezone: PLACEHOLDER_TIMEZONE,
@@ -253,18 +244,7 @@ export class WorkspaceSettingsService {
      */
     async isCommentsAutoReplyEnabled(workspaceId: string): Promise<boolean> {
         const settings = await this.getSettings(workspaceId);
-
-        if (!settings.commentsAutoReply) return false;
-
-        if (settings.businessHoursOnly) {
-            return this.isWithinBusinessHours(
-                settings.businessHoursStart,
-                settings.businessHoursEnd,
-                settings.timezone,
-            );
-        }
-
-        return true;
+        return this.isAutoReplyEnabledFromSettings(settings, 'comments');
     }
 
     /**
@@ -272,18 +252,7 @@ export class WorkspaceSettingsService {
      */
     async isMessagesAutoReplyEnabled(workspaceId: string): Promise<boolean> {
         const settings = await this.getSettings(workspaceId);
-
-        if (!settings.messagesAutoReply) return false;
-
-        if (settings.businessHoursOnly) {
-            return this.isWithinBusinessHours(
-                settings.businessHoursStart,
-                settings.businessHoursEnd,
-                settings.timezone,
-            );
-        }
-
-        return true;
+        return this.isAutoReplyEnabledFromSettings(settings, 'messages');
     }
 
     /**
@@ -347,33 +316,30 @@ export class WorkspaceSettingsService {
      * Accepts a pre-fetched WorkspaceSettings object to avoid redundant Redis calls.
      */
     isAutoReplyEnabledFromSettings(settings: WorkspaceSettings, type: 'messages' | 'comments'): boolean {
-        return this.autoReplyStateFromSettings(settings, type) === 'on';
+        // D-035: the master switches are the ONLY gate. Business hours describe
+        // when the merchant's TEAM is around (they feed the follow-up note via
+        // isOutsideTeamHours below) — they no longer schedule the assistant off.
+        // The old model silently muted Smart Replies, comments AND Post Reply for
+        // the whole night, which merchants read as "my working hours" and signed
+        // without knowing; one lost 65% of his traffic to it.
+        return type === 'messages' ? settings.messagesAutoReply : settings.commentsAutoReply;
     }
 
     /**
-     * Why auto-reply is (or isn't) active right now.
+     * Is the merchant's team currently off-hours? (D-035)
      *
-     * `isAutoReplyEnabledFromSettings` collapses two very different situations
-     * into one `false`: the merchant switched the channel OFF, versus the
-     * channel is ON but we're outside business hours. D-034 treats them
-     * differently for DMs — outside hours we can still answer with a Smart Reply
-     * plus a follow-up note, whereas a master-off channel must stay silent. The
-     * boolean wrapper above keeps every other caller (comments, Post Reply)
-     * behaving exactly as before.
+     * Purely informational: when true, DM replies append a "the team will follow
+     * up when they're back" note. Never used to suppress a reply. Hours are
+     * workspace-level because the TEAM is workspace-level (workspace_members) —
+     * per-shop opening hours are a different fact and live in each page's
+     * Business Info (D-010), where the AI answers "when are you open?" from.
      */
-    autoReplyStateFromSettings(settings: WorkspaceSettings, type: 'messages' | 'comments'): AutoReplyState {
-        const flag = type === 'messages' ? settings.messagesAutoReply : settings.commentsAutoReply;
-        if (!flag) return 'off_master';
-
-        if (settings.businessHoursOnly && !this.isWithinBusinessHours(
+    isOutsideTeamHours(settings: WorkspaceSettings): boolean {
+        return !!settings.businessHoursOnly && !this.isWithinBusinessHours(
             settings.businessHoursStart,
             settings.businessHoursEnd,
             settings.timezone,
-        )) {
-            return 'off_hours';
-        }
-
-        return 'on';
+        );
     }
 
     /**

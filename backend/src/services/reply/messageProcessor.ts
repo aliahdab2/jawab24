@@ -324,14 +324,12 @@ export class MessageProcessor {
 
             // 6-8. Run independent guard checks in parallel to reduce latency
             const pauseMinutes = userSettings.handoffPauseDurationMinutes;
-            // D-034: distinguish "merchant switched DMs off" from "DMs are on but
-            // we're outside business hours". A master-off channel must stay silent,
-            // but after hours the customer is better served by a Smart Reply with a
-            // "the team follows up during working hours" note than by silence —
-            // the merchant can opt out via afterHoursSmartReply.
-            const messagesState = workspaceSettingsService.autoReplyStateFromSettings(userSettings, 'messages');
-            const answeringAfterHours = messagesState === 'off_hours' && userSettings.afterHoursSmartReply;
-            const isMessagesEnabled = messagesState === 'on' || answeringAfterHours;
+            // D-035: the master switch is the ONLY gate — business hours never
+            // silence the assistant. Outside the team's hours we answer normally
+            // and append a follow-up note (step 12d-ter), because hours describe
+            // when the HUMANS are around, not when the bot works.
+            const isMessagesEnabled = workspaceSettingsService.isAutoReplyEnabledFromSettings(userSettings, 'messages');
+            const outsideTeamHours = workspaceSettingsService.isOutsideTeamHours(userSettings);
             const [isPaused, rateCheck] = await Promise.all([
                 messagesService.isPaused(page.id, senderId, pauseMinutes),
                 rateLimiter.check(page.id, senderId, 'message'),
@@ -372,6 +370,8 @@ export class MessageProcessor {
             }
 
             if (!isMessagesEnabled) {
+                // Master switch off: the away message is the only response (D-035 —
+                // this branch is no longer reachable via business hours).
                 const customerLang = detectTemplateLanguage(messageText);
                 const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);
                 // Send the away message at most once per sender per cooldown window,
@@ -756,14 +756,14 @@ export class MessageProcessor {
                 replyText = answer ? `${greetingPrefix}${separator}${answer}` : greetingPrefix;
             }
 
-            // 12d-ter. After-hours expectation note (D-034). Appended AFTER generation
+            // 12d-ter. Team-availability note (D-035). Appended AFTER generation
             // so it never enters the prompt, never changes PROMPT_VERSION and never
             // pollutes a cache entry — a cached daytime reply gets the note only when
             // it is actually served after hours. `aiOriginalReply` stays the bare AI
             // text (same contract as the greeting prefix above: this is our copy, not
             // AI output). Budgeted like the greeting so a long answer is truncated
             // first and the note always survives.
-            if (answeringAfterHours) {
+            if (outsideTeamHours) {
                 pipelineMetrics.record(pipeline, 'after_hours_reply');
                 const note = t('afterHoursNote', resolveFallbackLanguage({
                     text: messageText,

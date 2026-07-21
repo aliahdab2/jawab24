@@ -333,10 +333,12 @@ describe('Settings Service', () => {
             expect(result).toBe(true);
         });
 
-        it('should return false outside business hours', async () => {
+        it('ignores business hours — the master switch is the only gate (D-035)', async () => {
             const { db } = await import('../../src/db');
 
-            // Mock current time: 20:00 UTC = 23:00 Asia/Riyadh (UTC+3) → outside 09:00-18:00
+            // 20:00 UTC = 23:00 Asia/Riyadh → far outside a 09:00-18:00 window.
+            // Under the old model this returned false and silently muted the
+            // channel for the night; hours now only feed the follow-up note.
             const RealDate = Date;
             vi.spyOn(globalThis, 'Date').mockImplementation((...args: unknown[]) => {
                 if (args.length === 0) return new RealDate('2026-02-15T20:00:00Z');
@@ -352,56 +354,7 @@ describe('Settings Service', () => {
 
             const result = await settingsService.isCommentsAutoReplyEnabled('user_123');
 
-            expect(result).toBe(false);
-        });
-
-        it('should respect user timezone for business hours check', async () => {
-            const { db } = await import('../../src/db');
-
-            // 14:00 UTC = 09:00 America/New_York (UTC-5) → within 09:00-18:00
-            const RealDate = Date;
-            vi.spyOn(globalThis, 'Date').mockImplementation((...args: unknown[]) => {
-                if (args.length === 0) return new RealDate('2026-02-15T14:00:00Z');
-                return new (RealDate as any)(...args);
-            });
-
-            const mockSettings = {
-                ...baseSettings,
-                businessHoursOnly: true,
-                timezone: 'America/New_York',
-            };
-
-            vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
-
-            const result = await settingsService.isCommentsAutoReplyEnabled('user_123');
-
             expect(result).toBe(true);
-        });
-
-        it('should fallback to server time on invalid timezone', async () => {
-            const { db } = await import('../../src/db');
-
-            // Use a time that would be within business hours in server time
-            const RealDate = Date;
-            vi.spyOn(globalThis, 'Date').mockImplementation((...args: unknown[]) => {
-                if (args.length === 0) return new RealDate('2026-02-15T10:00:00Z');
-                return new (RealDate as any)(...args);
-            });
-            // Fallback uses getHours/getMinutes on the mocked date
-            vi.spyOn(RealDate.prototype, 'getHours').mockReturnValue(10);
-            vi.spyOn(RealDate.prototype, 'getMinutes').mockReturnValue(0);
-
-            const mockSettings = {
-                ...baseSettings,
-                businessHoursOnly: true,
-                timezone: 'Invalid/Timezone',
-            };
-
-            vi.mocked(db.query.settings.findFirst).mockResolvedValue(mockSettings);
-
-            const result = await settingsService.isCommentsAutoReplyEnabled('user_123');
-
-            expect(result).toBe(true); // Falls back to server time 10:00, within 09:00-18:00
         });
     });
 

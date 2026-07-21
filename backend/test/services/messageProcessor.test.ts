@@ -119,7 +119,7 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         pipelineMetrics.reset();
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
@@ -304,7 +304,7 @@ describe('MessageProcessor — Handoff Re-enqueue', () => {
         pipelineMetrics.reset();
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
@@ -457,7 +457,7 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
         pipelineMetrics.reset();
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
@@ -711,7 +711,7 @@ describe('MessageProcessor — subscription inactive', () => {
         pipelineMetrics.reset();
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
@@ -767,7 +767,7 @@ describe('MessageProcessor — origin post context inheritance', () => {
         vi.mocked(subscriptionsService.enforceAutoReplyGate).mockResolvedValue({ allowed: true });
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
@@ -1064,7 +1064,7 @@ describe('MessageProcessor — Product Card Follow-up', () => {
         pipelineMetrics.reset();
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
@@ -1186,7 +1186,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         pipelineMetrics.reset();
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
         vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
@@ -1726,7 +1726,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
     });
 
     it('sends the away message when auto-reply is off, even when isNew=false', async () => {
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_master');
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: false, replyDelay: 0,
@@ -1749,7 +1749,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
     });
 
     it('does NOT spam the away message while the cooldown window is still held', async () => {
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_master');
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: false, replyDelay: 0,
@@ -1771,7 +1771,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
     // once per LIFETIME. A customer who had ever written before got no AI reply
     // AND no acknowledgment — total silence — every night thereafter.
     it('acknowledges a RETURNING customer once the cooldown has expired', async () => {
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_master');
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: false, replyDelay: 0,
@@ -1792,15 +1792,16 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         );
     });
 
-    // ── After-hours Smart Reply (D-034) ───────────────────────────────────
-    // The behaviour this whole change exists for: outside working hours the
-    // customer gets a real answer plus a "we'll follow up" note, instead of one
-    // away message and then nothing until morning.
-    it('answers outside business hours and appends the follow-up note', async () => {
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_hours');
+    // ── Team-availability note (D-035) ────────────────────────────────────
+    // The behaviour this whole change exists for: business hours never silence
+    // the assistant — outside the team's hours the customer gets a real answer
+    // plus a "the team will follow up" note, instead of silence until morning.
+    it('answers outside team hours and appends the follow-up note', async () => {
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(true);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
-            messagesAutoReply: true, businessHoursOnly: true, afterHoursSmartReply: true,
+            messagesAutoReply: true, businessHoursOnly: true,
             replyDelay: 0, defaultReplyLanguage: 'en',
         } as any);
         vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
@@ -1825,15 +1826,19 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         expect(adapter.sendAwayMessage).not.toHaveBeenCalled();
     });
 
-    it('stays silent outside hours when the merchant opted out of after-hours replies', async () => {
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_hours');
+    it('appends NO note while the team is available (inside hours)', async () => {
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
-            messagesAutoReply: true, businessHoursOnly: true, afterHoursSmartReply: false,
-            replyDelay: 0,
+            messagesAutoReply: true, businessHoursOnly: true,
+            replyDelay: 0, defaultReplyLanguage: 'en',
         } as any);
-        vi.mocked(redis.set).mockResolvedValue('OK');
-        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are away — back soon!');
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Yes, in stock.',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
 
         const adapter = webhookPreStoredAdapter();
 
@@ -1841,19 +1846,20 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             adapter, 'page-1', 'sender-1', 'do you have swim diapers?', 'msg-6',
         );
 
-        expect(result.error).toBe('Messages auto-reply disabled');
-        expect(adapter.sendReply).not.toHaveBeenCalled();
-        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
-        expect(adapter.sendAwayMessage).toHaveBeenCalled();
+        expect(result.success).toBe(true);
+        const sent = vi.mocked(adapter.sendReply).mock.calls[0][2];
+        expect(sent).toContain('Yes, in stock.');
+        expect(sent).not.toContain(t('afterHoursNote', 'en'));
     });
 
-    // A master-off channel must NEVER start answering just because the after-hours
-    // switch is on — that switch qualifies business hours, not the master.
-    it('stays silent when the DM master is off, even with after-hours replies enabled', async () => {
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_master');
+    // The master switch stays absolute: off means the away message only —
+    // being outside team hours must never resurrect the assistant.
+    it('sends only the away message when the DM master is off, even outside team hours', async () => {
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(true);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
-            messagesAutoReply: false, businessHoursOnly: true, afterHoursSmartReply: true,
+            messagesAutoReply: false, businessHoursOnly: true,
             replyDelay: 0,
         } as any);
         vi.mocked(redis.set).mockResolvedValue('OK');
@@ -1870,7 +1876,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
     });
 
     it('still acknowledges when Redis is unavailable (a duplicate beats silence)', async () => {
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_master');
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: false, replyDelay: 0,
@@ -1903,7 +1909,7 @@ describe('MessageProcessor — Orphan recheck (post-release safety net)', () => 
         pipelineMetrics.reset();
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
@@ -2064,7 +2070,7 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         pipelineMetrics.reset();
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid',
             userId: 'user-uuid',
@@ -2312,7 +2318,7 @@ describe('MessageProcessor — attachment-enrichment park (store-then-enrich)', 
         vi.clearAllMocks();
         pipelineMetrics.reset();
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
-        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
+        vi.mocked(workspaceSettingsService.isOutsideTeamHours).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true, messagesAutoReply: true, replyDelay: 0,
         } as any);

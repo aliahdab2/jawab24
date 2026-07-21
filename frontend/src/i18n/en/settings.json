@@ -104,27 +104,24 @@
   "dualReplyVariationsHint": "Variations with the same meaning are generated automatically to keep replies fresh",
   "publicReplyPlaceholder": "Details sent in a private message 📩",
   "preview": "Preview",
-  "businessHoursDesc": "Set your working hours and choose what customers get outside them",
+  "businessHoursDesc": "Jawab24 always answers — set when your team is around so replies can say when you'll follow up",
   "businessHours": {
-    "statusActive": "Active",
-    "statusInactive": "Outside Hours",
+    "statusActive": "Team available now",
+    "statusInactive": "Team off-hours",
     "duringLabel": "During Hours",
     "outsideLabel": "Outside Hours",
-    "autoReplyActive": "Auto-Reply Active",
+    "autoReplyActive": "Smart Reply",
     "awayMessage": "Away Message",
-    "flowDesc": "Auto-reply is active during business hours. Outside these hours, an away message is sent.",
+    "flowDesc": "Jawab24 replies in both states — outside team hours it adds a note that the team will follow up.",
     "custom": "Custom",
-    "resumesAt": "Resumes at {time}",
-    "smartReplyPlusNote": "Smart Reply + note",
+    "resumesAt": "Back at {time}",
+    "smartReplyPlusNote": "Smart Reply + follow-up note",
+    "info": "These are your TEAM's hours, not Jawab24's — the assistant answers around the clock either way. Outside these hours it adds a short note telling the customer your team will follow up when they're back. Your shop's public opening hours are separate: keep those in each page's Business Info, and the assistant will quote them when customers ask.",
     "timezone": "Timezone",
     "localTimeNow": "Your local time now: {time}",
     "useDetectedTimezone": "Use this device's timezone ({timezone})",
     "timezoneSearch": "Search for a city or country…",
     "timezoneNoResults": "No matching timezone"
-  },
-  "afterHoursSmartReply": {
-    "title": "Smart Replies outside working hours",
-    "desc": "Keep answering messages at night, adding a note that the team follows up during working hours. Turn off to send only the away message."
   },
   "businessHoursStart": "From",
   "businessHoursEnd": "To",
@@ -181,8 +178,8 @@
     "enabledDescription": "When off, the AI handles the first message directly"
   },
   "awayMessage": {
-    "title": "After-Hours Message",
-    "desc": "Sent when customers message outside business hours"
+    "title": "Away Message",
+    "desc": "Sent when Smart Replies for private messages are turned off"
   },
   "subsectionCustomReplies": "Customer-facing replies",
   "limitFallbackMessage": {
@@ -201,7 +198,7 @@
   "translationFailed": "Translation failed. Please try again.",
   "bilingualTip": "💡 Tip: Write in one language, then auto-translate to reach all customers",
   "awayMessageLabel": "Away Message",
-  "businessHoursLabel": "Business Hours & Away Mode",
+  "businessHoursLabel": "Your Team's Working Hours",
   "businessHoursErrorMsg": "End time must be after start time",
   "greetingMessageLabel": "Welcome Message",
   "replyDelayLabel": "Reply Delay",

@@ -32,7 +32,7 @@ function normalizeMultiFields(s: UserSettings): UserSettings {
 export type { UserSettings, UpdateSettingsDTO };
 
 import { t } from '../utils/i18n';
-import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
+import { resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 
 /** Default messages used as send-time fallback when all stored values are empty */
 const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
@@ -267,51 +267,27 @@ export class SettingsService {
     }
 
     /**
-     * Check if auto-reply is enabled for comments
+     * Check if auto-reply is enabled for comments.
+     * D-035: the master switch is the only gate — business hours describe the
+     * team's availability (see workspaceSettings.isOutsideTeamHours), they never
+     * schedule the assistant off.
      */
     async isCommentsAutoReplyEnabled(userId: string): Promise<boolean> {
         const userSettings = await this.getSettings(userId);
-
-        if (!userSettings.commentsAutoReply) {
-            return false;
-        }
-
-        // Check business hours if enabled
-        if (userSettings.businessHoursOnly) {
-            return this.isWithinBusinessHours(
-                userSettings.businessHoursStart,
-                userSettings.businessHoursEnd,
-                userSettings.timezone
-            );
-        }
-
-        return true;
+        return userSettings.commentsAutoReply;
     }
 
     /**
-     * Check if auto-reply is enabled for messages
+     * Check if auto-reply is enabled for messages. Master switch only (D-035).
      */
     async isMessagesAutoReplyEnabled(userId: string): Promise<boolean> {
         const userSettings = await this.getSettings(userId);
-
-        if (!userSettings.messagesAutoReply) {
-            return false;
-        }
-
-        // Check business hours if enabled
-        if (userSettings.businessHoursOnly) {
-            return this.isWithinBusinessHours(
-                userSettings.businessHoursStart,
-                userSettings.businessHoursEnd,
-                userSettings.timezone
-            );
-        }
-
-        return true;
+        return userSettings.messagesAutoReply;
     }
 
     /**
-     * Get the away message if auto-reply is disabled or outside business hours.
+     * Get the away message sent when Smart Replies for messages are OFF (D-035:
+     * this is its only remaining job — off-hours DMs get a real answer + note).
      * Respects user's autoDetectLanguage and defaultReplyLanguage settings.
      *
      * @param userId - User ID
@@ -375,13 +351,6 @@ export class SettingsService {
         return userSettings.replyDelay;
     }
 
-    /**
-     * Check if current time is within business hours in the user's timezone
-     */
-    private isWithinBusinessHours(start: string, end: string, timezone: string): boolean {
-        return isWithinBusinessHoursShared(start, end, timezone);
-    }
-
     private resolveLanguage(userSettings: UserSettings, detectedLanguage?: string): string {
         return resolveLanguageShared({
             autoDetectLanguage: userSettings.autoDetectLanguage,
@@ -410,7 +379,6 @@ export class SettingsService {
             businessHoursOnly: record.businessHoursOnly ?? false,
             businessHoursStart: record.businessHoursStart || '09:00',
             businessHoursEnd: record.businessHoursEnd || '18:00',
-            afterHoursSmartReply: record.afterHoursSmartReply ?? true,
             timezone: record.timezone || PLACEHOLDER_TIMEZONE,
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,

@@ -91,7 +91,6 @@ const FULL_JSONB = {
     businessHoursOnly: false,
     businessHoursStart: '09:00',
     businessHoursEnd: '18:00',
-    afterHoursSmartReply: true,
     timezone: 'Asia/Damascus',
     aiEnabled: true,
     aiModel: 'gpt-4o-mini',
@@ -329,16 +328,17 @@ describe('WorkspaceSettingsService', () => {
             expect(await service.isCommentsAutoReplyEnabled(WS_ID)).toBe(true);
         });
 
-        it('delegates to business hours check when businessHoursOnly is true', async () => {
+        it('ignores business hours entirely — the master switch is the only gate (D-035)', async () => {
             vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
                 commentsAutoReply: true,
                 businessHoursOnly: true,
+                // An empty window (end <= start) — under the old model this
+                // silenced the channel around the clock.
                 businessHoursStart: '00:00',
-                businessHoursEnd: '23:59',
+                businessHoursEnd: '00:00',
                 timezone: 'UTC',
             }));
 
-            // 00:00–23:59 UTC covers all times
             expect(await service.isCommentsAutoReplyEnabled(WS_ID)).toBe(true);
         });
     });
@@ -364,18 +364,17 @@ describe('WorkspaceSettingsService', () => {
         });
     });
 
-    // ── autoReplyStateFromSettings (D-034) ────────────────────────────────
-    // The pipeline needs to tell "merchant switched DMs off" apart from "we're
-    // outside business hours": the first must stay silent, the second may still
-    // answer. The boolean wrapper must keep behaving exactly as it did before,
-    // because comments and Post Reply still gate on it.
-    describe('autoReplyStateFromSettings', () => {
+    // ── isOutsideTeamHours (D-035) ────────────────────────────────────────
+    // Business hours describe when the TEAM is around; they feed the follow-up
+    // note and nothing else. Gating (isAutoReplyEnabledFromSettings) reads only
+    // the master switches — a closed window must never silence a channel.
+    describe('isOutsideTeamHours', () => {
         // The clock is PINNED: these assertions are about the open/closed branch,
         // and a window expressed relative to the real time of day would flip on
-        // whichever minute CI happened to run (a 00:00–23:59 "always open" window
-        // is closed for the 23:59 minute). 12:00 UTC sits inside OPEN, outside CLOSED.
-        const ALWAYS_OPEN = { businessHoursStart: '09:00', businessHoursEnd: '18:00', timezone: 'UTC' };
-        const ALWAYS_CLOSED = { businessHoursStart: '20:00', businessHoursEnd: '23:00', timezone: 'UTC' };
+        // whichever minute CI happened to run. 12:00 UTC sits inside OPEN,
+        // outside CLOSED.
+        const OPEN_AT_NOON = { businessHoursStart: '09:00', businessHoursEnd: '18:00', timezone: 'UTC' };
+        const CLOSED_AT_NOON = { businessHoursStart: '20:00', businessHoursEnd: '23:00', timezone: 'UTC' };
 
         beforeEach(() => {
             vi.useFakeTimers();
@@ -386,60 +385,40 @@ describe('WorkspaceSettingsService', () => {
             vi.useRealTimers();
         });
 
-        it('reports off_master when the channel switch is off, even inside hours', () => {
-            const state = service.autoReplyStateFromSettings(
-                partial({ messagesAutoReply: false, businessHoursOnly: true, ...ALWAYS_OPEN }),
-                'messages',
-            );
-            expect(state).toBe('off_master');
+        it('is false while the team is inside its window', () => {
+            expect(service.isOutsideTeamHours(partial({ businessHoursOnly: true, ...OPEN_AT_NOON }))).toBe(false);
         });
 
-        it('reports off_hours when the channel is on but the window has closed', () => {
-            const state = service.autoReplyStateFromSettings(
-                partial({ messagesAutoReply: true, businessHoursOnly: true, ...ALWAYS_CLOSED }),
-                'messages',
-            );
-            expect(state).toBe('off_hours');
+        it('is true once the window has closed', () => {
+            expect(service.isOutsideTeamHours(partial({ businessHoursOnly: true, ...CLOSED_AT_NOON }))).toBe(true);
         });
 
-        it('reports on inside the window, and on when hours are not enforced', () => {
-            expect(service.autoReplyStateFromSettings(
-                partial({ messagesAutoReply: true, businessHoursOnly: true, ...ALWAYS_OPEN }),
-                'messages',
-            )).toBe('on');
-
-            expect(service.autoReplyStateFromSettings(
-                partial({ messagesAutoReply: true, businessHoursOnly: false }),
-                'messages',
-            )).toBe('on');
+        it('is false when team hours are not configured — no note, ever', () => {
+            expect(service.isOutsideTeamHours(partial({ businessHoursOnly: false, ...CLOSED_AT_NOON }))).toBe(false);
         });
 
-        it('reads the comments switch for the comments channel', () => {
+        it('never affects gating: the channel stays enabled outside the window', () => {
+            const settings = partial({
+                messagesAutoReply: true,
+                commentsAutoReply: true,
+                businessHoursOnly: true,
+                ...CLOSED_AT_NOON,
+            });
+            // The regression this pins: the old model returned false here and
+            // silently muted DMs, comments AND Post Reply for the whole night.
+            expect(service.isOutsideTeamHours(settings)).toBe(true);
+            expect(service.isAutoReplyEnabledFromSettings(settings, 'messages')).toBe(true);
+            expect(service.isAutoReplyEnabledFromSettings(settings, 'comments')).toBe(true);
+        });
+
+        it('gating reads the per-channel master switches only', () => {
             const settings = partial({
                 messagesAutoReply: true,
                 commentsAutoReply: false,
                 businessHoursOnly: false,
             });
-            expect(service.autoReplyStateFromSettings(settings, 'comments')).toBe('off_master');
-            expect(service.autoReplyStateFromSettings(settings, 'messages')).toBe('on');
-        });
-
-        it('keeps isAutoReplyEnabledFromSettings equivalent to the old boolean logic', () => {
-            const cases: { messagesAutoReply: boolean; businessHoursOnly: boolean; hours: typeof ALWAYS_OPEN }[] = [
-                { messagesAutoReply: false, businessHoursOnly: false, hours: ALWAYS_OPEN },
-                { messagesAutoReply: false, businessHoursOnly: true, hours: ALWAYS_OPEN },
-                { messagesAutoReply: true, businessHoursOnly: false, hours: ALWAYS_CLOSED },
-                { messagesAutoReply: true, businessHoursOnly: true, hours: ALWAYS_OPEN },
-                { messagesAutoReply: true, businessHoursOnly: true, hours: ALWAYS_CLOSED },
-            ];
-
-            for (const { messagesAutoReply, businessHoursOnly, hours } of cases) {
-                const settings = partial({ messagesAutoReply, businessHoursOnly, ...hours });
-                // Only "on" is enabled — off_hours must NOT leak through as true,
-                // or comments/Post Reply would start replying at 3am.
-                expect(service.isAutoReplyEnabledFromSettings(settings, 'messages'))
-                    .toBe(service.autoReplyStateFromSettings(settings, 'messages') === 'on');
-            }
+            expect(service.isAutoReplyEnabledFromSettings(settings, 'messages')).toBe(true);
+            expect(service.isAutoReplyEnabledFromSettings(settings, 'comments')).toBe(false);
         });
     });
 

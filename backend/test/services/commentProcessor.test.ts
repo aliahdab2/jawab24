@@ -2948,7 +2948,10 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(result.success).toBe(true);
         });
 
-        it('respects business hours — no Post Reply outside the merchant schedule', async () => {
+        it('fires OUTSIDE team hours too — hours never gate Post Reply (D-035)', async () => {
+            // The regression this pins: hours used to silently kill keyword
+            // replies at night, though a Post Reply is the merchant's own
+            // prewritten text and carries none of the after-hours AI risk.
             vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
                 id: 'settings-uuid',
                 userId: 'user-uuid',
@@ -2960,8 +2963,6 @@ describe('CommentProcessor — template reply mode behavior', () => {
                 timezone: 'Asia/Damascus',
                 replyDelay: 0,
             } as any);
-            const { isWithinBusinessHours } = await import('../../src/utils/settingsHelpers');
-            vi.mocked(isWithinBusinessHours).mockReturnValueOnce(false); // outside hours
 
             const adapter = createMockAdapter({
                 findOrCreateContent: vi.fn().mockResolvedValue(keywordContent),
@@ -2971,8 +2972,8 @@ describe('CommentProcessor — template reply mode behavior', () => {
                 adapter, 'page-1', 'content-1', 'comment-1', 'code please', 'user-1', 'Ali',
             );
 
-            expect(adapter.sendReply).not.toHaveBeenCalled();
-            expect(result.success).toBe(false);
+            expect(adapter.sendReply).toHaveBeenCalled();
+            expect(result.success).toBe(true);
         });
 
         it('subscription gate still runs before Post Reply', async () => {

@@ -1,5 +1,5 @@
 {
-  "id": "87142ef6-77e0-4780-9930-a83f19b065ab",
+  "id": "8bb92c64-dd64-4c40-8dc9-44f8e9eba8b1",
   "prevId": "a7cf07aa-27b3-46bf-858c-ce13c973a784",
   "version": "5",
   "dialect": "pg",
@@ -5192,13 +5192,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'18:00'"
-        },
-        "after_hours_smart_reply": {
-          "name": "after_hours_smart_reply",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false,
-          "default": true
         },
         "timezone": {
           "name": "timezone",

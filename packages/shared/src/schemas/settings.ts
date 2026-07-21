@@ -37,7 +37,6 @@ export const UpdateSettingsSchema = z.object({
         .string()
         .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:MM)')
         .optional(),
-    afterHoursSmartReply: z.boolean().optional(),
     timezone: z
         .string()
         .max(100)

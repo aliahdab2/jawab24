@@ -57,10 +57,6 @@ FROM u, LATERAL (
   -- NULL and silently reports "no away message". Unwrap with #>>'{}' then re-cast.
   UNION ALL SELECT 'away_message_ar', left(((s.away_message_multi #>> '{}')::jsonb ->> 'ar'), 60) FROM settings s WHERE s.user_id = u.id
   UNION ALL SELECT 'greeting_enabled', s.greeting_message_enabled::text FROM settings s WHERE s.user_id = u.id
-  -- Read via to_jsonb(row) so this line works BOTH before and after the D-034
-  -- migration adds the column: a missing key yields NULL instead of erroring the
-  -- whole snapshot, which is what naming the column directly would do.
-  UNION ALL SELECT 'after_hours_smart_reply', (to_jsonb(s) ->> 'after_hours_smart_reply') FROM settings s WHERE s.user_id = u.id
 ) AS settings_rows
 
 UNION ALL
@@ -73,7 +69,6 @@ FROM u, workspace_members wm, workspaces w, LATERAL (
   UNION ALL SELECT 'business_hours_only', ((w.settings #>> '{}')::jsonb ->> 'businessHoursOnly')
   UNION ALL SELECT 'business_hours_start', ((w.settings #>> '{}')::jsonb ->> 'businessHoursStart')
   UNION ALL SELECT 'business_hours_end', ((w.settings #>> '{}')::jsonb ->> 'businessHoursEnd')
-  UNION ALL SELECT 'after_hours_smart_reply', ((w.settings #>> '{}')::jsonb ->> 'afterHoursSmartReply')
   UNION ALL SELECT 'timezone', ((w.settings #>> '{}')::jsonb ->> 'timezone')
   UNION ALL SELECT 'ai_model', ((w.settings #>> '{}')::jsonb ->> 'aiModel')
   UNION ALL SELECT 'comment_reply_mode', ((w.settings #>> '{}')::jsonb ->> 'commentReplyMode')

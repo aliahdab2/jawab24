@@ -1297,13 +1297,6 @@ export interface WorkspaceSettings {
   businessHoursOnly: boolean;
   businessHoursStart: string;
   businessHoursEnd: string;
-  /**
-   * D-034: outside business hours, still answer DMs with a Smart Reply (plus a
-   * "the team follows up during working hours" note) instead of going silent.
-   * Only consulted when `businessHoursOnly` is on; the `messagesAutoReply`
-   * master switch still wins, and comments/Post Reply are unaffected.
-   */
-  afterHoursSmartReply: boolean;
   timezone: string;
   greetingMessageMulti: Record<string, string>;
   /** When false, the configured greeting is never sent — AI handles the first message directly. */
