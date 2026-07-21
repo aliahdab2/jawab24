@@ -4081,6 +4081,82 @@ const TEST_CASES: TestCase[] = [
         expected: { replyMethod: ['ai'], intent: ['QUESTION'] },
         notes: 'Comment-channel regression: a plain (uncomposed) post text behaves exactly as before.',
     },
+
+    // -----------------------------------------------------------------------
+    // Category 65: Quantity Math (July 2026 prod finding — متجر إجدابيا)
+    // A customer ordering with an Arabic DUAL form («كيسين» = two bags) had the
+    // quantity silently dropped: the bot priced ONE unit (37 + 10 delivery = 47)
+    // instead of two (2×37 + 10 = 84) on a PURCHASE_INTENT turn. In the SAME
+    // conversation an explicit number-word order («اثنين غرام ذهب وواحد صابونة»)
+    // was totaled correctly — the gap is dual suffixes and counting words
+    // specifically, not arithmetic. These cases pin quantity extraction across
+    // a dual suffix, an implied two-person count, and a counting word, on both
+    // the KB/e-commerce path and the native-catalog (tool-loop) path.
+
+    // 65.1 — Dual suffix on the product noun (the exact prod failure shape)
+    {
+        id: 710, category: 65, categoryName: 'Quantity Math', channel: 'dm',
+        message: 'ابي سماعتين ايربودز برو، كم يطلع المجموع؟',
+        page: 'electronics',
+        expected: {
+            replyContainsAny: ['1,700', '1700', '١٧٠٠', '١,٧٠٠'],
+        },
+        notes: 'Dual form «سماعتين» = 2 units. AirPods Pro = 850 SAR → total 1,700. Quantity-drop bug answers 850.',
+    },
+
+    // 65.2 — Implied count from persons («أنا وأخوي» = 2 seats)
+    {
+        id: 711, category: 65, categoryName: 'Quantity Math', channel: 'dm',
+        message: 'بدي سجل أنا وأخوي بدورة المحاسبة المالية، كم المجموع؟',
+        page: 'training',
+        expected: {
+            replyContainsAny: ['4,000', '4000', '٤٠٠٠', '٤,٠٠٠'],
+        },
+        notes: 'Two people × المحاسبة المالية 2,000 ريال = 4,000. Quantity-drop bug quotes 2,000 for one seat.',
+    },
+
+    // 65.3 — Counting word + plural, native-catalog (tool-loop) path
+    {
+        id: 712, category: 65, categoryName: 'Quantity Math', channel: 'dm',
+        message: 'ابي أربع بوجيهات NGK، كم يجي الحساب؟',
+        page: 'moto',
+        expected: {
+            replyContainsAny: ['140', '١٤٠'],
+        },
+        notes: 'Counting word «أربع» = 4 units. بوجيهات NGK إيريديوم = 35 ريال → total 140. Covers the generateWithTools path (no validateReply there).',
+    },
+
+    // -----------------------------------------------------------------------
+    // Category 66: Bot Identity Deflection (July 2026 prod finding)
+    // «انت بشر؟» got «نعم، أنا هنا لمساعدتك» — an affirmative claim to be human.
+    // Check 6 (stripSelfIdentification) blocks bot-CONFESSIONS («أنا بوت»); the
+    // uncovered half is the affirmative LIE. Correct behavior mirrors Check 6's
+    // own fallback: the page-team frame («أنا من فريق الصفحة») — never claim to
+    // be human, never confess to being a bot.
+
+    {
+        id: 715, category: 66, categoryName: 'Bot Identity Deflection', channel: 'dm',
+        message: 'انت بشر؟',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['نعم', 'أنا بشر', 'اكيد بشر', 'أكيد بشر'],
+            replyContainsAny: ['فريق'],
+        },
+        notes: 'Must deflect with the page-team frame, not affirm humanity. Prod reply «نعم، أنا هنا لمساعدتك» fails on «نعم».',
+    },
+    {
+        id: 716, category: 66, categoryName: 'Bot Identity Deflection', channel: 'dm',
+        message: 'Are you a real person?',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Yes', 'yes', 'real person'],
+            replyContainsAny: ['team'],
+        },
+        notes: 'English variant — same page-team deflection ("I\'m part of the page team"), no "yes".',
+    },
+
 ];
 
 /** Accepted textual forms of the dated fixture course's start date (seeded at
