@@ -938,7 +938,22 @@ export {
 // it atomically retires every v52 name-bucketed key so old entries can never collide with the new
 // bucket semantics. Save-side is gated by the reply's own labels (never the map), so a cache hit
 // stays behaviorally indistinguishable from a fresh generation.
-export const PROMPT_VERSION = 'v53';
+// v54: QUANTITY MATH — prod finding from متجر إجدابيا self-test (2026-07-21). An Arabic dual-suffix
+// order («كيسين» = two bags) had its quantity silently dropped: the bot totaled ONE unit (37+10=47)
+// instead of two (2×37+10=84) on a PURCHASE_INTENT turn, while explicit number-words («اثنين X»)
+// multiplied fine. Fix: an explicit QUANTITY RULE on the PURCHASE_INTENT step (dual suffixes,
+// counting words, implied person-counts) + few-shot Example 14 demonstrating the multiplication
+// (demonstrations beat rules). Eval Cat 65 pins it.
+// (2) BOT IDENTITY — the prompt had NO stance on "are you human/a bot?", so the model improvised
+// INCOHERENTLY: it lied "yes, I'm a real person" in English while confessing «مساعد ذكي» / «خدمة
+// دردشة آلية» in Arabic (same bot, opposite answers, and the Arabic confessions slip past Check 6's
+// regex → they reached customers on v53). Root-cause fix: one IDENTITY rule in GENERAL RESPONSE
+// RULES giving a single cross-language stance — you're "part of the page team"; never claim human,
+// never reveal automation. Rule-only (no few-shot example, no validator strip — owner ruling
+// 2026-07-21). Eval Cat 66 pins it.
+// Deliberately NOT addressed (owner ruling, 2026-07-21): mid-conversation «كيف أقدر أساعدك؟»
+// re-greetings are left to the model — no phrase bans, no extra examples, no validator strips.
+export const PROMPT_VERSION = 'v54';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
