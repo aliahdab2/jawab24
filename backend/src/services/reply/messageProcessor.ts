@@ -8,6 +8,7 @@ import { isOpenerMessage } from './openerPatterns';
 import { detectTemplateLanguage } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
+import { redis } from '../../lib/redis';
 import * as typingIndicator from './typingIndicator';
 import { computeHumanDelayMs } from './humanDelay';
 import { Logger, noopLogger } from '../../types';
@@ -43,6 +44,11 @@ import { extractPostId } from '../../utils/instagram';
  *  better no context than stale context. Pre-existing comments on old posts
  *  have the same issue and are out of scope for this pass. */
 const MAX_ORIGIN_POST_AGE_MS = 60 * 24 * 60 * 60 * 1000;
+
+/** One away-message acknowledgment per sender per 24h. Matches Meta's 24h
+ *  messaging window: within one window the customer needs telling once that
+ *  nobody is home, and the merchant can still reply to that same conversation. */
+const AWAY_MESSAGE_COOLDOWN_SECONDS = 24 * 60 * 60;
 
 /** Cap for the origin POST text inside the composed [current_post] context. The merchant's
  *  Post Reply is appended AFTER the post text (uncapped — product-limited to 1000 chars), so
@@ -360,13 +366,20 @@ export class MessageProcessor {
             if (!isMessagesEnabled) {
                 const customerLang = detectTemplateLanguage(messageText);
                 const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);
-                // Only send the away message on the customer's very first incoming message.
-                // The webhook controller pre-stores the message (see webhook.ts
-                // findOrCreateFromWebhook), so by the time the worker runs `isNew` is
-                // always false here — gating on it suppressed the away message entirely.
-                // Use isFirstIncomingMessage instead: count = 1 right after store → true
-                // exactly once per sender, preventing spam on repeat messages.
-                if (awayMessage && await messagesService.isFirstIncomingMessage(page.id, senderId)) {
+                // Send at most once per sender per 24h — NOT once per lifetime.
+                //
+                // History: gating on `isNew` suppressed the away message entirely (the
+                // webhook controller pre-stores the message, so `isNew` is always false
+                // by the time the worker runs). The fix used `isFirstIncomingMessage`,
+                // which overcorrected into "once per customer, ever": a customer who
+                // wrote months ago and writes again tonight gets NOTHING — no smart
+                // reply (hours are off) and no acknowledgment either. That is how a
+                // live merchant's returning customers went completely unanswered.
+                //
+                // A 24h window matches Meta's messaging window: within one window the
+                // customer is told once, and the merchant can still reply to that same
+                // conversation.
+                if (awayMessage && await this.shouldSendAwayMessage(page.id, senderId)) {
                     try {
                         await adapter.sendAwayMessage(page, senderId, awayMessage);
                         await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, awayMessage, 'template');
@@ -1035,6 +1048,25 @@ export class MessageProcessor {
 
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Away-message cooldown: true when this sender has not been sent one within
+     * the last `AWAY_MESSAGE_COOLDOWN_SECONDS`.
+     *
+     * On a Redis outage we send anyway — an occasional duplicate acknowledgment
+     * is a far smaller failure than silence (same trade-off as the non-text
+     * nudge cooldown in nonTextHandler.sendNudge).
+     */
+    private async shouldSendAwayMessage(pageId: string, senderId: string): Promise<boolean> {
+        try {
+            const acquired = await redis.set(
+                `away_msg:${pageId}:${senderId}`, '1', 'EX', AWAY_MESSAGE_COOLDOWN_SECONDS, 'NX',
+            );
+            return acquired !== null;
+        } catch {
+            return true;
+        }
     }
 
     /**

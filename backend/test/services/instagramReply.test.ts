@@ -175,6 +175,20 @@ vi.mock('../../src/lib/pipelineMetrics', () => ({
     },
     PipelineMetrics: class {},
 }));
+// The away-message cooldown is a Redis SET NX. Without this mock the suite talks
+// to whatever Redis the dev machine happens to have running, so the cooldown key
+// survives between runs and the assertion fails on the second run only.
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue('OK'),
+        del: vi.fn().mockResolvedValue(1),
+        incr: vi.fn(),
+        expire: vi.fn(),
+        quit: vi.fn(),
+    },
+}));
+
 vi.mock('../../src/lib/replyLock', () => ({
     acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
     releaseReplyLock: vi.fn().mockResolvedValue(undefined),

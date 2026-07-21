@@ -1723,7 +1723,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: false, replyDelay: 0,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(redis.set).mockResolvedValue('OK');
         vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are away — back soon!');
 
         const adapter = webhookPreStoredAdapter();
@@ -1739,13 +1739,14 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         );
     });
 
-    it('does NOT spam away message on subsequent messages from the same sender', async () => {
+    it('does NOT spam the away message while the 24h cooldown is still held', async () => {
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: false, replyDelay: 0,
         } as any);
-        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        // SET NX returns null when the key exists → already acknowledged this window.
+        vi.mocked(redis.set).mockResolvedValue(null);
         vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are away — back soon!');
 
         const adapter = webhookPreStoredAdapter();
@@ -1755,6 +1756,49 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         );
 
         expect(adapter.sendAwayMessage).not.toHaveBeenCalled();
+    });
+
+    // The bug this replaces: the gate was `isFirstIncomingMessage`, i.e. once per
+    // LIFETIME. A customer who had written before got no smart reply (schedule off)
+    // AND no acknowledgment — total silence, every night after the first.
+    it('acknowledges a RETURNING customer once the 24h window has expired', async () => {
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: false, replyDelay: 0,
+        } as any);
+        // Not their first message ever — under the old gate this sent nothing.
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(redis.set).mockResolvedValue('OK');
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are away — back soon!');
+
+        const adapter = webhookPreStoredAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'are you open?', 'msg-3',
+        );
+
+        expect(adapter.sendAwayMessage).toHaveBeenCalledWith(
+            expect.anything(), 'sender-1', 'We are away — back soon!',
+        );
+    });
+
+    it('still acknowledges when Redis is unavailable (a duplicate beats silence)', async () => {
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: false, replyDelay: 0,
+        } as any);
+        vi.mocked(redis.set).mockRejectedValue(new Error('redis down'));
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are away — back soon!');
+
+        const adapter = webhookPreStoredAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'hello?', 'msg-4',
+        );
+
+        expect(adapter.sendAwayMessage).toHaveBeenCalled();
     });
 });
 

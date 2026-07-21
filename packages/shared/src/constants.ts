@@ -80,6 +80,18 @@ export const MAX_BRAND_VOICE_LENGTH = 800;
 export const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
 
 /**
+ * Placeholder timezone a settings row carries until the merchant sets a real one.
+ *
+ * NOT a sensible guess — no global default can be — which is why the business-hours
+ * card seeds the merchant's detected zone the moment they switch hours on, and why
+ * any code comparing against this value is asking "has this ever been set?" rather
+ * than "where is this merchant?". Must stay identical to the `settings.timezone`
+ * column default (backend/src/db/schema.ts) and the workspace-JSONB read default,
+ * otherwise a row and its workspace disagree about when a merchant's day starts.
+ */
+export const PLACEHOLDER_TIMEZONE = 'Asia/Riyadh';
+
+/**
  * Per-customer model overrides are validated against this allowlist before
  * being applied. Backend's `aiModelResolver` falls back to `DEFAULT_AI_MODEL`
  * for any value not in this set, so a typo in the `settings.ai_model` DB

@@ -104,17 +104,20 @@
   "dualReplyVariationsHint": "Variations with the same meaning are generated automatically to keep replies fresh",
   "publicReplyPlaceholder": "Details sent in a private message 📩",
   "preview": "Preview",
-  "businessHoursDesc": "Auto-reply during work hours, send away message outside",
+  "businessHoursDesc": "The hours Jawab24 replies automatically — these are not your business hours",
   "businessHours": {
-    "statusActive": "Active",
-    "statusInactive": "Outside Hours",
-    "duringLabel": "During Hours",
-    "outsideLabel": "Outside Hours",
-    "autoReplyActive": "Auto-Reply Active",
-    "awayMessage": "Away Message",
-    "flowDesc": "Auto-reply is active during business hours. Outside these hours, an away message is sent.",
-    "custom": "Custom",
-    "resumesAt": "Resumes at {time}"
+    "statusActive": "Replying now",
+    "statusInactive": "Paused — outside schedule",
+    "autoReplyActive": "All auto-replies on",
+    "awayMessage": "Auto-replies paused",
+    "resumesAt": "Resumes at {time}",
+    "info": "This schedule controls JAWAB24, not your shop. Inside these hours Jawab24 replies automatically: Smart Replies on messages and comments, and Post Reply. Outside them all of it stops — private messages get your away message, while comments and Post Reply get no reply at all. Your shop's real opening hours belong in each page's Business Info, and Jawab24 quotes them from there when customers ask.",
+    "timezone": "Timezone",
+    "timezoneSearch": "Search for a city or country…",
+    "timezoneNoResults": "No matching timezone",
+    "localTimeNow": "Your local time now: {time}",
+    "useDetectedTimezone": "Use this device's timezone ({timezone})",
+    "timezoneInfo": "The schedule above is evaluated in this timezone, not on your device's clock. If it is wrong, your hours silently shift: a 09:00–18:00 schedule set in the wrong zone can start and end an hour early. Set it to where your business actually operates."
   },
   "businessHoursStart": "From",
   "businessHoursEnd": "To",
@@ -171,8 +174,9 @@
     "enabledDescription": "When off, the AI handles the first message directly"
   },
   "awayMessage": {
-    "title": "After-Hours Message",
-    "desc": "Sent when customers message outside business hours"
+    "title": "Away Message",
+    "desc": "Sent for private messages only, once per customer per 24 hours",
+    "info": "Sent only when a customer sends a PRIVATE MESSAGE while Jawab24's replies are paused — either outside the schedule above, or when Smart Replies for messages are switched off. It is sent at most once per customer every 24 hours, so a long conversation never gets it repeatedly. Comments and Post Reply receive no reply at all while paused — the away message is for private messages only."
   },
   "subsectionCustomReplies": "Customer-facing replies",
   "limitFallbackMessage": {
@@ -191,7 +195,7 @@
   "translationFailed": "Translation failed. Please try again.",
   "bilingualTip": "💡 Tip: Write in one language, then auto-translate to reach all customers",
   "awayMessageLabel": "Away Message",
-  "businessHoursLabel": "Business Hours & Away Mode",
+  "businessHoursLabel": "Jawab24 Reply Schedule",
   "businessHoursErrorMsg": "End time must be after start time",
   "greetingMessageLabel": "Welcome Message",
   "replyDelayLabel": "Reply Delay",
