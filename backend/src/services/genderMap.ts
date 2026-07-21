@@ -38,6 +38,16 @@ export const MIN_MAJORITY_RATIO = 0.9;
 const OBSERVATION_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 /**
+ * First whitespace token of a sender's display name ('' when none) — the
+ * "first name" every name-derived bucket keys on (exact-cache name/neutral
+ * guards in ai.ts and the learning map below). One definition so the buckets
+ * can never drift on what counts as the first name.
+ */
+export function firstNameOf(senderName: string): string {
+    return senderName.trim().split(/\s+/)[0] ?? '';
+}
+
+/**
  * Hash a sender's first name into the map key segment. Mirrors the cache-key
  * name bucket (first whitespace token) but additionally normalizes Arabic
  * (alef variants, tatweel, digits) and lowercases, so trivially-different
@@ -45,7 +55,7 @@ const OBSERVATION_TTL_SECONDS = 90 * 24 * 60 * 60;
  * there's no usable token.
  */
 export function genderNameKeyHash(senderName: string): string | null {
-    const firstToken = senderName.trim().split(/\s+/)[0];
+    const firstToken = firstNameOf(senderName);
     if (!firstToken) return null;
     const normalized = normalizeArabic(firstToken).toLowerCase();
     if (!normalized) return null;

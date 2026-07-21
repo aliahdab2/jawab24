@@ -96,6 +96,7 @@ vi.mock('../../src/config', () => ({
             cacheEnabled: true,
             semanticCacheEnabled: true,
             genderBucketEnabled: true,
+            neutralBucketEnabled: true,
             serviceUrl: 'http://localhost:3002',
             defaultModel: 'gpt-4-mini',
             model: 'gpt-4.1-mini',
@@ -108,7 +109,10 @@ vi.mock('../../src/config', () => ({
 // Mock the v53 name→gender consensus map — default "unknown name" (null) so every
 // pre-existing test keeps the v51 per-name bucketing behavior. The gender-bucket
 // describe overrides per test. The real module has its own unit tests.
-vi.mock('../../src/services/genderMap', () => ({
+vi.mock('../../src/services/genderMap', async (importOriginal) => ({
+    // Keep the real pure helpers (firstNameOf — buildCacheKey and the save
+    // guards depend on it); mock only the Redis-backed map functions.
+    ...(await importOriginal<typeof import('../../src/services/genderMap')>()),
     getConfidentGender: vi.fn().mockResolvedValue(null),
     recordGenderObservation: vi.fn().mockResolvedValue(undefined),
 }));
@@ -1081,6 +1085,35 @@ describe('AI Service', () => {
         });
     });
 
+    /**
+     * Run one DM generation (cache miss + stubbed worker) and return every
+     * exact-cache GET key in probe order plus the exact-cache key written.
+     * Shared by the v53 gender-bucket and g:n neutral-bucket suites.
+     */
+    async function dmProbeAndSave(
+        context: Record<string, unknown>,
+        workerData: Record<string, unknown>,
+    ): Promise<{ getKeys: string[]; savedKey: string | undefined }> {
+        const { redis } = await import('../../src/lib/redis');
+        vi.mocked(redis.get).mockClear();
+        vi.mocked(redis.set).mockClear();
+        vi.mocked(redis.incr).mockClear();
+        vi.mocked(redis.get).mockResolvedValue(null);
+        vi.mocked(axios.post).mockResolvedValue({ data: workerData });
+        await service.generateReply({
+            comment: 'كم السعر',
+            language: 'ar',
+            context: { channel: 'dm', pipeline: 'dm_reply', ...context },
+        });
+        const getKeys = vi.mocked(redis.get).mock.calls
+            .map(call => call[0] as string)
+            .filter(key => key.startsWith('cache:ai_reply:'));
+        const savedKey = vi.mocked(redis.set).mock.calls
+            .map(call => call[0] as string)
+            .find(key => key.startsWith('cache:ai_reply:'));
+        return { getKeys, savedKey };
+    }
+
     describe('generateReply - DM gender-bucketed exact cache (v53)', () => {
         // v51 bucketed DM cache keys per first name (correct but zero cross-sender
         // sharing). v53 buckets confidently-learned names by gender instead. These
@@ -1105,26 +1138,13 @@ describe('AI Service', () => {
             return vi.mocked(redis.get).mock.calls[0][0] as string;
         }
 
-        /** Run one DM generation and return the key read vs the key written. */
+        /** Run one DM generation and return the (specific) key read vs the key written. */
         async function dmReadAndSaveKeys(
             senderName: string,
             workerData: Record<string, unknown>,
         ): Promise<{ readKey: string; savedKey: string | undefined }> {
-            const { redis } = await import('../../src/lib/redis');
-            vi.mocked(redis.get).mockClear();
-            vi.mocked(redis.set).mockClear();
-            vi.mocked(redis.get).mockResolvedValue(null);
-            vi.mocked(axios.post).mockResolvedValue({ data: workerData });
-            await service.generateReply({
-                comment: 'كم السعر',
-                language: 'ar',
-                context: { channel: 'dm', senderName, pipeline: 'dm_reply' },
-            });
-            const readKey = vi.mocked(redis.get).mock.calls[0][0] as string;
-            const savedKey = vi.mocked(redis.set).mock.calls
-                .map(call => call[0] as string)
-                .find(key => key.startsWith('cache:ai_reply:'));
-            return { readKey, savedKey };
+            const { getKeys, savedKey } = await dmProbeAndSave({ senderName }, workerData);
+            return { readKey: getKeys[0], savedKey };
         }
 
         beforeEach(async () => {
@@ -1193,14 +1213,36 @@ describe('AI Service', () => {
                 expect(redis.incr).toHaveBeenCalledWith('metrics:cache:gender_bucket:save_ok');
             });
 
-            it('a gender-neutral reply (gender unknown) also saves to the gender bucket', async () => {
+            it('a gender-neutral reply (gender unknown) saves to the g:n neutral bucket, not the gender bucket', async () => {
                 const { getConfidentGender } = await import('../../src/services/genderMap');
+                const { redis } = await import('../../src/lib/redis');
                 vi.mocked(getConfidentGender).mockResolvedValue('m');
                 const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
                     reply: 'السعر 50 ريال', language: 'ar',
                     gender: 'unknown', genderBasis: 'unclear', usedName: false,
                 });
-                expect(savedKey).toBe(readKey);
+                // g:n wins over g:m in buildCacheKey — strictly more sharing for a
+                // reply certified safe for every sender, not just one gender.
+                expect(savedKey).toBeDefined();
+                expect(savedKey).not.toBe(readKey);
+                expect(redis.incr).toHaveBeenCalledWith('metrics:cache:neutral_bucket:save_ok');
+                expect(redis.incr).not.toHaveBeenCalledWith('metrics:cache:gender_bucket:save_ok');
+            });
+
+            it('with the neutral bucket disabled, a gender-neutral reply keeps the v53 behavior (saves to the gender bucket)', async () => {
+                const { getConfidentGender } = await import('../../src/services/genderMap');
+                const { config } = await import('../../src/config');
+                vi.mocked(getConfidentGender).mockResolvedValue('m');
+                config.ai.neutralBucketEnabled = false;
+                try {
+                    const { readKey, savedKey } = await dmReadAndSaveKeys('أحمد', {
+                        reply: 'السعر 50 ريال', language: 'ar',
+                        gender: 'unknown', genderBasis: 'unclear', usedName: false,
+                    });
+                    expect(savedKey).toBe(readKey);
+                } finally {
+                    config.ai.neutralBucketEnabled = true;
+                }
             });
 
             it('model-reported name use downgrades the save to the per-name bucket', async () => {
@@ -1291,6 +1333,150 @@ describe('AI Service', () => {
                 );
                 expect(recordGenderObservation).not.toHaveBeenCalled();
             });
+        });
+    });
+
+    describe('generateReply - DM neutral shared bucket (g:n)', () => {
+        // A reply the model certifies genderless (gender: 'unknown') and name-free
+        // is safe for EVERY sender, so it saves under a distinct g:n segment shared
+        // across all names — no gender-map warm-up needed. These tests pin: cross-name
+        // sharing via g:n, the g:n ≠ bare-nameless-key isolation (legacy nameless
+        // entries are uncertified and must never leak to named senders), specific-first
+        // probe order, every save-guard rejection reason, and the kill-switch.
+
+        /** A worker response certified safe for the neutral bucket. */
+        const neutralJudgment = {
+            reply: 'السعر 50 ريال، متوفر', language: 'ar',
+            gender: 'unknown', genderBasis: 'unclear', usedName: false,
+        };
+
+        beforeEach(async () => {
+            const { getConfidentGender } = await import('../../src/services/genderMap');
+            vi.mocked(getConfidentGender).mockResolvedValue(null);
+        });
+
+        it('two differently-named senders share one g:n save key, distinct from per-name, gender-bucket, AND bare nameless keys', async () => {
+            const { getConfidentGender } = await import('../../src/services/genderMap');
+            const ahmad = await dmProbeAndSave({ senderName: 'أحمد' }, neutralJudgment);
+            const mohammad = await dmProbeAndSave({ senderName: 'محمد' }, neutralJudgment);
+            // The whole point: identical shared save key across names.
+            expect(ahmad.savedKey).toBeDefined();
+            expect(ahmad.savedKey).toBe(mohammad.savedKey);
+            // Distinct from both senders' per-name keys (first probe each).
+            expect(ahmad.savedKey).not.toBe(ahmad.getKeys[0]);
+            expect(ahmad.savedKey).not.toBe(mohammad.getKeys[0]);
+            // Distinct from the gender-bucket key for the same message.
+            vi.mocked(getConfidentGender).mockResolvedValue('m');
+            const bucketed = await dmProbeAndSave({ senderName: 'أحمد' }, { ...neutralJudgment, gender: 'm', genderBasis: 'name' });
+            expect(ahmad.savedKey).not.toBe(bucketed.getKeys[0]);
+            vi.mocked(getConfidentGender).mockResolvedValue(null);
+            // Distinct from the bare nameless-DM key: legacy nameless entries carry no
+            // gender certification and must never be served to named senders.
+            const nameless = await dmProbeAndSave({}, neutralJudgment);
+            expect(ahmad.savedKey).not.toBe(nameless.getKeys[0]);
+        });
+
+        it('round trip: a neutral entry saved for one sender is served from cache to a differently-named sender', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { savedKey } = await dmProbeAndSave({ senderName: 'أحمد' }, neutralJudgment);
+            const savedData = vi.mocked(redis.set).mock.calls
+                .find(call => (call[0] as string) === savedKey)?.[1] as string;
+            expect(savedData).toBeDefined();
+
+            vi.mocked(redis.get).mockClear();
+            vi.mocked(redis.incr).mockClear();
+            vi.mocked(axios.post).mockClear();
+            vi.mocked(redis.get).mockImplementation(async (key: string) => (key === savedKey ? savedData : null));
+            const result = await service.generateReply({
+                comment: 'كم السعر',
+                language: 'ar',
+                context: { channel: 'dm', senderName: 'فاطمة', pipeline: 'dm_reply' },
+            });
+            expect(result.cached).toBe(true);
+            expect(result.reply).toBe(neutralJudgment.reply);
+            expect(axios.post).not.toHaveBeenCalled();
+            // Specific (per-name) probe missed first, then the neutral probe hit.
+            const getKeys = vi.mocked(redis.get).mock.calls
+                .map(call => call[0] as string)
+                .filter(key => key.startsWith('cache:ai_reply:'));
+            expect(getKeys).toHaveLength(2);
+            expect(getKeys[1]).toBe(savedKey);
+            expect(redis.incr).toHaveBeenCalledWith('metrics:cache:neutral_bucket:hit');
+        });
+
+        it('a specific-bucket hit short-circuits — the neutral bucket is never probed', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockClear();
+            vi.mocked(axios.post).mockClear();
+            vi.mocked(redis.get).mockResolvedValueOnce(JSON.stringify({ reply: 'أهلاً بك! السعر 50' }));
+            const result = await service.generateReply({
+                comment: 'كم السعر',
+                language: 'ar',
+                context: { channel: 'dm', senderName: 'أحمد', pipeline: 'dm_reply' },
+            });
+            expect(result.cached).toBe(true);
+            const getKeys = vi.mocked(redis.get).mock.calls
+                .map(call => call[0] as string)
+                .filter(key => key.startsWith('cache:ai_reply:'));
+            expect(getKeys).toHaveLength(1);
+            expect(axios.post).not.toHaveBeenCalled();
+        });
+
+        describe('save-guard rejections (each reason downgrades to the per-name/gender path)', () => {
+            async function expectReject(
+                workerData: Record<string, unknown>,
+                reason: string,
+            ): Promise<void> {
+                const { redis } = await import('../../src/lib/redis');
+                const { getKeys, savedKey } = await dmProbeAndSave({ senderName: 'أحمد' }, workerData);
+                // Saved to the specific (per-name) key it read, not a shared one.
+                expect(savedKey).toBe(getKeys[0]);
+                expect(redis.incr).toHaveBeenCalledWith(`metrics:cache:neutral_bucket:save_reject:${reason}`);
+                expect(redis.incr).not.toHaveBeenCalledWith('metrics:cache:neutral_bucket:save_ok');
+            }
+
+            it('gendered reply (model reports m) → gendered', async () => {
+                await expectReject({ ...neutralJudgment, gender: 'm', genderBasis: 'name' }, 'gendered');
+            });
+
+            it('model-reported name use → used_name', async () => {
+                await expectReject({ ...neutralJudgment, usedName: true }, 'used_name');
+            });
+
+            it('reply literally embedding the first name (alef variant) → name_substring', async () => {
+                await expectReject({ ...neutralJudgment, reply: 'أهلاً احمد! السعر 50 ريال', usedName: false }, 'name_substring');
+            });
+
+            it('missing v53 fields (old worker / failover) → not_reported', async () => {
+                await expectReject({ reply: 'السعر 50 ريال', language: 'ar' }, 'not_reported');
+            });
+        });
+
+        it('kill-switch off → single probe, no neutral save, v51/v53 behavior byte-identical', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const { config } = await import('../../src/config');
+            config.ai.neutralBucketEnabled = false;
+            try {
+                const { getKeys, savedKey } = await dmProbeAndSave({ senderName: 'أحمد' }, neutralJudgment);
+                expect(getKeys).toHaveLength(1);
+                expect(savedKey).toBe(getKeys[0]);
+                const neutralCalls = vi.mocked(redis.incr).mock.calls
+                    .filter(call => (call[0] as string).startsWith('metrics:cache:neutral_bucket:'));
+                expect(neutralCalls).toHaveLength(0);
+            } finally {
+                config.ai.neutralBucketEnabled = true;
+            }
+        });
+
+        it('blast radius: comments and nameless DMs keep a single probe and their existing keys', async () => {
+            const comment = await dmProbeAndSave({ channel: 'comment', senderName: 'أحمد' }, neutralJudgment);
+            expect(comment.getKeys).toHaveLength(1);
+            expect(comment.savedKey).toBe(comment.getKeys[0]);
+            const nameless = await dmProbeAndSave({}, neutralJudgment);
+            expect(nameless.getKeys).toHaveLength(1);
+            expect(nameless.savedKey).toBe(nameless.getKeys[0]);
+            // A comment and a nameless DM share the bare key (pre-existing behavior).
+            expect(comment.getKeys[0]).toBe(nameless.getKeys[0]);
         });
     });
 });

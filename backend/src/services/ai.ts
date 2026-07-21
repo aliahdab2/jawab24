@@ -17,7 +17,7 @@ import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
 import { classifyFallbackIntent } from './reply/fallbackClassifier';
 import { getModelForUser } from './aiModelResolver';
-import { getConfidentGender, recordGenderObservation } from './genderMap';
+import { getConfidentGender, recordGenderObservation, firstNameOf } from './genderMap';
 import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError, AiQuotaExhaustedError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
 import { emailService } from './email';
@@ -85,6 +85,17 @@ interface CacheContext {
      * per-name bucket (unknown/ambiguous name, kill-switch off, or Redis down).
      */
     genderBucket?: 'm' | 'f' | null;
+    /**
+     * Neutral shared DM bucket (g:n). Set on a READ to probe the shared bucket
+     * (after the specific gender/name probe misses), and on a SAVE when the
+     * reply's own labels certify it is genderless AND name-free (see the
+     * neutral-eligibility guard in generateReply) — such a reply is safe to
+     * serve to ANY sender, so it shares one bucket across all names with zero
+     * map warm-up. Takes precedence over genderBucket in buildCacheKey. A
+     * distinct segment (not the bare nameless-DM key) so uncertified legacy
+     * nameless entries can never leak to named senders.
+     */
+    neutralBucket?: boolean;
 }
 
 /** Shape returned by a successful exact-cache hit. */
@@ -215,15 +226,19 @@ export class AiService {
         // key, so bucket + exact text pins the gender decision deterministically).
         // First whitespace token, hashed. Comments and nameless DMs skip this, so
         // their keys — and the high-volume comment cache — stay byte-identical.
+        // Precedence: neutral shared bucket (g:n, reply certified genderless +
+        // name-free) → gender bucket (g:m/g:f) → per-name hash.
         if (ctx.channel === 'dm' && ctx.senderName) {
-            if (ctx.genderBucket) {
+            if (ctx.neutralBucket) {
+                key.push('g:n');
+            } else if (ctx.genderBucket) {
                 key.push(`g:${ctx.genderBucket}`);
             } else {
                 // 16 hex chars (64 bits), widened from v51's 8: two different names
                 // colliding into one bucket would share gendered replies across names —
                 // at 32 bits that reaches ~50% probability around 77k distinct names.
                 // Widening is free in v53 (the pv: bump retires every old key anyway).
-                const firstName = ctx.senderName.trim().split(/\s+/)[0];
+                const firstName = firstNameOf(ctx.senderName);
                 if (firstName) key.push(`n:${crypto.createHash('md5').update(firstName).digest('hex').slice(0, 16)}`);
             }
         }
@@ -437,7 +452,17 @@ export class AiService {
 
         // Layer 1: Exact cache (scoped per page + KB version + post context + model)
         if (!hasConversationHistory && !bypassAllCaches) {
-            const cachedData = await this.checkCache(request.comment, cacheCtx);
+            // Most-specific probe first (gender/name bucket — a warmer, personalized
+            // entry wins over a blander shared one), then the g:n neutral shared
+            // bucket for named DMs. Exactly two probes max; comments and nameless
+            // DMs keep a single probe (their key has no gender/name segment).
+            let cachedData = await this.checkCache(request.comment, cacheCtx);
+            if (!cachedData && config.ai.neutralBucketEnabled && cacheCtx.channel === 'dm' && cacheCtx.senderName) {
+                cachedData = await this.checkCache(request.comment, { ...cacheCtx, neutralBucket: true });
+                // Prod-visible adoption counter (same fire-and-forget pattern as the
+                // gender-bucket counters). Counts served hits, not probes.
+                if (cachedData) redis.incr('metrics:cache:neutral_bucket:hit').catch(() => {});
+            }
             if (cachedData) {
                 // Fire-and-forget: log zero-cost cache hit under the workspace's resolved model.
                 if (userId) {
@@ -614,21 +639,59 @@ export class AiService {
             // Eval pipeline never writes to cache (see `bypassAllCaches` above).
             const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
 
+            // Shared by both save guards below: does the reply literally embed the
+            // customer's first name (normalized, any alef variant)? Belt-and-braces
+            // on top of the model-reported `usedName` — "أهلاً فاطمة" must never
+            // reach another sender.
+            const firstName = senderName ? firstNameOf(senderName) : '';
+            const replyEmbedsName = firstName.length > 0 &&
+                normalizeArabic(aiReply).toLowerCase().includes(normalizeArabic(firstName).toLowerCase());
+
+            // Neutral (g:n) save guard — evaluated BEFORE the gender-bucket guard and
+            // independent of it (no map needed, works even with the gender bucket
+            // off). A reply may enter the fully-shared bucket ONLY when its own
+            // labels certify it: the model reports it used NO gendered forms
+            // (`gender: 'unknown'` — the high-volume «كم السعر / متوفر؟» inventory
+            // answers) and no name (strict `usedName === false`, so old-worker /
+            // failover responses without the v53 fields fail closed), plus the
+            // name-substring belt above. The labels are the certification (D-030's
+            // trust model — same labels the g:m/g:f guard already relies on); no
+            // reply-text gender inspection, which D-030 ruled cannot certify
+            // neutrality (masculine Arabic is unmarked). The reject-reason split vs
+            // save_ok sizes the genderless slice — THE metric that decides how much
+            // sharing this bucket can ever recover.
+            let neutralEligible = false;
+            if (config.ai.neutralBucketEnabled && cacheCtx.channel === 'dm' && senderName) {
+                neutralEligible =
+                    response.data.gender === 'unknown' &&
+                    response.data.usedName === false &&
+                    !replyEmbedsName;
+                if (neutralEligible) {
+                    saveCacheCtx.neutralBucket = true;
+                    redis.incr('metrics:cache:neutral_bucket:save_ok').catch(() => {});
+                } else {
+                    // One reason label, first tripped guard wins (mirrors the
+                    // gender-bucket downgrade counters).
+                    const reason = response.data.gender === undefined ? 'not_reported'
+                        : response.data.gender !== 'unknown' ? 'gendered'
+                            : response.data.usedName !== false ? 'used_name'
+                                : 'name_substring';
+                    redis.incr(`metrics:cache:neutral_bucket:save_reject:${reason}`).catch(() => {});
+                }
+            }
+
             // v53 save guard: a reply may land in the shared gender bucket ONLY when
             // the reply's OWN labels prove it's safe there — never the map alone:
             //   1. it does not embed the customer's name in any script (model-reported
-            //      `usedName`, plus a normalized-substring check as belt-and-braces —
+            //      `usedName`, plus the normalized-substring check above —
             //      "أهلاً فاطمة" must never reach another sender), and
             //   2. the gender it addresses matches the bucket, or it used no gendered
-            //      forms at all (`unknown` — e.g. "كم السعر" answers, the high-volume
-            //      shared inventory).
+            //      forms at all (`unknown` — though that case now takes the g:n
+            //      neutral bucket above when enabled, which wins in buildCacheKey).
             // Anything else downgrades the SAVE to the per-name bucket; the read side
             // keeps using the gender bucket, so a downgraded entry just means one
             // regeneration next time instead of a wrong reply ever being shared.
-            if (saveCacheCtx.genderBucket && senderName) {
-                const firstName = senderName.trim().split(/\s+/)[0] ?? '';
-                const replyEmbedsName = firstName.length > 0 &&
-                    normalizeArabic(aiReply).toLowerCase().includes(normalizeArabic(firstName).toLowerCase());
+            if (!neutralEligible && saveCacheCtx.genderBucket && senderName) {
                 const genderSafe = response.data.gender === saveCacheCtx.genderBucket
                     || response.data.gender === 'unknown';
                 if (response.data.usedName !== false || replyEmbedsName || !genderSafe) {
