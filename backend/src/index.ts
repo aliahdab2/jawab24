@@ -18,6 +18,7 @@ import webhookRoutes from "./routes/webhook";
 import aiRoutes from "./routes/ai";
 import pagesRoutes from "./routes/pages";
 import postsRoutes from "./routes/posts";
+import postReplyImageRoutes from "./routes/postReplyImage";
 import commentsRoutes from "./routes/comments";
 import settingsRoutes from "./routes/settings";
 import messagesRoutes from "./routes/messages";
@@ -265,6 +266,8 @@ const start = async () => {
     await server.register(pagesRoutes);
     await server.register(catalogRoutes);
     await server.register(postsRoutes);
+    // Public: stable tap-through for Post Reply image cards already sitting in customer threads.
+    await server.register(postReplyImageRoutes);
     await server.register(commentsRoutes);
     await server.register(settingsRoutes);
     await server.register(messagesRoutes);

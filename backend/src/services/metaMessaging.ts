@@ -121,7 +121,10 @@ export function buttonTemplateMessage(text: string, cta: CtaButton): MetaMessage
  * A one-element Generic Template that shows a Post Reply image INLINE with a caption — the
  * image is ALWAYS visible (Meta allows only one message on a cold comment→DM). `default_action`
  * makes the (necessarily ~1.91:1) card image tappable → opens the full-resolution image in the
- * in-app browser. When the caption is too long to fit the title, the caller passes a `readMore`
+ * in-app browser. `viewUrl` is what that tap opens: callers pass the STABLE resolver link
+ * (buildPostReplyImageUrl) because the card outlives the storage key — see postReplyImage.ts.
+ * It falls back to the image URL itself for callers with no stable link (previews, tests).
+ * When the caption is too long to fit the title, the caller passes a `readMore`
  * postback button: the card shows a teaser, and tapping «Read more» delivers the full text as a
  * follow-up DM (the tap opens the 24h window). The image is not re-sent — it stays in this card
  * and is tappable to full size. Title falls back to a single space because Meta rejects an empty title.
@@ -131,9 +134,10 @@ export function imageCardMessage(
     caption: string,
     readMore?: { title: string; payload: string },
     cta?: CtaButton,
+    viewUrl?: string,
 ): MetaMessage {
     const title = caption.trim().slice(0, META_TEMPLATE_LIMITS.maxTitleChars) || ' ';
-    const element: MetaTemplateElement = { title, image_url: imageUrl, default_action: { type: 'web_url', url: imageUrl } };
+    const element: MetaTemplateElement = { title, image_url: imageUrl, default_action: { type: 'web_url', url: viewUrl || imageUrl } };
     // Up to 3 buttons per card: «Read more» (postback, when the caption is long) then the CTA
     // (web_url). Order puts the reply-completing action first, the outward link second.
     const buttons: MetaButton[] = [];

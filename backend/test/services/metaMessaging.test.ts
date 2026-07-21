@@ -77,6 +77,32 @@ describe('metaMessaging', () => {
             expect(msg.attachment.payload.elements[0].buttons).toEqual([{ type: 'web_url', title: 'Shop', url: 'https://shop.example' }]);
         });
 
+        // Regression: the card's tap-through used to be the raw storage URL, so replacing or
+        // clearing a Post Reply turned every already-sent card into a `NoSuchKey` XML page.
+        it('imageCardMessage: default_action opens the STABLE view link, not the storage URL', () => {
+            const msg = imageCardMessage(
+                'https://s3.example/bucket/trigger-images/ws/abc.jpg',
+                'hi',
+                undefined,
+                undefined,
+                'https://jawab24.com/api/post-reply-image/facebook/post-1',
+            ) as { attachment: { payload: { elements: { image_url: string; default_action: { type: string; url: string } }[] } } };
+            const element = msg.attachment.payload.elements[0];
+            expect(element.default_action).toEqual({
+                type: 'web_url',
+                url: 'https://jawab24.com/api/post-reply-image/facebook/post-1',
+            });
+            // image_url stays direct — Meta fetches it once at send time and caches its own copy.
+            expect(element.image_url).toBe('https://s3.example/bucket/trigger-images/ws/abc.jpg');
+        });
+
+        it('imageCardMessage: falls back to the image URL when no view link is given', () => {
+            const msg = imageCardMessage('https://cdn/x.jpg', 'hi') as {
+                attachment: { payload: { elements: { default_action: { url: string } }[] } };
+            };
+            expect(msg.attachment.payload.elements[0].default_action.url).toBe('https://cdn/x.jpg');
+        });
+
         it('buttonTemplateMessage: text + a single web_url button, text capped at 640', () => {
             const msg = buttonTemplateMessage('Check this out', { label: 'Shop now', url: 'https://shop.example/x' }) as {
                 attachment: { type: string; payload: { template_type: string; text: string; buttons: { type: string; title: string; url: string }[] } };

@@ -444,6 +444,7 @@ export class FacebookService {
         imageUrl: string,
         readMore: { label: string; payload: string } | null,
         cta?: CtaButton,
+        viewUrl?: string,
     ): Promise<{ recipientId: string; format: 'card' | 'card_readmore' }> {
         // The image ALWAYS rides an inline card (image never hidden). A short caption fits the
         // card title in full; a long one shows a teaser + a «Read more» postback button, and the
@@ -452,7 +453,7 @@ export class FacebookService {
         // rides the same card alongside «Read more» (≤3 buttons per card).
         const isLong = text.trim().length > POST_REPLY_CARD_CAPTION_MAX;
         const readMoreBtn = isLong && readMore ? { title: readMore.label, payload: readMore.payload } : undefined;
-        const message = imageCardMessage(imageUrl, text, readMoreBtn, cta);
+        const message = imageCardMessage(imageUrl, text, readMoreBtn, cta, viewUrl);
         try {
             const response = await traced('sendPrivateReplyWithImage', () =>
                 fbAxios.post<{ recipient_id: string }>(

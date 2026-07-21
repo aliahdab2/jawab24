@@ -158,6 +158,9 @@ See the broader secret-rotation practice for cadence.
   live image is never lost). Page delete drops all its images
   (`pagesService.deletePage`). **Age-based expiry targets ONLY orphaned/non-current
   objects — never a live, referenced image.**
+- **Never hand a storage key to something that outlives it.** Deleting a replaced object is
+  correct (it keeps the workspace quota honest), but a delivered message is permanent — so a
+  sent message must never embed the bucket URL. See §10.
 - **Audit:** `npx ts-node src/scripts/audit-trigger-images.ts` (READ-ONLY) lists DB
   rows whose object is missing (investigate) and bucket objects with no DB row
   (safe-to-clean orphans). Run before any bulk cleanup.
@@ -184,3 +187,31 @@ A generic-template *card* was tried first (image + title/subtitle in one bubble)
 cropped the image to ~1.91:1 and split/capped the caption at 160 chars — see git history.
 WhatsApp, when added, will send a single message with a native `caption` (handled in its
 own adapter; the storage + picker are reused unchanged).
+
+## 10. Tap-through: the stable image link
+
+The Facebook image card carries two URLs, and they are deliberately different:
+
+| Field | URL | Why |
+|-------|-----|-----|
+| `image_url` | the bucket URL | Meta fetches it **once at send time** and serves its own cached copy thereafter — it never needs the object again |
+| `default_action.url` | `${PUBLIC_API_BASE_URL}/post-reply-image/{source}/{postId}` | opened **live, on every tap, forever** — so it must not be a key we delete |
+
+`GET /post-reply-image/:source/:id` (public, `routes/postReplyImage.ts`) looks the post up
+and 302s (`cache-control: no-store`) to its **current** `trigger_image_url`. If the rule was
+cleared it returns 410 with a short bilingual notice; an unknown post returns 404.
+
+**The bug this fixes (2026-07-22):** cards used to point `default_action` at the bucket URL.
+Because replacing or clearing a Post Reply deletes the old object (§8), every card already
+sitting in a customer's thread started rendering Backblaze's raw `NoSuchKey` XML page on tap —
+the thumbnail still showed (Meta's cache), so the failure was invisible from the dashboard.
+Regression coverage: `test/routes/postReplyImage.test.ts`,
+`test/services/reply/postReplyImageLink.test.ts`, and the `default_action` assertions in
+`test/services/metaMessaging.test.ts`.
+
+Instagram is unaffected: its image is delivered as a native attachment (Meta hosts it), with
+no link back to our bucket.
+
+**Config:** `PUBLIC_API_BASE_URL` — the public origin+prefix that reaches this backend.
+Defaults to `${FRONTEND_URL}/api`, which matches the nginx `/api/` → backend mapping. It ends
+up baked into DMs permanently, so changing it later strands old links: keep it stable.

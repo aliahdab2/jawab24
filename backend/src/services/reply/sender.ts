@@ -28,6 +28,10 @@ export interface SendCommentReplyOptions {
      *  exceeds the card limit, the card shows a teaser + this button; the tap delivers the full
      *  text in-chat (the image stays in the card). Null/absent → short caption shown in full, no button. */
     readMore?: { label: string; payload: string } | null;
+    /** Stable link the card's tap-through opens — resolves the Post Reply's CURRENT image at tap
+     *  time so an already-sent card never 404s after the merchant replaces or clears it.
+     *  Absent → the card falls back to the raw image URL (see metaMessaging.imageCardMessage). */
+    imageViewUrl?: string;
     /** Post Reply CTA link button (DM channel only, Facebook only): label + URL. When set, the
      *  reply rides a button template (no image) or the image card (with image). Absent → no button. */
     cta?: CtaButton;
@@ -93,6 +97,7 @@ export class ReplySender {
             isDemo = false,
             replyImageUrl,
             readMore,
+            imageViewUrl,
             cta,
         } = options;
 
@@ -115,7 +120,7 @@ export class ReplySender {
                     // a teaser + «Read more» postback, and the tap delivers the full text in-chat.
                     // An optional CTA link button rides the same card.
                     try {
-                        const dm = await facebookService.sendPrivateReplyWithImage(accessToken, facebookCommentId, replyText, replyImageUrl, readMore ?? null, cta);
+                        const dm = await facebookService.sendPrivateReplyWithImage(accessToken, facebookCommentId, replyText, replyImageUrl, readMore ?? null, cta, imageViewUrl);
                         dmRecipientId = dm.recipientId;
                         imageDelivered = true;
                         this.logger.info('[Sender] Private reply with image sent', { facebookCommentId, replyMode, recipientId: dmRecipientId, format: dm.format });

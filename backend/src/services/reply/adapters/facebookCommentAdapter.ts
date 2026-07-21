@@ -9,6 +9,7 @@ import { stripCommentNoise } from '../../../utils/commentText';
 import { isDemoPlatformId } from '../../../utils/demo';
 import { t } from '../../../utils/i18n';
 import { buildReadMorePayload } from '@jawab24/shared';
+import { buildPostReplyImageUrl } from '../postReplyImageLink';
 import { mapToPlatformPage } from './shared';
 import type {
     CommentPlatformAdapter,
@@ -116,6 +117,10 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             // branch and never on a public comment.
             replyImageUrl: opts.replyImageUrl,
             readMore,
+            // Tap-through goes through our resolver, never the raw storage key — the card
+            // outlives the object (postReplyImageLink.ts). No postId → no stable link, and the
+            // card falls back to the image URL.
+            imageViewUrl: opts.replyImageUrl && opts.postId ? buildPostReplyImageUrl('facebook', opts.postId) : undefined,
             // CTA link button — DM channel only (sender gates by mode). Both fields present or absent.
             cta: opts.replyCta ? { label: opts.replyCta.label, url: opts.replyCta.url } : undefined,
         });
