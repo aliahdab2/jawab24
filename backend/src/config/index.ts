@@ -59,6 +59,14 @@ export const config = {
         // to pure per-name bucketing (v51 behavior) with no deploy — the learning map
         // keeps accumulating while off, so re-enabling is instant.
         genderBucketEnabled: process.env.AI_GENDER_BUCKET_ENABLED !== 'false',
+        // Gender-neutral shared DM bucket (g:n) — companion to the v53 gender
+        // bucket but fully independent of it (works with a cold map and even with
+        // AI_GENDER_BUCKET_ENABLED=false). A reply the model certifies genderless
+        // (gender:'unknown') and name-free is safe to share across ALL senders.
+        // Kill-switch: AI_NEUTRAL_BUCKET_ENABLED=false reverts to v53 behavior
+        // (per-gender/per-name buckets only) with no deploy; g:n entries become
+        // unreachable while off — cold but safe.
+        neutralBucketEnabled: process.env.AI_NEUTRAL_BUCKET_ENABLED !== 'false',
         // Always use DEFAULT_AI_MODEL for cost efficiency - not configurable by users
         model: DEFAULT_AI_MODEL,
         // Fallback model when primary provider (OpenAI) is unreachable
