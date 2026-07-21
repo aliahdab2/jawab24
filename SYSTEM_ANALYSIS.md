@@ -420,11 +420,13 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │
 ├── Is platform auto-reply enabled? (comments/messages separately)
 │   ├── Comments OFF → ❌ Ignore silently (comment still stored) → STOP
-│   └── Messages OFF → Send AWAY MESSAGE (language-matched, once per sender/24h) → STOP
+│   └── Messages OFF → Send AWAY MESSAGE (language-matched, first msg only) → STOP
 │
-├── Is the team outside its hours? (businessHoursOnly + window, end EXCLUSIVE)
-│   ├── YES → Reply NORMALLY on every channel; DM replies append the
-│   │         "team will follow up" note (D-035 — hours never gate anything)
+├── Is businessHoursOnly enabled?
+│   ├── YES → Is it within business hours?
+│   │   └── NO → Same as "platform disabled" above:
+│   │       ├── Comments → ❌ Ignore silently → STOP
+│   │       └── Messages → Send AWAY MESSAGE (first msg only) → STOP
 │   └── NO → Continue
 │
 ├── Is there an active HANDOFF PAUSE? (human agent took over)
@@ -873,13 +875,13 @@ This ensures pipeline metrics and downstream guards still function even without 
 | Setting | Type | Default | Where It Affects |
 |---------|------|---------|------------------|
 | **commentsAutoReply** | boolean | true | If false, ignore comments silently (no away message) |
-| **messagesAutoReply** | boolean | true | If false, send away message (language-matched, once per sender per 24h — D-035). The ONLY switch that silences DMs |
+| **messagesAutoReply** | boolean | true | If false, send away message (language-matched, first msg only) |
 | **commentReplyMode** | enum | 'public' | `public` = visible comment, `private` = DM, `dual` = both |
 | **dualReplyNudge** | text | "Details sent in DM" | Appended to public reply in dual mode |
-| **businessHoursOnly** | boolean | false | D-035: TEAM hours are configured. Never gates any channel — outside the window, DM replies append a "team follows up" note. Per-shop opening hours are a per-page Business Info fact (D-010), not this |
+| **businessHoursOnly** | boolean | false | If true, auto-reply ONLY during business hours |
 | **businessHoursStart** | time | '09:00' | Start of business hours (timezone-aware) |
-| **businessHoursEnd** | time | '18:00' | End of team hours (timezone-aware, EXCLUSIVE — 18:00 closes the day) |
-| **timezone** | string | 'Asia/Riyadh' | Used for business hours calculation. A PLACEHOLDER, not a guess — the settings UI seeds the merchant's detected zone when hours are switched on (`PLACEHOLDER_TIMEZONE` in shared/constants) |
+| **businessHoursEnd** | time | '18:00' | End of business hours (timezone-aware) |
+| **timezone** | string | 'Asia/Damascus' | Used for business hours calculation |
 | **aiEnabled** | boolean | true | Master switch: if false, only templates work |
 | **replyDelay** | integer | 0 | Seconds to wait before sending (consolidation) |
 | **commentEscalationMinutes** | integer | 60 | Auto-flag unreplied comments after X minutes |

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Check, Search } from 'lucide-react';
+import { ChevronDown, Check } from 'lucide-react';
 import clsx from 'clsx';
 
 interface SelectOption {
@@ -22,19 +22,6 @@ interface SelectProps {
   disabled?: boolean;
   /** Compact mode for inline filter bars — smaller padding, pill shape, muted background */
   compact?: boolean;
-  /**
-   * Opt-in type-ahead filter above the options. Off by default, so every existing
-   * Select renders byte-identically.
-   *
-   * Turn it on for lists too long to scan — the IANA timezone list is ~400 entries,
-   * and an unsearchable dropdown that size is the reason we nearly shipped a
-   * hand-curated list instead of the platform's own database.
-   */
-  searchable?: boolean;
-  /** Placeholder for the type-ahead input. Required when `searchable` (i18n — never hardcode). */
-  searchPlaceholder?: string;
-  /** Announced when the filter matches nothing. Required when `searchable`. */
-  noResultsLabel?: string;
 }
 
 function LabelWithBadge({ label, badge, badgeTone = 'brand', truncate = false }: { label: string; badge?: string; badgeTone?: 'brand' | 'muted'; truncate?: boolean }) {
@@ -60,20 +47,12 @@ function LabelWithBadge({ label, badge, badgeTone = 'brand', truncate = false }:
  * Custom Select component that works correctly on iOS
  * Native selects have issues inside modals on iOS Safari
  */
-export function Select({ value, onChange, options, placeholder, label, 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy, className, disabled = false, compact = false, searchable = false, searchPlaceholder, noResultsLabel }: SelectProps) {
+export function Select({ value, onChange, options, placeholder, label, 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy, className, disabled = false, compact = false }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
   const selectedOption = options.find(opt => opt.value === value);
-
-  // Match on the label so a search hits both the zone name and its offset
-  // ("tripoli" and "+02" both find Africa/Tripoli).
-  const visibleOptions = searchable && query.trim()
-    ? options.filter(opt => opt.label.toLowerCase().includes(query.trim().toLowerCase()))
-    : options;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -111,16 +90,6 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
       }
     }
   }, [isOpen]);
-
-  // Reset the filter whenever the menu closes, and focus the input when it opens,
-  // so reopening never shows a stale, silently-filtered list.
-  useEffect(() => {
-    if (!isOpen) {
-      setQuery('');
-    } else if (searchable) {
-      searchRef.current?.focus();
-    }
-  }, [isOpen, searchable]);
 
   const handleSelect = (optionValue: string) => {
     onChange(optionValue);
@@ -176,33 +145,12 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
               : "inset-x-0 bg-card border border-theme-border shadow-xl"
           )}
         >
-          {searchable && (
-            // Sticky so the filter stays reachable while scrolling a long list.
-            <div className="sticky top-0 z-10 bg-card border-b border-theme-border p-2">
-              <div className="relative">
-                <Search
-                  className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-icon-muted pointer-events-none"
-                  aria-hidden="true"
-                />
-                <input
-                  ref={searchRef}
-                  type="text"
-                  dir="auto"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={searchPlaceholder}
-                  aria-label={searchPlaceholder}
-                  className="w-full ps-8 pe-2 py-2 text-sm rounded-lg bg-muted border-none text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                />
-              </div>
-            </div>
-          )}
-          {visibleOptions.length === 0 ? (
+          {options.length === 0 ? (
             <div className="px-4 py-3 text-sm text-muted-foreground text-center">
-              {query.trim() ? noResultsLabel : 'No options available'}
+              No options available
             </div>
           ) : (
-            visibleOptions.map((option, idx) => (
+            options.map((option, idx) => (
               <button
                 key={option.value}
                 type="button"

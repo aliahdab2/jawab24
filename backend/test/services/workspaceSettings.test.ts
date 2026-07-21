@@ -328,17 +328,16 @@ describe('WorkspaceSettingsService', () => {
             expect(await service.isCommentsAutoReplyEnabled(WS_ID)).toBe(true);
         });
 
-        it('ignores business hours entirely — the master switch is the only gate (D-035)', async () => {
+        it('delegates to business hours check when businessHoursOnly is true', async () => {
             vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
                 commentsAutoReply: true,
                 businessHoursOnly: true,
-                // An empty window (end <= start) — under the old model this
-                // silenced the channel around the clock.
                 businessHoursStart: '00:00',
-                businessHoursEnd: '00:00',
+                businessHoursEnd: '23:59',
                 timezone: 'UTC',
             }));
 
+            // 00:00–23:59 UTC covers all times
             expect(await service.isCommentsAutoReplyEnabled(WS_ID)).toBe(true);
         });
     });
@@ -361,64 +360,6 @@ describe('WorkspaceSettingsService', () => {
             }));
 
             expect(await service.isMessagesAutoReplyEnabled(WS_ID)).toBe(true);
-        });
-    });
-
-    // ── isOutsideTeamHours (D-035) ────────────────────────────────────────
-    // Business hours describe when the TEAM is around; they feed the follow-up
-    // note and nothing else. Gating (isAutoReplyEnabledFromSettings) reads only
-    // the master switches — a closed window must never silence a channel.
-    describe('isOutsideTeamHours', () => {
-        // The clock is PINNED: these assertions are about the open/closed branch,
-        // and a window expressed relative to the real time of day would flip on
-        // whichever minute CI happened to run. 12:00 UTC sits inside OPEN,
-        // outside CLOSED.
-        const OPEN_AT_NOON = { businessHoursStart: '09:00', businessHoursEnd: '18:00', timezone: 'UTC' };
-        const CLOSED_AT_NOON = { businessHoursStart: '20:00', businessHoursEnd: '23:00', timezone: 'UTC' };
-
-        beforeEach(() => {
-            vi.useFakeTimers();
-            vi.setSystemTime(new Date('2026-07-21T12:00:00Z'));
-        });
-
-        afterEach(() => {
-            vi.useRealTimers();
-        });
-
-        it('is false while the team is inside its window', () => {
-            expect(service.isOutsideTeamHours(partial({ businessHoursOnly: true, ...OPEN_AT_NOON }))).toBe(false);
-        });
-
-        it('is true once the window has closed', () => {
-            expect(service.isOutsideTeamHours(partial({ businessHoursOnly: true, ...CLOSED_AT_NOON }))).toBe(true);
-        });
-
-        it('is false when team hours are not configured — no note, ever', () => {
-            expect(service.isOutsideTeamHours(partial({ businessHoursOnly: false, ...CLOSED_AT_NOON }))).toBe(false);
-        });
-
-        it('never affects gating: the channel stays enabled outside the window', () => {
-            const settings = partial({
-                messagesAutoReply: true,
-                commentsAutoReply: true,
-                businessHoursOnly: true,
-                ...CLOSED_AT_NOON,
-            });
-            // The regression this pins: the old model returned false here and
-            // silently muted DMs, comments AND Post Reply for the whole night.
-            expect(service.isOutsideTeamHours(settings)).toBe(true);
-            expect(service.isAutoReplyEnabledFromSettings(settings, 'messages')).toBe(true);
-            expect(service.isAutoReplyEnabledFromSettings(settings, 'comments')).toBe(true);
-        });
-
-        it('gating reads the per-channel master switches only', () => {
-            const settings = partial({
-                messagesAutoReply: true,
-                commentsAutoReply: false,
-                businessHoursOnly: false,
-            });
-            expect(service.isAutoReplyEnabledFromSettings(settings, 'messages')).toBe(true);
-            expect(service.isAutoReplyEnabledFromSettings(settings, 'comments')).toBe(false);
         });
     });
 

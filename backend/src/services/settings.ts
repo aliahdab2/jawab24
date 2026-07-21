@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { settings, workspaceMembers } from '../db/schema';
 import { UserSettings, UpdateSettingsDTO } from '../types';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
@@ -32,7 +32,7 @@ function normalizeMultiFields(s: UserSettings): UserSettings {
 export type { UserSettings, UpdateSettingsDTO };
 
 import { t } from '../utils/i18n';
-import { resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
+import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 
 /** Default messages used as send-time fallback when all stored values are empty */
 const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
@@ -267,27 +267,51 @@ export class SettingsService {
     }
 
     /**
-     * Check if auto-reply is enabled for comments.
-     * D-035: the master switch is the only gate — business hours describe the
-     * team's availability (see workspaceSettings.isOutsideTeamHours), they never
-     * schedule the assistant off.
+     * Check if auto-reply is enabled for comments
      */
     async isCommentsAutoReplyEnabled(userId: string): Promise<boolean> {
         const userSettings = await this.getSettings(userId);
-        return userSettings.commentsAutoReply;
+
+        if (!userSettings.commentsAutoReply) {
+            return false;
+        }
+
+        // Check business hours if enabled
+        if (userSettings.businessHoursOnly) {
+            return this.isWithinBusinessHours(
+                userSettings.businessHoursStart,
+                userSettings.businessHoursEnd,
+                userSettings.timezone
+            );
+        }
+
+        return true;
     }
 
     /**
-     * Check if auto-reply is enabled for messages. Master switch only (D-035).
+     * Check if auto-reply is enabled for messages
      */
     async isMessagesAutoReplyEnabled(userId: string): Promise<boolean> {
         const userSettings = await this.getSettings(userId);
-        return userSettings.messagesAutoReply;
+
+        if (!userSettings.messagesAutoReply) {
+            return false;
+        }
+
+        // Check business hours if enabled
+        if (userSettings.businessHoursOnly) {
+            return this.isWithinBusinessHours(
+                userSettings.businessHoursStart,
+                userSettings.businessHoursEnd,
+                userSettings.timezone
+            );
+        }
+
+        return true;
     }
 
     /**
-     * Get the away message sent when Smart Replies for messages are OFF (D-035:
-     * this is its only remaining job — off-hours DMs get a real answer + note).
+     * Get the away message if auto-reply is disabled or outside business hours.
      * Respects user's autoDetectLanguage and defaultReplyLanguage settings.
      *
      * @param userId - User ID
@@ -351,6 +375,13 @@ export class SettingsService {
         return userSettings.replyDelay;
     }
 
+    /**
+     * Check if current time is within business hours in the user's timezone
+     */
+    private isWithinBusinessHours(start: string, end: string, timezone: string): boolean {
+        return isWithinBusinessHoursShared(start, end, timezone);
+    }
+
     private resolveLanguage(userSettings: UserSettings, detectedLanguage?: string): string {
         return resolveLanguageShared({
             autoDetectLanguage: userSettings.autoDetectLanguage,
@@ -379,7 +410,7 @@ export class SettingsService {
             businessHoursOnly: record.businessHoursOnly ?? false,
             businessHoursStart: record.businessHoursStart || '09:00',
             businessHoursEnd: record.businessHoursEnd || '18:00',
-            timezone: record.timezone || PLACEHOLDER_TIMEZONE,
+            timezone: record.timezone || 'Asia/Damascus',
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,
             greetingMessageEnabled: record.greetingMessageEnabled ?? false,

@@ -54,7 +54,6 @@ vi.mock('../services/workspaceSettings', () => ({
     workspaceSettingsService: {
         getSettings: mockGetSettings,
         isAutoReplyEnabledFromSettings: vi.fn().mockReturnValue(true),
-        isOutsideTeamHours: vi.fn().mockReturnValue(false),
     },
 }));
 vi.mock('../services/protection', () => ({

@@ -61,16 +61,7 @@ export const KB_GAP_FLAGS = ['info_not_in_kb', 'price_not_in_kb', 'phone_not_in_
 export type KbGapFlag = (typeof KB_GAP_FLAGS)[number];
 
 // --- Utilities ---
-export {
-    isValidTimezone,
-    safeTimezone,
-    formatTimeInZone,
-    isWithinBusinessHours,
-    formatUtcOffset,
-    detectTimezone,
-    getTimezoneOptions,
-    utcOffsetMinutes,
-} from './timezone';
+export { isValidTimezone, safeTimezone } from './timezone';
 export { normalizeArabic } from './utils/arabic-normalize';
 export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
@@ -795,7 +786,6 @@ export {
     MAX_TEMPLATE_MESSAGE_LENGTH,
     MAX_BRAND_VOICE_LENGTH,
     DEFAULT_AI_MODEL,
-    PLACEHOLDER_TIMEZONE,
     ALLOWED_AI_MODELS,
     isAllowedAiModel,
     type AllowedAiModel,

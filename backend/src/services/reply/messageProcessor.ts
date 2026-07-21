@@ -6,10 +6,8 @@ import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
 import { detectTemplateLanguage } from '../../utils/language';
-import { t } from '../../utils/i18n';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
-import { redis } from '../../lib/redis';
 import * as typingIndicator from './typingIndicator';
 import { computeHumanDelayMs } from './humanDelay';
 import { Logger, noopLogger } from '../../types';
@@ -45,11 +43,6 @@ import { extractPostId } from '../../utils/instagram';
  *  better no context than stale context. Pre-existing comments on old posts
  *  have the same issue and are out of scope for this pass. */
 const MAX_ORIGIN_POST_AGE_MS = 60 * 24 * 60 * 60 * 1000;
-
-/** One away-message acknowledgment per sender per 24h (D-034). Matches Meta's
- *  24h messaging window: within one window the customer needs telling once that
- *  nobody is home, and the merchant can still reply to that same conversation. */
-const AWAY_MESSAGE_COOLDOWN_SECONDS = 24 * 60 * 60;
 
 /** Cap for the origin POST text inside the composed [current_post] context. The merchant's
  *  Post Reply is appended AFTER the post text (uncapped — product-limited to 1000 chars), so
@@ -324,12 +317,7 @@ export class MessageProcessor {
 
             // 6-8. Run independent guard checks in parallel to reduce latency
             const pauseMinutes = userSettings.handoffPauseDurationMinutes;
-            // D-035: the master switch is the ONLY gate — business hours never
-            // silence the assistant. Outside the team's hours we answer normally
-            // and append a follow-up note (step 12d-ter), because hours describe
-            // when the HUMANS are around, not when the bot works.
             const isMessagesEnabled = workspaceSettingsService.isAutoReplyEnabledFromSettings(userSettings, 'messages');
-            const outsideTeamHours = workspaceSettingsService.isOutsideTeamHours(userSettings);
             const [isPaused, rateCheck] = await Promise.all([
                 messagesService.isPaused(page.id, senderId, pauseMinutes),
                 rateLimiter.check(page.id, senderId, 'message'),
@@ -370,23 +358,15 @@ export class MessageProcessor {
             }
 
             if (!isMessagesEnabled) {
-                // Master switch off: the away message is the only response (D-035 —
-                // this branch is no longer reachable via business hours).
                 const customerLang = detectTemplateLanguage(messageText);
                 const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);
-                // Send the away message at most once per sender per cooldown window,
-                // NOT once per lifetime. The original gate was
-                // `isFirstIncomingMessage` (the webhook controller pre-stores the
-                // message, so `isNew` is always false by the time the worker runs and
-                // gating on it suppressed the away message entirely). But a
-                // lifetime-once gate means a RETURNING customer who writes after hours
-                // gets total silence — no AI reply and no acknowledgment either, which
-                // is exactly how a live merchant's evening traffic went unanswered.
-                // A cooldown window is the industry norm (Zendesk's "idle responder
-                // interval", Intercom's per-conversation reply-time message); 24h also
-                // matches Meta's messaging window, so it is one acknowledgment per
-                // conversation the merchant could actually still reply to.
-                if (awayMessage && await this.shouldSendAwayMessage(page.id, senderId)) {
+                // Only send the away message on the customer's very first incoming message.
+                // The webhook controller pre-stores the message (see webhook.ts
+                // findOrCreateFromWebhook), so by the time the worker runs `isNew` is
+                // always false here — gating on it suppressed the away message entirely.
+                // Use isFirstIncomingMessage instead: count = 1 right after store → true
+                // exactly once per sender, preventing spam on repeat messages.
+                if (awayMessage && await messagesService.isFirstIncomingMessage(page.id, senderId)) {
                     try {
                         await adapter.sendAwayMessage(page, senderId, awayMessage);
                         await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, awayMessage, 'template');
@@ -756,28 +736,6 @@ export class MessageProcessor {
                 replyText = answer ? `${greetingPrefix}${separator}${answer}` : greetingPrefix;
             }
 
-            // 12d-ter. Team-availability note (D-035). Appended AFTER generation
-            // so it never enters the prompt, never changes PROMPT_VERSION and never
-            // pollutes a cache entry — a cached daytime reply gets the note only when
-            // it is actually served after hours. `aiOriginalReply` stays the bare AI
-            // text (same contract as the greeting prefix above: this is our copy, not
-            // AI output). Budgeted like the greeting so a long answer is truncated
-            // first and the note always survives.
-            if (outsideTeamHours) {
-                pipelineMetrics.record(pipeline, 'after_hours_reply');
-                const note = t('afterHoursNote', resolveFallbackLanguage({
-                    text: messageText,
-                    knowledgeBase,
-                    defaultReplyLanguage: userSettings.defaultReplyLanguage,
-                }));
-                const separator = '\n\n';
-                const bodyBudget = maxReplyChars - note.length - separator.length;
-                const body = bodyBudget <= 0
-                    ? ''
-                    : (replyText.length > bodyBudget ? truncateAtSentence(replyText, bodyBudget) : replyText);
-                replyText = body ? `${body}${separator}${note}` : note;
-            }
-
             if (replyText.length > maxReplyChars) {
                 const originalLength = replyText.length;
                 replyText = truncateAtSentence(replyText, maxReplyChars);
@@ -1077,25 +1035,6 @@ export class MessageProcessor {
 
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    /**
-     * Away-message cooldown: true when this sender has not been sent one within
-     * the last `AWAY_MESSAGE_COOLDOWN_SECONDS`.
-     *
-     * On a Redis outage we send anyway — an occasional duplicate acknowledgment
-     * is a far smaller failure than silence (same trade-off as the non-text
-     * nudge cooldown in nonTextHandler.sendNudge).
-     */
-    private async shouldSendAwayMessage(pageId: string, senderId: string): Promise<boolean> {
-        try {
-            const acquired = await redis.set(
-                `away_msg:${pageId}:${senderId}`, '1', 'EX', AWAY_MESSAGE_COOLDOWN_SECONDS, 'NX',
-            );
-            return acquired !== null;
-        } catch {
-            return true;
-        }
     }
 
     /**

@@ -6,6 +6,7 @@ import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isUrgentNotification, buildNotificationReason, detectBusinessActionFlags } from './urgentFlags';
 import { resolvePostReplyRule, matchPostReplyRule, evaluateAnyCommentGuard } from './postReplyRule';
+import { isWithinBusinessHours } from '../../utils/settingsHelpers';
 import { preprocessCommentText } from './commentPreprocess';
 import { classifyFallbackIntent } from './fallbackClassifier';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
@@ -193,12 +194,16 @@ export class CommentProcessor {
                 triggerImageUrl: content.triggerImageUrl ?? null,
                 likeComment: content.likeComment,
             });
-            // D-035: a configured trigger is the only condition. Business hours
-            // used to gate this too, which silently killed a merchant's keyword
-            // replies at night — but a Post Reply is the merchant's OWN prewritten
-            // text (it can't invent prices or stock), so the after-hours caution
-            // that once justified the gate never applied to it.
-            const postReplyEligible = !!postReplyRule;
+            // Rule check first: most comments land on posts with no trigger, so the
+            // business-hours evaluation (an Intl.DateTimeFormat construction) only
+            // runs when a trigger actually exists.
+            const postReplyEligible = !!postReplyRule
+                && (!userSettings.businessHoursOnly
+                    || isWithinBusinessHours(
+                        userSettings.businessHoursStart,
+                        userSettings.businessHoursEnd,
+                        userSettings.timezone,
+                    ));
 
             // 3a. Friend-tag silent-skip — must run before the trigger-keyword branch.
             // The AI path already skips user-tagged comments via preprocessCommentText,

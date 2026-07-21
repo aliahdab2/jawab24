@@ -6,7 +6,7 @@ import { t } from '../utils/i18n';
 import { captureError } from '../utils/sentryHelpers';
 import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 import type { WorkspaceSettings, LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
 import { PIPELINE_FIELDS, type PipelineField } from './pipelineFields';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
@@ -28,9 +28,7 @@ export const DEFAULTS: WorkspaceSettings = {
     businessHoursOnly: false,
     businessHoursStart: '09:00',
     businessHoursEnd: '18:00',
-    // Must match the settings-table column default (see schema.ts) so a workspace
-    // whose JSONB predates an explicit timezone reads the same value the row has.
-    timezone: PLACEHOLDER_TIMEZONE,
+    timezone: 'Asia/Damascus',
     greetingMessageMulti: {},
     greetingMessageEnabled: false,
     awayMessageMulti: {},
@@ -244,7 +242,18 @@ export class WorkspaceSettingsService {
      */
     async isCommentsAutoReplyEnabled(workspaceId: string): Promise<boolean> {
         const settings = await this.getSettings(workspaceId);
-        return this.isAutoReplyEnabledFromSettings(settings, 'comments');
+
+        if (!settings.commentsAutoReply) return false;
+
+        if (settings.businessHoursOnly) {
+            return this.isWithinBusinessHours(
+                settings.businessHoursStart,
+                settings.businessHoursEnd,
+                settings.timezone,
+            );
+        }
+
+        return true;
     }
 
     /**
@@ -252,7 +261,18 @@ export class WorkspaceSettingsService {
      */
     async isMessagesAutoReplyEnabled(workspaceId: string): Promise<boolean> {
         const settings = await this.getSettings(workspaceId);
-        return this.isAutoReplyEnabledFromSettings(settings, 'messages');
+
+        if (!settings.messagesAutoReply) return false;
+
+        if (settings.businessHoursOnly) {
+            return this.isWithinBusinessHours(
+                settings.businessHoursStart,
+                settings.businessHoursEnd,
+                settings.timezone,
+            );
+        }
+
+        return true;
     }
 
     /**
@@ -316,30 +336,18 @@ export class WorkspaceSettingsService {
      * Accepts a pre-fetched WorkspaceSettings object to avoid redundant Redis calls.
      */
     isAutoReplyEnabledFromSettings(settings: WorkspaceSettings, type: 'messages' | 'comments'): boolean {
-        // D-035: the master switches are the ONLY gate. Business hours describe
-        // when the merchant's TEAM is around (they feed the follow-up note via
-        // isOutsideTeamHours below) — they no longer schedule the assistant off.
-        // The old model silently muted Smart Replies, comments AND Post Reply for
-        // the whole night, which merchants read as "my working hours" and signed
-        // without knowing; one lost 65% of his traffic to it.
-        return type === 'messages' ? settings.messagesAutoReply : settings.commentsAutoReply;
-    }
+        const flag = type === 'messages' ? settings.messagesAutoReply : settings.commentsAutoReply;
+        if (!flag) return false;
 
-    /**
-     * Is the merchant's team currently off-hours? (D-035)
-     *
-     * Purely informational: when true, DM replies append a "the team will follow
-     * up when they're back" note. Never used to suppress a reply. Hours are
-     * workspace-level because the TEAM is workspace-level (workspace_members) —
-     * per-shop opening hours are a different fact and live in each page's
-     * Business Info (D-010), where the AI answers "when are you open?" from.
-     */
-    isOutsideTeamHours(settings: WorkspaceSettings): boolean {
-        return !!settings.businessHoursOnly && !this.isWithinBusinessHours(
-            settings.businessHoursStart,
-            settings.businessHoursEnd,
-            settings.timezone,
-        );
+        if (settings.businessHoursOnly) {
+            return this.isWithinBusinessHours(
+                settings.businessHoursStart,
+                settings.businessHoursEnd,
+                settings.timezone,
+            );
+        }
+
+        return true;
     }
 
     /**

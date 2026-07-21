@@ -42,11 +42,6 @@ export type Outcome =
     | 'greeting_suppressed'
     | 'greeting_prefixed'
     | 'greeting_skipped_already_engaged'
-    // D-035: a DM answered outside the merchant's TEAM hours (reply + follow-up
-    // note). Without this the change is unmeasurable — these replies carry the
-    // new AI cost and recover otherwise-silent night traffic, so their volume is
-    // the number that decides whether the trade was worth it.
-    | 'after_hours_reply'
     | 'subscription_inactive'
     | 'lock_contention'
     | 'trigger_no_match'
