@@ -1113,15 +1113,18 @@ describe('MessagesService', () => {
 
         it('should return paused via manual reply when no explicit pause exists', async () => {
             vi.mocked(db.query.conversationPauses.findFirst).mockResolvedValue(null as any);
-            // Recent manual reply exists
+            // Recent manual reply exists at 2026-02-01T00:00:00Z
+            const manualReplyAt = new Date('2026-02-01');
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(
-                mockDbRow({ direction: 'outgoing', replyMethod: 'manual' }) as any
+                mockDbRow({ direction: 'outgoing', replyMethod: 'manual', createdAt: manualReplyAt }) as any
             );
 
             const result = await messagesService.getPauseStatus('page-1', 'sender-1');
             expect(result.paused).toBe(true);
-            expect(result.pausedUntil).toBeNull();
             expect(result.reason).toBe('manual_reply');
+            // The implicit handoff pause auto-resumes DEFAULT_HANDOFF_PAUSE_MINUTES (15)
+            // after the manual reply, so the banner can show the resume countdown.
+            expect(result.pausedUntil).toEqual(new Date(manualReplyAt.getTime() + 15 * 60 * 1000));
         });
 
         it('should return not paused when no active pause exists', async () => {
