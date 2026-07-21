@@ -194,11 +194,13 @@ AUDIT_FAILED=false
 # when precompile: true. Transitive via next-intl's precompile feature, which we don't use
 # (see GHSA-4c35-wcg5-mm9h above). Vulnerable code path is unreachable.
 # GHSA-q6x5-8v7m-xcrf, GHSA-2pr8-phx7-x9h3, GHSA-66ff-xgx4-vchm, GHSA-fx83-v9x8-x52w,
-# GHSA-75px-5xx7-5xc7, GHSA-jvwf-75h9-cwgg, GHSA-685m-2w69-288q, GHSA-f38q-mgvj-vph7 —
-# eight protobufjs CVEs (overlong UTF-8 decode, DoS via crafted field names, code injection
+# GHSA-75px-5xx7-5xc7, GHSA-jvwf-75h9-cwgg, GHSA-685m-2w69-288q, GHSA-f38q-mgvj-vph7,
+# GHSA-j3f2-48v5-ccww —
+# nine protobufjs CVEs (overlong UTF-8 decode, DoS via crafted field names, code injection
 # through bytes-field defaults, prototype injection, code-gen gadget after prototype
 # pollution, DoS via unsafe option paths, DoS via unbounded recursion, schema-derived names
-# shadowing runtime-significant properties). All transitive via firebase-admin ->
+# shadowing runtime-significant properties, DoS via infinite loop in .proto option parsing).
+# All transitive via firebase-admin ->
 # @google-cloud/firestore -> google-gax -> @grpc/proto-loader -> protobufjs. Reachability:
 # protobufjs only decodes messages exchanged with Google's Firestore service (a trusted
 # Google endpoint). We never parse user-supplied .proto files, never construct protobuf
@@ -206,18 +208,29 @@ AUDIT_FAILED=false
 # Patched versions exist (7.5.6+) but cannot be applied without breaking the typecheck via
 # pdfjs-dist semver-minor bump in the same lockfile regeneration. Track upstream
 # firebase-admin release that ships protobufjs >=7.5.6 transitively, then drop these.
-# GHSA-h67p-54hq-rp68 — js-yaml quadratic-complexity DoS in merge-key handling via repeated
-# aliases (moderate). Transitive via gray-matter, which we use only in frontend/src/lib/blog.ts
-# to parse the frontmatter of our OWN static blog markdown (frontend/src/content/blog/{en,ar}/
-# *.md) at build time — never user-supplied YAML. The DoS requires an attacker-controlled YAML
-# document, which never reaches js-yaml. The patched js-yaml (4.x) drops the js-yaml@^3 API
-# gray-matter@4 depends on, so it can't be force-overridden without breaking blog parsing;
-# revisit when gray-matter ships a release built on js-yaml@4.
+# GHSA-h67p-54hq-rp68, GHSA-52cp-r559-cp3m — js-yaml merge-key quadratic-complexity DoS (two
+# sibling advisories for the SAME defect: repeated-alias / merge-key-chain CPU blowup, high).
+# Transitive via gray-matter, which we use only in frontend/src/lib/blog.ts to parse the
+# frontmatter of our OWN static blog markdown (frontend/src/content/blog/{en,ar}/*.md) at build
+# time — never user-supplied YAML. The DoS requires an attacker-controlled YAML document, which
+# never reaches js-yaml. The patched js-yaml (4.x) drops the js-yaml@^3 API gray-matter@4 depends
+# on, so it can't be force-overridden without breaking blog parsing; revisit when gray-matter
+# ships a release built on js-yaml@4.
+# GHSA-3jxr-9vmj-r5cp — brace-expansion DoS via exponential expansion of crafted brace patterns
+# (high). Transitive via glob/minimatch. Every production path reaches it through DEVELOPER-
+# configured glob patterns, never attacker input: @fastify/static (backend, globs the fixed
+# static root at startup), @sentry/bundler-plugin-core (build-time sourcemap upload), and rimraf
+# (build/clean scripts). The exponential blowup requires an attacker-controlled brace string in
+# expand(), which no request path supplies. A bump is available (brace-expansion 2.x/5.0.7+) but
+# only applies via a full lockfile re-resolve (the next-intl→next peer override forces
+# --legacy-peer-deps), which reshuffles unrelated tree nodes (e.g. prunes a stale root axios) —
+# disproportionate churn for an unreachable build/startup-time DoS. Revisit if a runtime path
+# ever globs attacker-supplied patterns, or fold the bump into the next broad lockfile refresh.
 #
 # Fixed and removed from this allowlist (bumped to patched versions via root overrides):
 #   GHSA-ph9p-34f9-6g65 (tmp ->0.2.7), GHSA-58qx-3vcg-4xpx (ws ->8.21.0),
 #   GHSA-q8mj-m7cp-5q26 (qs ->6.15.2), GHSA-hmw2-7cc7-3qxx (form-data ->4.0.6).
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68"
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
