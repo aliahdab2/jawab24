@@ -11,6 +11,7 @@
     "defaultGreeting": "مرحباً بك! كيف يمكننا مساعدتك اليوم؟",
     "dualNudgeDefault": "أرسلنا لك التفاصيل برسالة خاصة 📩",
     "postReplyReadMore": "اقرأ المزيد",
+    "postReplyImageUnavailable": "لم تعد هذه الصورة متاحة.",
     "instagramFallback": "شكراً لتعليقك! 🙏",
     "commentFallback": "شكراً لتعليقك!",
     "messageFallback": "شكراً لرسالتك! سنرد عليك في أقرب وقت ممكن.",

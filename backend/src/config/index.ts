@@ -244,6 +244,12 @@ export const config = {
     // Frontend URL
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
 
+    // Public origin+prefix that reaches THIS backend from the open internet. nginx maps
+    // `/api/*` on the site origin onto the backend with the prefix stripped, so the default
+    // derives from frontendUrl. Used for links embedded in messages that outlive the request
+    // (e.g. the Post Reply image view link, which sits in Messenger threads forever).
+    publicApiBaseUrl: process.env.PUBLIC_API_BASE_URL || `${process.env.FRONTEND_URL || 'http://localhost:3001'}/api`,
+
     // Cookie secret (validated by validateEnv — no insecure fallback)
     cookieSecret: process.env.COOKIE_SECRET || '',
 

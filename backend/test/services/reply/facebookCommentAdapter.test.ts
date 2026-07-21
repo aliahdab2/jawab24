@@ -238,6 +238,46 @@ describe('FacebookCommentAdapter', () => {
             });
         });
 
+        // Regression: an image card must tap through to our resolver, never to the storage key —
+        // the key is deleted when the merchant replaces or clears the rule, but the already-sent
+        // card lives in the customer's thread forever.
+        it('sends a STABLE image view link (not the storage URL) when an image + postId are present', async () => {
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Great product!',
+                accessToken: 'token_abc',
+                fromId: 'from_user_1',
+                userSettings: { commentReplyMode: 'private' },
+                replyImageUrl: 'https://s3.example/bucket/trigger-images/ws/abc.jpg',
+                postId: 'post-uuid-1',
+            });
+
+            const sent = mockSendCommentReply.mock.calls[0][0];
+            expect(sent.imageViewUrl).toMatch(/\/post-reply-image\/facebook\/post-uuid-1$/);
+            expect(sent.imageViewUrl).not.toContain('trigger-images');
+        });
+
+        it('has no view link when there is no image (nothing to resolve)', async () => {
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'Thank you!',
+                commentMessage: 'Great product!',
+                accessToken: 'token_abc',
+                fromId: 'from_user_1',
+                userSettings: { commentReplyMode: 'private' },
+                postId: 'post-uuid-1',
+            });
+
+            expect(mockSendCommentReply.mock.calls[0][0].imageViewUrl).toBeUndefined();
+        });
+
         it('should detect language from comment and pick nudge variation', async () => {
             mockDetectLanguageCode.mockReturnValue('ar');
             mockPickNudgeVariation.mockReturnValue('تم الرد بالخاص');
