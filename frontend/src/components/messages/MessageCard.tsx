@@ -17,7 +17,7 @@ import { formatMessageTime } from '@/utils/dateUtils';
 import { formatInternationalPhone, resolveCustomerLabel } from '@/utils/phone';
 import { renderMessageText, stripImageDescription } from '@/utils/renderMessageText';
 import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
-import type { Message } from '@/lib/api';
+import type { Message, PauseStatus } from '@/lib/api';
 
 export interface Conversation {
   senderId: string;
@@ -25,7 +25,7 @@ export interface Conversation {
   messages: Message[];
   lastMessage: Message;
   needsHumanAttention: boolean;
-  pauseStatus?: { paused: boolean; pausedUntil: string | null; remainingMinutes: number | null };
+  pauseStatus?: PauseStatus;
 }
 
 export interface MessageCardProps {

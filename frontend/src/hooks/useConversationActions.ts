@@ -115,6 +115,12 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
       messages: [...prev.messages, outgoingMessage],
       lastMessage: outgoingMessage,
     } : null);
+    // A manual reply silently triggers the implicit handoff pause on the backend.
+    // Invalidate the pause-status query so the takeover banner appears immediately
+    // instead of only after the merchant reopens the conversation.
+    if (conv) {
+      queryClient.invalidateQueries({ queryKey: ['pause-status', conv.senderId] });
+    }
     invalidateShared();
   };
 
@@ -169,7 +175,7 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
       queryClient.invalidateQueries({ queryKey: ['pause-status', variables.senderId] });
       setSelectedConversation(prev => prev ? {
         ...prev,
-        pauseStatus: { paused: true, pausedUntil: _data.pausedUntil, remainingMinutes: null },
+        pauseStatus: { paused: true, pausedUntil: _data.pausedUntil, reason: 'explicit', remainingMinutes: null },
       } : null);
       toast.warning(t('pauseSuccess'), { id: 'smart-reply-status' });
     },
@@ -192,7 +198,7 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
       queryClient.invalidateQueries({ queryKey: ['pause-status', variables.senderId] });
       setSelectedConversation(prev => prev ? {
         ...prev,
-        pauseStatus: { paused: false, pausedUntil: null, remainingMinutes: null },
+        pauseStatus: { paused: false, pausedUntil: null, reason: null, remainingMinutes: null },
       } : null);
       toast.success(t('resumeSuccess'), { id: 'smart-reply-status' });
     },

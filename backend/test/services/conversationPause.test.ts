@@ -92,3 +92,72 @@ describe('ConversationPauseService — resume marker', () => {
         expect(paused).toBe(true);
     });
 });
+
+/**
+ * getPauseStatus surfaces WHY a conversation is paused (explicit vs the implicit
+ * handoff a manual reply triggers) plus the auto-resume countdown, so the banner
+ * can explain the otherwise-silent takeover to the merchant.
+ */
+describe('ConversationPauseService — getPauseStatus', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        redisMock.get.mockResolvedValue(null);
+    });
+
+    it('reports an explicit pause with reason and remaining countdown', async () => {
+        const pausedUntil = new Date(Date.now() + 20 * 60 * 1000);
+        dbMock.query.conversationPauses.findFirst.mockResolvedValue({ id: 'p1', pausedUntil });
+
+        const status = await conversationPauseService.getPauseStatus('page-1', 'sender-1', 15);
+
+        expect(status.paused).toBe(true);
+        expect(status.reason).toBe('explicit');
+        expect(status.pausedUntil).toEqual(pausedUntil);
+        expect(status.remainingMinutes).toBeGreaterThan(0);
+        expect(status.remainingMinutes).toBeLessThanOrEqual(20);
+    });
+
+    it('reports an implicit manual-reply handoff pause with reason and countdown', async () => {
+        dbMock.query.conversationPauses.findFirst.mockResolvedValue(null);
+        // Manual reply 5 min ago in a 15-min window → ~10 min remaining.
+        dbMock.query.messages.findFirst.mockResolvedValue({
+            createdAt: new Date(Date.now() - 5 * 60 * 1000),
+        });
+
+        const status = await conversationPauseService.getPauseStatus('page-1', 'sender-1', 15);
+
+        expect(status.paused).toBe(true);
+        expect(status.reason).toBe('manual_reply');
+        expect(status.pausedUntil).toBeInstanceOf(Date);
+        expect(status.remainingMinutes).toBeGreaterThan(0);
+        expect(status.remainingMinutes).toBeLessThanOrEqual(10);
+    });
+
+    it('honors the merchant window for the countdown (not the default)', async () => {
+        dbMock.query.conversationPauses.findFirst.mockResolvedValue(null);
+        // Reply 20 min ago: past the 15-min default but inside a 60-min window,
+        // leaving ~40 min on the clock.
+        dbMock.query.messages.findFirst.mockResolvedValue({
+            createdAt: new Date(Date.now() - 20 * 60 * 1000),
+        });
+
+        const status = await conversationPauseService.getPauseStatus('page-1', 'sender-1', 60);
+
+        expect(status.paused).toBe(true);
+        expect(status.reason).toBe('manual_reply');
+        expect(status.remainingMinutes).toBeGreaterThan(0);
+        expect(status.remainingMinutes).toBeLessThanOrEqual(40);
+    });
+
+    it('reports not-paused with null reason and countdown when nothing is active', async () => {
+        dbMock.query.conversationPauses.findFirst.mockResolvedValue(null);
+        dbMock.query.messages.findFirst.mockResolvedValue(null);
+
+        const status = await conversationPauseService.getPauseStatus('page-1', 'sender-1', 15);
+
+        expect(status.paused).toBe(false);
+        expect(status.reason).toBeNull();
+        expect(status.pausedUntil).toBeNull();
+        expect(status.remainingMinutes).toBeNull();
+    });
+});

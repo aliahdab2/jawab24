@@ -568,7 +568,12 @@ export class MessagesController {
                 return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
             }
 
-            const status = await messagesService.getPauseStatus(pageId, senderId);
+            // Use the merchant's configured handoff window so the manual-reply
+            // detection + auto-resume countdown match the reply pipeline (which
+            // gates on the same setting). Passing the default here would mis-report
+            // the pause for any merchant who changed the duration.
+            const wsSettings = await workspaceSettingsService.getSettings(req.workspaceId);
+            const status = await messagesService.getPauseStatus(pageId, senderId, wsSettings.handoffPauseDurationMinutes);
             return reply.send(status);
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error getting pause status');

@@ -40,6 +40,7 @@
   "smartReplyPausedRemaining": "{minutes} دقيقة متبقية",
   "pauseBannerBody": "الرد الذكي متوقف لهذا العميل",
   "pauseBannerBodyWithDuration": "الرد الذكي متوقف لمدة {duration} لهذا العميل",
+  "pauseBannerTakeover": "توليت الرد يدويًا — الرد الذكي متوقف مؤقتًا ويُستأنف تلقائيًا",
   "pauseBannerResumeNow": "استئناف الآن",
   "pauseSuccess": "تم إيقاف الرد الذكي",
   "resumeSuccess": "تم استئناف الرد الذكي",

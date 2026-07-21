@@ -357,6 +357,7 @@ export function MessageDetailModal({
         {/* Pause state banner — visible when Smart Reply is paused for this customer */}
         <PauseBanner
           paused={!!isPaused}
+          reason={conversation.pauseStatus?.reason}
           remainingMinutes={conversation.pauseStatus?.remainingMinutes}
           totalMinutes={pauseDuration}
           onResumeNow={() => onResume(conversation.senderId, pageId)}

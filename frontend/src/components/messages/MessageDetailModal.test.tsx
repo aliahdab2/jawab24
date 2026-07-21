@@ -395,7 +395,7 @@ describe('MessageDetailModal', () => {
       <MessageDetailModal
         {...defaultProps}
         conversation={makeConversation({
-          pauseStatus: { paused: true, pausedUntil: null, remainingMinutes: 10 },
+          pauseStatus: { paused: true, pausedUntil: null, reason: 'explicit', remainingMinutes: 10 },
         })}
       />
     );
@@ -408,13 +408,27 @@ describe('MessageDetailModal', () => {
       <MessageDetailModal
         {...defaultProps}
         conversation={makeConversation({
-          pauseStatus: { paused: true, pausedUntil: null, remainingMinutes: 10 },
+          pauseStatus: { paused: true, pausedUntil: null, reason: 'explicit', remainingMinutes: 10 },
         })}
       />
     );
 
     // Shown in both the PauseBanner (header) and the PauseToggle (footer).
     expect(screen.getAllByText('10 min remaining').length).toBeGreaterThan(0);
+  });
+
+  it('explains the takeover when the pause was triggered by a manual reply', () => {
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        conversation={makeConversation({
+          pauseStatus: { paused: true, pausedUntil: null, reason: 'manual_reply', remainingMinutes: 12 },
+        })}
+      />
+    );
+
+    // Takeover-specific copy replaces the generic "Smart Reply paused" body.
+    expect(screen.getByText(/You replied manually/i)).toBeInTheDocument();
   });
 
   it('calls onClose when close button is clicked', () => {

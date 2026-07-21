@@ -700,6 +700,19 @@ export const subscriptionApi = {
   }>('/subscription/topup/config'),
 };
 
+/**
+ * Conversation pause state for the human-handoff banner.
+ * `reason` distinguishes an explicit UI pause ('explicit') from the implicit
+ * pause a manual reply triggers ('manual_reply') — the banner uses it to explain
+ * WHY auto-reply is paused. `remainingMinutes` is the auto-resume countdown.
+ */
+export interface PauseStatus {
+  paused: boolean;
+  pausedUntil: string | null;
+  reason: 'explicit' | 'manual_reply' | null;
+  remainingMinutes: number | null;
+}
+
 // Messages API
 export const messagesApi = {
   getAll: (params?: MessagesQueryParams) =>
@@ -734,7 +747,7 @@ export const messagesApi = {
     api.post<{ success: boolean }>(`/messages/conversation/${senderId}/resume`, { pageId }),
 
   getPauseStatus: (senderId: string, pageId: string) =>
-    api.get<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null }>(
+    api.get<PauseStatus>(
       `/messages/conversation/${senderId}/pause-status`, { params: { pageId } }
     ),
 

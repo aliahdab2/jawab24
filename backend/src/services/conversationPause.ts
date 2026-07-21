@@ -22,6 +22,12 @@ const resumeMarkerKey = (pageId: string, senderId: string) =>
     `${RESUME_MARKER_PREFIX}${pageId}:${senderId}`;
 
 /**
+ * Why auto-reply is paused: an explicit UI pause, the implicit handoff a manual
+ * reply triggers, or null when not paused.
+ */
+export type PauseReason = 'explicit' | 'manual_reply' | null;
+
+/**
  * Manages conversation pause state: explicit UI-triggered pauses and implicit
  * pauses triggered by a human agent sending a manual reply (handoff detection).
  */
@@ -35,9 +41,8 @@ export class ConversationPauseService {
         senderId: string,
         pauseMinutes: number = DEFAULT_HANDOFF_PAUSE_MINUTES,
     ): Promise<boolean> {
-        const explicitPause = await this.getExplicitPause(pageId, senderId);
-        if (explicitPause) return true;
-        return this._hasRecentManualReply(pageId, senderId, pauseMinutes);
+        const { reason } = await this._resolvePause(pageId, senderId, pauseMinutes);
+        return reason !== null;
     }
 
     /**
@@ -50,21 +55,8 @@ export class ConversationPauseService {
         senderId: string,
         pauseMinutes: number = DEFAULT_HANDOFF_PAUSE_MINUTES,
     ): Promise<number> {
-        const now = Date.now();
-
-        const explicitPause = await this.getExplicitPause(pageId, senderId);
-        if (explicitPause) {
-            const remaining = explicitPause.pausedUntil.getTime() - now;
-            return Math.max(0, remaining);
-        }
-
-        const recentManual = await this._getRecentManualReply(pageId, senderId, pauseMinutes);
-        if (recentManual?.createdAt) {
-            const pauseExpiresAt = new Date(recentManual.createdAt).getTime() + pauseMinutes * 60 * 1000;
-            return Math.max(0, pauseExpiresAt - now);
-        }
-
-        return 0;
+        const { remainingMs } = await this._resolvePause(pageId, senderId, pauseMinutes);
+        return remainingMs;
     }
 
     /**
@@ -122,23 +114,67 @@ export class ConversationPauseService {
     }
 
     /**
-     * Get the pause status for a conversation.
+     * Get the pause status for a conversation, including WHY it's paused and how
+     * many minutes remain until auto-reply resumes.
+     *
+     * `reason` distinguishes an explicit UI pause from the implicit handoff pause
+     * a manual reply triggers — the latter is otherwise invisible to the merchant,
+     * who sees the bot go quiet with no explanation. `remainingMinutes` gives the
+     * auto-resume countdown for both.
+     *
+     * `pauseMinutes` MUST be the merchant's configured handoff window (not the
+     * default) so both the manual-reply detection and the countdown match the
+     * reply pipeline, which gates on `userSettings.handoffPauseDurationMinutes`.
      */
     async getPauseStatus(
         pageId: string,
         senderId: string,
-    ): Promise<{ paused: boolean; pausedUntil: Date | null; reason: string | null }> {
+        pauseMinutes: number = DEFAULT_HANDOFF_PAUSE_MINUTES,
+    ): Promise<{ paused: boolean; pausedUntil: Date | null; reason: PauseReason; remainingMinutes: number | null }> {
+        const { reason, pausedUntil, remainingMs } = await this._resolvePause(pageId, senderId, pauseMinutes);
+        return {
+            paused: reason !== null,
+            pausedUntil,
+            reason,
+            remainingMinutes: reason !== null ? Math.ceil(remainingMs / 60_000) : null,
+        };
+    }
+
+    /**
+     * Single source of truth for pause state: resolves the active pause (if any),
+     * why it's active, when it expires, and how long remains. `isPaused`,
+     * `getRemainingPauseMs`, and `getPauseStatus` all derive from this so the
+     * explicit-vs-manual-reply precedence and expiry math live in exactly one place.
+     *
+     * Precedence: an explicit UI pause wins over the implicit manual-reply handoff.
+     * Short-circuits on the explicit pause so the messages table is only queried
+     * when there's no explicit pause.
+     */
+    private async _resolvePause(
+        pageId: string,
+        senderId: string,
+        pauseMinutes: number,
+    ): Promise<{ reason: PauseReason; pausedUntil: Date | null; remainingMs: number }> {
         const explicitPause = await this.getExplicitPause(pageId, senderId);
         if (explicitPause) {
-            return { paused: true, pausedUntil: explicitPause.pausedUntil, reason: 'explicit' };
+            return {
+                reason: 'explicit',
+                pausedUntil: explicitPause.pausedUntil,
+                remainingMs: Math.max(0, explicitPause.pausedUntil.getTime() - Date.now()),
+            };
         }
 
-        const hasManual = await this._hasRecentManualReply(pageId, senderId);
-        if (hasManual) {
-            return { paused: true, pausedUntil: null, reason: 'manual_reply' };
+        const recentManual = await this._getRecentManualReply(pageId, senderId, pauseMinutes);
+        if (recentManual?.createdAt) {
+            const pausedUntil = new Date(new Date(recentManual.createdAt).getTime() + pauseMinutes * 60 * 1000);
+            return {
+                reason: 'manual_reply',
+                pausedUntil,
+                remainingMs: Math.max(0, pausedUntil.getTime() - Date.now()),
+            };
         }
 
-        return { paused: false, pausedUntil: null, reason: null };
+        return { reason: null, pausedUntil: null, remainingMs: 0 };
     }
 
     /**
@@ -161,23 +197,8 @@ export class ConversationPauseService {
     }
 
     /**
-     * Check if a manual outgoing reply was sent within the given window and
-     * AFTER any active resume marker. The marker is set by resumeConversation;
-     * it neutralizes the rolling implicit pause without rewriting message rows.
-     */
-    private async _hasRecentManualReply(
-        pageId: string,
-        senderId: string,
-        pauseMinutes: number = DEFAULT_HANDOFF_PAUSE_MINUTES,
-    ): Promise<boolean> {
-        const recent = await this._getRecentManualReply(pageId, senderId, pauseMinutes);
-        return !!recent;
-    }
-
-    /**
-     * Look up the most recent unmasked manual reply within the window. Shared
-     * by `getRemainingPauseMs` and `_hasRecentManualReply` so they apply the
-     * resume marker identically.
+     * Look up the most recent unmasked manual reply within the window, applying
+     * the Redis resume marker as a virtual cutoff. Sole caller is `_resolvePause`.
      */
     private async _getRecentManualReply(
         pageId: string,
