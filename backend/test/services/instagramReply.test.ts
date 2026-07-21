@@ -113,6 +113,7 @@ vi.mock('../../src/services/workspaceSettings', () => ({
         isCommentsAutoReplyEnabled: vi.fn(),
         isMessagesAutoReplyEnabled: vi.fn(),
         isAutoReplyEnabledFromSettings: vi.fn(),
+        autoReplyStateFromSettings: vi.fn(),
         getReplyDelay: vi.fn(),
         getSettings: vi.fn(),
         getAwayMessage: vi.fn(),
@@ -175,6 +176,21 @@ vi.mock('../../src/lib/pipelineMetrics', () => ({
     },
     PipelineMetrics: class {},
 }));
+// The away-message cooldown (D-034) is a Redis SET NX. Without this mock the
+// suite talks to whatever Redis the dev machine happens to have running, so the
+// cooldown key survives between runs and the away-message assertion fails on the
+// second run only — a genuinely confusing flake.
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue('OK'),
+        del: vi.fn().mockResolvedValue(1),
+        incr: vi.fn(),
+        expire: vi.fn(),
+        quit: vi.fn(),
+    },
+}));
+
 vi.mock('../../src/lib/replyLock', () => ({
     acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
     releaseReplyLock: vi.fn().mockResolvedValue(undefined),
@@ -273,6 +289,7 @@ describe('InstagramReplyService', () => {
         vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.isMessagesAutoReplyEnabled).mockResolvedValue(true);
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('on');
         vi.mocked(workspaceSettingsService.getReplyDelay).mockResolvedValue(0);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             aiEnabled: true,
@@ -364,6 +381,7 @@ describe('InstagramReplyService', () => {
 
         it('should return error when comments auto-reply is disabled', async () => {
             vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+            vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_master');
             setupDbForComment();
 
             const result = await service.processComment('ig-1', 'media-1', 'comment-1', 'hello');
@@ -438,6 +456,7 @@ describe('InstagramReplyService', () => {
 
         it('should send away message when auto-reply disabled and away message configured', async () => {
             vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+            vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_master');
             vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are currently away');
             // Away message now gates on first incoming (not the legacy `isNew` flag which was
             // always false under the webhook pre-store flow).
@@ -455,6 +474,7 @@ describe('InstagramReplyService', () => {
 
         it('should not fail if away message sending fails', async () => {
             vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+            vi.mocked(workspaceSettingsService.autoReplyStateFromSettings).mockReturnValue('off_master');
             vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('Away');
             vi.mocked(instagramService.sendDirectMessage).mockRejectedValue(new Error('blocked'));
             vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);

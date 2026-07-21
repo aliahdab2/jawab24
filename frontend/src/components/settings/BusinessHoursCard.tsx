@@ -1,11 +1,20 @@
 import clsx from 'clsx';
-import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
+import { useMemo } from 'react';
+import {
+  MAX_TEMPLATE_MESSAGE_LENGTH,
+  PLACEHOLDER_TIMEZONE,
+  detectTimezone,
+  formatTimeInZone,
+  getTimezoneOptions,
+  isWithinBusinessHours,
+} from '@jawab24/shared';
 import { Card, Toggle, Select, InputFieldWrapper, CharCounter } from '@/components/ui';
 import {
   Clock,
   Zap,
   AlertTriangle,
   ArrowRight,
+  Globe,
   Mail,
   Sun,
   Moon,
@@ -31,6 +40,16 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
           [currentLang]: defaultMsg
         };
       }
+      // Hours are meaningless without a timezone, and until now nothing ever wrote
+      // one — merchants silently inherited the DB placeholder, so a Libyan shop ran
+      // on Riyadh time and lost its last working hour. Switching hours ON is the
+      // moment the value starts to matter, so seed it from this device. Only ever
+      // applied when the stored value is still the untouched placeholder, and the
+      // picker directly below shows the result, so this is visible, not silent.
+      const detected = detectTimezone();
+      if (detected && settings.timezone === PLACEHOLDER_TIMEZONE) {
+        updates.timezone = detected;
+      }
     }
     setSettings({ ...settings, ...updates });
   };
@@ -43,13 +62,25 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
 
   const hasError = settings.businessHoursEnd <= settings.businessHoursStart;
 
-  // Compute current status
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: settings.timezone,
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(currentTime);
-  const nowTime = `${parts.find(p => p.type === 'hour')?.value || '00'}:${parts.find(p => p.type === 'minute')?.value || '00'}`;
-  const isActive = settings.businessHoursOnly && nowTime >= settings.businessHoursStart && nowTime < settings.businessHoursEnd;
+  // Timezone options are derived once per stored/detected zone rather than per
+  // render: the full IANA list is ~400 entries and each label formats an offset.
+  const detectedTimezone = useMemo(() => detectTimezone(), []);
+  const timezoneOptions = useMemo(
+    () => getTimezoneOptions([settings.timezone, detectedTimezone]),
+    [settings.timezone, detectedTimezone],
+  );
+  // Surfaced as a hint, never auto-applied: silently rewriting the merchant's
+  // stored zone from whatever device they happen to open Settings on is how the
+  // value became invisible in the first place.
+  const timezoneMismatch = !!detectedTimezone && detectedTimezone !== settings.timezone;
+
+  // Current status — `isWithinBusinessHours` is the SAME function the reply
+  // pipeline gates on, so this badge cannot claim "open" while the bot stays
+  // silent (or the reverse) the way two hand-rolled comparisons used to.
+  const nowTime = formatTimeInZone(settings.timezone, currentTime);
+  const isActive = settings.businessHoursOnly && isWithinBusinessHours(
+    settings.businessHoursStart, settings.businessHoursEnd, settings.timezone, currentTime,
+  );
 
   // Character limit for away messages (Messenger recommendation)
   const currentLang = settings.dashboardLanguage;
@@ -124,17 +155,27 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               </div>
             </div>
 
-            {/* Outside hours */}
+            {/* Outside hours — mirrors whichever behaviour afterHoursSmartReply
+                selects, so the merchant can see what night traffic will get. */}
             <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-card">
               <div className="w-9 h-9 rounded-xl icon-bg-purple flex items-center justify-center flex-shrink-0">
                 <Moon className="w-4 h-4" />
               </div>
               <div className="flex items-center gap-1.5 flex-1 min-w-0">
                 <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
-                <div className="w-7 h-7 rounded-lg icon-bg-orange flex items-center justify-center flex-shrink-0">
-                  <Mail className="w-3.5 h-3.5" />
+                <div className={clsx(
+                  'w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0',
+                  settings.afterHoursSmartReply ? 'icon-bg-brand' : 'icon-bg-orange',
+                )}>
+                  {settings.afterHoursSmartReply
+                    ? <Zap className="w-3.5 h-3.5" />
+                    : <Mail className="w-3.5 h-3.5" />}
                 </div>
-                <span className="text-[11px] font-semibold text-foreground truncate">{t('businessHours.awayMessage')}</span>
+                <span className="text-[11px] font-semibold text-foreground truncate">
+                  {settings.afterHoursSmartReply
+                    ? t('businessHours.smartReplyPlusNote')
+                    : t('businessHours.awayMessage')}
+                </span>
               </div>
             </div>
           </div>
@@ -182,6 +223,67 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               </div>
             </div>
           )}
+
+          {/* Timezone — the hours above mean nothing without it. Kept in the same
+              card so the two are read (and changed) together. */}
+          <div className="mt-4">
+            <label
+              id="business-hours-timezone-label"
+              className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5"
+            >
+              {t('businessHours.timezone')}
+            </label>
+            <Select
+              aria-labelledby="business-hours-timezone-label"
+              value={settings.timezone}
+              onChange={(val) => setSettings({ ...settings, timezone: val })}
+              options={timezoneOptions}
+              disabled={!settings.businessHoursOnly}
+              searchable
+              searchPlaceholder={t('businessHours.timezoneSearch')}
+              noResultsLabel={t('businessHours.timezoneNoResults')}
+              className="!py-3 font-bold border-none bg-card shadow-sm"
+            />
+            <div className="flex items-center gap-1.5 mt-2">
+              <Globe className="w-3.5 h-3.5 text-icon-muted flex-shrink-0" aria-hidden="true" />
+              <p className="text-[11px] text-muted-foreground font-medium">
+                {t('businessHours.localTimeNow', { time: nowTime })}
+              </p>
+            </div>
+            {timezoneMismatch && detectedTimezone && (
+              <button
+                type="button"
+                onClick={() => setSettings({ ...settings, timezone: detectedTimezone })}
+                disabled={!settings.businessHoursOnly}
+                className="mt-2 text-[11px] font-semibold text-brand-600 hover:underline text-start"
+              >
+                {t('businessHours.useDetectedTimezone', { timezone: detectedTimezone.replace(/_/g, ' ') })}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* After-hours Smart Reply (D-034) — outside working hours the assistant
+            still answers and tells the customer when a human follows up, instead
+            of the conversation going silent until morning. */}
+        <div className="p-5 landscape:p-3 rounded-2xl bg-muted border border-theme-border">
+          <div className="flex items-center gap-3">
+            <div className={clsx(
+              'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+              settings.afterHoursSmartReply ? 'icon-bg-brand' : 'bg-muted text-muted-foreground',
+            )}>
+              <Zap className="w-4 h-4" />
+            </div>
+            <div className="text-start flex-1 min-w-0">
+              <h5 className="font-bold text-foreground text-sm">{t('afterHoursSmartReply.title')}</h5>
+              <p className="text-[11px] text-muted-foreground font-medium">{t('afterHoursSmartReply.desc')}</p>
+            </div>
+            <Toggle
+              enabled={settings.afterHoursSmartReply}
+              onChange={(enabled) => setSettings({ ...settings, afterHoursSmartReply: enabled })}
+              aria-label={t('afterHoursSmartReply.title')}
+            />
+          </div>
         </div>
 
         {/* Away Message */}

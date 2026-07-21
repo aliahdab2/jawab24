@@ -42,6 +42,11 @@ export type Outcome =
     | 'greeting_suppressed'
     | 'greeting_prefixed'
     | 'greeting_skipped_already_engaged'
+    // D-034: a DM answered OUTSIDE the merchant's business hours. Without this the
+    // feature is unmeasurable — these replies are exactly the ones that carry new
+    // AI cost and are supposed to recover otherwise-silent night traffic, so their
+    // volume is the number that decides whether the trade is worth it.
+    | 'after_hours_reply'
     | 'subscription_inactive'
     | 'lock_contention'
     | 'trigger_no_match'

@@ -104,7 +104,7 @@
   "dualReplyVariationsHint": "تُنشأ تلقائياً صيغ مختلفة بالمعنى نفسه للحفاظ على تنوّع الردود",
   "publicReplyPlaceholder": "تم إرسال التفاصيل برسالة خاصة 📩",
   "preview": "معاينة",
-  "businessHoursDesc": "تفعيل الردود خلال الدوام فقط، ورسالة غياب خارج أوقات العمل",
+  "businessHoursDesc": "حدّد أوقات عملك واختر ما يصل العملاء خارجها",
   "businessHours": {
     "statusActive": "نشط",
     "statusInactive": "خارج الدوام",
@@ -114,7 +114,17 @@
     "awayMessage": "رسالة غياب",
     "flowDesc": "الرد التلقائي نشط خلال ساعات العمل. خارج هذه الساعات، تُرسل رسالة غياب.",
     "custom": "مخصص",
-    "resumesAt": "يستأنف عند {time}"
+    "resumesAt": "يستأنف عند {time}",
+    "smartReplyPlusNote": "رد ذكي + تنويه",
+    "timezone": "المنطقة الزمنية",
+    "localTimeNow": "الوقت لديك الآن: {time}",
+    "useDetectedTimezone": "استخدام المنطقة الزمنية لهذا الجهاز ({timezone})",
+    "timezoneSearch": "ابحث عن مدينة أو دولة…",
+    "timezoneNoResults": "لا توجد منطقة زمنية مطابقة"
+  },
+  "afterHoursSmartReply": {
+    "title": "الردود الذكية خارج أوقات العمل",
+    "desc": "استمرار الرد على الرسائل ليلاً مع تنويه بأن الفريق سيتابع خلال أوقات العمل. أوقفه للاكتفاء برسالة الغياب."
   },
   "businessHoursStart": "بداية الدوام",
   "businessHoursEnd": "نهاية الدوام",

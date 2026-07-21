@@ -104,7 +104,7 @@
   "dualReplyVariationsHint": "Variations with the same meaning are generated automatically to keep replies fresh",
   "publicReplyPlaceholder": "Details sent in a private message 📩",
   "preview": "Preview",
-  "businessHoursDesc": "Auto-reply during work hours, send away message outside",
+  "businessHoursDesc": "Set your working hours and choose what customers get outside them",
   "businessHours": {
     "statusActive": "Active",
     "statusInactive": "Outside Hours",
@@ -114,7 +114,17 @@
     "awayMessage": "Away Message",
     "flowDesc": "Auto-reply is active during business hours. Outside these hours, an away message is sent.",
     "custom": "Custom",
-    "resumesAt": "Resumes at {time}"
+    "resumesAt": "Resumes at {time}",
+    "smartReplyPlusNote": "Smart Reply + note",
+    "timezone": "Timezone",
+    "localTimeNow": "Your local time now: {time}",
+    "useDetectedTimezone": "Use this device's timezone ({timezone})",
+    "timezoneSearch": "Search for a city or country…",
+    "timezoneNoResults": "No matching timezone"
+  },
+  "afterHoursSmartReply": {
+    "title": "Smart Replies outside working hours",
+    "desc": "Keep answering messages at night, adding a note that the team follows up during working hours. Turn off to send only the away message."
   },
   "businessHoursStart": "From",
   "businessHoursEnd": "To",

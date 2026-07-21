@@ -50,5 +50,9 @@ if [ "$FILES_BEFORE" != "$FILES_AFTER" ]; then
 fi
 
 echo -e "${GREEN}✅ No schema drift detected${NC}"
+echo -e "${YELLOW}ℹ️  This compares schema.ts against the migration snapshots only.${NC}"
+echo -e "${YELLOW}   It cannot see a production database that was ALTERed by hand${NC}"
+echo -e "${YELLOW}   (how settings.timezone came to serve a default no migration set).${NC}"
+echo -e "${YELLOW}   Run ./scripts/check-live-column-defaults.sh for that.${NC}"
 exit 0
 

@@ -13,6 +13,8 @@ export interface SettingsState {
   businessHoursOnly: boolean;
   businessHoursStart: string;
   businessHoursEnd: string;
+  /** Outside business hours: answer with a Smart Reply + follow-up note (D-034). */
+  afterHoursSmartReply: boolean;
   timezone: string;
   awayMessageMulti: Record<string, string>;
   greetingMessageMulti: Record<string, string>;

@@ -61,7 +61,16 @@ export const KB_GAP_FLAGS = ['info_not_in_kb', 'price_not_in_kb', 'phone_not_in_
 export type KbGapFlag = (typeof KB_GAP_FLAGS)[number];
 
 // --- Utilities ---
-export { isValidTimezone, safeTimezone } from './timezone';
+export {
+    isValidTimezone,
+    safeTimezone,
+    formatTimeInZone,
+    isWithinBusinessHours,
+    formatUtcOffset,
+    detectTimezone,
+    getTimezoneOptions,
+    utcOffsetMinutes,
+} from './timezone';
 export { normalizeArabic } from './utils/arabic-normalize';
 export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
@@ -786,6 +795,7 @@ export {
     MAX_TEMPLATE_MESSAGE_LENGTH,
     MAX_BRAND_VOICE_LENGTH,
     DEFAULT_AI_MODEL,
+    PLACEHOLDER_TIMEZONE,
     ALLOWED_AI_MODELS,
     isAllowedAiModel,
     type AllowedAiModel,
@@ -1287,6 +1297,13 @@ export interface WorkspaceSettings {
   businessHoursOnly: boolean;
   businessHoursStart: string;
   businessHoursEnd: string;
+  /**
+   * D-034: outside business hours, still answer DMs with a Smart Reply (plus a
+   * "the team follows up during working hours" note) instead of going silent.
+   * Only consulted when `businessHoursOnly` is on; the `messagesAutoReply`
+   * master switch still wins, and comments/Post Reply are unaffected.
+   */
+  afterHoursSmartReply: boolean;
   timezone: string;
   greetingMessageMulti: Record<string, string>;
   /** When false, the configured greeting is never sent — AI handles the first message directly. */

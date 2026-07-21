@@ -20,6 +20,8 @@ export interface UserSettings {
     businessHoursOnly: boolean;
     businessHoursStart: string;
     businessHoursEnd: string;
+    /** D-034: answer DMs outside business hours instead of going silent. */
+    afterHoursSmartReply: boolean;
     timezone: string;
     awayMessage: string | null;
     greetingMessage: string | null;
@@ -62,6 +64,7 @@ export interface UpdateSettingsDTO {
     businessHoursOnly?: boolean;
     businessHoursStart?: string;
     businessHoursEnd?: string;
+    afterHoursSmartReply?: boolean;
     timezone?: string;
     awayMessage?: string | null;
     greetingMessage?: string | null;

@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, numeric, date, check, customType, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE } from '@jawab24/shared';
 import type { LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
 import type { FacebookMessageTag } from '../utils/commentText';
 
@@ -501,7 +501,16 @@ export const settings = pgTable('settings', {
     businessHoursOnly: boolean('business_hours_only').default(false),
     businessHoursStart: varchar('business_hours_start', { length: 5 }).default('09:00'),
     businessHoursEnd: varchar('business_hours_end', { length: 5 }).default('18:00'),
-    timezone: varchar('timezone', { length: 100 }).default('Asia/Damascus'),
+    // D-034: keep answering DMs outside business hours (with a follow-up note)
+    // instead of going silent. Only read when businessHoursOnly is on.
+    afterHoursSmartReply: boolean('after_hours_smart_reply').default(true),
+    // Placeholder only — every merchant should set this explicitly (the business-hours
+    // card prefills the detected zone when hours are switched on). Declared as
+    // 'Asia/Riyadh' because that is what production has actually been handing out:
+    // migration 0026 created the column with 'Asia/Damascus' but prod's default was
+    // later changed by hand, so all 59 pre-D-034 rows carry Riyadh. Codifying the live
+    // value keeps fresh databases identical to prod instead of silently splitting them.
+    timezone: varchar('timezone', { length: 100 }).default(PLACEHOLDER_TIMEZONE),
     // DEPRECATED - kept for backward compatibility (use language-specific fields below)
     awayMessage: text('away_message'),
     greetingMessage: text('greeting_message'),

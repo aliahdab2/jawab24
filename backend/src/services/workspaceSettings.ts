@@ -6,8 +6,16 @@ import { t } from '../utils/i18n';
 import { captureError } from '../utils/sentryHelpers';
 import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 import type { WorkspaceSettings, LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
 import { PIPELINE_FIELDS, type PipelineField } from './pipelineFields';
+
+/**
+ * Why auto-reply is or isn't active for a channel right now.
+ *  - `on`         — reply normally
+ *  - `off_master` — the merchant switched this channel off; stay silent
+ *  - `off_hours`  — channel is on but we're outside business hours (D-034)
+ */
+export type AutoReplyState = 'on' | 'off_master' | 'off_hours';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
 const SETTINGS_CACHE_TTL = 300;
@@ -28,7 +36,10 @@ export const DEFAULTS: WorkspaceSettings = {
     businessHoursOnly: false,
     businessHoursStart: '09:00',
     businessHoursEnd: '18:00',
-    timezone: 'Asia/Damascus',
+    afterHoursSmartReply: true,
+    // Must match the settings-table column default (see schema.ts) so a workspace
+    // whose JSONB predates an explicit timezone reads the same value the row has.
+    timezone: PLACEHOLDER_TIMEZONE,
     greetingMessageMulti: {},
     greetingMessageEnabled: false,
     awayMessageMulti: {},
@@ -336,18 +347,33 @@ export class WorkspaceSettingsService {
      * Accepts a pre-fetched WorkspaceSettings object to avoid redundant Redis calls.
      */
     isAutoReplyEnabledFromSettings(settings: WorkspaceSettings, type: 'messages' | 'comments'): boolean {
-        const flag = type === 'messages' ? settings.messagesAutoReply : settings.commentsAutoReply;
-        if (!flag) return false;
+        return this.autoReplyStateFromSettings(settings, type) === 'on';
+    }
 
-        if (settings.businessHoursOnly) {
-            return this.isWithinBusinessHours(
-                settings.businessHoursStart,
-                settings.businessHoursEnd,
-                settings.timezone,
-            );
+    /**
+     * Why auto-reply is (or isn't) active right now.
+     *
+     * `isAutoReplyEnabledFromSettings` collapses two very different situations
+     * into one `false`: the merchant switched the channel OFF, versus the
+     * channel is ON but we're outside business hours. D-034 treats them
+     * differently for DMs — outside hours we can still answer with a Smart Reply
+     * plus a follow-up note, whereas a master-off channel must stay silent. The
+     * boolean wrapper above keeps every other caller (comments, Post Reply)
+     * behaving exactly as before.
+     */
+    autoReplyStateFromSettings(settings: WorkspaceSettings, type: 'messages' | 'comments'): AutoReplyState {
+        const flag = type === 'messages' ? settings.messagesAutoReply : settings.commentsAutoReply;
+        if (!flag) return 'off_master';
+
+        if (settings.businessHoursOnly && !this.isWithinBusinessHours(
+            settings.businessHoursStart,
+            settings.businessHoursEnd,
+            settings.timezone,
+        )) {
+            return 'off_hours';
         }
 
-        return true;
+        return 'on';
     }
 
     /**

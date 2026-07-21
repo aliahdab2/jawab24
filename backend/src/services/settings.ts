@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { settings, workspaceMembers } from '../db/schema';
 import { UserSettings, UpdateSettingsDTO } from '../types';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE } from '@jawab24/shared';
 import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
@@ -410,7 +410,8 @@ export class SettingsService {
             businessHoursOnly: record.businessHoursOnly ?? false,
             businessHoursStart: record.businessHoursStart || '09:00',
             businessHoursEnd: record.businessHoursEnd || '18:00',
-            timezone: record.timezone || 'Asia/Damascus',
+            afterHoursSmartReply: record.afterHoursSmartReply ?? true,
+            timezone: record.timezone || PLACEHOLDER_TIMEZONE,
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,
             greetingMessageEnabled: record.greetingMessageEnabled ?? false,

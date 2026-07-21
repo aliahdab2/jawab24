@@ -5,27 +5,14 @@
 
 /**
  * Check if the current time (in the given timezone) falls within business hours.
+ *
+ * Re-exported from `@jawab24/shared` rather than reimplemented: the settings UI
+ * renders the same "open / closed" state next to the merchant's hours, and when
+ * the two carried separate copies they disagreed — this one treated `end` as
+ * inclusive, the card as exclusive, so at exactly 18:00 the pipeline replied
+ * while the badge read "Outside Hours". One definition, one answer.
  */
-export function isWithinBusinessHours(start: string, end: string, timezone: string): boolean {
-    let currentTime: string;
-    try {
-        const parts = new Intl.DateTimeFormat('en-US', {
-            timeZone: timezone,
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-        }).formatToParts(new Date());
-        const hour = parts.find(p => p.type === 'hour')?.value || '00';
-        const minute = parts.find(p => p.type === 'minute')?.value || '00';
-        currentTime = `${hour}:${minute}`;
-    } catch {
-        // Fallback to server time if timezone is invalid
-        const now = new Date();
-        currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    }
-
-    return currentTime >= start && currentTime <= end;
-}
+export { isWithinBusinessHours } from '@jawab24/shared';
 
 /**
  * Resolve which language version to use for a customer-facing reply.
