@@ -40,6 +40,7 @@
   "smartReplyPausedRemaining": "{minutes} min remaining",
   "pauseBannerBody": "Smart Reply paused for this customer",
   "pauseBannerBodyWithDuration": "Smart Reply paused for {duration} for this customer",
+  "pauseBannerTakeover": "You replied manually — Smart Reply is paused and resumes automatically",
   "pauseBannerResumeNow": "Resume now",
   "pauseSuccess": "Smart reply paused",
   "resumeSuccess": "Smart reply resumed",

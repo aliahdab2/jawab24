@@ -4,6 +4,12 @@ import { useTranslations } from 'next-intl';
 
 interface PauseBannerProps {
   paused: boolean;
+  /**
+   * Why auto-reply is paused. 'manual_reply' = an implicit handoff pause the merchant
+   * triggered by replying manually; the banner explains this so the quiet bot isn't a
+   * mystery. 'explicit'/undefined = a deliberate UI pause (generic copy).
+   */
+  reason?: 'explicit' | 'manual_reply' | null;
   remainingMinutes?: number | null;
   totalMinutes?: number | null;
   onResumeNow: () => void;
@@ -33,6 +39,7 @@ function useDurationLabel(totalMinutes: number | null | undefined): string | nul
  */
 export function PauseBanner({
   paused,
+  reason,
   remainingMinutes,
   totalMinutes,
   onResumeNow,
@@ -43,9 +50,14 @@ export function PauseBanner({
 
   if (!paused) return null;
 
-  const bodyText = durationLabel
-    ? t('pauseBannerBodyWithDuration', { duration: durationLabel })
-    : t('pauseBannerBody');
+  // A manual reply put auto-reply into an implicit handoff pause. Say so explicitly —
+  // otherwise the merchant sees "Smart Reply paused" with no idea they caused it by
+  // replying, or that it auto-resumes. The countdown line below carries the timing.
+  const bodyText = reason === 'manual_reply'
+    ? t('pauseBannerTakeover')
+    : durationLabel
+      ? t('pauseBannerBodyWithDuration', { duration: durationLabel })
+      : t('pauseBannerBody');
 
   return (
     <div

@@ -121,6 +121,34 @@ describe('useConversationActions', () => {
     });
   });
 
+  describe('handleReply onSuccess', () => {
+    // A manual reply silently triggers the backend handoff pause. The hook must
+    // invalidate pause-status so the takeover banner appears immediately instead
+    // of only after the merchant reopens the conversation.
+    it('invalidates pause-status for the selected conversation after a manual reply', async () => {
+      mockReply.mockResolvedValue({ data: { id: 'out-1', pageId: 'page1', senderId: 'sender1' } });
+      const { wrapper, invalidateSpy } = createWrapper();
+      const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+      act(() => {
+        result.current.setSelectedConversation({
+          senderId: 'sender1',
+          senderName: null,
+          messages: [],
+          lastMessage: { id: 'in-1', pageId: 'page1', senderId: 'sender1' } as never,
+          needsHumanAttention: false,
+        });
+      });
+
+      await act(async () => {
+        result.current.handleReply('in-1', 'hi');
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['pause-status', 'sender1'] });
+    });
+  });
+
   describe('handleReply onError', () => {
     // Regression: the toast used to show `error.message` ("Request failed with status code 500"),
     // leaking axios internals to the user. It now always shows the translated replyFailed key.

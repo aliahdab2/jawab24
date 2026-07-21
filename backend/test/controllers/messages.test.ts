@@ -968,6 +968,7 @@ describe('MessagesController', () => {
         beforeEach(() => {
             (mockRequest as any).params = { senderId: 'sender-1' };
             (mockRequest as any).query = { pageId: 'page-1' };
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ handoffPauseDurationMinutes: 15 } as any);
         });
 
         it('should return pause status', async () => {
@@ -978,6 +979,16 @@ describe('MessagesController', () => {
             await messagesController.getPauseStatus(mockRequest as any, mockReply as any);
 
             expect(mockReply.send).toHaveBeenCalledWith(status);
+        });
+
+        it('passes the merchant handoff window to the service', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-uuid' } as any);
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ handoffPauseDurationMinutes: 60 } as any);
+            vi.mocked(messagesService.getPauseStatus).mockResolvedValue({ paused: false } as any);
+
+            await messagesController.getPauseStatus(mockRequest as any, mockReply as any);
+
+            expect(messagesService.getPauseStatus).toHaveBeenCalledWith('page-1', 'sender-1', 60);
         });
 
         it('should return 400 when pageId is missing', async () => {

@@ -9,7 +9,7 @@ import { checkNeedsAttention } from './CommentCard';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
-import { commentsApi, messagesApi } from '@/lib/api';
+import { commentsApi, messagesApi, type PauseStatus } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
 import { parseKeywords } from '@jawab24/shared';
@@ -122,7 +122,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Pause state
-  const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
+  const [pauseStatus, setPauseStatus] = useState<PauseStatus | null>(null);
   const [pauseLoading, setPauseLoading] = useState(false);
   const pauseDuration = useHandoffPauseDuration();
 
@@ -155,11 +155,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     try {
       if (pauseStatus?.paused) {
         await messagesApi.resumeConversation(comment.fromId, comment.pageId);
-        setPauseStatus({ paused: false, pausedUntil: null, remainingMinutes: null });
+        setPauseStatus({ paused: false, pausedUntil: null, reason: null, remainingMinutes: null });
         toast.success(tMessages('resumeSuccess'), { id: 'smart-reply-status' });
       } else {
         const res = await messagesApi.pauseConversation(comment.fromId, comment.pageId);
-        setPauseStatus({ paused: true, pausedUntil: res.data.pausedUntil, remainingMinutes: null });
+        setPauseStatus({ paused: true, pausedUntil: res.data.pausedUntil, reason: 'explicit', remainingMinutes: null });
         toast.warning(tMessages('pauseSuccess'), { id: 'smart-reply-status' });
       }
     } catch {
@@ -277,6 +277,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         {/* Pause state banner — visible when Smart Reply is paused for this customer */}
         <PauseBanner
           paused={!!pauseStatus?.paused}
+          reason={pauseStatus?.reason}
           remainingMinutes={pauseStatus?.remainingMinutes}
           totalMinutes={pauseDuration}
           onResumeNow={handleTogglePause}
