@@ -20,6 +20,7 @@ import { getModelForUser } from './aiModelResolver';
 import { getConfidentGender, recordGenderObservation, firstNameOf } from './genderMap';
 import { cacheRejectReason } from './cacheQualityGate';
 import { normalizeForExactCacheKey } from '../utils/exactCacheNormalize';
+import { generateGenderVariant } from './genderVariantTransform';
 import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError, AiQuotaExhaustedError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
 import { emailService } from './email';
@@ -98,6 +99,15 @@ interface CacheContext {
      * nameless entries can never leak to named senders.
      */
     neutralBucket?: boolean;
+    /**
+     * Dual-variant shared DM bucket (g:d) — the entry stores BOTH addressee
+     * renderings ({m,f} in metadata.variants), so ONE key is shared across
+     * ALL named senders; the reader's map-known gender picks the rendering at
+     * serve time. Highest precedence in buildCacheKey. A distinct segment so
+     * single-rendering legacy entries (per-name/g:m/g:f/g:n) can never be
+     * misread as dual. Only ever set when config.ai.dualVariantEnabled.
+     */
+    dualVariant?: boolean;
 }
 
 /** Shape returned by a successful exact-cache hit. */
@@ -106,6 +116,10 @@ interface CacheHit {
     intent?: string;
     confidence?: string;
     flags?: string[];
+    /** Dual-variant (g:d) entries only: both addressee renderings. The read
+     *  path serves variants[readerGender]; `reply` holds the as-generated
+     *  primary rendering for legacy/inspection paths. */
+    variants?: { m?: string; f?: string };
 }
 
 /**
@@ -222,10 +236,13 @@ export class AiService {
         // key, so bucket + exact text pins the gender decision deterministically).
         // First whitespace token, hashed. Comments and nameless DMs skip this, so
         // their keys — and the high-volume comment cache — stay byte-identical.
-        // Precedence: neutral shared bucket (g:n, reply certified genderless +
+        // Precedence: dual-variant shared bucket (g:d, entry carries both
+        // renderings) → neutral shared bucket (g:n, reply certified genderless +
         // name-free) → gender bucket (g:m/g:f) → per-name hash.
         if (ctx.channel === 'dm' && ctx.senderName) {
-            if (ctx.neutralBucket) {
+            if (ctx.dualVariant) {
+                key.push('g:d');
+            } else if (ctx.neutralBucket) {
                 key.push('g:n');
             } else if (ctx.genderBucket) {
                 key.push(`g:${ctx.genderBucket}`);
@@ -280,7 +297,7 @@ export class AiService {
                 .where(eq(aiCache.commentHash, hash));
 
             if (cached.length > 0) {
-                const meta = cached[0].metadata as { intent?: string; confidence?: string; flags?: string[] } | null;
+                const meta = cached[0].metadata as { intent?: string; confidence?: string; flags?: string[]; variants?: { m?: string; f?: string } } | null;
 
                 // Skip entries without metadata — fresh AI call will save with full flagging data
                 if (!meta) {
@@ -289,7 +306,7 @@ export class AiService {
                 }
 
                 const reply = cached[0].replyText;
-                const result = { reply, intent: meta.intent, confidence: meta.confidence, flags: meta.flags };
+                const result = { reply, intent: meta.intent, confidence: meta.confidence, flags: meta.flags, variants: meta.variants };
                 this.logger.info('ai_cache_hit_postgres', { hash });
 
                 // Populate Redis for next time (JSON format with metadata)
@@ -323,7 +340,7 @@ export class AiService {
         comment: string,
         reply: string,
         ctx: CacheContext,
-        metadata?: { intent?: string; confidence?: string; flags?: string[] },
+        metadata?: { intent?: string; confidence?: string; flags?: string[]; variants?: { m?: string; f?: string } },
     ): Promise<void> {
         if (!config.ai.cacheEnabled) {
             return;
@@ -331,7 +348,7 @@ export class AiService {
 
         const hash = this.buildCacheKey(comment, ctx);
         const cacheKey = `cache:ai_reply:${hash}`;
-        const cacheData = JSON.stringify({ reply, intent: metadata?.intent, confidence: metadata?.confidence, flags: metadata?.flags });
+        const cacheData = JSON.stringify({ reply, intent: metadata?.intent, confidence: metadata?.confidence, flags: metadata?.flags, variants: metadata?.variants });
 
         // Save to Redis (30 days TTL) — JSON with metadata
         try {
@@ -419,7 +436,9 @@ export class AiService {
         // may cross its confidence threshold during the ~seconds the GPT call is
         // in flight, and a read/save bucket flip would strand entries. Failure or
         // unknown name → undefined → per-name bucket (v51 behavior, always safe).
-        if (config.ai.genderBucketEnabled && cacheCtx.channel === 'dm' && cacheCtx.senderName) {
+        // The dual-variant read path needs the same resolution (it picks WHICH
+        // rendering to serve), so it participates even with the bucket flag off.
+        if ((config.ai.genderBucketEnabled || config.ai.dualVariantEnabled) && cacheCtx.channel === 'dm' && cacheCtx.senderName) {
             cacheCtx.genderBucket = await getConfidentGender(cacheCtx.senderName);
             if (cacheCtx.genderBucket) {
                 this.logger.debug('ai_cache_gender_bucket', { pageId, bucket: cacheCtx.genderBucket });
@@ -448,11 +467,25 @@ export class AiService {
 
         // Layer 1: Exact cache (scoped per page + KB version + post context + model)
         if (!hasConversationHistory && !bypassAllCaches) {
-            // Most-specific probe first (gender/name bucket — a warmer, personalized
+            // Dual-variant shared bucket first (g:d): one entry serves ALL named
+            // senders whose gender the map knows — the entry carries both
+            // renderings and the reader's gender picks one. Unknown-gender
+            // readers skip this probe (no way to choose a rendering) and fall
+            // through to the legacy chain, ending at g:n / fresh generation.
+            let cachedData: CacheHit | null = null;
+            if (config.ai.dualVariantEnabled && cacheCtx.channel === 'dm' && cacheCtx.senderName && cacheCtx.genderBucket) {
+                const dualEntry = await this.checkCache(request.comment, { ...cacheCtx, dualVariant: true });
+                const rendering = dualEntry?.variants?.[cacheCtx.genderBucket];
+                if (rendering) {
+                    cachedData = { ...dualEntry, reply: rendering };
+                    redis.incr(`metrics:cache:dual_variant:hit:${cacheCtx.genderBucket}`).catch(() => {});
+                }
+            }
+            // Most-specific probe next (gender/name bucket — a warmer, personalized
             // entry wins over a blander shared one), then the g:n neutral shared
-            // bucket for named DMs. Exactly two probes max; comments and nameless
-            // DMs keep a single probe (their key has no gender/name segment).
-            let cachedData = await this.checkCache(request.comment, cacheCtx);
+            // bucket for named DMs. Comments and nameless DMs keep a single probe
+            // (their key has no gender/name segment).
+            if (!cachedData) cachedData = await this.checkCache(request.comment, cacheCtx);
             if (!cachedData && config.ai.neutralBucketEnabled && cacheCtx.channel === 'dm' && cacheCtx.senderName) {
                 cachedData = await this.checkCache(request.comment, { ...cacheCtx, neutralBucket: true });
                 // Prod-visible adoption counter (same fire-and-forget pattern as the
@@ -736,15 +769,53 @@ export class AiService {
                 }
             }
 
-            // History gate (save side): the READ path only probes for history-less
-            // messages (see `hasConversationHistory` above), but the save must be
-            // gated too — a reply generated WITH conversation history can reference
-            // it ("the product you asked about earlier") while `customerContext`
-            // (the cc: key segment) is legitimately empty (no summary, no extracted
-            // data yet), landing it under the exact key a brand-new customer's
-            // first message probes. Serving one customer's context to another is a
-            // wrong-CONTENT leak — strictly worse than any wrong-form issue.
-            if (!bypassAllCaches && !cacheReject && !hasConversationHistory) {
+            // Save eligibility, shared by BOTH save shapes below:
+            // - History gate: the READ path only probes for history-less messages,
+            //   but the save must be gated too — a reply generated WITH history can
+            //   reference it ("the product you asked about earlier") while
+            //   `customerContext` (the cc: key segment) is legitimately empty,
+            //   landing it under the key a brand-new customer's first message
+            //   probes. One customer's context served to another = wrong-CONTENT
+            //   leak, strictly worse than any wrong-form issue.
+            // - Quality gate (cacheReject): a weak reply must not repeat — and that
+            //   applies to the dual-variant entry MORE, not less (it is the most
+            //   widely shared entry of all).
+            const mayCache = !bypassAllCaches && !cacheReject && !hasConversationHistory;
+
+            // Dual-variant save (g:d): a gendered, name-free reply becomes ONE
+            // shared entry carrying both addressee renderings. The transform runs
+            // FIRE-AND-FORGET — the customer's reply has already been produced;
+            // only the cache entry lands a few seconds later. Certification is
+            // the same trust model as the g:m/g:f guard: the reply's own labels
+            // (gender m/f + strict usedName === false) plus the literal
+            // name-substring belt. Any transform failure falls back to exactly
+            // the legacy save below — never a worse outcome than today.
+            const dualEligible = config.ai.dualVariantEnabled
+                && saveCacheCtx.channel === 'dm'
+                && !!senderName
+                && !!userId
+                && (response.data.gender === 'm' || response.data.gender === 'f')
+                && response.data.usedName === false
+                && !replyEmbedsName;
+
+            if (mayCache && dualEligible) {
+                const sourceGender = response.data.gender as 'm' | 'f';
+                void generateGenderVariant({ userId: userId as string, reply: aiReply, sourceGender })
+                    .then(async (variant) => {
+                        if (variant) {
+                            const variants = sourceGender === 'm'
+                                ? { m: aiReply, f: variant }
+                                : { m: variant, f: aiReply };
+                            redis.incr('metrics:cache:dual_variant:save_ok').catch(() => {});
+                            await this.saveToCache(request.comment, aiReply, { ...saveCacheCtx, dualVariant: true }, { ...aiMetadata, variants });
+                        } else {
+                            // Rejection reason already counted inside the transform
+                            // module; keep this reply cached the legacy way.
+                            await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
+                        }
+                    })
+                    .catch(() => { /* cache warm-up loss only — never surfaces */ });
+            } else if (mayCache) {
                 await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
             }
 

@@ -98,6 +98,7 @@ vi.mock('../../src/config', () => ({
             genderBucketEnabled: true,
             neutralBucketEnabled: true,
             qualityGateEnabled: true,
+            dualVariantEnabled: false,
             serviceUrl: 'http://localhost:3002',
             defaultModel: 'gpt-4-mini',
             model: 'gpt-4.1-mini',
@@ -110,6 +111,13 @@ vi.mock('../../src/config', () => ({
 // Mock the v53 name→gender consensus map — default "unknown name" (null) so every
 // pre-existing test keeps the v51 per-name bucketing behavior. The gender-bucket
 // describe overrides per test. The real module has its own unit tests.
+// Mock the dual-variant transform — the real module makes an OpenAI call.
+// Default null = "transform unavailable" so every pre-existing test keeps the
+// legacy save path; the dual-variant describe overrides per test.
+vi.mock('../../src/services/genderVariantTransform', () => ({
+    generateGenderVariant: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('../../src/services/genderMap', async (importOriginal) => ({
     // Keep the real pure helpers (firstNameOf — buildCacheKey and the save
     // guards depend on it); mock only the Redis-backed map functions.
@@ -1587,6 +1595,120 @@ describe('AI Service', () => {
             expect(nameless.savedKey).toBe(nameless.getKeys[0]);
             // A comment and a nameless DM share the bare key (pre-existing behavior).
             expect(comment.getKeys[0]).toBe(nameless.getKeys[0]);
+        });
+    });
+    describe('generateReply - DM dual-variant shared cache (g:d)', () => {
+        // Flag-gated (dark by default). One shared entry stores both addressee
+        // renderings; the reader's map-known gender picks one at serve time.
+        const dmContext = { channel: 'dm' as const, senderName: 'فاطمة', userId: 'user-1' };
+        const dualEntry = JSON.stringify({
+            reply: 'تفضّل، السعر ٥٠',
+            variants: { m: 'تفضّل، السعر ٥٠', f: 'تفضّلي، السعر ٥٠' },
+            intent: 'QUESTION', confidence: 'high', flags: [],
+        });
+
+        async function withDualFlag<T>(fn: () => Promise<T>): Promise<T> {
+            const { config } = await import('../../src/config');
+            config.ai.dualVariantEnabled = true;
+            try { return await fn(); } finally { config.ai.dualVariantEnabled = false; }
+        }
+
+        it('serves the reader-matching rendering from the shared entry when the map knows the gender', async () => {
+            await withDualFlag(async () => {
+                const { getConfidentGender } = await import('../../src/services/genderMap');
+                vi.mocked(getConfidentGender).mockResolvedValue('f');
+                const { redis } = await import('../../src/lib/redis');
+                // First probe is the g:d key — return the dual entry immediately.
+                vi.mocked(redis.get).mockResolvedValueOnce(dualEntry);
+
+                const result = await service.generateReply({ comment: 'كم السعر؟', context: dmContext });
+
+                expect(result.cached).toBe(true);
+                expect(result.reply).toBe('تفضّلي، السعر ٥٠');
+                const hitCalls = vi.mocked(redis.incr).mock.calls
+                    .filter(call => call[0] === 'metrics:cache:dual_variant:hit:f');
+                expect(hitCalls).toHaveLength(1);
+            });
+        });
+
+        it('skips the dual probe entirely when the reader gender is unknown', async () => {
+            await withDualFlag(async () => {
+                const { getConfidentGender } = await import('../../src/services/genderMap');
+                vi.mocked(getConfidentGender).mockResolvedValue(null);
+                const { redis } = await import('../../src/lib/redis');
+                vi.mocked(redis.get).mockResolvedValue(null);
+                vi.mocked(axios.post).mockResolvedValue({ data: { reply: 'رد جديد', language: 'ar', confidence: 'high', flags: [] } });
+
+                await service.generateReply({ comment: 'كم السعر؟', context: dmContext });
+
+                // Probes: per-name key + g:n only — never a third (g:d) probe.
+                expect(vi.mocked(redis.get).mock.calls.length).toBeLessThanOrEqual(2);
+            });
+        });
+
+        it('saves ONE shared entry with both renderings when the transform succeeds', async () => {
+            await withDualFlag(async () => {
+                const { generateGenderVariant } = await import('../../src/services/genderVariantTransform');
+                vi.mocked(generateGenderVariant).mockResolvedValueOnce('تفضّلي، السعر ٥٠');
+                const { redis } = await import('../../src/lib/redis');
+                vi.mocked(redis.get).mockResolvedValue(null);
+                vi.mocked(redis.set).mockResolvedValue('OK' as never);
+                vi.mocked(axios.post).mockResolvedValue({ data: {
+                    reply: 'تفضّل، السعر ٥٠', language: 'ar', confidence: 'high', flags: [],
+                    gender: 'm', genderBasis: 'name', usedName: false,
+                } });
+
+                await service.generateReply({ comment: 'كم السعر؟', context: dmContext });
+                await new Promise(r => setTimeout(r, 50)); // fire-and-forget save settles
+
+                expect(generateGenderVariant).toHaveBeenCalledWith({ userId: 'user-1', reply: 'تفضّل، السعر ٥٠', sourceGender: 'm' });
+                const cacheWrites = vi.mocked(redis.set).mock.calls
+                    .filter(call => typeof call[0] === 'string' && (call[0] as string).startsWith('cache:ai_reply:'));
+                expect(cacheWrites).toHaveLength(1);
+                const written = JSON.parse(cacheWrites[0][1] as string);
+                expect(written.variants).toEqual({ m: 'تفضّل، السعر ٥٠', f: 'تفضّلي، السعر ٥٠' });
+                const okCalls = vi.mocked(redis.incr).mock.calls
+                    .filter(call => call[0] === 'metrics:cache:dual_variant:save_ok');
+                expect(okCalls).toHaveLength(1);
+            });
+        });
+
+        it('falls back to the legacy save (no variants) when the transform fails', async () => {
+            await withDualFlag(async () => {
+                const { generateGenderVariant } = await import('../../src/services/genderVariantTransform');
+                vi.mocked(generateGenderVariant).mockResolvedValueOnce(null);
+                const { redis } = await import('../../src/lib/redis');
+                vi.mocked(redis.get).mockResolvedValue(null);
+                vi.mocked(redis.set).mockResolvedValue('OK' as never);
+                vi.mocked(axios.post).mockResolvedValue({ data: {
+                    reply: 'تفضّل', language: 'ar', confidence: 'high', flags: [],
+                    gender: 'm', genderBasis: 'name', usedName: false,
+                } });
+
+                await service.generateReply({ comment: 'كم السعر؟', context: dmContext });
+                await new Promise(r => setTimeout(r, 50));
+
+                const cacheWrites = vi.mocked(redis.set).mock.calls
+                    .filter(call => typeof call[0] === 'string' && (call[0] as string).startsWith('cache:ai_reply:'));
+                expect(cacheWrites).toHaveLength(1);
+                expect(JSON.parse(cacheWrites[0][1] as string).variants).toBeUndefined();
+            });
+        });
+
+        it('flag off: transform never called, save path byte-identical to today', async () => {
+            const { generateGenderVariant } = await import('../../src/services/genderVariantTransform');
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(redis.set).mockResolvedValue('OK' as never);
+            vi.mocked(axios.post).mockResolvedValue({ data: {
+                reply: 'تفضّل', language: 'ar', confidence: 'high', flags: [],
+                gender: 'm', genderBasis: 'name', usedName: false,
+            } });
+
+            await service.generateReply({ comment: 'كم السعر؟', context: dmContext });
+            await new Promise(r => setTimeout(r, 50));
+
+            expect(generateGenderVariant).not.toHaveBeenCalled();
         });
     });
 });
