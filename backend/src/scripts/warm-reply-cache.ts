@@ -153,11 +153,17 @@ async function run() {
 
     console.log(`🔍 Collecting AI-replied comments since ${since.toISOString()}...`);
     const rows = await loadCandidateRows(since);
-    const candidates = rankWarmCandidates(rows, TOP_N);
-    console.log(`   ${rows.length} rows → ${candidates.length} distinct candidates (top ${TOP_N})`);
 
-    const pageContexts = await loadPages([...new Set(candidates.map(c => c.pageId))]);
+    // Resolve page eligibility BEFORE ranking: rows from dual/private-mode or
+    // ownerless pages must not consume top-N slots they can never warm (a
+    // high-volume dual-mode merchant would otherwise silently crowd out the
+    // whole run).
+    const pageContexts = await loadPages([...new Set(rows.map(r => r.pageId))]);
     const pagesSkipped = [...pageContexts.values()].filter(v => v === null).length;
+    const eligibleRows = rows.filter(r => pageContexts.get(r.pageId));
+
+    const candidates = rankWarmCandidates(eligibleRows, TOP_N);
+    console.log(`   ${rows.length} rows (${eligibleRows.length} on eligible pages) → ${candidates.length} candidates (top ${TOP_N})`);
 
     let hits = 0;
     let generated = 0;
@@ -166,17 +172,22 @@ async function run() {
     let deadlineReached = false;
 
     let cursor = 0;
+    let inFlight = 0;
     async function worker(): Promise<void> {
         for (;;) {
             const i = cursor++;
             if (i >= candidates.length) return;
-            if (generated >= MAX_GENERATIONS) return;
+            // Pessimistic budget reservation: count in-flight replays as
+            // generations so N workers can't collectively overshoot the cap.
+            // A replay that turns out to be a cache hit releases its slot.
+            if (generated + inFlight >= MAX_GENERATIONS) return;
             if (Date.now() > deadline) { deadlineReached = true; return; }
 
             const candidate = candidates[i];
             const ctx = pageContexts.get(candidate.pageId);
             if (!ctx) { skipped++; continue; }
 
+            inFlight++;
             try {
                 const { playgroundInput } = await buildPlaygroundContext({
                     page: ctx.page,
@@ -199,6 +210,8 @@ async function run() {
             } catch (err) {
                 errors++;
                 console.warn(`   ⚠️  candidate ${i} (page ${candidate.pageId}) failed: ${err instanceof Error ? err.message : String(err)}`);
+            } finally {
+                inFlight--;
             }
         }
     }
