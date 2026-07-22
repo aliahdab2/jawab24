@@ -27,7 +27,7 @@ import { pagesService } from '../../src/services/pages';
 import { commentsService } from '../../src/services/comments';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { settingsService } from '../../src/services/settings';
-import { seedDemoData } from '../../src/plugins/demo/seedData';
+import { seedDemoData, DEMO_PAGES } from '../../src/plugins/demo/seedData';
 import { workspaceService } from '../../src/services/workspace';
 
 // Silence Redis — we test DB behaviour, not cache
@@ -59,8 +59,9 @@ describe('Demo seed — workspace scoping', () => {
 
         const pages = await pagesService.getPages(ws.id);
 
-        // Must return all demo pages, not an empty array (DEMO_PAGES count)
-        expect(pages.length).toBe(7);
+        // Must return all demo pages, not an empty array. Derived from the
+        // fixture list so adding a demo page doesn't red the suite.
+        expect(pages.length).toBe(DEMO_PAGES.length);
         expect(pages.every(p => p.workspaceId === ws.id)).toBe(true);
     });
 
@@ -86,7 +87,7 @@ describe('Demo seed — workspace scoping', () => {
         await seedDemoData(user.id, ws.id);
 
         const pages = await pagesService.getPages(ws.id);
-        expect(pages.length).toBe(7);
+        expect(pages.length).toBe(DEMO_PAGES.length);
         expect(pages.every(p => p.workspaceId === ws.id)).toBe(true);
     });
 });
