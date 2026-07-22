@@ -79,9 +79,10 @@ export class OpenAIAdapter implements LLMProvider {
                         return client.chat.completions.create(body, { signal: controller.signal });
                     },
                 ),
-                (e) => (e instanceof Error && e.name === 'APIUserAbortError'
-                    ? 'AiTimeoutError'
-                    : 'OpenAIApiError'),
+                // Timeout detection reads OUR OWN AbortSignal, never the error's
+                // name/class — the SDK does not set `name` on its error classes.
+                // See the matching comment in openai.ts createCompletion.
+                () => (controller.signal.aborted ? 'AiTimeoutError' : 'OpenAIApiError'),
             );
 
             const content = completion.choices[0]?.message?.content?.trim() || '';
@@ -93,7 +94,7 @@ export class OpenAIAdapter implements LLMProvider {
                 tokensTotal: completion.usage?.total_tokens,
             };
         } catch (e) {
-            if (e instanceof Error && e.name === 'APIUserAbortError') {
+            if (controller.signal.aborted) {
                 throw new AiTimeoutError(params.timeoutMs);
             }
             throw e;

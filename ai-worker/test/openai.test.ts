@@ -530,6 +530,59 @@ describe('OpenAI Service - Token Budgeting & KB', () => {
         expect(systemPrompt.length).toBeLessThan(systemPrompt.replace(longKB, '').length + 18000);
     });
 
+    // REGRESSION (JAWAB24-AI-WORKER-6/9, 2026-07-22): a real 30s timeout was
+    // reported as `OpenAIApiError` and escaped to Sentry as the raw
+    // `Error: Request was aborted.`, because the guard sniffed
+    // `e.name === 'APIUserAbortError'` and openai@6.27.0 never sets `name` on its
+    // error classes (name is inherited "Error"). Consequences: no AiTimeoutError
+    // was thrown, so routes.ts couldn't suppress the alert for a typed error and
+    // returned a generic 500; and the Phase 6.5 `failed_before_log` counter
+    // booked every timeout as OpenAIApiError, making the attempts−returns gap
+    // unable to separate timeouts from genuine API errors. Detection now reads
+    // our own AbortSignal, so this must hold across SDK upgrades.
+    it('classifies a real timeout abort as AiTimeoutError (not OpenAIApiError)', async () => {
+        const emitted: string[] = [];
+        vi.doMock('../src/lib/aiMetrics', () => ({
+            withAiMetrics: async (_p: unknown, _m: unknown, fn: () => Promise<unknown>,
+                classifier?: (e: unknown) => string) => {
+                try {
+                    return await fn();
+                } catch (e) {
+                    emitted.push(classifier ? classifier(e) : 'unclassified');
+                    throw e;
+                }
+            },
+            recordAiFailedBeforeLog: vi.fn(),
+        }));
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        // Reject only when OUR signal aborts, with the SDK's real
+                        // name-less shape (name === 'Error').
+                        create: vi.fn().mockImplementation((_body: any, opts: any) =>
+                            new Promise((_resolve, reject) => {
+                                opts.signal.addEventListener('abort',
+                                    () => reject(new Error('Request was aborted.')));
+                            })),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: { openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 20 } },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const { AiTimeoutError } = await import('../src/lib/errors');
+        const service = new FreshService();
+
+        const err = await service.generateReply({ comment: 'كم السعر؟' }).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(AiTimeoutError);
+        expect(emitted).toContain('AiTimeoutError');
+        expect(emitted).not.toContain('OpenAIApiError');
+    });
+
     it('should not truncate knowledge base under KB_MAX_CHARS', async () => {
         let capturedMessages: any[] = [];
         const shortKB = 'Product info: Great quality shoes.';
