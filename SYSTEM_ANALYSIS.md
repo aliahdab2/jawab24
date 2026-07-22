@@ -330,6 +330,14 @@ Customer message: "كم سعر القميص الأزرق؟"
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+**Post-deploy cache warm** — every deploy replays last week's top AI-replied
+comments through the playground pipeline (`backend/src/scripts/warm-reply-cache.ts`,
+hooked in `deploy-on-server.sh` after migrations, before traffic switch; pipeline
+tag `cache_warm`). Already-cached items are free hits, so the step is idempotent;
+after a `PROMPT_VERSION` bump it rebuilds the hot set in minutes instead of the
+~week of organic warm-up. Comments on public-mode pages only (DM and dual/private
+keys are name-bucketed and can't be warmed). Kill-switch: `WARM_REPLY_CACHE_DISABLED=1`.
+
 ## عربي
 
 ### الرحلة الكاملة: من رسالة العميل إلى إرسال الرد

@@ -109,6 +109,27 @@ export async function enrichPageContext(
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance);
 
     // 4. Language-appropriate brand voice notes
+    const brandVoiceNotes = resolveBrandVoiceNotes(userSettings, messageText);
+
+    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock };
+}
+
+/**
+ * Pick the brand-voice notes matching the customer message's language.
+ *
+ * Single source of truth for the selection rule — used by enrichPageContext
+ * (production replies) AND scripts/warm-reply-cache.ts (post-deploy cache
+ * warming). Brand voice is a cache-key segment (`bv:`), so the warm path must
+ * resolve it exactly like production or warmed entries land under unread keys.
+ */
+export function resolveBrandVoiceNotes(
+    userSettings: {
+        brandVoiceNotesMulti?: Record<string, string> | unknown;
+        brandVoiceNotes?: string;
+        supportedLanguages?: unknown;
+    },
+    messageText: string,
+): string | undefined {
     const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
     const lang = detectLanguageCode(messageText);
     const supportedLangs = (userSettings.supportedLanguages as string[] | undefined) || ['ar', 'en'];
@@ -116,10 +137,8 @@ export async function enrichPageContext(
     // never been written (i.e. it has no keys). Once the user has used the new UI, the multi
     // column is authoritative — falling back to the old column would resurrect cleared values.
     const legacyFallback = Object.keys(bvMulti).length === 0 ? userSettings.brandVoiceNotes : undefined;
-    const brandVoiceNotes = bvMulti[lang]
+    return bvMulti[lang]
         || supportedLangs.map(l => bvMulti[l]).find(Boolean)
         || legacyFallback
         || undefined;
-
-    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock };
 }
