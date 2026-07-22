@@ -314,6 +314,19 @@ run_migrations() {
     else
         echo "   ⚠️  Workspace-settings cache flush failed — continuing (TTL will expire stale entries within 5 min)"
     fi
+
+    # Re-warm the AI reply cache: replay last week's top AI-replied comments
+    # through the playground pipeline (no customer sends). Already-cached items
+    # are free cache hits, so this is cheap and idempotent on every deploy;
+    # after a PROMPT_VERSION bump it rebuilds the hot set BEFORE traffic
+    # switches. Self-time-capped (WARM_CACHE_DEADLINE_MS, default 10 min) and
+    # non-fatal; set WARM_REPLY_CACHE_DISABLED=1 in the server env to skip.
+    echo "   🔥 Warming AI reply cache..."
+    if docker exec "$container_id" npm run cache:warm-replies; then
+        echo "   ✅ Reply cache warmed"
+    else
+        echo "   ⚠️  Reply-cache warm failed — continuing (cache rebuilds organically on live traffic)"
+    fi
 }
 
 # Switch traffic by updating Nginx

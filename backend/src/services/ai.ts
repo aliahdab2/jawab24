@@ -19,6 +19,7 @@ import { classifyFallbackIntent } from './reply/fallbackClassifier';
 import { getModelForUser } from './aiModelResolver';
 import { getConfidentGender, recordGenderObservation, firstNameOf } from './genderMap';
 import { cacheRejectReason } from './cacheQualityGate';
+import { normalizeForExactCacheKey } from '../utils/exactCacheNormalize';
 import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError, AiQuotaExhaustedError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
 import { emailService } from './email';
@@ -175,16 +176,10 @@ export class AiService {
      * cross-page, stale-KB, and cross-post cache collisions.
      */
     private buildCacheKey(comment: string, ctx: CacheContext): string {
-        // normalizeArabic unifies alef variants (أ/إ/آ → ا), strips tatweel, and
-        // converts Arabic-Indic digits (٠-٩ → 0-9) so trivially-different Arabic
-        // spellings share one bucket — same normalization the embedding path uses
-        // for the semantic cache. Diacritics are \p{M}, so the symbol strip below
-        // already removes them.
-        const normalized = normalizeArabic(comment)
-            .toLowerCase()
-            .replace(/[^\p{L}\p{N}\s]/gu, '')
-            .replace(/\s+/g, ' ')
-            .trim();
+        // Shared normalization (utils/exactCacheNormalize.ts) — the warm-cache
+        // ranking groups by the same function, so warmed entries always land
+        // under keys this read path produces.
+        const normalized = normalizeForExactCacheKey(comment);
 
         const key = [
             normalized,
