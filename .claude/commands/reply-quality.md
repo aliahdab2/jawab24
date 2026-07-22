@@ -200,7 +200,36 @@ FROM kb_gaps WHERE page_id = '<PID>' AND resolved = false
 ORDER BY occurrence_count DESC, last_seen_at DESC LIMIT 20;"
 ```
 
-## Step 7 — Score the answering quality
+## Step 7 — Lead capture: is the AI *asking*, and is the answer being kept?
+
+Replies that read well but never collect a contact are a silent business failure — the merchant sees "the AI is chatting" and no leads. Audit both halves: does the AI **ask**, and does the system **keep** the answer.
+
+```bash
+./scripts/prod-db-query.sh "
+SELECT sender_name, phone, status, source_type, extraction_status, extracted_data, created_at
+FROM leads WHERE page_id = '<PID>' ORDER BY created_at DESC LIMIT 20;
+
+-- Contact details customers volunteered, vs leads actually captured
+SELECT COUNT(*) FILTER (WHERE message ~ '[0-9٠-٩]{7,}') AS msgs_with_a_number,
+       COUNT(*) FILTER (WHERE message ~ '[0-9٠-٩]{7,}' AND flag_reason IS NOT NULL) AS of_those_flagged
+FROM messages WHERE page_id = '<PID>' AND direction = 'incoming';"
+```
+
+Compare `msgs_with_a_number` against the lead count. A large gap means phones arrived and weren't kept. Two distinct causes, and you must say which:
+- **Not asked** — the AI never requests name/city/phone, so numbers only arrive when the customer volunteers them. This is a *persona* problem (below).
+- **Asked, then dropped** — a known defect: `hold_low_confidence` early-returns at `messageProcessor.ts:718`, while `maybeCaptureLead` runs at `:902`, so **held messages never produce a lead**. Check whether any phone appearing in a `held_low_confidence` message is missing from `leads`. Also inspect `extracted_data` — `"fields": []` with only a summary means extraction ran but harvested nothing structured.
+
+**Should the merchant add a lead hint to the persona? — answer this explicitly, every run.**
+
+`brand_voice_notes` is injected into the system prompt verbatim (`promptBuilder.ts:258-262`), so it is the merchant's most direct lever on reply behavior — and the shipped template's last line is literally the lead hook: «الهدف: [نحو ماذا توجّه العميل — مثلاً أخذ الاسم والجوال لإتمام الطلب أو الحجز]». Decide with this rule:
+
+- Persona still holds `[...]` placeholders → **yes, and it's the top recommendation.** Nothing is guiding the AI toward a close; it will answer questions politely and never ask for anything.
+- Persona is written but the Goal line has no explicit "collect name + city + phone" instruction, and the lead count is low relative to buying conversations → **yes.**
+- Persona already names the collection flow and leads are being captured → **no** — look at extraction quality or the hold defect instead.
+
+Recommend concrete wording drawn from the merchant's own vertical rather than a generic sentence, and mirror the pattern that demonstrably works in prod: an explicit sequence («لما العميل يقول نبي نحجز… قوله كم طرف تبي؟ بعد يقولك الكمية قوله ارسلي اسم المدينة ورقم اتصال باش نكملك الطلب»). A page with that written down closes orders and produces leads; a page with placeholders does neither. For B2B merchants (wholesale, pharma, importers) the ask should include the business name, not just a personal name.
+
+## Step 8 — Score the answering quality
 
 Give an explicit verdict, not just observations. Score each dimension **Good / Weak / Failing** with a one-line reason and a quoted example. Always attribute the cause to *input* (persona, Business Info, settings) or *product* — merchants can act on the first, only you can act on the second.
 
@@ -212,6 +241,7 @@ Give an explicit verdict, not just observations. Score each dimension **Good / W
 | **Persona fidelity** | Sounds like the merchant's brand voice, mirrors the customer's dialect. Placeholder persona ⇒ automatically Weak. |
 | **Honest limits** | Says «ما عندي المعلومة» / routes to phone instead of inventing. Refusing out-of-scope requests is Good, not a defect. |
 | **Escalation** | Complaints and angry customers reach Needs Attention, and the merchant is visibly engaging (`manual` replies present). |
+| **Lead capture** | The AI asks for name/city/phone at purchase intent, and volunteered contacts become `leads` rows (Step 7). |
 
 State the headline verdict in one sentence — e.g. "the AI answers accurately but is starved of product data, so two-thirds of buying questions end in silence."
 
@@ -245,5 +275,6 @@ Report in prose, leading with the verdict. Include, in this order: the one-sente
 - **Computed totals are blocked** (multi-item sums, item + delivery fee) even when every input number is in the Business Info. `flagHallucinatedPrice` grounds against numbers appearing *literally* in the KB text, so any arithmetic result is unreachable. Symptom: `price_not_in_kb` on «الحساب كم بالتوصيل». Fix in progress as prompt **v56** — model emits a `price_math` structured claim, validator verifies components against the KB and checks the sum. If you see this, note it and move on.
 - **`generateWithTools` never calls `validateReply`** — native-catalog merchants (Salla/Shopify/Zid) get **no** price/language/length guard; their `flags` are the model's self-report. Symptom: fabricated low anchor prices with `flags=[]`. Separate open item from v56.
 - Quantity math («كيسين») is a known weak spot; classify under the same v56 work rather than filing fresh.
+- **`hold_low_confidence` suppresses lead capture** — the hold returns at `messageProcessor.ts:718`, before `maybeCaptureLead` at `:902`, so a held message's phone/name is lost. Confirmed in prod 2026-07-22 (a pharmacy's name + number vanished). Fix not built; note it and move on.
 
 Prereqs: `~/.ssh/id_jawab24_deploy`, and `./scripts/prod-db-query.sh` from the repo root.
