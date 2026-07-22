@@ -113,6 +113,21 @@ export interface TokenInfo {
     prompt_version: string;
 }
 
+/** One line of the model's self-reported cart arithmetic (v56).
+ *  `unit` must be a price that appears literally in Business Info / the
+ *  catalog; `qty` a positive integer. Verified deterministically in
+ *  replyValidator (Check 1b) — never trusted as-is. */
+export interface PriceMathTerm {
+    unit: number;
+    qty: number;
+}
+
+/** A claimed computed total: Σ(unit×qty) over `terms` must equal `total`. */
+export interface PriceMathClaim {
+    total: number;
+    terms: PriceMathTerm[];
+}
+
 /** The JSON object GPT returns (parsed, before validation). */
 export interface ParsedReply {
     reply: string;
@@ -124,6 +139,16 @@ export interface ParsedReply {
     gender?: 'm' | 'f' | 'unknown';
     gender_basis?: 'self' | 'name' | 'unclear';
     used_name?: boolean;
+    /**
+     * v56 price-math self-report — when the reply quotes a COMPUTED total
+     * (items + delivery, quantity × unit price), the model lists the breakdown
+     * here. replyValidator verifies every unit against KB values and the
+     * arithmetic; verified totals extend Check 1's accepted set for this reply
+     * only. null / absent / malformed → the literal-KB guard, unchanged.
+     * Typed `unknown`-compatible on purpose at the validator boundary — this is
+     * model output and all shape-checking lives in verifiedPriceMathValues.
+     */
+    price_math?: PriceMathClaim[] | null;
 }
 
 /** Result of validateReply — `hedging` is consumed and dropped. */

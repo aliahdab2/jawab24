@@ -767,7 +767,7 @@ After OpenAI returns, the system runs **6 automated checks**:
 
 | Check | What It Does | Action |
 |-------|-------------|--------|
-| **Hallucinated Prices** | Matches numbers adjacent to currency tokens (SAR, SR, ريال, $, etc.) and checks if they exist in KB. Ignores dates, phone numbers, delivery times. | Adds `price_not_in_kb` flag |
+| **Hallucinated Prices** | Matches numbers adjacent to currency tokens (SAR, SR, ريال, $, etc.) and checks if they exist in KB. Ignores dates, phone numbers, delivery times. Since v56 the accepted set is KB values **∪ verified `price_math`** — the model self-reports its cart arithmetic `[{total, terms:[{unit, qty}]}]` and code verifies every `unit` against the KB and that Σ(unit×qty)=total, so a correct computed total (items + delivery) is no longer treated as a hallucination. Additive only: absent/malformed/unverifiable claims fall back to the literal-KB check. | Adds `price_not_in_kb` flag |
 | **Comment Too Long** | Word count > 50 for comment replies (AI Worker flags it; backend separately truncates at 280 chars for public mode) | Adds `comment_too_long` flag |
 | **Language Mismatch** | Reply language differs from input language | Adds `language_mismatch` flag |
 | **Hedge Words** | Detects "let me check", "سأتحقق", etc. with high/medium confidence | **Downgrades to LOW** + adds `info_not_in_kb` |
@@ -1512,8 +1512,8 @@ Customer question arrives
 |----------|-----------|--------|-------------------|
 | Offensive comment | intent = OFFENSIVE | Empty reply, flag for review | Yes |
 | Spam/irrelevant | intent = SPAM_OR_IRRELEVANT | Empty reply, don't send | No |
-| Price hallucination (Tier A) | `price_not_in_kb` flag — currency-adjacent number not in KB (SAR/$/ريال etc.) | Replace with safe fallback | Yes |
-| Price hallucination (Tier B) | `price_not_in_kb` flag — price-cue phrase + nearby number not in KB (e.g. "سعره 120", "only 50", "starts at 200") | Replace with safe fallback | Yes |
+| Price hallucination (Tier A) | `price_not_in_kb` flag — currency-adjacent number not in KB (SAR/$/ريال etc.) and not a verified `price_math` total (v56) | Replace with safe fallback | Yes |
+| Price hallucination (Tier B) | `price_not_in_kb` flag — price-cue phrase + nearby number not in KB (e.g. "سعره 120", "only 50", "starts at 200") and not a verified `price_math` total (v56) | Replace with safe fallback | Yes |
 | Low confidence + hold | confidence=low + setting on | Don't send, flag for review | Yes |
 | Angry customer | `angry_customer` flag | Send reply + notify merchant | Yes |
 | AI worker down | Circuit breaker open | Lightweight fallback reply | No |
