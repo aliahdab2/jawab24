@@ -24,6 +24,7 @@ export type AiPipeline =
     | 'catalog_extraction'   // Pasted/uploaded free text → proposed catalog items (merchant-reviewed via /catalog import; never auto-saved)
     | 'ecommerce_tools'      // Per-iteration call inside the e-commerce tool loop
     | 'cache_warm'           // Post-deploy re-warm: replays recent AI-replied comments through the playground path to repopulate the reply caches (scripts/warm-reply-cache.ts). Excluded from REPLY_PIPELINES so it can't distort prod hit-rate.
+    | 'gender_name_backfill' // One-off name→gender classification seeding the v53 gender map (scripts/backfill-gender-map.ts)
     | 'failover'             // Fallback model after circuit breaker opened
     | 'unknown';             // Caller forgot to tag — surfaces in dashboard so we can fix it
 
