@@ -76,6 +76,14 @@ export const config = {
         // cache-everything with no deploy; already-cached entries are unaffected
         // either way (the gate is save-side only).
         qualityGateEnabled: process.env.AI_QUALITY_GATE_ENABLED !== 'false',
+        // Dual-variant shared DM cache (g:d): gendered replies store BOTH
+        // addressee renderings (services/genderVariantTransform.ts) under ONE
+        // key shared across all senders; the read side serves the rendering
+        // matching the sender's map-known gender. Restores full pre-v51
+        // cross-sender sharing while keeping gender-correct replies.
+        // DEFAULT OFF — deliberately dark until the transform passes its
+        // dialect-preservation eval; flip AI_DUAL_VARIANT_ENABLED=true after.
+        dualVariantEnabled: process.env.AI_DUAL_VARIANT_ENABLED === 'true',
         // Always use DEFAULT_AI_MODEL for cost efficiency - not configurable by users
         model: DEFAULT_AI_MODEL,
         // Fallback model when primary provider (OpenAI) is unreachable
