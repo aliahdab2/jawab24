@@ -12,6 +12,7 @@ import {
     AI_TYPED_ERROR_NAMES,
 } from '../lib/errors';
 import { recordAiFailedBeforeLog, withAiMetrics } from '../lib/aiMetrics';
+import { classifyTimeoutAbort, isTimeoutAbort } from '../lib/aiTimeout';
 import { detectLanguage } from './language';
 import {
     KB_MAX_CHARS,
@@ -382,20 +383,17 @@ export class OpenAIService {
                         },
                     }, { signal: controller.signal }),
                 ),
-                // Custom classifier — timeouts and quota exhaustion get distinct
-                // error_classes so the breakdown script can separate them from
-                // generic API errors. Check by name (not instanceof) so tests can
-                // mock `openai` without providing the real APIUserAbortError class.
-                (e) => (e instanceof Error && e.name === 'APIUserAbortError'
-                    ? 'AiTimeoutError'
-                    : isInsufficientQuotaError(e)
-                        ? 'AiQuotaError'
-                        : 'OpenAIApiError'),
+                // Timeouts and quota exhaustion get distinct error_classes so the
+                // breakdown script can separate them from generic API errors.
+                // Timeout detection lives in aiTimeout (see it for WHY it reads
+                // the signal rather than the error).
+                classifyTimeoutAbort(controller.signal,
+                    (e) => (isInsufficientQuotaError(e) ? 'AiQuotaError' : 'OpenAIApiError')),
             );
         } catch (e) {
             // withAiMetrics already emitted failed_before_log. Re-throw typed
             // errors so backend BullMQ classifies them correctly.
-            if (e instanceof Error && e.name === 'APIUserAbortError') {
+            if (isTimeoutAbort(controller.signal)) {
                 throw new AiTimeoutError(config.openai.timeoutMs);
             }
             // 429 insufficient_quota — account out of credit. Throw the typed

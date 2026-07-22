@@ -13,6 +13,7 @@
  */
 import OpenAI from 'openai';
 import { withAiMetrics } from '../lib/aiMetrics';
+import { classifyTimeoutAbort } from '../lib/aiTimeout';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { openaiService, type GenerateRequest, type GenerateResponse } from './openai';
@@ -229,6 +230,11 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
                         tools: ECOMMERCE_TOOLS,
                     }, { signal: controller.signal }),
                 ),
+                // Without a classifier withAiMetrics defaults to 'OpenAIApiError',
+                // so tool-loop timeouts were booked identically to genuine API
+                // errors — the same Phase 6.5 blind spot as the name-sniffing bug,
+                // reached by omission rather than by a broken check.
+                classifyTimeoutAbort(controller.signal),
             );
         } finally {
             clearTimeout(timeout);
@@ -331,6 +337,8 @@ export async function generateWithToolResults(
                         tools: ECOMMERCE_TOOLS,
                     }, { signal: controller.signal }),
                 ),
+                // See the note on the Phase-1 tool call above — same reasoning.
+                classifyTimeoutAbort(controller.signal),
             );
         } finally {
             clearTimeout(timeout);

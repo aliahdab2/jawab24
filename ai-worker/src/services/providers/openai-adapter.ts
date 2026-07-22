@@ -4,6 +4,7 @@ import { config } from '../../config';
 import type { LLMProvider, LLMChatParams, LLMChatResult, LLMMessage } from './types';
 import { AI_REPLY_JSON_SCHEMA } from './types';
 import { withAiMetrics } from '../../lib/aiMetrics';
+import { classifyTimeoutAbort, isTimeoutAbort } from '../../lib/aiTimeout';
 import { AiTimeoutError } from '../../lib/errors';
 
 export class OpenAIAdapter implements LLMProvider {
@@ -79,9 +80,7 @@ export class OpenAIAdapter implements LLMProvider {
                         return client.chat.completions.create(body, { signal: controller.signal });
                     },
                 ),
-                (e) => (e instanceof Error && e.name === 'APIUserAbortError'
-                    ? 'AiTimeoutError'
-                    : 'OpenAIApiError'),
+                classifyTimeoutAbort(controller.signal),
             );
 
             const content = completion.choices[0]?.message?.content?.trim() || '';
@@ -93,7 +92,7 @@ export class OpenAIAdapter implements LLMProvider {
                 tokensTotal: completion.usage?.total_tokens,
             };
         } catch (e) {
-            if (e instanceof Error && e.name === 'APIUserAbortError') {
+            if (isTimeoutAbort(controller.signal)) {
                 throw new AiTimeoutError(params.timeoutMs);
             }
             throw e;
