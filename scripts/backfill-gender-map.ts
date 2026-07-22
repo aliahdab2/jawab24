@@ -80,6 +80,12 @@ function parseArgs(): Args {
         console.error('--user-id <uuid> required (ai_usage_log attribution — use the ops/admin account).');
         process.exit(2);
     }
+    // ai_usage_log.user_id is a NOT NULL FK; logAiUsage is fire-and-forget, so
+    // a typo'd id would silently drop every cost row while the run proceeds.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(args.userId)) {
+        console.error(`--user-id "${args.userId}" is not a valid UUID.`);
+        process.exit(2);
+    }
     if (!args.model.startsWith('gpt-')) {
         console.error(`--model must be a gpt-* model (got "${args.model}").`);
         process.exit(2);
@@ -170,6 +176,10 @@ async function main() {
     for (const item of classified) {
         if (item.gender === 'unknown') {
             unknown++;
+            // The dry-run review gate exists to eyeball EXACTLY these: unisex
+            // names (نور، جود) must land here — hiding them would hide the one
+            // failure mode the owner review is meant to catch.
+            if (args.dryRun) console.log(`   ?  ${String(item.total).padStart(5)}×  ${item.name}  (unknown — nothing written)`);
             continue;
         }
         if (args.apply) {
