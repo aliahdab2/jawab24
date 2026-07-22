@@ -93,6 +93,39 @@ export async function recordGenderObservation(senderName: string, gender: Learne
     }
 }
 
+/** True when the name already has any m/f counters (organic or seeded). */
+export async function hasGenderObservations(senderName: string): Promise<boolean> {
+    const hash = genderNameKeyHash(senderName);
+    if (!hash) return false;
+    const [mKey, fKey] = counterKeys(hash);
+    return (await redis.exists(mKey, fKey)) > 0;
+}
+
+/**
+ * Backfill seam (scripts/backfill-gender-map.ts): seed a name's winning
+ * counter to exactly MIN_OBSERVATIONS so getConfidentGender engages
+ * immediately. SET, not INCR — idempotent, and deliberately never above the
+ * threshold: a single contrary organic observation must be able to break
+ * confidence (5/6 < MIN_MAJORITY_RATIO → per-name bucket), which is the
+ * map's self-healing property against a wrong seed. Refuses to touch names
+ * that already have counters — organic learning is never stomped, and that
+ * refusal is what makes re-running the backfill safe.
+ *
+ * Unlike recordGenderObservation this THROWS on Redis failure — the backfill
+ * script must see errors, not silently under-seed.
+ */
+export async function seedGenderObservation(
+    senderName: string,
+    gender: LearnedGender,
+): Promise<'seeded' | 'exists' | 'invalid'> {
+    const hash = genderNameKeyHash(senderName);
+    if (!hash) return 'invalid';
+    const [mKey, fKey] = counterKeys(hash);
+    if ((await redis.exists(mKey, fKey)) > 0) return 'exists';
+    await redis.set(gender === 'm' ? mKey : fKey, MIN_OBSERVATIONS, 'EX', OBSERVATION_TTL_SECONDS);
+    return 'seeded';
+}
+
 /**
  * The consensus gender for a name, or null when unknown / ambiguous / Redis
  * unavailable. Null means "keep the per-name cache bucket" — always safe.
