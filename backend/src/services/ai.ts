@@ -18,6 +18,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { classifyFallbackIntent } from './reply/fallbackClassifier';
 import { getModelForUser } from './aiModelResolver';
 import { getConfidentGender, recordGenderObservation, firstNameOf } from './genderMap';
+import { cacheRejectReason } from './cacheQualityGate';
 import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError, AiQuotaExhaustedError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
 import { emailService } from './email';
@@ -617,6 +618,30 @@ export class AiService {
                 throw new AiUnavailableError('ai-worker returned fallback_reply flag');
             }
 
+            // Save-side quality gate: ONE decision governing BOTH cache saves below
+            // (exact + semantic — computed here so the two layers can never diverge).
+            // A weak reply (confidence 'low', or info_not_in_kb / price_not_in_kb /
+            // language_mismatch) is still returned to the customer but never cached —
+            // cached, it would repeat for 30 days. Silent skip, deliberately NOT a
+            // throw (contrast fallback_reply above: that reply is unusable; this one
+            // is merely not worth repeating). Counters only when a save was actually
+            // in play (eval bypasses); save_ok keeps counting when the kill-switch is
+            // off (cacheReject stays null) so the reject-rate denominator survives a
+            // flag flip.
+            const cacheReject = config.ai.qualityGateEnabled
+                ? cacheRejectReason(response.data.confidence, response.data.flags)
+                : null;
+            // Pipeline-suffixed (like the §13c AI counters): the rollout threshold
+            // ("reject share >~25-30% → investigate") is only meaningful per
+            // pipeline — cache_warm replays and dm_reply must not blend.
+            if (!bypassAllCaches) {
+                if (cacheReject) {
+                    redis.incr(`metrics:cache:quality_gate:save_reject:${cacheReject}:${pipeline}`).catch(() => {});
+                } else {
+                    redis.incr(`metrics:cache:quality_gate:save_ok:${pipeline}`).catch(() => {});
+                }
+            }
+
             // v53 learning: feed the model's gender judgment into the fleet name→gender
             // map. Only pure NAME-based judgments on real Arabic DM traffic count —
             // `gender_basis === 'self'` is a self-reference override (فاطمة writing
@@ -716,7 +741,15 @@ export class AiService {
                 }
             }
 
-            if (!bypassAllCaches) {
+            // History gate (save side): the READ path only probes for history-less
+            // messages (see `hasConversationHistory` above), but the save must be
+            // gated too — a reply generated WITH conversation history can reference
+            // it ("the product you asked about earlier") while `customerContext`
+            // (the cc: key segment) is legitimately empty (no summary, no extracted
+            // data yet), landing it under the exact key a brand-new customer's
+            // first message probes. Serving one customer's context to another is a
+            // wrong-CONTENT leak — strictly worse than any wrong-form issue.
+            if (!bypassAllCaches && !cacheReject && !hasConversationHistory) {
                 await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
             }
 
@@ -732,7 +765,7 @@ export class AiService {
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
             // Model is stored in metadata so check-time can filter to same-model entries.
             // Eval pipeline never writes (see `bypassAllCaches` above).
-            if (config.ai.semanticCacheEnabled && !bypassAllCaches && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
+            if (config.ai.semanticCacheEnabled && !bypassAllCaches && !cacheReject && !hasConversationHistory && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,

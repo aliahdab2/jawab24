@@ -67,6 +67,15 @@ export const config = {
         // (per-gender/per-name buckets only) with no deploy; g:n entries become
         // unreachable while off — cold but safe.
         neutralBucketEnabled: process.env.AI_NEUTRAL_BUCKET_ENABLED !== 'false',
+        // Save-side reply-cache quality gate (see services/cacheQualityGate.ts).
+        // Replies the model itself marked weak (confidence 'low', or flagged
+        // info_not_in_kb / price_not_in_kb / language_mismatch) are still served
+        // to the customer but NOT saved to the exact or semantic cache — a weak
+        // answer served once is a one-off; cached, it repeats for 30 days.
+        // Default ON. Kill-switch: AI_QUALITY_GATE_ENABLED=false reverts to
+        // cache-everything with no deploy; already-cached entries are unaffected
+        // either way (the gate is save-side only).
+        qualityGateEnabled: process.env.AI_QUALITY_GATE_ENABLED !== 'false',
         // Always use DEFAULT_AI_MODEL for cost efficiency - not configurable by users
         model: DEFAULT_AI_MODEL,
         // Fallback model when primary provider (OpenAI) is unreachable
