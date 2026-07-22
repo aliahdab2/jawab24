@@ -631,11 +631,14 @@ export class AiService {
             const cacheReject = config.ai.qualityGateEnabled
                 ? cacheRejectReason(response.data.confidence, response.data.flags)
                 : null;
+            // Pipeline-suffixed (like the §13c AI counters): the rollout threshold
+            // ("reject share >~25-30% → investigate") is only meaningful per
+            // pipeline — cache_warm replays and dm_reply must not blend.
             if (!bypassAllCaches) {
                 if (cacheReject) {
-                    redis.incr(`metrics:cache:quality_gate:save_reject:${cacheReject}`).catch(() => {});
+                    redis.incr(`metrics:cache:quality_gate:save_reject:${cacheReject}:${pipeline}`).catch(() => {});
                 } else {
-                    redis.incr('metrics:cache:quality_gate:save_ok').catch(() => {});
+                    redis.incr(`metrics:cache:quality_gate:save_ok:${pipeline}`).catch(() => {});
                 }
             }
 

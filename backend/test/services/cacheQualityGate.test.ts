@@ -14,6 +14,14 @@ describe('cacheRejectReason', () => {
         expect(cacheRejectReason('high', ['language_mismatch'])).toBe('language_mismatch');
     });
 
+    it('rejects the model-emitted low_confidence FLAG even when the confidence field is not low', () => {
+        // systemPrompt lets the model flag itself uncertain independently of the
+        // confidence field — both routes share the low_confidence reason.
+        expect(cacheRejectReason('medium', ['low_confidence'])).toBe('low_confidence');
+        expect(cacheRejectReason('high', ['low_confidence'])).toBe('low_confidence');
+        expect(cacheRejectReason('high', ['info_not_in_kb', 'low_confidence'])).toBe('low_confidence');
+    });
+
     it('reports a single reason, first-tripped wins', () => {
         // Confidence outranks flags…
         expect(cacheRejectReason('low', ['price_not_in_kb', 'language_mismatch'])).toBe('low_confidence');

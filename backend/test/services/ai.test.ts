@@ -737,8 +737,10 @@ describe('AI Service', () => {
 
         async function gateCounterCalls(suffix: string) {
             const { redis } = await import('../../src/lib/redis');
+            // Counters are pipeline-suffixed; these tests run without a pipeline
+            // tag, which resolves to 'unknown'.
             return vi.mocked(redis.incr).mock.calls
-                .filter((call: unknown[]) => call[0] === `metrics:cache:quality_gate:${suffix}`);
+                .filter((call: unknown[]) => call[0] === `metrics:cache:quality_gate:${suffix}:unknown`);
         }
 
         it('serves a low-confidence reply but never caches it', async () => {
@@ -755,7 +757,7 @@ describe('AI Service', () => {
             expect(await gateCounterCalls('save_ok')).toHaveLength(0);
         });
 
-        it.each(['info_not_in_kb', 'price_not_in_kb', 'language_mismatch'])(
+        it.each(['low_confidence', 'info_not_in_kb', 'price_not_in_kb', 'language_mismatch'])(
             'skips the cache save when a high-confidence reply carries %s',
             async (flag) => {
                 const result = await generateWithWorkerReply({

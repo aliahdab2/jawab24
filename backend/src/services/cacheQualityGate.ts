@@ -40,8 +40,14 @@ export type CacheRejectReason =
  * the reason-counter convention of the gender/neutral bucket guards).
  * Exact membership only: dynamic companion flags such as `expected_lang:<x>` /
  * `reply_lang:<x>` never match and never block on their own.
+ *
+ * `low_confidence` appears BOTH as a confidence value ('low') and as a
+ * model-emitted flag (systemPrompt: "low_confidence if you are uncertain") —
+ * the model can flag itself uncertain while still reporting confidence
+ * 'medium'. Both routes must gate, and they share one reason label.
  */
 const REJECT_FLAGS: readonly CacheRejectReason[] = [
+    'low_confidence',
     'info_not_in_kb',
     'price_not_in_kb',
     'language_mismatch',
