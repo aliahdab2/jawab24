@@ -14,7 +14,7 @@ vi.mock('../../src/db', () => ({
 }));
 
 import { db } from '../../src/db';
-import { seedDemoData } from '../../src/plugins/demo/seedData';
+import { seedDemoData, DEMO_PAGES } from '../../src/plugins/demo/seedData';
 
 // Helper to build a chainable select mock
 function mockSelectChain(result: any[]) {
@@ -74,9 +74,15 @@ describe('seedDemoData', () => {
 
         await seedDemoData('user-123', 'ws-123');
 
-        // 1 settings dashboardLanguage refresh + 7 page name refreshes (DEMO_PAGES has 7:
-        // institute, school, electronics, fashion, damascus, clinic, motoshop) + 2 e-commerce page link updates (Shopify + Salla)
-        expect(db.update).toHaveBeenCalledTimes(10);
+        // Derived from the fixture list so adding a demo page doesn't break this
+        // test: 1 settings dashboardLanguage refresh + one refresh per DEMO_PAGES
+        // entry + 2 e-commerce page link updates (Shopify on electronics, Salla
+        // on fashion, both via seedDemoStore).
+        const SETTINGS_REFRESH = 1;
+        const ECOMMERCE_PAGE_LINKS = 2;
+        expect(db.update).toHaveBeenCalledTimes(
+            SETTINGS_REFRESH + DEMO_PAGES.length + ECOMMERCE_PAGE_LINKS,
+        );
     });
 
     it('should create pages when no demo data exists', async () => {

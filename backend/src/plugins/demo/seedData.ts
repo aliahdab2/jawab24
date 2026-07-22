@@ -42,7 +42,10 @@ const hasArabic = (s: string | null | undefined): boolean =>
 const langOf = (s: string | null | undefined): 'ar' | 'en' =>
     hasArabic(s) ? 'ar' : 'en';
 
-const DEMO_PAGES = [
+// Exported so the seed test can derive its expected write counts from the
+// fixture list instead of hardcoding a number that goes stale every time a
+// demo page is added (it already did twice — see d0072c39).
+export const DEMO_PAGES = [
     {
         facebookPageId: 'demo_page_institute',
         name: 'معهد النور للتدريب',
