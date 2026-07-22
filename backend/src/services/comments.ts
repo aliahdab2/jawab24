@@ -3,7 +3,7 @@ import { comments, posts, pages, logs, instagramComments, instagramMedia } from 
 import { eq, desc, sql, and } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
 import { detectLanguageCode } from '../utils/language';
-import { ENDPOINT_STATS_CACHE_TTL, commentsStatsCacheKey, withStatsCache } from './statsCache';
+import { ENDPOINT_STATS_CACHE_TTL, commentsStatsCacheKey, statsEpochKey, withStatsCache } from './statsCache';
 
 export interface CommentStats {
     total: number;
@@ -475,7 +475,12 @@ export class CommentsService {
         // workspace-wide variant (page-filtered calls are rare and skip the cache).
         // Invalidation: see services/statsCache.ts.
         const cacheKey = options?.pageId ? null : commentsStatsCacheKey(workspaceId);
-        return withStatsCache(cacheKey, ENDPOINT_STATS_CACHE_TTL, () => this.computeStats(workspaceId, options));
+        return withStatsCache(
+            cacheKey,
+            ENDPOINT_STATS_CACHE_TTL,
+            () => this.computeStats(workspaceId, options),
+            statsEpochKey(workspaceId),
+        );
     }
 
     private async computeStats(workspaceId: string, options?: { pageId?: string }): Promise<CommentStats> {

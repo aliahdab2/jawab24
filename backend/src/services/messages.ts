@@ -5,7 +5,7 @@ import { ConversationMessage } from '../types';
 import { Message } from '@jawab24/shared';
 import { conversationPauseService } from './conversationPause';
 import { conversationsService, type Platform } from './conversations';
-import { ENDPOINT_STATS_CACHE_TTL, messagesStatsCacheKey, withStatsCache } from './statsCache';
+import { ENDPOINT_STATS_CACHE_TTL, messagesStatsCacheKey, statsEpochKey, withStatsCache } from './statsCache';
 
 /** DB connection or transaction — methods accepting this can participate in a transaction. */
 type DbConn = typeof db;
@@ -868,7 +868,12 @@ export class MessagesService {
         // workspace-wide variant is cached briefly. Page-filtered calls are
         // rare and skip the cache. Invalidation: see services/statsCache.ts.
         const cacheKey = options?.pageId ? null : messagesStatsCacheKey(workspaceId);
-        return withStatsCache(cacheKey, ENDPOINT_STATS_CACHE_TTL, () => this.computeStats(workspaceId, options));
+        return withStatsCache(
+            cacheKey,
+            ENDPOINT_STATS_CACHE_TTL,
+            () => this.computeStats(workspaceId, options),
+            statsEpochKey(workspaceId),
+        );
     }
 
     private async computeStats(workspaceId: string, options?: { pageId?: string }): Promise<MessageStats> {

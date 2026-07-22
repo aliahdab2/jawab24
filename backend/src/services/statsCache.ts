@@ -35,6 +35,14 @@ export const STATS_INVALIDATION_THROTTLE = 30;
 export const pagesStatsCacheKey = (workspaceId: string) => `stats:workspace:${workspaceId}:v2`;
 export const messagesStatsCacheKey = (workspaceId: string) => `stats:messages:${workspaceId}:v1`;
 export const commentsStatsCacheKey = (workspaceId: string) => `stats:comments:${workspaceId}:v1`;
+/**
+ * Per-workspace invalidation counter, bumped on every endpoint-stats invalidation.
+ * Lets a cache write detect that the data changed while it was computing — see
+ * writeStatsCacheIfFresh below.
+ */
+export const statsEpochKey = (workspaceId: string) => `stats:epoch:${workspaceId}`;
+/** TTL refreshed on every epoch bump — the counter only needs to outlive a compute. */
+const STATS_EPOCH_TTL = 86400;
 
 /** All stats keys for a workspace — what a full invalidation must delete. */
 export const allStatsCacheKeys = (workspaceId: string): string[] => [
@@ -60,21 +68,76 @@ function writeStatsCache(key: string, value: unknown, ttlSeconds: number): void 
 }
 
 /**
+ * Guarded cache write: stores the value ONLY if the workspace's invalidation
+ * epoch is unchanged since the compute started.
+ *
+ * Without this guard, a DEL that lands mid-compute is undone by the compute's own
+ * write — the classic read-compute-write race:
+ *   1. SSE `comment:received` → chip refetches stats → compute reads the DB and
+ *      sees 1 action-required comment
+ *   2. the AI replies → reply pipeline DELs the (not yet written) cache key
+ *   3. the compute from step 1 finishes and writes `actionRequired: 1`, TTL 60s
+ *   4. the `comment:reply_sent` refetch reads that stale 1, while the uncached
+ *      list correctly returns 0 → chip shows 1 over an empty list, and sticks
+ *      (react-query has no polling fallback, so it holds the value until the next
+ *      SSE event — on a quiet page, indefinitely)
+ *
+ * The epoch is bumped by the same call that DELs, so a stale write is detected and
+ * skipped; the next read simply recomputes. Missing epoch key (never invalidated /
+ * expired) is represented as '' on both sides so a first write still lands.
+ */
+function writeStatsCacheIfFresh(
+    key: string,
+    epochKey: string,
+    epochAtStart: string,
+    value: unknown,
+    ttlSeconds: number,
+): void {
+    redis.eval(
+        `local cur = redis.call('GET', KEYS[2])
+         if cur == false then cur = '' end
+         if cur == ARGV[3] then redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2]) end
+         return 1`,
+        2,
+        key,
+        epochKey,
+        JSON.stringify(value),
+        String(ttlSeconds),
+        epochAtStart,
+    ).catch(() => {});
+}
+
+/** Read the current invalidation epoch — '' when the counter doesn't exist yet. */
+async function readStatsEpoch(epochKey: string): Promise<string> {
+    return (await redis.get(epochKey).catch(() => null)) ?? '';
+}
+
+/**
  * Cache-through wrapper for stats aggregations: returns the cached value when
  * present, otherwise computes, stores (fire-and-forget), and returns it.
  * Pass `cacheKey: null` to bypass caching entirely (e.g. page-filtered calls).
+ *
+ * Pass `epochKey` (endpoint stats do) to make the write race-safe against an
+ * invalidation that lands mid-compute — see writeStatsCacheIfFresh.
  */
 export async function withStatsCache<T>(
     cacheKey: string | null,
     ttlSeconds: number,
     compute: () => Promise<T>,
+    epochKey?: string,
 ): Promise<T> {
     if (cacheKey) {
         const cached = await readStatsCache<T>(cacheKey);
         if (cached !== null) return cached;
     }
+    // Captured BEFORE the compute reads the DB, so any invalidation racing the
+    // compute is visible as a changed epoch at write time.
+    const epochAtStart = cacheKey && epochKey ? await readStatsEpoch(epochKey) : '';
     const value = await compute();
-    if (cacheKey) writeStatsCache(cacheKey, value, ttlSeconds);
+    if (cacheKey) {
+        if (epochKey) writeStatsCacheIfFresh(cacheKey, epochKey, epochAtStart, value, ttlSeconds);
+        else writeStatsCache(cacheKey, value, ttlSeconds);
+    }
     return value;
 }
 
@@ -84,7 +147,14 @@ export async function withStatsCache<T>(
  * refetches immediately and must see the change. Fire-and-forget.
  */
 export function invalidateEndpointStatsCaches(workspaceId: string): void {
-    redis.del(messagesStatsCacheKey(workspaceId), commentsStatsCacheKey(workspaceId)).catch(() => {});
+    // Bump the epoch in the same pipeline as the DEL: a compute already in flight
+    // must not be able to write its pre-mutation snapshot after this DEL lands.
+    redis.multi()
+        .del(messagesStatsCacheKey(workspaceId), commentsStatsCacheKey(workspaceId))
+        .incr(statsEpochKey(workspaceId))
+        .expire(statsEpochKey(workspaceId), STATS_EPOCH_TTL)
+        .exec()
+        .catch(() => {});
 }
 
 /**
