@@ -97,6 +97,7 @@ vi.mock('../../src/config', () => ({
             semanticCacheEnabled: true,
             genderBucketEnabled: true,
             neutralBucketEnabled: true,
+            qualityGateEnabled: true,
             serviceUrl: 'http://localhost:3002',
             defaultModel: 'gpt-4-mini',
             model: 'gpt-4.1-mini',
@@ -712,6 +713,86 @@ describe('AI Service', () => {
             const result = await service.generateReply({ comment: 'Hello' });
 
             expect(result.reply).toBe('A real AI reply.');
+        });
+    });
+
+    describe('generateReply - save-side quality gate', () => {
+        // A weak reply (confidence 'low', or info_not_in_kb / price_not_in_kb /
+        // language_mismatch) is served to the customer but never cached — cached,
+        // it would repeat for 30 days. Unlike fallback_reply above this is a
+        // silent skip-save, not a throw. Kill-switch: config.ai.qualityGateEnabled.
+        async function generateWithWorkerReply(data: Record<string, unknown>) {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(redis.set).mockResolvedValue('OK' as never);
+            vi.mocked(axios.post).mockResolvedValue({ data });
+            return service.generateReply({ comment: 'كم السعر؟' });
+        }
+
+        async function cacheSetCalls() {
+            const { redis } = await import('../../src/lib/redis');
+            return vi.mocked(redis.set).mock.calls
+                .filter((call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).startsWith('cache:ai_reply:'));
+        }
+
+        async function gateCounterCalls(suffix: string) {
+            const { redis } = await import('../../src/lib/redis');
+            return vi.mocked(redis.incr).mock.calls
+                .filter((call: unknown[]) => call[0] === `metrics:cache:quality_gate:${suffix}`);
+        }
+
+        it('serves a low-confidence reply but never caches it', async () => {
+            const result = await generateWithWorkerReply({
+                reply: 'ما عندي هالمعلومة، بس بقدر ساعدك بغيرها', language: 'ar', confidence: 'low', flags: [],
+            });
+
+            expect(result.reply).toBe('ما عندي هالمعلومة، بس بقدر ساعدك بغيرها');
+            expect(result.cached).toBe(false);
+            expect(await cacheSetCalls()).toHaveLength(0);
+            const { db } = await import('../../src/db');
+            expect(vi.mocked(db.insert)).not.toHaveBeenCalled();
+            expect(await gateCounterCalls('save_reject:low_confidence')).toHaveLength(1);
+            expect(await gateCounterCalls('save_ok')).toHaveLength(0);
+        });
+
+        it.each(['info_not_in_kb', 'price_not_in_kb', 'language_mismatch'])(
+            'skips the cache save when a high-confidence reply carries %s',
+            async (flag) => {
+                const result = await generateWithWorkerReply({
+                    reply: 'Some reply', language: 'en', confidence: 'high', flags: [flag],
+                });
+
+                expect(result.reply).toBe('Some reply');
+                expect(await cacheSetCalls()).toHaveLength(0);
+                expect(await gateCounterCalls(`save_reject:${flag}`)).toHaveLength(1);
+            },
+        );
+
+        it('caches normally when only dynamic companion flags are present', async () => {
+            await generateWithWorkerReply({
+                reply: 'رد سليم', language: 'ar', confidence: 'high', flags: ['expected_lang:ar'],
+            });
+
+            expect(await cacheSetCalls()).toHaveLength(1);
+            expect(await gateCounterCalls('save_ok')).toHaveLength(1);
+            expect(await gateCounterCalls('save_reject:low_confidence')).toHaveLength(0);
+        });
+
+        it('kill-switch off: low-confidence replies cache again, save_ok keeps counting', async () => {
+            const { config } = await import('../../src/config');
+            config.ai.qualityGateEnabled = false;
+            try {
+                await generateWithWorkerReply({
+                    reply: 'weak but cached', language: 'en', confidence: 'low', flags: ['info_not_in_kb'],
+                });
+
+                expect(await cacheSetCalls()).toHaveLength(1);
+                // Denominator continuity: with the gate off every save counts save_ok.
+                expect(await gateCounterCalls('save_ok')).toHaveLength(1);
+                expect(await gateCounterCalls('save_reject:low_confidence')).toHaveLength(0);
+            } finally {
+                config.ai.qualityGateEnabled = true;
+            }
         });
     });
 
@@ -1493,11 +1574,13 @@ describe('AI Service - Semantic Cache Integration', () => {
         semanticCacheHit?: { reply: string; intent: string; confidence?: string; flags?: string[] } | null;
         openaiApiKey?: string;
         semanticCacheEnabled?: boolean;
+        qualityGateEnabled?: boolean;
     } = {}) {
         vi.doMock('../../src/lib/redis', () => ({
             redis: {
                 get: vi.fn().mockResolvedValue(overrides.redisReply ?? null),
                 set: vi.fn(),
+                incr: vi.fn().mockResolvedValue(1),
                 quit: vi.fn(),
             },
         }));
@@ -1540,7 +1623,9 @@ describe('AI Service - Semantic Cache Integration', () => {
 
         vi.doMock('../../src/config', () => ({
             config: {
-                ai: { enabled: true, cacheEnabled: true, semanticCacheEnabled: overrides.semanticCacheEnabled ?? true, serviceUrl: 'http://localhost:3002', model: 'gpt-4.1-mini' },
+                // qualityGateEnabled defaults OFF in this harness — these tests exercise
+                // semantic-cache mechanics, not the gate. The gate parity tests opt in.
+                ai: { enabled: true, cacheEnabled: true, semanticCacheEnabled: overrides.semanticCacheEnabled ?? true, qualityGateEnabled: overrides.qualityGateEnabled ?? false, serviceUrl: 'http://localhost:3002', model: 'gpt-4.1-mini' },
                 openai: { apiKey: overrides.openaiApiKey ?? 'test-key' },
             },
         }));
@@ -1682,6 +1767,47 @@ describe('AI Service - Semantic Cache Integration', () => {
         expect(saveArgs.kbActiveVersion).toBe(2);
         // Intent should be pre-GPT classified (PRICE normalized to QUESTION via classifyFallbackIntent)
         expect(saveArgs.intent).toBe('QUESTION');
+    });
+
+    it('quality gate parity: a gated reply is not saved to the semantic cache either', async () => {
+        // One decision governs both save sites — a reply too weak for the exact
+        // cache must not survive as a semantic entry (which would serve it fuzzily).
+        const { mockSemCache } = setupMocks({
+            qualityGateEnabled: true,
+            semanticCacheHit: null,
+            axiosReply: { reply: 'Not sure about that price', language: 'en', intent: 'QUESTION', confidence: 'high', flags: ['price_not_in_kb'] },
+        });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        const result = await service.generateReply({
+            comment: 'How much is this?',
+            context: { pageId: 'page-1', kbActiveVersion: 2 },
+        });
+
+        expect(result.reply).toBe('Not sure about that price');
+        await new Promise(r => setTimeout(r, 50));
+        expect(mockSemCache.save).not.toHaveBeenCalled();
+    });
+
+    it('quality gate parity: a clean reply still saves to the semantic cache with the gate on', async () => {
+        const { mockSemCache } = setupMocks({
+            qualityGateEnabled: true,
+            semanticCacheHit: null,
+            axiosReply: { reply: 'Price is $50', language: 'en', intent: 'QUESTION', confidence: 'high', flags: [] },
+        });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'How much is this?',
+            context: { pageId: 'page-1', kbActiveVersion: 2 },
+        });
+
+        await new Promise(r => setTimeout(r, 50));
+        expect(mockSemCache.save).toHaveBeenCalledTimes(1);
     });
 
     it('should skip the semantic cache entirely (read + write + embed) when semanticCacheEnabled=false', async () => {

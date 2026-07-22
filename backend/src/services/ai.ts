@@ -18,6 +18,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { classifyFallbackIntent } from './reply/fallbackClassifier';
 import { getModelForUser } from './aiModelResolver';
 import { getConfidentGender, recordGenderObservation, firstNameOf } from './genderMap';
+import { cacheRejectReason } from './cacheQualityGate';
 import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError, AiQuotaExhaustedError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
 import { emailService } from './email';
@@ -617,6 +618,27 @@ export class AiService {
                 throw new AiUnavailableError('ai-worker returned fallback_reply flag');
             }
 
+            // Save-side quality gate: ONE decision governing BOTH cache saves below
+            // (exact + semantic — computed here so the two layers can never diverge).
+            // A weak reply (confidence 'low', or info_not_in_kb / price_not_in_kb /
+            // language_mismatch) is still returned to the customer but never cached —
+            // cached, it would repeat for 30 days. Silent skip, deliberately NOT a
+            // throw (contrast fallback_reply above: that reply is unusable; this one
+            // is merely not worth repeating). Counters only when a save was actually
+            // in play (eval bypasses); save_ok keeps counting when the kill-switch is
+            // off (cacheReject stays null) so the reject-rate denominator survives a
+            // flag flip.
+            const cacheReject = config.ai.qualityGateEnabled
+                ? cacheRejectReason(response.data.confidence, response.data.flags)
+                : null;
+            if (!bypassAllCaches) {
+                if (cacheReject) {
+                    redis.incr(`metrics:cache:quality_gate:save_reject:${cacheReject}`).catch(() => {});
+                } else {
+                    redis.incr('metrics:cache:quality_gate:save_ok').catch(() => {});
+                }
+            }
+
             // v53 learning: feed the model's gender judgment into the fleet name→gender
             // map. Only pure NAME-based judgments on real Arabic DM traffic count —
             // `gender_basis === 'self'` is a self-reference override (فاطمة writing
@@ -716,7 +738,7 @@ export class AiService {
                 }
             }
 
-            if (!bypassAllCaches) {
+            if (!bypassAllCaches && !cacheReject) {
                 await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
             }
 
@@ -732,7 +754,7 @@ export class AiService {
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
             // Model is stored in metadata so check-time can filter to same-model entries.
             // Eval pipeline never writes (see `bypassAllCaches` above).
-            if (config.ai.semanticCacheEnabled && !bypassAllCaches && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
+            if (config.ai.semanticCacheEnabled && !bypassAllCaches && !cacheReject && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,

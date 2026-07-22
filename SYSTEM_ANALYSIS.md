@@ -317,7 +317,9 @@ Customer message: "كم سعر القميص الأزرق؟"
 │     ├─ Parse JSON response                                      │
 │     └─ Run 6 post-validation checks                             │
 │                                                                 │
-│  6. SAVE TO CACHES                                              │
+│  6. SAVE TO CACHES (quality-gated: confidence 'low' or          │
+│     info/price_not_in_kb / language_mismatch → serve, don't     │
+│     cache; kill-switch AI_QUALITY_GATE_ENABLED)                 │
 │     ├─ Exact cache (Redis + Postgres)                           │
 │     └─ Semantic cache (fire-and-forget)                         │
 │                                                                 │
@@ -486,7 +488,10 @@ CUSTOMER SENDS MESSAGE/COMMENT
 ├── CALL AI WORKER → OpenAI gpt-4.1-mini
 │   └── TIMEOUT/ERROR → Return FALLBACK reply
 │
-├── SAVE to caches (exact + semantic)
+├── SAVE to caches (exact + semantic) — quality-gated: replies the model
+│   marked weak (confidence 'low', info_not_in_kb, price_not_in_kb,
+│   language_mismatch) are served but never cached
+│   (services/cacheQualityGate.ts, counters metrics:cache:quality_gate:*)
 │
 ├── SAFETY FILTERS:
 │   ├── Intent = OFFENSIVE or SPAM? → Flag → ❌ DON'T reply → STOP
