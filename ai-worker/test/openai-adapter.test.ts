@@ -142,19 +142,41 @@ describe('OpenAIAdapter', () => {
         expect(body.temperature).toBe(0.7);
     });
 
-    it('converts OpenAI APIUserAbortError into a typed AiTimeoutError', async () => {
-        // Internal timeout aborts via AbortController → OpenAI SDK throws
-        // APIUserAbortError. Without normalization the raw "Request was aborted."
-        // leaks to Sentry as an unhandled OpenAIApiError; the backend can't tell
-        // it's a timeout. Adapter must re-throw as AiTimeoutError (matching the
-        // legacy openai.ts path).
-        const abortErr = Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' });
-        mockCreate.mockRejectedValue(abortErr);
+    // REGRESSION (JAWAB24-AI-WORKER-6/9, 2026-07-22): this test used to forge the
+    // error as `Object.assign(new Error(...), { name: 'APIUserAbortError' })`,
+    // which asserted the PRODUCTION BUG'S ASSUMPTION instead of the SDK's real
+    // shape — so it passed while every real timeout was misclassified.
+    // openai@6.27.0 never assigns `name` on its error classes (core/error.js:
+    // APIUserAbortError → APIError → OpenAIError → Error, no `this.name`), so a
+    // genuine abort arrives with name === 'Error' and the old name check was dead
+    // code. These now abort the REAL AbortSignal the adapter passes to the SDK.
+    it('converts a real timeout abort into a typed AiTimeoutError', async () => {
+        mockCreate.mockImplementation((_body: unknown, opts: { signal: AbortSignal }) =>
+            new Promise((_resolve, reject) => {
+                // The SDK's actual rejection shape: a name-less Error. If the
+                // implementation goes back to sniffing `name`, this fails.
+                opts.signal.addEventListener('abort', () => reject(new Error('Request was aborted.')));
+            }));
 
         const { OpenAIAdapter } = await import('../src/services/providers/openai-adapter');
         const { AiTimeoutError } = await import('../src/lib/errors');
         const adapter = new OpenAIAdapter('gpt-4.1-mini');
 
-        await expect(adapter.chat(baseParams)).rejects.toBeInstanceOf(AiTimeoutError);
+        await expect(adapter.chat({ ...baseParams, timeoutMs: 20 })).rejects.toBeInstanceOf(AiTimeoutError);
+    });
+
+    it('leaves a NON-timeout failure as-is (does not over-claim AiTimeoutError)', async () => {
+        // The signal never aborts here, so the guard must not fire — otherwise
+        // the fix would relabel every API error as a timeout.
+        mockCreate.mockRejectedValue(new Error('500 Internal Server Error'));
+
+        const { OpenAIAdapter } = await import('../src/services/providers/openai-adapter');
+        const { AiTimeoutError } = await import('../src/lib/errors');
+        const adapter = new OpenAIAdapter('gpt-4.1-mini');
+
+        const err = await adapter.chat(baseParams).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(Error);
+        expect(err).not.toBeInstanceOf(AiTimeoutError);
+        expect((err as Error).message).toContain('500');
     });
 });

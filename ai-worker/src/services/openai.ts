@@ -384,9 +384,9 @@ export class OpenAIService {
                 ),
                 // Custom classifier — timeouts and quota exhaustion get distinct
                 // error_classes so the breakdown script can separate them from
-                // generic API errors. Check by name (not instanceof) so tests can
-                // mock `openai` without providing the real APIUserAbortError class.
-                (e) => (e instanceof Error && e.name === 'APIUserAbortError'
+                // generic API errors. Timeout detection reads OUR OWN
+                // AbortSignal, never the error's shape — see the catch below.
+                (e) => (controller.signal.aborted
                     ? 'AiTimeoutError'
                     : isInsufficientQuotaError(e)
                         ? 'AiQuotaError'
@@ -395,7 +395,20 @@ export class OpenAIService {
         } catch (e) {
             // withAiMetrics already emitted failed_before_log. Re-throw typed
             // errors so backend BullMQ classifies them correctly.
-            if (e instanceof Error && e.name === 'APIUserAbortError') {
+            //
+            // Timeout detection is `controller.signal.aborted`, NOT the error's
+            // name/class. This code used to check `e.name === 'APIUserAbortError'`
+            // so tests could mock `openai` without the real class — but the SDK
+            // never assigns `name` on its error classes (openai@6.27.0
+            // core/error.js: APIUserAbortError extends APIError extends
+            // OpenAIError extends Error, no `this.name` anywhere), so `name`
+            // inherits "Error" and the branch was DEAD. Every timeout was
+            // reported as OpenAIApiError, no AiTimeoutError was thrown, and the
+            // raw error escaped to Sentry as `Error: Request was aborted.`
+            // (JAWAB24-AI-WORKER-6/9, 2026-07). The signal is ours — only the
+            // timeout above aborts it — so it is authoritative and, unlike a
+            // class or name check, cannot silently break on an SDK upgrade.
+            if (controller.signal.aborted) {
                 throw new AiTimeoutError(config.openai.timeoutMs);
             }
             // 429 insufficient_quota — account out of credit. Throw the typed
