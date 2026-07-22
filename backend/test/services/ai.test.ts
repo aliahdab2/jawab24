@@ -778,6 +778,33 @@ describe('AI Service', () => {
             expect(await gateCounterCalls('save_reject:low_confidence')).toHaveLength(0);
         });
 
+        it('never caches a reply generated WITH conversation history (context-leak guard)', async () => {
+            // The read path only probes for history-less messages, but without a
+            // save-side gate a mid-conversation reply ("the product you asked
+            // about earlier") whose customerContext happens to be empty lands
+            // under the same key a brand-new customer's first message probes —
+            // a wrong-CONTENT leak across customers.
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(redis.set).mockResolvedValue('OK' as never);
+            vi.mocked(axios.post).mockResolvedValue({ data: {
+                reply: 'نفس المنتج اللي سألتي عنه، سعره ٥٠', language: 'ar', confidence: 'high', flags: [],
+            } });
+
+            const result = await service.generateReply({
+                comment: 'كم السعر؟',
+                context: { conversationHistory: [
+                    { role: 'user', content: 'شو عندكم كريمات؟' },
+                    { role: 'assistant', content: 'عندنا كريم مرطب وواقي شمس' },
+                ] },
+            });
+
+            expect(result.reply).toContain('نفس المنتج');
+            expect(await cacheSetCalls()).toHaveLength(0);
+            const { db } = await import('../../src/db');
+            expect(vi.mocked(db.insert)).not.toHaveBeenCalled();
+        });
+
         it('kill-switch off: low-confidence replies cache again, save_ok keeps counting', async () => {
             const { config } = await import('../../src/config');
             config.ai.qualityGateEnabled = false;

@@ -738,7 +738,15 @@ export class AiService {
                 }
             }
 
-            if (!bypassAllCaches && !cacheReject) {
+            // History gate (save side): the READ path only probes for history-less
+            // messages (see `hasConversationHistory` above), but the save must be
+            // gated too — a reply generated WITH conversation history can reference
+            // it ("the product you asked about earlier") while `customerContext`
+            // (the cc: key segment) is legitimately empty (no summary, no extracted
+            // data yet), landing it under the exact key a brand-new customer's
+            // first message probes. Serving one customer's context to another is a
+            // wrong-CONTENT leak — strictly worse than any wrong-form issue.
+            if (!bypassAllCaches && !cacheReject && !hasConversationHistory) {
                 await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
             }
 
@@ -754,7 +762,7 @@ export class AiService {
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
             // Model is stored in metadata so check-time can filter to same-model entries.
             // Eval pipeline never writes (see `bypassAllCaches` above).
-            if (config.ai.semanticCacheEnabled && !bypassAllCaches && !cacheReject && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
+            if (config.ai.semanticCacheEnabled && !bypassAllCaches && !cacheReject && !hasConversationHistory && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,
