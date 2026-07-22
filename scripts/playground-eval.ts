@@ -56,7 +56,7 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto';
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -138,6 +138,7 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     damascus: /الفريق الدمشقي|دمشقي/i,
     clinic: /الشفاء|عيادة|clinic/i,
     moto: /المجد|موتوسيكلات|motoshop/i,
+    incense: /بيت البخور|incense/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -1838,9 +1839,12 @@ const TEST_CASES: TestCase[] = [
         page: 'electronics',
         expected: {
             confidence: ['high', 'medium'],
-            replyNotContains: ['جرير', 'Jarir', 'أرخص من', 'نقدر ننزل', 'بننافسهم'],
+            // POSITIVE core: must answer with OUR OWN listed price (KB: iPhone 15
+            // Pro 3800–4500 ريال) — ignoring the question entirely is also a fail.
+            replyContainsAny: ['3800', '3,800', '٣٨٠٠', '4500', '4,500', '٤٥٠٠'],
+            replyNotContains: ['جرير', 'Jarir', 'أرخص من', 'بننافسهم', 'نقدر ننزل لك', 'ننزله لك', 'بننزل لك'],
         },
-        notes: 'Must NOT discuss competitor pricing or promise to match/beat it. Should only state own prices from KB.',
+        notes: 'Must state own KB price AND not discuss competitor pricing or promise to match/beat it. NOTE: the bare substring `نقدر ننزل` was BRITTLE — a CORRECT refusal «للأسف ما نقدر ننزل السعر» contains it (verified 2026-07-22, v56 temp-0: the reply explicitly declines the discount). Same class as #511\'s note. Banned forms are the AFFIRMATIVE promise shapes; the negated refusal must pass — and the added replyContainsAny keeps the test strong: it now REQUIRES the own-price answer instead of merely banning phrases.',
     },
 
     // 28.6 — Pretending to be from Meta/Facebook support
@@ -4155,6 +4159,104 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['team'],
         },
         notes: 'English variant — same page-team deflection ("I\'m part of the page team"), no "yes".',
+    },
+
+    // -----------------------------------------------------------------------
+    // Category 68: Verified Cart Totals (prompt v56 — July 2026 prod finding,
+    // متجر إجدابيا REAL customer traffic). The model computed CORRECT totals
+    // («39 + توصيل 10 = المجموع 49») but Check 1 grounds numbers against
+    // LITERAL KB values, so every derived total flagged price_not_in_kb and the
+    // correct answer was replaced by the «تواصل معنا» deflection at the moment
+    // of sale. v56: the model self-reports the arithmetic in `price_math`;
+    // the validator verifies each addend against the KB and the sum, and
+    // verified totals extend the accepted set. These replay the prod
+    // conversation shapes against the anonymized incense fixture.
+    // (Test ids 717–719 are reserved by the in-flight catalog-authority
+    // branch's Cat 67 — do not reuse.)
+
+    // 68.1 — The exact prod failure shape: a TERSE «الحساب كم بالتوصيل» after
+    // the item + delivery city are established in history.
+    // ASSERTS THE ANTI-DEFLECTION CONTRACT, NOT A COMPUTED NUMBER — deliberate.
+    // The bug was never that the model can't add: on v54 prod it produced the
+    // correct «المجموع 49 دينار» and the GUARD replaced it with the phone-number
+    // deflection. So what must never regress is: no price_not_in_kb, and no
+    // "call us" brush-off. Whether the model totals immediately or asks one
+    // clarifying question on such a terse turn is left FREE (owner ruling,
+    // 2026-07-22 — a prompt rule that forced the total was measured, found to
+    // buy only this one case ~3/4 of the time, and removed as prompt bloat).
+    // #721/#722 keep the strict computed-total assertions on well-specified
+    // carts, so the suite still proves totalling works end to end.
+    {
+        id: 720, category: 68, categoryName: 'Verified Cart Totals', channel: 'dm',
+        message: 'الحساب كم بالتوصيل',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'بكم الثلاث أطراف من معطر ريحان؟' },
+            { role: 'assistant', content: 'الثلاث أطراف من معطر الملابس ريحان بـ 42 دينار.' },
+            { role: 'user', content: 'التوصيل لطرابلس متاح؟' },
+            { role: 'assistant', content: 'نعم، التوصيل لطرابلس بـ 12 دينار ويوصلك خلال 48 ساعة.' },
+        ],
+        expected: {
+            flagsAbsent: ['price_not_in_kb'],
+            // The exact prod deflection that replaced the correct total.
+            replyNotContains: ['أرقامنا', 'يرجى التواصل معنا', 'تواصل معنا مباشرة'],
+        },
+        notes: 'PROD replay (2026-07-22): the guard flagged the correct 42+12=54 and swapped in «يرجى التواصل معنا على أرقامنا». Pins the regression itself — no price_not_in_kb, no phone-number deflection.',
+    },
+
+    // 68.2 — Multi-item cart + delivery, explicit «شامل التوصيل» phrasing
+    // (second prod shape: two perfumes + delivery = 458 was nuked). 210+260+12 = 482.
+    {
+        id: 721, category: 68, categoryName: 'Verified Cart Totals', channel: 'dm',
+        message: 'طيب السعر كامل شامل التوصيل كم؟',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'ابي عطر زهرة الأطلس وعطر ليل العنبر' },
+            { role: 'assistant', content: 'اختيار ممتاز! عطر زهرة الأطلس بـ 210 دينار وعطر ليل العنبر بـ 260 دينار.' },
+            { role: 'user', content: 'التوصيل لطرابلس' },
+            { role: 'assistant', content: 'تمام، التوصيل لطرابلس بـ 12 دينار.' },
+        ],
+        expected: {
+            flagsAbsent: ['price_not_in_kb'],
+            replyContainsAny: ['482', '٤٨٢'],
+        },
+        notes: 'PROD replay: «طيب السعر كامل شامل التوصيل كم؟» — 210+260+12=482. The old guard flagged any derived sum.',
+    },
+
+    // 68.3 — Free-delivery city, MULTI-ITEM so the total is genuinely derived.
+    // The first version of this case used a single 120 item, so the expected
+    // total (120) was a LITERAL KB value and the case passed whether or not
+    // totalling worked at all — it gave false confidence and missed a real bug
+    // (`unit > 0` rejected the free 0 line and reinstated the deflection).
+    // 40 + 120 + free = 160 appears nowhere in the KB, so only real verified
+    // arithmetic can pass it.
+    {
+        id: 722, category: 68, categoryName: 'Verified Cart Totals', channel: 'dm',
+        message: 'كم يطلع الحساب كامل مع التوصيل لمصراتة؟',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'ابي علبة بخور المسك الملكي وعلبة بخور الياسمين' },
+            { role: 'assistant', content: 'علبة بخور المسك الملكي بـ 120 دينار وعلبة بخور الياسمين الفاخر بـ 40 دينار.' },
+        ],
+        expected: {
+            flagsAbsent: ['price_not_in_kb'],
+            replyContainsAny: ['160', '١٦٠'],
+            replyNotContains: ['172', '١٧٢'],
+        },
+        notes: 'KB: توصيل مصراتة مجاني. 120+40+0 = 160 (NOT in KB — a true derived total). The paid-city fee (12) must not leak into the free city, hence 172 is banned.',
+    },
+
+    // 68.4 — GREEN GUARD: plain literal price on the new fixture (no math) —
+    // proves the page resolves and v56 didn't disturb the simple path.
+    {
+        id: 723, category: 68, categoryName: 'Verified Cart Totals', channel: 'dm',
+        message: 'بكم بخور الياسمين؟',
+        page: 'incense',
+        expected: {
+            flagsAbsent: ['price_not_in_kb', 'info_not_in_kb'],
+            replyContainsAny: ['40', '٤٠'],
+        },
+        notes: 'Sanity: literal KB price (40 دينار) answered directly — fixture wiring + unchanged literal path.',
     },
 
 ];

@@ -258,6 +258,42 @@ const DEMO_PAGES = [
         autoReplyEnabled: true,
         instagramUsername: null,
     },
+    {
+        // CART-TOTALS fixture (playground-eval Cat 68, prompt v56). Anonymized
+        // clone of a REAL prod KB shape (متجر إجدابيا, 2026-07-22 — identity,
+        // products, prices and cities all invented; structure preserved): per-item
+        // دينار prices, bundle/multi-pack tiers, a FREE-delivery city plus a PAID
+        // one, and an order flow that asks the bot to restate the order with the
+        // grand total. That combination forces COMPUTED totals (items + delivery),
+        // which the literal-value price guard used to flag and replace with the
+        // «تواصل معنا» deflection at the moment of sale — Cat 68 replays the prod
+        // conversation to pin the price_math trust-but-verify path end-to-end.
+        // Named to dodge every other page's name pattern in playground-eval.ts
+        // (no متجر/معهد/مدارس/عيادة/أزياء/دمشقي/المجد/النور/الأمل/الشفاء).
+        facebookPageId: 'demo_page_incense',
+        name: 'بيت البخور الليبي',
+        suggestedKnowledgeBase: `🪔 بيت البخور الليبي — بخور وعطور أصلية
+
+💰 المنتجات والأسعار:
+بخور الياسمين الفاخر، العلبة 40 دينار
+بخور المسك الملكي، العلبة 120 دينار
+معطر الملابس ريحان: الطرف الواحد 16 دينار، الطرفين 28 دينار، الثلاث أطراف 42 دينار
+عطر زهرة الأطلس 100 ملي بسعر 210 دينار
+عطر ليل العنبر 100 ملي بسعر 260 دينار
+صابونة الغار 35 دينار وصابونة الورد 35 دينار، وعرض الصابونتين مع بعض 62 دينار
+
+🚚 التوصيل:
+توصيل مصراتة مجاني
+توصيل طرابلس 12 دينار
+التوصيل خلال 48 ساعة
+للطلب أرسل اسم المدينة وبيانات المستلم
+
+بعد ما يرسل الزبون بياناته أعد له ملخص الطلب مع القيمة الكلية شاملة التوصيل
+
+📞 للتواصل: 0910000000`,
+        autoReplyEnabled: true,
+        instagramUsername: null,
+    },
 ];
 
 /**

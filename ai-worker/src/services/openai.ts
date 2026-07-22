@@ -331,6 +331,36 @@ export class OpenAIService {
                                             enum: ['self', 'name', 'unclear'],
                                         },
                                         used_name: { type: 'boolean' },
+                                        // Price-math self-report (v56): when the reply quotes a
+                                        // COMPUTED total (cart items + delivery, quantity × unit
+                                        // price), the model lists the breakdown so the validator
+                                        // can verify each unit price against Business Info and
+                                        // the arithmetic (replyValidator Check 1b). null when the
+                                        // reply quotes no computed total. Strict mode: nullable
+                                        // union + listed in `required`.
+                                        price_math: {
+                                            type: ['array', 'null'],
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    total: { type: 'number' },
+                                                    terms: {
+                                                        type: 'array',
+                                                        items: {
+                                                            type: 'object',
+                                                            properties: {
+                                                                unit: { type: 'number' },
+                                                                qty: { type: 'number' },
+                                                            },
+                                                            required: ['unit', 'qty'],
+                                                            additionalProperties: false,
+                                                        },
+                                                    },
+                                                },
+                                                required: ['total', 'terms'],
+                                                additionalProperties: false,
+                                            },
+                                        },
                                         language: {
                                             type: 'string',
                                             // ISO 639-1 codes. Includes scripts the detector now
@@ -345,7 +375,7 @@ export class OpenAIService {
                                             enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr', 'my', 'th', 'zh', 'ja', 'ko', 'ru', 'hi', 'he'],
                                         },
                                     },
-                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'gender', 'gender_basis', 'used_name', 'language'] as const,
+                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'gender', 'gender_basis', 'used_name', 'price_math', 'language'] as const,
                                     additionalProperties: false,
                                 },
                             },

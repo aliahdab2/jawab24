@@ -70,7 +70,31 @@ export const AI_REPLY_JSON_SCHEMA = {
             enum: ['self', 'name', 'unclear'],
         },
         used_name: { type: 'boolean' as const },
+        // Price-math self-report (v56) — see the inline schema in openai.ts for semantics.
+        price_math: {
+            type: ['array', 'null'] as const,
+            items: {
+                type: 'object' as const,
+                properties: {
+                    total: { type: 'number' as const },
+                    terms: {
+                        type: 'array' as const,
+                        items: {
+                            type: 'object' as const,
+                            properties: {
+                                unit: { type: 'number' as const },
+                                qty: { type: 'number' as const },
+                            },
+                            required: ['unit', 'qty'] as const,
+                            additionalProperties: false,
+                        },
+                    },
+                },
+                required: ['total', 'terms'] as const,
+                additionalProperties: false,
+            },
+        },
     },
-    required: ['reply', 'intent', 'confidence', 'flags', 'gender', 'gender_basis', 'used_name'] as const,
+    required: ['reply', 'intent', 'confidence', 'flags', 'gender', 'gender_basis', 'used_name', 'price_math'] as const,
     additionalProperties: false,
 };

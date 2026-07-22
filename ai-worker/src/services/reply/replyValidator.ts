@@ -6,7 +6,7 @@
  */
 import { detectLanguage } from '../language';
 import { getKBText, resolveLanguage, resolveChannel } from './replyContext';
-import type { GenerateRequest, ParsedReply, ValidatedReply } from './types';
+import type { GenerateRequest, ParsedReply, PriceMathClaim, PriceMathTerm, ValidatedReply } from './types';
 
 /** Map Arabic-Indic (U+0660–U+0669) and Eastern Arabic-Indic (U+06F0–U+06F9)
  *  digits to ASCII, so "٢٥٠٠٠" and "25000" compare equal. JS `\d` only
@@ -86,6 +86,82 @@ function priceIsInKb(numToken: string, mult: number, kbValues: Set<number>): boo
     return mult > 1 && kbValues.has(v * mult);
 }
 
+/** Bounds for price_math verification. Real carts are a handful of lines; anything
+ *  beyond these bounds is a malformed/degenerate claim and is simply not verified
+ *  (degrades to the literal-KB guard, never past it). */
+const PRICE_MATH_MAX_CLAIMS = 8;
+const PRICE_MATH_MAX_TERMS = 20;
+/** Quantity is pure model input, and unit×qty mints an accepted value from a
+ *  KB-grounded price — so the cap bounds how far a hallucinated quantity can
+ *  move a total. 100 covers any realistic DM order (wholesale enquiries get a
+ *  human) while keeping the mint-space small; at 1000 the model could assert
+ *  qty:250 and have 10,000 accepted off a 40-dinar item. */
+const PRICE_MATH_MAX_QTY = 100;
+/** Absolute tolerance for Σ(unit×qty) === total — absorbs float noise only,
+ *  not rounding: a claim that's off by a real amount must fail. */
+const PRICE_MATH_EPSILON = 0.01;
+
+/** A term is valid with `unit >= 0`, NOT `unit > 0`: a free line («توصيل مصراتة
+ *  مجاني» → {unit: 0, qty: 1}) is the natural itemization when the merchant
+ *  offers free delivery in some cities and charges in others, and rejecting it
+ *  killed the WHOLE claim — reinstating the very deflection v56 exists to fix
+ *  (caught in review, 2026-07-22). A zero term is arithmetically inert: it adds
+ *  0 to the sum and 0 to the accepted set, so it cannot launder anything. */
+function isPriceMathTerm(t: unknown): t is PriceMathTerm {
+    if (typeof t !== 'object' || t === null) return false;
+    const { unit, qty } = t as Record<string, unknown>;
+    return typeof unit === 'number' && Number.isFinite(unit) && unit >= 0
+        && typeof qty === 'number' && Number.isInteger(qty)
+        && qty >= 1 && qty <= PRICE_MATH_MAX_QTY;
+}
+
+function isPriceMathClaim(c: unknown): c is PriceMathClaim {
+    if (typeof c !== 'object' || c === null) return false;
+    const { total, terms } = c as Record<string, unknown>;
+    return typeof total === 'number' && Number.isFinite(total) && total > 0
+        && Array.isArray(terms) && terms.length >= 1 && terms.length <= PRICE_MATH_MAX_TERMS
+        && terms.every(isPriceMathTerm);
+}
+
+/**
+ * Check 1b (v56) — verify the model's self-reported cart arithmetic and return
+ * the derived values it has EARNED for this reply: for each claim whose unit
+ * prices are all literal KB values and whose Σ(unit×qty) equals the total, the
+ * total and each line product (unit×qty) become accepted. Trust-but-verify:
+ * the model shows its work, deterministic code checks every addend against the
+ * KB and the arithmetic — a hallucinated line item or wrong sum earns nothing.
+ *
+ * INVARIANT — additive only. The caller unions this set with collectKbValues();
+ * a model-controlled field must never remove or replace KB grounding, only
+ * extend it for the single reply that carried the claim. `priceMath` arrives as
+ * `unknown` on purpose: it's model output, so every shape check lives here and
+ * malformed input degrades to the pre-v56 guard (empty set), never past it.
+ *
+ * Deliberately inexpressible: subtraction. {unit, qty} covers sums and quantity
+ * products but not discount math («الطرفين 78 وبالعرض توفر 9، يعني 69») — in
+ * practice offer prices are literal KB values so this self-resolves. Do NOT
+ * "fix" by adding a sign/negative field without thinking through what a
+ * negative term does to verification (it would let claims cancel a hallucinated
+ * addend back to a plausible total).
+ */
+export function verifiedPriceMathValues(priceMath: unknown, kbValues: Set<number>): Set<number> {
+    const verified = new Set<number>();
+    if (!Array.isArray(priceMath)) return verified;
+    for (const claim of priceMath.slice(0, PRICE_MATH_MAX_CLAIMS)) {
+        if (!isPriceMathClaim(claim)) continue;
+        // A zero unit is trivially grounded and needs NO KB lookup: merchants
+        // write free delivery as «مجاني» / "free", never as a literal 0, so
+        // requiring 0 ∈ kbValues would reject every free-line itemization.
+        // Contributes nothing to the sum and nothing to the accepted set.
+        if (!claim.terms.every(t => t.unit === 0 || kbValues.has(t.unit))) continue;
+        const sum = claim.terms.reduce((acc, t) => acc + t.unit * t.qty, 0);
+        if (Math.abs(sum - claim.total) > PRICE_MATH_EPSILON) continue;
+        for (const t of claim.terms) verified.add(t.unit * t.qty);
+        verified.add(claim.total);
+    }
+    return verified;
+}
+
 /** Currency markers, generic across the Arabic-speaking world (not just the Gulf) —
  *  merchants may be in Syria, Libya, Egypt, Lebanon, the Maghreb, the Gulf, etc.
  *  Three groups: symbols, ISO codes, and Arabic words/abbreviations. ISO codes that
@@ -121,9 +197,15 @@ const CURRENCY = [
  * number after each cue as the quoted price (so "والتوصيل 3 أيام" — a delivery duration —
  * isn't read as a price).
  */
-export function flagHallucinatedPrice(reply: string, kbText: string): boolean {
+export function flagHallucinatedPrice(reply: string, kbText: string, priceMath?: unknown): boolean {
     const nReply = normalizeDigits(reply);
+    // Accepted values = literal KB numbers ∪ price_math-verified derivations
+    // (Check 1b). Computed ONCE and fed to BOTH tiers below — the union only
+    // ever ADDS values for this reply; KB grounding itself is untouched.
     const kbValues = collectKbValues(kbText);
+    for (const v of verifiedPriceMathValues(priceMath, kbValues)) {
+        kbValues.add(v);
+    }
 
     // Tier A: currency-adjacent numbers (optional multiplier word between number and currency).
     const pricePattern = new RegExp(
@@ -243,7 +325,7 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest): Va
     // quotes — without them here, every correct catalog price would flag.
     if (reply && parsed.intent === 'QUESTION') {
         const kbText = getKBText(request, { includeProductCatalog: true });
-        if (kbText && flagHallucinatedPrice(reply, kbText) && !flags.includes('price_not_in_kb')) {
+        if (kbText && flagHallucinatedPrice(reply, kbText, parsed.price_math) && !flags.includes('price_not_in_kb')) {
             flags.push('price_not_in_kb');
         }
     }

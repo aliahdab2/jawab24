@@ -962,7 +962,24 @@ export {
 // 2026-07-21). Eval Cat 66 pins it.
 // Deliberately NOT addressed (owner ruling, 2026-07-21): mid-conversation «كيف أقدر أساعدك؟»
 // re-greetings are left to the model — no phrase bans, no extra examples, no validator strips.
-export const PROMPT_VERSION = 'v54';
+// v55: RESERVED by the in-flight catalog-authority work (uncommitted on feat/business-surface,
+// 2026-07-22 — <product_catalog> wins over stale KB narrative prices, eval Cat 67). Skipped here
+// so the two branches can't collide on a version string; if that work is abandoned, v55 stays
+// unused (the version is only a cache-key namespace — gaps are harmless, collisions are not).
+// v56: VERIFIED CART TOTALS — prod finding from متجر إجدابيا real traffic (2026-07-22). The model
+// computed CORRECT totals («39 + توصيل 10 = المجموع 49») but Check 1 grounds every number against
+// LITERAL KB values, so a derived total can never pass: the correct answer was swapped for the
+// «تواصل معنا على أرقامنا» deflection at the exact moment of purchase, while the SAME question one
+// turn earlier passed only because PURCHASE_INTENT skips the guard (intent asymmetry = symptom).
+// Fix is trust-but-verify (owner ruling: structured self-report over hand-grown heuristics): a new
+// required `price_math` JSON field — [{total, terms:[{unit, qty}]}] — where the model shows its
+// arithmetic; replyValidator (Check 1b) verifies every unit against literal KB values and the sum,
+// and verified totals/products EXTEND the accepted set for that reply only. Additive-only by
+// construction: a hallucinated addend or wrong sum earns nothing, absent/malformed price_math
+// degrades to the pre-v56 guard. Subtraction (discount math) is deliberately inexpressible — see
+// verifiedPriceMathValues. Plus a TOTALS prompt rule: itemize-then-total, never deflect a total
+// question whose components are all in KB. Eval Cat 68 replays the prod conversation.
+export const PROMPT_VERSION = 'v56';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

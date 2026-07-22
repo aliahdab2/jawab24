@@ -1902,7 +1902,12 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         expect(rf.type).toBe('json_schema');
         expect(rf.json_schema.name).toBe('ai_reply');
         expect(rf.json_schema.strict).toBe(true);
-        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags', 'hedging', 'gender', 'gender_basis', 'used_name', 'language']);
+        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags', 'hedging', 'gender', 'gender_basis', 'used_name', 'price_math', 'language']);
+        // price_math (v56): nullable array of {total, terms:[{unit, qty}]} claims —
+        // strict mode nullability via type union, verified in replyValidator Check 1b.
+        expect(rf.json_schema.schema.properties.price_math.type).toEqual(['array', 'null']);
+        expect(rf.json_schema.schema.properties.price_math.items.required).toEqual(['total', 'terms']);
+        expect(rf.json_schema.schema.properties.price_math.items.properties.terms.items.required).toEqual(['unit', 'qty']);
         expect(rf.json_schema.schema.properties.intent.enum).toEqual([
             'QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
             'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT',

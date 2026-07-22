@@ -192,6 +192,140 @@ describe('flagHallucinatedPrice — generic across business types', () => {
     });
 });
 
+// Prod regression (متجر إجدابيا, 2026-07-22): the model computed CORRECT cart
+// totals («39 + توصيل 10 = المجموع 49») but the guard grounds every number
+// against LITERAL KB values, so a derived total can never pass and the correct
+// answer was swapped for the deflection fallback at the moment of sale.
+// Fix (v56): the model self-reports the arithmetic in a structured `price_math`
+// field; code verifies every addend against the KB and the sum — verified
+// totals/products EXTEND the accepted set for that reply only (never replace it).
+describe('flagHallucinatedPrice — verified price_math totals (v56)', () => {
+    // Shape of the real KB: per-item prices + per-city delivery fees. The
+    // «3 ساعات» line matters: Tier B reads the quantity token in «سعر 3 أطراف…»
+    // as the quoted price, and in the REAL prod KB it passed only because a
+    // literal 3 exists elsewhere («بخور انسام جلكسي 3 ساعات»). That
+    // quantity-after-cue reading is a PRE-EXISTING Tier B limitation, out of
+    // scope for v56 — price_math terms carry {unit, qty} prices, not bare
+    // counts, so it is deliberately not expressible here.
+    const kb = 'سعر الثلاث اطرف 39 دينار\nبخور العنفر الملكي سعره 37 دينار\nبخور انسام جلكسي 3 ساعات العلبة 15 دينار\nتوصيل بنغازي 10 دينار\nعطر صندلية 199 دينار\nعطر غرام ذهب 249 دينار';
+
+    it('REGRESSION: correct itemized total (39+10=49) is flagged without price_math', () => {
+        // Documents today's defect — the reply that prod replaced with the deflection.
+        const reply = 'سعر 3 أطراف 39 دينار، والتوصيل لبنغازي 10 دينار، فيكون المجموع 49 دينار.';
+        expect(flagHallucinatedPrice(reply, kb)).toBe(true);
+    });
+
+    it('the same total passes when price_math shows verified work', () => {
+        const reply = 'سعر 3 أطراف 39 دينار، والتوصيل لبنغازي 10 دينار، فيكون المجموع 49 دينار.';
+        const pm = [{ total: 49, terms: [{ unit: 39, qty: 1 }, { unit: 10, qty: 1 }] }];
+        expect(flagHallucinatedPrice(reply, kb, pm)).toBe(false);
+    });
+
+    it('quantity product: كيسين (2×37) + توصيل 10 = 84 passes; intermediate 74 accepted too', () => {
+        // The v54 quantity class — survives today only because PURCHASE_INTENT
+        // skips the guard; must also survive when the turn classifies QUESTION.
+        const reply = 'كيسين من بخور العنفر بـ 74 دينار والتوصيل 10 دنانير، المجموع 84 دينار.';
+        const pm = [{ total: 84, terms: [{ unit: 37, qty: 2 }, { unit: 10, qty: 1 }] }];
+        expect(flagHallucinatedPrice(reply, kb, pm)).toBe(false);
+    });
+
+    it('multi-total reply: an array vouches for each total independently', () => {
+        const reply = 'الطرف الواحد مع توصيل بنغازي 49 دينار، وعطر صندلية مع غرام ذهب والتوصيل 458 دينار.';
+        const pm = [
+            { total: 49, terms: [{ unit: 39, qty: 1 }, { unit: 10, qty: 1 }] },
+            { total: 458, terms: [{ unit: 199, qty: 1 }, { unit: 249, qty: 1 }, { unit: 10, qty: 1 }] },
+        ];
+        expect(flagHallucinatedPrice(reply, kb, pm)).toBe(false);
+    });
+
+    it('ADDITIVE ONLY: valid price_math cannot launder an unrelated hallucinated price', () => {
+        // price_math verifies 49, but the reply ALSO quotes an invented 999 —
+        // the model-controlled field must extend KB grounding, never bypass it.
+        const reply = 'المجموع 49 دينار، وعندنا قلادة فاخرة بـ 999 دينار.';
+        const pm = [{ total: 49, terms: [{ unit: 39, qty: 1 }, { unit: 10, qty: 1 }] }];
+        expect(flagHallucinatedPrice(reply, kb, pm)).toBe(true);
+    });
+
+    it('addend not in KB → claim rejected → total still flagged', () => {
+        // Hallucinated line item (55 is nowhere in the KB) — showing "work"
+        // built on invented numbers earns nothing.
+        const reply = 'المجموع 65 دينار.';
+        const pm = [{ total: 65, terms: [{ unit: 55, qty: 1 }, { unit: 10, qty: 1 }] }];
+        expect(flagHallucinatedPrice(reply, kb, pm)).toBe(true);
+    });
+
+    it('arithmetic that does not add up → claim rejected', () => {
+        const reply = 'المجموع 60 دينار.';
+        const pm = [{ total: 60, terms: [{ unit: 39, qty: 1 }, { unit: 10, qty: 1 }] }];
+        expect(flagHallucinatedPrice(reply, kb, pm)).toBe(true);
+    });
+
+    it('malformed price_math degrades to today\'s behavior (never past it)', () => {
+        const reply = 'المجموع 49 دينار.';
+        // Deliberately malformed shapes a misbehaving model could emit.
+        const malformed = [
+            null,
+            42,
+            'nonsense',
+            [{ total: 49 }],
+            [{ total: 49, terms: 'x' }],
+            [{ total: 49, terms: [] }],
+            [{ total: 49, terms: [{ unit: 39, qty: -1 }, { unit: 10, qty: 1 }] }],
+            [{ total: 49, terms: [{ unit: 39, qty: 0.5 }, { unit: 10, qty: 1 }] }],
+            [{ total: NaN, terms: [{ unit: 39, qty: 1 }, { unit: 10, qty: 1 }] }],
+        ];
+        for (const pm of malformed) {
+            expect(flagHallucinatedPrice(reply, kb, pm)).toBe(true);
+        }
+        // And a KB-literal price stays fine regardless of garbage price_math.
+        expect(flagHallucinatedPrice('السعر 39 دينار.', kb, 'garbage')).toBe(false);
+    });
+
+    it('absent price_math (undefined/null) is exactly the pre-v56 guard', () => {
+        expect(flagHallucinatedPrice('السعر 39 دينار.', kb)).toBe(false);
+        expect(flagHallucinatedPrice('السعر 39 دينار.', kb, null)).toBe(false);
+        expect(flagHallucinatedPrice('المجموع 49 دينار.', kb, null)).toBe(true);
+    });
+
+    it('Arabic-Indic digits in the reply still match a verified total', () => {
+        const reply = 'المجموع ٤٩ دينار.';
+        const pm = [{ total: 49, terms: [{ unit: 39, qty: 1 }, { unit: 10, qty: 1 }] }];
+        expect(flagHallucinatedPrice(reply, kb, pm)).toBe(false);
+    });
+
+    // REVIEW REGRESSION (2026-07-22): `unit > 0` rejected the whole claim when the
+    // model itemized a FREE delivery line as 0 — reinstating the exact deflection
+    // v56 exists to fix, for every merchant with a free-delivery city (the shipped
+    // prod KB has «توصيل اجدابيا مجاني»). Zero units are also exempt from the KB
+    // lookup: "free" is written «مجاني», never as a literal 0.
+    it('a free line itemized as 0 does not reject the claim', () => {
+        const freeKb = 'الياسمين 40 دينار\nالمسك 120 دينار\nتوصيل طرابلس 12 دينار\nتوصيل مصراتة مجاني';
+        const reply = 'الياسمين 40 والمسك 120، والتوصيل لمصراتة مجاني، المجموع 160 دينار.';
+        const pm = [{ total: 160, terms: [{ unit: 40, qty: 1 }, { unit: 120, qty: 1 }, { unit: 0, qty: 1 }] }];
+        expect(flagHallucinatedPrice(reply, freeKb, pm)).toBe(false);
+        // …and the same cart without the explicit zero line stays valid too.
+        expect(flagHallucinatedPrice(reply, freeKb,
+            [{ total: 160, terms: [{ unit: 40, qty: 1 }, { unit: 120, qty: 1 }] }])).toBe(false);
+    });
+
+    it('a zero term cannot launder a hallucinated total (adds nothing to the sum)', () => {
+        const freeKb = 'الياسمين 40 دينار\nتوصيل مصراتة مجاني';
+        // Claims 999 while the terms produce 40 — the zero line changes nothing.
+        const pm = [{ total: 999, terms: [{ unit: 40, qty: 1 }, { unit: 0, qty: 1 }] }];
+        expect(flagHallucinatedPrice('المجموع 999 دينار.', freeKb, pm)).toBe(true);
+    });
+
+    it('quantity cap bounds how far a minted product can move a total', () => {
+        // 40 is in KB, so unit×qty mints an accepted value; qty above the cap is
+        // not verified and the total falls back to the literal-KB check.
+        const qtyKb = 'الياسمين 40 دينار';
+        expect(flagHallucinatedPrice('المجموع 4000 دينار.', qtyKb,
+            [{ total: 4000, terms: [{ unit: 40, qty: 100 }] }])).toBe(false);
+        expect(flagHallucinatedPrice('المجموع 10000 دينار.', qtyKb,
+            [{ total: 10000, terms: [{ unit: 40, qty: 250 }] }])).toBe(true);
+    });
+});
+
 describe('isCommentTooLong (Check 2)', () => {
     const long = Array.from({ length: 60 }, (_, i) => `w${i}`).join(' ');
     const short = 'just a few words here';
@@ -271,6 +405,33 @@ describe('stripSelfIdentification (Check 6)', () => {
 describe('validateReply orchestration', () => {
     const base = (over: Partial<ParsedReply>): ParsedReply => ({
         reply: 'ok', intent: 'QUESTION', confidence: 'high', hedging: false, language: 'en', flags: [], ...over,
+    });
+
+    // WIRING (v56): the checks above are also unit-tested directly, but nothing
+    // proved validateReply actually FORWARDS parsed.price_math into Check 1 —
+    // dropping the argument at the call site would leave every other test green
+    // while the whole feature silently no-ops (caught in review, 2026-07-22).
+    // These two cases pin the wiring from both sides.
+    const cartKb = 'الثلاث أطراف 42 دينار\nتوصيل طرابلس 12 دينار';
+    const cartReply = 'الثلاث أطراف 42 دينار والتوصيل لطرابلس 12 دينار، المجموع 54 دينار.';
+
+    it('Check 1: forwards price_math — a verified total is NOT flagged', () => {
+        const out = validateReply(
+            base({
+                reply: cartReply, language: 'ar',
+                price_math: [{ total: 54, terms: [{ unit: 42, qty: 1 }, { unit: 12, qty: 1 }] }],
+            }),
+            req('الحساب كم بالتوصيل', { knowledgeBase: cartKb }),
+        );
+        expect(out.flags).not.toContain('price_not_in_kb');
+    });
+
+    it('Check 1: the SAME reply without price_math is flagged (proves the arg matters)', () => {
+        const out = validateReply(
+            base({ reply: cartReply, language: 'ar' }),
+            req('الحساب كم بالتوصيل', { knowledgeBase: cartKb }),
+        );
+        expect(out.flags).toContain('price_not_in_kb');
     });
 
     it('Check 4: hedging on a QUESTION downgrades confidence and flags info_not_in_kb', () => {
