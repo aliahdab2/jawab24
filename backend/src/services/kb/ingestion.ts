@@ -101,6 +101,7 @@ export class KbIngestionService {
         rawKBText: string | undefined,
         products: ProductData[],
         kbVersion: number,
+        opts?: { resolveGaps?: boolean },
     ): Promise<void> {
         const kbChunks = rawKBText?.trim() ? chunkKnowledgeBase(rawKBText) : [];
         const productChunks = chunkProducts(products);
@@ -124,14 +125,21 @@ export class KbIngestionService {
             .set({ kbActiveVersion: kbVersion })
             .where(eq(pages.id, pageId));
 
-        try {
-            gapDetectorService.setLogger(this.logger);
-            await gapDetectorService.resolveAllForPage(pageId);
-        } catch (error) {
-            this.logger.error('Failed to resolve KB gaps after full page ingestion', {
-                error: error instanceof Error ? error.message : String(error),
-                pageId,
-            });
+        // Resolving gaps means "the merchant just answered the open customer
+        // questions by editing their KB" — true for a normal KB edit, FALSE for
+        // a Phase-C cleanup save, which only REMOVES product lines that moved to
+        // the catalog and answers nothing. A cleanup passes resolveGaps:false so
+        // the «سألها N عملاء» backlog survives (it anchors the /business page).
+        if (opts?.resolveGaps !== false) {
+            try {
+                gapDetectorService.setLogger(this.logger);
+                await gapDetectorService.resolveAllForPage(pageId);
+            } catch (error) {
+                this.logger.error('Failed to resolve KB gaps after full page ingestion', {
+                    error: error instanceof Error ? error.message : String(error),
+                    pageId,
+                });
+            }
         }
 
         this.logger.info('Full page ingestion completed, version activated', {

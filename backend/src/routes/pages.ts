@@ -97,6 +97,14 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, pagesController.dismissGap);
+
+        adminRoutes.post('/pages/:id/kb/cleanup', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Remove merchant-confirmed KB lines after a catalog import (preserves gaps)',
+                security: auth,
+            },
+        }, pagesController.cleanupKb);
     });
 
     // --- Owner only: connecting pages uses the caller's Facebook token and sets

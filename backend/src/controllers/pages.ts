@@ -14,7 +14,7 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
 import { BusinessProfileSchema, validateSchema } from '../utils/validation';
-import { canonicalizeHoursWeek } from '@jawab24/shared';
+import { canonicalizeHoursWeek, removeKbLines } from '@jawab24/shared';
 import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
@@ -501,6 +501,78 @@ export class PagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch KB gaps' });
+        }
+    }
+
+    /**
+     * Confirmed KB cleanup after a catalog import/scan (Phase C).
+     * POST /pages/:id/kb/cleanup   body: { lines: string[] }
+     *
+     * The merchant confirmed specific KB lines (their products moved to the
+     * catalog) for removal. Contract is by LINE TEXT, not index: a stale index
+     * from a concurrent edit could delete the wrong line, whereas an exact-text
+     * match that no longer exists is simply skipped — safe. Preserves the
+     * "merchant confirms exactly what's removed" guarantee.
+     *
+     * Reuses updatePage (validation / ingestion / activation) but passes
+     * skipGapResolution so the «سألها N عملاء» backlog survives — a cleanup
+     * REMOVES product lines, it does not answer open customer questions.
+     */
+    async cleanupKb(request: FastifyRequest<{ Params: { id: string }; Body: { lines?: unknown } }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { id } = request.params;
+        const { lines } = request.body;
+
+        if (!Array.isArray(lines) || lines.some((l) => typeof l !== 'string')) {
+            return reply.status(400).send({ error: 'Body must be { lines: string[] } — the exact KB lines to remove' });
+        }
+
+        try {
+            const page = await pagesService.getPage(req.workspaceId, id);
+            if (!page) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+
+            const currentKb = page.knowledgeBase ?? '';
+            const confirmed = new Set(lines as string[]);
+            const kbLines = currentKb.split('\n');
+            const indices = kbLines
+                .map((line, i) => (confirmed.has(line) ? i : -1))
+                .filter((i) => i >= 0);
+
+            // Nothing matched (KB changed since the merchant saw the sheet) —
+            // a safe no-op, not an error.
+            if (indices.length === 0) {
+                return reply.send({ ...serializePage(page), cleanup: { removed: 0 } });
+            }
+
+            const cleaned = removeKbLines(currentKb, indices);
+
+            // Guard the empty-KB trap: an emptied KB skips re-ingestion upstream,
+            // leaving stale RAG chunks active. A cleanup should never blank the
+            // whole KB (you don't move every business fact to the catalog); if it
+            // would, refuse and tell the merchant rather than silently rotting.
+            if (!cleaned.trim()) {
+                return reply.status(400).send({ error: 'Cleanup would empty your Business Info — remove products individually instead', code: 'CLEANUP_EMPTIES_KB' });
+            }
+
+            const updated = await pagesService.updatePage(
+                req.workspaceId,
+                id,
+                { knowledgeBase: cleaned } as UpdatePageDTO,
+                { skipGapResolution: true },
+            );
+            if (!updated) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+
+            return reply.send({ ...serializePage(updated), cleanup: { removed: indices.length } });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to clean up Business Info' });
         }
     }
 
