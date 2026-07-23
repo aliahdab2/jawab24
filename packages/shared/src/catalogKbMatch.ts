@@ -142,14 +142,17 @@ export interface StructuredFieldLineMatch {
 // (Arabic clitics make them distinct tokens: موقعنا ≠ موقع).
 //
 // Deliberately EXCLUDES over-broad tokens that collide with unrelated lines:
-// bare «رقم» (matches «رقم الطلب» = order number) and bare «موقع» (matches
-// «موقعنا الإلكتروني» = website). We keep the possessive «موقعنا» (their
-// physical location) but not standalone «موقع». Fewer false proposals in the
-// sheet; the merchant still confirms every one.
+//  - bare «رقم» (matches «رقم الطلب» = order number), bare «موقع» («موقعنا
+//    الإلكتروني» = website) — keep the possessive «موقعنا» (physical location).
+//  - «جوال»/«موبايل»/«mobile» — these are PRODUCT words (a phone-accessory line
+//    «حامل جوال» would be proposed as a phone-field duplicate). Keep «هاتف».
+//  - «مواعيد» — appears in delivery prose («مواعيد التوصيل خلال ٣ أيام»). Keep
+//    «دوام»/«ساعات» which specifically name business hours.
+// Fewer false proposals in the sheet; the merchant still confirms every one.
 const FIELD_LABELS: Record<StructuredFieldKind, string[]> = {
   address: ['عنوان', 'عنواننا', 'موقعنا', 'address', 'location'],
-  phone: ['هاتف', 'هاتفنا', 'رقمنا', 'موبايل', 'جوال', 'للتواصل', 'phone', 'tel', 'mobile'],
-  hours: ['دوام', 'دوامنا', 'اوقات', 'ساعات', 'مواعيد', 'نفتح', 'hours', 'open'],
+  phone: ['هاتف', 'هاتفنا', 'رقمنا', 'للتواصل', 'phone', 'tel'],
+  hours: ['دوام', 'دوامنا', 'اوقات', 'ساعات', 'نفتح', 'hours', 'open'],
 };
 
 /**

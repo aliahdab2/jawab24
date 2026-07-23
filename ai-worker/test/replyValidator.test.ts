@@ -434,38 +434,39 @@ describe('validateReply orchestration', () => {
         expect(out.flags).toContain('price_not_in_kb');
     });
 
-    // Phase V: the e-commerce tool loop now runs validateReply, passing its live
-    // tool results as extraGrounding so a verified tool-sourced price isn't
-    // false-flagged — while an INVENTED price is still caught.
-    // The merchant's static KB mentions the product but NOT its (live) price —
-    // exactly why the tool loop fetched it. Tool result carries the real price.
-    const phoneKb = 'We sell the iPhone 15 and accessories.';
-    const toolResults = JSON.stringify([{ product: 'iPhone 15', price: '3800 SAR', inStock: true }]);
+    // Phase V: the e-commerce tool loop now runs validateReply on its replies.
+    // The Phase-2 (post-tool-results) reply passes skipPriceCheck — its prices
+    // are verified tool results (a computed total isn't in the static KB, so the
+    // heuristic would false-flag it → destructive fallback swap). Phase-1 direct
+    // replies (answered from static KB) keep the full check.
+    const phoneKb = 'We sell the iPhone 15 and accessories.'; // product named, price not
+    const priceReply = 'The iPhone 15 is 3800 SAR and in stock.';
 
-    it('extraGrounding: a tool-sourced price (not in the static KB) is NOT flagged', () => {
+    it('skipPriceCheck: a tool-sourced price (not in the static KB) is NOT flagged (Phase-2)', () => {
         const out = validateReply(
-            base({ reply: 'The iPhone 15 is 3800 SAR and in stock.' }),
+            base({ reply: priceReply }),
             req('how much is the iphone 15', { knowledgeBase: phoneKb }),
-            { extraGrounding: toolResults },
+            { skipPriceCheck: true },
         );
         expect(out.flags).not.toContain('price_not_in_kb');
     });
 
-    it('extraGrounding: the SAME reply WITHOUT it is flagged (the hole Phase V closes)', () => {
+    it('skipPriceCheck omitted: the SAME reply IS flagged (default/Phase-1/provider path unchanged)', () => {
         const out = validateReply(
-            base({ reply: 'The iPhone 15 is 3800 SAR and in stock.' }),
+            base({ reply: priceReply }),
             req('how much is the iphone 15', { knowledgeBase: phoneKb }),
         );
         expect(out.flags).toContain('price_not_in_kb');
     });
 
-    it('extraGrounding: an INVENTED price is still flagged even with tool results present', () => {
+    it('skipPriceCheck disables ONLY the price check — language mismatch still fires', () => {
         const out = validateReply(
-            base({ reply: 'The iPhone 15 is 9999 SAR.' }),
-            req('how much is the iphone 15', { knowledgeBase: phoneKb }),
-            { extraGrounding: toolResults },
+            base({ reply: 'Hello there, the iPhone 15 is 3800 SAR', language: 'en' }),
+            req('كم سعر الايفون؟', { knowledgeBase: phoneKb }),
+            { skipPriceCheck: true },
         );
-        expect(out.flags).toContain('price_not_in_kb');
+        expect(out.flags).not.toContain('price_not_in_kb');
+        expect(out.flags).toContain('language_mismatch');
     });
 
     it('Check 4: hedging on a QUESTION downgrades confidence and flags info_not_in_kb', () => {

@@ -310,8 +310,10 @@ export function presentFieldsFromProfile(stored: StoredBusinessProfile): Present
   const { merchant = {} } = unwrapBusinessProfile(stored);
   return {
     address: !!merchant.address?.trim(),
-    phone: !!(merchant.phones && merchant.phones.length > 0),
-    hours: !!(merchant.hours && Object.keys(merchant.hours).length > 0),
+    // Guard blank contents: [''] / [' '] is not a real phone, {sat:[]} is not
+    // real hours — treat them as absent (matches the address `.trim()` check).
+    phone: !!merchant.phones?.some((p) => p?.trim()),
+    hours: !!merchant.hours && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0),
   };
 }
 

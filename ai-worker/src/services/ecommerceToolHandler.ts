@@ -378,13 +378,13 @@ export async function generateWithToolResults(
             parsed = { reply: content, intent: 'QUESTION', confidence: 'medium', flags: ['invalid_json'] };
         }
 
-        // Validate the final reply (same guards as the provider path). The tool
-        // results are passed as extra grounding so verified tool-sourced prices
-        // aren't flagged price_not_in_kb.
+        // Validate the final reply. Skip the price check: prices here are from
+        // verified tool results (the ground truth), and a computed total would
+        // false-flag against the static KB → destructive fallback swap.
         const v = validateToolReply(
             { ...parsed, reply: parsed.reply || 'Thank you for your patience!' },
             request,
-            toolResults,
+            { skipPriceCheck: true },
         );
         return {
             reply: v.reply,
@@ -419,18 +419,23 @@ function safeParseArgs(argsString: string): Record<string, string> {
 
 /**
  * Run the standard post-reply validator on a tool-loop reply — the same guard
- * the multi-provider path applies (price grounding, language, comment length,
- * self-identification strip). Closes the hole where both tool-loop exits
- * returned unvalidated. `toolResults`, when present (Phase 2), extends the
- * price-grounding set so a verified tool-sourced price/total isn't false-flagged.
+ * the multi-provider path applies (language, comment length, self-identification
+ * strip, and — off the tool path — price grounding). Closes the hole where both
+ * tool-loop exits returned unvalidated.
+ *
+ * `skipPriceCheck` is set for the Phase-2 (post-tool-results) reply: its prices
+ * come from verified verify_and_get_* tool results, and a computed total isn't
+ * literally in the static KB, so the heuristic price check would false-flag it
+ * — and price_not_in_kb triggers a destructive fallback swap in the backend.
+ * The tool result IS the price ground truth there. The Phase-1 direct reply
+ * (no tool called → answered from static KB/catalog) keeps the full check.
  */
 function validateToolReply(
     parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; language?: string },
     request: GenerateRequest,
-    toolResults?: EcommerceToolResult[],
+    opts?: { skipPriceCheck?: boolean },
 ): { reply: string; intent?: string; confidence?: string; flags?: string[] } {
-    const extraGrounding = toolResults && toolResults.length > 0 ? JSON.stringify(toolResults) : undefined;
-    const validated = openaiService.validateReply(parsed, request, extraGrounding ? { extraGrounding } : undefined);
+    const validated = openaiService.validateReply(parsed, request, opts);
     return {
         reply: validated.reply,
         intent: validated.intent,

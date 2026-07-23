@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { CatalogItem } from '@jawab24/shared';
+import type { CatalogItem, Page } from '@jawab24/shared';
 import { CatalogManager } from './CatalogManager';
 
 const { list, create, update, remove, extract, batchCreate, scanPosts, setVertical } = vi.hoisted(() => ({
@@ -209,6 +209,50 @@ describe('CatalogManager', () => {
     renderManager({ importRequested: true, importInitialText: 'قص شعر ٥٠ ريال' });
     expect(await screen.findByText('Import your products & services')).toBeInTheDocument();
     expect(screen.getByLabelText('Your list')).toHaveValue('قص شعر ٥٠ ريال');
+  });
+
+  // Phase C: after an import, CatalogManager's onDone decides whether to offer
+  // the KB cleanup sheet (product/field line still in the KB). Drive a full
+  // import to completion and assert the decision both ways.
+  const extractOneItem = (name: string) => extract.mockResolvedValue({
+    data: {
+      items: [{ type: 'product', name, price: '22', currency: 'ريال', isAvailable: true, startsAt: null, endsAt: null, attributes: null, description: null }],
+      dropped: [], overflow: false, truncated: false,
+    },
+  });
+  async function driveImport(text: string) {
+    fireEvent.click(await screen.findByRole('button', { name: 'Import a list' }));
+    fireEvent.change(await screen.findByLabelText('Your list'), { target: { value: text } });
+    fireEvent.click(screen.getByRole('button', { name: /Extract items/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Add 1 item/i }));
+  }
+
+  it('onDone: opens the cleanup sheet when the KB still holds the moved product line', async () => {
+    const oil = item({ id: 'oil', name: 'زيت موتول', price: '22.00' });
+    list.mockResolvedValue(listData([oil]));            // fetchQuery in onDone sees it
+    extractOneItem('زيت موتول');
+    batchCreate.mockResolvedValue({ data: [oil] });
+    const page = { id: 'p1', name: 'Moto', knowledgeBase: 'زيت موتول 18 ريال', businessProfile: {} } as unknown as Page;
+
+    renderManager({ page });
+    await driveImport('زيت موتول 22 ريال');
+
+    expect(await screen.findByText('Tidy up your Business Info')).toBeInTheDocument();
+  });
+
+  it('onDone: does NOT open the sheet when nothing in the KB matches (fall-through)', async () => {
+    const candle = item({ id: 'c', name: 'شمعة معطرة', price: '22.00' });
+    list.mockResolvedValue(listData([candle]));
+    extractOneItem('شمعة معطرة');
+    batchCreate.mockResolvedValue({ data: [candle] });
+    // KB has only hours prose + no confirmed fields → neither matcher fires.
+    const page = { id: 'p1', name: 'Shop', knowledgeBase: 'نفتح من ٩ صباحاً', businessProfile: {} } as unknown as Page;
+
+    renderManager({ page });
+    await driveImport('شمعة معطرة 22 ريال');
+
+    await waitFor(() => expect(batchCreate).toHaveBeenCalled());
+    expect(screen.queryByText('Tidy up your Business Info')).not.toBeInTheDocument();
   });
 
   it('deletes an item after confirmation', async () => {
