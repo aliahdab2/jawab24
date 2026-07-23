@@ -188,33 +188,33 @@ export function formatBusinessInfoPrompt(
 
     // Address (composite of address/city/country, each gated independently).
     if (address.authoritative) {
-        fieldLines.push(`- Address: ${address.authoritative}`);
+        fieldLines.push(`- Address / العنوان / الموقع: ${address.authoritative}`);
     } else if (!address.hasAnyValue) {
-        fieldLines.push(`- Address: ${NOT_PROVIDED}`);
+        fieldLines.push(`- Address / العنوان / الموقع: ${NOT_PROVIDED}`);
     } // else: FB-only → omit.
 
     // Phones. Legacy singular `phone` is not provenance-tracked → authoritative.
     const phonesAuthoritative = isAuthoritative(provenance, 'phones');
     if (phonesValue && phonesAuthoritative) {
-        fieldLines.push(`- Phones: ${phonesValue}`);
+        fieldLines.push(`- Phones / الهاتف / الأرقام: ${phonesValue}`);
     } else if (!phonesValue) {
-        fieldLines.push(`- Phones: ${NOT_PROVIDED}`);
+        fieldLines.push(`- Phones / الهاتف / الأرقام: ${NOT_PROVIDED}`);
     } // else: FB-only → omit.
 
     // Hours.
     if (hoursValue && isAuthoritative(provenance, 'hours')) {
-        fieldLines.push('- Hours (24h, "closed" if shut, "all day" if 24/7):');
+        fieldLines.push('- Hours / أوقات الدوام (24h, "closed" if shut, "all day" if 24/7):');
         fieldLines.push(hoursValue);
     } else if (!hoursValue) {
-        fieldLines.push(`- Hours: ${NOT_PROVIDED}`);
+        fieldLines.push(`- Hours / أوقات الدوام: ${NOT_PROVIDED}`);
     } // else: FB-only → omit.
 
     // Policies.
     if (policiesValue && isAuthoritative(provenance, 'policies')) {
-        fieldLines.push('- Policies:');
+        fieldLines.push('- Policies / السياسات:');
         fieldLines.push(policiesValue);
     } else if (!policiesValue) {
-        fieldLines.push(`- Policies: ${NOT_PROVIDED}`);
+        fieldLines.push(`- Policies / السياسات: ${NOT_PROVIDED}`);
     } // else: FB-only → omit.
 
     // Every field that has a value is FB-only (so all were omitted) and no
@@ -236,7 +236,15 @@ export function formatBusinessInfoPrompt(
     // The persona/brand voice lives earlier in the prompt (BRAND VOICE NOTES in
     // openai.ts) so the model picks a tone-matched refusal automatically.
     const sections: string[] = [
-        'BUSINESS_INFO (structured, authoritative — prefer over <business_knowledge> text):',
+        'BUSINESS_INFO (structured, merchant-confirmed — the CURRENT values):',
+        // "prefer over <business_knowledge>" was too weak to survive an actual
+        // disagreement: eval #720 (v57) put a merchant-confirmed address here and
+        // a stale one in the KB narrative, and the model answered from the KB.
+        // The explicit conflict framing below is the wording that DID hold for
+        // <product_catalog> (cases #717/#718) — same medicine, same phase.
+        'If <business_knowledge> states a DIFFERENT value for any field listed here, ' +
+        'the value in BUSINESS_INFO is the correct one — the narrative text is outdated. ' +
+        'Answer from BUSINESS_INFO and never repeat the outdated value.',
         `When a field is ${NOT_PROVIDED}, you MUST NOT invent a value. ` +
         'Politely decline in the merchant\'s brand voice and offer an alternative ' +
         'channel if available (e.g. "we don\'t have a public phone — please visit ' +

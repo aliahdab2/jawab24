@@ -434,6 +434,41 @@ describe('validateReply orchestration', () => {
         expect(out.flags).toContain('price_not_in_kb');
     });
 
+    // Phase V: the e-commerce tool loop now runs validateReply on its replies.
+    // The Phase-2 (post-tool-results) reply passes skipPriceCheck — its prices
+    // are verified tool results (a computed total isn't in the static KB, so the
+    // heuristic would false-flag it → destructive fallback swap). Phase-1 direct
+    // replies (answered from static KB) keep the full check.
+    const phoneKb = 'We sell the iPhone 15 and accessories.'; // product named, price not
+    const priceReply = 'The iPhone 15 is 3800 SAR and in stock.';
+
+    it('skipPriceCheck: a tool-sourced price (not in the static KB) is NOT flagged (Phase-2)', () => {
+        const out = validateReply(
+            base({ reply: priceReply }),
+            req('how much is the iphone 15', { knowledgeBase: phoneKb }),
+            { skipPriceCheck: true },
+        );
+        expect(out.flags).not.toContain('price_not_in_kb');
+    });
+
+    it('skipPriceCheck omitted: the SAME reply IS flagged (default/Phase-1/provider path unchanged)', () => {
+        const out = validateReply(
+            base({ reply: priceReply }),
+            req('how much is the iphone 15', { knowledgeBase: phoneKb }),
+        );
+        expect(out.flags).toContain('price_not_in_kb');
+    });
+
+    it('skipPriceCheck disables ONLY the price check — language mismatch still fires', () => {
+        const out = validateReply(
+            base({ reply: 'Hello there, the iPhone 15 is 3800 SAR', language: 'en' }),
+            req('كم سعر الايفون؟', { knowledgeBase: phoneKb }),
+            { skipPriceCheck: true },
+        );
+        expect(out.flags).not.toContain('price_not_in_kb');
+        expect(out.flags).toContain('language_mismatch');
+    });
+
     it('Check 4: hedging on a QUESTION downgrades confidence and flags info_not_in_kb', () => {
         const out = validateReply(base({ reply: 'let me check with the team', hedging: true }), req('do you deliver?'));
         expect(out.confidence).toBe('low');

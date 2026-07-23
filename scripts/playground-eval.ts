@@ -4003,7 +4003,7 @@ const TEST_CASES: TestCase[] = [
     { id: 685, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'كم سعر كاوتش ميشلان؟', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'] }, notes: 'Price-on-request item (null price → "price on request" in the block) — any invented number trips the catalog-grounded guard and fails this case.' },
     { id: 686, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'كم سعر دورة صيانة الموتوسيكلات؟', page: 'moto', expected: { flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'], replyContainsAny: ['1200', '١٢٠٠', '1,200'] }, notes: 'Course-type item ([course] tag) — generic types answer like products.' },
     { id: 687, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'بكم الهوندا CG المستعملة؟', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'], replyContainsAny: ['5500', '٥٥٠٠', '5,500'] }, notes: 'Vehicle-type item ([vehicle] tag) — the used-bike listing.' },
-    { id: 688, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'وين موقعكم؟', page: 'moto', expected: { confidence: ['high'], replyContainsAny: ['العزيزية', 'الرياض'] }, notes: 'Feature-must-not-distort guard (v1 post-mortem lesson 4): an off-topic question on a catalog page still answers from KB text normally.' },
+    { id: 688, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'وين موقعكم؟', page: 'moto', expected: { confidence: ['high'], replyContainsAny: ['العزيزية', 'الرياض'] }, notes: 'Feature-must-not-distort guard (v1 post-mortem lesson 4): an off-topic (non-product) question on a catalog page is still answered normally. Since v57 this fixture also carries a merchant-confirmed address, so the answer may come from BUSINESS_INFO rather than the KB text — either is fine here; case 720 is the one that pins WHICH source wins.' },
     // Flexible-fields cases (dates + attributes). The dated fixture course is
     // seeded at today+30 (relative, never stale) and /auth/demo re-seeds on
     // login, so the eval-run date matches the seed date.
@@ -4257,6 +4257,51 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['40', '٤٠'],
         },
         notes: 'Sanity: literal KB price (40 دينار) answered directly — fixture wiring + unchanged literal path.',
+    },
+
+    // ── Category 67: Catalog Authority (PROMPT_VERSION v57) ─────────────────
+    // The two-store split leaves the same product in BOTH stores for migrated
+    // merchants: a stale price in the KB text, the live one in catalog_items.
+    // The motoshop fixture carries the conflict on purpose (seedData comment):
+    // KB says زيت موتول = 18 (stale), catalog says 22; حامل جوال (35) is KB-only.
+    {
+        id: 717, category: 67, categoryName: 'Catalog Authority', channel: 'comment',
+        message: 'كم سعر زيت موتول 20W-50؟',
+        page: 'moto',
+        expected: {
+            replyContainsAny: ['22', '٢٢'],
+            replyNotContains: ['18', '١٨'],
+        },
+        notes: 'Direct conflict: KB text says stale 18, catalog says 22 — the v55 AUTHORITY rule must make the catalog win.',
+    },
+    {
+        id: 718, category: 67, categoryName: 'Catalog Authority', channel: 'dm',
+        message: 'شفت عندكم زيت موتول بـ 18 ريال، بدي علبة',
+        page: 'moto',
+        expected: {
+            replyContainsAny: ['22', '٢٢'],
+        },
+        notes: 'Customer quotes the STALE price back (read an old post/KB) — must correct to the catalog 22, not confirm 18.',
+    },
+    {
+        id: 719, category: 67, categoryName: 'Catalog Authority', channel: 'dm',
+        message: 'بكم حامل الجوال للمقود؟',
+        page: 'moto',
+        expected: {
+            flagsAbsent: ['price_not_in_kb'],
+            replyContainsAny: ['35', '٣٥'],
+        },
+        notes: 'KB-ONLY priced item (not in the catalog) — the authority rule must NOT nuke the KB: still answered from KB text.',
+    },
+    {
+        id: 720, category: 67, categoryName: 'Catalog Authority', channel: 'dm',
+        message: 'وين موقعكم بالضبط؟',
+        page: 'moto',
+        expected: {
+            replyContainsAny: ['النسيم'],
+            replyNotContains: ['العزيزية'],
+        },
+        notes: 'The OTHER authority axis, finally testable: merchant-confirmed address (النسيم) vs the stale address still sitting in the KB text (العزيزية). Case 411 claimed this precedence but only ever ran it on an AGREEING page — this is the real conflict.',
     },
 
 ];

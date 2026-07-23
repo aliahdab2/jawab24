@@ -552,7 +552,12 @@ export class PagesService {
      * Without this bump, cached replies would quote the old address/phone/
      * hours for up to 30 days (exact-cache TTL).
      */
-    async updatePage(workspaceId: string, pageId: string, data: UpdatePageDTO) {
+    async updatePage(
+        workspaceId: string,
+        pageId: string,
+        data: UpdatePageDTO,
+        opts?: { skipGapResolution?: boolean },
+    ) {
         const setData: Record<string, unknown> = {
             ...data,
             updatedAt: new Date(),
@@ -612,7 +617,9 @@ export class PagesService {
             if (ingestion) {
                 this.fetchProductsForPage(updatedPage.ecommerceStoreId)
                     .then(productData =>
-                        ingestion.ingestFullPage(pageId, kbText, productData, kbVersion)
+                        ingestion.ingestFullPage(pageId, kbText, productData, kbVersion, {
+                            resolveGaps: !opts?.skipGapResolution,
+                        })
                     )
                     .catch(err => captureError(err, 'Full page ingestion failed during updatePage', { tags: { service: 'kb-ingestion', action: 'updatePage' }, extra: { pageId } }));
             }

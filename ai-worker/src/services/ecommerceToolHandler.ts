@@ -378,17 +378,25 @@ export async function generateWithToolResults(
             parsed = { reply: content, intent: 'QUESTION', confidence: 'medium', flags: ['invalid_json'] };
         }
 
+        // Validate the final reply. Skip the price check: prices here are from
+        // verified tool results (the ground truth), and a computed total would
+        // false-flag against the static KB → destructive fallback swap.
+        const v = validateToolReply(
+            { ...parsed, reply: parsed.reply || 'Thank you for your patience!' },
+            request,
+            { skipPriceCheck: true },
+        );
         return {
-            reply: parsed.reply || 'Thank you for your patience!',
+            reply: v.reply,
             language: detectedLanguage,
             model: config.openai.model,
             tokensUsed: completion.usage?.total_tokens,
             tokensIn: completion.usage?.prompt_tokens,
             tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
             tokensOut: completion.usage?.completion_tokens,
-            intent: parsed.intent,
-            confidence: parsed.confidence,
-            flags: parsed.flags,
+            intent: v.intent,
+            confidence: v.confidence,
+            flags: v.flags,
         };
     } catch (error) {
         Sentry.captureException(error instanceof Error ? error : new Error('OpenAI tool results error'), {
@@ -409,6 +417,33 @@ function safeParseArgs(argsString: string): Record<string, string> {
     }
 }
 
+/**
+ * Run the standard post-reply validator on a tool-loop reply — the same guard
+ * the multi-provider path applies (language, comment length, self-identification
+ * strip, and — off the tool path — price grounding). Closes the hole where both
+ * tool-loop exits returned unvalidated.
+ *
+ * `skipPriceCheck` is set for the Phase-2 (post-tool-results) reply: its prices
+ * come from verified verify_and_get_* tool results, and a computed total isn't
+ * literally in the static KB, so the heuristic price check would false-flag it
+ * — and price_not_in_kb triggers a destructive fallback swap in the backend.
+ * The tool result IS the price ground truth there. The Phase-1 direct reply
+ * (no tool called → answered from static KB/catalog) keeps the full check.
+ */
+function validateToolReply(
+    parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; language?: string },
+    request: GenerateRequest,
+    opts?: { skipPriceCheck?: boolean },
+): { reply: string; intent?: string; confidence?: string; flags?: string[] } {
+    const validated = openaiService.validateReply(parsed, request, opts);
+    return {
+        reply: validated.reply,
+        intent: validated.intent,
+        confidence: validated.confidence,
+        flags: validated.flags,
+    };
+}
+
 /** Parse a direct (non-tool) reply from OpenAI content string */
 function parseDirectReply(
     content: string,
@@ -422,16 +457,19 @@ function parseDirectReply(
         parsed = { reply: content, intent: 'QUESTION', confidence: 'medium', flags: [] };
     }
 
+    // Phase-1 direct reply (model answered without calling a tool) → no tool
+    // results, standard KB/catalog grounding.
+    const v = validateToolReply({ ...parsed, reply: parsed.reply || content }, request);
     return {
-        reply: parsed.reply || content,
+        reply: v.reply,
         language: request.language || 'en',
         model: config.openai.model,
         tokensUsed: completion.usage?.total_tokens,
         tokensIn: completion.usage?.prompt_tokens,
         tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
         tokensOut: completion.usage?.completion_tokens,
-        intent: parsed.intent,
-        confidence: parsed.confidence,
-        flags: parsed.flags,
+        intent: v.intent,
+        confidence: v.confidence,
+        flags: v.flags,
     };
 }

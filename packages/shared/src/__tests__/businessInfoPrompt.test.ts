@@ -31,7 +31,18 @@ describe('formatBusinessInfoPrompt', () => {
         it('emits the structured block header', () => {
             const block = formatBusinessInfoPrompt({ address: 'Damascus' });
             expect(block).toContain('BUSINESS_INFO');
-            expect(block).toContain('structured, authoritative');
+            expect(block).toContain('merchant-confirmed');
+        });
+
+        it('states the conflict rule explicitly — a bare "prefer" did not survive a real disagreement', () => {
+            // v57: eval #720 put a merchant-confirmed address here and a stale one
+            // in the KB narrative; with the old "prefer over <business_knowledge>"
+            // wording the model answered from the KB. The block must now SAY which
+            // side is correct when they disagree.
+            const block = formatBusinessInfoPrompt({ address: 'Damascus' });
+            expect(block).toContain('<business_knowledge>');
+            expect(block).toContain('the correct one');
+            expect(block).toContain('outdated');
         });
 
         it('includes the anti-hallucination refusal directive at the TOP (must survive truncation)', () => {
@@ -79,9 +90,9 @@ describe('formatBusinessInfoPrompt', () => {
                 address: 'Damascus',
                 // phones, hours, policies all missing
             });
-            expect(block).toContain('Phones: [NOT_PROVIDED]');
-            expect(block).toContain('Hours: [NOT_PROVIDED]');
-            expect(block).toContain('Policies: [NOT_PROVIDED]');
+            expect(block).toContain('- Phones / الهاتف / الأرقام: [NOT_PROVIDED]');
+            expect(block).toContain('- Hours / أوقات الدوام: [NOT_PROVIDED]');
+            expect(block).toContain('- Policies / السياسات: [NOT_PROVIDED]');
         });
 
         it('renders hours in day order, not insertion order', () => {
@@ -187,7 +198,7 @@ describe('formatBusinessInfoPrompt', () => {
             // fb_sync phone → omitted (fallback), NOT shown as a value...
             expect(block).not.toContain('0935924472');
             // ...and NOT marked [NOT_PROVIDED] either (it exists, just at fallback).
-            expect(block).not.toContain('Phones: [NOT_PROVIDED]');
+            expect(block).not.toContain('- Phones / الهاتف / الأرقام: [NOT_PROVIDED]');
         });
 
         it('treats kb_extract as authoritative (merchant authored it in their KB)', () => {
@@ -257,7 +268,7 @@ describe('formatBusinessInfoPrompt', () => {
                 fbSync('address', 'hours'),
             );
             expect(block).not.toBeNull();
-            expect(block).toContain('Phones: [NOT_PROVIDED]');
+            expect(block).toContain('- Phones / الهاتف / الأرقام: [NOT_PROVIDED]');
             // The fb_sync fields are demoted to fallback, not asserted here.
             expect(block).not.toContain('Damascus');
             expect(block).not.toContain('Monday: 09:00-17:00');

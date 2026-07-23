@@ -14,7 +14,7 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
 import { BusinessProfileSchema, validateSchema } from '../utils/validation';
-import { canonicalizeHoursWeek } from '@jawab24/shared';
+import { canonicalizeHoursWeek, removeKbLines } from '@jawab24/shared';
 import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
@@ -33,6 +33,9 @@ export function serializePage<T extends { accessToken?: string | null; whatsappA
         whatsappConnected,
     };
 }
+
+/** Upper bound on KB lines a single cleanup request may name (defensive). */
+const MAX_CLEANUP_LINES = 1000;
 
 export class PagesController {
     /**
@@ -501,6 +504,95 @@ export class PagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch KB gaps' });
+        }
+    }
+
+    /**
+     * Confirmed KB cleanup after a catalog import/scan (Phase C).
+     * POST /pages/:id/kb/cleanup   body: { lines: string[] }
+     *
+     * The merchant confirmed specific KB lines (their products moved to the
+     * catalog) for removal. Contract is by LINE TEXT, not index: a stale index
+     * could delete the WRONG line, whereas an exact-text match that no longer
+     * exists is simply skipped — so we never delete a line the merchant didn't
+     * name. NOTE this is still a read-modify-write of the whole KB (last-write-
+     * wins, same as the normal KB PATCH): a *different* line added concurrently
+     * between this read and write could be lost. Acceptable here because cleanup
+     * fires right after an import in the same session (tiny window); a
+     * kbVersion compare-and-set across the whole KB-edit surface is the proper
+     * follow-up, not a cleanup-only bolt-on.
+     *
+     * Reuses updatePage (validation / ingestion / activation) but passes
+     * skipGapResolution so the «سألها N عملاء» backlog survives — a cleanup
+     * REMOVES product lines, it does not answer open customer questions.
+     */
+    async cleanupKb(request: FastifyRequest<{ Params: { id: string }; Body: { lines?: unknown } }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { id } = request.params;
+        const { lines } = request.body;
+
+        if (!Array.isArray(lines) || lines.some((l) => typeof l !== 'string')) {
+            return reply.status(400).send({ error: 'Body must be { lines: string[] } — the exact KB lines to remove' });
+        }
+        // Defensive cap: a real KB has at most a few dozen lines; a payload larger
+        // than this is a client bug, not a legitimate cleanup.
+        if (lines.length > MAX_CLEANUP_LINES) {
+            return reply.status(400).send({ error: `Too many lines (max ${MAX_CLEANUP_LINES})`, code: 'TOO_MANY_LINES' });
+        }
+
+        try {
+            const page = await pagesService.getPage(req.workspaceId, id);
+            if (!page) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+
+            const currentKb = page.knowledgeBase ?? '';
+            const confirmed = new Set(lines as string[]);
+            const kbLines = currentKb.split('\n');
+            const indices = kbLines
+                .map((line, i) => (confirmed.has(line) ? i : -1))
+                .filter((i) => i >= 0);
+
+            // Nothing matched (KB changed since the merchant saw the sheet) —
+            // a safe no-op, not an error.
+            if (indices.length === 0) {
+                return reply.send({ ...serializePage(page), cleanup: { removed: 0 } });
+            }
+
+            const cleaned = removeKbLines(currentKb, indices);
+
+            // Guard the empty-KB trap: an emptied KB skips re-ingestion upstream,
+            // leaving stale RAG chunks active. A cleanup should never blank the
+            // whole KB (you don't move every business fact to the catalog); if it
+            // would, refuse and tell the merchant rather than silently rotting.
+            if (!cleaned.trim()) {
+                return reply.status(400).send({ error: 'Cleanup would empty your Business Info — remove products individually instead', code: 'CLEANUP_EMPTIES_KB' });
+            }
+
+            const updated = await pagesService.updatePage(
+                req.workspaceId,
+                id,
+                { knowledgeBase: cleaned } as UpdatePageDTO,
+                { skipGapResolution: true },
+            );
+            if (!updated) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+
+            // Audit trail: this mutation REMOVES merchant content, so leave a record
+            // that lets a "you deleted the wrong line" report be reconstructed.
+            request.log.info(
+                { pageId: id, workspaceId: req.workspaceId, removed: indices.length },
+                '[Pages] KB cleanup removed merchant-confirmed lines',
+            );
+
+            return reply.send({ ...serializePage(updated), cleanup: { removed: indices.length } });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to clean up Business Info' });
         }
     }
 

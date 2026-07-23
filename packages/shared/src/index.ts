@@ -1,6 +1,7 @@
 // Shared Types for Jawab24
 
 import type { MerchantProvenanceMap } from './businessProfileMerge';
+import type { PresentFields } from './catalogKbMatch';
 
 // --- Validation schemas (single source of truth across backend + frontend) ---
 export { UpdateSettingsSchema, type UpdateSettingsInput } from './schemas/settings';
@@ -76,6 +77,9 @@ export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
 export { isSafeRedirectPath } from './utils/redirect';
 export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
+export { matchCatalogLinesInKb, matchStructuredFieldLinesInKb, removeKbLines } from './catalogKbMatch';
+// presentFieldsFromProfile is defined in this file (needs unwrapBusinessProfile).
+export type { CatalogMatchItem, KbLineMatch, KbLineMatchConfidence, StructuredFieldKind, PresentFields, StructuredFieldLineMatch } from './catalogKbMatch';
 export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, isValidHttpUrl, normalizeHttpUrl, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
 export type { ExtractedPhone } from './utils/validation';
 
@@ -293,6 +297,29 @@ export function unwrapBusinessProfile(stored: StoredBusinessProfile): BusinessPr
 export function mergedBusinessProfile(stored: StoredBusinessProfile): BusinessProfile {
   const { merchant = {}, suggestions = {} } = unwrapBusinessProfile(stored);
   return { ...suggestions, ...merchant };
+}
+
+/**
+ * Which structured fields the merchant holds as CONFIRMED values — the input
+ * to `matchStructuredFieldLinesInKb`. Unwraps the stored container and reads
+ * only `merchant` (the authoritative half). Single source of truth so the
+ * "is this field present?" predicate can't diverge between the catalog page's
+ * open-the-sheet check and the cleanup sheet's build-proposals step.
+ *
+ * ⚠️ Pass the RAW stored profile (the `{merchant,suggestions}` container or the
+ * legacy flat shape) — NOT `mergedBusinessProfile(...)`. This reads only the
+ * confirmed `merchant` half; a merged/flat value unwraps to empty `merchant`
+ * and field-cleanup would silently never fire (no error, just a dead feature).
+ */
+export function presentFieldsFromProfile(stored: StoredBusinessProfile): PresentFields {
+  const { merchant = {} } = unwrapBusinessProfile(stored);
+  return {
+    address: !!merchant.address?.trim(),
+    // Guard blank contents: [''] / [' '] is not a real phone, {sat:[]} is not
+    // real hours — treat them as absent (matches the address `.trim()` check).
+    phone: !!merchant.phones?.some((p) => p?.trim()),
+    hours: !!merchant.hours && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0),
+  };
 }
 
 // --- Page Types ---
@@ -962,10 +989,9 @@ export {
 // 2026-07-21). Eval Cat 66 pins it.
 // Deliberately NOT addressed (owner ruling, 2026-07-21): mid-conversation «كيف أقدر أساعدك؟»
 // re-greetings are left to the model — no phrase bans, no extra examples, no validator strips.
-// v55: RESERVED by the in-flight catalog-authority work (uncommitted on feat/business-surface,
-// 2026-07-22 — <product_catalog> wins over stale KB narrative prices, eval Cat 67). Skipped here
-// so the two branches can't collide on a version string; if that work is abandoned, v55 stays
-// unused (the version is only a cache-key namespace — gaps are harmless, collisions are not).
+// v55: NEVER SHIPPED — reserved for the catalog-authority work while it sat uncommitted on
+// feat/business-surface; that work landed as v57 instead (main had already moved to v56 by the
+// time it was rebased). The gap is harmless: the version is only a cache-key namespace.
 // v56: VERIFIED CART TOTALS — prod finding from متجر إجدابيا real traffic (2026-07-22). The model
 // computed CORRECT totals («39 + توصيل 10 = المجموع 49») but Check 1 grounds every number against
 // LITERAL KB values, so a derived total can never pass: the correct answer was swapped for the
@@ -979,7 +1005,16 @@ export {
 // degrades to the pre-v56 guard. Subtraction (discount math) is deliberately inexpressible — see
 // verifiedPriceMathValues. Plus a TOTALS prompt rule: itemize-then-total, never deflect a total
 // question whose components are all in KB. Eval Cat 68 replays the prod conversation.
-export const PROMPT_VERSION = 'v56';
+// v57: CATALOG AUTHORITY — the two-store split (volatile facts → catalog, stable facts → KB)
+// needs one winner when they disagree: merchants historically pasted price lists into the KB
+// text, so after migrating to the catalog the SAME product can carry an old price in
+// <business_knowledge> and the current one in <product_catalog>. New AUTHORITY paragraph in
+// the <product_catalog> instruction (promptBuilder): for items listed in the catalog, its
+// price/availability/dates override conflicting narrative text; items not in the catalog keep
+// the KB as source. Cat 67 pins both directions (catalog wins on conflict; KB-only item still
+// answered) AND the structured-facts↔narrative precedence that case 411 asserted but never
+// actually tested with a disagreement (owner accuracy principle, 2026-07-14/22).
+export const PROMPT_VERSION = 'v57';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

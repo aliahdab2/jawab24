@@ -485,10 +485,11 @@ export class OpenAIService {
 
     /**
      * Post-reply validation. Delegates to replyValidator.
-     * @internal Exposed for provider abstraction — do not call directly outside providers/index.ts
+     * @internal Exposed for provider abstraction — approved callers: providers/index.ts
+     * and ecommerceToolHandler.ts (tool-loop reply validation). Do not call elsewhere.
      */
-    validateReply(parsed: ParsedReply, request: GenerateRequest): ValidatedReply {
-        return runValidateReply(parsed, request);
+    validateReply(parsed: ParsedReply, request: GenerateRequest, opts?: { skipPriceCheck?: boolean }): ValidatedReply {
+        return runValidateReply(parsed, request, opts);
     }
 }
 

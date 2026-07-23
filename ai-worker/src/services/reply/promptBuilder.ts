@@ -151,6 +151,7 @@ ${safeProductCatalog}
 </product_catalog>
 
 The <product_catalog> lists the actual products/items this business sells in their store. When a customer asks about products, what is available, what you sell, or pricing, refer to <product_catalog>.
+AUTHORITY: <product_catalog> is the merchant's live, maintained list. If <business_knowledge> states a DIFFERENT price, availability, or date for an item that appears in <product_catalog>, the <product_catalog> value is the correct one — the narrative text may be outdated. For items NOT in <product_catalog>, <business_knowledge> remains the source as usual.
 When a customer asks "where can I buy", "give me the link", or wants to purchase — share the store URL or specific product URL from <product_catalog> if available. NEVER invent or guess URLs.`);
     }
 
