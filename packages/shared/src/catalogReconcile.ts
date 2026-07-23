@@ -67,9 +67,18 @@ function samePrice(existing: string | null, proposed: number | null): boolean {
     return Number.isFinite(e) && e === proposed;
 }
 
-/** Currencies match when equal after trim/lowercase; both empty/null counts as equal. */
+/**
+ * Currencies match when equal after trim/lowercase. A proposal that does NOT
+ * assert a currency (null/empty) is treated as "no signal" → matches whatever
+ * the existing row has, so it never alone turns a same-price row into an
+ * `update`. (Post-reply / scan extractions frequently omit currency; flagging
+ * those as updates would produce noisy candidates that, if confirmed blindly,
+ * would wipe the existing currency.) Only a proposal that states a DIFFERENT
+ * currency is a real conflict.
+ */
 function sameCurrency(existing: string | null, proposed: string | null): boolean {
     const norm = (c: string | null) => (c ?? '').trim().toLowerCase();
+    if (norm(proposed) === '') return true; // proposal asserts no currency → no conflict
     return norm(existing) === norm(proposed);
 }
 

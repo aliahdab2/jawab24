@@ -2,7 +2,7 @@ import axios from 'axios';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { MAX_CATALOG_IMPORT_CHARS } from '@jawab24/shared';
 import { db } from '../db';
-import { pages, catalogItems, posts } from '../db/schema';
+import { pages, catalogItems, posts, instagramMedia } from '../db/schema';
 import { facebookService } from './facebook';
 import { extractFromImage } from './kb/file-extractor';
 import { catalogExtractor, type CatalogExtractionResult } from './catalogExtractor';
@@ -215,14 +215,16 @@ export class CatalogScanService {
 
     /**
      * Scan the page's configured Post Reply auto-replies into proposed catalog
-     * items. Unlike scanPosts this needs NO Facebook call — the reply text lives
-     * in our own `posts.trigger_reply`, so it works even for a page whose token
-     * has since expired. Nothing is persisted (same merchant-in-the-loop
-     * contract as scanPosts / catalogExtractor).
+     * items — across BOTH channels: Facebook (`posts.trigger_reply` + post
+     * `message`) and Instagram (`instagram_media.trigger_reply` + `caption`).
+     * Unlike scanPosts this needs NO Graph call — the reply text lives in our own
+     * DB, so it works even for a page whose token has since expired. Nothing is
+     * persisted (same merchant-in-the-loop contract as scanPosts / catalogExtractor).
      *
      * Presence-gated by design (owner decision 2026-07-24): post-reply richness
      * is concentrated in a few merchants (courses/training vertical). A page with
-     * no Post Reply returns noPostReplies:true so the caller hides the action.
+     * no Post Reply on EITHER channel returns noPostReplies:true so the caller
+     * hides the action (an IG-only merchant must not be mis-signalled as empty).
      *
      * No re-scan bookmark: post-replies are few and the merchant edits them
      * (offers rotate), so a full re-scan each time is cheap and correct — the
@@ -246,22 +248,35 @@ export class CatalogScanService {
         if (!page) return null;
         if (page.ecommerceStoreId) throw new CatalogStoreConflictError();
 
-        const rows = await db
-            .select({
-                message: posts.message,
-                triggerReply: posts.triggerReply,
-                createdTime: posts.createdTime,
-            })
-            .from(posts)
-            .where(and(
-                eq(posts.pageId, pageId),
-                isNotNull(posts.triggerReply),
-                sql`length(trim(${posts.triggerReply})) > 0`,
-            ))
-            // Newest-first so the freshest offers survive the char cap; NULLS LAST
-            // keeps undated legacy rows from crowding out real recent ones.
-            .orderBy(sql`${posts.createdTime} DESC NULLS LAST`)
-            .limit(MAX_POST_REPLIES_SCAN);
+        // Both channels, each newest-first + capped, then merged and re-capped —
+        // so neither channel alone can exceed the fetch bound. `text` is the post's
+        // own copy (FB message / IG caption) that names the product; the price
+        // lives in the reply.
+        const [fbRows, igRows] = await Promise.all([
+            db.select({ text: posts.message, triggerReply: posts.triggerReply, createdTime: posts.createdTime })
+                .from(posts)
+                .where(and(
+                    eq(posts.pageId, pageId),
+                    isNotNull(posts.triggerReply),
+                    sql`length(trim(${posts.triggerReply})) > 0`,
+                ))
+                .orderBy(sql`${posts.createdTime} DESC NULLS LAST`)
+                .limit(MAX_POST_REPLIES_SCAN),
+            db.select({ text: instagramMedia.caption, triggerReply: instagramMedia.triggerReply, createdTime: instagramMedia.createdTime })
+                .from(instagramMedia)
+                .where(and(
+                    eq(instagramMedia.pageId, pageId),
+                    isNotNull(instagramMedia.triggerReply),
+                    sql`length(trim(${instagramMedia.triggerReply})) > 0`,
+                ))
+                .orderBy(sql`${instagramMedia.createdTime} DESC NULLS LAST`)
+                .limit(MAX_POST_REPLIES_SCAN),
+        ]);
+
+        // Merge FB + IG, newest-first (undated rows last), re-cap the combined set.
+        const rows = [...fbRows, ...igRows]
+            .sort((a, b) => (b.createdTime?.getTime() ?? -Infinity) - (a.createdTime?.getTime() ?? -Infinity))
+            .slice(0, MAX_POST_REPLIES_SCAN);
 
         if (rows.length === 0) {
             return { items: [], dropped: 0, truncated: false, failed: false, repliesScanned: 0, noPostReplies: true };
@@ -271,7 +286,7 @@ export class CatalogScanService {
         // map "الكلفة 25 ألف" to "كورس المكياج". The price lives in the REPLY.
         const blocks = rows.map((r) => {
             const date = r.createdTime ? r.createdTime.toISOString().slice(0, 10) : 'unknown date';
-            const post = r.message?.trim();
+            const post = r.text?.trim();
             const postLine = post ? `\nPOST: ${post.slice(0, POST_CONTEXT_MAX_CHARS)}` : '';
             // triggerReply is non-null + non-blank by the query filter; `?? ''` only
             // satisfies the type-narrower without a forbidden non-null assertion.

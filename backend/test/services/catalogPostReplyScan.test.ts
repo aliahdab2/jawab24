@@ -9,20 +9,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const state = {
     pageRow: undefined as Record<string, unknown> | undefined,
-    postRows: [] as Record<string, unknown>[],
+    postRows: [] as Record<string, unknown>[],  // FB (posts) source
+    igRows: [] as Record<string, unknown>[],     // Instagram (instagram_media) source
+    scanCall: 0,                                  // 0 → FB query, 1 → IG query (Promise.all array order)
 };
 
 vi.mock('../../src/db', () => ({
     db: {
-        // Page load ends in .limit; the post-replies query ends in .orderBy —
-        // one `where` object exposes both so cols/order can't confuse them.
+        // Page load ends in .limit(1); each source query ends in .orderBy(...).limit(MAX).
+        // The two source queries share the chain, so the inner .limit routes by call
+        // order (FB first, IG second — Promise.all builds them in array order).
         select: () => ({
             from: () => ({
                 where: () => ({
-                    // page load: .where().limit(1)
                     limit: async () => (state.pageRow ? [state.pageRow] : []),
-                    // post-replies: .where().orderBy(...).limit(MAX)
-                    orderBy: () => ({ limit: async () => state.postRows }),
+                    orderBy: () => ({ limit: async () => (state.scanCall++ === 0 ? state.postRows : state.igRows) }),
                 }),
             }),
         }),
@@ -61,6 +62,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     state.pageRow = page();
     state.postRows = [];
+    state.igRows = [];
+    state.scanCall = 0;
     (catalogExtractor.extract as ReturnType<typeof vi.fn>).mockResolvedValue({
         items: [], dropped: 0, truncated: false, failed: false,
     });
@@ -89,8 +92,8 @@ describe('scanPostReplies', () => {
 
     it('pairs each post with its reply and extracts under source:post_reply', async () => {
         state.postRows = [
-            { message: 'كورس المكياج المبتدئ', triggerReply: 'الكلفة 25 ألف ل.س بالعملة القديمة', createdTime: new Date('2026-07-20T00:00:00Z') },
-            { message: null, triggerReply: 'دورة ICDL الكلفة 25 ألف', createdTime: null },
+            { text: 'كورس المكياج المبتدئ', triggerReply: 'الكلفة 25 ألف ل.س بالعملة القديمة', createdTime: new Date('2026-07-20T00:00:00Z') },
+            { text: null, triggerReply: 'دورة ICDL الكلفة 25 ألف', createdTime: null },
         ];
         (catalogExtractor.extract as ReturnType<typeof vi.fn>).mockResolvedValue({
             items: [{ name: 'كورس المكياج المبتدئ', price: 25000, currency: 'ل.س', type: 'course', description: null, isAvailable: true, startsAt: null, endsAt: null, attributes: null }],
@@ -110,5 +113,29 @@ describe('scanPostReplies', () => {
 
         expect(result).toMatchObject({ repliesScanned: 2, noPostReplies: false });
         expect(result!.items).toHaveLength(1);
+    });
+
+    it('includes INSTAGRAM post-replies — an IG-only page is NOT mis-signalled as empty', async () => {
+        state.postRows = []; // no Facebook post-replies
+        state.igRows = [
+            { text: 'كورس التصوير', triggerReply: 'دورة التصوير 75 ألف', createdTime: new Date('2026-07-22T00:00:00Z') },
+        ];
+
+        const result = await catalogScanService.scanPostReplies(WS, PAGE, CTX);
+
+        expect(result).toMatchObject({ repliesScanned: 1, noPostReplies: false });
+        expect(catalogExtractor.extract).toHaveBeenCalledTimes(1);
+        const [text] = (catalogExtractor.extract as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(text).toContain('REPLY: دورة التصوير 75 ألف');
+    });
+
+    it('merges FB + IG newest-first (IG reply dated later leads)', async () => {
+        state.postRows = [{ text: 'FB منتج', triggerReply: 'FB سعر 10', createdTime: new Date('2026-07-10T00:00:00Z') }];
+        state.igRows = [{ text: 'IG منتج', triggerReply: 'IG سعر 20', createdTime: new Date('2026-07-25T00:00:00Z') }];
+
+        await catalogScanService.scanPostReplies(WS, PAGE, CTX);
+
+        const [text] = (catalogExtractor.extract as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(text.indexOf('IG سعر 20')).toBeLessThan(text.indexOf('FB سعر 10'));
     });
 });

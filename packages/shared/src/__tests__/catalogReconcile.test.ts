@@ -34,9 +34,14 @@ describe('reconcileCatalogProposals', () => {
         expect(r.kind).toBe('duplicate');
     });
 
-    it('a currency change alone (same price) is still an update', () => {
+    it('a currency change alone (same price) is still an update when the proposal STATES a currency', () => {
         const [r] = reconcileCatalogProposals([p('دورة ICDL', 35000, 'ريال')], existing);
         expect(r.kind).toBe('update');
+    });
+
+    it('a proposal that OMITS currency (same price) is a duplicate, not an update — never wipes the existing currency', () => {
+        const [r] = reconcileCatalogProposals([p('دورة ICDL', 35000, null)], existing);
+        expect(r.kind).toBe('duplicate');
     });
 
     it('both prices null (price-on-request) → duplicate; adding a price → update', () => {
