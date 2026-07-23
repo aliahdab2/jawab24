@@ -492,6 +492,16 @@ describe('buildSystemPrompt — product catalog block', () => {
         expect(out).toContain('NEVER invent or guess URLs');
     });
 
+    it('states the catalog-wins-over-stale-narrative AUTHORITY rule (prompt v57)', () => {
+        // The everyone-facing Phase A change. Pinned so a refactor can't silently
+        // drop/weaken it while CI stays green (playground-eval Cat 67 is manual).
+        const out = suffix(req('hi', { productCatalog: '- Blue Shirt — 50 SAR' }));
+        expect(out).toContain('AUTHORITY:');
+        expect(out).toContain('the <product_catalog> value is the correct one');
+        expect(out).toContain('the narrative text may be outdated');
+        expect(out).toContain('For items NOT in <product_catalog>');
+    });
+
     it('omits the block when the catalog is absent or whitespace-only', () => {
         expect(suffix(req('hi'))).not.toContain('<product_catalog>');
         expect(suffix(req('hi', { productCatalog: '   ' }))).not.toContain('<product_catalog>');
