@@ -434,6 +434,40 @@ describe('validateReply orchestration', () => {
         expect(out.flags).toContain('price_not_in_kb');
     });
 
+    // Phase V: the e-commerce tool loop now runs validateReply, passing its live
+    // tool results as extraGrounding so a verified tool-sourced price isn't
+    // false-flagged — while an INVENTED price is still caught.
+    // The merchant's static KB mentions the product but NOT its (live) price —
+    // exactly why the tool loop fetched it. Tool result carries the real price.
+    const phoneKb = 'We sell the iPhone 15 and accessories.';
+    const toolResults = JSON.stringify([{ product: 'iPhone 15', price: '3800 SAR', inStock: true }]);
+
+    it('extraGrounding: a tool-sourced price (not in the static KB) is NOT flagged', () => {
+        const out = validateReply(
+            base({ reply: 'The iPhone 15 is 3800 SAR and in stock.' }),
+            req('how much is the iphone 15', { knowledgeBase: phoneKb }),
+            { extraGrounding: toolResults },
+        );
+        expect(out.flags).not.toContain('price_not_in_kb');
+    });
+
+    it('extraGrounding: the SAME reply WITHOUT it is flagged (the hole Phase V closes)', () => {
+        const out = validateReply(
+            base({ reply: 'The iPhone 15 is 3800 SAR and in stock.' }),
+            req('how much is the iphone 15', { knowledgeBase: phoneKb }),
+        );
+        expect(out.flags).toContain('price_not_in_kb');
+    });
+
+    it('extraGrounding: an INVENTED price is still flagged even with tool results present', () => {
+        const out = validateReply(
+            base({ reply: 'The iPhone 15 is 9999 SAR.' }),
+            req('how much is the iphone 15', { knowledgeBase: phoneKb }),
+            { extraGrounding: toolResults },
+        );
+        expect(out.flags).toContain('price_not_in_kb');
+    });
+
     it('Check 4: hedging on a QUESTION downgrades confidence and flags info_not_in_kb', () => {
         const out = validateReply(base({ reply: 'let me check with the team', hedging: true }), req('do you deliver?'));
         expect(out.confidence).toBe('low');

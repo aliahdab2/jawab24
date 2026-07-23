@@ -487,8 +487,8 @@ export class OpenAIService {
      * Post-reply validation. Delegates to replyValidator.
      * @internal Exposed for provider abstraction — do not call directly outside providers/index.ts
      */
-    validateReply(parsed: ParsedReply, request: GenerateRequest): ValidatedReply {
-        return runValidateReply(parsed, request);
+    validateReply(parsed: ParsedReply, request: GenerateRequest, opts?: { extraGrounding?: string }): ValidatedReply {
+        return runValidateReply(parsed, request, opts);
     }
 }
 

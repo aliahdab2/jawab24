@@ -315,7 +315,7 @@ export function stripSelfIdentification(reply: string, fallbackLang: string): st
  * Mutations are applied in order; Check 4 (hedging) lowers confidence which
  * Check 5 then reads, so ordering is significant — do not reorder.
  */
-export function validateReply(parsed: ParsedReply, request: GenerateRequest): ValidatedReply {
+export function validateReply(parsed: ParsedReply, request: GenerateRequest, opts?: { extraGrounding?: string }): ValidatedReply {
     const flags = [...(parsed.flags || [])];
     const reply = parsed.reply || '';
 
@@ -323,8 +323,10 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest): Va
     // Grounding includes the <product_catalog> block: catalog prices (manual
     // items or store summary) are merchant content the model legitimately
     // quotes — without them here, every correct catalog price would flag.
+    // `extraGrounding` adds live tool-loop results (verified prices/totals) so
+    // the e-commerce tool path doesn't false-flag a tool-sourced price.
     if (reply && parsed.intent === 'QUESTION') {
-        const kbText = getKBText(request, { includeProductCatalog: true });
+        const kbText = getKBText(request, { includeProductCatalog: true, extraGrounding: opts?.extraGrounding });
         if (kbText && flagHallucinatedPrice(reply, kbText, parsed.price_math) && !flags.includes('price_not_in_kb')) {
             flags.push('price_not_in_kb');
         }

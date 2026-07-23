@@ -36,7 +36,7 @@ export function resolveChannel(request: GenerateRequest): 'comment' | 'dm' {
  * resolveLanguage also consumes getKBText — folding the catalog in
  * unconditionally would perturb language inference for existing pages.
  */
-export function getKBText(request: GenerateRequest, opts?: { includeProductCatalog?: boolean }): string | null {
+export function getKBText(request: GenerateRequest, opts?: { includeProductCatalog?: boolean; extraGrounding?: string }): string | null {
     const parts: string[] = [];
     const chunks = request.context?.retrievedChunks;
     if (chunks && chunks.length > 0) {
@@ -52,6 +52,12 @@ export function getKBText(request: GenerateRequest, opts?: { includeProductCatal
     }
     if (opts?.includeProductCatalog && request.context?.productCatalog) {
         parts.push(request.context.productCatalog);
+    }
+    // Extra grounding: live tool-loop results (verified inventory/prices/order
+    // totals) that aren't in the static KB/catalog. Passed by the e-commerce
+    // tool path so a legitimately tool-sourced price isn't flagged price_not_in_kb.
+    if (opts?.extraGrounding) {
+        parts.push(opts.extraGrounding);
     }
     return parts.length > 0 ? parts.join(' ') : null;
 }

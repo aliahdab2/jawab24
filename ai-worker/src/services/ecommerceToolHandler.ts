@@ -378,17 +378,25 @@ export async function generateWithToolResults(
             parsed = { reply: content, intent: 'QUESTION', confidence: 'medium', flags: ['invalid_json'] };
         }
 
+        // Validate the final reply (same guards as the provider path). The tool
+        // results are passed as extra grounding so verified tool-sourced prices
+        // aren't flagged price_not_in_kb.
+        const v = validateToolReply(
+            { ...parsed, reply: parsed.reply || 'Thank you for your patience!' },
+            request,
+            toolResults,
+        );
         return {
-            reply: parsed.reply || 'Thank you for your patience!',
+            reply: v.reply,
             language: detectedLanguage,
             model: config.openai.model,
             tokensUsed: completion.usage?.total_tokens,
             tokensIn: completion.usage?.prompt_tokens,
             tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
             tokensOut: completion.usage?.completion_tokens,
-            intent: parsed.intent,
-            confidence: parsed.confidence,
-            flags: parsed.flags,
+            intent: v.intent,
+            confidence: v.confidence,
+            flags: v.flags,
         };
     } catch (error) {
         Sentry.captureException(error instanceof Error ? error : new Error('OpenAI tool results error'), {
@@ -409,6 +417,28 @@ function safeParseArgs(argsString: string): Record<string, string> {
     }
 }
 
+/**
+ * Run the standard post-reply validator on a tool-loop reply — the same guard
+ * the multi-provider path applies (price grounding, language, comment length,
+ * self-identification strip). Closes the hole where both tool-loop exits
+ * returned unvalidated. `toolResults`, when present (Phase 2), extends the
+ * price-grounding set so a verified tool-sourced price/total isn't false-flagged.
+ */
+function validateToolReply(
+    parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; language?: string },
+    request: GenerateRequest,
+    toolResults?: EcommerceToolResult[],
+): { reply: string; intent?: string; confidence?: string; flags?: string[] } {
+    const extraGrounding = toolResults && toolResults.length > 0 ? JSON.stringify(toolResults) : undefined;
+    const validated = openaiService.validateReply(parsed, request, extraGrounding ? { extraGrounding } : undefined);
+    return {
+        reply: validated.reply,
+        intent: validated.intent,
+        confidence: validated.confidence,
+        flags: validated.flags,
+    };
+}
+
 /** Parse a direct (non-tool) reply from OpenAI content string */
 function parseDirectReply(
     content: string,
@@ -422,16 +452,19 @@ function parseDirectReply(
         parsed = { reply: content, intent: 'QUESTION', confidence: 'medium', flags: [] };
     }
 
+    // Phase-1 direct reply (model answered without calling a tool) → no tool
+    // results, standard KB/catalog grounding.
+    const v = validateToolReply({ ...parsed, reply: parsed.reply || content }, request);
     return {
-        reply: parsed.reply || content,
+        reply: v.reply,
         language: request.language || 'en',
         model: config.openai.model,
         tokensUsed: completion.usage?.total_tokens,
         tokensIn: completion.usage?.prompt_tokens,
         tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
         tokensOut: completion.usage?.completion_tokens,
-        intent: parsed.intent,
-        confidence: parsed.confidence,
-        flags: parsed.flags,
+        intent: v.intent,
+        confidence: v.confidence,
+        flags: v.flags,
     };
 }
