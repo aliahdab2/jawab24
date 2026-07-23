@@ -78,6 +78,8 @@ export { sanitizeKbContent } from './utils/sanitize-kb';
 export { isSafeRedirectPath } from './utils/redirect';
 export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
 export { matchCatalogLinesInKb, matchStructuredFieldLinesInKb, removeKbLines } from './catalogKbMatch';
+export { reconcileCatalogProposals } from './catalogReconcile';
+export type { ReconcileExistingItem, ReconcileProposalItem, ReconcileKind, ReconcileResult } from './catalogReconcile';
 // presentFieldsFromProfile is defined in this file (needs unwrapBusinessProfile).
 export type { CatalogMatchItem, KbLineMatch, KbLineMatchConfidence, StructuredFieldKind, PresentFields, StructuredFieldLineMatch } from './catalogKbMatch';
 export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, isValidHttpUrl, normalizeHttpUrl, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';

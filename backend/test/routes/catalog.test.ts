@@ -39,7 +39,7 @@ vi.mock('../../src/services/catalogExtractor', () => ({
 vi.mock('../../src/services/catalogScan', () => {
     // The class must come from THIS mock so the controller's instanceof matches.
     class CatalogScanUnavailableError extends Error {}
-    return { catalogScanService: { scanPosts: vi.fn() }, CatalogScanUnavailableError };
+    return { catalogScanService: { scanPosts: vi.fn(), scanPostReplies: vi.fn() }, CatalogScanUnavailableError };
 });
 vi.mock('../../src/lib/dailyCap', () => ({
     dailyCapKey: (prefix: string, id: string) => `${prefix}:${id}:2026-01-01`,
@@ -96,6 +96,7 @@ describe('Catalog routes — security wiring', () => {
             ['POST', `/pages/${PAGE}/catalog`],
             ['POST', `/pages/${PAGE}/catalog/extract`],
             ['POST', `/pages/${PAGE}/catalog/scan-posts`],
+            ['POST', `/pages/${PAGE}/catalog/scan-post-replies`],
             ['POST', `/pages/${PAGE}/catalog/batch`],
             ['PATCH', `/pages/${PAGE}/catalog/vertical`],
             ['PATCH', `/pages/${PAGE}/catalog/${ITEM}`],
@@ -119,6 +120,7 @@ describe('Catalog routes — security wiring', () => {
             ['POST', `/pages/${PAGE}/catalog`],
             ['POST', `/pages/${PAGE}/catalog/extract`],
             ['POST', `/pages/${PAGE}/catalog/scan-posts`],
+            ['POST', `/pages/${PAGE}/catalog/scan-post-replies`],
             ['POST', `/pages/${PAGE}/catalog/batch`],
             ['PATCH', `/pages/${PAGE}/catalog/vertical`],
             ['PATCH', `/pages/${PAGE}/catalog/${ITEM}`],
@@ -133,6 +135,7 @@ describe('Catalog routes — security wiring', () => {
         expect(catalogService.setPageVertical).not.toHaveBeenCalled();
         expect(catalogExtractor.extract).not.toHaveBeenCalled();
         expect(catalogScanService.scanPosts).not.toHaveBeenCalled();
+        expect(catalogScanService.scanPostReplies).not.toHaveBeenCalled();
         expect(catalogService.createCatalogItemsBatch).not.toHaveBeenCalled();
     });
 
@@ -212,6 +215,51 @@ describe('Catalog routes — security wiring', () => {
             const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
             expect(res.statusCode).toBe(403);
             expect(catalogScanService.scanPosts).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('POST /scan-post-replies', () => {
+        beforeEach(() => {
+            vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 100, pageUserId: 'user-1' });
+        });
+
+        it('returns proposals + telemetry and counts the daily cap', async () => {
+            vi.mocked(catalogScanService.scanPostReplies).mockResolvedValue({
+                items: [{ name: 'كورس المكياج المبتدئ', type: 'course' } as never],
+                dropped: 0, truncated: false, failed: false, repliesScanned: 12, noPostReplies: false,
+            });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-post-replies` });
+            expect(res.statusCode).toBe(200);
+            const body = JSON.parse(res.payload);
+            expect(body.items).toHaveLength(1);
+            expect(body.repliesScanned).toBe(12);
+            expect(body.noPostReplies).toBe(false);
+            expect(catalogScanService.scanPostReplies).toHaveBeenCalledWith('ws-1', PAGE, { userId: 'user-1' });
+            expect(incrementDailyCap).toHaveBeenCalledTimes(1);
+        });
+
+        it('does NOT count a no-Post-Reply page against the daily cap (no paid call happened)', async () => {
+            vi.mocked(catalogScanService.scanPostReplies).mockResolvedValue({
+                items: [], dropped: 0, truncated: false, failed: false, repliesScanned: 0, noPostReplies: true,
+            });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-post-replies` });
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.payload).noPostReplies).toBe(true);
+            expect(incrementDailyCap).not.toHaveBeenCalled();
+        });
+
+        it('429s once the daily cap is spent — before any scan work', async () => {
+            vi.mocked(checkDailyCap).mockResolvedValueOnce({ allowed: false, used: 30, limit: 30 });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-post-replies` });
+            expect(res.statusCode).toBe(429);
+            expect(catalogScanService.scanPostReplies).not.toHaveBeenCalled();
+        });
+
+        it('403s CATALOG_LIMIT_REACHED when the catalog is already full — before any scan work', async () => {
+            vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 0, pageUserId: 'user-1' });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-post-replies` });
+            expect(res.statusCode).toBe(403);
+            expect(catalogScanService.scanPostReplies).not.toHaveBeenCalled();
         });
     });
 

@@ -245,6 +245,70 @@ export class CatalogController {
         });
     }
 
+    /**
+     * POST /pages/:pageId/catalog/scan-post-replies — read the page's configured
+     * Post Reply auto-replies into PROPOSED items (same review-then-/batch
+     * contract; persists nothing). Costs one LLM extraction call (no Vision, no
+     * Graph), so it shares the extract cost class. Presence-gated: a page with no
+     * Post Reply returns noPostReplies:true and consumes no paid call.
+     */
+    async scanPostReplies(
+        request: FastifyRequest<{ Params: { pageId: string } }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+
+        let capacity;
+        try {
+            capacity = await catalogService.getCatalogCapacity(req.workspaceId, request.params.pageId);
+        } catch (err) {
+            if (err instanceof CatalogStoreConflictError) return sendStoreConflict(reply, err);
+            throw err;
+        }
+        if (!capacity) return reply.status(404).send({ error: 'Page not found' });
+        if (capacity.remaining <= 0) {
+            return reply.status(403).send({ error: 'Catalog is full', code: 'CATALOG_LIMIT_REACHED' });
+        }
+
+        const userId = req.user?.userId;
+        if (!userId) return reply.status(401).send({ error: 'Authentication required' });
+
+        const capKey = dailyCapKey('catalog_postreply_scan', userId);
+        try {
+            const cap = await checkDailyCap(capKey, EXTRACT_DAILY_LIMIT);
+            if (!cap.allowed) {
+                return reply.status(429).send({ error: 'Daily scan limit reached. Try again tomorrow.', code: 'daily_limit_reached' });
+            }
+        } catch (err) {
+            captureError(err, 'Catalog post-reply scan quota check unavailable', {
+                level: 'warning', tags: { service: 'catalog-scan' },
+            });
+            return reply.status(503).send({ error: 'Quota check unavailable. Try again shortly.', code: 'quota_check_unavailable' });
+        }
+
+        let result;
+        try {
+            result = await catalogScanService.scanPostReplies(req.workspaceId, request.params.pageId, { userId });
+        } catch (err) {
+            if (err instanceof CatalogStoreConflictError) return sendStoreConflict(reply, err);
+            throw err;
+        }
+        if (!result) return reply.status(404).send({ error: 'Page not found' });
+        // A no-Post-Reply page consumed no paid call — don't count it against the cap.
+        if (!result.noPostReplies) void incrementDailyCap(capKey);
+
+        const items = result.items.slice(0, capacity.remaining);
+        return reply.send({
+            items,
+            dropped: result.dropped,
+            overflow: result.items.length - items.length,
+            remainingCapacity: capacity.remaining,
+            truncated: result.truncated,
+            repliesScanned: result.repliesScanned,
+            noPostReplies: result.noPostReplies,
+        });
+    }
+
     /** POST /pages/:pageId/catalog/batch — save the reviewed import rows in one
      *  all-or-nothing transaction (one cache bump, one activation event). */
     async batchCreate(
