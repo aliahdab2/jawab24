@@ -96,6 +96,20 @@ describe('KbCleanupSheet', () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledWith(2));
   });
 
+  it('disables the primary button when nothing is checked (no duplicate "Keep everything")', () => {
+    renderSheet();
+    // Uncheck the pre-checked product → selection empty.
+    const productBox = (screen.getAllByRole('checkbox') as HTMLInputElement[]).find((b) => b.checked)!;
+    fireEvent.click(productBox);
+    const buttons = screen.getAllByRole('button');
+    const keepButtons = buttons.filter((b) => /Keep everything/i.test(b.textContent || ''));
+    expect(keepButtons).toHaveLength(1); // not two identical buttons
+    // The remove/confirm button is present but disabled.
+    const removeBtn = buttons.find((b) => /Remove/i.test(b.textContent || '')) as HTMLButtonElement;
+    expect(removeBtn).toBeDefined();
+    expect(removeBtn.disabled).toBe(true);
+  });
+
   it('"Keep everything" closes without calling the API', () => {
     const { onClose } = renderSheet();
     fireEvent.click(screen.getByRole('button', { name: /Keep everything/i }));

@@ -305,6 +305,11 @@ export function mergedBusinessProfile(stored: StoredBusinessProfile): BusinessPr
  * only `merchant` (the authoritative half). Single source of truth so the
  * "is this field present?" predicate can't diverge between the catalog page's
  * open-the-sheet check and the cleanup sheet's build-proposals step.
+ *
+ * ⚠️ Pass the RAW stored profile (the `{merchant,suggestions}` container or the
+ * legacy flat shape) — NOT `mergedBusinessProfile(...)`. This reads only the
+ * confirmed `merchant` half; a merged/flat value unwraps to empty `merchant`
+ * and field-cleanup would silently never fire (no error, just a dead feature).
  */
 export function presentFieldsFromProfile(stored: StoredBusinessProfile): PresentFields {
   const { merchant = {} } = unwrapBusinessProfile(stored);

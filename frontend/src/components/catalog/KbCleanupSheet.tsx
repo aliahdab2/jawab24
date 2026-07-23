@@ -165,9 +165,12 @@ export function KbCleanupSheet({ pageId, kbText, items, profile, onDone, onClose
         <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
           {t('cleanup.keepAll')}
         </Button>
-        <Button type="button" onClick={handleConfirm} disabled={saving}>
+        {/* Disable (don't relabel) the primary when nothing is checked — otherwise
+            it duplicated the secondary "Keep everything". "Keep everything" is the
+            only action when the selection is empty. */}
+        <Button type="button" onClick={handleConfirm} disabled={saving || selectedCount === 0}>
           {saving && <Loader2 className="w-4 h-4 animate-spin me-2" aria-hidden="true" />}
-          {selectedCount > 0 ? t('cleanup.confirm', { count: selectedCount }) : t('cleanup.keepAll')}
+          {t('cleanup.confirm', { count: selectedCount })}
         </Button>
       </div>
     </DetailSheet>
