@@ -1,6 +1,7 @@
 // Shared Types for Jawab24
 
 import type { MerchantProvenanceMap } from './businessProfileMerge';
+import type { PresentFields } from './catalogKbMatch';
 
 // --- Validation schemas (single source of truth across backend + frontend) ---
 export { UpdateSettingsSchema, type UpdateSettingsInput } from './schemas/settings';
@@ -77,6 +78,7 @@ export { sanitizeKbContent } from './utils/sanitize-kb';
 export { isSafeRedirectPath } from './utils/redirect';
 export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
 export { matchCatalogLinesInKb, matchStructuredFieldLinesInKb, removeKbLines } from './catalogKbMatch';
+// presentFieldsFromProfile is defined in this file (needs unwrapBusinessProfile).
 export type { CatalogMatchItem, KbLineMatch, KbLineMatchConfidence, StructuredFieldKind, PresentFields, StructuredFieldLineMatch } from './catalogKbMatch';
 export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, isValidHttpUrl, normalizeHttpUrl, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
 export type { ExtractedPhone } from './utils/validation';
@@ -295,6 +297,22 @@ export function unwrapBusinessProfile(stored: StoredBusinessProfile): BusinessPr
 export function mergedBusinessProfile(stored: StoredBusinessProfile): BusinessProfile {
   const { merchant = {}, suggestions = {} } = unwrapBusinessProfile(stored);
   return { ...suggestions, ...merchant };
+}
+
+/**
+ * Which structured fields the merchant holds as CONFIRMED values — the input
+ * to `matchStructuredFieldLinesInKb`. Unwraps the stored container and reads
+ * only `merchant` (the authoritative half). Single source of truth so the
+ * "is this field present?" predicate can't diverge between the catalog page's
+ * open-the-sheet check and the cleanup sheet's build-proposals step.
+ */
+export function presentFieldsFromProfile(stored: StoredBusinessProfile): PresentFields {
+  const { merchant = {} } = unwrapBusinessProfile(stored);
+  return {
+    address: !!merchant.address?.trim(),
+    phone: !!(merchant.phones && merchant.phones.length > 0),
+    hours: !!(merchant.hours && Object.keys(merchant.hours).length > 0),
+  };
 }
 
 // --- Page Types ---

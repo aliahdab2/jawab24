@@ -9,9 +9,10 @@ import { Button, EmptyState, Select, Skeleton, ConfirmationModal } from '@/compo
 import { catalogApi, type CatalogItemInput, type CatalogVerticalInfo } from '@/lib/api';
 import {
   CATALOG_VERTICALS, CATALOG_VERTICAL_DEFAULT_TYPE, MAX_CATALOG_ITEMS_PER_PAGE,
-  matchCatalogLinesInKb, matchStructuredFieldLinesInKb, unwrapBusinessProfile,
+  matchCatalogLinesInKb, matchStructuredFieldLinesInKb, presentFieldsFromProfile,
   type CatalogItem, type CatalogVertical, type Page,
 } from '@jawab24/shared';
+import { captureError } from '@/lib/sentryHelpers';
 import { CatalogItemRow } from './CatalogItemRow';
 import { CatalogItemFormSheet } from './CatalogItemFormSheet';
 import { CatalogImportSheet } from './CatalogImportSheet';
@@ -302,20 +303,22 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
             const kb = page?.knowledgeBase?.trim();
             if (kb) {
               try {
-                const fresh = (await catalogApi.list(pageId).then((r) => r.data?.data)) ?? [];
-                const merchant = unwrapBusinessProfile(page?.businessProfile).merchant ?? {};
-                const hasProductLines = matchCatalogLinesInKb(kb, fresh.map((i) => ({ id: i.id, name: i.name }))).length > 0;
-                const hasFieldLines = matchStructuredFieldLinesInKb(kb, {
-                  address: !!merchant.address?.trim(),
-                  phone: !!(merchant.phones && merchant.phones.length > 0),
-                  hours: !!(merchant.hours && Object.keys(merchant.hours).length > 0),
-                }).length > 0;
+                // Reuse the react-query cache (invalidate() above triggered a
+                // refetch) instead of a second parallel GET — fetchQuery dedupes
+                // the in-flight request and populates the cache once.
+                const fresh = (await queryClient.fetchQuery({ queryKey, queryFn: () => catalogApi.list(pageId).then((r) => r.data) }))?.data ?? [];
+                const present = presentFieldsFromProfile(page?.businessProfile);
+                const hasProductLines = matchCatalogLinesInKb(kb, fresh).length > 0;
+                const hasFieldLines = matchStructuredFieldLinesInKb(kb, present).length > 0;
                 if (hasProductLines || hasFieldLines) {
                   setCleanupItems(fresh);
                   return; // the cleanup sheet is the next step; its own onDone toasts
                 }
-              } catch {
-                // ignore — cleanup is an offer, never a blocker
+              } catch (err) {
+                // The cleanup OFFER is optional (fall through to the success
+                // toast), but a persistent failure means the feature never
+                // surfaces — surface the signal instead of losing it.
+                captureError(err, 'KB cleanup offer detection failed', { extra: { pageId } });
               }
             }
 

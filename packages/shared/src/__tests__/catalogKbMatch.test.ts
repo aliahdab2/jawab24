@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { matchCatalogLinesInKb, matchStructuredFieldLinesInKb, removeKbLines } from '../catalogKbMatch';
+import { presentFieldsFromProfile } from '../index';
 
 /** Real merchant shape: a price wall with headers, bullets, emoji and prose. */
 const MOTO_KB = [
@@ -130,6 +131,45 @@ describe('matchStructuredFieldLinesInKb (the #720 fix)', () => {
     const cleaned = removeKbLines(KB, matches.map((m) => m.lineIndex));
     expect(cleaned).not.toContain('العزيزية');
     expect(cleaned).toContain('نوصّل لكل العناوين'); // delivery prose kept
+  });
+});
+
+describe('presentFieldsFromProfile (guards the container-unwrap regression)', () => {
+  // The exact bug this guards: the API serves businessProfile as the
+  // {merchant, suggestions} CONTAINER; reading it as a flat BusinessProfile
+  // returns undefined for every field → field matches never fire (#720 stays).
+  it('reads confirmed fields from the CONTAINER shape (merchant.*), not the top level', () => {
+    const container = {
+      merchant: { address: 'حي النسيم', phones: ['0114567890'], hours: { sat: ['09:00-21:00'] } },
+      suggestions: { address: 'حي العزيزية' },
+    };
+    expect(presentFieldsFromProfile(container)).toEqual({ address: true, phone: true, hours: true });
+  });
+
+  it('treats a legacy FLAT profile as unconfirmed (unwrap routes it to suggestions)', () => {
+    // A flat BusinessProfile has no merchant/suggestions wrapper, so
+    // unwrapBusinessProfile files it under `suggestions` (FB-sync tier). Since
+    // only CONFIRMED merchant values gate cleanup, a flat profile is "not
+    // present" — correct: we never propose removing a KB line on the strength
+    // of an unconfirmed value.
+    expect(presentFieldsFromProfile({ address: 'حي النسيم', phones: ['09'] }))
+      .toEqual({ address: false, phone: false, hours: false });
+  });
+
+  it('ignores suggestions (unconfirmed) — only merchant values count', () => {
+    // FB-sync address lives in suggestions; not merchant → not "present".
+    expect(presentFieldsFromProfile({ merchant: {}, suggestions: { address: 'حي العزيزية' } }))
+      .toEqual({ address: false, phone: false, hours: false });
+  });
+
+  it('treats blank/empty values as absent', () => {
+    expect(presentFieldsFromProfile({ merchant: { address: '   ', phones: [], hours: {} } }))
+      .toEqual({ address: false, phone: false, hours: false });
+  });
+
+  it('handles null/undefined', () => {
+    expect(presentFieldsFromProfile(null)).toEqual({ address: false, phone: false, hours: false });
+    expect(presentFieldsFromProfile(undefined)).toEqual({ address: false, phone: false, hours: false });
   });
 });
 

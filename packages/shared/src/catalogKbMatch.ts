@@ -53,8 +53,9 @@ function containsStandalone(paddedLine: string, token: string): boolean {
 }
 
 /**
- * Pure. Returns the KB lines safe to PROPOSE for removal, most confident
- * first within their original order. Never touches the text itself.
+ * Pure. Returns the KB lines safe to PROPOSE for removal, in their original
+ * KB order (each carries its own `confidence`; callers pre-check 'exact' and
+ * leave 'tokens' unchecked). Never touches the text itself.
  */
 export function matchCatalogLinesInKb(
   kbText: string,
@@ -139,9 +140,15 @@ export interface StructuredFieldLineMatch {
 // Label tokens per field. Listed WITHOUT the ال prefix where the ال-tolerance
 // in containsStandalone covers it; possessive/variant forms listed explicitly
 // (Arabic clitics make them distinct tokens: موقعنا ≠ موقع).
+//
+// Deliberately EXCLUDES over-broad tokens that collide with unrelated lines:
+// bare «رقم» (matches «رقم الطلب» = order number) and bare «موقع» (matches
+// «موقعنا الإلكتروني» = website). We keep the possessive «موقعنا» (their
+// physical location) but not standalone «موقع». Fewer false proposals in the
+// sheet; the merchant still confirms every one.
 const FIELD_LABELS: Record<StructuredFieldKind, string[]> = {
-  address: ['عنوان', 'عنواننا', 'موقع', 'موقعنا', 'address', 'location'],
-  phone: ['هاتف', 'هاتفنا', 'رقم', 'رقمنا', 'موبايل', 'جوال', 'للتواصل', 'تواصل', 'phone', 'tel', 'mobile'],
+  address: ['عنوان', 'عنواننا', 'موقعنا', 'address', 'location'],
+  phone: ['هاتف', 'هاتفنا', 'رقمنا', 'موبايل', 'جوال', 'للتواصل', 'phone', 'tel', 'mobile'],
   hours: ['دوام', 'دوامنا', 'اوقات', 'ساعات', 'مواعيد', 'نفتح', 'hours', 'open'],
 };
 

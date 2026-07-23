@@ -34,6 +34,9 @@ export function serializePage<T extends { accessToken?: string | null; whatsappA
     };
 }
 
+/** Upper bound on KB lines a single cleanup request may name (defensive). */
+const MAX_CLEANUP_LINES = 1000;
+
 export class PagesController {
     /**
      * Create a new page
@@ -510,9 +513,14 @@ export class PagesController {
      *
      * The merchant confirmed specific KB lines (their products moved to the
      * catalog) for removal. Contract is by LINE TEXT, not index: a stale index
-     * from a concurrent edit could delete the wrong line, whereas an exact-text
-     * match that no longer exists is simply skipped — safe. Preserves the
-     * "merchant confirms exactly what's removed" guarantee.
+     * could delete the WRONG line, whereas an exact-text match that no longer
+     * exists is simply skipped — so we never delete a line the merchant didn't
+     * name. NOTE this is still a read-modify-write of the whole KB (last-write-
+     * wins, same as the normal KB PATCH): a *different* line added concurrently
+     * between this read and write could be lost. Acceptable here because cleanup
+     * fires right after an import in the same session (tiny window); a
+     * kbVersion compare-and-set across the whole KB-edit surface is the proper
+     * follow-up, not a cleanup-only bolt-on.
      *
      * Reuses updatePage (validation / ingestion / activation) but passes
      * skipGapResolution so the «سألها N عملاء» backlog survives — a cleanup
@@ -528,6 +536,11 @@ export class PagesController {
 
         if (!Array.isArray(lines) || lines.some((l) => typeof l !== 'string')) {
             return reply.status(400).send({ error: 'Body must be { lines: string[] } — the exact KB lines to remove' });
+        }
+        // Defensive cap: a real KB has at most a few dozen lines; a payload larger
+        // than this is a client bug, not a legitimate cleanup.
+        if (lines.length > MAX_CLEANUP_LINES) {
+            return reply.status(400).send({ error: `Too many lines (max ${MAX_CLEANUP_LINES})`, code: 'TOO_MANY_LINES' });
         }
 
         try {
@@ -568,6 +581,13 @@ export class PagesController {
             if (!updated) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
+
+            // Audit trail: this mutation REMOVES merchant content, so leave a record
+            // that lets a "you deleted the wrong line" report be reconstructed.
+            request.log.info(
+                { pageId: id, workspaceId: req.workspaceId, removed: indices.length },
+                '[Pages] KB cleanup removed merchant-confirmed lines',
+            );
 
             return reply.send({ ...serializePage(updated), cleanup: { removed: indices.length } });
         } catch (error) {

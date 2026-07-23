@@ -10,7 +10,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import {
   matchCatalogLinesInKb,
   matchStructuredFieldLinesInKb,
-  unwrapBusinessProfile,
+  presentFieldsFromProfile,
   type CatalogItem,
   type StoredBusinessProfile,
 } from '@jawab24/shared';
@@ -53,23 +53,20 @@ export function KbCleanupSheet({ pageId, kbText, items, profile, onDone, onClose
   // Build the proposal list once. A line matched as BOTH a product and a field
   // is shown once, as a product (the higher-confidence, pre-checked reason).
   const proposals = useMemo<Proposal[]>(() => {
-    const productLines = matchCatalogLinesInKb(kbText, items.map((i) => ({ id: i.id, name: i.name })));
-    const productSet = new Set(productLines.map((m) => m.line));
+    // CatalogItem is structurally a CatalogMatchItem ({id,name,...}) — pass items
+    // directly. presentFieldsFromProfile unwraps the {merchant,suggestions}
+    // container and reads the authoritative fields (shared with CatalogManager).
+    const productLines = matchCatalogLinesInKb(kbText, items);
+    const fieldLines = matchStructuredFieldLinesInKb(kbText, presentFieldsFromProfile(profile));
 
-    // The API serves businessProfile as the {merchant, suggestions} CONTAINER;
-    // the authoritative fields live under `merchant`. Unwrap before reading.
-    const merchant = unwrapBusinessProfile(profile).merchant ?? {};
-    const fieldLines = matchStructuredFieldLinesInKb(kbText, {
-      address: !!merchant.address?.trim(),
-      phone: !!(merchant.phones && merchant.phones.length > 0),
-      hours: !!(merchant.hours && Object.keys(merchant.hours).length > 0),
-    });
-
-    const out: Proposal[] = productLines.map((m) => ({ line: m.line, kind: 'product' as const }));
-    for (const f of fieldLines) {
-      if (!productSet.has(f.line)) out.push({ line: f.line, kind: 'field' });
-    }
-    return out;
+    // De-dupe by line TEXT: the endpoint removes by exact text, so all copies of
+    // a duplicated line go together → one row per unique line (no React key
+    // collision, no shared-checkbox confusion). Product kind wins over field
+    // (higher confidence, pre-checked) since products are inserted first.
+    const byText = new Map<string, Proposal>();
+    for (const m of productLines) if (!byText.has(m.line)) byText.set(m.line, { line: m.line, kind: 'product' });
+    for (const f of fieldLines) if (!byText.has(f.line)) byText.set(f.line, { line: f.line, kind: 'field' });
+    return [...byText.values()];
   }, [kbText, items, profile]);
 
   // Selection: products start checked, field lines start unchecked.
