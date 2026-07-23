@@ -245,6 +245,10 @@ export const DEMO_PAGES = [
         // any correct price answer proves the <product_catalog> prompt path, and the
         // price guard's grounding on that block. Named to dodge every other page's
         // name pattern in playground-eval.ts (no متجر/معهد/مدارس/عيادة/أزياء/دمشقي).
+        // TWO deliberate exceptions (Cat 67, catalog-authority): the KB tail carries a
+        // STALE price for زيت موتول (18 — catalog says 22; the v55 authority rule must
+        // make the catalog win) and one KB-ONLY priced item (حامل جوال 35 — not in the
+        // catalog; must still be answered from KB). Don't "clean these up".
         facebookPageId: 'demo_page_motoshop',
         name: 'معرض المجد للموتوسيكلات',
         suggestedKnowledgeBase: `🏍️ معرض المجد للموتوسيكلات وقطع الغيار
@@ -257,9 +261,25 @@ export const DEMO_PAGES = [
 السبت - الخميس: 9 صباحاً - 10 مساءً
 الجمعة: مغلق
 
-نوفر قطع غيار أصلية وصيانة معتمدة لجميع أنواع الموتوسيكلات، وبيع موتوسيكلات مستعملة بحالة ممتازة.`,
+نوفر قطع غيار أصلية وصيانة معتمدة لجميع أنواع الموتوسيكلات، وبيع موتوسيكلات مستعملة بحالة ممتازة.
+
+عرض سابق: زيت محرك موتول 20W-50 بسعر 18 ريال فقط.
+حامل جوال للمقود متوفر بسعر 35 ريال.`,
         autoReplyEnabled: true,
         instagramUsername: null,
+        // Cat 67, second conflict axis: the KB text above still carries the OLD
+        // address (حي العزيزية — the shop moved) while the merchant-confirmed
+        // field below carries the CURRENT one. Case 411 asserted "structured
+        // beats stale KB" for years but its own comment admitted it only ever
+        // tested the AGREEING case; this fixture finally makes them DISAGREE so
+        // the precedence is proven, not assumed. Don't "fix" the mismatch.
+        businessProfile: {
+            merchant: {
+                address: 'الرياض، حي النسيم، طريق الدائري الشرقي',
+                city: 'الرياض',
+            },
+            suggestions: {},
+        },
     },
     {
         // CART-TOTALS fixture (playground-eval Cat 68, prompt v56). Anonymized
