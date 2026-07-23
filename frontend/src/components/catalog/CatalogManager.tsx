@@ -9,11 +9,13 @@ import { Button, EmptyState, Select, Skeleton, ConfirmationModal } from '@/compo
 import { catalogApi, type CatalogItemInput, type CatalogVerticalInfo } from '@/lib/api';
 import {
   CATALOG_VERTICALS, CATALOG_VERTICAL_DEFAULT_TYPE, MAX_CATALOG_ITEMS_PER_PAGE,
+  matchCatalogLinesInKb, matchStructuredFieldLinesInKb, unwrapBusinessProfile,
   type CatalogItem, type CatalogVertical, type Page,
 } from '@jawab24/shared';
 import { CatalogItemRow } from './CatalogItemRow';
 import { CatalogItemFormSheet } from './CatalogItemFormSheet';
 import { CatalogImportSheet } from './CatalogImportSheet';
+import { KbCleanupSheet } from './KbCleanupSheet';
 
 const TestSmartReplyModal = dynamic(
   () => import('@/components/test-smart-reply/TestSmartReplyModal').then((m) => ({ default: m.TestSmartReplyModal })),
@@ -45,6 +47,8 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
   const [sheetMode, setSheetMode] = useState<'paste' | 'scan' | null>(null);
   /** Prefilled question for the post-save "try it" moment (null = modal closed). */
   const [tryItQuestion, setTryItQuestion] = useState<string | null>(null);
+  /** Phase C: fresh items to offer KB cleanup against (null = sheet closed). */
+  const [cleanupItems, setCleanupItems] = useState<CatalogItem[] | null>(null);
 
   // Deep-link entry: open the import sheet once when the page asks for it.
   useEffect(() => {
@@ -286,9 +290,35 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
           mode={sheetMode}
           defaultCurrency={lastCurrency}
           initialText={importRequested ? importInitialText : undefined}
-          onDone={(count, firstItemName) => {
+          onDone={async (count, firstItemName) => {
             invalidate();
             setSheetMode(null);
+
+            // Phase C: if the imported products still have their old free-text
+            // lines in Business Info (or a structured field is duplicated in the
+            // narrative — bug #720), offer to remove them. Fetch fresh items so
+            // the just-imported ones are matched. Non-blocking; failure falls
+            // through to the normal success toast.
+            const kb = page?.knowledgeBase?.trim();
+            if (kb) {
+              try {
+                const fresh = (await catalogApi.list(pageId).then((r) => r.data?.data)) ?? [];
+                const merchant = unwrapBusinessProfile(page?.businessProfile).merchant ?? {};
+                const hasProductLines = matchCatalogLinesInKb(kb, fresh.map((i) => ({ id: i.id, name: i.name }))).length > 0;
+                const hasFieldLines = matchStructuredFieldLinesInKb(kb, {
+                  address: !!merchant.address?.trim(),
+                  phone: !!(merchant.phones && merchant.phones.length > 0),
+                  hours: !!(merchant.hours && Object.keys(merchant.hours).length > 0),
+                }).length > 0;
+                if (hasProductLines || hasFieldLines) {
+                  setCleanupItems(fresh);
+                  return; // the cleanup sheet is the next step; its own onDone toasts
+                }
+              } catch {
+                // ignore — cleanup is an offer, never a blocker
+              }
+            }
+
             // The value proof, zero effort: right after saving, offer to SEE
             // the AI answer a price question about their own product. Only
             // when the host gave us the page (the modal needs it).
@@ -305,6 +335,21 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
             }
           }}
           onClose={() => setSheetMode(null)}
+        />
+      )}
+
+      {page?.knowledgeBase && cleanupItems && (
+        <KbCleanupSheet
+          pageId={pageId}
+          kbText={page.knowledgeBase}
+          items={cleanupItems}
+          profile={page.businessProfile}
+          onClose={() => setCleanupItems(null)}
+          onDone={(removed) => {
+            setCleanupItems(null);
+            invalidate();
+            toast.success(removed > 0 ? t('cleanup.toastDone', { count: removed }) : t('import.toastImported', { count: cleanupItems.length }));
+          }}
         />
       )}
 

@@ -172,6 +172,9 @@ export const pagesApi = {
     api.post('/pages/sync', accessToken ? { accessToken } : undefined, { timeout: LONG_RUNNING_TIMEOUT }),
   getKbGaps: (pageId: string) => api.get(`/pages/${pageId}/kb-gaps`),
   dismissGap: (pageId: string, gapId: string) => api.post(`/pages/${pageId}/kb-gaps/${gapId}/dismiss`),
+  // Phase C: remove merchant-confirmed KB lines that moved to the catalog or
+  // duplicate a structured field. `lines` are the EXACT line texts to remove.
+  cleanupKb: (pageId: string, lines: string[]) => api.post(`/pages/${pageId}/kb/cleanup`, { lines }),
   // Per-page lead-config override. For each slice: null reverts to the workspace
   // default; an omitted key leaves it unchanged; a value is a full override.
   updateLeadConfig: (id: string, data: { leadStages?: LeadStagesConfig | null; leadFields?: LeadCustomFieldDef[] | null }) =>
