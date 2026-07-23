@@ -254,7 +254,29 @@ AUDIT_FAILED=false
 # disproportionate churn documented for GHSA-3jxr above, immediately before a deploy. Fold the
 # bump into the next broad dependency refresh and drop these two entries then. Revisit sooner if
 # any runtime path ever parses attacker-supplied URIs through ajv.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww|GHSA-f88m-g3jw-g9cj|GHSA-4c8g-83qw-93j6|GHSA-v2hh-gcrm-f6hx"
+#
+# ── Next.js 15.5.x advisory cluster (added 2026-07-23) ──────────────────────────
+# Nine high-severity advisories published against next@15.5.x + a build-time postcss.
+# There is NO stable patch in the 15.5.x line (15.5.21 is the latest and does not clear
+# them); the only fix is a Next 16.x MAJOR upgrade. `npm audit fix` proposes next@9.3.3
+# (a catastrophic downgrade) — never run it. Fold the real fix into a planned Next 16
+# migration and drop these entries then. Reachability against OUR app (pages-router):
+# GHSA-89xv, GHSA-955p, GHSA-m99w, GHSA-4c39 — Server Actions / App Router advisories.
+#   We have NO App Router (`ls frontend/src/app` → none), NO Server Actions (no `'use server'`),
+#   and NO custom server (`next start`, GHSA-89xv is "…on custom servers"). Features absent.
+# GHSA-p9j2 — SSRF via attacker-controlled rewrite DESTINATION hostname. Our next.config
+#   rewrites resolve to fixed INTERNAL paths (`/`, `/api/indexnow-key?key=:indexnowKey`);
+#   no rewrite destination is attacker-controllable to an external host.
+# GHSA-q8wf — DoS in the Image Optimization API via SVG. `dangerouslyAllowSVG` is UNSET,
+#   so next/image refuses to optimize SVGs at all; `images.remotePatterns` is ui-avatars.com
+#   only (no untrusted/merchant image source). Unreachable.
+# GHSA-6g55 — postcss arbitrary file read via sourceMappingURL in CSS comments. Build-time
+#   CSS tooling (tailwind/autoprefixer); no runtime path — same rationale as GHSA-qx2v above.
+# GHSA-68g3, GHSA-4633 — Next.js cache confusion of response bodies for requests WITH bodies.
+#   Lowest-confidence of the set: framework-internal response caching. Our app caches no
+#   body-keyed responses (the only POST route, /api/revalidate, is an auth'd mutation that
+#   is never cached; pages are getStaticProps). Re-verify at the Next 16 upgrade.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww|GHSA-f88m-g3jw-g9cj|GHSA-4c8g-83qw-93j6|GHSA-v2hh-gcrm-f6hx|GHSA-4633-3j49-mh5q|GHSA-4c39-4ccg-62r3|GHSA-68g3-v927-f742|GHSA-6g55-p6wh-862q|GHSA-89xv-2m56-2m9x|GHSA-955p-x3mx-jcvp|GHSA-m99w-x7hq-7vfj|GHSA-p9j2-gv94-2wf4|GHSA-q8wf-6r8g-63ch"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
