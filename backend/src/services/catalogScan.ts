@@ -1,8 +1,8 @@
 import axios from 'axios';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { MAX_CATALOG_IMPORT_CHARS } from '@jawab24/shared';
 import { db } from '../db';
-import { pages, catalogItems } from '../db/schema';
+import { pages, catalogItems, posts } from '../db/schema';
 import { facebookService } from './facebook';
 import { extractFromImage } from './kb/file-extractor';
 import { catalogExtractor, type CatalogExtractionResult } from './catalogExtractor';
@@ -54,6 +54,25 @@ export interface CatalogScanResult extends CatalogExtractionResult {
     /** No posts newer than the last scan's bookmark. */
     upToDate: boolean;
 }
+
+export interface CatalogPostReplyScanResult extends CatalogExtractionResult {
+    /** Post Reply configs fed to the extractor. */
+    repliesScanned: number;
+    /** The page has NO Post Reply configured — the presence gate is closed, so
+     *  the caller should not surface the "import from your post replies" action. */
+    noPostReplies: boolean;
+}
+
+/** Cap on how much of a post's own text we prepend as context for its reply —
+ *  the offering+price lives in the REPLY; the post is only there to name the
+ *  product. Keeps the combined input focused (and under MAX_CATALOG_IMPORT_CHARS). */
+const POST_CONTEXT_MAX_CHARS = 400;
+
+/** Upper bound on Post Reply rows fetched per scan. Newest-first + the 16k char
+ *  cap already mean only the freshest ~40-80 replies reach the model; this
+ *  bounds the DB fetch itself so a page with thousands of posts can't load them
+ *  all into memory to use a fraction. */
+const MAX_POST_REPLIES_SCAN = 200;
 
 /** Only fetch images from Meta's CDNs — the URLs come from the Graph API, but
  *  a compromised/odd payload must not turn this into a generic URL fetcher. */
@@ -192,6 +211,83 @@ export class CatalogScanService {
             });
             return null;
         }
+    }
+
+    /**
+     * Scan the page's configured Post Reply auto-replies into proposed catalog
+     * items. Unlike scanPosts this needs NO Facebook call — the reply text lives
+     * in our own `posts.trigger_reply`, so it works even for a page whose token
+     * has since expired. Nothing is persisted (same merchant-in-the-loop
+     * contract as scanPosts / catalogExtractor).
+     *
+     * Presence-gated by design (owner decision 2026-07-24): post-reply richness
+     * is concentrated in a few merchants (courses/training vertical). A page with
+     * no Post Reply returns noPostReplies:true so the caller hides the action.
+     *
+     * No re-scan bookmark: post-replies are few and the merchant edits them
+     * (offers rotate), so a full re-scan each time is cheap and correct — the
+     * review sheet is where the merchant reconciles against the existing catalog.
+     */
+    async scanPostReplies(
+        workspaceId: string,
+        pageId: string,
+        ctx: { userId: string },
+    ): Promise<CatalogPostReplyScanResult | null> {
+        const [page] = await db
+            .select({
+                id: pages.id,
+                ecommerceStoreId: pages.ecommerceStoreId,
+                catalogVertical: pages.catalogVertical,
+                businessProfile: pages.businessProfile,
+            })
+            .from(pages)
+            .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+            .limit(1);
+        if (!page) return null;
+        if (page.ecommerceStoreId) throw new CatalogStoreConflictError();
+
+        const rows = await db
+            .select({
+                message: posts.message,
+                triggerReply: posts.triggerReply,
+                createdTime: posts.createdTime,
+            })
+            .from(posts)
+            .where(and(
+                eq(posts.pageId, pageId),
+                isNotNull(posts.triggerReply),
+                sql`length(trim(${posts.triggerReply})) > 0`,
+            ))
+            // Newest-first so the freshest offers survive the char cap; NULLS LAST
+            // keeps undated legacy rows from crowding out real recent ones.
+            .orderBy(sql`${posts.createdTime} DESC NULLS LAST`)
+            .limit(MAX_POST_REPLIES_SCAN);
+
+        if (rows.length === 0) {
+            return { items: [], dropped: 0, truncated: false, failed: false, repliesScanned: 0, noPostReplies: true };
+        }
+
+        // Pair each reply with its post text (product name) so the extractor can
+        // map "الكلفة 25 ألف" to "كورس المكياج". The price lives in the REPLY.
+        const blocks = rows.map((r) => {
+            const date = r.createdTime ? r.createdTime.toISOString().slice(0, 10) : 'unknown date';
+            const post = r.message?.trim();
+            const postLine = post ? `\nPOST: ${post.slice(0, POST_CONTEXT_MAX_CHARS)}` : '';
+            // triggerReply is non-null + non-blank by the query filter; `?? ''` only
+            // satisfies the type-narrower without a forbidden non-null assertion.
+            return `POST REPLY (${date}):${postLine}\nREPLY: ${(r.triggerReply ?? '').trim()}`;
+        });
+        const combined = blocks.join('\n\n---\n\n').slice(0, MAX_CATALOG_IMPORT_CHARS);
+
+        const vertical = resolveCatalogVertical(page.catalogVertical, page.businessProfile as StoredBusinessProfile);
+        const result = await catalogExtractor.extract(combined, {
+            userId: ctx.userId,
+            pageId,
+            vertical: vertical.effective,
+            source: 'post_reply',
+        });
+
+        return { ...result, repliesScanned: rows.length, noPostReplies: false };
     }
 
     private async advanceBookmark(pageId: string, newestCreatedTime: string | null): Promise<void> {

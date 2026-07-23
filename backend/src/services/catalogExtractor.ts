@@ -44,8 +44,11 @@ export interface CatalogExtractionCtx {
     vertical?: CatalogVertical;
     /** Where the text came from. 'posts' (the page scan) adds framing so
      *  promo captions/contests are skipped but the promoted offering — usually
-     *  priceless by design ("comment for the price") — is still emitted. */
-    source?: 'paste' | 'posts';
+     *  priceless by design ("comment for the price") — is still emitted.
+     *  'post_reply' (the Post Reply scan) frames the input as the merchant's own
+     *  configured auto-replies — the highest-intent, merchant-authored answers,
+     *  and the place the withheld price actually lives. */
+    source?: 'paste' | 'posts' | 'post_reply';
 }
 
 /** Raw JSON shape the model is asked to return (pre-validation). */
@@ -107,6 +110,9 @@ export class CatalogExtractor {
         }
         if (ctx.source === 'posts') {
             hints.push('- The input is a series of the merchant\'s recent Facebook posts (each may include text read from its images). Contest announcements, greetings, and engagement bait ("comment/DM for the price") are NOT offerings — but the specific product/course/vehicle a post promotes IS one. Posts often withhold the price on purpose: emit such items with "price": null, never invent one.');
+        }
+        if (ctx.source === 'post_reply') {
+            hints.push('- The input is the merchant\'s own configured Post Reply auto-replies — the private message they send to a customer who comments on a specific post — each shown with the post it belongs to. These are the merchant\'s authoritative answers to customers, and usually the place the post\'s withheld price is actually stated. Extract the offering(s) and the exact price(s) stated. A reply that is only a greeting, a phone number, an address, or "visit us to register" with NO offering is NOT an item — skip it. Prices here are frequently limited-time offers ("سعر العرض", "فترة العرض"): extract the price exactly as written, do not annotate it as an offer and do not invent an expiry.');
         }
         if (hints.length === 0) return CATALOG_EXTRACTION_PROMPT;
         return CATALOG_EXTRACTION_PROMPT.replace('\nInput:\n', `${hints.join('\n')}\n\nInput:\n`);

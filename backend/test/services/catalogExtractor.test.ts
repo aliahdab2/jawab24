@@ -272,4 +272,23 @@ describe('catalogExtractor', () => {
         expect(attrs[0]).toEqual({ label: 'المدة', value: '٦ أسابيع' });
         expect(attrs[1]).toEqual({ label: 'سنة', value: '2019' });
     });
+
+    describe('source framing', () => {
+        const promptSent = () => openaiCreateMock.mock.calls[0][0].messages[0].content as string;
+
+        it('source "post_reply" adds the auto-reply framing hint', async () => {
+            mockReply({ items: [] });
+            await catalogExtractor.extract('POST REPLY (2026-07-24):\nREPLY: الكلفة 25 ألف', { ...CTX, source: 'post_reply' });
+            const prompt = promptSent();
+            expect(prompt).toContain('configured Post Reply auto-replies');
+            // it must instruct extracting the stated price and skipping bare CTAs
+            expect(prompt).toContain('Extract the offering(s) and the exact price(s) stated');
+        });
+
+        it('paste (no source) does NOT include the post_reply framing — the hint is opt-in', async () => {
+            mockReply({ items: [] });
+            await catalogExtractor.extract('x', CTX);
+            expect(promptSent()).not.toContain('configured Post Reply auto-replies');
+        });
+    });
 });

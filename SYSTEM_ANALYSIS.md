@@ -1043,7 +1043,14 @@ mode `dual`) exists only in the workspace store while the legacy columns default
 > recent FB posts incl. full-res attachment images via Vision, extracts
 > proposals; a per-page bookmark `pages.catalog_scan_last_post_time` makes
 > re-scans propose only NEW posts, and the bookmark only advances when the
-> AI call succeeded), **bulk import** (paste a price list / upload a file →
+> AI call succeeded), **post-reply scan** (`POST /pages/:id/catalog/scan-post-replies`
+> — reads the merchant's configured Post Reply auto-replies (`posts.trigger_reply`,
+> DB-only: no Graph/Vision, works even on a dead token), the place the price a post
+> withholds actually lives; presence-gated (`noPostReplies` when none) so it surfaces
+> only for merchants who use Post Reply — concentrated in the courses/training
+> vertical; each reply paired with its post text for product context; see D-038 —
+> proposes into the same review sheet, inert until update-vs-add reconciliation exists),
+> **bulk import** (paste a price list / upload a file →
 > extract proposals), and manual add. All paths land in one review sheet
 > shaped as a PRICE-COMPLETION step: merchants deliberately keep prices out
 > of public posts (comment-bait), so proposals arrive priceless and the

@@ -39,6 +39,14 @@ export default async function catalogRoutes(fastify: FastifyInstance) {
             config: { rateLimit: { max: 2, timeWindow: '1 minute' } },
         }, catalogController.scanPosts.bind(catalogController));
 
+        // Post Reply scan — one extraction call over the merchant's own
+        // configured auto-replies (no Graph/Vision), presence-gated in the
+        // controller. Same "scan gesture" rate limit as scan-posts.
+        adminRoutes.post('/pages/:pageId/catalog/scan-post-replies', {
+            schema: { tags: ['Catalog'], summary: "Read the page's Post Reply auto-replies into proposed catalog items (no persistence)", security: auth },
+            config: { rateLimit: { max: 2, timeWindow: '1 minute' } },
+        }, catalogController.scanPostReplies.bind(catalogController));
+
         adminRoutes.post('/pages/:pageId/catalog/batch', {
             schema: { tags: ['Catalog'], summary: 'Create multiple catalog items in one transaction', security: auth },
         }, catalogController.batchCreate.bind(catalogController));
