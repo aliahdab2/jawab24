@@ -52,12 +52,15 @@ export interface ToolEnabledResponse {
 
 // --- OpenAI Tool Definitions (5 tools: 3 Phase-1 + 2 Phase-2) ---
 
-const ECOMMERCE_TOOLS: OpenAI.ChatCompletionTool[] = [
+// Exported for the CI guard in test/ecommerceToolHandler.test.ts — the order
+// tools' SCOPING (specific-order only, general delivery questions answered from
+// [store_policies]) is load-bearing behaviour, not cosmetic wording.
+export const ECOMMERCE_TOOLS: OpenAI.ChatCompletionTool[] = [
     {
         type: 'function',
         function: {
             name: 'lookup_order',
-            description: 'Check if an order exists by order number. Returns a verification challenge — you must then ask the customer for their name or phone and call verify_and_get_order.',
+            description: 'Check if a SPECIFIC existing order exists by its order number. Returns a verification challenge — you must then ask the customer for their name or phone and call verify_and_get_order. Use this ONLY when the customer refers to a particular order they already placed (they give an order number, or clearly mean their own order). Do NOT use it for a GENERAL question about delivery times, shipping cost, or the shipping policy ("how long does delivery take?", "when do orders usually arrive?") — answer those from [store_policies] in the prompt, then offer to check their specific order if they give the order number.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -74,7 +77,7 @@ const ECOMMERCE_TOOLS: OpenAI.ChatCompletionTool[] = [
         type: 'function',
         function: {
             name: 'track_shipment',
-            description: 'Check if a shipment exists for an order. Returns a verification challenge — you must then ask the customer for their name or phone and call verify_and_get_shipment.',
+            description: 'Check if a shipment exists for a SPECIFIC existing order. Returns a verification challenge — you must then ask the customer for their name or phone and call verify_and_get_shipment. Use this ONLY when the customer is tracking a particular order they already placed. Do NOT use it for a GENERAL question about how long delivery takes or the shipping policy — answer those from [store_policies] in the prompt, then offer to track their specific order if they give the order number.',
             parameters: {
                 type: 'object',
                 properties: {
