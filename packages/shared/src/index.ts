@@ -1052,9 +1052,12 @@ export {
 // patches within the hour — the marker-list treadmill). The model now answers it itself:
 // new structured flag `self_identified_as_automation` (set only when the reply describes
 // the RESPONDER as automated, never for product AI features); the validator strips the
-// ambiguous AI vocabulary only when that flag is set, keeps the lexically-decisive tokens
-// (بوت/روبوت/chatbot/Jawab24) unconditional, and records every swap with a validator-added
-// `self_identification_stripped` flag so Check 6 activity is finally observable in prod.
+// ambiguous vocabulary (AI terms + روبوت — robot vacuums are PRODUCTS) only when that flag
+// is set, keeps truly decisive strings unconditional (brand, "chatbot", EN "bot" outside
+// "robot", plus a closed MSA/English first-person tripwire «أنا روبوت»/"I'm a bot" — owned,
+// bounded, never dialect-extended: dialect reveals ride the flag), and records every swap
+// with a validator-added `self_identification_stripped` flag — deliberately merchant-visible
+// (flag_reason chip + needs-attention + cache-blocked), never a silent mutation again.
 export const PROMPT_VERSION = 'v59';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */

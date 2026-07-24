@@ -33,7 +33,8 @@ export type CacheRejectReason =
     | 'low_confidence'
     | 'info_not_in_kb'
     | 'price_not_in_kb'
-    | 'language_mismatch';
+    | 'language_mismatch'
+    | 'self_identification_stripped';
 
 /**
  * Flags that block caching, in priority order (first tripped wins — mirrors
@@ -51,6 +52,10 @@ const REJECT_FLAGS: readonly CacheRejectReason[] = [
     'info_not_in_kb',
     'price_not_in_kb',
     'language_mismatch',
+    // Check 6 swapped the reply (often to a generic self-id fallback) — caching
+    // that against the customer's actual question would serve the wrong answer
+    // for 30 days (#495 review L2).
+    'self_identification_stripped',
 ];
 
 /**

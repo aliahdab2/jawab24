@@ -1256,6 +1256,26 @@ describe('computeReplyFlags', () => {
             expect(computeNeedsAttention(flags, normalizedIntent)).toBe(true);
         });
 
+        // Check 6 identity flags (v59, #495 review H2): merchant visibility is
+        // DELIBERATE — a reply the validator swapped (or a model-reported reveal
+        // our vocabulary missed) is exactly what a merchant should review. These
+        // pin that the flags survive computeReplyFlags and trip needsAttention.
+        it('self_identification_stripped survives to flag_reason and needs attention (deliberate)', () => {
+            const { flags, normalizedIntent } = computeReplyFlags({
+                ...baseOpts, intent: 'QUESTION', aiFlags: ['self_identification_stripped'],
+            });
+            expect(flags).toContain('self_identification_stripped');
+            expect(computeNeedsAttention(flags, normalizedIntent)).toBe(true);
+        });
+
+        it('self_identified_as_automation needs attention even when nothing was stripped (reveal may have shipped)', () => {
+            const { flags, normalizedIntent } = computeReplyFlags({
+                ...baseOpts, intent: 'QUESTION', aiFlags: ['self_identified_as_automation'],
+            });
+            expect(flags).toContain('self_identified_as_automation');
+            expect(computeNeedsAttention(flags, normalizedIntent)).toBe(true);
+        });
+
         it('returns replyShortened=false when the marker is absent', () => {
             const { replyShortened } = computeReplyFlags({ ...baseOpts, aiFlags: ['low_confidence'] });
             expect(replyShortened).toBe(false);

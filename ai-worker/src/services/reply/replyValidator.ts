@@ -302,19 +302,28 @@ export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
  * only if fewer than 10 useful characters remain.
  *
  * Two vocabulary classes (v59):
- * - Lexically DECISIVE tokens (بوت/روبوت/chatbot/Jawab24) — no legitimate product
- *   sentence contains them; the regex strips them unconditionally.
- * - AMBIGUOUS AI vocabulary («ذكاء اصطناعي», "artificial intelligence") — ordinary
- *   product language (phone cameras, TVs, "Galaxy AI"). "Who is the AI in this
- *   sentence?" is a MEANING question no regex or marker list can answer (a pronoun
- *   heuristic was tried and needed dialect patches within the hour — the treadmill
- *   the no-hand-maintained-linguistic-lists rule exists to prevent). The model
- *   answers it itself via the structured `self_identified_as_automation` flag
- *   (same pattern as the gender/dialect self-reports); `selfReported` carries it.
+ * - Lexically DECISIVE strings, stripped unconditionally: the platform brand,
+ *   "chatbot", English "bot" outside "robot" — plus a closed TRIPWIRE of literal
+ *   first-person claims («أنا روبوت», «أنا ذكاء اصطناعي», "I'm a bot"). The
+ *   tripwire is an OWNED, bounded list — MSA + English only, the registers a
+ *   disobeying model actually emits — and is deliberately NEVER extended with
+ *   dialect variants (آني روبوت etc. go through the flag below); extending it
+ *   would recreate the marker-list treadmill the
+ *   no-hand-maintained-linguistic-lists rule exists to prevent.
+ * - AMBIGUOUS vocabulary («ذكاء اصطناعي», "artificial intelligence", روبوت —
+ *   robot vacuums are PRODUCTS) — ordinary product language. "Who is the AI in
+ *   this sentence?" is a MEANING question no regex can answer; the model answers
+ *   it via the structured `self_identified_as_automation` flag (same pattern as
+ *   the gender/dialect self-reports); `selfReported` carries it. Residual,
+ *   accepted with visibility: a model FALSE-POSITIVE flag on a product-AI reply
+ *   re-creates a #236-style swap — but every swap is flagged, needs-attention,
+ *   and cache-blocked, so it is seen, not silent.
  *
- * Returns `stripped` so the caller can record that a swap happened — Check 6
- * mutated replies silently for months, which is exactly why the #236 bug
- * (product specs nuked to the fallback pool) went undetected.
+ * Returns `stripped` so the caller records the swap as
+ * `self_identification_stripped` — DELIBERATELY merchant-visible (flag_reason
+ * chip + needs-attention): a substituted reply is exactly what a merchant
+ * should review. Check 6 mutated replies silently for months, which is why the
+ * #236 bug went undetected.
  */
 export function stripSelfIdentification(
     reply: string,
@@ -334,7 +343,7 @@ export function stripSelfIdentification(
     const botWords = /(?<!ro)bot\b|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24|(?:أنا|انا) (?:روبوت|بوت|ذكاء اصطناعي)|I(?:['’]m| am) (?:a |an )?(?:bot|robot|AI)\b/i;
     // Ambiguous vocabulary — ordinary product language until the model's own
     // report says the reply identifies ITSELF as automated.
-    const aiWords = /ذكاء اصطناعي|الذكاء الاصطناعي|artificial intelligence|روبوت/i;
+    const aiWords = /ذكاء (?:ال)?[اإ]صطناعي|artificial intelligence|روبوت/i;
     const offending = (text: string): boolean =>
         botWords.test(text) || (selfReported && aiWords.test(text));
     if (!offending(reply)) {
