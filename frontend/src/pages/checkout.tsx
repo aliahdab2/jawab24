@@ -336,11 +336,13 @@ function CheckoutPage() {
         setIntentType(response.data.type);
       }
     } catch (err: unknown) {
-      captureError(err, 'Checkout error', { tags: { page: 'checkout', action: 'create-session', mode: isTopup ? 'topup' : 'subscription' } });
-
       const axiosErr = err as { response?: { data?: { code?: string; error?: string | boolean; message?: string } } };
       const errorData = axiosErr.response?.data;
 
+      // Expected, non-error server responses are handled below and must NOT be
+      // reported to Sentry — captureError runs only after these short-circuits,
+      // so a sanctioned geo, a required email, a tripped kill-switch, or the
+      // demo-account block don't spam the error tracker.
       if (errorData?.code === 'SANCTIONED_GEO_BLOCK' || errorData?.code === 'GEO_VERIFICATION_REQUIRED') {
         setIsSanctioned(true);
         return;
@@ -359,6 +361,16 @@ function CheckoutPage() {
         router.push(`/complete-profile?redirect=${encodeURIComponent(returnUrl)}`);
         return;
       }
+
+      // The shared public demo account is deliberately blocked from Stripe on
+      // the backend (DemoUserStripeError → 403). Show honest feedback instead
+      // of the generic failure banner, and don't treat it as an error.
+      if (errorData?.code === 'DEMO_USER_STRIPE_BLOCKED') {
+        setError(t('errorDemoAccount'));
+        return;
+      }
+
+      captureError(err, 'Checkout error', { tags: { page: 'checkout', action: 'create-session', mode: isTopup ? 'topup' : 'subscription' } });
 
       const axiosCode = (err as { code?: string }).code;
       const isNetwork = axiosCode === 'ERR_NETWORK' || axiosCode === 'ECONNABORTED';

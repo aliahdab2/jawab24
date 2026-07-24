@@ -6,6 +6,7 @@ import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-libra
 import { useRouter } from 'next/router';
 import CheckoutPage from '@/pages/checkout';
 import { useAuthStore } from '@/lib/store';
+import { captureError } from '@/lib/sentryHelpers';
 
 // Mock modules
 vi.mock('next/router', () => ({ useRouter: vi.fn() }));
@@ -284,6 +285,47 @@ describe('CheckoutPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Card declined')).toBeInTheDocument();
     });
+  });
+
+  // The shared public demo account is deliberately blocked from Stripe on the
+  // backend (DemoUserStripeError → 403 DEMO_USER_STRIPE_BLOCKED). The page must
+  // show honest feedback and must NOT report the expected block to Sentry
+  // (regression: captureError used to fire unconditionally at the top of the
+  // catch, spamming the error tracker for every demo visit to /checkout).
+  it('shows a friendly message and does not report to Sentry on DEMO_USER_STRIPE_BLOCKED', async () => {
+    mockApiPost.mockRejectedValue({
+      response: { data: { code: 'DEMO_USER_STRIPE_BLOCKED' } },
+    });
+
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'This is a demo account, so purchases are disabled. Create your own account to subscribe.'
+        )
+      ).toBeInTheDocument();
+    });
+
+    expect(vi.mocked(captureError)).not.toHaveBeenCalled();
+  });
+
+  it('reports genuinely unexpected checkout failures to Sentry', async () => {
+    mockApiPost.mockRejectedValue({
+      response: { data: { error: 'Card declined' } },
+    });
+
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Card declined')).toBeInTheDocument();
+    });
+
+    expect(vi.mocked(captureError)).toHaveBeenCalledWith(
+      expect.anything(),
+      'Checkout error',
+      expect.objectContaining({ tags: expect.objectContaining({ action: 'create-session' }) })
+    );
   });
 
   // ─── Runaway retry-loop regression ─────────────────────
