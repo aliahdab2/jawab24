@@ -254,6 +254,30 @@ AUDIT_FAILED=false
 # disproportionate churn documented for GHSA-3jxr above, immediately before a deploy. Fold the
 # bump into the next broad dependency refresh and drop these two entries then. Revisit sooner if
 # any runtime path ever parses attacker-supplied URIs through ajv.
+# GHSA-83w8-p2f5-377r, GHSA-8pvw-jcv7-9cmj — @fastify/static route-guard bypass via
+# non-leading `..`/`%2E%2E` segments, and allowedPath bypass via non-canonical paths
+# (`//file`, `/./file`) — both high, added 2026-07-24. Neither escapes the served root;
+# both only defeat a security boundary (route-based guards / allowedPath callback)
+# protecting files under it. Reachability: our ONLY @fastify/static instance is the one
+# @fastify/swagger-ui registers internally (backend/src/plugins/swagger.ts → swagger-ui
+# lib/routes.js) serving its own bundled public dist assets under /docs/static — no
+# baseDir, no allowedPath, no route guards on those files, nothing under the root is
+# access-restricted. With no boundary to bypass, the vulnerable paths are unreachable.
+# NOT fixable in range: every 9.x is affected (patches are 10.1.1/10.1.2 only) and even
+# the latest @fastify/swagger-ui (6.1.0) still pins @fastify/static ^9, so the fix needs
+# a root override above the declared range + full lockfile regeneration under
+# --legacy-peer-deps — the same disproportionate churn documented for fast-uri above.
+# Fold into the next broad dependency refresh (or a swagger-ui release adopting
+# static@10) and drop these entries then. Revisit IMMEDIATELY if we ever register
+# @fastify/static directly, pass baseDir to swagger-ui, or add auth guards on /docs.
+# GHSA-r28c-9q8g-f849 — postcss path traversal via sourceMappingURL auto-loading →
+# arbitrary .map file disclosure (high, added 2026-07-24). REAL FIX APPLIED for every
+# copy we control: workspace postcss bumped 8.5.15 → 8.5.23 (npm update postcss,
+# 7-line lockfile diff). The remaining audit hit is ONLY next@15.5.x's own pinned
+# nested copy (node_modules/next/node_modules/postcss@8.4.31), which we cannot bump
+# without a Next major. Build-time CSS tooling with no runtime path — same rationale
+# as GHSA-6g55 in the Next 15.5.x cluster below; cleared by the planned Next 16
+# migration. Drop this entry then.
 # GHSA-c96f-x56v-gq3h — find-my-way DDoS via crafted HTTP/2 requests (high, added 2026-07-24).
 # Transitive via fastify (its router), in BOTH backend and ai-worker. Reachability: the advisory
 # is HTTP/2-specific, and neither service enables HTTP/2 — both call fastify({...}) with no
@@ -287,7 +311,7 @@ AUDIT_FAILED=false
 #   Lowest-confidence of the set: framework-internal response caching. Our app caches no
 #   body-keyed responses (the only POST route, /api/revalidate, is an auth'd mutation that
 #   is never cached; pages are getStaticProps). Re-verify at the Next 16 upgrade.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww|GHSA-f88m-g3jw-g9cj|GHSA-4c8g-83qw-93j6|GHSA-v2hh-gcrm-f6hx|GHSA-4633-3j49-mh5q|GHSA-4c39-4ccg-62r3|GHSA-68g3-v927-f742|GHSA-6g55-p6wh-862q|GHSA-89xv-2m56-2m9x|GHSA-955p-x3mx-jcvp|GHSA-m99w-x7hq-7vfj|GHSA-p9j2-gv94-2wf4|GHSA-q8wf-6r8g-63ch|GHSA-c96f-x56v-gq3h"
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww|GHSA-f88m-g3jw-g9cj|GHSA-4c8g-83qw-93j6|GHSA-v2hh-gcrm-f6hx|GHSA-4633-3j49-mh5q|GHSA-4c39-4ccg-62r3|GHSA-68g3-v927-f742|GHSA-6g55-p6wh-862q|GHSA-89xv-2m56-2m9x|GHSA-955p-x3mx-jcvp|GHSA-m99w-x7hq-7vfj|GHSA-p9j2-gv94-2wf4|GHSA-q8wf-6r8g-63ch|GHSA-c96f-x56v-gq3h|GHSA-83w8-p2f5-377r|GHSA-8pvw-jcv7-9cmj|GHSA-r28c-9q8g-f849"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
