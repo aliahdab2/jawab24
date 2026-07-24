@@ -83,8 +83,15 @@ describe('i18n namespace files', () => {
 
     it('parameterized strings have matching placeholders in EN and AR', () => {
         const isICUPlural = (v: string) => /\{[^}]+,\s*plural\s*,/.test(v);
+        // ICU `select` (like `plural`) carries localized text inside its branch
+        // bodies — e.g. `{reason, select, … other {unknown}}`. The naive {word}
+        // scan below would mistake a single-word EN branch body (`{unknown}`) for a
+        // placeholder while the Arabic branch (`{غير معروف}`) matches nothing, a
+        // false mismatch. Exempt select strings, exactly as plural is exempted.
+        const isICUSelect = (v: string) => /\{[^}]+,\s*select\s*,/.test(v);
+        const isICU = (v: string) => isICUPlural(v) || isICUSelect(v);
         const getSimplePlaceholders = (v: string) => {
-            if (isICUPlural(v)) return [];
+            if (isICU(v)) return [];
             return [...v.matchAll(/\{([a-zA-Z_]+)\}/g)].map(m => m[1]).sort();
         };
         for (const ns of enNamespaces) {
@@ -93,7 +100,7 @@ describe('i18n namespace files', () => {
                 const enValue = resolve(EN[ns], key);
                 const arValue = resolve(AR[ns], key);
                 if (!enValue || !arValue) continue;
-                if (isICUPlural(enValue) || isICUPlural(arValue)) continue;
+                if (isICU(enValue) || isICU(arValue)) continue;
                 expect(
                     getSimplePlaceholders(arValue),
                     `[${ns}] Placeholder mismatch for "${key}"\n  EN: "${enValue}"\n  AR: "${arValue}"`
