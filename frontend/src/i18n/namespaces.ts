@@ -61,6 +61,10 @@ export const PAGE_NAMESPACES = {
 
   // 'kb' is required by FileUploadButton inside the import sheet.
   catalog:            [...DASHBOARD_LAYOUT, 'catalog', 'pages', 'kb', 'testSmartReply'],
+  // /business hosts CatalogManager ('catalog') + KnowledgeBasePanel ('kb', 'pages')
+  // + TestSmartReplyModal ('testSmartReply') — every rendered child's namespace
+  // must be listed or that page shows raw keys (translation:validate won't catch it).
+  business:           [...DASHBOARD_LAYOUT, 'business', 'catalog', 'pages', 'kb', 'testSmartReply'],
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'testSmartReply', 'time', 'onboarding'],
   settings:           [...DASHBOARD_LAYOUT, 'settings', 'testSmartReply', 'time', 'logout'],
   team:               [...DASHBOARD_LAYOUT, 'team'],

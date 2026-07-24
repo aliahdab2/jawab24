@@ -78,7 +78,7 @@ describe('KnowledgeBaseModal — catalog import CTA gating', () => {
     // must survive verbatim; the extractor skips non-offering lines anyway.
     expect(draft.text).toContain('دورة ICDL ٣٥٠٠ ل.س');
     expect(onClose).toHaveBeenCalled();
-    expect(push).toHaveBeenCalledWith('/catalog?page=page-1&import=1');
+    expect(push).toHaveBeenCalledWith('/business?page=page-1&import=1');
   });
 
   it('hides the CTA on store-linked pages even for a platform admin', async () => {

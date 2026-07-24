@@ -166,7 +166,7 @@ export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boo
     { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
     { key: 'nav.pages', href: '/pages', icon: FileText },
     ...(options.showCatalog
-      ? [{ key: 'nav.catalog', href: '/catalog', icon: Tag }]
+      ? [{ key: 'nav.business', href: '/business', icon: Tag }]
       : []),
     ...(options.isAdmin
       ? [{ key: 'nav.integrations', href: '/integrations', icon: Store }]

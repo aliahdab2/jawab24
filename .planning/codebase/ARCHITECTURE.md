@@ -83,6 +83,15 @@ Each service is independently deployable but shares:
    - Public pages: landing, pricing, login, what-is-jawab24, blog, contact, terms, privacy
    - Protected pages: dashboard, comments, messages, rules, templates, settings, integrations
    - Auth pages: login, complete-profile, checkout
+   - **`/business` («نشاطك التجاري», B1 2026-07-24)** — the unified business surface:
+     readiness chips → catalog (`CatalogManager`) → structured fact rows →
+     inline Business Info editor. The KB editor logic lives in
+     `KnowledgeBasePanel` (extracted from `KnowledgeBaseModal`, which is now a
+     thin portal wrapper used by conversation deep-links `?openKb`). `/catalog`
+     is a CLIENT-side redirect to `/business` preserving `?page&import=1`
+     (`next.config` redirects don't run under `output:'export'`). Canary-gated
+     by `isCatalogVisible` — for that reason `KB_DEEP_LINK` deliberately still
+     targets `/pages?openKb=true` (moving it would bounce non-admin merchants).
 
 2. **Layout System**:
    - **PublicLayout** — for landing, pricing, blog pages (no sidebar)

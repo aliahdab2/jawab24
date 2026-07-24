@@ -5,6 +5,7 @@ import enAbout         from './en/about.json';
 import enBlog          from './en/blog.json';
 import enAdmin         from './en/admin.json';
 import enAuth          from './en/auth.json';
+import enBusiness      from './en/business.json';
 import enCatalog       from './en/catalog.json';
 import enCheckout      from './en/checkout.json';
 import enComments      from './en/comments.json';
@@ -58,6 +59,7 @@ import arAbout         from './ar/about.json';
 import arBlog          from './ar/blog.json';
 import arAdmin         from './ar/admin.json';
 import arAuth          from './ar/auth.json';
+import arBusiness      from './ar/business.json';
 import arCatalog       from './ar/catalog.json';
 import arCheckout      from './ar/checkout.json';
 import arComments      from './ar/comments.json';
@@ -112,6 +114,7 @@ const GLOBAL_NAMESPACES = ['common', 'nav', 'notifications', 'errors', 'errorBou
 const NS: Record<string, Record<string, unknown>> = {
   'en/about': enAbout,           'ar/about': arAbout,
   'en/blog': enBlog,             'ar/blog': arBlog,
+  'en/business': enBusiness,     'ar/business': arBusiness,
   'en/catalog': enCatalog,       'ar/catalog': arCatalog,
   'en/admin': enAdmin,           'ar/admin': arAdmin,
   'en/auth': enAuth,             'ar/auth': arAuth,
