@@ -43,6 +43,7 @@ const EXCLUDED_ROUTES = new Map([
   ['auth/callback', 'auth flow (noindex)'],
   ['auth/phone-collect', 'auth flow (noindex)'],
   ['auth/sync', 'auth flow (noindex)'],
+  ['business', 'app workspace (auth-gated)'],
   ['catalog', 'app workspace (auth-gated)'],
   ['checkout', 'transactional (noindex)'],
   ['comments', 'app workspace (auth-gated)'],
