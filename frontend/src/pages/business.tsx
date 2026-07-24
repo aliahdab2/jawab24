@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { useTranslations } from 'next-intl';
@@ -10,6 +10,7 @@ import { CatalogManager } from '@/components/catalog/CatalogManager';
 import { BusinessReadinessCard, type FixableChipKey } from '@/components/business/BusinessReadinessCard';
 import { BusinessFactRows } from '@/components/business/BusinessFactRows';
 import { BusinessFactSheet, type EditableFactKey } from '@/components/business/BusinessFactSheet';
+import { BusinessHoursSheet } from '@/components/business/BusinessHoursSheet';
 import { KnowledgeBasePanel } from '@/components/knowledge-base/KnowledgeBasePanel';
 import { api, pagesApi, catalogApi, type CatalogVerticalInfo } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -113,23 +114,17 @@ function BusinessPageInner() {
     () => { void queryClient.invalidateQueries({ queryKey: ['pages'] }); },
   );
 
-  // «معلومات نشاطك التجاري» starts collapsed when structured data already
-  // exists (facts first, free text second); expanded for a fresh page so the
-  // merchant's first action is visible.
-  const hasAnyKb = !!selectedPage?.knowledgeBase;
-  const [infoOpen, setInfoOpen] = useState(!hasAnyKb);
-  useEffect(() => { setInfoOpen(!selectedPage?.knowledgeBase); }, [selectedPage?.id, selectedPage?.knowledgeBase]);
-  const infoSectionRef = useRef<HTMLDivElement>(null);
-  const openAndScrollToInfo = () => {
-    setInfoOpen(true);
-    // After the collapse animation frame, bring the editor into view.
-    requestAnimationFrame(() => infoSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  };
+  // «معلومات إضافية» always starts collapsed: every fact now has its own
+  // structured editor, so the free-text box is the overflow surface (FAQs,
+  // one-off details) — not the place a merchant should land by default.
+  const [infoOpen, setInfoOpen] = useState(false);
+  useEffect(() => { setInfoOpen(false); }, [selectedPage?.id]);
 
   const [testReplyOpen, setTestReplyOpen] = useState(false);
 
   // ── Single-field fact editing (B1 part 2) ────────────────────────────────
   const [editingFact, setEditingFact] = useState<EditableFactKey | null>(null);
+  const [editingHours, setEditingHours] = useState(false);
   const [savingFact, setSavingFact] = useState(false);
 
   /** Current confirmed value for a fact, as the sheet's single text field. */
@@ -144,29 +139,29 @@ function BusinessPageInner() {
     }
   };
 
-  const saveFact = async (key: EditableFactKey, raw: string) => {
+  /**
+   * Persist one fact. `mutate` receives the existing CONFIRMED merchant half
+   * and returns the full patch.
+   *
+   * ⚠️ applyMerchantEdit treats the PATCH as the merchant's FULL intent: every
+   * tracked field absent from it becomes a "cleared" tombstone. So the patch
+   * must always carry the whole merchant half with one field changed — a
+   * partial `{ address }` body would wipe hours/phones/policies.
+   */
+  const saveProfile = async (
+    mutate: (merchant: BusinessProfile) => BusinessProfile,
+    onDone: () => void,
+  ) => {
     if (!selectedPage) return;
-    const value = raw.trim();
-    // ⚠️ applyMerchantEdit treats the PATCH as the merchant's FULL intent:
-    // every tracked field absent from it becomes a "cleared" tombstone. So we
-    // must send the whole existing merchant half with this one field changed —
-    // sending `{ address }` alone would wipe hours/phones/policies.
     const { merchant = {} } = unwrapBusinessProfile(selectedPage.businessProfile);
-    const patch: BusinessProfile = { ...merchant };
-    switch (key) {
-      case 'address': patch.address = value || undefined; break;
-      case 'phone': patch.phones = value ? value.split(/[,،]/).map((p) => p.trim()).filter(Boolean) : undefined; break;
-      case 'website': patch.website = value || undefined; break;
-      case 'delivery': patch.policies = { ...patch.policies, shipping: value || undefined }; break;
-      case 'payment': patch.policies = { ...patch.policies, payment: value || undefined }; break;
-    }
+    const patch = mutate({ ...merchant });
 
     setSavingFact(true);
     try {
       await api.put(`/pages/${selectedPage.id}`, { businessProfile: patch });
       // Refetch so the readiness chips + rows reflect the new confirmed value.
       await queryClient.invalidateQueries({ queryKey: ['pages'] });
-      setEditingFact(null);
+      onDone();
       toast.success(tPages('savedStatus'));
     } catch (error) {
       captureError(error, 'Failed to save business fact', { tags: { action: 'save-business-fact' } });
@@ -176,9 +171,26 @@ function BusinessPageInner() {
     }
   };
 
-  /** Readiness chip → the matching editor (hours has no sheet yet). */
+  const saveFact = (key: EditableFactKey, raw: string) => {
+    const value = raw.trim();
+    return saveProfile((patch) => {
+      switch (key) {
+        case 'address': patch.address = value || undefined; break;
+        case 'phone': patch.phones = value ? value.split(/[,،]/).map((p) => p.trim()).filter(Boolean) : undefined; break;
+        case 'website': patch.website = value || undefined; break;
+        case 'delivery': patch.policies = { ...patch.policies, shipping: value || undefined }; break;
+        case 'payment': patch.policies = { ...patch.policies, payment: value || undefined }; break;
+      }
+      return patch;
+    }, () => setEditingFact(null));
+  };
+
+  const saveHours = (hours: Record<string, string[]> | undefined) =>
+    saveProfile((patch) => { patch.hours = hours; return patch; }, () => setEditingHours(false));
+
+  /** Readiness chip → the matching editor. */
   const handleFixChip = (key: FixableChipKey) => {
-    if (key === 'hours') openAndScrollToInfo();
+    if (key === 'hours') setEditingHours(true);
     else setEditingFact(key);
   };
 
@@ -246,13 +258,13 @@ function BusinessPageInner() {
             <BusinessFactRows
               page={selectedPage}
               onEditFact={setEditingFact}
-              onEditHours={openAndScrollToInfo}
+              onEditHours={() => setEditingHours(true)}
             />
           </div>
 
           {/* 4 — Free-text Business Info (collapsed once structured data exists) */}
           <section
-            ref={infoSectionRef}
+
             aria-label={t('info.title')}
             className="order-4 rounded-2xl border border-theme-border bg-card overflow-hidden"
           >
@@ -289,6 +301,15 @@ function BusinessPageInner() {
 
       {testReplyOpen && selectedPage && (
         <TestSmartReplyModal page={selectedPage} onClose={() => setTestReplyOpen(false)} />
+      )}
+
+      {editingHours && selectedPage && (
+        <BusinessHoursSheet
+          initialHours={unwrapBusinessProfile(selectedPage.businessProfile).merchant?.hours}
+          saving={savingFact}
+          onSave={saveHours}
+          onClose={() => setEditingHours(false)}
+        />
       )}
 
       {editingFact && selectedPage && (

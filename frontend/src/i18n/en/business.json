@@ -42,11 +42,23 @@
     "placeholder_phone": "e.g. 0935924472",
     "placeholder_website": "e.g. example.com",
     "placeholder_delivery": "e.g. We deliver within Damascus in 2 days for 5,000.",
-    "placeholder_payment": "e.g. Cash on delivery or bank transfer."
+    "placeholder_payment": "e.g. Cash on delivery or bank transfer.",
+    "hint_hours": "When can customers reach you?",
+    "hoursDays": "Working days",
+    "hoursFrom": "From",
+    "hoursTo": "To",
+    "hoursPickDay": "Pick at least one working day.",
+    "day_sat": "Sat",
+    "day_sun": "Sun",
+    "day_mon": "Mon",
+    "day_tue": "Tue",
+    "day_wed": "Wed",
+    "day_thu": "Thu",
+    "day_fri": "Fri"
   },
   "info": {
-    "title": "Business information",
-    "hint": "The free-text knowledge Jawab replies from. Structured facts above take priority."
+    "title": "Additional information",
+    "hint": "For anything the fields above don't cover: FAQs, special details, whatever else Jawab should know."
   },
   "noPage": "Connect a page to set up your business information.",
   "loading": "Loading your business…"
