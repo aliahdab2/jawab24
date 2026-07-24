@@ -100,6 +100,9 @@ export interface PlaygroundRequestBody {
     /** Customer display name (DM only) — lets the eval/playground exercise gender-aware
      *  Arabic DM addressing, which infers gender partly from the first name. */
     senderName?: string;
+    /** Minutes since the previous message in the thread (DM only) — lets the eval/replay
+     *  harness exercise the time-gap fact line (live conversation vs days-later return). */
+    minutesSinceLastMessage?: number;
     model?: string;
     /** 'eval' from playground-eval.ts batch script; defaults to 'playground' for the admin UI. */
     source?: PlaygroundSource;

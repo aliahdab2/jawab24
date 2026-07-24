@@ -371,6 +371,8 @@ export interface PlaygroundInput {
     customerContext?: string;
     /** Customer display name (DM only) — feeds gender-aware Arabic DM addressing. */
     senderName?: string;
+    /** Minutes since the previous thread message (DM only) — the time-gap fact line. */
+    minutesSinceLastMessage?: number;
     model?: string;
     defaultReplyLanguage?: string;
     /** See GenerateReplyContext.timezone. */
@@ -662,6 +664,15 @@ export class ReplyGenerator {
                     m => !(m.role === 'user' && m.content === text)
                 );
 
+                // Time since the previous thread activity (either direction) — the
+                // "clock" the model otherwise lacks: history reaches it undated, so
+                // it cannot tell a live conversation from a days-later return. Sent
+                // as a plain fact; promptBuilder renders it in the per-call block.
+                const lastPrev = historyForAI[historyForAI.length - 1];
+                const minutesSinceLastMessage = lastPrev?.timestamp
+                    ? Math.max(0, Math.round((Date.now() - new Date(lastPrev.timestamp).getTime()) / 60000))
+                    : undefined;
+
                 // Language resolution: for low-confidence Latin detection (short acronyms
                 // like "ICDL", "ok", "yes") with ANY prior context in the DM thread, defer
                 // to the ai-worker's history-first chain. Prior context includes assistant
@@ -678,7 +689,7 @@ export class ReplyGenerator {
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };
 
                 const aiResponse = await dispatchAiReply(aiRequest);
@@ -816,7 +827,7 @@ export class ReplyGenerator {
         const {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
-            replyStyle, brandVoiceNotes, businessInfoBlock, customerContext, senderName, model, defaultReplyLanguage,
+            replyStyle, brandVoiceNotes, businessInfoBlock, customerContext, senderName, minutesSinceLastMessage, model, defaultReplyLanguage,
             timezone, messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
         } = input;
 
@@ -896,6 +907,7 @@ export class ReplyGenerator {
                 ...(postMessage ? { postMessage } : {}),
                 ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
                 ...(channel === 'dm' && senderName ? { senderName } : {}),
+                ...(channel === 'dm' && typeof minutesSinceLastMessage === 'number' ? { minutesSinceLastMessage } : {}),
                 ...(replyStyle ? { replyStyle } : {}),
                 ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
                 ...(businessInfoBlock ? { businessInfoBlock } : {}),

@@ -2467,7 +2467,7 @@ describe('Brand Voice Notes — DM prompt differentiation', () => {
         vi.resetModules();
     });
 
-    it('should use "incorporate naturally" wording for DMs with conversation history', async () => {
+    it('frames the persona as identity for DMs with history, keeping the CRITICAL no-repeat sentence', async () => {
         const mockCreate = vi.fn().mockResolvedValue({
             choices: [{ message: { content: JSON.stringify({ reply: 'Thanks!', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
             usage: { total_tokens: 50 },
@@ -2499,11 +2499,13 @@ describe('Brand Voice Notes — DM prompt differentiation', () => {
         });
 
         const systemPrompt = mockCreate.mock.calls[0][0].messages[0].content;
-        expect(systemPrompt).toContain('incorporate naturally');
-        expect(systemPrompt).toContain('Do NOT repeat any point, offer, or promotion already stated in the conversation history');
+        // v58 identity framing (2026-07-24): persona is WHO the model is, not a task list.
+        expect(systemPrompt).toContain('this is WHO YOU ARE in this chat');
+        // The CRITICAL no-repeat sentence must stay byte-identical (eval #158 dilution trap).
+        expect(systemPrompt).toContain('CRITICAL: Do NOT repeat any point, offer, or promotion already stated in the conversation history — this overrides any "always mention" instructions in the brand voice notes below');
     });
 
-    it('should use standard wording for comments (no conversation history)', async () => {
+    it('uses identity framing without the no-repeat sentence for comments (no history)', async () => {
         const mockCreate = vi.fn().mockResolvedValue({
             choices: [{ message: { content: JSON.stringify({ reply: 'Thanks!', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
             usage: { total_tokens: 50 },
@@ -2531,7 +2533,7 @@ describe('Brand Voice Notes — DM prompt differentiation', () => {
         });
 
         const systemPrompt = mockCreate.mock.calls[0][0].messages[0].content;
-        expect(systemPrompt).toContain('follow these additional guidelines from the business owner');
+        expect(systemPrompt).toContain('this is WHO YOU ARE in this chat');
         expect(systemPrompt).not.toContain('Do NOT repeat any point');
     });
 

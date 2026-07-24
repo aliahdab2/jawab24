@@ -1016,7 +1016,34 @@ export {
 // the KB as source. Cat 67 pins both directions (catalog wins on conflict; KB-only item still
 // answered) AND the structured-facts↔narrative precedence that case 411 asserted but never
 // actually tested with a disagreement (owner accuracy principle, 2026-07-14/22).
-export const PROMPT_VERSION = 'v57';
+// v58: NATURALNESS PASS — owner ruling 2026-07-24: «ما بدي قيد المودل — بدي شي طبيعي بس ما
+// يكون في تكرار». Prod: «أنا من فريق الصفحة» parroted 25×/4 pages; one page sent 38k persona
+// greeting stems, 77% of its greeting-family replies landing in CONTINUOUS (<10 min)
+// conversations. NO anti-repetition rules added — four natural moves instead:
+// (1) REMOVE the copyable identity example from the IDENTITY rule (systemPrompt) — deletion,
+//     the stance (team member, never claim human, never reveal automation) unchanged.
+// (2) CODE: Check 6 canned fallback → small channel-neutral pool (replyValidator
+//     SELF_ID_FALLBACKS; «الفريق» not «الصفحة» — WhatsApp shares the path).
+// (3) INFORM: the clock — minutesSinceLastMessage plumbed backend→worker (platform-generic,
+//     computed from messages.created_at; WhatsApp-ready) and rendered as a fact + meaning
+//     line IN THE USER PROMPT adjacent to the message («[Time since the previous message:
+//     3 days — the customer is RETURNING…]»). ⚠️ Placement is the finding: the SAME line in
+//     the system prompt was ignored across three replay iterations — message-adjacent, the
+//     3-days+open-order return got a true resume («جاهزة نكمل طلبك ونوصلك زوز قطع…») per the
+//     owner's resume ruling. Same attention lesson as customerContext. Only set on the
+//     with-history path, which skips ALL reply caches — no cache-key changes needed.
+//     Companion: the STEP-2 GREETING rule was unconditional («Greet back naturally») — the
+//     very rule forcing the reset; now context-aware (new customer → greet; mid-conversation
+//     / returning → pick the conversation back up, never reset to "how can I help?").
+// (4) REFRAME: brand voice injected as identity («this is WHO YOU ARE — speak as this person
+//     naturally would») instead of "guidelines to follow" — actors don't copy-paste their
+//     lines; instruction-executors do. Mid-conversation CRITICAL do-not-repeat sentence kept
+//     BYTE-IDENTICAL (eval #158 A/B: extending it broke offer non-repetition — never fold
+//     text into that sentence).
+// Explicit rules (opener/closer rotation etc.) remain LAST RESORT, preserved un-applied in
+// .planning/patches/v58-prompt-work-2026-07-24.patch, only if prod metrics still show
+// repetition after this pass.
+export const PROMPT_VERSION = 'v58';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
