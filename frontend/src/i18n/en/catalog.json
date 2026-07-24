@@ -149,7 +149,8 @@
     "separate": "Add as a separate item",
     "noPrice": "no price",
     "saveChanges": "Save changes",
-    "toastUpdated": "{count, plural, one {# price updated} other {# prices updated}}"
+    "toastUpdated": "{count, plural, one {# price updated} other {# prices updated}}",
+    "toastSaveError": "Couldn’t save the changes. Please try again."
   },
   "scan": {
     "cta": "Find products in your posts",

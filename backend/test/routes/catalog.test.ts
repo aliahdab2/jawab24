@@ -216,6 +216,28 @@ describe('Catalog routes — security wiring', () => {
             expect(res.statusCode).toBe(403);
             expect(catalogScanService.scanPosts).not.toHaveBeenCalled();
         });
+
+        it('capacity slicing spares proposals matching an existing item — new rows only consume slots (B0)', async () => {
+            vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 1, pageUserId: 'user-1' });
+            vi.mocked(catalogService.listCatalogItems).mockResolvedValue([
+                { id: 'i1', name: 'كيا ريو 2018', price: '40000.00', currency: 'ريال' },
+            ] as never);
+            vi.mocked(catalogScanService.scanPosts).mockResolvedValue({
+                items: [
+                    { name: 'كيا ريو 2018', type: 'vehicle', price: 38000, currency: 'ريال' },       // update
+                    { name: 'هيونداي النترا 2020', type: 'vehicle', price: 52000, currency: 'ريال' }, // new — fits
+                    { name: 'تويوتا كورولا 2019', type: 'vehicle', price: 47000, currency: 'ريال' },  // new — cut
+                ] as never,
+                dropped: 0, truncated: false, failed: false, postsScanned: 3, upToDate: false,
+            });
+
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
+
+            expect(res.statusCode).toBe(200);
+            const body = JSON.parse(res.payload);
+            expect(body.items.map((i: { name: string }) => i.name)).toEqual(['كيا ريو 2018', 'هيونداي النترا 2020']);
+            expect(body.overflow).toBe(1);
+        });
     });
 
     describe('POST /scan-post-replies', () => {

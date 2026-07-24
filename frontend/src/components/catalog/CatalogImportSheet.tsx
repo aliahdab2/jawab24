@@ -260,7 +260,9 @@ export function CatalogImportSheet({
       if (axiosErr.response?.data?.code === 'CATALOG_LIMIT_REACHED') {
         toast.error(t('toast.limitReached', { max: MAX_CATALOG_ITEMS_PER_PAGE }));
       } else {
-        toast.error(t('import.toastImportError'));
+        // "Couldn't add the items" would misdescribe a save that carried
+        // confirmed price updates — use the generic changes copy then.
+        toast.error(updateRows.length > 0 ? t('reconcile.toastSaveError') : t('import.toastImportError'));
       }
       setPhase('review');
     }
@@ -407,6 +409,12 @@ export function CatalogImportSheet({
                         </span>
                       )}
                     </div>
+                    {/* Every enabled control must map to something the save
+                        actually applies (#492 M1 — no silently-discarded edits):
+                        an update row PATCHes price/currency only, so Details
+                        editing unlocks only for «add as separate» (which inserts
+                        the full draft), and a «keep» row applies nothing, so its
+                        price input locks too. */}
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <input
                         aria-label={t('fields.priceOptional')}
@@ -416,7 +424,7 @@ export function CatalogImportSheet({
                         value={row.draft.price}
                         onChange={(e) => patchRowDraft(row.id, { price: e.target.value })}
                         placeholder={t('scan.pricePlaceholder')}
-                        disabled={row.removed}
+                        disabled={row.removed || (row.kind === 'update' && row.updateChoice === 'keep')}
                       />
                       {row.draft.currency.trim() && (
                         <span dir="auto" className="text-xs font-medium text-muted-foreground">{row.draft.currency.trim()}</span>
@@ -425,7 +433,7 @@ export function CatalogImportSheet({
                     <button
                       type="button"
                       onClick={() => patchRow(row.id, { expanded: !row.expanded })}
-                      disabled={row.removed}
+                      disabled={row.removed || (row.kind === 'update' && row.updateChoice !== 'separate')}
                       aria-expanded={row.expanded}
                       className="flex items-center gap-0.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 disabled:cursor-not-allowed py-1.5"
                     >
@@ -470,7 +478,9 @@ export function CatalogImportSheet({
                             key={choice}
                             type="button"
                             aria-pressed={row.updateChoice === choice}
-                            onClick={() => patchRow(row.id, { updateChoice: choice })}
+                            // Leaving «separate» collapses Details — its fields
+                            // only apply to the separate-insert path (M1 lock).
+                            onClick={() => patchRow(row.id, { updateChoice: choice, expanded: choice === 'separate' ? row.expanded : false })}
                             className={clsx(
                               'px-3 py-1 rounded-full text-xs font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/30',
                               row.updateChoice === choice

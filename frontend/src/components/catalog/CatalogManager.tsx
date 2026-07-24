@@ -61,16 +61,18 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
    *  length is the wrong number for the "N added" fallback toast. */
   const [cleanupImportCount, setCleanupImportCount] = useState(0);
 
-  // Deep-link entry: open the import sheet once when the page asks for it.
-  useEffect(() => {
-    if (importRequested) setSheetMode('paste');
-  }, [importRequested]);
-
   const { data: listData, isLoading, isError } = useQuery<{ data: CatalogItem[]; vertical: CatalogVerticalInfo }>({
     queryKey,
     queryFn: () => catalogApi.list(pageId).then((r) => r.data),
     enabled: !!pageId,
   });
+
+  // Deep-link entry: open the import sheet once when the page asks for it —
+  // after the catalog list resolves, so the sheet's reconcile step never
+  // classifies against a still-loading (empty) catalog (#492 review).
+  useEffect(() => {
+    if (importRequested && !isLoading) setSheetMode('paste');
+  }, [importRequested, isLoading]);
   const items = useMemo(() => listData?.data ?? [], [listData]);
   const vertical = listData?.vertical;
   // Fresh items default to the vertical's natural type (dealer → vehicle,

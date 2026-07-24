@@ -280,6 +280,31 @@ describe('CatalogImportSheet', () => {
       await waitFor(() => expect(update).toHaveBeenCalledWith('p1', 'item-1', { price: '2500' }));
     });
 
+    it('locks edits the save would discard: Details only for "separate", price locked on "keep" (M1)', async () => {
+      await reachReview([proposal({ price: 2500 })], undefined, { existingItems: EXISTING });
+      await screen.findByText('In your catalog: 3500 ل.س — in this import: 2500 ل.س');
+
+      // Default = keep → the save applies nothing, so nothing is editable.
+      expect(screen.getByLabelText('Price (optional)')).toBeDisabled();
+      expect(screen.getByRole('button', { name: /Details/ })).toBeDisabled();
+
+      // «Update the price» applies price/currency only → price unlocks, Details stays locked.
+      fireEvent.click(screen.getByRole('button', { name: 'Update the price' }));
+      expect(screen.getByLabelText('Price (optional)')).toBeEnabled();
+      expect(screen.getByRole('button', { name: /Details/ })).toBeDisabled();
+
+      // «Add as separate» inserts the full draft → Details unlocks.
+      fireEvent.click(screen.getByRole('button', { name: 'Add as a separate item' }));
+      const details = screen.getByRole('button', { name: /Details/ });
+      expect(details).toBeEnabled();
+      fireEvent.click(details);
+      expect(screen.getByLabelText('Name')).toBeInTheDocument();
+
+      // Leaving «separate» collapses the panel — its fields no longer apply.
+      fireEvent.click(screen.getByRole('button', { name: 'Keep the current price' }));
+      expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
+    });
+
     it('"add as separate item" inserts instead of patching', async () => {
       batchCreate.mockResolvedValue({ data: { data: [{}] } });
       const { onDone } = await reachReview([proposal({ price: 2500 })], undefined, { existingItems: EXISTING });
