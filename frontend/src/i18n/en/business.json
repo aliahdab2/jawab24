@@ -19,7 +19,7 @@
   },
   "facts": {
     "title": "Business facts",
-    "hint": "Confirmed facts answer customers directly. Missing ones show as questions.",
+    "hint": "Confirmed facts answer customers directly. Set the missing ones to complete your info.",
     "hours": "Working hours",
     "address": "Address",
     "delivery": "Delivery",
@@ -27,7 +27,7 @@
     "phone": "Phone",
     "website": "Website",
     "notSet": "Not set yet",
-    "answerPrompt": "Answer"
+    "answerPrompt": "Set"
   },
   "info": {
     "title": "Business information",
