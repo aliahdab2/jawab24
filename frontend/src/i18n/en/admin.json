@@ -338,7 +338,11 @@
     "emailSend": "Send email",
     "emailSent": "Email sent to the merchant.",
     "emailRequiredFields": "Subject and message are both required.",
-    "emailErrorGeneric": "Couldn't send the email. Please try again."
+    "emailErrorGeneric": "Couldn't send the email. Please try again.",
+    "flag_all_channels_silent": "Both comment and message auto-reply are off — the merchant is fully silent.",
+    "flag_auto_reply_off_unknown": "Auto-reply is off for this page (no recorded reason).",
+    "flag_hold_low_confidence_weak_kb": "Low-confidence replies are held for review — and the Business Info is empty/thin, so most replies will be held (customers get little back).",
+    "flag_kb_thin": "Business Info is thin — the AI has little to answer from."
   },
   "playground": {
     "title": "Smart Reply Playground",

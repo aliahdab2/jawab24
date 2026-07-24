@@ -660,7 +660,10 @@ class AdminUsersService {
                 adminUserId,
                 targetUserId: userId,
                 action: 'merchant_email_sent',
-                newValue: { subject: input.subject },
+                // Store subject AND body: email_sends.html_body is blanked after
+                // 30 days, so this is the durable record of "what did we tell them?"
+                // for any later support dispute (audit rows are exempt).
+                newValue: { subject: input.subject, body: input.body },
             });
         } catch (err) {
             captureError(err, 'Failed to write admin audit log for merchant email', {

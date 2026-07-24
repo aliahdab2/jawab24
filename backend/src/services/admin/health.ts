@@ -128,6 +128,29 @@ const DORMANT_DAYS = 14;
 const KB_THIN_CHARS = 500;
 const KB_THIN_CHUNKS = 5;
 const USAGE_NEAR_CAP_RATIO = 0.8;
+// A page with chunks but no `offering` is red (can't answer pricing) UNLESS the
+// KB is a substantial FAQ/info knowledge base — a legitimate service business
+// shouldn't sit permanently red. At/above this many FAQ chunks it downgrades to
+// yellow ("worth a look") instead.
+const NO_OFFERING_FAQ_DOWNGRADE = 3;
+
+/**
+ * Every flag key `computeHealthFlags` can emit — the canonical list the i18n
+ * parity test asserts against (`customer.flag_<key>` must exist in both locales).
+ * The banner also renders two derived keys not emitted here — `merchant_never_seen`
+ * (dormant with days=-1) and `hold_low_confidence_weak_kb` (the withWeakKb meta) —
+ * both covered in that test's render-variant list.
+ */
+export const HEALTH_FLAG_KEYS = [
+    'no_pages', 'ai_disabled', 'all_channels_silent', 'channel_silent',
+    'trial_expired', 'subscription_inactive', 'usage_over_cap', 'usage_near_cap',
+    'limit_fallback_off', 'page_disconnected', 'auto_reply_user_off',
+    'auto_reply_system_off', 'auto_reply_off_unknown', 'kb_empty',
+    'no_offering_chunks', 'kb_thin', 'unresolved_kb_gaps', 'persona_placeholder',
+    'hold_low_confidence', 'business_hours_only', 'timezone_default',
+    'no_away_message', 'greeting_written_not_enabled', 'trial_ending_soon',
+    'merchant_dormant', 'team_member', 'settings_untouched', 'onboarding_incomplete',
+] as const;
 
 /** Order-insensitive equality for the string arrays we store (e.g. supportedLanguages). */
 function arraysEqualUnordered(a: unknown, b: unknown): boolean {
@@ -213,11 +236,16 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
     if (settings?.aiEnabled === false) {
         add('red', 'ai_disabled');
     }
-    if (settings?.commentsAutoReply === false) {
-        add('red', 'channel_silent', { meta: { channel: 'comments' } });
-    }
-    if (settings?.messagesAutoReply === false) {
-        add('red', 'channel_silent', { meta: { channel: 'messages' } });
+    // Both channels off = merchant is fully silent (red). One channel off is a
+    // legitimate deliberate config (e.g. DMs-only) — surface it, but yellow.
+    const commentsOff = settings?.commentsAutoReply === false;
+    const messagesOff = settings?.messagesAutoReply === false;
+    if (commentsOff && messagesOff) {
+        add('red', 'all_channels_silent');
+    } else if (commentsOff) {
+        add('yellow', 'channel_silent', { meta: { channel: 'comments' } });
+    } else if (messagesOff) {
+        add('yellow', 'channel_silent', { meta: { channel: 'messages' } });
     }
 
     // Subscription / trial state.
@@ -243,7 +271,9 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
     const limit = usage.limit;
     if (limit !== null && limit > 0) {
         const used = usage.aiRepliesCount;
-        const percent = Math.round((used / limit) * 100);
+        // Floor, not round — 999/1000 must read "99%", never "100%" under the
+        // near-cap (not over-cap) message.
+        const percent = Math.floor((used / limit) * 100);
         if (used >= limit) {
             add('red', 'usage_over_cap', { meta: { used, limit } });
         } else if (used >= USAGE_NEAR_CAP_RATIO * limit) {
@@ -267,6 +297,13 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
                 add('yellow', 'auto_reply_user_off', scope);
             } else if (reason) {
                 add('red', 'auto_reply_system_off', { ...scope, meta: { reason } });
+            } else {
+                // Off with no recorded reason (legacy rows toggled off before the
+                // reason column existed, or a path that cleared it without
+                // re-enabling). Runtime treats a null reason as NOT system-disabled
+                // (commentProcessor), i.e. effectively user-off — surface it so a
+                // silent page never reads as healthy.
+                add('yellow', 'auto_reply_off_unknown', scope);
             }
         }
 
@@ -276,7 +313,11 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
             anyThinOrEmptyKb = true;
         } else {
             if (!chunksByType.offering) {
-                add('red', 'no_offering_chunks', scope);
+                // Product merchant with no offerings can't answer pricing (red),
+                // but a substantial FAQ/info KB is a legitimate service business —
+                // downgrade to yellow so it isn't permanently red.
+                const substantialFaq = (chunksByType.faq ?? 0) >= NO_OFFERING_FAQ_DOWNGRADE;
+                add(substantialFaq ? 'yellow' : 'red', 'no_offering_chunks', scope);
             }
             if (kbLength < KB_THIN_CHARS || chunksTotal < KB_THIN_CHUNKS) {
                 add('yellow', 'kb_thin', scope);

@@ -178,7 +178,9 @@ export function accountNoticeEmailTemplate(params: {
         dir,
         bodyFontFamily: fontFamily,
         title: params.subject,
-        preheader: escapeHtml(params.body.slice(0, 150)),
+        // Array.from → slice by code point, so a 150-char cut can't split an
+        // emoji surrogate pair into a replacement character.
+        preheader: escapeHtml(Array.from(params.body).slice(0, 150).join('')),
         bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
         bodyHtml,
     });

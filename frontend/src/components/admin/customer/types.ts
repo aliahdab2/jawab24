@@ -190,13 +190,6 @@ export const STATUS_COLORS: Record<string, string> = {
     paused: 'bg-muted text-muted-foreground border-theme-border',
 };
 
-/** Health-flag pill classes, reusing the semantic status tokens (dark-mode safe). */
-export const FLAG_SEVERITY_COLORS: Record<FlagSeverity, string> = {
-    red: 'status-error border',
-    yellow: 'status-warning border',
-    info: 'bg-muted text-muted-foreground border-theme-border',
-};
-
 export const STATUS_KEYS: Record<string, string> = {
     active: 'customers.statusActive',
     trialing: 'customers.statusTrialing',

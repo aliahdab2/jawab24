@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Mail } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -23,7 +23,6 @@ import {
     type CustomerDetail,
     type Plan,
 } from '@/components/admin/customer';
-import { Mail } from 'lucide-react';
 
 // The customer id is carried in the query string (`?userId=…`), NOT a path
 // segment. A dynamic path route (`[userId]`) cannot be statically exported for

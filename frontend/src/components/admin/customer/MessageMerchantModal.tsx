@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Button, Modal } from '@/components/ui';
@@ -28,6 +28,12 @@ export function MessageMerchantModal({ isOpen, onClose, userId, email }: Props) 
     const [subject, setSubject] = useState('');
     const [body, setBody] = useState('');
 
+    // Clear a stale error when the modal is (re)opened — otherwise reopening
+    // shows the previous send's failure.
+    useEffect(() => {
+        if (isOpen) setError(null);
+    }, [isOpen]);
+
     const handleSend = async () => {
         if (!subject.trim() || !body.trim()) {
             setError(t('customer.emailRequiredFields'));
@@ -48,7 +54,9 @@ export function MessageMerchantModal({ isOpen, onClose, userId, email }: Props) 
                 setBody('');
                 onClose();
             } else {
-                setError(response.error || t('customer.emailErrorGeneric'));
+                // Server error strings are English (Zod/service messages); show a
+                // translated message so the Arabic admin UI stays consistent.
+                setError(t('customer.emailErrorGeneric'));
             }
         } catch (err) {
             setError(t('customer.emailErrorGeneric'));

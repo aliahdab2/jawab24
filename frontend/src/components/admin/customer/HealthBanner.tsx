@@ -21,8 +21,12 @@ export function HealthBanner({ flags }: Props) {
     // Resolve a flag to its translated sentence. `merchant_dormant` with days=-1
     // means "never seen" — a distinct message rather than "inactive for -1 days".
     const flagText = (flag: HealthFlag): string => {
+        // Two derived variants read the meta rather than the bare key:
         if (flag.key === 'merchant_dormant' && flag.meta?.days === -1) {
             return t('customer.flag_merchant_never_seen');
+        }
+        if (flag.key === 'hold_low_confidence' && flag.meta?.withWeakKb === 1) {
+            return t('customer.flag_hold_low_confidence_weak_kb');
         }
         const key = `customer.flag_${flag.key}` as Parameters<typeof t>[0];
         return t(key, flag.meta as Record<string, string | number>);

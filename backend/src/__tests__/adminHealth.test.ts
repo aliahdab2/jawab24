@@ -5,11 +5,13 @@ import {
     computeNonDefaultKeys,
     isPlaceholderPersona,
     SETTINGS_DEFAULTS,
+    SUPPORT_SETTINGS_KEYS,
     type HealthInput,
     type HealthInputPage,
     type SupportSettings,
     type PageKbSummary,
 } from '../services/admin/health';
+import { settings } from '../db/schema';
 
 /**
  * Unit coverage for the admin support-console health flags. All pure — plain
@@ -114,12 +116,24 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
         expect(keys(flags)).toContain('ai_disabled');
     });
 
-    it('channel_silent per channel, with the channel in meta', () => {
+    it('one channel off is yellow channel_silent with the channel in meta', () => {
+        const flags = computeHealthFlags(healthyInput({
+            settings: healthySettings({ commentsAutoReply: false }),
+        }));
+        const f = flags.find(x => x.key === 'channel_silent');
+        expect(f?.severity).toBe('yellow');
+        expect(f?.meta?.channel).toBe('comments');
+        expect(keys(flags)).not.toContain('all_channels_silent');
+    });
+
+    it('both channels off is a single red all_channels_silent', () => {
         const flags = computeHealthFlags(healthyInput({
             settings: healthySettings({ commentsAutoReply: false, messagesAutoReply: false }),
         }));
-        const silent = flags.filter(f => f.key === 'channel_silent');
-        expect(silent.map(f => f.meta?.channel).sort()).toEqual(['comments', 'messages']);
+        const silent = flags.filter(f => f.key === 'all_channels_silent');
+        expect(silent).toHaveLength(1);
+        expect(silent[0].severity).toBe('red');
+        expect(keys(flags)).not.toContain('channel_silent');
     });
 
     it('page_disconnected when the access token is cleared', () => {
@@ -145,6 +159,16 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
         expect(keys(flags)).not.toContain('auto_reply_system_off');
     });
 
+    it('auto-reply off with a NULL reason still surfaces (auto_reply_off_unknown), never healthy', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({ autoReplyEnabled: false, autoReplyDisabledReason: null })],
+        }));
+        const f = flags.find(x => x.key === 'auto_reply_off_unknown');
+        expect(f?.severity).toBe('yellow');
+        expect(keys(flags)).not.toContain('auto_reply_user_off');
+        expect(keys(flags)).not.toContain('auto_reply_system_off');
+    });
+
     it('kb_empty when there are no chunks', () => {
         const flags = computeHealthFlags(healthyInput({
             pages: [healthyPage({ kb: healthyKb({ kbLength: 0, chunksTotal: 0, chunksByType: {} }) })],
@@ -155,11 +179,20 @@ describe('computeHealthFlags — RED triggers in isolation', () => {
         expect(keys(flags)).not.toContain('kb_thin');
     });
 
-    it('no_offering_chunks when chunks exist but none are offerings', () => {
+    it('no_offering_chunks is RED for a product KB with little FAQ', () => {
+        const flags = computeHealthFlags(healthyInput({
+            pages: [healthyPage({ kb: healthyKb({ chunksByType: { info: 12, faq: 1 } }) })],
+        }));
+        const f = flags.find(x => x.key === 'no_offering_chunks');
+        expect(f?.severity).toBe('red');
+    });
+
+    it('no_offering_chunks downgrades to YELLOW for a substantial FAQ/service KB', () => {
         const flags = computeHealthFlags(healthyInput({
             pages: [healthyPage({ kb: healthyKb({ chunksByType: { faq: 8, info: 12 } }) })],
         }));
-        expect(keys(flags)).toContain('no_offering_chunks');
+        const f = flags.find(x => x.key === 'no_offering_chunks');
+        expect(f?.severity).toBe('yellow');
     });
 
     it('trial_expired when a trialing sub is past its end date', () => {
@@ -370,4 +403,25 @@ describe('computeNonDefaultKeys', () => {
         expect(Object.keys(SETTINGS_DEFAULTS)).toContain('brandVoiceNotes');
         expect(Object.keys(SETTINGS_DEFAULTS)).toContain('timezone');
     });
+});
+
+describe('SETTINGS_DEFAULTS stays in sync with the Drizzle schema', () => {
+    // Guards against silent drift: a change to any settings column default (as
+    // happened historically with timezone) would flip "changed from default"
+    // markers and several health flags with no other failing test.
+    for (const key of SUPPORT_SETTINGS_KEYS) {
+        it(`${key} matches the schema column default`, () => {
+            const col = (settings as unknown as Record<string, { default?: unknown; hasDefault?: boolean }>)[key];
+            expect(col, `settings.${key} column missing`).toBeDefined();
+            if (key === 'supportedLanguages') {
+                // Default is a raw `sql\`ARRAY[...]\`` — its value isn't readable off
+                // the SQL object; assert the column HAS a default and the constant
+                // holds the intended value.
+                expect(col.hasDefault).toBe(true);
+                expect(SETTINGS_DEFAULTS.supportedLanguages).toEqual(['en', 'ar']);
+                return;
+            }
+            expect(col.default).toEqual((SETTINGS_DEFAULTS as Record<string, unknown>)[key]);
+        });
+    }
 });
