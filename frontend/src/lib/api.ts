@@ -985,6 +985,16 @@ export const adminApi = {
     };
   },
 
+  // Send an admin-composed account-notice email to one merchant (support console).
+  sendCustomerEmail: async (userId: string, data: { subject: string; body: string }) => {
+    const response = await api.post(`/admin/users/${userId}/send-email`, data);
+    return response.data as {
+      success: boolean;
+      data?: { emailSendId?: string };
+      error?: string;
+    };
+  },
+
   // History of a customer's collect-payment requests.
   listPaymentRequests: async (userId: string) => {
     const response = await api.get(`/admin/users/${userId}/payment-requests`);

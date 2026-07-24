@@ -16,9 +16,14 @@ import {
     BillingSection,
     AiSection,
     TeamSection,
+    HealthBanner,
+    SettingsSection,
+    KbSection,
+    MessageMerchantModal,
     type CustomerDetail,
     type Plan,
 } from '@/components/admin/customer';
+import { Mail } from 'lucide-react';
 
 // The customer id is carried in the query string (`?userId=…`), NOT a path
 // segment. A dynamic path route (`[userId]`) cannot be statically exported for
@@ -37,6 +42,7 @@ export default function AdminCustomerDetailPage() {
 
     const [customer, setCustomer] = useState<CustomerDetail | null>(null);
     const [plans, setPlans] = useState<Plan[]>([]);
+    const [emailModalOpen, setEmailModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -153,20 +159,46 @@ export default function AdminCustomerDetailPage() {
                     >
                         <ArrowLeft className={clsx('w-5 h-5 text-muted-foreground', isRTL && 'rotate-180')} />
                     </Link>
-                    <div>
-                        <h1 className="text-2xl font-display font-bold text-foreground">
+                    <div className="min-w-0">
+                        <h1 className="text-2xl font-display font-bold text-foreground truncate">
                             {customer.name || (customer.phone ? <span dir="ltr">{customer.phone}</span> : t('customer.noName'))}
                         </h1>
-                        <p className="text-muted-foreground">
+                        <p className="text-muted-foreground truncate">
                             {customer.email || (customer.phone ? <span dir="ltr">{customer.phone}</span> : t('customer.noEmail'))}
                         </p>
                     </div>
+                    {/* Support action: email this merchant about an issue. Disabled
+                        (with a reason) when we have no address to send to. */}
+                    <div className="ms-auto shrink-0">
+                        <Button
+                            variant="secondary"
+                            onClick={() => setEmailModalOpen(true)}
+                            disabled={!customer.email}
+                            title={customer.email ? undefined : t('customer.emailNoAddress')}
+                        >
+                            <Mail className="w-4 h-4 me-2" aria-hidden="true" />
+                            {t('customer.emailMerchant')}
+                        </Button>
+                    </div>
                 </div>
 
+                {customer.email && (
+                    <MessageMerchantModal
+                        isOpen={emailModalOpen}
+                        onClose={() => setEmailModalOpen(false)}
+                        userId={customer.id}
+                        email={customer.email}
+                    />
+                )}
+
+                {/* Diagnostic summary: what's wrong / worth acting on, before the
+                    raw config below. Computed server-side (customer.health). */}
+                <HealthBanner flags={customer.health ?? []} />
+
                 {/* Two-column dashboard: wide main column for the data-heavy
-                    sections (overview, AI tables), narrow side column for the
-                    billing action cards and team. Stacks on small screens; the
-                    grid follows document direction so RTL flips it natively.
+                    sections (overview, settings, KB, AI tables), narrow side column
+                    for the billing action cards and team. Stacks on small screens;
+                    the grid follows document direction so RTL flips it natively.
                     scroll-mt clears the sticky admin header on deep links. */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                     <div className="lg:col-span-2 space-y-8">
@@ -175,6 +207,18 @@ export default function AdminCustomerDetailPage() {
                                 {t('customer.tabOverview')}
                             </h2>
                             <OverviewSection customer={customer} formatDate={formatDate} intlLocale={intlLocale} />
+                        </section>
+                        <section id="settings" aria-labelledby="settings-heading" className="scroll-mt-24 space-y-4">
+                            <h2 id="settings-heading" className="text-xl font-display font-semibold text-foreground">
+                                {t('customer.tabSettings')}
+                            </h2>
+                            <SettingsSection customer={customer} />
+                        </section>
+                        <section id="kb" aria-labelledby="kb-heading" className="scroll-mt-24 space-y-4">
+                            <h2 id="kb-heading" className="text-xl font-display font-semibold text-foreground">
+                                {t('customer.tabKb')}
+                            </h2>
+                            <KbSection customer={customer} formatDate={formatDate} />
                         </section>
                         <section id="ai" aria-labelledby="ai-heading" className="scroll-mt-24 space-y-4">
                             <h2 id="ai-heading" className="text-xl font-display font-semibold text-foreground">

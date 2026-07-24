@@ -52,6 +52,16 @@ export const UpdatePlanSchema = CreatePlanSchema.partial();
  *   - extraEmails: max 500 per request
  * Audience defaults to 'waitlist' when omitted.
  */
+/**
+ * Admin-composed account-notice email to a single merchant (support console).
+ * Deliberately narrower than SendEmailSchema — no audience/template/broadcast
+ * fields; just a subject + body sent to one user by id (path param).
+ */
+export const SendMerchantEmailSchema = z.object({
+    subject: z.string().trim().min(1, 'Subject is required').max(500),
+    body: z.string().trim().min(1, 'Body is required').max(20_000),
+});
+
 export const SendEmailSchema = z.object({
     subject: z.string().trim().min(1, 'Subject is required').max(500),
     body: z.string().trim().min(1, 'Body is required').max(100_000),

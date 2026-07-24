@@ -2,10 +2,14 @@ import { db } from '../../db';
 import {
     users, subscriptions, plans, pages, usage, posts, instagramMedia,
     leads, workspaces, workspaceMembers, settings, adminAuditLogs,
-    comments, instagramComments, messages,
+    comments, instagramComments, messages, kbChunks, kbGaps,
 } from '../../db/schema';
 import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'drizzle-orm';
-import { NotFoundError } from '../../utils/errors';
+import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
+import { computeHealthFlags, computeNonDefaultKeys } from './health';
+import { emailService } from '../email';
+import { accountNoticeEmailTemplate } from '../../utils/emailTemplates';
+import { captureError } from '../../utils/sentryHelpers';
 
 /**
  * Admin Users service — read-heavy aggregation for the support/admin console.
@@ -204,6 +208,7 @@ class AdminUsersService {
                 facebookId: users.facebookId,
                 createdAt: users.createdAt,
                 topupBalance: users.topupBalance,
+                lastSeenAt: users.lastSeenAt,
             })
             .from(users)
             .where(eq(users.id, userId))
@@ -216,9 +221,37 @@ class AdminUsersService {
         // to pay ~6 serial round-trips before any dependent work).
         const now = new Date();
         const [settingsRows, subscriptionRows, userPages, currentUsageRows, membershipRows] = await Promise.all([
-            // Per-workspace AI model override (null = follows DEFAULT_AI_MODEL).
+            // Full settings row the support console reads (persona, toggles,
+            // messages). Top-level aiModel stays derived from this below.
             db
-            .select({ aiModel: settings.aiModel })
+            .select({
+                aiEnabled: settings.aiEnabled,
+                aiModel: settings.aiModel,
+                commentsAutoReply: settings.commentsAutoReply,
+                messagesAutoReply: settings.messagesAutoReply,
+                commentReplyMode: settings.commentReplyMode,
+                holdLowConfidence: settings.holdLowConfidence,
+                businessHoursOnly: settings.businessHoursOnly,
+                businessHoursStart: settings.businessHoursStart,
+                businessHoursEnd: settings.businessHoursEnd,
+                timezone: settings.timezone,
+                replyStyle: settings.replyStyle,
+                brandVoiceNotes: settings.brandVoiceNotes,
+                brandVoiceNotesMulti: settings.brandVoiceNotesMulti,
+                greetingMessageEnabled: settings.greetingMessageEnabled,
+                greetingMessageMulti: settings.greetingMessageMulti,
+                awayMessageMulti: settings.awayMessageMulti,
+                limitFallbackEnabled: settings.limitFallbackEnabled,
+                replyDelay: settings.replyDelay,
+                defaultReplyLanguage: settings.defaultReplyLanguage,
+                supportedLanguages: settings.supportedLanguages,
+                autoDetectLanguage: settings.autoDetectLanguage,
+                newLeadAlertsEnabled: settings.newLeadAlertsEnabled,
+                notificationsEnabled: settings.notificationsEnabled,
+                onboardingCompletedAt: settings.onboardingCompletedAt,
+                createdAt: settings.createdAt,
+                updatedAt: settings.updatedAt,
+            })
             .from(settings)
             .where(eq(settings.userId, userId))
             .limit(1),
@@ -255,6 +288,12 @@ class AdminUsersService {
                 autoReplyEnabled: pages.autoReplyEnabled,
                 autoReplyDisabledReason: pages.autoReplyDisabledReason,
                 disconnected: sql<boolean>`(${pages.accessToken} IS NULL OR ${pages.accessToken} = '')`,
+                disconnectReason: pages.disconnectReason,
+                // KB summary lives under `kb` in the payload; select the raw
+                // inputs here (length only — never ship the KB text itself).
+                kbLength: sql<number>`length(coalesce(${pages.knowledgeBase}, ''))`,
+                kbActiveVersion: pages.kbActiveVersion,
+                kbUpdatedAt: pages.kbUpdatedAt,
             })
             .from(pages)
             .where(eq(pages.userId, userId)),
@@ -308,10 +347,15 @@ class AdminUsersService {
         };
 
         const workspaceIds = membershipRows.map(r => r.workspaceId);
+        // KB health is summarised for the pages the console displays (owned
+        // directly by this user).
+        const displayPageIds = userPages.map(p => p.id);
 
-        // Member count per workspace (single grouped query, no N+1) and the
-        // owned-pages lookup both depend only on workspaceIds — run concurrently.
-        const [countRows, ownedPageIdsRows] = await Promise.all([
+        // Member count per workspace (single grouped query, no N+1), the
+        // owned-pages lookup, and the per-page KB summaries all run concurrently.
+        // Chunk counts pin to each page's ACTIVE kb version (a null active
+        // version matches no rows → kb reads as empty, same as adminKbService).
+        const [countRows, ownedPageIdsRows, kbChunkRows, kbGapRows] = await Promise.all([
             workspaceIds.length > 0
                 ? db
                     .select({
@@ -330,11 +374,67 @@ class AdminUsersService {
                         ? sql`${pages.userId} = ${userId} OR ${pages.workspaceId} IN (${sql.join(workspaceIds.map(w => sql`${w}`), sql`, `)})`
                         : eq(pages.userId, userId),
                 ),
+            displayPageIds.length > 0
+                ? db
+                    .select({
+                        pageId: kbChunks.pageId,
+                        type: kbChunks.type,
+                        count: sql<number>`count(*)::int`,
+                    })
+                    .from(kbChunks)
+                    .innerJoin(pages, and(
+                        eq(pages.id, kbChunks.pageId),
+                        eq(kbChunks.kbVersion, pages.kbActiveVersion),
+                    ))
+                    .where(inArray(kbChunks.pageId, displayPageIds))
+                    .groupBy(kbChunks.pageId, kbChunks.type)
+                : Promise.resolve([]),
+            displayPageIds.length > 0
+                ? db
+                    .select({
+                        pageId: kbGaps.pageId,
+                        count: sql<number>`count(*)::int`,
+                    })
+                    .from(kbGaps)
+                    .where(and(inArray(kbGaps.pageId, displayPageIds), eq(kbGaps.resolved, false)))
+                    .groupBy(kbGaps.pageId)
+                : Promise.resolve([]),
         ]);
         const memberCounts = new Map<string, number>();
         for (const r of countRows) {
             memberCounts.set(r.workspaceId, r.count);
         }
+
+        // Fold chunk rows into per-page { total, byType } and gaps into a count map.
+        const chunksByPage = new Map<string, { total: number; byType: Record<string, number> }>();
+        for (const r of kbChunkRows) {
+            const entry = chunksByPage.get(r.pageId) ?? { total: 0, byType: {} };
+            entry.byType[r.type] = (entry.byType[r.type] ?? 0) + r.count;
+            entry.total += r.count;
+            chunksByPage.set(r.pageId, entry);
+        }
+        const gapsByPage = new Map<string, number>();
+        for (const r of kbGapRows) {
+            gapsByPage.set(r.pageId, r.count);
+        }
+
+        // Nest the KB summary under `kb`, keeping the length-only inputs off the
+        // top-level page object.
+        const pagesPayload = userPages.map(p => {
+            const { kbLength, kbActiveVersion, kbUpdatedAt, ...rest } = p;
+            const c = chunksByPage.get(p.id);
+            return {
+                ...rest,
+                kb: {
+                    kbLength: kbLength ?? 0,
+                    kbActiveVersion,
+                    kbUpdatedAt,
+                    chunksTotal: c?.total ?? 0,
+                    chunksByType: c?.byType ?? {},
+                    unresolvedGaps: gapsByPage.get(p.id) ?? 0,
+                },
+            };
+        });
 
         // isOwner is derived from the workspace's owner_id FK (authoritative).
         const workspacesPayload = membershipRows.map(r => ({
@@ -417,26 +517,55 @@ class AdminUsersService {
             };
         }
 
+        // Owns no pages but belongs to someone else's workspace — the settings
+        // shown are NOT the row driving replies (the owner's is). Surfaced as an
+        // info flag rather than resolving the owner's settings here.
+        const isTeamMemberOnly = userPages.length === 0 && workspacesPayload.some(w => !w.isOwner);
+        const usageLimit = subscription?.maxAiRepliesPerMonth || null;
+
+        const health = computeHealthFlags({
+            now,
+            lastSeenAt: user.lastSeenAt,
+            settings: settingsRow ?? null,
+            subscription: subscription
+                ? { status: subscription.status, trialEndsAt: subscription.trialEndsAt }
+                : null,
+            pages: pagesPayload.map(p => ({
+                id: p.id,
+                name: p.name,
+                disconnected: p.disconnected,
+                autoReplyEnabled: p.autoReplyEnabled,
+                autoReplyDisabledReason: p.autoReplyDisabledReason,
+                kb: p.kb,
+            })),
+            usage: { aiRepliesCount: currentUsage?.aiRepliesCount || 0, limit: usageLimit },
+            isTeamMemberOnly,
+        });
+
         return {
             ...user,
             aiModel,
+            settings: settingsRow
+                ? { values: settingsRow, nonDefaultKeys: computeNonDefaultKeys(settingsRow) }
+                : null,
             subscription: subscription || null,
-            pages: userPages,
+            pages: pagesPayload,
             usage: currentUsage ? {
                 aiRepliesCount: currentUsage.aiRepliesCount || 0,
                 postRepliesCount,
                 periodStart: currentUsage.periodStart,
                 periodEnd: currentUsage.periodEnd,
-                limit: subscription?.maxAiRepliesPerMonth || null,
+                limit: usageLimit,
             } : {
                 aiRepliesCount: 0,
                 postRepliesCount,
                 periodStart: null,
                 periodEnd: null,
-                limit: subscription?.maxAiRepliesPerMonth || null,
+                limit: usageLimit,
             },
             leads: leadStats,
             workspaces: workspacesPayload,
+            health,
         };
     }
 
@@ -478,6 +607,68 @@ class AdminUsersService {
         });
 
         return { previousModel };
+    }
+
+    /**
+     * Send an admin-composed support/account-notice email to a single merchant.
+     * Reuses the shared email transport (Resend + email_sends audit + rate
+     * limiting); records the admin action in adminAuditLogs for accountability.
+     * Throws NotFoundError (404) if the user is missing, ValidationError (400)
+     * if they have no email on file, ExternalServiceError (502) if delivery
+     * fails.
+     */
+    async sendMerchantEmail(
+        userId: string,
+        input: { subject: string; body: string },
+        adminUserId: string | undefined,
+    ): Promise<{ emailSendId?: string }> {
+        const [target] = await db
+            .select({ id: users.id, email: users.email, name: users.name })
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+        if (!target) {
+            throw new NotFoundError('User not found');
+        }
+        if (!target.email) {
+            throw new ValidationError('This merchant has no email address on file');
+        }
+
+        const { subject, html } = accountNoticeEmailTemplate({
+            name: target.name,
+            subject: input.subject,
+            body: input.body,
+        });
+
+        const result = await emailService.send({
+            to: target.email,
+            subject,
+            html,
+            type: 'account_notice',
+            userId,
+        });
+
+        if (!result.success) {
+            throw new ExternalServiceError('Email', result.error || 'Failed to send email');
+        }
+
+        // Accountability: who emailed whom, and about what. email_sends already
+        // stores the rendered body; this records the acting admin. Audit failure
+        // must never turn a delivered email into an error.
+        try {
+            await db.insert(adminAuditLogs).values({
+                adminUserId,
+                targetUserId: userId,
+                action: 'merchant_email_sent',
+                newValue: { subject: input.subject },
+            });
+        } catch (err) {
+            captureError(err, 'Failed to write admin audit log for merchant email', {
+                tags: { service: 'admin-users', action: 'merchant_email_sent' },
+            });
+        }
+
+        return { emailSendId: result.emailSendId };
     }
 }
 

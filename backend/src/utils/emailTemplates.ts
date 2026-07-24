@@ -22,6 +22,25 @@ function getBrandName(): string {
     return config.resend.fromName || 'Jawab24';
 }
 
+const RTL_FONT_STACK = "'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+const LTR_FONT_STACK = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+
+/**
+ * Content-driven presentation for a piece of text: direction, lang, alignment
+ * and font stack. Shared by every template that decides RTL from its content
+ * (waitlist, account-notice) instead of an explicit `lang` param.
+ */
+function rtlPresentation(text: string): { rtl: boolean; dir: 'ltr' | 'rtl'; lang: 'ar' | 'en'; align: 'left' | 'right'; fontFamily: string } {
+    const rtl = isRTLText(text);
+    return {
+        rtl,
+        dir: rtl ? 'rtl' : 'ltr',
+        lang: rtl ? 'ar' : 'en',
+        align: rtl ? 'right' : 'left',
+        fontFamily: rtl ? RTL_FONT_STACK : LTR_FONT_STACK,
+    };
+}
+
 /**
  * Shared branded email shell — the markup every transactional email has in
  * common: the document scaffold, a teal brand header, the centered 600/720px
@@ -113,13 +132,7 @@ export function waitlistEmailTemplate(params: {
         return params.customHtml.replace(/\{\{UNSUBSCRIBE_URL\}\}/g, params.unsubscribeUrl);
     }
     const htmlBody = escapeHtml(params.body).replace(/\n/g, '<br>');
-    const rtl = isRTLText(params.body);
-    const dir = rtl ? 'rtl' : 'ltr';
-    const lang = rtl ? 'ar' : 'en';
-    const align = rtl ? 'right' : 'left';
-    const fontFamily = rtl
-        ? "'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
-        : "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+    const { rtl, dir, lang, align, fontFamily } = rtlPresentation(params.body);
     const brandName = getBrandName();
     const unsubscribeLabel = rtl ? 'إلغاء الاشتراك' : 'Unsubscribe';
 
@@ -136,6 +149,40 @@ export function waitlistEmailTemplate(params: {
                 <a href="${params.unsubscribeUrl}" style="color:#71717a;text-decoration:underline;font-size:12px;">${unsubscribeLabel}</a>
               </p>`,
     });
+}
+
+/**
+ * Account-notice email — an admin-composed message to a single merchant from
+ * the support console (e.g. "your page disconnected", "Business Info is empty").
+ * Transactional, NOT marketing: no unsubscribe link. Direction/language follow
+ * the admin-written body (they may write Arabic or English regardless of the
+ * merchant's dashboard language), so the greeting matches the body.
+ *
+ * `name` and `body` are HTML-escaped here — the admin's text is untrusted input.
+ */
+export function accountNoticeEmailTemplate(params: {
+    name: string | null;
+    subject: string;
+    body: string;
+}): { subject: string; html: string } {
+    const { rtl, dir, lang, align, fontFamily } = rtlPresentation(params.body || params.subject);
+    const trimmedName = params.name?.trim();
+    const greeting = trimmedName
+        ? (rtl ? `مرحبًا ${escapeHtml(trimmedName)}،` : `Hi ${escapeHtml(trimmedName)},`)
+        : (rtl ? 'مرحبًا،' : 'Hi,');
+    const bodyHtml = `<p style="margin:0 0 16px 0;">${greeting}</p>`
+        + `<div>${escapeHtml(params.body).replace(/\n/g, '<br>')}</div>`;
+
+    const html = emailShell({
+        lang,
+        dir,
+        bodyFontFamily: fontFamily,
+        title: params.subject,
+        preheader: escapeHtml(params.body.slice(0, 150)),
+        bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+        bodyHtml,
+    });
+    return { subject: params.subject, html };
 }
 
 /**
