@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, CircleAlert, Sparkles } from 'lucide-react';
+import { Check, CircleAlert, Sparkles, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { unwrapBusinessProfile } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
@@ -10,12 +10,23 @@ interface BusinessReadinessCardProps {
   /** Catalog item count; undefined while loading. */
   productsCount: number | undefined;
   onTryReply: () => void;
+  /**
+   * Tap an uncovered chip to fix it on the spot. Without this the merchant has
+   * to scroll past the whole product list to reach the fact rows — measured at
+   * 4–6 screens on a 390px viewport for a 27-item catalog.
+   */
+  onFixChip: (key: FixableChipKey) => void;
 }
+
+/** Chips that map to a fact the merchant can fill. `products` is not one. */
+export type FixableChipKey = 'hours' | 'address' | 'delivery' | 'payment';
 
 interface Chip {
   key: string;
   label: string;
   covered: boolean;
+  /** Set when tapping the chip should open the matching fact editor. */
+  fixKey?: FixableChipKey;
 }
 
 /**
@@ -25,7 +36,7 @@ interface Chip {
  * (same authority rule as the reply pipeline — suggestions never count as
  * covered) plus the catalog count for products.
  */
-export function BusinessReadinessCard({ page, productsCount, onTryReply }: BusinessReadinessCardProps) {
+export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixChip }: BusinessReadinessCardProps) {
   const t = useTranslations('business');
 
   const chips: Chip[] = useMemo(() => {
@@ -37,10 +48,10 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply }: Busin
         label: t('readiness.productsChip', { count: productsCount ?? 0 }),
         covered: (productsCount ?? 0) > 0,
       },
-      { key: 'hours', label: t('readiness.hoursChip'), covered: hasHours },
-      { key: 'address', label: t('readiness.addressChip'), covered: !!merchant.address?.trim() },
-      { key: 'delivery', label: t('readiness.deliveryChip'), covered: !!merchant.policies?.shipping?.trim() },
-      { key: 'payment', label: t('readiness.paymentChip'), covered: !!merchant.policies?.payment?.trim() },
+      { key: 'hours', label: t('readiness.hoursChip'), covered: hasHours, fixKey: 'hours' },
+      { key: 'address', label: t('readiness.addressChip'), covered: !!merchant.address?.trim(), fixKey: 'address' },
+      { key: 'delivery', label: t('readiness.deliveryChip'), covered: !!merchant.policies?.shipping?.trim(), fixKey: 'delivery' },
+      { key: 'payment', label: t('readiness.paymentChip'), covered: !!merchant.policies?.payment?.trim(), fixKey: 'payment' },
     ];
   }, [page.businessProfile, productsCount, t]);
 
@@ -65,26 +76,43 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply }: Busin
       </div>
 
       <ul className="flex flex-wrap gap-2 mt-3" aria-busy={productsCount === undefined}>
-        {chips.map((chip) => (
-          <li
-            key={chip.key}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border ${
-              chip.covered
-                ? 'status-active border-transparent'
-                : 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40'
-            }`}
-          >
-            {chip.covered ? (
-              <Check className="w-3.5 h-3.5" aria-hidden="true" />
-            ) : (
-              <CircleAlert className="w-3.5 h-3.5" aria-hidden="true" />
-            )}
-            {chip.label}
-            <span className="sr-only">
-              — {chip.covered ? t('readiness.covered') : t('readiness.missing')}
-            </span>
-          </li>
-        ))}
+        {chips.map((chip) => {
+          const Icon = chip.covered ? Check : CircleAlert;
+          const chipClass = `inline-flex items-center gap-1.5 rounded-full text-xs font-medium border ${
+            chip.covered
+              ? 'status-active border-transparent'
+              : 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40'
+          }`;
+          const body = (
+            <>
+              <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+              {chip.label}
+              <span className="sr-only">
+                — {chip.covered ? t('readiness.covered') : t('readiness.missing')}
+              </span>
+            </>
+          );
+          // An UNCOVERED chip is the shortcut: tap it to fix the gap right here.
+          // Covered chips stay inert — nothing to do, and a tappable-looking
+          // chip that does nothing is worse than a plain one.
+          return (
+            <li key={chip.key}>
+              {!chip.covered && chip.fixKey ? (
+                <button
+                  type="button"
+                  onClick={() => onFixChip(chip.fixKey!)}
+                  aria-label={`${chip.label} — ${t('readiness.missing')}`}
+                  className={`${chipClass} min-h-[44px] ps-3 pe-2.5 hover:brightness-95 active:brightness-90 transition`}
+                >
+                  {body}
+                  <ChevronLeft className="w-3.5 h-3.5 rtl:rotate-180" aria-hidden="true" />
+                </button>
+              ) : (
+                <span className={`${chipClass} px-3 py-1.5`}>{body}</span>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

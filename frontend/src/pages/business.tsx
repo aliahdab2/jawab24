@@ -7,10 +7,14 @@ import { Store, ChevronDown } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader, EmptyState, Select, Skeleton } from '@/components/ui';
 import { CatalogManager } from '@/components/catalog/CatalogManager';
-import { BusinessReadinessCard } from '@/components/business/BusinessReadinessCard';
+import { BusinessReadinessCard, type FixableChipKey } from '@/components/business/BusinessReadinessCard';
 import { BusinessFactRows } from '@/components/business/BusinessFactRows';
+import { BusinessFactSheet, type EditableFactKey } from '@/components/business/BusinessFactSheet';
 import { KnowledgeBasePanel } from '@/components/knowledge-base/KnowledgeBasePanel';
-import { pagesApi, catalogApi, type CatalogVerticalInfo } from '@/lib/api';
+import { api, pagesApi, catalogApi, type CatalogVerticalInfo } from '@/lib/api';
+import { captureError } from '@/lib/sentryHelpers';
+import { unwrapBusinessProfile, type BusinessProfile } from '@jawab24/shared';
+import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
 import { consumeCatalogImportDraft } from '@/lib/catalogImportDraft';
@@ -33,6 +37,7 @@ const TestSmartReplyModal = dynamic(
  */
 function BusinessPageInner() {
   const t = useTranslations('business');
+  const tPages = useTranslations('pages');
   const tCatalog = useTranslations('catalog');
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -123,6 +128,60 @@ function BusinessPageInner() {
 
   const [testReplyOpen, setTestReplyOpen] = useState(false);
 
+  // ── Single-field fact editing (B1 part 2) ────────────────────────────────
+  const [editingFact, setEditingFact] = useState<EditableFactKey | null>(null);
+  const [savingFact, setSavingFact] = useState(false);
+
+  /** Current confirmed value for a fact, as the sheet's single text field. */
+  const factValue = (key: EditableFactKey): string => {
+    const { merchant = {} } = unwrapBusinessProfile(selectedPage?.businessProfile);
+    switch (key) {
+      case 'address': return merchant.address ?? '';
+      case 'phone': return (merchant.phones ?? []).filter((p) => p?.trim()).join(', ');
+      case 'website': return merchant.website ?? '';
+      case 'delivery': return merchant.policies?.shipping ?? '';
+      case 'payment': return merchant.policies?.payment ?? '';
+    }
+  };
+
+  const saveFact = async (key: EditableFactKey, raw: string) => {
+    if (!selectedPage) return;
+    const value = raw.trim();
+    // ⚠️ applyMerchantEdit treats the PATCH as the merchant's FULL intent:
+    // every tracked field absent from it becomes a "cleared" tombstone. So we
+    // must send the whole existing merchant half with this one field changed —
+    // sending `{ address }` alone would wipe hours/phones/policies.
+    const { merchant = {} } = unwrapBusinessProfile(selectedPage.businessProfile);
+    const patch: BusinessProfile = { ...merchant };
+    switch (key) {
+      case 'address': patch.address = value || undefined; break;
+      case 'phone': patch.phones = value ? value.split(/[,،]/).map((p) => p.trim()).filter(Boolean) : undefined; break;
+      case 'website': patch.website = value || undefined; break;
+      case 'delivery': patch.policies = { ...patch.policies, shipping: value || undefined }; break;
+      case 'payment': patch.policies = { ...patch.policies, payment: value || undefined }; break;
+    }
+
+    setSavingFact(true);
+    try {
+      await api.put(`/pages/${selectedPage.id}`, { businessProfile: patch });
+      // Refetch so the readiness chips + rows reflect the new confirmed value.
+      await queryClient.invalidateQueries({ queryKey: ['pages'] });
+      setEditingFact(null);
+      toast.success(tPages('savedStatus'));
+    } catch (error) {
+      captureError(error, 'Failed to save business fact', { tags: { action: 'save-business-fact' } });
+      toast.error(tPages('saveFailed'));
+    } finally {
+      setSavingFact(false);
+    }
+  };
+
+  /** Readiness chip → the matching editor (hours has no sheet yet). */
+  const handleFixChip = (key: FixableChipKey) => {
+    if (key === 'hours') openAndScrollToInfo();
+    else setEditingFact(key);
+  };
+
   return (
     <>
       <PageHeader
@@ -152,16 +211,26 @@ function BusinessPageInner() {
       ) : validPages.length === 0 || !selectedPage ? (
         <EmptyState icon={Store} title={t('noPage')} />
       ) : (
-        <div className="mt-4 space-y-4">
+        // Mobile reorders facts ABOVE products: with a 27-item catalog the fact
+        // rows sat 4–6 screens down on a 390px viewport, burying the gaps that
+        // actually make Jawab fail. Desktop keeps the approved mock order.
+        // CSS order only — one DOM, never duplicated markup.
+        <div className="mt-4 flex flex-col gap-4">
           {/* 1 — Readiness */}
-          <BusinessReadinessCard
-            page={selectedPage}
-            productsCount={productsCount}
-            onTryReply={() => setTestReplyOpen(true)}
-          />
+          <div className="order-1">
+            <BusinessReadinessCard
+              page={selectedPage}
+              productsCount={productsCount}
+              onTryReply={() => setTestReplyOpen(true)}
+              onFixChip={handleFixChip}
+            />
+          </div>
 
           {/* 2 — Products & services (catalog) */}
-          <section aria-label={t('products.title')} className="rounded-2xl border border-theme-border bg-card p-4 sm:p-5">
+          <section
+            aria-label={t('products.title')}
+            className="order-3 md:order-2 rounded-2xl border border-theme-border bg-card p-4 sm:p-5"
+          >
             <h2 className="text-base sm:text-lg font-semibold text-foreground">{t('products.title')}</h2>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 mb-3">{t('products.hint')}</p>
             <CatalogManager
@@ -173,13 +242,19 @@ function BusinessPageInner() {
           </section>
 
           {/* 3 — Structured facts */}
-          <BusinessFactRows page={selectedPage} onAnswerMissing={openAndScrollToInfo} />
+          <div className="order-2 md:order-3">
+            <BusinessFactRows
+              page={selectedPage}
+              onEditFact={setEditingFact}
+              onEditHours={openAndScrollToInfo}
+            />
+          </div>
 
           {/* 4 — Free-text Business Info (collapsed once structured data exists) */}
           <section
             ref={infoSectionRef}
             aria-label={t('info.title')}
-            className="rounded-2xl border border-theme-border bg-card overflow-hidden"
+            className="order-4 rounded-2xl border border-theme-border bg-card overflow-hidden"
           >
             <button
               type="button"
@@ -214,6 +289,17 @@ function BusinessPageInner() {
 
       {testReplyOpen && selectedPage && (
         <TestSmartReplyModal page={selectedPage} onClose={() => setTestReplyOpen(false)} />
+      )}
+
+      {editingFact && selectedPage && (
+        <BusinessFactSheet
+          factKey={editingFact}
+          label={t(`facts.${editingFact}`)}
+          initialValue={factValue(editingFact)}
+          saving={savingFact}
+          onSave={(value) => saveFact(editingFact, value)}
+          onClose={() => setEditingFact(null)}
+        />
       )}
     </>
   );

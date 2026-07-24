@@ -1,32 +1,45 @@
 import React, { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { Clock, MapPin, Truck, CreditCard, Phone, Globe, Check } from 'lucide-react';
+import { Clock, MapPin, Truck, CreditCard, Phone, Globe, ChevronLeft } from 'lucide-react';
 import { unwrapBusinessProfile } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
 import type { LucideIcon } from 'lucide-react';
+import type { EditableFactKey } from './BusinessFactSheet';
+
+/** Row keys = the editable facts plus `hours`, which routes to the free-text
+ *  editor until the Phase-D day/range editor exists. */
+export type FactRowKey = EditableFactKey | 'hours';
 
 interface BusinessFactRowsProps {
   page: Page;
-  /** Focus the free-text editor — the current way to answer a missing fact. */
-  onAnswerMissing: () => void;
+  /** Open the single-field sheet for an editable fact. */
+  onEditFact: (key: EditableFactKey) => void;
+  /** `hours` has no sheet yet — hand it to the free-text Business Info editor. */
+  onEditHours: () => void;
 }
 
 interface FactRow {
-  key: string;
+  key: FactRowKey;
   icon: LucideIcon;
-  label: string;
-  /** Display value; null = not set. */
+  /** Display value; null = not set. Empty string = set but not renderable (hours). */
   value: string | null;
 }
 
 /**
- * Structured business facts as read-only rows (B1). Values come from the
- * CONFIRMED merchant half of the business profile only — the same authority
- * the reply pipeline uses. Missing facts show «أجب» pointing the merchant at
- * the editor (the Phase-D interview later replaces this with per-fact
- * questions).
+ * Business facts as tappable rows (B1 part 2 — mobile-first rewrite).
+ *
+ * The first version rendered a read-only table whose only action was a 19×16px
+ * «حدّد» link — measured on a 390px viewport, roughly a sixth of the 44px
+ * minimum tap target, and the owner mis-tapped it immediately. This replaces it
+ * with the iOS-Settings row pattern merchants already know from their phone:
+ * the WHOLE row is the target (56px), a chevron signals "this opens something",
+ * and the prompt text sits where the value will appear — so one line does the
+ * job of the old value + action pair.
+ *
+ * Values come from the CONFIRMED merchant half only — the same authority the
+ * reply pipeline uses (suggestions never count as set).
  */
-export function BusinessFactRows({ page, onAnswerMissing }: BusinessFactRowsProps) {
+export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFactRowsProps) {
   const t = useTranslations('business');
 
   const rows: FactRow[] = useMemo(() => {
@@ -35,47 +48,54 @@ export function BusinessFactRows({ page, onAnswerMissing }: BusinessFactRowsProp
     const phones = (merchant.phones ?? []).filter((p) => p?.trim());
     const addressValue = [merchant.address, merchant.city].filter((v) => v?.trim()).join('، ');
     return [
-      // Hours are a Record<day, ranges> — a faithful textual summary needs the
-      // Phase-D hours editor; until then presence is shown, values are not.
-      { key: 'hours', icon: Clock, label: t('facts.hours'), value: hasHours ? '' : null },
-      { key: 'address', icon: MapPin, label: t('facts.address'), value: addressValue || null },
-      { key: 'phone', icon: Phone, label: t('facts.phone'), value: phones.length ? phones.join(' · ') : null },
-      { key: 'website', icon: Globe, label: t('facts.website'), value: merchant.website?.trim() || null },
-      { key: 'delivery', icon: Truck, label: t('facts.delivery'), value: merchant.policies?.shipping?.trim() || null },
-      { key: 'payment', icon: CreditCard, label: t('facts.payment'), value: merchant.policies?.payment?.trim() || null },
+      { key: 'hours', icon: Clock, value: hasHours ? '' : null },
+      { key: 'address', icon: MapPin, value: addressValue || null },
+      { key: 'phone', icon: Phone, value: phones.length ? phones.join(' · ') : null },
+      { key: 'website', icon: Globe, value: merchant.website?.trim() || null },
+      { key: 'delivery', icon: Truck, value: merchant.policies?.shipping?.trim() || null },
+      { key: 'payment', icon: CreditCard, value: merchant.policies?.payment?.trim() || null },
     ];
-  }, [page.businessProfile, t]);
+  }, [page.businessProfile]);
 
   return (
     <section aria-label={t('facts.title')} className="rounded-2xl border border-theme-border bg-card p-4 sm:p-5">
       <h2 className="text-base sm:text-lg font-semibold text-foreground">{t('facts.title')}</h2>
-      <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 mb-3">{t('facts.hint')}</p>
+      <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 mb-2">{t('facts.hint')}</p>
 
-      <ul className="divide-y divide-theme-border">
+      <ul className="divide-y divide-theme-border -mx-4 sm:-mx-5">
         {rows.map((row) => {
           const Icon = row.icon;
           const isSet = row.value !== null;
           return (
-            <li key={row.key} className="flex items-center gap-3 py-2.5">
-              <Icon className="w-4 h-4 text-icon-muted flex-shrink-0" aria-hidden="true" />
-              <span className="text-sm font-medium text-foreground min-w-[7rem]">{row.label}</span>
-              {isSet ? (
-                <span className="flex items-center gap-1.5 text-sm text-muted-foreground min-w-0 truncate" dir="auto">
-                  <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0" aria-hidden="true" />
-                  {row.value || null}
-                </span>
-              ) : (
-                <>
-                  <span className="ms-auto text-xs text-subtle">{t('facts.notSet')}</span>
-                  <button
-                    type="button"
-                    onClick={onAnswerMissing}
-                    className="text-xs font-medium text-brand-600 hover:text-brand-700 underline-offset-2 hover:underline"
+            <li key={row.key}>
+              <button
+                type="button"
+                onClick={() => (row.key === 'hours' ? onEditHours() : onEditFact(row.key))}
+                // 56px row: the whole thing is the tap target (was a 19×16px link).
+                className="w-full min-h-[56px] flex items-center gap-3 px-4 sm:px-5 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors"
+              >
+                <Icon
+                  className={`w-5 h-5 flex-shrink-0 ${isSet ? 'text-brand-600' : 'text-icon-muted'}`}
+                  aria-hidden="true"
+                />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-medium text-foreground">
+                    {t(`facts.${row.key}`)}
+                  </span>
+                  {/* The prompt sits where the value will be — one line does the
+                      job of the old "not set" + "set" pair. */}
+                  <span
+                    className={`block text-xs truncate ${isSet ? 'text-muted-foreground' : 'text-brand-600'}`}
+                    dir="auto"
                   >
-                    {t('facts.answerPrompt')}
-                  </button>
-                </>
-              )}
+                    {isSet ? (row.value || t('facts.isSet')) : t(`facts.add_${row.key}`)}
+                  </span>
+                </span>
+                <ChevronLeft
+                  className="w-4 h-4 text-icon-muted flex-shrink-0 rtl:rotate-180"
+                  aria-hidden="true"
+                />
+              </button>
             </li>
           );
         })}
