@@ -1043,7 +1043,19 @@ export {
 // Explicit rules (opener/closer rotation etc.) remain LAST RESORT, preserved un-applied in
 // .planning/patches/v58-prompt-work-2026-07-24.patch, only if prod metrics still show
 // repetition after this pass.
-export const PROMPT_VERSION = 'v58';
+// v59: IDENTITY SELF-REPORT (Check 6 root-cause fix, 2026-07-24). Diagnosed via eval
+// #236: Check 6's regex treated ANY «ذكاء اصطناعي» mention as an automation reveal, so a
+// faithful Galaxy-S24 spec answer («كاميرا مع ذكاء اصطناعي») was nuked to the self-id
+// fallback pool — live in prod for every merchant selling AI-featured products, and
+// invisible because Check 6 mutated replies silently. "Who is the AI in this sentence?"
+// is a meaning question a regex can't answer (an interim pronoun heuristic needed dialect
+// patches within the hour — the marker-list treadmill). The model now answers it itself:
+// new structured flag `self_identified_as_automation` (set only when the reply describes
+// the RESPONDER as automated, never for product AI features); the validator strips the
+// ambiguous AI vocabulary only when that flag is set, keeps the lexically-decisive tokens
+// (بوت/روبوت/chatbot/Jawab24) unconditional, and records every swap with a validator-added
+// `self_identification_stripped` flag so Check 6 activity is finally observable in prod.
+export const PROMPT_VERSION = 'v59';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

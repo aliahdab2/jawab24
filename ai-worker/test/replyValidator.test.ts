@@ -351,22 +351,23 @@ describe('isCommentTooLong (Check 2)', () => {
 describe('stripSelfIdentification (Check 6)', () => {
     it('strips only the offending sentence and keeps the rest', () => {
         const out = stripSelfIdentification('I am a chatbot. The price is 150 SAR and we deliver fast.', 'en');
-        expect(out).not.toMatch(/chatbot/i);
-        expect(out).toContain('The price is 150 SAR');
+        expect(out.reply).not.toMatch(/chatbot/i);
+        expect(out.reply).toContain('The price is 150 SAR');
+        expect(out.stripped).toBe(true);
     });
 
     it('falls back to a pooled EN reply when nothing useful remains', () => {
-        expect(SELF_ID_FALLBACKS.en).toContain(stripSelfIdentification('I am a bot.', 'en'));
+        expect(SELF_ID_FALLBACKS.en).toContain(stripSelfIdentification('I am a bot.', 'en').reply);
     });
 
     it('falls back to a pooled AR reply when fallbackLang is ar', () => {
-        expect(SELF_ID_FALLBACKS.ar).toContain(stripSelfIdentification('I am a bot.', 'ar'));
+        expect(SELF_ID_FALLBACKS.ar).toContain(stripSelfIdentification('I am a bot.', 'ar').reply);
     });
 
     it('fallback pool varies — not the same string every time (repetition source, 2026-07-24)', () => {
         const seen = new Set<string>();
         for (let i = 0; i < 60; i++) {
-            seen.add(stripSelfIdentification('I am a bot.', 'ar'));
+            seen.add(stripSelfIdentification('I am a bot.', 'ar').reply);
         }
         expect(seen.size).toBeGreaterThan(1);
     });
@@ -377,18 +378,20 @@ describe('stripSelfIdentification (Check 6)', () => {
         }
     });
 
-    it('leaves a clean reply untouched', () => {
-        expect(stripSelfIdentification('Hello there, how can I help?', 'en')).toBe('Hello there, how can I help?');
+    it('leaves a clean reply untouched and reports stripped:false', () => {
+        const out = stripSelfIdentification('Hello there, how can I help?', 'en');
+        expect(out.reply).toBe('Hello there, how can I help?');
+        expect(out.stripped).toBe(false);
     });
 
     it('strips the Jawab24 brand name', () => {
         const out = stripSelfIdentification('This is Jawab24 speaking. Our hours are 9 to 5 every weekday here.', 'en');
-        expect(out).not.toMatch(/jawab24/i);
-        expect(out).toContain('Our hours are 9 to 5');
+        expect(out.reply).not.toMatch(/jawab24/i);
+        expect(out.reply).toContain('Our hours are 9 to 5');
     });
 
     it('returns empty input unchanged', () => {
-        expect(stripSelfIdentification('', 'ar')).toBe('');
+        expect(stripSelfIdentification('', 'ar')).toEqual({ reply: '', stripped: false });
     });
 
     // Regression (prod 2026-07-17): the dot inside "Jawab24.com" was treated as a
@@ -397,70 +400,76 @@ describe('stripSelfIdentification (Check 6)', () => {
     it('does not split inside a domain — no orphaned "com" fragment survives', () => {
         const out = stripSelfIdentification(
             'ما عندي هالمعلومة حالياً، بس فريق Jawab24.com ممكن يساعدوك أكتر.', 'ar');
-        expect(out).not.toMatch(/jawab24/i);
-        expect(out).not.toMatch(/\bcom\b/);
+        expect(out.reply).not.toMatch(/jawab24/i);
+        expect(out.reply).not.toMatch(/\bcom\b/);
         // Whole sentence stripped → under 10 useful chars → pooled AR fallback.
-        expect(SELF_ID_FALLBACKS.ar).toContain(out);
+        expect(SELF_ID_FALLBACKS.ar).toContain(out.reply);
     });
 
     it('keeps non-offending sentences intact when a domain sentence is stripped', () => {
         const out = stripSelfIdentification(
             'You can visit Jawab24.com for details. Our hours are 9 to 5 every weekday here.', 'en');
-        expect(out).not.toMatch(/jawab24|(^|\s)com\b/i);
-        expect(out).toContain('Our hours are 9 to 5');
+        expect(out.reply).not.toMatch(/jawab24|(^|\s)com\b/i);
+        expect(out.reply).toContain('Our hours are 9 to 5');
     });
 
     it('does not treat decimals as sentence boundaries', () => {
         const reply = 'I am a bot. Delivery takes 2.5 days on average for most orders.';
         const out = stripSelfIdentification(reply, 'en');
-        expect(out).toBe('Delivery takes 2.5 days on average for most orders.');
+        expect(out.reply).toBe('Delivery takes 2.5 days on average for most orders.');
     });
 
-    // «ذكاء اصطناعي» is ordinary PRODUCT vocabulary (phone cameras, TVs) — it is
-    // a self-reveal only in a self-referential sentence. Before this gate, a
-    // faithful Galaxy S24 spec answer was nuked to the fallback pool (eval #236).
-    describe('AI-as-product-feature vs AI-as-self-reveal (eval #236, 2026-07-24)', () => {
-        it('keeps an Arabic spec sentence that mentions ذكاء اصطناعي', () => {
+    // «ذكاء اصطناعي» is ordinary PRODUCT vocabulary (phone cameras, TVs) — it is a
+    // self-reveal only when the reply describes the RESPONDER as automated. "Who is
+    // the AI in this sentence?" is a meaning question no regex or marker list can
+    // answer (a pronoun heuristic needed dialect patches within the hour), so the
+    // MODEL answers it via the structured self_identified_as_automation flag —
+    // threaded here as `selfReported`. Before this gate, a faithful Galaxy S24 spec
+    // answer was nuked to the fallback pool (eval #236, diagnosed 2026-07-24).
+    describe('ambiguous AI vocabulary — gated by the model self-report (v59)', () => {
+        it('keeps an Arabic spec sentence mentioning ذكاء اصطناعي when the model did not self-report', () => {
             const reply = 'كاميرا Samsung Galaxy S24 بدقة 200 ميجابكسل مع ذكاء اصطناعي، وشاشة 6.2 بوصة بسطوع عالي.';
-            expect(stripSelfIdentification(reply, 'ar')).toBe(reply);
+            expect(stripSelfIdentification(reply, 'ar')).toEqual({ reply, stripped: false });
         });
 
-        it('keeps an English AI-feature sentence', () => {
+        it('keeps an English AI-feature sentence without a self-report', () => {
             const reply = 'The S24 camera uses artificial intelligence for photo editing and instant translation.';
-            expect(stripSelfIdentification(reply, 'en')).toBe(reply);
+            expect(stripSelfIdentification(reply, 'en')).toEqual({ reply, stripped: false });
         });
 
-        it('still strips a self-referential AI sentence («أنا ذكاء اصطناعي») down to the pool', () => {
-            expect(SELF_ID_FALLBACKS.ar).toContain(stripSelfIdentification('أنا ذكاء اصطناعي أساعدك هنا.', 'ar'));
+        it('strips a self-reported AI reveal down to the pool («أنا ذكاء اصطناعي»)', () => {
+            const out = stripSelfIdentification('أنا ذكاء اصطناعي أساعدك هنا.', 'ar', true);
+            expect(SELF_ID_FALLBACKS.ar).toContain(out.reply);
+            expect(out.stripped).toBe(true);
         });
 
-        it('still strips «معك مساعد ذكاء اصطناعي» while keeping the informative rest', () => {
+        it('is dialect-blind by design — the flag decides, not pronoun lists («آني ذكاء اصطناعي»)', () => {
+            const out = stripSelfIdentification('آني ذكاء اصطناعي وياك للرد السريع. التوصيل خلال يومين لكل المناطق.', 'ar', true);
+            expect(out.reply).not.toMatch(/ذكاء اصطناعي/);
+            expect(out.reply).toContain('التوصيل خلال يومين');
+        });
+
+        it('strips only the self-reported AI sentence and keeps the informative rest', () => {
             const out = stripSelfIdentification(
-                'معك مساعد ذكاء اصطناعي للرد السريع. الأسعار تبدأ من 100 ريال للقطعة الواحدة.', 'ar');
-            expect(out).not.toMatch(/ذكاء اصطناعي/);
-            expect(out).toContain('100 ريال');
+                'I am an artificial intelligence assistant. Delivery takes 3 days for most orders.', 'en', true);
+            expect(out.reply).not.toMatch(/artificial intelligence/i);
+            expect(out.reply).toContain('Delivery takes 3 days');
         });
 
-        it('still strips "I am an artificial intelligence assistant"', () => {
-            const out = stripSelfIdentification(
-                'I am an artificial intelligence assistant. Delivery takes 3 days for most orders.', 'en');
-            expect(out).not.toMatch(/artificial intelligence/i);
-            expect(out).toContain('Delivery takes 3 days');
+        // The trust decision, pinned honestly: without the model flag the validator
+        // does NOT touch ambiguous AI wording. The PROMPT is the primary prevention
+        // (identity rule + mandatory flag); the self-report is the classifier; and
+        // slips are observable in prod via self_identification_stripped counts.
+        it('without a self-report, ambiguous AI wording passes through the VALIDATOR untouched', () => {
+            const reply = 'أنا ذكاء اصطناعي أساعدك هنا.';
+            expect(stripSelfIdentification(reply, 'ar', false)).toEqual({ reply, stripped: false });
         });
 
-        it('unconditional reveals (روبوت/chatbot/برنامج بوت) are stripped regardless of self-reference', () => {
+        it('lexically-decisive reveals (روبوت/chatbot) strip regardless of the flag', () => {
             const out = stripSelfIdentification('هذا رد من روبوت المتجر. سعر الجهاز 2900 ريال شامل الضريبة.', 'ar');
-            expect(out).not.toMatch(/روبوت/);
-            expect(out).toContain('2900 ريال');
-        });
-
-        // The model mirrors the customer's dialect, so a disobedient self-reveal
-        // arrives in dialect too — the pronoun gate must not be MSA-only.
-        it('catches DIALECT self-reveals: «آني ذكاء اصطناعي» (Iraqi) and «معاك ذكاء اصطناعي» (Egyptian/Gulf)', () => {
-            expect(SELF_ID_FALLBACKS.ar).toContain(stripSelfIdentification('آني ذكاء اصطناعي أرد عليك هنا.', 'ar'));
-            const out = stripSelfIdentification('معاك ذكاء اصطناعي بيرد عليك. التوصيل خلال يومين لكل المناطق.', 'ar');
-            expect(out).not.toMatch(/ذكاء اصطناعي/);
-            expect(out).toContain('التوصيل خلال يومين');
+            expect(out.reply).not.toMatch(/روبوت/);
+            expect(out.reply).toContain('2900 ريال');
+            expect(out.stripped).toBe(true);
         });
     });
 });
@@ -598,5 +607,36 @@ describe('validateReply orchestration', () => {
         const out = validateReply(base({ reply: 'Hello there, happy to help', intent: 'GREETING' }), req('hi'));
         expect(out.reply).toBe('Hello there, happy to help');
         expect(out.flags).toEqual([]);
+    });
+
+    // Check 6 wiring (v59): the model's structured self-report gates the ambiguous
+    // AI vocabulary, and every swap is recorded — Check 6 must never mutate a
+    // reply silently again (the silence is how eval #236 hid for months).
+    describe('Check 6 wiring — self-report gate + observability flag', () => {
+        it('model-flagged AI reveal → stripped AND recorded', () => {
+            const out = validateReply(
+                base({ reply: 'أنا ذكاء اصطناعي أساعدك هنا.', language: 'ar', flags: ['self_identified_as_automation'] }),
+                req('انت بشر؟'),
+            );
+            expect(out.reply).not.toMatch(/ذكاء اصطناعي/);
+            expect(out.flags).toContain('self_identification_stripped');
+        });
+
+        it('unflagged PRODUCT-AI reply → untouched, nothing recorded', () => {
+            const reply = 'كاميرا Samsung Galaxy S24 بدقة 200 ميجابكسل مع ذكاء اصطناعي، وشاشة 6.2 بوصة.';
+            const out = validateReply(base({ reply, language: 'ar' }), req('وش مواصفات السامسونج'));
+            expect(out.reply).toBe(reply);
+            expect(out.flags).not.toContain('self_identification_stripped');
+        });
+
+        it('lexically-decisive reveal (روبوت) → stripped and recorded even WITHOUT the model flag', () => {
+            const out = validateReply(
+                base({ reply: 'هذا رد من روبوت المتجر. سعر الجهاز 2900 ريال شامل الضريبة.', language: 'ar' }),
+                req('كم السعر؟'),
+            );
+            expect(out.reply).not.toMatch(/روبوت/);
+            expect(out.reply).toContain('2900 ريال');
+            expect(out.flags).toContain('self_identification_stripped');
+        });
     });
 });

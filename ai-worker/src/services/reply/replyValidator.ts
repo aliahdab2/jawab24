@@ -298,30 +298,38 @@ export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
 
 /**
  * Check 6 — the bot must never reveal it's automated. Strips only the offending
- * sentence(s) and keeps the rest. Falls back to a pooled reply (in fallbackLang)
+ * sentence(s) and keeps the rest; falls back to a pooled reply (in fallbackLang)
  * only if fewer than 10 useful characters remain.
+ *
+ * Two vocabulary classes (v59):
+ * - Lexically DECISIVE tokens (بوت/روبوت/chatbot/Jawab24) — no legitimate product
+ *   sentence contains them; the regex strips them unconditionally.
+ * - AMBIGUOUS AI vocabulary («ذكاء اصطناعي», "artificial intelligence") — ordinary
+ *   product language (phone cameras, TVs, "Galaxy AI"). "Who is the AI in this
+ *   sentence?" is a MEANING question no regex or marker list can answer (a pronoun
+ *   heuristic was tried and needed dialect patches within the hour — the treadmill
+ *   the no-hand-maintained-linguistic-lists rule exists to prevent). The model
+ *   answers it itself via the structured `self_identified_as_automation` flag
+ *   (same pattern as the gender/dialect self-reports); `selfReported` carries it.
+ *
+ * Returns `stripped` so the caller can record that a swap happened — Check 6
+ * mutated replies silently for months, which is exactly why the #236 bug
+ * (product specs nuked to the fallback pool) went undetected.
  */
-export function stripSelfIdentification(reply: string, fallbackLang: string): string {
+export function stripSelfIdentification(
+    reply: string,
+    fallbackLang: string,
+    selfReported = false,
+): { reply: string; stripped: boolean } {
     if (!reply) {
-        return reply;
+        return { reply, stripped: false };
     }
-    // Unconditional automation reveals — these have no legitimate product reading.
     const botWords = /\bبوت\b|bot\b|روبوت|AI chatbot|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24/i;
-    // "AI" as a CONCEPT is ordinary product vocabulary (phone cameras, TVs:
-    // «كاميرا مع ذكاء اصطناعي», "Galaxy AI") — stripping every mention nuked real
-    // spec answers down to the fallback pool (eval #236, diagnosed 2026-07-24).
-    // These count as a self-reveal only when the same sentence is SELF-referential.
     const aiWords = /ذكاء اصطناعي|الذكاء الاصطناعي|artificial intelligence/i;
-    // NB: JS \b is ASCII-only — useless around Arabic script — so the Arabic
-    // pronouns use explicit whitespace/edge boundaries instead. Dialect variants
-    // included (آني/اني Iraqi-Gulf, معاك/وياك Egyptian-Gulf): the model mirrors
-    // the customer's dialect, so a disobedient self-reveal arrives in dialect
-    // too. Erring loose here lets a reveal SLIP — keep the pronouns covered.
-    const selfRef = /(?:^|\s)(?:أنا|انا|آني|اني|نحن|احنا)(?:\s|$)|معك|معكم|معاك|وياك|مساعد|بخدمتك|في خدمتك|خدمة العملاء|I['’]m\b|\bI am\b|\bthis is\b|you['’]re (?:chatting|talking)|\bassistant\b/i;
     const offending = (text: string): boolean =>
-        botWords.test(text) || (aiWords.test(text) && selfRef.test(text));
+        botWords.test(text) || (selfReported && aiWords.test(text));
     if (!offending(reply)) {
-        return reply;
+        return { reply, stripped: false };
     }
     // Split while preserving sentence delimiters so we can rejoin naturally.
     // A period only terminates a sentence when followed by whitespace or
@@ -342,9 +350,9 @@ export function stripSelfIdentification(reply: string, fallbackLang: string): st
     const filtered = kept.join('').trim();
     if (filtered.length < 10) {
         const pool = SELF_ID_FALLBACKS[fallbackLang === 'ar' ? 'ar' : 'en'];
-        return pool[Math.floor(Math.random() * pool.length)];
+        return { reply: pool[Math.floor(Math.random() * pool.length)], stripped: true };
     }
-    return filtered;
+    return { reply: filtered, stripped: true };
 }
 
 /**
@@ -433,8 +441,18 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
         flags.push('info_not_in_kb');
     }
 
-    // Check 6: Self-identification — strip any sentence revealing the bot is automated.
-    const finalReply = stripSelfIdentification(reply, parsed.language || request.language || 'ar');
+    // Check 6: Self-identification — strip any sentence revealing the bot is
+    // automated. The model's own structured report (v59) gates the ambiguous
+    // AI vocabulary; lexically-decisive tokens strip regardless. Every swap is
+    // recorded as a flag — Check 6 must never mutate a reply silently again
+    // (the silence is how #236 hid for months).
+    const selfReported = flags.includes('self_identified_as_automation');
+    const { reply: finalReply, stripped } = stripSelfIdentification(
+        reply, parsed.language || request.language || 'ar', selfReported,
+    );
+    if (stripped && !flags.includes('self_identification_stripped')) {
+        flags.push('self_identification_stripped');
+    }
 
     return {
         ...parsed,
