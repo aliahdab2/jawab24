@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { Toggle } from '@/components/ui';
 import type { CatalogItem } from '@jawab24/shared';
-import { todayISODate } from './CatalogItemFields';
+import { formatCatalogPrice as formatPrice, todayISODate } from './CatalogItemFields';
 
 interface CatalogItemRowProps {
   item: CatalogItem;
@@ -18,12 +18,6 @@ interface CatalogItemRowProps {
   /** Inline price save (trimmed string; '' = price on request). Server
    *  normalizes Arabic-Indic digits — pass the raw text through. */
   onSavePrice: (item: CatalogItem, price: string) => void;
-}
-
-/** "3500.00" → "3500", "49.90" → "49.9" — merchant-facing, no trailing zeros. */
-function formatPrice(price: string): string {
-  const n = Number(price);
-  return Number.isFinite(n) ? String(n) : price;
 }
 
 /**

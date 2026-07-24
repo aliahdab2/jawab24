@@ -30,6 +30,12 @@ export function todayISODate(): string {
   return new Date().toLocaleDateString('en-CA');
 }
 
+/** DB numeric strings arrive as "3500.00" — show "3500". Non-numeric passes through. */
+export function formatCatalogPrice(price: string): string {
+  const n = Number(price);
+  return Number.isFinite(n) ? String(n) : price;
+}
+
 /** Both dates set and inverted — callers block submit and show the inline error. */
 export function draftDatesInvalid(draft: CatalogItemDraft): boolean {
   return draft.startsAt !== '' && draft.endsAt !== '' && draft.endsAt < draft.startsAt;

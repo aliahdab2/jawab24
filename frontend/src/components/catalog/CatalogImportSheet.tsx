@@ -7,10 +7,13 @@ import { ChevronDown, ChevronUp, Loader2, RotateCcw, ScanSearch, Trash2, X } fro
 import { DetailSheet } from '@/components/ui/DetailSheet';
 import { Button, CharCounter, Textarea } from '@/components/ui';
 import { FileUploadButton } from '@/components/knowledge-base/FileUploadButton';
-import { catalogApi, type CatalogExtractResponse } from '@/lib/api';
-import { MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEMS_PER_PAGE } from '@jawab24/shared';
+import { catalogApi, type CatalogExtractResponse, type CatalogItemInput } from '@/lib/api';
 import {
-  CatalogItemFields, draftDatesInvalid, draftFromInput, draftToInput, todayISODate, type CatalogItemDraft,
+  MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEMS_PER_PAGE, reconcileCatalogProposals,
+  type ReconcileExistingItem, type ReconcileKind,
+} from '@jawab24/shared';
+import {
+  CatalogItemFields, draftDatesInvalid, draftFromInput, draftToInput, formatCatalogPrice, todayISODate, type CatalogItemDraft,
 } from './CatalogItemFields';
 
 /** Below this the extract button stays disabled — mirrors the backend Zod min,
@@ -19,27 +22,51 @@ const MIN_IMPORT_CHARS = 10;
 
 type Phase = 'input' | 'extracting' | 'scanning' | 'review' | 'saving';
 
+/** The merchant's call on an `update`-classified row (D-038: default = keep —
+ *  a price change must be an explicit choice, never a side effect of saving). */
+type UpdateChoice = 'keep' | 'update' | 'separate';
+
 interface ProposalRow {
   id: number;
   draft: CatalogItemDraft;
   removed: boolean;
   expanded: boolean;
   nameError: boolean;
+  /** Arrival-time reconcile vs the existing catalog. 'new' has no match. */
+  kind: ReconcileKind;
+  match: ReconcileExistingItem | null;
+  updateChoice: UpdateChoice;
+}
+
+/** Add-bound rows INSERT via /batch; an `update` row only inserts when the
+ *  merchant explicitly chose "add as separate" (a restored duplicate is the
+ *  merchant overriding the auto-deselect — also an insert). */
+function isAddBound(row: ProposalRow): boolean {
+  return row.kind !== 'update' || row.updateChoice === 'separate';
 }
 
 interface CatalogImportSheetProps {
   pageId: string;
   /** 'paste' (default): paste/upload → extract. 'scan': read the page's recent
-   *  FB posts server-side — no input step, opens straight into the review. */
-  mode?: 'paste' | 'scan';
+   *  FB posts server-side — no input step, opens straight into the review.
+   *  'scanReplies': same, from the page's configured Post Reply auto-replies. */
+  mode?: 'paste' | 'scan' | 'scanReplies';
+  /** The page's current catalog (any CatalogItem[] fits) — proposals are
+   *  classified against it (D-038: new / already-there / price-changed)
+   *  instead of blind-inserting. */
+  existingItems?: ReconcileExistingItem[];
   /** Applied at save to rows that got a price but no currency (posts and
    *  pasted lists rarely state one; a bare number reads ambiguous to the AI). */
   defaultCurrency?: string;
   /** Pre-filled paste (e.g. arriving from the Business Info price-list warning). */
   initialText?: string;
-  /** Called with the number of items created + the first saved item's name
-   *  (feeds the "try asking Jawab about it" nudge) — parent refreshes + closes. */
-  onDone: (count: number, firstItemName?: string) => void;
+  /** scanReplies only: the scan reported the page has no Post Reply configured —
+   *  the host hides the action (the presence gate closing after the fact). */
+  onNoPostReplies?: () => void;
+  /** Called with the number of items created + the first created item's name
+   *  (feeds the "try asking Jawab about it" nudge) + the number of existing
+   *  items whose price was updated — parent refreshes + closes. */
+  onDone: (count: number, firstItemName?: string, updatedCount?: number) => void;
   onClose: () => void;
 }
 
@@ -56,32 +83,85 @@ interface CatalogImportSheetProps {
  * request"). Missing prices get a warning badge + a count-up nudge; prices
  * stay private (only ever sent inside replies/DMs, never posted).
  */
-export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, initialText, onDone, onClose }: CatalogImportSheetProps) {
+export function CatalogImportSheet({
+  pageId, mode = 'paste', existingItems, defaultCurrency, initialText, onNoPostReplies, onDone, onClose,
+}: CatalogImportSheetProps) {
   const t = useTranslations('catalog');
 
-  const [phase, setPhase] = useState<Phase>(mode === 'scan' ? 'scanning' : 'input');
+  const isScanMode = mode === 'scan' || mode === 'scanReplies';
+  const [phase, setPhase] = useState<Phase>(isScanMode ? 'scanning' : 'input');
   const [text, setText] = useState(initialText ?? '');
   const [rows, setRows] = useState<ProposalRow[]>([]);
   const [meta, setMeta] = useState<Pick<CatalogExtractResponse, 'dropped' | 'overflow' | 'truncated'> | null>(null);
   const [scanUpToDate, setScanUpToDate] = useState(false);
+  const [noPostReplies, setNoPostReplies] = useState(false);
+
+  /** Classify arriving proposals against the current catalog (D-038): a name
+   *  already there with the same price starts DESELECTED (nothing to do); with
+   *  a different price it becomes an explicit update-vs-keep decision. Runs
+   *  once at arrival — the classification is the review's starting point, not
+   *  a live validator chasing the merchant's edits. */
+  const buildRows = (items: CatalogItemInput[]): ProposalRow[] => {
+    const classified = reconcileCatalogProposals(
+      items.map((input) => {
+        const n = typeof input.price === 'number' ? input.price : Number(input.price);
+        return {
+          name: input.name,
+          price: input.price == null || input.price === '' || !Number.isFinite(n) ? null : n,
+          currency: input.currency ?? null,
+          input,
+        };
+      }),
+      existingItems ?? [],
+    );
+    return classified.map((c, i) => ({
+      id: i,
+      draft: draftFromInput(c.proposal.input),
+      removed: c.kind === 'duplicate',
+      expanded: false,
+      nameError: false,
+      kind: c.kind,
+      match: c.match,
+      updateChoice: 'keep' as UpdateChoice,
+    }));
+  };
 
   const activeRows = rows.filter((r) => !r.removed);
-  const pricelessCount = activeRows.filter((r) => !r.draft.price.trim()).length;
+  /** Rows the save will INSERT / rows whose matched item gets a price PATCH.
+   *  `keep` update-rows and deselected duplicates contribute to neither. */
+  const addRows = activeRows.filter(isAddBound);
+  const updateRows = activeRows.filter((r) => r.kind === 'update' && r.updateChoice === 'update');
+  // The price nudge concerns rows about to be INSERTED priceless — an update
+  // row's matched item already has whatever price the merchant kept.
+  const pricelessCount = addRows.filter((r) => !r.draft.price.trim()).length;
 
-  // Scan mode fires immediately on mount — there is no input step. The ref
+  // Scan modes fire immediately on mount — there is no input step. The ref
   // guards React 18 dev double-invoke (a second POST would burn the rate limit).
   const scanFired = useRef(false);
   useEffect(() => {
-    if (mode !== 'scan' || scanFired.current) return;
+    if (!isScanMode || scanFired.current) return;
     scanFired.current = true;
     (async () => {
       try {
-        const { data } = await catalogApi.scanPosts(pageId);
-        setRows(data.items.map((item, i) => ({
-          id: i, draft: draftFromInput(item), removed: false, expanded: false, nameError: false,
-        })));
-        setMeta({ dropped: data.dropped, overflow: data.overflow, truncated: data.truncated });
-        setScanUpToDate(data.upToDate);
+        if (mode === 'scanReplies') {
+          const { data } = await catalogApi.scanPostReplies(pageId);
+          if (data.noPostReplies) {
+            // Presence gate closed after the fact: nothing was scanned (and no
+            // paid call burned) — show why in place, and let the host hide the
+            // action so the dead end isn't offered again.
+            setNoPostReplies(true);
+            onNoPostReplies?.();
+            setPhase('review');
+            return;
+          }
+          setRows(buildRows(data.items));
+          setMeta({ dropped: data.dropped, overflow: data.overflow, truncated: data.truncated });
+        } else {
+          const { data } = await catalogApi.scanPosts(pageId);
+          setRows(buildRows(data.items));
+          setMeta({ dropped: data.dropped, overflow: data.overflow, truncated: data.truncated });
+          setScanUpToDate(data.upToDate);
+        }
         setPhase('review');
       } catch (err) {
         // Nothing typed, nothing lost — toast and close; the scan button remains.
@@ -113,9 +193,7 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
     setPhase('extracting');
     try {
       const { data } = await catalogApi.extract(pageId, text.trim());
-      setRows(data.items.map((item, i) => ({
-        id: i, draft: draftFromInput(item), removed: false, expanded: false, nameError: false,
-      })));
+      setRows(buildRows(data.items));
       setMeta({ dropped: data.dropped, overflow: data.overflow, truncated: data.truncated });
       setPhase('review');
     } catch (err) {
@@ -136,13 +214,14 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
   const saveAll = async () => {
     // A row edited to a blank name can't be saved — surface it inline instead
     // of a rejected batch (same one-required-field rule as the manual form).
-    const blank = activeRows.find((r) => !r.draft.name.trim());
+    // Only add-bound rows: an update PATCHes price/currency, never the name.
+    const blank = addRows.find((r) => !r.draft.name.trim());
     if (blank) {
       patchRow(blank.id, { expanded: true, nameError: true });
       return;
     }
     // Inverted dates: expand the row — the end-date field shows the inline error.
-    const badDates = activeRows.find((r) => draftDatesInvalid(r.draft));
+    const badDates = addRows.find((r) => draftDatesInvalid(r.draft));
     if (badDates) {
       patchRow(badDates.id, { expanded: true });
       return;
@@ -150,14 +229,31 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
 
     setPhase('saving');
     try {
-      await catalogApi.batchCreate(pageId, activeRows.map((r) => {
-        const input = draftToInput(r.draft);
-        // Currency fallback: a typed price with no stated currency inherits
-        // the page's last-used one (extraction rarely finds a currency in posts).
-        if (input.price != null && !input.currency && defaultCurrency) input.currency = defaultCurrency;
-        return input;
+      // Confirmed updates FIRST: each PATCH is idempotent, so if the batch
+      // insert below fails, retrying the whole save re-applies them harmlessly.
+      // Price/currency only (D-038: the source proposes a price, nothing else)
+      // — and a proposal that never asserted a currency must not overwrite the
+      // stored one, so `currency` is omitted when the draft has none (the
+      // defaultCurrency fallback is for INSERTS, not existing rows).
+      await Promise.all(updateRows.map((r) => {
+        const data: { price: string | null; currency?: string } = {
+          price: r.draft.price.trim() === '' ? null : r.draft.price.trim(),
+        };
+        if (r.draft.currency.trim()) data.currency = r.draft.currency.trim();
+        // updateRows are 'update'-classified, which always carries a match.
+        return catalogApi.update(pageId, r.match!.id, data);
       }));
-      onDone(activeRows.length, activeRows[0]?.draft.name.trim() || undefined);
+
+      if (addRows.length > 0) {
+        await catalogApi.batchCreate(pageId, addRows.map((r) => {
+          const input = draftToInput(r.draft);
+          // Currency fallback: a typed price with no stated currency inherits
+          // the page's last-used one (extraction rarely finds a currency in posts).
+          if (input.price != null && !input.currency && defaultCurrency) input.currency = defaultCurrency;
+          return input;
+        }));
+      }
+      onDone(addRows.length, addRows[0]?.draft.name.trim() || undefined, updateRows.length);
     } catch (err) {
       // Review state is kept — a failed save must not eat the merchant's edits.
       const axiosErr = err as AxiosError<{ code?: string }>;
@@ -169,6 +265,27 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
       setPhase('review');
     }
   };
+
+  /** Merchant-facing price text for the update-conflict line. */
+  const priceLabel = (price: string | null, currency: string | null): string => {
+    if (price === null || price === '') return t('reconcile.noPrice');
+    const p = formatCatalogPrice(price);
+    return currency ? `${p} ${currency}` : p;
+  };
+
+  /** [title, hint] for the empty review card — each entry path has its own story. */
+  const emptyStateKeys = (): [string, string] => {
+    if (mode === 'scanReplies') {
+      return noPostReplies
+        ? ['replyScan.noReplies', 'replyScan.noRepliesHint']
+        : ['replyScan.emptyResult', 'replyScan.emptyResultHint'];
+    }
+    if (mode === 'scan') {
+      return scanUpToDate ? ['scan.upToDate', 'scan.upToDateHint'] : ['scan.emptyResult', 'scan.emptyResultHint'];
+    }
+    return ['import.emptyResult', 'import.emptyResultHint'];
+  };
+  const [emptyTitleKey, emptyHintKey] = emptyStateKeys();
 
   const titleId = 'catalog-import-title';
   const inReview = phase === 'review' || phase === 'saving';
@@ -183,7 +300,7 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
     <DetailSheet dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId }} panelClassName="sm:h-auto">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
         <h2 id={titleId} className="text-lg font-semibold text-foreground">
-          {mode === 'scan' ? t('scan.title') : t('import.title')}
+          {mode === 'scanReplies' ? t('replyScan.title') : mode === 'scan' ? t('scan.title') : t('import.title')}
         </h2>
         <button type="button" onClick={onClose} aria-label={t('actions.cancel')}
           className="p-1.5 rounded-lg text-icon-muted hover:bg-muted transition-colors">
@@ -197,7 +314,7 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
             <ScanSearch className="w-8 h-8 mx-auto text-icon-muted" aria-hidden="true" />
             <p className="text-sm text-muted-foreground mt-3 flex items-center justify-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-              {t('scan.scanning')}
+              {mode === 'scanReplies' ? t('replyScan.scanning') : t('scan.scanning')}
             </p>
           </div>
         )}
@@ -233,19 +350,19 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
 
         {inReview && rows.length === 0 && (
           <div className="rounded-2xl border border-dashed border-border p-6 text-center">
-            <h3 className="text-base font-semibold text-foreground">
-              {mode === 'scan' && scanUpToDate ? t('scan.upToDate') : mode === 'scan' ? t('scan.emptyResult') : t('import.emptyResult')}
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {mode === 'scan' && scanUpToDate ? t('scan.upToDateHint') : mode === 'scan' ? t('scan.emptyResultHint') : t('import.emptyResultHint')}
-            </p>
+            <h3 className="text-base font-semibold text-foreground">{t(emptyTitleKey)}</h3>
+            <p className="text-sm text-muted-foreground mt-1">{t(emptyHintKey)}</p>
           </div>
         )}
 
         {inReview && rows.length > 0 && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              {mode === 'scan' ? t('scan.reviewHint', { count: rows.length }) : t('import.reviewHint', { count: rows.length })}
+              {mode === 'scanReplies'
+                ? t('replyScan.reviewHint', { count: rows.length })
+                : mode === 'scan'
+                  ? t('scan.reviewHint', { count: rows.length })
+                  : t('import.reviewHint', { count: rows.length })}
             </p>
             {/* The price-completion nudge — the real work of the review step.
                 Posts rarely carry prices (deliberately); a priceless item only
@@ -280,6 +397,13 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
                       {row.draft.endsAt !== '' && row.draft.endsAt < todayISODate() && (
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground ms-2">
                           {t('badges.ended')}
+                        </span>
+                      )}
+                      {/* Stays visible on the deselected row — it explains WHY
+                          the row arrived deselected (D-038 reconcile). */}
+                      {row.kind === 'duplicate' && (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground ms-2">
+                          {t('reconcile.duplicateBadge')}
                         </span>
                       )}
                     </div>
@@ -326,6 +450,40 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
                         : <Trash2 className="w-4 h-4" aria-hidden="true" />}
                     </button>
                   </div>
+                  {/* The reconcile decision (D-038): this name is already in the
+                      catalog at a different price. The merchant decides — keep
+                      (default: saving must never change a price as a side
+                      effect), update the existing item, or add separately. */}
+                  {row.kind === 'update' && row.match && !row.removed && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <p className="alert-warning rounded-lg px-2.5 py-1.5 text-xs">
+                        {t('reconcile.conflict', {
+                          existing: priceLabel(row.match.price, row.match.currency),
+                          proposed: priceLabel(row.draft.price.trim() || null, row.draft.currency.trim() || row.match.currency),
+                        })}
+                      </p>
+                      {/* aria-pressed toggles, not radio roles — same rationale
+                          as the type chips (L7, PR #407). */}
+                      <div className="flex flex-wrap gap-2" role="group" aria-label={t('reconcile.choiceLabel')}>
+                        {(['update', 'keep', 'separate'] as const).map((choice) => (
+                          <button
+                            key={choice}
+                            type="button"
+                            aria-pressed={row.updateChoice === choice}
+                            onClick={() => patchRow(row.id, { updateChoice: choice })}
+                            className={clsx(
+                              'px-3 py-1 rounded-full text-xs font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/30',
+                              row.updateChoice === choice
+                                ? 'bg-brand-500 text-white border-brand-500'
+                                : 'bg-card text-foreground/80 border-border hover:bg-muted',
+                            )}
+                          >
+                            {t(`reconcile.${choice}`)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {row.expanded && !row.removed && (
                     <div className="px-3 pb-3 pt-1 border-t border-border">
                       <CatalogItemFields
@@ -380,9 +538,11 @@ export function CatalogImportSheet({ pageId, mode = 'paste', defaultCurrency, in
                 variant="primary"
                 onClick={saveAll}
                 loading={phase === 'saving'}
-                disabled={activeRows.length === 0}
+                disabled={addRows.length + updateRows.length === 0}
               >
-                {t('import.addItems', { count: activeRows.length })}
+                {/* With confirmed updates in the mix, "Add N" would miscount
+                    the save — the generic label covers inserts + patches. */}
+                {updateRows.length > 0 ? t('reconcile.saveChanges') : t('import.addItems', { count: addRows.length })}
               </Button>
             )}
           </>

@@ -5,13 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CatalogItem, Page } from '@jawab24/shared';
 import { CatalogManager } from './CatalogManager';
 
-const { list, create, update, remove, extract, batchCreate, scanPosts, setVertical } = vi.hoisted(() => ({
+const { list, create, update, remove, extract, batchCreate, scanPosts, scanPostReplies, setVertical } = vi.hoisted(() => ({
   list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(),
-  extract: vi.fn(), batchCreate: vi.fn(), scanPosts: vi.fn(), setVertical: vi.fn(),
+  extract: vi.fn(), batchCreate: vi.fn(), scanPosts: vi.fn(), scanPostReplies: vi.fn(), setVertical: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  catalogApi: { list, create, update, remove, extract, batchCreate, scanPosts, setVertical },
+  catalogApi: { list, create, update, remove, extract, batchCreate, scanPosts, scanPostReplies, setVertical },
   kbApi: { extractText: vi.fn() }, // FileUploadButton (inside the import sheet)
 }));
 
@@ -211,6 +211,22 @@ describe('CatalogManager', () => {
     expect(screen.getByLabelText('Your list')).toHaveValue('قص شعر ٥٠ ريال');
   });
 
+  it('offers the post-replies import and stops offering it once the scan reports none exist', async () => {
+    list.mockResolvedValue(listData([item()]));
+    scanPostReplies.mockResolvedValue({
+      data: { items: [], dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, repliesScanned: 0, noPostReplies: true },
+    });
+    renderManager();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Import from your post replies' }));
+    expect(await screen.findByText('This page has no Post Replies yet')).toBeInTheDocument();
+
+    // Presence gate closed — the dead end isn't offered again after closing.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0]);
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Import from your post replies' })).not.toBeInTheDocument());
+  });
+
   // Phase C: after an import, CatalogManager's onDone decides whether to offer
   // the KB cleanup sheet (product/field line still in the KB). Drive a full
   // import to completion and assert the decision both ways.
@@ -229,7 +245,9 @@ describe('CatalogManager', () => {
 
   it('onDone: opens the cleanup sheet when the KB still holds the moved product line', async () => {
     const oil = item({ id: 'oil', name: 'زيت موتول', price: '22.00' });
-    list.mockResolvedValue(listData([oil]));            // fetchQuery in onDone sees it
+    // Empty BEFORE the import (a pre-existing identical item would make the
+    // reconcile step auto-deselect the proposal); the onDone fetchQuery sees it.
+    list.mockResolvedValueOnce(listData([])).mockResolvedValue(listData([oil]));
     extractOneItem('زيت موتول');
     batchCreate.mockResolvedValue({ data: [oil] });
     const page = { id: 'p1', name: 'Moto', knowledgeBase: 'زيت موتول 18 ريال', businessProfile: {} } as unknown as Page;
@@ -242,7 +260,7 @@ describe('CatalogManager', () => {
 
   it('onDone: does NOT open the sheet when nothing in the KB matches (fall-through)', async () => {
     const candle = item({ id: 'c', name: 'شمعة معطرة', price: '22.00' });
-    list.mockResolvedValue(listData([candle]));
+    list.mockResolvedValueOnce(listData([])).mockResolvedValue(listData([candle]));
     extractOneItem('شمعة معطرة');
     batchCreate.mockResolvedValue({ data: [candle] });
     // KB has only hours prose + no confirmed fields → neither matcher fires.

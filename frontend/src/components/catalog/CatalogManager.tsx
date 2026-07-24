@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ClipboardPaste, Plus, ScanSearch, Tag } from 'lucide-react';
+import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { AxiosError } from 'axios';
 import { Button, EmptyState, Select, Skeleton, ConfirmationModal } from '@/components/ui';
 import { catalogApi, type CatalogItemInput, type CatalogVerticalInfo } from '@/lib/api';
@@ -44,12 +45,21 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [deleting, setDeleting] = useState<CatalogItem | null>(null);
-  /** Which entry to the review flow is open: paste/upload import, or the posts scan. */
-  const [sheetMode, setSheetMode] = useState<'paste' | 'scan' | null>(null);
+  /** Which entry to the review flow is open: paste/upload import, the posts
+   *  scan, or the Post Reply scan. */
+  const [sheetMode, setSheetMode] = useState<'paste' | 'scan' | 'scanReplies' | null>(null);
+  /** Presence gate (learned from the scan itself — no free-standing probe
+   *  endpoint): once a scan reports the page has no Post Reply configured,
+   *  stop offering the action for the rest of the mount. */
+  const [postRepliesAbsent, setPostRepliesAbsent] = useState(false);
   /** Prefilled question for the post-save "try it" moment (null = modal closed). */
   const [tryItQuestion, setTryItQuestion] = useState<string | null>(null);
   /** Phase C: fresh items to offer KB cleanup against (null = sheet closed). */
   const [cleanupItems, setCleanupItems] = useState<CatalogItem[] | null>(null);
+  /** How many items the import that opened the cleanup sheet actually CREATED —
+   *  cleanupItems holds the whole fresh catalog (the matcher needs it), so its
+   *  length is the wrong number for the "N added" fallback toast. */
+  const [cleanupImportCount, setCleanupImportCount] = useState(0);
 
   // Deep-link entry: open the import sheet once when the page asks for it.
   useEffect(() => {
@@ -217,11 +227,19 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
             <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
             {t('scan.cta')}
           </Button>
-          <div className="flex items-center justify-center gap-1 mt-3 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center gap-1 mt-3 text-sm text-muted-foreground">
             <span>{t('empty.or')}</span>
             <button type="button" onClick={() => setSheetMode('paste')} className="underline underline-offset-2 hover:text-foreground transition-colors">
               {t('import.cta')}
             </button>
+            {!postRepliesAbsent && (
+              <>
+                <span aria-hidden="true">·</span>
+                <button type="button" onClick={() => setSheetMode('scanReplies')} className="underline underline-offset-2 hover:text-foreground transition-colors">
+                  {t('replyScan.cta')}
+                </button>
+              </>
+            )}
             <span aria-hidden="true">·</span>
             <button type="button" onClick={openAdd} className="underline underline-offset-2 hover:text-foreground transition-colors">
               {t('empty.cta')}
@@ -238,11 +256,17 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
               </span>
               {verticalControl}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="secondary" size="sm" onClick={() => setSheetMode('scan')} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
                 <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
                 {t('scan.cta')}
               </Button>
+              {!postRepliesAbsent && (
+                <Button variant="secondary" size="sm" onClick={() => setSheetMode('scanReplies')} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
+                  <PostReplyIcon className={`w-4 h-4 me-1.5 ${postReplyIconClass}`} aria-hidden="true" />
+                  {t('replyScan.cta')}
+                </Button>
+              )}
               <Button variant="secondary" size="sm" onClick={() => setSheetMode('paste')} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
                 <ClipboardPaste className="w-4 h-4 me-1.5" aria-hidden="true" />
                 {t('import.cta')}
@@ -289,11 +313,18 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
           key={sheetMode}
           pageId={pageId}
           mode={sheetMode}
+          existingItems={items}
           defaultCurrency={lastCurrency}
           initialText={importRequested ? importInitialText : undefined}
-          onDone={async (count, firstItemName) => {
+          onNoPostReplies={() => setPostRepliesAbsent(true)}
+          onDone={async (count, firstItemName, updatedCount) => {
             invalidate();
             setSheetMode(null);
+
+            // Confirmed price updates are already committed (PATCHes ran before
+            // the batch) — acknowledge them even when the cleanup sheet takes
+            // over the rest of the flow below.
+            if (updatedCount) toast.success(t('reconcile.toastUpdated', { count: updatedCount }));
 
             // Phase C: if the imported products still have their old free-text
             // lines in Business Info (or a structured field is duplicated in the
@@ -311,6 +342,7 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
                 const hasProductLines = matchCatalogLinesInKb(kb, fresh).length > 0;
                 const hasFieldLines = matchStructuredFieldLinesInKb(kb, present).length > 0;
                 if (hasProductLines || hasFieldLines) {
+                  setCleanupImportCount(count);
                   setCleanupItems(fresh);
                   return; // the cleanup sheet is the next step; its own onDone toasts
                 }
@@ -324,7 +356,8 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
 
             // The value proof, zero effort: right after saving, offer to SEE
             // the AI answer a price question about their own product. Only
-            // when the host gave us the page (the modal needs it).
+            // when the host gave us the page (the modal needs it). An
+            // updates-only save created nothing — its toast already fired above.
             if (page && firstItemName) {
               toast.success(t('import.toastImported', { count }), {
                 duration: 10000,
@@ -333,11 +366,17 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
                   onClick: () => setTryItQuestion(t('tryIt.question', { name: firstItemName })),
                 },
               });
-            } else {
+            } else if (count > 0) {
               toast.success(t('import.toastImported', { count }));
             }
           }}
-          onClose={() => setSheetMode(null)}
+          onClose={() => {
+            setSheetMode(null);
+            // Confirmed price updates PATCH before the batch insert — if the
+            // batch then failed and the merchant cancels, those updates are
+            // already committed. Refetch so the list never shows stale prices.
+            invalidate();
+          }}
         />
       )}
 
@@ -351,7 +390,9 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
           onDone={(removed) => {
             setCleanupItems(null);
             invalidate();
-            toast.success(removed > 0 ? t('cleanup.toastDone', { count: removed }) : t('import.toastImported', { count: cleanupItems.length }));
+            // Updates-only imports created nothing — their toast already fired.
+            if (removed > 0) toast.success(t('cleanup.toastDone', { count: removed }));
+            else if (cleanupImportCount > 0) toast.success(t('import.toastImported', { count: cleanupImportCount }));
           }}
         />
       )}
