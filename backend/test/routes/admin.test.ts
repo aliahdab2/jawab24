@@ -1108,7 +1108,20 @@ describe('Admin Routes', () => {
                 from: vi.fn().mockReturnThis(),
                 where: vi.fn().mockResolvedValue([{ id: 'page-1' }, { id: 'page-2' }]),
             };
-            // Ninth–eleventh: post replies actually SENT (replyMethod='post_reply') across
+            // Ninth–tenth: KB chunk counts (grouped, pinned to active version) + unresolved
+            // gaps per displayed page — support-console health inputs.
+            const kbChunksChain = {
+                from: vi.fn().mockReturnThis(),
+                innerJoin: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                groupBy: vi.fn().mockResolvedValue([{ pageId: 'page-1', type: 'offering', count: 5 }]),
+            };
+            const kbGapsChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                groupBy: vi.fn().mockResolvedValue([]),
+            };
+            // Eleventh–thirteenth: post replies actually SENT (replyMethod='post_reply') across
             // FB comments, IG comments and DMs → 4 + 6 + 2 = 12.
             const fbPostReplyChain = {
                 from: vi.fn().mockReturnThis(),
@@ -1141,6 +1154,8 @@ describe('Admin Routes', () => {
                 .mockReturnValueOnce(membershipChain as any)
                 .mockReturnValueOnce(memberCountChain as any)
                 .mockReturnValueOnce(ownedPagesChain as any)
+                .mockReturnValueOnce(kbChunksChain as any)
+                .mockReturnValueOnce(kbGapsChain as any)
                 .mockReturnValueOnce(fbPostReplyChain as any)
                 .mockReturnValueOnce(igPostReplyChain as any)
                 .mockReturnValueOnce(dmPostReplyChain as any)
