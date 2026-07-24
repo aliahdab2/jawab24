@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X, Check } from 'lucide-react';
+import Link from 'next/link';
 import { DetailSheet, Button } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useMerchantTimezone } from '@/hooks/useMerchantTimezone';
 import { canonicalizeHoursEntry, SHORT_DAY_KEYS } from '@jawab24/shared';
 
 type DayKey = typeof SHORT_DAY_KEYS[number];
@@ -55,6 +57,7 @@ function readExisting(hours: Record<string, string[]> | undefined) {
 export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: BusinessHoursSheetProps) {
   const t = useTranslations('business');
   const tc = useTranslations('common');
+  const timezone = useMerchantTimezone();
 
   const existing = useMemo(() => readExisting(initialHours), [initialHours]);
   const [openDays, setOpenDays] = useState<Set<DayKey>>(existing.open);
@@ -166,6 +169,25 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
         {openDays.size === 0 && (
           <p className="text-xs text-amber-700 mt-3" role="status">{t('facts.hoursPickDay')}</p>
         )}
+
+        {/* Timezone is SHOWN, never edited here: it is workspace-level and already
+            drives the AI's date awareness + the Post-Reply hours gate. A second
+            control would give one value two homes (D-039). */}
+        {timezone && (
+          <p className="text-xs text-muted-foreground mt-4">
+            {/* Show the city, not the IANA id: "Asia/Damascus" → "Damascus". */}
+            {t('facts.hoursTimezone', { timezone: timezone.split('/').pop()?.replace(/_/g, ' ') ?? timezone })}{' '}
+            <Link href="/settings" className="text-brand-600 hover:underline underline-offset-2">
+              {t('facts.hoursTimezoneChange')}
+            </Link>
+          </p>
+        )}
+
+        {/* These hours are what Jawab TELLS customers — they are NOT the
+            auto-reply schedule (settings.businessHoursOnly). Different facts:
+            a shop open 9–5 may still want the bot answering at night. Saying so
+            here prevents the merchant assuming one controls the other. */}
+        <p className="text-xs text-subtle mt-2">{t('facts.hoursScopeNote')}</p>
       </div>
 
       <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
