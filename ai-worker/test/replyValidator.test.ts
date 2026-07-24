@@ -457,19 +457,46 @@ describe('stripSelfIdentification (Check 6)', () => {
         });
 
         // The trust decision, pinned honestly: without the model flag the validator
-        // does NOT touch ambiguous AI wording. The PROMPT is the primary prevention
-        // (identity rule + mandatory flag); the self-report is the classifier; and
-        // slips are observable in prod via self_identification_stripped counts.
-        it('without a self-report, ambiguous AI wording passes through the VALIDATOR untouched', () => {
-            const reply = 'أنا ذكاء اصطناعي أساعدك هنا.';
+        // does NOT touch ambiguous AI wording (literal first-person claims like
+        // «أنا ذكاء اصطناعي» are decisive and caught regardless — see botWords).
+        // The PROMPT is the primary prevention (identity rule + mandatory flag);
+        // the self-report is the classifier for everything non-literal; and slips
+        // are observable in prod via self_identification_stripped counts.
+        it('without a self-report, non-first-person AI wording passes through the VALIDATOR untouched', () => {
+            const reply = 'هذا النظام يعتمد على الذكاء الاصطناعي في اقتراح المقاسات المناسبة.';
             expect(stripSelfIdentification(reply, 'ar', false)).toEqual({ reply, stripped: false });
         });
 
-        it('lexically-decisive reveals (روبوت/chatbot) strip regardless of the flag', () => {
-            const out = stripSelfIdentification('هذا رد من روبوت المتجر. سعر الجهاز 2900 ريال شامل الضريبة.', 'ar');
-            expect(out.reply).not.toMatch(/روبوت/);
-            expect(out.reply).toContain('2900 ريال');
+        it('the literal first-person claim «أنا ذكاء اصطناعي» is DECISIVE — stripped even without the flag', () => {
+            const out = stripSelfIdentification('أنا ذكاء اصطناعي أساعدك هنا.', 'ar', false);
+            expect(SELF_ID_FALLBACKS.ar).toContain(out.reply);
             expect(out.stripped).toBe(true);
+        });
+
+        it('lexically-decisive reveals (chatbot / first-person «أنا روبوت») strip regardless of the flag', () => {
+            const out = stripSelfIdentification('You are talking to a chatbot. The device costs 2900 SAR with tax.', 'en');
+            expect(out.reply).not.toMatch(/chatbot/i);
+            expect(out.reply).toContain('2900 SAR');
+
+            const ar = stripSelfIdentification('أنا روبوت أرد عليك تلقائياً. سعر الجهاز 2900 ريال شامل الضريبة.', 'ar');
+            expect(ar.reply).not.toMatch(/روبوت/);
+            expect(ar.reply).toContain('2900 ريال');
+        });
+
+        // روبوت / "robot" are PRODUCTS — robot vacuums, robot toys (#495 review:
+        // the same bug class as #236, one word over). Only the model's report or
+        // a literal first-person claim makes them a reveal.
+        it('keeps ROBOT-product sentences in both languages when the model did not self-report', () => {
+            const ar = 'مكنسة روبوت ذكية للتنظيف اليومي بسعر 899 ريال.';
+            expect(stripSelfIdentification(ar, 'ar')).toEqual({ reply: ar, stripped: false });
+            const en = 'The robot vacuum cleans daily and costs 899 SAR.';
+            expect(stripSelfIdentification(en, 'en')).toEqual({ reply: en, stripped: false });
+        });
+
+        it('strips a روبوت sentence when the model self-reported', () => {
+            const out = stripSelfIdentification('معك روبوت الرد الآلي هنا. الشحن متاح لكل المدن.', 'ar', true);
+            expect(out.reply).not.toMatch(/روبوت/);
+            expect(out.reply).toContain('الشحن متاح');
         });
     });
 });
@@ -629,14 +656,21 @@ describe('validateReply orchestration', () => {
             expect(out.flags).not.toContain('self_identification_stripped');
         });
 
-        it('lexically-decisive reveal (روبوت) → stripped and recorded even WITHOUT the model flag', () => {
+        it('lexically-decisive reveal («أنا روبوت») → stripped and recorded even WITHOUT the model flag', () => {
             const out = validateReply(
-                base({ reply: 'هذا رد من روبوت المتجر. سعر الجهاز 2900 ريال شامل الضريبة.', language: 'ar' }),
+                base({ reply: 'أنا روبوت أرد عليك تلقائياً. سعر الجهاز 2900 ريال شامل الضريبة.', language: 'ar' }),
                 req('كم السعر؟'),
             );
             expect(out.reply).not.toMatch(/روبوت/);
             expect(out.reply).toContain('2900 ريال');
             expect(out.flags).toContain('self_identification_stripped');
+        });
+
+        it('ROBOT-product reply → untouched (robot vacuums are products, not reveals)', () => {
+            const reply = 'مكنسة روبوت ذكية للتنظيف اليومي، شحن مجاني فوق 500 ريال.';
+            const out = validateReply(base({ reply, language: 'ar' }), req('عندكم مكانس؟'));
+            expect(out.reply).toBe(reply);
+            expect(out.flags).not.toContain('self_identification_stripped');
         });
     });
 });

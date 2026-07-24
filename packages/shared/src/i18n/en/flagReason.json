@@ -32,5 +32,7 @@
   "dm_failed_our_fault": "DM failed — permission issue",
   "dm_failed_unknown": "DM failed",
   "no_reply_generated": "Needs manual reply",
-  "AI flagged this reply": "Flagged for review"
+  "AI flagged this reply": "Flagged for review",
+  "self_identified_as_automation": "AI self-reference detected",
+  "self_identification_stripped": "Automated-identity wording removed from the reply"
 }

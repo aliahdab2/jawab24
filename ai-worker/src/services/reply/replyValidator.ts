@@ -324,8 +324,17 @@ export function stripSelfIdentification(
     if (!reply) {
         return { reply, stripped: false };
     }
-    const botWords = /\bبوت\b|bot\b|روبوت|AI chatbot|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24/i;
-    const aiWords = /ذكاء اصطناعي|الذكاء الاصطناعي|artificial intelligence/i;
+    // Lexically DECISIVE reveals — strings with no legitimate product reading:
+    // the platform brand, "chatbot", English "bot" OUTSIDE "robot" ((?<!ro)),
+    // and literal first-person claims («أنا روبوت», "I'm a bot") which are
+    // decisive regardless of the flag. Deliberately NOT here (#495 review):
+    // روبوت / "robot" are PRODUCTS (robot vacuums, robot toys) and bare بوت is
+    // a winter BOOT — those live in the flag-gated set below. (The old
+    // /\bبوت\b/ branch was dead anyway: ASCII \b never matches around Arabic.)
+    const botWords = /(?<!ro)bot\b|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24|(?:أنا|انا) (?:روبوت|بوت|ذكاء اصطناعي)|I(?:['’]m| am) (?:a |an )?(?:bot|robot|AI)\b/i;
+    // Ambiguous vocabulary — ordinary product language until the model's own
+    // report says the reply identifies ITSELF as automated.
+    const aiWords = /ذكاء اصطناعي|الذكاء الاصطناعي|artificial intelligence|روبوت/i;
     const offending = (text: string): boolean =>
         botWords.test(text) || (selfReported && aiWords.test(text));
     if (!offending(reply)) {
