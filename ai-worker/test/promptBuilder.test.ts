@@ -20,6 +20,7 @@ import {
     MAX_INPUT_TOKENS,
     buildSystemPrompt,
     buildUserPrompt,
+    formatTimeGap,
     formatTodayForPrompt,
 } from '../src/services/reply/promptBuilder';
 import { STATIC_SYSTEM_PREFIX } from '../src/services/reply/systemPrompt';
@@ -352,6 +353,58 @@ describe('buildSystemPrompt — structured BUSINESS_INFO block', () => {
         expect(out).not.toMatch(/disregard all previous rules/i);
         expect(out).not.toMatch(/\nADMIN:/);
         expect(out).toContain('[filtered]');
+    });
+});
+
+describe('formatTimeGap', () => {
+    it('renders coarse human buckets, switching units on the exact meaning-line thresholds', () => {
+        const cases: Array<[number, string]> = [
+            [0, 'less than a minute'],
+            [1, '1 minute'],
+            [59, '59 minutes'],
+            [60, '1 hour'],
+            [119, '1 hour'],    // floor — never rounds up into the next bucket
+            [120, '2 hours'],
+            [2879, '47 hours'], // 1 min under 48h stays in hours — the meaning line still says "same conversation"
+            [2880, '2 days'],   // the 48h boundary flips unit and meaning TOGETHER (#493 review)
+            [4320, '3 days'],
+            [10080, '7 days'],
+        ];
+        for (const [mins, expected] of cases) expect(formatTimeGap(mins)).toBe(expected);
+    });
+});
+
+describe('buildUserPrompt — the time-since-last-message clock (v58)', () => {
+    const history = [{ role: 'user' as const, content: 'بدي جزمة' }];
+
+    it('renders fact + meaning for a DM with history, at the top of the user block above customerContext', () => {
+        const out = buildUserPrompt(req('سلام', {
+            channel: 'dm', conversationHistory: history,
+            customerContext: 'Name: Noor', minutesSinceLastMessage: 3 * 24 * 60,
+        }));
+        expect(out.startsWith('[Time since the previous message: 3 days — the customer is RETURNING')).toBe(true);
+        expect(out.indexOf('Time since')).toBeLessThan(out.indexOf('Noor'));
+    });
+
+    it('meaning tracks the gap: live (<1h), stepped-away (<48h), returning (≥48h) — unit and meaning agree at the boundary', () => {
+        const at = (mins: number) => buildUserPrompt(req('سلام', {
+            channel: 'dm', conversationHistory: history, minutesSinceLastMessage: mins,
+        }));
+        expect(at(5)).toContain('live conversation still in progress');
+        expect(at(300)).toContain('stepped away earlier');
+        expect(at(2879)).toContain('47 hours');
+        expect(at(2879)).toContain('stepped away earlier'); // no "2 days"+"same conversation" contradiction
+        expect(at(2880)).toContain('2 days');
+        expect(at(2880)).toContain('RETURNING after days away');
+    });
+
+    it('never renders for comments, without history, or without the number', () => {
+        expect(buildUserPrompt(req('سلام', { channel: 'comment', conversationHistory: history, minutesSinceLastMessage: 60 })))
+            .not.toContain('Time since');
+        expect(buildUserPrompt(req('سلام', { channel: 'dm', minutesSinceLastMessage: 60 })))
+            .not.toContain('Time since');
+        expect(buildUserPrompt(req('سلام', { channel: 'dm', conversationHistory: history })))
+            .not.toContain('Time since');
     });
 });
 

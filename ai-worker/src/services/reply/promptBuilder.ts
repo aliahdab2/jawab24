@@ -44,10 +44,12 @@ export function formatTodayForPrompt(timezone?: string, now: Date = new Date()):
 export function formatTimeGap(minutes: number): string {
     if (minutes < 1) return 'less than a minute';
     if (minutes < 60) return minutes === 1 ? '1 minute' : `${minutes} minutes`;
-    const hours = Math.round(minutes / 60);
+    // Floor, not round: the rendered unit must flip to "days" at exactly the
+    // 48h boundary the meaning line uses (#493 review — round() said "2 days"
+    // up to ~30 min early while the meaning still read "same conversation").
+    const hours = Math.floor(minutes / 60);
     if (hours < 48) return hours === 1 ? '1 hour' : `${hours} hours`;
-    const days = Math.round(hours / 24);
-    return `${days} days`;
+    return `${Math.floor(hours / 24)} days`;
 }
 
 /**
@@ -420,9 +422,10 @@ export function buildUserPrompt(request: GenerateRequest): string {
     // live conversation from a days-later return — prod showed 77% of one page's
     // "welcome back" greetings landing in <10-minute-old conversations. Information,
     // not constraints (owner ruling): the fact + what the fact means, descriptively.
-    // Placed HERE, adjacent to the message, deliberately: in the system prompt this
-    // exact line was ignored across three replay iterations (2026-07-24) — same
-    // attention lesson as customerContext above.
+    // Placed in the per-call USER turn deliberately (it lands at the top of the
+    // user block, above customerContext): in the system prompt this exact line was
+    // ignored across three replay iterations (2026-07-24) — being in the user turn
+    // is what matters, same attention lesson as customerContext above.
     if (typeof request.context?.minutesSinceLastMessage === 'number'
         && request.context.conversationHistory?.length
         && resolveChannel(request) === 'dm') {

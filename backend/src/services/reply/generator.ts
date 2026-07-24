@@ -668,6 +668,11 @@ export class ReplyGenerator {
                 // "clock" the model otherwise lacks: history reaches it undated, so
                 // it cannot tell a live conversation from a days-later return. Sent
                 // as a plain fact; promptBuilder renders it in the per-call block.
+                // NOTE: historyForAI drops prior user messages whose content equals
+                // the CURRENT text (the just-stored-message filter matches by content,
+                // not id), so a customer repeating an identical message computes the
+                // gap from an older turn — overstated, never understated. Coarse
+                // formatTimeGap buckets absorb most of it; acceptable edge.
                 const lastPrev = historyForAI[historyForAI.length - 1];
                 const minutesSinceLastMessage = lastPrev?.timestamp
                     ? Math.max(0, Math.round((Date.now() - new Date(lastPrev.timestamp).getTime()) / 60000))
