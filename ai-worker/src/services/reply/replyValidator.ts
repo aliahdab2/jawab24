@@ -298,16 +298,56 @@ export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
 
 /**
  * Check 6 — the bot must never reveal it's automated. Strips only the offending
- * sentence(s) and keeps the rest. Falls back to a pooled reply (in fallbackLang)
+ * sentence(s) and keeps the rest; falls back to a pooled reply (in fallbackLang)
  * only if fewer than 10 useful characters remain.
+ *
+ * Two vocabulary classes (v59):
+ * - Lexically DECISIVE strings, stripped unconditionally: the platform brand,
+ *   "chatbot", English "bot" outside "robot" — plus a closed TRIPWIRE of literal
+ *   first-person claims («أنا روبوت», «أنا ذكاء اصطناعي», "I'm a bot"). The
+ *   tripwire is an OWNED, bounded list — MSA + English only, the registers a
+ *   disobeying model actually emits — and is deliberately NEVER extended with
+ *   dialect variants (آني روبوت etc. go through the flag below); extending it
+ *   would recreate the marker-list treadmill the
+ *   no-hand-maintained-linguistic-lists rule exists to prevent.
+ * - AMBIGUOUS vocabulary («ذكاء اصطناعي», "artificial intelligence", روبوت —
+ *   robot vacuums are PRODUCTS) — ordinary product language. "Who is the AI in
+ *   this sentence?" is a MEANING question no regex can answer; the model answers
+ *   it via the structured `self_identified_as_automation` flag (same pattern as
+ *   the gender/dialect self-reports); `selfReported` carries it. Residual,
+ *   accepted with visibility: a model FALSE-POSITIVE flag on a product-AI reply
+ *   re-creates a #236-style swap — but every swap is flagged, needs-attention,
+ *   and cache-blocked, so it is seen, not silent.
+ *
+ * Returns `stripped` so the caller records the swap as
+ * `self_identification_stripped` — DELIBERATELY merchant-visible (flag_reason
+ * chip + needs-attention): a substituted reply is exactly what a merchant
+ * should review. Check 6 mutated replies silently for months, which is why the
+ * #236 bug went undetected.
  */
-export function stripSelfIdentification(reply: string, fallbackLang: string): string {
+export function stripSelfIdentification(
+    reply: string,
+    fallbackLang: string,
+    selfReported = false,
+): { reply: string; stripped: boolean } {
     if (!reply) {
-        return reply;
+        return { reply, stripped: false };
     }
-    const botWords = /\bبوت\b|bot\b|روبوت|ذكاء اصطناعي|artificial intelligence|AI chatbot|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24/i;
-    if (!botWords.test(reply)) {
-        return reply;
+    // Lexically DECISIVE reveals — strings with no legitimate product reading:
+    // the platform brand, "chatbot", English "bot" OUTSIDE "robot" ((?<!ro)),
+    // and literal first-person claims («أنا روبوت», "I'm a bot") which are
+    // decisive regardless of the flag. Deliberately NOT here (#495 review):
+    // روبوت / "robot" are PRODUCTS (robot vacuums, robot toys) and bare بوت is
+    // a winter BOOT — those live in the flag-gated set below. (The old
+    // /\bبوت\b/ branch was dead anyway: ASCII \b never matches around Arabic.)
+    const botWords = /(?<!ro)bot\b|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24|(?:أنا|انا) (?:روبوت|بوت|ذكاء اصطناعي)|I(?:['’]m| am) (?:a |an )?(?:bot|robot|AI)\b/i;
+    // Ambiguous vocabulary — ordinary product language until the model's own
+    // report says the reply identifies ITSELF as automated.
+    const aiWords = /ذكاء (?:ال)?[اإ]صطناعي|artificial intelligence|روبوت/i;
+    const offending = (text: string): boolean =>
+        botWords.test(text) || (selfReported && aiWords.test(text));
+    if (!offending(reply)) {
+        return { reply, stripped: false };
     }
     // Split while preserving sentence delimiters so we can rejoin naturally.
     // A period only terminates a sentence when followed by whitespace or
@@ -322,15 +362,15 @@ export function stripSelfIdentification(reply: string, fallbackLang: string): st
         const sentence = parts[i];
         const delimiter = parts[i + 1] || '';
         if (!sentence) continue;
-        if (botWords.test(sentence)) continue;
+        if (offending(sentence)) continue;
         kept.push(sentence + delimiter);
     }
     const filtered = kept.join('').trim();
     if (filtered.length < 10) {
         const pool = SELF_ID_FALLBACKS[fallbackLang === 'ar' ? 'ar' : 'en'];
-        return pool[Math.floor(Math.random() * pool.length)];
+        return { reply: pool[Math.floor(Math.random() * pool.length)], stripped: true };
     }
-    return filtered;
+    return { reply: filtered, stripped: true };
 }
 
 /**
@@ -419,8 +459,18 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
         flags.push('info_not_in_kb');
     }
 
-    // Check 6: Self-identification — strip any sentence revealing the bot is automated.
-    const finalReply = stripSelfIdentification(reply, parsed.language || request.language || 'ar');
+    // Check 6: Self-identification — strip any sentence revealing the bot is
+    // automated. The model's own structured report (v59) gates the ambiguous
+    // AI vocabulary; lexically-decisive tokens strip regardless. Every swap is
+    // recorded as a flag — Check 6 must never mutate a reply silently again
+    // (the silence is how #236 hid for months).
+    const selfReported = flags.includes('self_identified_as_automation');
+    const { reply: finalReply, stripped } = stripSelfIdentification(
+        reply, parsed.language || request.language || 'ar', selfReported,
+    );
+    if (stripped && !flags.includes('self_identification_stripped')) {
+        flags.push('self_identification_stripped');
+    }
 
     return {
         ...parsed,

@@ -143,6 +143,7 @@ IMPORTANT: Output a JSON object with these fields:
   - "offensive_or_abusive" if the message contains insults, profanity, slurs, or disrespectful language
   - "low_confidence" if you are uncertain about your reply
   - "redirect_to_human" if you advised the customer to contact a human
+  - "self_identified_as_automation" if your reply calls YOU (its writer) a bot, AI, or automated — in any language. A product's own AI features (a camera "with AI") never count.
 CRITICAL: If your reply redirects the customer to DMs, another channel, or says "I'll check" / "let me get back to you" — you MUST include "info_not_in_kb" in flags. Redirecting means you don't have the answer in the provided knowledge base.
 Output ONLY the JSON object, nothing else.
 

@@ -12,6 +12,9 @@ describe('cacheRejectReason', () => {
         expect(cacheRejectReason('high', ['info_not_in_kb'])).toBe('info_not_in_kb');
         expect(cacheRejectReason('medium', ['price_not_in_kb'])).toBe('price_not_in_kb');
         expect(cacheRejectReason('high', ['language_mismatch'])).toBe('language_mismatch');
+        // A Check-6-swapped reply (often the generic self-id pool) must never be
+        // cached against the customer's actual question (#495 review L2).
+        expect(cacheRejectReason('high', ['self_identification_stripped'])).toBe('self_identification_stripped');
     });
 
     it('rejects the model-emitted low_confidence FLAG even when the confidence field is not low', () => {
