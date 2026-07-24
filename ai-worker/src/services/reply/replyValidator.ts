@@ -305,8 +305,22 @@ export function stripSelfIdentification(reply: string, fallbackLang: string): st
     if (!reply) {
         return reply;
     }
-    const botWords = /\bبوت\b|bot\b|روبوت|ذكاء اصطناعي|artificial intelligence|AI chatbot|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24/i;
-    if (!botWords.test(reply)) {
+    // Unconditional automation reveals — these have no legitimate product reading.
+    const botWords = /\bبوت\b|bot\b|روبوت|AI chatbot|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24/i;
+    // "AI" as a CONCEPT is ordinary product vocabulary (phone cameras, TVs:
+    // «كاميرا مع ذكاء اصطناعي», "Galaxy AI") — stripping every mention nuked real
+    // spec answers down to the fallback pool (eval #236, diagnosed 2026-07-24).
+    // These count as a self-reveal only when the same sentence is SELF-referential.
+    const aiWords = /ذكاء اصطناعي|الذكاء الاصطناعي|artificial intelligence/i;
+    // NB: JS \b is ASCII-only — useless around Arabic script — so the Arabic
+    // pronouns use explicit whitespace/edge boundaries instead. Dialect variants
+    // included (آني/اني Iraqi-Gulf, معاك/وياك Egyptian-Gulf): the model mirrors
+    // the customer's dialect, so a disobedient self-reveal arrives in dialect
+    // too. Erring loose here lets a reveal SLIP — keep the pronouns covered.
+    const selfRef = /(?:^|\s)(?:أنا|انا|آني|اني|نحن|احنا)(?:\s|$)|معك|معكم|معاك|وياك|مساعد|بخدمتك|في خدمتك|خدمة العملاء|I['’]m\b|\bI am\b|\bthis is\b|you['’]re (?:chatting|talking)|\bassistant\b/i;
+    const offending = (text: string): boolean =>
+        botWords.test(text) || (aiWords.test(text) && selfRef.test(text));
+    if (!offending(reply)) {
         return reply;
     }
     // Split while preserving sentence delimiters so we can rejoin naturally.
@@ -322,7 +336,7 @@ export function stripSelfIdentification(reply: string, fallbackLang: string): st
         const sentence = parts[i];
         const delimiter = parts[i + 1] || '';
         if (!sentence) continue;
-        if (botWords.test(sentence)) continue;
+        if (offending(sentence)) continue;
         kept.push(sentence + delimiter);
     }
     const filtered = kept.join('').trim();

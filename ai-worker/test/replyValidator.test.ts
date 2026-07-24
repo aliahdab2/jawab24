@@ -415,6 +415,54 @@ describe('stripSelfIdentification (Check 6)', () => {
         const out = stripSelfIdentification(reply, 'en');
         expect(out).toBe('Delivery takes 2.5 days on average for most orders.');
     });
+
+    // «ذكاء اصطناعي» is ordinary PRODUCT vocabulary (phone cameras, TVs) — it is
+    // a self-reveal only in a self-referential sentence. Before this gate, a
+    // faithful Galaxy S24 spec answer was nuked to the fallback pool (eval #236).
+    describe('AI-as-product-feature vs AI-as-self-reveal (eval #236, 2026-07-24)', () => {
+        it('keeps an Arabic spec sentence that mentions ذكاء اصطناعي', () => {
+            const reply = 'كاميرا Samsung Galaxy S24 بدقة 200 ميجابكسل مع ذكاء اصطناعي، وشاشة 6.2 بوصة بسطوع عالي.';
+            expect(stripSelfIdentification(reply, 'ar')).toBe(reply);
+        });
+
+        it('keeps an English AI-feature sentence', () => {
+            const reply = 'The S24 camera uses artificial intelligence for photo editing and instant translation.';
+            expect(stripSelfIdentification(reply, 'en')).toBe(reply);
+        });
+
+        it('still strips a self-referential AI sentence («أنا ذكاء اصطناعي») down to the pool', () => {
+            expect(SELF_ID_FALLBACKS.ar).toContain(stripSelfIdentification('أنا ذكاء اصطناعي أساعدك هنا.', 'ar'));
+        });
+
+        it('still strips «معك مساعد ذكاء اصطناعي» while keeping the informative rest', () => {
+            const out = stripSelfIdentification(
+                'معك مساعد ذكاء اصطناعي للرد السريع. الأسعار تبدأ من 100 ريال للقطعة الواحدة.', 'ar');
+            expect(out).not.toMatch(/ذكاء اصطناعي/);
+            expect(out).toContain('100 ريال');
+        });
+
+        it('still strips "I am an artificial intelligence assistant"', () => {
+            const out = stripSelfIdentification(
+                'I am an artificial intelligence assistant. Delivery takes 3 days for most orders.', 'en');
+            expect(out).not.toMatch(/artificial intelligence/i);
+            expect(out).toContain('Delivery takes 3 days');
+        });
+
+        it('unconditional reveals (روبوت/chatbot/برنامج بوت) are stripped regardless of self-reference', () => {
+            const out = stripSelfIdentification('هذا رد من روبوت المتجر. سعر الجهاز 2900 ريال شامل الضريبة.', 'ar');
+            expect(out).not.toMatch(/روبوت/);
+            expect(out).toContain('2900 ريال');
+        });
+
+        // The model mirrors the customer's dialect, so a disobedient self-reveal
+        // arrives in dialect too — the pronoun gate must not be MSA-only.
+        it('catches DIALECT self-reveals: «آني ذكاء اصطناعي» (Iraqi) and «معاك ذكاء اصطناعي» (Egyptian/Gulf)', () => {
+            expect(SELF_ID_FALLBACKS.ar).toContain(stripSelfIdentification('آني ذكاء اصطناعي أرد عليك هنا.', 'ar'));
+            const out = stripSelfIdentification('معاك ذكاء اصطناعي بيرد عليك. التوصيل خلال يومين لكل المناطق.', 'ar');
+            expect(out).not.toMatch(/ذكاء اصطناعي/);
+            expect(out).toContain('التوصيل خلال يومين');
+        });
+    });
 });
 
 describe('validateReply orchestration', () => {
