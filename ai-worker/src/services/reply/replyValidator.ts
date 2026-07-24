@@ -273,8 +273,32 @@ export function isCommentTooLong(reply: string, channel: 'comment' | 'dm'): bool
 }
 
 /**
+ * Fallback pool for Check 6 — used only when stripping leaves nothing useful.
+ * A single fixed string here was itself a repetition source in prod (the same
+ * line reached customers on 3 different pages verbatim, found 2026-07-24), so
+ * the rare fallback path draws from a small pool instead. Neutral light register
+ * on purpose: this code path cannot know the customer's dialect.
+ */
+// Channel-neutral wording on purpose ("الفريق", never "الصفحة"): this same code path
+// serves Facebook, Instagram, and WhatsApp — "page team" only makes sense on the first two.
+export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
+    ar: [
+        'أنا من الفريق هنا، كيف أقدر أساعدك؟',
+        'معك أحد أعضاء الفريق — تفضل، كيف نخدمك؟',
+        'أنا من فريق خدمة العملاء عندنا، تفضل بسؤالك.',
+        'الفريق في خدمتك — اسأل ما تحتاج.',
+    ],
+    en: [
+        'I\'m part of the team here. How can I help you?',
+        'You\'re chatting with our team — what can I do for you?',
+        'I\'m with the team here, happy to help.',
+        'Team member here — what would you like to know?',
+    ],
+};
+
+/**
  * Check 6 — the bot must never reveal it's automated. Strips only the offending
- * sentence(s) and keeps the rest. Falls back to a canned reply (in fallbackLang)
+ * sentence(s) and keeps the rest. Falls back to a pooled reply (in fallbackLang)
  * only if fewer than 10 useful characters remain.
  */
 export function stripSelfIdentification(reply: string, fallbackLang: string): string {
@@ -303,9 +327,8 @@ export function stripSelfIdentification(reply: string, fallbackLang: string): st
     }
     const filtered = kept.join('').trim();
     if (filtered.length < 10) {
-        return fallbackLang === 'ar'
-            ? 'أنا من فريق الصفحة، كيف أقدر أساعدك؟'
-            : 'I\'m part of the page team. How can I help you?';
+        const pool = SELF_ID_FALLBACKS[fallbackLang === 'ar' ? 'ar' : 'en'];
+        return pool[Math.floor(Math.random() * pool.length)];
     }
     return filtered;
 }

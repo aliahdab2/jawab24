@@ -3,6 +3,7 @@ import {
     flagHallucinatedPrice,
     isCommentTooLong,
     stripSelfIdentification,
+    SELF_ID_FALLBACKS,
     validateReply,
 } from '../src/services/reply/replyValidator';
 import type { GenerateRequest, ParsedReply } from '../src/services/reply/types';
@@ -354,12 +355,26 @@ describe('stripSelfIdentification (Check 6)', () => {
         expect(out).toContain('The price is 150 SAR');
     });
 
-    it('falls back to the EN canned reply when nothing useful remains', () => {
-        expect(stripSelfIdentification('I am a bot.', 'en')).toBe("I'm part of the page team. How can I help you?");
+    it('falls back to a pooled EN reply when nothing useful remains', () => {
+        expect(SELF_ID_FALLBACKS.en).toContain(stripSelfIdentification('I am a bot.', 'en'));
     });
 
-    it('falls back to the AR canned reply when fallbackLang is ar', () => {
-        expect(stripSelfIdentification('I am a bot.', 'ar')).toBe('أنا من فريق الصفحة، كيف أقدر أساعدك؟');
+    it('falls back to a pooled AR reply when fallbackLang is ar', () => {
+        expect(SELF_ID_FALLBACKS.ar).toContain(stripSelfIdentification('I am a bot.', 'ar'));
+    });
+
+    it('fallback pool varies — not the same string every time (repetition source, 2026-07-24)', () => {
+        const seen = new Set<string>();
+        for (let i = 0; i < 60; i++) {
+            seen.add(stripSelfIdentification('I am a bot.', 'ar'));
+        }
+        expect(seen.size).toBeGreaterThan(1);
+    });
+
+    it('fallback pool is channel-neutral — no Facebook-specific "الصفحة"/"page" (WhatsApp shares this path)', () => {
+        for (const s of [...SELF_ID_FALLBACKS.ar, ...SELF_ID_FALLBACKS.en]) {
+            expect(s).not.toMatch(/الصفحة|page/i);
+        }
     });
 
     it('leaves a clean reply untouched', () => {
@@ -384,8 +399,8 @@ describe('stripSelfIdentification (Check 6)', () => {
             'ما عندي هالمعلومة حالياً، بس فريق Jawab24.com ممكن يساعدوك أكتر.', 'ar');
         expect(out).not.toMatch(/jawab24/i);
         expect(out).not.toMatch(/\bcom\b/);
-        // Whole sentence stripped → under 10 useful chars → canned AR fallback.
-        expect(out).toBe('أنا من فريق الصفحة، كيف أقدر أساعدك؟');
+        // Whole sentence stripped → under 10 useful chars → pooled AR fallback.
+        expect(SELF_ID_FALLBACKS.ar).toContain(out);
     });
 
     it('keeps non-offending sentences intact when a domain sentence is stripped', () => {

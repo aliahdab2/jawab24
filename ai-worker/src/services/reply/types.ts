@@ -75,6 +75,16 @@ export interface GenerateRequest {
          * "welcome". See backend messageProcessor first-message handling.
          */
         suppressGreeting?: boolean;
+        /**
+         * Minutes since the previous message in this thread (computed backend-side
+         * from messages.created_at — platform-generic: FB/IG/WhatsApp). Rendered as
+         * a plain fact line in the per-call block so the model has the clock a human
+         * has: it can tell a live conversation (seconds/minutes) from a days-later
+         * return, and behave naturally in each. Information only, no rules. Lives in
+         * the per-call block AFTER the cached prefix (never breaks the OpenAI prompt
+         * cache), and only set on the with-history path, which skips all reply caches.
+         */
+        minutesSinceLastMessage?: number;
     };
 }
 

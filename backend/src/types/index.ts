@@ -72,6 +72,18 @@ export interface AiGenerateRequest {
          * doesn't see a double "welcome". See messageProcessor first-message path.
          */
         suppressGreeting?: boolean;
+        /**
+         * Minutes elapsed between the previous message in this thread (either
+         * direction) and the current customer message. Platform-generic — computed
+         * from messages.created_at, so FB/IG/WhatsApp all get it. Rendered by
+         * ai-worker as a plain FACT line in the per-call block ("time since the
+         * previous message: 3 days") so the model can behave like a human who can
+         * see the clock: continue a live conversation vs. welcome back a returning
+         * customer. Information only — no behavioral rules attached. Only set when
+         * history exists, which is exactly the path that skips ALL reply caches
+         * (ai.ts hasConversationHistory), so it never fragments cache keys.
+         */
+        minutesSinceLastMessage?: number;
     };
 }
 

@@ -37,6 +37,22 @@ export function formatTodayForPrompt(timezone?: string, now: Date = new Date()):
 }
 
 /**
+ * Human-readable rendering of the minutes-since-last-message fact for the prompt.
+ * Coarse on purpose — "3 days" reads like a human's sense of time, and coarse
+ * buckets keep the line stable across retries within the same conversation beat.
+ */
+export function formatTimeGap(minutes: number): string {
+    if (minutes < 1) return 'less than a minute';
+    if (minutes < 60) return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+    // Floor, not round: the rendered unit must flip to "days" at exactly the
+    // 48h boundary the meaning line uses (#493 review — round() said "2 days"
+    // up to ~30 min early while the meaning still read "same conversation").
+    const hours = Math.floor(minutes / 60);
+    if (hours < 48) return hours === 1 ? '1 hour' : `${hours} hours`;
+    return `${Math.floor(hours / 24)} days`;
+}
+
+/**
  * Strip known prompt-injection patterns from user-controlled text
  * before embedding into prompts. Removes fake XML/tag closings,
  * common override phrases, and system-impersonation markers.
@@ -256,10 +272,27 @@ ${isDM
         prompt += `\n- A welcome greeting has ALREADY been added to the start of this reply for you. Do NOT greet, welcome, or say hello — begin directly with the answer to the customer's question.`;
     }
 
+    // The clock (2026-07-24) is NOT rendered here. It was, originally — and replay
+    // testing showed the model ignored it in the system prompt entirely (three
+    // wordings, zero behavior change). It now lives in buildUserPrompt, adjacent to
+    // the customer message — the same highest-attention placement customerContext
+    // uses, and for the same documented reason.
+
     if (request.context?.brandVoiceNotes) {
+        // Identity framing, not an instruction list (2026-07-24). Handed "guidelines
+        // to follow", the model EXECUTES persona text literally — one merchant's
+        // casual "Always used words: …" became the identical opening line on
+        // thousands of replies. Framed as who the model IS, it plays the character
+        // the way a person inhabits a role: the signature vocabulary and warmth are
+        // present everywhere, but the wording is its own in every reply. No
+        // anti-repetition rules attached (owner ruling 2026-07-24: no constraints on
+        // the model — naturalness comes from framing + the time fact, not bans).
+        // The mid-conversation CRITICAL sentence is byte-identical to the pre-2026-07-24
+        // header: extending THAT sentence measurably weakened offer non-repetition
+        // (eval #158, A/B'd) — never fold new text into it.
         const voiceHeader = isDM && request.context?.conversationHistory?.length
-            ? 'guidelines from the business owner — incorporate naturally. CRITICAL: Do NOT repeat any point, offer, or promotion already stated in the conversation history — this overrides any "always mention" instructions in the brand voice notes below'
-            : 'follow these additional guidelines from the business owner';
+            ? 'written by the business owner — this is WHO YOU ARE in this chat. Speak as this person naturally would, in your own words each reply. CRITICAL: Do NOT repeat any point, offer, or promotion already stated in the conversation history — this overrides any "always mention" instructions in the brand voice notes below'
+            : 'written by the business owner — this is WHO YOU ARE in this chat. Speak as this person naturally would, in your own words';
         prompt += `\n\nBRAND VOICE NOTES (${voiceHeader}):\n${sanitizeUserField(request.context.brandVoiceNotes, MAX_BRAND_VOICE_LENGTH)}`;
     }
 
@@ -383,6 +416,26 @@ export function buildUserPrompt(request: GenerateRequest): string {
     if (request.context?.customerContext && request.context.conversationHistory?.length) {
         const safeCtx = sanitizeUserField(request.context.customerContext, 300);
         prompt = `[${safeCtx}]\n\n${prompt}`;
+    }
+
+    // The clock (2026-07-24): history reaches the model undated, so it cannot tell a
+    // live conversation from a days-later return — prod showed 77% of one page's
+    // "welcome back" greetings landing in <10-minute-old conversations. Information,
+    // not constraints (owner ruling): the fact + what the fact means, descriptively.
+    // Placed in the per-call USER turn deliberately (it lands at the top of the
+    // user block, above customerContext): in the system prompt this exact line was
+    // ignored across three replay iterations (2026-07-24) — being in the user turn
+    // is what matters, same attention lesson as customerContext above.
+    if (typeof request.context?.minutesSinceLastMessage === 'number'
+        && request.context.conversationHistory?.length
+        && resolveChannel(request) === 'dm') {
+        const mins = request.context.minutesSinceLastMessage;
+        const meaning = mins < 60
+            ? 'this is one live conversation still in progress — the messages above just happened'
+            : mins < 48 * 60
+                ? 'the customer stepped away earlier and has come back to the same conversation'
+                : 'the customer is RETURNING after days away; whatever was left unfinished above (an order awaiting their details, an unanswered question) is what they are coming back to';
+        prompt = `[Time since the previous message: ${formatTimeGap(mins)} — ${meaning}]\n\n${prompt}`;
     }
 
     return prompt;
