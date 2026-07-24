@@ -4,7 +4,7 @@ import { clearAiModelCache } from '../services/aiModelResolver';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { AppError } from '../utils/errors';
 import { parsePaginationQuery } from '../utils/pagination';
-import { SendEmailSchema } from '../utils/validation';
+import { SendEmailSchema, SendMerchantEmailSchema } from '../utils/validation';
 import {
     adminUsersService,
     adminSubscriptionsService,
@@ -317,6 +317,41 @@ export class AdminController {
             }
             request.log.error(error, 'Admin payment request creation failed');
             return reply.status(500).send({ success: false, error: 'Failed to create payment request' });
+        }
+    }
+
+    /** POST /admin/users/:userId/send-email — admin-composed account notice to one merchant. */
+    async sendUserEmail(
+        request: FastifyRequest<{ Params: { userId: string } }>,
+        reply: FastifyReply,
+    ) {
+        const parsed = SendMerchantEmailSchema.safeParse(request.body);
+        if (!parsed.success) {
+            return reply.status(400).send({
+                success: false,
+                error: parsed.error.errors[0]?.message ?? 'Invalid request',
+            });
+        }
+
+        const { userId } = request.params;
+        const adminUserId = (request as AuthenticatedRequest).user?.userId;
+        if (!adminUserId) {
+            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        try {
+            const result = await adminUsersService.sendMerchantEmail(userId, parsed.data, adminUserId);
+            request.log.info(
+                { adminUserId, targetUserId: userId, emailSendId: result.emailSendId },
+                'Admin sent merchant email',
+            );
+            return reply.send({ success: true, data: result });
+        } catch (error) {
+            if (error instanceof AppError && error.statusCode !== 500) {
+                return reply.status(error.statusCode).send({ success: false, error: error.message });
+            }
+            request.log.error(error, 'Admin merchant email send failed');
+            return reply.status(500).send({ success: false, error: 'Failed to send email' });
         }
     }
 

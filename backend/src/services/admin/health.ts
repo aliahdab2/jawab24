@@ -1,0 +1,387 @@
+import { DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE } from '@jawab24/shared';
+
+/**
+ * Admin support-console health flags.
+ *
+ * A pure, DB-free diagnostic layer: `computeHealthFlags` takes data already
+ * fetched by `getUserDetail` and returns the list of problems/warnings a support
+ * agent should see at a glance ("why isn't this merchant getting good replies?").
+ *
+ * Kept side-effect free so it is unit-testable with plain fixtures (no Drizzle
+ * mocking). The heuristics mirror the `/merchant-settings` + `/reply-quality`
+ * skill playbooks — keep the two in sync when a flag changes.
+ */
+
+export type FlagSeverity = 'red' | 'yellow' | 'info';
+
+export interface HealthFlag {
+    /** Stable key; the frontend maps it to i18n `customer.flag_<key>`. */
+    key: string;
+    severity: FlagSeverity;
+    /** Set for page-scoped flags so the UI can show which page. */
+    pageId?: string;
+    pageName?: string | null;
+    /** ICU interpolation params for the translated message. */
+    meta?: Record<string, string | number>;
+}
+
+/** Per-page KB summary (counts/lengths only — never the raw KB text). */
+export interface PageKbSummary {
+    kbLength: number;
+    kbActiveVersion: number | null;
+    kbUpdatedAt: Date | null;
+    chunksTotal: number;
+    chunksByType: Record<string, number>;
+    unresolvedGaps: number;
+}
+
+/** The subset of the settings row the support console reads. */
+export interface SupportSettings {
+    aiEnabled: boolean | null;
+    aiModel: string | null;
+    commentsAutoReply: boolean | null;
+    messagesAutoReply: boolean | null;
+    commentReplyMode: string | null;
+    holdLowConfidence: boolean | null;
+    businessHoursOnly: boolean | null;
+    businessHoursStart: string | null;
+    businessHoursEnd: string | null;
+    timezone: string | null;
+    replyStyle: string | null;
+    brandVoiceNotes: string | null;
+    brandVoiceNotesMulti: Record<string, string> | null;
+    greetingMessageEnabled: boolean | null;
+    greetingMessageMulti: Record<string, string> | null;
+    awayMessageMulti: Record<string, string> | null;
+    limitFallbackEnabled: boolean | null;
+    replyDelay: number | null;
+    defaultReplyLanguage: string | null;
+    supportedLanguages: string[] | null;
+    autoDetectLanguage: boolean | null;
+    newLeadAlertsEnabled: boolean | null;
+    notificationsEnabled: boolean | null;
+    onboardingCompletedAt: Date | null;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+}
+
+export interface HealthInputPage {
+    id: string;
+    name: string | null;
+    disconnected: boolean;
+    autoReplyEnabled: boolean | null;
+    autoReplyDisabledReason: string | null;
+    kb: PageKbSummary;
+}
+
+export interface HealthInput {
+    now: Date;
+    lastSeenAt: Date | null;
+    settings: SupportSettings | null;
+    subscription: {
+        status: string | null;
+        trialEndsAt: Date | null;
+    } | null;
+    pages: HealthInputPage[];
+    usage: { aiRepliesCount: number; limit: number | null };
+    /** True when the user owns no pages but is a member of someone else's workspace. */
+    isTeamMemberOnly: boolean;
+}
+
+/**
+ * Defaults for every setting the console surfaces, mirroring the Drizzle column
+ * defaults (backend/src/db/schema.ts:487-552). Reused constants come from the
+ * shared package so this can't silently drift from the schema.
+ */
+export const SETTINGS_DEFAULTS = {
+    aiEnabled: true,
+    aiModel: DEFAULT_AI_MODEL,
+    commentsAutoReply: true,
+    messagesAutoReply: true,
+    commentReplyMode: 'public',
+    holdLowConfidence: false,
+    businessHoursOnly: false,
+    businessHoursStart: '09:00',
+    businessHoursEnd: '18:00',
+    timezone: PLACEHOLDER_TIMEZONE,
+    replyStyle: 'professional',
+    brandVoiceNotes: '',
+    brandVoiceNotesMulti: {},
+    greetingMessageEnabled: false,
+    greetingMessageMulti: {},
+    awayMessageMulti: {},
+    limitFallbackEnabled: false,
+    replyDelay: 3,
+    defaultReplyLanguage: 'ar',
+    supportedLanguages: ['en', 'ar'],
+    autoDetectLanguage: true,
+    newLeadAlertsEnabled: true,
+    notificationsEnabled: true,
+} as const;
+
+/** The settings keys the console diffs against defaults, in display order. */
+export const SUPPORT_SETTINGS_KEYS = Object.keys(SETTINGS_DEFAULTS) as Array<keyof typeof SETTINGS_DEFAULTS>;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TRIAL_ENDING_SOON_DAYS = 3;
+const DORMANT_DAYS = 14;
+const KB_THIN_CHARS = 500;
+const KB_THIN_CHUNKS = 5;
+const USAGE_NEAR_CAP_RATIO = 0.8;
+// A page with chunks but no `offering` is red (can't answer pricing) UNLESS the
+// KB is a substantial FAQ/info knowledge base — a legitimate service business
+// shouldn't sit permanently red. At/above this many FAQ chunks it downgrades to
+// yellow ("worth a look") instead.
+const NO_OFFERING_FAQ_DOWNGRADE = 3;
+
+/**
+ * Every flag key `computeHealthFlags` can emit — the canonical list the i18n
+ * parity test asserts against (`customer.flag_<key>` must exist in both locales).
+ * The banner also renders two derived keys not emitted here — `merchant_never_seen`
+ * (dormant with days=-1) and `hold_low_confidence_weak_kb` (the withWeakKb meta) —
+ * both covered in that test's render-variant list.
+ */
+export const HEALTH_FLAG_KEYS = [
+    'no_pages', 'ai_disabled', 'all_channels_silent', 'channel_silent',
+    'trial_expired', 'subscription_inactive', 'usage_over_cap', 'usage_near_cap',
+    'limit_fallback_off', 'page_disconnected', 'auto_reply_user_off',
+    'auto_reply_system_off', 'auto_reply_off_unknown', 'kb_empty',
+    'no_offering_chunks', 'kb_thin', 'unresolved_kb_gaps', 'persona_placeholder',
+    'hold_low_confidence', 'business_hours_only', 'timezone_default',
+    'no_away_message', 'greeting_written_not_enabled', 'trial_ending_soon',
+    'merchant_dormant', 'team_member', 'settings_untouched', 'onboarding_incomplete',
+] as const;
+
+/** Order-insensitive equality for the string arrays we store (e.g. supportedLanguages). */
+function arraysEqualUnordered(a: unknown, b: unknown): boolean {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    const sa = [...a].map(String).sort();
+    const sb = [...b].map(String).sort();
+    return sa.every((v, i) => v === sb[i]);
+}
+
+/** True when a jsonb "multi" map (e.g. brandVoiceNotesMulti) has no entries. */
+function isEmptyRecord(v: unknown): boolean {
+    return v === null || v === undefined
+        || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0);
+}
+
+function valueEqualsDefault(value: unknown, def: unknown): boolean {
+    // A null/undefined column value means the schema default is in effect — equal,
+    // regardless of the default's type (must be checked before the array/object
+    // branches, or a null array column reads as "changed").
+    if (value === null || value === undefined) return true;
+    if (Array.isArray(def)) return arraysEqualUnordered(value, def);
+    if (typeof def === 'object') {
+        // jsonb map defaults are always `{}` — non-default iff the row has entries.
+        return isEmptyRecord(value);
+    }
+    return value === def;
+}
+
+/**
+ * Keys of the settings row that deviate from their schema default. Used to draw
+ * the "changed from default" markers; a null settings row → [] (everything
+ * default, surfaced separately as the `settings_untouched` info flag).
+ */
+export function computeNonDefaultKeys(settings: Partial<SupportSettings> | null): string[] {
+    if (!settings) return [];
+    const changed: string[] = [];
+    for (const key of SUPPORT_SETTINGS_KEYS) {
+        const def = (SETTINGS_DEFAULTS as Record<string, unknown>)[key];
+        if (!valueEqualsDefault((settings as Record<string, unknown>)[key], def)) {
+            changed.push(key);
+        }
+    }
+    return changed;
+}
+
+/** Template markers left in a persona, e.g. "[Your Assistant's Name]". */
+const PLACEHOLDER_MARKER = /\[[^\]]{2,}\]/;
+
+/**
+ * A persona counts as "not really set" when every variant (the base notes and
+ * each language in brandVoiceNotesMulti) is either empty or still carries an
+ * unfilled `[...]` template marker.
+ */
+export function isPlaceholderPersona(
+    notes: string | null | undefined,
+    notesMulti: Record<string, string> | null | undefined,
+): boolean {
+    const variants: string[] = [];
+    if (notes) variants.push(notes);
+    if (notesMulti) variants.push(...Object.values(notesMulti));
+    const nonEmpty = variants.map(v => v.trim()).filter(Boolean);
+    if (nonEmpty.length === 0) return true;
+    return nonEmpty.every(v => PLACEHOLDER_MARKER.test(v));
+}
+
+const SEVERITY_ORDER: Record<FlagSeverity, number> = { red: 0, yellow: 1, info: 2 };
+
+/**
+ * Compute the ordered health-flag list (red → yellow → info) for a merchant.
+ * Pure: no DB, no clock — `now` is passed in.
+ */
+export function computeHealthFlags(input: HealthInput): HealthFlag[] {
+    const { now, lastSeenAt, settings, subscription, pages, usage, isTeamMemberOnly } = input;
+    const flags: HealthFlag[] = [];
+    const add = (severity: FlagSeverity, key: string, extra?: Partial<HealthFlag>) =>
+        flags.push({ key, severity, ...extra });
+
+    // ---- Account-level, replies-broken (RED) ----
+    if (pages.length === 0 && !isTeamMemberOnly) {
+        add('red', 'no_pages');
+    }
+    if (settings?.aiEnabled === false) {
+        add('red', 'ai_disabled');
+    }
+    // Both channels off = merchant is fully silent (red). One channel off is a
+    // legitimate deliberate config (e.g. DMs-only) — surface it, but yellow.
+    const commentsOff = settings?.commentsAutoReply === false;
+    const messagesOff = settings?.messagesAutoReply === false;
+    if (commentsOff && messagesOff) {
+        add('red', 'all_channels_silent');
+    } else if (commentsOff) {
+        add('yellow', 'channel_silent', { meta: { channel: 'comments' } });
+    } else if (messagesOff) {
+        add('yellow', 'channel_silent', { meta: { channel: 'messages' } });
+    }
+
+    // Subscription / trial state.
+    if (subscription) {
+        const status = subscription.status;
+        const trialEndsAt = subscription.trialEndsAt;
+        if (status === 'trialing' && trialEndsAt) {
+            const msLeft = trialEndsAt.getTime() - now.getTime();
+            if (msLeft < 0) {
+                add('red', 'trial_expired');
+            } else {
+                const daysLeft = Math.ceil(msLeft / DAY_MS);
+                if (daysLeft <= TRIAL_ENDING_SOON_DAYS) {
+                    add('yellow', 'trial_ending_soon', { meta: { daysLeft } });
+                }
+            }
+        } else if (status === 'past_due' || status === 'canceled') {
+            add('red', 'subscription_inactive', { meta: { status } });
+        }
+    }
+
+    // Usage vs plan cap.
+    const limit = usage.limit;
+    if (limit !== null && limit > 0) {
+        const used = usage.aiRepliesCount;
+        // Floor, not round — 999/1000 must read "99%", never "100%" under the
+        // near-cap (not over-cap) message.
+        const percent = Math.floor((used / limit) * 100);
+        if (used >= limit) {
+            add('red', 'usage_over_cap', { meta: { used, limit } });
+        } else if (used >= USAGE_NEAR_CAP_RATIO * limit) {
+            add('yellow', 'usage_near_cap', { meta: { used, limit, percent } });
+        }
+        if (used >= USAGE_NEAR_CAP_RATIO * limit && settings?.limitFallbackEnabled === false) {
+            add('yellow', 'limit_fallback_off');
+        }
+    }
+
+    // ---- Per-page (RED then YELLOW) ----
+    let anyThinOrEmptyKb = false;
+    for (const p of pages) {
+        const scope = { pageId: p.id, pageName: p.name };
+        if (p.disconnected) {
+            add('red', 'page_disconnected', scope);
+        }
+        if (p.autoReplyEnabled === false) {
+            const reason = p.autoReplyDisabledReason;
+            if (reason === 'user') {
+                add('yellow', 'auto_reply_user_off', scope);
+            } else if (reason) {
+                add('red', 'auto_reply_system_off', { ...scope, meta: { reason } });
+            } else {
+                // Off with no recorded reason (legacy rows toggled off before the
+                // reason column existed, or a path that cleared it without
+                // re-enabling). Runtime treats a null reason as NOT system-disabled
+                // (commentProcessor), i.e. effectively user-off — surface it so a
+                // silent page never reads as healthy.
+                add('yellow', 'auto_reply_off_unknown', scope);
+            }
+        }
+
+        const { kbLength, chunksTotal, chunksByType, unresolvedGaps } = p.kb;
+        if (kbLength === 0 || chunksTotal === 0) {
+            add('red', 'kb_empty', scope);
+            anyThinOrEmptyKb = true;
+        } else {
+            if (!chunksByType.offering) {
+                // Product merchant with no offerings can't answer pricing (red),
+                // but a substantial FAQ/info KB is a legitimate service business —
+                // downgrade to yellow so it isn't permanently red.
+                const substantialFaq = (chunksByType.faq ?? 0) >= NO_OFFERING_FAQ_DOWNGRADE;
+                add(substantialFaq ? 'yellow' : 'red', 'no_offering_chunks', scope);
+            }
+            if (kbLength < KB_THIN_CHARS || chunksTotal < KB_THIN_CHUNKS) {
+                add('yellow', 'kb_thin', scope);
+                anyThinOrEmptyKb = true;
+            }
+        }
+        if (unresolvedGaps > 0) {
+            add('yellow', 'unresolved_kb_gaps', { ...scope, meta: { count: unresolvedGaps } });
+        }
+    }
+
+    // ---- Settings-level warnings (YELLOW) ----
+    if (settings) {
+        if (isPlaceholderPersona(settings.brandVoiceNotes, settings.brandVoiceNotesMulti)) {
+            add('yellow', 'persona_placeholder');
+        }
+        if (settings.holdLowConfidence === true) {
+            // Escalates when the KB is also thin/empty — the classic "bot that only
+            // says hello then holds everything" failure mode.
+            add('yellow', 'hold_low_confidence', anyThinOrEmptyKb ? { meta: { withWeakKb: 1 } } : undefined);
+        }
+        if (settings.businessHoursOnly === true) {
+            add('yellow', 'business_hours_only', {
+                meta: {
+                    start: settings.businessHoursStart ?? '',
+                    end: settings.businessHoursEnd ?? '',
+                    timezone: settings.timezone ?? '',
+                },
+            });
+            if (settings.timezone === PLACEHOLDER_TIMEZONE) {
+                add('yellow', 'timezone_default');
+            }
+            if (isEmptyRecord(settings.awayMessageMulti)) {
+                add('yellow', 'no_away_message');
+            }
+        }
+        if (settings.greetingMessageEnabled === false && !isEmptyRecord(settings.greetingMessageMulti)) {
+            add('yellow', 'greeting_written_not_enabled');
+        }
+    }
+
+    // Dormancy — can't be working any hold / needs-attention queue.
+    if (!lastSeenAt) {
+        add('yellow', 'merchant_dormant', { meta: { days: -1 } });
+    } else {
+        const days = Math.floor((now.getTime() - lastSeenAt.getTime()) / DAY_MS);
+        if (days > DORMANT_DAYS) {
+            add('yellow', 'merchant_dormant', { meta: { days } });
+        }
+    }
+
+    // ---- INFO ----
+    if (isTeamMemberOnly) {
+        add('info', 'team_member');
+    }
+    if (!settings) {
+        add('info', 'settings_untouched');
+    } else if (settings.onboardingCompletedAt === null || settings.onboardingCompletedAt === undefined) {
+        add('info', 'onboarding_incomplete');
+    }
+
+    // Stable sort by severity; preserves insertion order within a severity.
+    return flags
+        .map((f, i) => ({ f, i }))
+        .sort((a, b) => SEVERITY_ORDER[a.f.severity] - SEVERITY_ORDER[b.f.severity] || a.i - b.i)
+        .map(({ f }) => f);
+}

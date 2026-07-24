@@ -1,5 +1,66 @@
 import type { adminApi } from '@/lib/api';
 
+/** Severity of a support health flag (red = broken, yellow = degrading, info). */
+export type FlagSeverity = 'red' | 'yellow' | 'info';
+
+/**
+ * A computed support diagnostic. `key` maps to i18n `customer.flag_<key>`;
+ * `meta` supplies its ICU params. Page-scoped flags carry pageId/pageName.
+ */
+export interface HealthFlag {
+    key: string;
+    severity: FlagSeverity;
+    pageId?: string;
+    pageName?: string | null;
+    meta?: Record<string, string | number>;
+}
+
+/** Per-page KB summary (counts/lengths only; full text lazy-loads on demand). */
+export interface PageKbSummary {
+    kbLength: number;
+    kbActiveVersion: number | null;
+    kbUpdatedAt: string | null;
+    chunksTotal: number;
+    chunksByType: Record<string, number>;
+    unresolvedGaps: number;
+}
+
+/**
+ * The merchant's settings row as shown in the support console, plus the list of
+ * keys that deviate from their schema default (for "changed" markers).
+ */
+export interface CustomerSettings {
+    values: {
+        aiEnabled: boolean | null;
+        aiModel: string | null;
+        commentsAutoReply: boolean | null;
+        messagesAutoReply: boolean | null;
+        commentReplyMode: string | null;
+        holdLowConfidence: boolean | null;
+        businessHoursOnly: boolean | null;
+        businessHoursStart: string | null;
+        businessHoursEnd: string | null;
+        timezone: string | null;
+        replyStyle: string | null;
+        brandVoiceNotes: string | null;
+        brandVoiceNotesMulti: Record<string, string> | null;
+        greetingMessageEnabled: boolean | null;
+        greetingMessageMulti: Record<string, string> | null;
+        awayMessageMulti: Record<string, string> | null;
+        limitFallbackEnabled: boolean | null;
+        replyDelay: number | null;
+        defaultReplyLanguage: string | null;
+        supportedLanguages: string[] | null;
+        autoDetectLanguage: boolean | null;
+        newLeadAlertsEnabled: boolean | null;
+        notificationsEnabled: boolean | null;
+        onboardingCompletedAt: string | null;
+        createdAt: string | null;
+        updatedAt: string | null;
+    };
+    nonDefaultKeys: string[];
+}
+
 /** Single customer's full admin detail, as returned by adminApi.getUser. */
 export interface CustomerDetail {
     id: string;
@@ -8,9 +69,14 @@ export interface CustomerDetail {
     phone: string | null;
     facebookId: string | null;
     createdAt: string | null;
+    lastSeenAt: string | null;
     topupBalance: number | null;
     /** Per-workspace AI model override. null = follows DEFAULT_AI_MODEL. */
     aiModel: string | null;
+    /** Full settings row + non-default markers. null = merchant never saved settings. */
+    settings: CustomerSettings | null;
+    /** Computed diagnostics (red → yellow → info), for the health banner. */
+    health: HealthFlag[];
     subscription: {
         id: string;
         status: string;
@@ -35,6 +101,10 @@ export interface CustomerDetail {
         autoReplyDisabledReason: string | null;
         /** Access token cleared (revoked / reconnect required) */
         disconnected: boolean;
+        /** Why the page disconnected, when known. */
+        disconnectReason: string | null;
+        /** Business Info (KB) health summary for this page. */
+        kb: PageKbSummary;
     }>;
     usage: {
         aiRepliesCount: number;
@@ -87,7 +157,7 @@ export type PaymentRequest = NonNullable<
  * Section ids on the customer page. Also accepted as legacy ?tab= deep-link
  * values (the page used tabs before the two-column layout).
  */
-export const CUSTOMER_SECTIONS = ['overview', 'billing', 'ai', 'team'] as const;
+export const CUSTOMER_SECTIONS = ['overview', 'settings', 'kb', 'billing', 'ai', 'team'] as const;
 export type CustomerSection = (typeof CUSTOMER_SECTIONS)[number];
 
 /** Coerce an arbitrary ?tab=/#hash value to a valid section id, or null. */

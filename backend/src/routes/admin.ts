@@ -203,6 +203,27 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             adminController.createPaymentRequest,
         );
 
+        adminProtected.post(
+            '/users/:userId/send-email',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Send an admin-composed account-notice email to one merchant',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    body: {
+                        type: 'object',
+                        required: ['subject', 'body'],
+                        properties: {
+                            subject: { type: 'string', minLength: 1, maxLength: 500 },
+                            body: { type: 'string', minLength: 1, maxLength: 20_000 },
+                        },
+                    },
+                },
+            },
+            adminController.sendUserEmail,
+        );
+
         adminProtected.get(
             '/users/:userId/payment-requests',
             {
