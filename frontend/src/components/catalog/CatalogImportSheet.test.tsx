@@ -4,12 +4,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CatalogItemInput } from '@/lib/api';
 import { CatalogImportSheet } from './CatalogImportSheet';
 
-const { extract, batchCreate, scanPosts } = vi.hoisted(() => ({
-  extract: vi.fn(), batchCreate: vi.fn(), scanPosts: vi.fn(),
+const { extract, batchCreate, scanPosts, scanPostReplies, update } = vi.hoisted(() => ({
+  extract: vi.fn(), batchCreate: vi.fn(), scanPosts: vi.fn(), scanPostReplies: vi.fn(), update: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  catalogApi: { extract, batchCreate, scanPosts },
+  catalogApi: { extract, batchCreate, scanPosts, scanPostReplies, update },
   kbApi: { extractText: vi.fn() }, // FileUploadButton dependency
 }));
 
@@ -38,9 +38,13 @@ function renderSheet(props: Partial<React.ComponentProps<typeof CatalogImportShe
 }
 
 /** Paste text and run the extraction so tests start from the review phase. */
-async function reachReview(items: CatalogItemInput[], meta?: Partial<{ dropped: number; overflow: number; truncated: boolean }>) {
+async function reachReview(
+  items: CatalogItemInput[],
+  meta?: Partial<{ dropped: number; overflow: number; truncated: boolean }>,
+  props?: Partial<React.ComponentProps<typeof CatalogImportSheet>>,
+) {
   extract.mockResolvedValue(extractResponse(items, meta));
-  const handles = renderSheet();
+  const handles = renderSheet(props);
   fireEvent.change(screen.getByLabelText('Your list'), { target: { value: PASTE } });
   fireEvent.click(screen.getByRole('button', { name: 'Extract items' }));
   await waitFor(() => expect(extract).toHaveBeenCalledWith('p1', PASTE));
@@ -120,7 +124,7 @@ describe('CatalogImportSheet', () => {
     await waitFor(() => expect(batchCreate).toHaveBeenCalledWith('p1', [
       expect.objectContaining({ name: 'دورة ICDL' }),
     ]));
-    expect(onDone).toHaveBeenCalledWith(1, 'دورة ICDL');
+    expect(onDone).toHaveBeenCalledWith(1, 'دورة ICDL', 0);
   });
 
   it('restores a removed row (undoable, not destructive)', async () => {
@@ -201,7 +205,7 @@ describe('CatalogImportSheet', () => {
         attributes: [{ label: 'المدة', value: '٦ أسابيع' }],
       }),
     ]));
-    expect(onDone).toHaveBeenCalledWith(1, 'دورة ميكانيك متقدمة');
+    expect(onDone).toHaveBeenCalledWith(1, 'دورة ميكانيك متقدمة', 0);
   });
 
   describe('scan mode', () => {
@@ -230,6 +234,138 @@ describe('CatalogImportSheet', () => {
     it('closes with an error toast when the scan fails (nothing typed, nothing lost)', async () => {
       scanPosts.mockRejectedValue(new Error('boom'));
       const { onClose } = renderSheet({ mode: 'scan' });
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      const { toast } = await import('sonner');
+      expect(toast.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('reconcile against the existing catalog (D-038)', () => {
+    const EXISTING = [{ id: 'item-1', name: 'دورة ICDL', price: '3500.00', currency: 'ل.س' }];
+
+    it('auto-deselects an unchanged duplicate, labels it, and lets the merchant restore it', async () => {
+      await reachReview([proposal()], undefined, { existingItems: EXISTING });
+      expect(await screen.findByText('Already in your catalog')).toBeInTheDocument();
+      // The row arrives deselected — nothing to save until the merchant says so.
+      expect(screen.getByRole('button', { name: 'Add 0 items' })).toBeDisabled();
+      fireEvent.click(screen.getByLabelText('Restore this item'));
+      expect(screen.getByRole('button', { name: 'Add 1 item' })).toBeEnabled();
+    });
+
+    it('classifies a changed price as an update that DEFAULTS TO KEEP (a price change is never a side effect)', async () => {
+      const { onDone } = await reachReview([proposal({ price: 2500 })], undefined, { existingItems: EXISTING });
+      expect(await screen.findByText('In your catalog: 3500 ل.س — in this import: 2500 ل.س')).toBeInTheDocument();
+      // Default = keep → the save has nothing to do.
+      expect(screen.getByRole('button', { name: 'Add 0 items' })).toBeDisabled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Update the price' }));
+      update.mockResolvedValue({ data: {} });
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() => expect(update).toHaveBeenCalledWith('p1', 'item-1', { price: '2500', currency: 'ل.س' }));
+      expect(batchCreate).not.toHaveBeenCalled(); // an update never inserts
+      expect(onDone).toHaveBeenCalledWith(0, undefined, 1);
+    });
+
+    it('never overwrites the stored currency from a proposal that omitted one (defaultCurrency is for inserts only)', async () => {
+      update.mockResolvedValue({ data: {} });
+      await reachReview(
+        [proposal({ price: 2500, currency: null })],
+        undefined,
+        { existingItems: EXISTING, defaultCurrency: 'ريال' },
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Update the price' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() => expect(update).toHaveBeenCalledWith('p1', 'item-1', { price: '2500' }));
+    });
+
+    it('locks edits the save would discard: Details only for "separate", price locked on "keep" (M1)', async () => {
+      await reachReview([proposal({ price: 2500 })], undefined, { existingItems: EXISTING });
+      await screen.findByText('In your catalog: 3500 ل.س — in this import: 2500 ل.س');
+
+      // Default = keep → the save applies nothing, so nothing is editable.
+      expect(screen.getByLabelText('Price (optional)')).toBeDisabled();
+      expect(screen.getByRole('button', { name: /Details/ })).toBeDisabled();
+
+      // «Update the price» applies price/currency only → price unlocks, Details stays locked.
+      fireEvent.click(screen.getByRole('button', { name: 'Update the price' }));
+      expect(screen.getByLabelText('Price (optional)')).toBeEnabled();
+      expect(screen.getByRole('button', { name: /Details/ })).toBeDisabled();
+
+      // «Add as separate» inserts the full draft → Details unlocks.
+      fireEvent.click(screen.getByRole('button', { name: 'Add as a separate item' }));
+      const details = screen.getByRole('button', { name: /Details/ });
+      expect(details).toBeEnabled();
+      fireEvent.click(details);
+      expect(screen.getByLabelText('Name')).toBeInTheDocument();
+
+      // Leaving «separate» collapses the panel — its fields no longer apply.
+      fireEvent.click(screen.getByRole('button', { name: 'Keep the current price' }));
+      expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();
+    });
+
+    it('"add as separate item" inserts instead of patching', async () => {
+      batchCreate.mockResolvedValue({ data: { data: [{}] } });
+      const { onDone } = await reachReview([proposal({ price: 2500 })], undefined, { existingItems: EXISTING });
+      fireEvent.click(await screen.findByRole('button', { name: 'Add as a separate item' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Add 1 item' }));
+
+      await waitFor(() => expect(batchCreate).toHaveBeenCalledWith('p1', [
+        expect.objectContaining({ name: 'دورة ICDL', price: '2500' }),
+      ]));
+      expect(update).not.toHaveBeenCalled();
+      expect(onDone).toHaveBeenCalledWith(1, 'دورة ICDL', 0);
+    });
+
+    it('mixed save: confirmed updates PATCH before the batch insert, and each row goes to its own path', async () => {
+      update.mockResolvedValue({ data: {} });
+      batchCreate.mockResolvedValue({ data: { data: [{}] } });
+      const { onDone } = await reachReview(
+        [proposal({ price: 2500 }), proposal({ name: 'دورة جديدة', price: 1000 })],
+        undefined,
+        { existingItems: EXISTING },
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'Update the price' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() => expect(batchCreate).toHaveBeenCalledWith('p1', [
+        expect.objectContaining({ name: 'دورة جديدة' }),
+      ]));
+      expect(update).toHaveBeenCalledWith('p1', 'item-1', { price: '2500', currency: 'ل.س' });
+      // Updates first: PATCHes are idempotent, so a failed batch can be retried wholesale.
+      expect(update.mock.invocationCallOrder[0]).toBeLessThan(batchCreate.mock.invocationCallOrder[0]);
+      expect(onDone).toHaveBeenCalledWith(1, 'دورة جديدة', 1);
+    });
+  });
+
+  describe('post-replies scan mode', () => {
+    function replyScanResponse(items: CatalogItemInput[], meta: Partial<{ repliesScanned: number; noPostReplies: boolean }> = {}) {
+      return { data: { items, dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, repliesScanned: 5, noPostReplies: false, ...meta } };
+    }
+
+    it('fires the post-reply scan on mount (exactly once) and lands in review', async () => {
+      scanPostReplies.mockResolvedValue(replyScanResponse([proposal()]));
+      renderSheet({ mode: 'scanReplies' });
+
+      expect(screen.getByText('Products from your post replies')).toBeInTheDocument();
+      expect(await screen.findByText('دورة ICDL')).toBeInTheDocument();
+      expect(scanPostReplies).toHaveBeenCalledTimes(1);
+      expect(scanPostReplies).toHaveBeenCalledWith('p1');
+    });
+
+    it('presence gate: noPostReplies shows the explainer in place and notifies the host', async () => {
+      scanPostReplies.mockResolvedValue(replyScanResponse([], { noPostReplies: true }));
+      const onNoPostReplies = vi.fn();
+      renderSheet({ mode: 'scanReplies', onNoPostReplies });
+
+      expect(await screen.findByText('This page has no Post Replies yet')).toBeInTheDocument();
+      expect(onNoPostReplies).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes with an error toast when the reply scan fails', async () => {
+      scanPostReplies.mockRejectedValue(new Error('boom'));
+      const { onClose } = renderSheet({ mode: 'scanReplies' });
       await waitFor(() => expect(onClose).toHaveBeenCalled());
       const { toast } = await import('sonner');
       expect(toast.error).toHaveBeenCalled();

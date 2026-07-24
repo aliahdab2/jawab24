@@ -1,8 +1,9 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
+import { reconcileCatalogProposals, type ReconcileExistingItem } from '@jawab24/shared';
 import { catalogService, CatalogLimitError, CatalogStoreConflictError } from '../services/catalog';
 import {
     CatalogBatchSchema, CatalogExtractSchema, CatalogItemSchema, CatalogItemUpdateSchema,
-    CatalogVerticalSchema, formatValidationErrors,
+    CatalogVerticalSchema, formatValidationErrors, type CatalogItemInput,
 } from '../utils/validation';
 import { catalogExtractor } from '../services/catalogExtractor';
 import { catalogScanService, CatalogScanUnavailableError } from '../services/catalogScan';
@@ -32,6 +33,39 @@ const SCAN_DAILY_LIMIT = 10;
  */
 function sendStoreConflict(reply: FastifyReply, err: CatalogStoreConflictError) {
     return reply.status(409).send({ error: err.message, code: 'PAGE_HAS_STORE' });
+}
+
+/**
+ * Capacity applies to proposals that would INSERT. A proposal whose name is
+ * already in the catalog (reconcile: `update`/`duplicate`) resolves via PATCH
+ * or not at all — slicing it away with the plain `slice(0, remaining)` would
+ * hide exactly the price-change reviews the import sheet exists to surface
+ * (B0; the capacity-accounting Low from the #486 review). Order is preserved;
+ * `overflow` counts only the NEW proposals that didn't fit.
+ */
+function capNewProposals(
+    proposals: CatalogItemInput[],
+    existing: ReconcileExistingItem[],
+    remaining: number,
+): { items: CatalogItemInput[]; overflow: number } {
+    const classified = reconcileCatalogProposals(
+        proposals.map((input) => ({ name: input.name, price: input.price, currency: input.currency, input })),
+        existing,
+    );
+    let budget = remaining;
+    const items: CatalogItemInput[] = [];
+    let overflow = 0;
+    for (const c of classified) {
+        if (c.kind !== 'new') {
+            items.push(c.proposal.input);
+        } else if (budget > 0) {
+            items.push(c.proposal.input);
+            budget -= 1;
+        } else {
+            overflow += 1;
+        }
+    }
+    return { items, overflow };
 }
 
 export class CatalogController {
@@ -169,11 +203,13 @@ export class CatalogController {
         void incrementDailyCap(capKey);
 
         // More proposals than free slots: keep what fits, report the cut.
-        const items = result.items.slice(0, capacity.remaining);
+        // (Update/duplicate-classified proposals resolve without a slot.)
+        const existing = await catalogService.listCatalogItems(req.workspaceId, request.params.pageId) ?? [];
+        const { items, overflow } = capNewProposals(result.items, existing, capacity.remaining);
         return reply.send({
             items,
             dropped: result.dropped,
-            overflow: result.items.length - items.length,
+            overflow,
             remainingCapacity: capacity.remaining,
             truncated: result.truncated,
         });
@@ -233,11 +269,12 @@ export class CatalogController {
         // An up-to-date no-op consumed no paid calls — don't count it against the cap.
         if (!result.upToDate) void incrementDailyCap(capKey);
 
-        const items = result.items.slice(0, capacity.remaining);
+        const existing = await catalogService.listCatalogItems(req.workspaceId, request.params.pageId) ?? [];
+        const { items, overflow } = capNewProposals(result.items, existing, capacity.remaining);
         return reply.send({
             items,
             dropped: result.dropped,
-            overflow: result.items.length - items.length,
+            overflow,
             remainingCapacity: capacity.remaining,
             truncated: result.truncated,
             postsScanned: result.postsScanned,
@@ -297,11 +334,12 @@ export class CatalogController {
         // A no-Post-Reply page consumed no paid call — don't count it against the cap.
         if (!result.noPostReplies) void incrementDailyCap(capKey);
 
-        const items = result.items.slice(0, capacity.remaining);
+        const existing = await catalogService.listCatalogItems(req.workspaceId, request.params.pageId) ?? [];
+        const { items, overflow } = capNewProposals(result.items, existing, capacity.remaining);
         return reply.send({
             items,
             dropped: result.dropped,
-            overflow: result.items.length - items.length,
+            overflow,
             remainingCapacity: capacity.remaining,
             truncated: result.truncated,
             repliesScanned: result.repliesScanned,

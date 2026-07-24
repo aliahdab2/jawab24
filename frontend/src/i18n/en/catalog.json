@@ -140,6 +140,18 @@
     "toastImportError": "Couldn’t add the items. Please try again.",
     "toastDailyLimit": "You’ve reached today’s import limit. Please try again tomorrow."
   },
+  "reconcile": {
+    "duplicateBadge": "Already in your catalog",
+    "conflict": "In your catalog: {existing} — in this import: {proposed}",
+    "choiceLabel": "What should happen to this item?",
+    "update": "Update the price",
+    "keep": "Keep the current price",
+    "separate": "Add as a separate item",
+    "noPrice": "no price",
+    "saveChanges": "Save changes",
+    "toastUpdated": "{count, plural, one {# price updated} other {# prices updated}}",
+    "toastSaveError": "Couldn’t save the changes. Please try again."
+  },
   "scan": {
     "cta": "Find products in your posts",
     "title": "Products from your posts",
@@ -153,6 +165,16 @@
     "upToDate": "You’re up to date",
     "upToDateHint": "No new posts since the last scan. Post something new, or add items manually.",
     "toastError": "Couldn’t read your posts. Please try again."
+  },
+  "replyScan": {
+    "cta": "Import from your post replies",
+    "title": "Products from your post replies",
+    "scanning": "Reading your post replies…",
+    "reviewHint": "{count, plural, one {We found # item in your post replies. Review it, then save.} other {We found # items in your post replies. Review them, then save.}}",
+    "emptyResult": "No products found in your post replies",
+    "emptyResultHint": "You can import a price list or add items manually instead.",
+    "noReplies": "This page has no Post Replies yet",
+    "noRepliesHint": "Post Replies are the automatic replies you set up on individual posts. Once you configure some, Jawab can read products and prices from them."
   },
   "cleanup": {
     "title": "Tidy up your Business Info",

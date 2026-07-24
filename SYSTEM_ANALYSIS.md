@@ -1051,7 +1051,8 @@ mode `dual`) exists only in the workspace store while the legacy columns default
 > channel — an IG-only page is not mis-signalled) so it surfaces
 > only for merchants who use Post Reply — concentrated in the courses/training
 > vertical; each reply paired with its post text for product context; see D-038 —
-> proposes into the same review sheet, inert until update-vs-add reconciliation exists),
+> proposes into the same review sheet via «استورد من ردود منشوراتك» in the
+> catalog manager, live since B0 wired the reconcile review),
 > **bulk import** (paste a price list / upload a file →
 > extract proposals), and manual add. All paths land in one review sheet
 > shaped as a PRICE-COMPLETION step: merchants deliberately keep prices out

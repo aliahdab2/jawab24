@@ -216,6 +216,28 @@ describe('Catalog routes — security wiring', () => {
             expect(res.statusCode).toBe(403);
             expect(catalogScanService.scanPosts).not.toHaveBeenCalled();
         });
+
+        it('capacity slicing spares proposals matching an existing item — new rows only consume slots (B0)', async () => {
+            vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 1, pageUserId: 'user-1' });
+            vi.mocked(catalogService.listCatalogItems).mockResolvedValue([
+                { id: 'i1', name: 'كيا ريو 2018', price: '40000.00', currency: 'ريال' },
+            ] as never);
+            vi.mocked(catalogScanService.scanPosts).mockResolvedValue({
+                items: [
+                    { name: 'كيا ريو 2018', type: 'vehicle', price: 38000, currency: 'ريال' },       // update
+                    { name: 'هيونداي النترا 2020', type: 'vehicle', price: 52000, currency: 'ريال' }, // new — fits
+                    { name: 'تويوتا كورولا 2019', type: 'vehicle', price: 47000, currency: 'ريال' },  // new — cut
+                ] as never,
+                dropped: 0, truncated: false, failed: false, postsScanned: 3, upToDate: false,
+            });
+
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
+
+            expect(res.statusCode).toBe(200);
+            const body = JSON.parse(res.payload);
+            expect(body.items.map((i: { name: string }) => i.name)).toEqual(['كيا ريو 2018', 'هيونداي النترا 2020']);
+            expect(body.overflow).toBe(1);
+        });
     });
 
     describe('POST /scan-post-replies', () => {
@@ -260,6 +282,28 @@ describe('Catalog routes — security wiring', () => {
             const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-post-replies` });
             expect(res.statusCode).toBe(403);
             expect(catalogScanService.scanPostReplies).not.toHaveBeenCalled();
+        });
+
+        it('capacity slicing spares update/duplicate-classified proposals — new rows only consume slots (B0)', async () => {
+            vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 1, pageUserId: 'user-1' });
+            vi.mocked(catalogService.listCatalogItems).mockResolvedValue([
+                { id: 'i1', name: 'كورس المكياج المبتدئ', price: '35000.00', currency: 'ل.س' },
+            ] as never);
+            vi.mocked(catalogScanService.scanPostReplies).mockResolvedValue({
+                items: [
+                    { name: 'كورس المكياج المبتدئ', type: 'course', price: 25000, currency: 'ل.س' },   // update — the 25k offer
+                    { name: 'كورس الأظافر', type: 'course', price: 20000, currency: 'ل.س' },           // new — fits
+                    { name: 'كورس الحواجب', type: 'course', price: 15000, currency: 'ل.س' },           // new — cut
+                ] as never,
+                dropped: 0, truncated: false, failed: false, repliesScanned: 3, noPostReplies: false,
+            });
+
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-post-replies` });
+
+            expect(res.statusCode).toBe(200);
+            const body = JSON.parse(res.payload);
+            expect(body.items.map((i: { name: string }) => i.name)).toEqual(['كورس المكياج المبتدئ', 'كورس الأظافر']);
+            expect(body.overflow).toBe(1);
         });
     });
 
@@ -405,6 +449,34 @@ describe('Catalog import endpoints — extract + batch', () => {
         expect(body.dropped).toBe(1);
         expect(body.remainingCapacity).toBe(2);
         expect(body.truncated).toBe(false);
+    });
+
+    it('capacity slicing spares proposals matching an existing item — they resolve via PATCH, not a slot (B0)', async () => {
+        vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 1, pageUserId: 'user-1' } as never);
+        // Two proposals are already in the catalog (price-changed → update,
+        // identical → duplicate); the plain slice(0, remaining) used to cut
+        // them and hide exactly the price-change reviews the sheet surfaces.
+        vi.mocked(catalogService.listCatalogItems).mockResolvedValue([
+            { id: 'i1', name: 'دورة ICDL', price: '3500.00', currency: 'ل.س' },
+            { id: 'i2', name: 'دورة فوتوشوب', price: '5000.00', currency: 'ل.س' },
+        ] as never);
+        vi.mocked(catalogExtractor.extract).mockResolvedValue({
+            items: [
+                { type: 'course', name: 'دورة ICDL', price: 2500, currency: 'ل.س', description: null, isAvailable: true },    // update
+                { type: 'course', name: 'دورة فوتوشوب', price: 5000, currency: 'ل.س', description: null, isAvailable: true }, // duplicate
+                { type: 'course', name: 'دورة إكسل', price: 2000, currency: 'ل.س', description: null, isAvailable: true },    // new — fits
+                { type: 'course', name: 'دورة وورد', price: 1500, currency: 'ل.س', description: null, isAvailable: true },    // new — cut
+            ],
+            dropped: 0,
+            truncated: false,
+        });
+
+        const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/extract`, payload: { text: LONG_TEXT } });
+
+        expect(res.statusCode).toBe(200);
+        const body = JSON.parse(res.payload);
+        expect(body.items.map((i: { name: string }) => i.name)).toEqual(['دورة ICDL', 'دورة فوتوشوب', 'دورة إكسل']);
+        expect(body.overflow).toBe(1); // counts only the NEW proposal that didn't fit
     });
 
     it('400s batch with per-index field paths on one bad row', async () => {

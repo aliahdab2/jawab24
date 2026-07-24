@@ -203,6 +203,10 @@ export const catalogApi = {
   // returns PROPOSALS in the same shape as extract — same review-then-batch flow.
   scanPosts: (pageId: string) =>
     api.post<CatalogScanResponse>(`/pages/${pageId}/catalog/scan-posts`, {}, { timeout: LONG_RUNNING_TIMEOUT }),
+  // Post-replies scan: reads the page's configured Post Reply auto-replies
+  // (DB-only, works on a dead token) into the same review-then-batch flow.
+  scanPostReplies: (pageId: string) =>
+    api.post<CatalogReplyScanResponse>(`/pages/${pageId}/catalog/scan-post-replies`, {}, { timeout: LONG_RUNNING_TIMEOUT }),
   batchCreate: (pageId: string, items: CatalogItemInput[]) =>
     api.post<{ data: CatalogItem[] }>(`/pages/${pageId}/catalog/batch`, { items }),
 };
@@ -220,6 +224,14 @@ export interface CatalogScanResponse extends CatalogExtractResponse {
   postsScanned: number;
   /** True when no new posts existed since the last scan. */
   upToDate: boolean;
+}
+
+/** POST /catalog/scan-post-replies response — extract's shape plus the presence gate. */
+export interface CatalogReplyScanResponse extends CatalogExtractResponse {
+  /** Post Reply configs fed to the extractor. */
+  repliesScanned: number;
+  /** The page has NO Post Reply configured — hide the action, nothing to scan. */
+  noPostReplies: boolean;
 }
 
 /** POST /catalog/extract response. Prices come back as numbers (already
