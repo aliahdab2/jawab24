@@ -2247,11 +2247,17 @@ Jawab24 supports **multi-tenant workspaces** with role-based access control (RBA
 │  │ Status: pending → accepted | expired | revoked           │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
-│  SCOPED RESOURCES (all have workspace_id column):               │
+│  SCOPED RESOURCES — own workspace_id (source of truth):         │
 │  • pages                    • rules                             │
 │  • templates                • ecommerce_stores                  │
 │  • logs                     • ai_usage_log                      │
 │                                                                 │
+│  DENORMALIZED COPY of pages.workspace_id (inbox indexes):       │
+│  • comments (via posts)     • messages (has page_id)            │
+│  • instagram_comments (via instagram_media)                     │
+│  ⚠ Moving a page between workspaces MUST re-scope all three     │
+│    (services/pages.ts → rescopePageWorkspace). Page row alone   │
+│    = inbox strands in the old workspace.                        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
