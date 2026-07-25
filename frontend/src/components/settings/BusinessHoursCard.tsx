@@ -1,12 +1,5 @@
 import clsx from 'clsx';
-import { useMemo } from 'react';
-import {
-  MAX_TEMPLATE_MESSAGE_LENGTH,
-  PLACEHOLDER_TIMEZONE,
-  detectTimezone,
-  formatTimeInZone,
-  getTimezoneOptions,
-} from '@jawab24/shared';
+import { MAX_TEMPLATE_MESSAGE_LENGTH, formatTimeInZone } from '@jawab24/shared';
 import { Card, Toggle, Select, InputFieldWrapper, CharCounter } from '@/components/ui';
 import {
   Clock,
@@ -40,16 +33,10 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
           [currentLang]: defaultMsg
         };
       }
-      // The schedule is meaningless without a timezone, and until now nothing ever
-      // wrote one — merchants silently inherited the DB placeholder, so a Libyan
-      // shop ran on Riyadh time and lost an hour every day. Switching the schedule
-      // ON is the moment the value starts to matter, so seed it from this device.
-      // Only ever applied when the stored value is still the untouched placeholder,
-      // and the picker directly below shows the result — visible, not silent.
-      const detected = detectTimezone();
-      if (detected && settings.timezone === PLACEHOLDER_TIMEZONE) {
-        updates.timezone = detected;
-      }
+      // The placeholder-timezone seed that used to live here is gone: settings.tsx
+      // now replaces PLACEHOLDER_TIMEZONE with the device zone at LOAD, for every
+      // merchant, so by the time this toggle runs the value can never still be the
+      // placeholder. Seeding here as well would have been unreachable code.
     }
     setSettings({ ...settings, ...updates });
   };
@@ -61,17 +48,6 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
   });
 
   const hasError = settings.businessHoursEnd <= settings.businessHoursStart;
-
-  // Timezone options are derived once per stored/detected zone rather than per
-  // render: the full IANA list is ~400 entries and each label formats an offset.
-  const detectedTimezone = useMemo(() => detectTimezone(), []);
-  const timezoneOptions = useMemo(
-    () => getTimezoneOptions([settings.timezone, detectedTimezone]),
-    [settings.timezone, detectedTimezone],
-  );
-  // Offered as a hint, never auto-applied: silently rewriting the stored zone from
-  // whatever device happens to open Settings is how it became invisible to begin with.
-  const timezoneMismatch = !!detectedTimezone && detectedTimezone !== settings.timezone;
 
   // Compute current status
   const nowTime = formatTimeInZone(settings.timezone, currentTime);
@@ -106,6 +82,14 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
         </div>
         <Toggle enabled={settings.businessHoursOnly} onChange={handleToggle} aria-label={t('businessHoursLabel')} />
       </div>
+
+      {/* The zone itself is a General setting (TimezoneCard) — it governs far
+          more than this schedule. Echoed read-only here so the hours are never
+          read without the clock they are measured against. */}
+      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium mb-4">
+        <Globe className="w-3.5 h-3.5 text-icon-muted flex-shrink-0" aria-hidden="true" />
+        {t('businessHours.timezoneEcho', { timezone: settings.timezone.split('/').pop()?.replace(/_/g, ' ') ?? settings.timezone })}
+      </p>
 
       <div
         className={clsx(
@@ -211,48 +195,6 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
             </div>
           )}
 
-          {/* Timezone — the hours above are meaningless without it, and until now
-              the merchant could neither see nor set it: everyone inherited a DB
-              placeholder, so a Libyan shop ran on Riyadh time. Kept in the same
-              card so the two are always read (and changed) together. */}
-          <div className="mt-4">
-            <TitleWithInfo info={t('businessHours.timezoneInfo')} infoLabel={t('businessHours.timezone')}>
-              <label
-                id="business-hours-timezone-label"
-                className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest"
-              >
-                {t('businessHours.timezone')}
-              </label>
-            </TitleWithInfo>
-            <div className="mb-1.5" />
-            <Select
-              aria-labelledby="business-hours-timezone-label"
-              value={settings.timezone}
-              onChange={(val) => setSettings({ ...settings, timezone: val })}
-              options={timezoneOptions}
-              disabled={!settings.businessHoursOnly}
-              searchable
-              searchPlaceholder={t('businessHours.timezoneSearch')}
-              noResultsLabel={t('businessHours.timezoneNoResults')}
-              className="!py-3 font-bold border-none bg-card shadow-sm"
-            />
-            <div className="flex items-center gap-1.5 mt-2">
-              <Globe className="w-3.5 h-3.5 text-icon-muted flex-shrink-0" aria-hidden="true" />
-              <p className="text-[11px] text-muted-foreground font-medium">
-                {t('businessHours.localTimeNow', { time: nowTime })}
-              </p>
-            </div>
-            {timezoneMismatch && detectedTimezone && (
-              <button
-                type="button"
-                onClick={() => setSettings({ ...settings, timezone: detectedTimezone })}
-                disabled={!settings.businessHoursOnly}
-                className="mt-2 text-[11px] font-semibold text-brand-600 hover:underline text-start"
-              >
-                {t('businessHours.useDetectedTimezone', { timezone: detectedTimezone.replace(/_/g, ' ') })}
-              </button>
-            )}
-          </div>
         </div>
 
         {/* Away Message */}

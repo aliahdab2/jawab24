@@ -8,6 +8,7 @@ export { buildSettingsUpdatePayload, buildChangedSettingsPayload } from './build
 export { ThemeSelector } from './ThemeSelector';
 export { AutoReplyBoardCard } from './AutoReplyBoardCard';
 export { BusinessHoursCard } from './BusinessHoursCard';
+export { TimezoneCard } from './TimezoneCard';
 export { ReplyDelayCard } from './ReplyDelayCard';
 export { NotificationsCard } from './NotificationsCard';
 export { HandoffPauseCard } from './HandoffPauseCard';

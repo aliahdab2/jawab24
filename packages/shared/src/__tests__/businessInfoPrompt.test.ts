@@ -95,6 +95,26 @@ describe('formatBusinessInfoPrompt', () => {
             expect(block).toContain('- Policies / السياسات: [NOT_PROVIDED]');
         });
 
+        // v61. `channels.whatsapp` existed on the type since Stage 2.6 but was
+        // read by nothing — B1 gives it a fact row, so it has to reach the model.
+        it('renders the merchant WhatsApp contact when set', () => {
+            const block = formatBusinessInfoPrompt({
+                address: 'Damascus',
+                channels: { whatsapp: '+963937549674' },
+            });
+            expect(block).toContain('- WhatsApp / واتساب: +963937549674');
+        });
+
+        // PRESENT-ONLY: no [NOT_PROVIDED] counterpart. An absence line would cost
+        // a token on every reply for every merchant (almost none set this) and
+        // invite the model to volunteer "we have no WhatsApp". Keeping it absent
+        // makes v61 byte-identical to v60 for anyone who hasn't filled it in.
+        it('emits no WhatsApp line at all when unset', () => {
+            const block = formatBusinessInfoPrompt({ address: 'Damascus' });
+            expect(block).not.toContain('WhatsApp');
+            expect(block).not.toContain('واتساب');
+        });
+
         it('renders hours in day order, not insertion order', () => {
             const block = formatBusinessInfoPrompt({
                 hours: {
@@ -185,6 +205,31 @@ describe('formatBusinessInfoPrompt', () => {
                 fbSync('address', 'city', 'country', 'phones', 'hours', 'policies'),
             );
             expect(block).toBeNull();
+        });
+
+        // WhatsApp is PRESENT-ONLY (no [NOT_PROVIDED] line) and channels never
+        // reach the narrative fallback (D-010) — so an unconfirmed value must
+        // count as absent EVERYWHERE, including the empty-profile gate. Without
+        // that, a store-synced suggestion the merchant never confirmed would be
+        // the sole trigger of a block made entirely of [NOT_PROVIDED] lines:
+        // tokens on every reply, conjured out of a value no prompt can show.
+        it('returns null when an unconfirmed WhatsApp is the ONLY value', () => {
+            const block = formatBusinessInfoPrompt(
+                { channels: { whatsapp: '+218911234567' } },
+                fbSync('channels'),
+            );
+            expect(block).toBeNull();
+        });
+
+        it('omits an unconfirmed WhatsApp from an otherwise-authoritative block', () => {
+            const block = formatBusinessInfoPrompt(
+                { address: 'Damascus', channels: { whatsapp: '+218911234567' } },
+                { ...editor('address'), ...fbSync('channels') },
+            );
+            expect(block).toContain('Damascus');
+            expect(block).not.toContain('+218911234567');
+            // PRESENT-ONLY holds for the unconfirmed case too: omitted, not guarded.
+            expect(block).not.toContain('WhatsApp');
         });
 
         it('asserts an editor-authored value over fb_sync', () => {

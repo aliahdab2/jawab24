@@ -68,6 +68,7 @@ export {
     formatTimeInZone,
     formatUtcOffset,
     detectTimezone,
+    resolveStoredTimezone,
     getTimezoneOptions,
     utcOffsetMinutes,
 } from './timezone';
@@ -348,6 +349,20 @@ export interface Page {
   whatsappAutoReplyEnabled?: boolean | null;
   // E-commerce store linked to this page
   ecommerceStoreId?: string | null;
+  /**
+   * Whether the linked store ACTUALLY answers policy questions (delivery,
+   * payment, returns) in replies — i.e. it is still active AND has synced
+   * policy text. Derived server-side to mirror `getStoreContextForAI`, which
+   * returns nothing for an inactive store or an empty `policiesSummary`.
+   *
+   * Never infer this from `ecommerceStoreId` alone: the id survives a
+   * platform-side uninstall (`deactivateStore` blanks tokens but deliberately
+   * keeps the link so a reconnect restores it), and a live store can sync with
+   * no policies at all. In both cases the id is set while the model receives
+   * nothing — so UI keyed on the id tells the merchant "your store answers
+   * this" and the customer then gets "I don't know".
+   */
+  storeAnswersPolicies?: boolean;
   // KB fields
   knowledgeBase?: string | null;
   suggestedKnowledgeBase?: string | null;
@@ -1063,7 +1078,17 @@ export {
 // form itself. First-token truncation addressed a customer as «يا أبو» (prod — the
 // kunya «أبو حسان» minus the part that makes it a name) and does the same to «عبد
 // الرحمن». Arabic-DM-with-a-name traffic only; every other prompt is byte-identical.
-export const PROMPT_VERSION = 'v60';
+// v61 — BUSINESS_INFO carries the merchant's WhatsApp contact
+// (`channels.whatsapp`). The field had existed on the type since Stage 2.6 but
+// was read by NOTHING: no prompt, no backend, no worker. B1 gives it a fact row,
+// so it now has to reach the model or the merchant fills in a value that can
+// never be told to anyone. Emitted PRESENT-ONLY (no [NOT_PROVIDED] counterpart)
+// so the prompt is byte-identical for every merchant who hasn't set one.
+// ⚠️ This block was authored as v60 on the B1 branch while #502 independently
+// took v60 on main for the name-truncation fix above. Renumbered to v61 on merge:
+// PROMPT_VERSION keys the semantic cache, so shipping two different prompts under
+// one version would have served #502's cached replies for this change.
+export const PROMPT_VERSION = 'v61';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

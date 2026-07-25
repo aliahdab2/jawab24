@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, detectTimezone, resolveStoredTimezone } from '@jawab24/shared';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore, useUIStore } from '@/lib/store';
@@ -27,6 +27,7 @@ import {
   ThemeSelector,
   AutoReplyBoardCard,
   BusinessHoursCard,
+  TimezoneCard,
   ReplyDelayCard,
   NotificationsCard,
   HandoffPauseCard,
@@ -82,7 +83,7 @@ const INITIAL_SETTINGS: SettingsState = {
  * advanced fields don't need to be registered — keeps this map low-drift.
  */
 const SECTION_FIELD_KEYS: Record<'general' | 'autoReply' | 'aiPersonality', (keyof SettingsState)[]> = {
-  general: ['dashboardLanguage', 'defaultReplyLanguage', 'autoDetectLanguage'],
+  general: ['dashboardLanguage', 'defaultReplyLanguage', 'autoDetectLanguage', 'timezone'],
   autoReply: ['aiEnabled', 'commentsAutoReply', 'messagesAutoReply', 'commentReplyMode', 'dualReplyNudgeMulti'],
   aiPersonality: ['replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti'],
 };
@@ -187,7 +188,8 @@ const SettingsPage: NextPageWithLayout = () => {
         businessHoursOnly: data.businessHoursOnly ?? false,
         businessHoursStart: (data.businessHoursStart && data.businessHoursStart !== '00:00') ? data.businessHoursStart : '09:00',
         businessHoursEnd: (data.businessHoursEnd && data.businessHoursEnd !== '00:00') ? data.businessHoursEnd : '18:00',
-        timezone: data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+        // The placeholder is a DB default nobody chose — see resolveStoredTimezone.
+        timezone: resolveStoredTimezone(data.timezone, detectTimezone()) || Intl.DateTimeFormat().resolvedOptions().timeZone,
         awayMessageMulti: data.awayMessageMulti || {},
         greetingMessageMulti: data.greetingMessageMulti || {},
         greetingMessageEnabled: data.greetingMessageEnabled ?? false,
@@ -210,7 +212,11 @@ const SettingsPage: NextPageWithLayout = () => {
         holdLowConfidence: data.holdLowConfidence ?? false,
       };
       setSettings(newSettings);
-      setInitialSettings(newSettings);
+      // Baseline keeps the RAW stored zone. When the placeholder above was
+      // replaced, that shows up as a genuine pending change the merchant can
+      // save in one tap — rather than a picker quietly disagreeing with the
+      // zone the backend actually replies in.
+      setInitialSettings({ ...newSettings, timezone: data.timezone ?? '' });
     } catch (error) {
       // CRITICAL: do NOT silently swallow this. If the fetch fails (offline, 5xx),
       // the page would otherwise show INITIAL_SETTINGS defaults to the user. They
@@ -243,7 +249,10 @@ const SettingsPage: NextPageWithLayout = () => {
     if (loading || didDeepLinkRef.current) return;
     if (typeof window === 'undefined') return;
     const anchorId = window.location.hash.slice(1);
-    const KNOWN_ANCHORS = ['limit-fallback-message', 'comment-reply-mode-label'];
+    // 'business-hours-timezone-label' is the target of the timezone hint in the
+    // /business hours sheet — timezone stays HERE (workspace-level, one home per
+    // D-043); the sheet only links in.
+    const KNOWN_ANCHORS = ['limit-fallback-message', 'comment-reply-mode-label', 'business-hours-timezone-label'];
     if (!KNOWN_ANCHORS.includes(anchorId)) return;
     didDeepLinkRef.current = true;
     if (anchorId === 'limit-fallback-message') setForceAdvanced(true);
@@ -441,6 +450,12 @@ const SettingsPage: NextPageWithLayout = () => {
           setLanguage={setLanguage}
         />
         <ThemeSelector />
+        {/* Timezone belongs here, not in the reply-schedule card: it governs the
+            AI's date awareness, the Post-Reply gate, the reply schedule AND the
+            hours quoted to customers. In Advanced (collapsed by default) it was
+            effectively invisible for a value whose being wrong shifts all of
+            them. */}
+        <TimezoneCard settings={settings} setSettings={setSettings} currentTime={currentTime} />
       </div>
 
       {/* Section: Auto-Reply — ONE flat status board (D-029): who replies, and where.

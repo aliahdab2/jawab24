@@ -14,6 +14,7 @@ import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { redisScanDelete } from '../lib/redis';
 import { customerNotificationService } from './customerNotifications';
+import { workspaceSettingsService } from './workspaceSettings';
 
 // --- Constants & Types ---
 
@@ -363,6 +364,21 @@ export async function createStore(opts: CreateStoreOptions) {
         },
     }).returning();
 
+    // A connected store knows where the BUSINESS is — better than the device
+    // that happens to open Settings, and better than the placeholder every
+    // workspace inherits. Only adopted when the merchant has never set one
+    // (see adoptTimezoneIfUnset); never fatal to a store connect.
+    if (opts.workspaceId && opts.shopInfo?.shopTimezone) {
+        try {
+            await workspaceSettingsService.adoptTimezoneIfUnset(opts.workspaceId, opts.shopInfo.shopTimezone);
+        } catch (err) {
+            captureError(err, 'Failed to adopt store timezone', {
+                tags: { service: 'ecommerce', action: 'adopt-store-timezone' },
+                extra: { workspaceId: opts.workspaceId, platform: opts.platform },
+            });
+        }
+    }
+
     return result[0];
 }
 
@@ -708,10 +724,31 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
     }
 }
 
+/**
+ * Does this store actually contribute policy text (delivery, payment, returns)
+ * to replies? THE single definition of "the store answers policy questions":
+ * `getStorePolicies` / `getStoreContextForAI` (what the model receives) and
+ * `getPages`' `storeAnswersPolicies` page flag (what /business tells the
+ * merchant) all derive from it.
+ *
+ * One definition on purpose. `pages.ecommerce_store_id` alone is NOT proof the
+ * store answers anything — it survives a platform-side uninstall
+ * (`deactivateStore` keeps the link for reconnect) and a live store can sync
+ * with no policy text. The UI once re-expressed this rule separately, drifted,
+ * and told merchants «يجيب عنها متجرك المتصل» while the model received nothing.
+ * If the rule changes (trimming, a productSummary condition), change it HERE —
+ * every claim and every prompt moves together.
+ */
+export function storeAnswersPolicies(
+    store: { isActive?: boolean | null; policiesSummary?: string | null } | null | undefined,
+): boolean {
+    return !!store?.isActive && !!store.policiesSummary;
+}
+
 /** Fetch just the policiesSummary for a store (return, warranty, delivery, payment). */
 export async function getStorePolicies(ecommerceStoreId: string): Promise<string | undefined> {
     const store = await getStoreById(ecommerceStoreId);
-    if (!store || !store.isActive) return undefined;
+    if (!store || !storeAnswersPolicies(store)) return undefined;
     return store.policiesSummary || undefined;
 }
 
@@ -723,7 +760,7 @@ export async function getStoreContextForAI(ecommerceStoreId: string): Promise<{
     const store = await getStoreById(ecommerceStoreId);
     if (!store || !store.isActive) return {};
     return {
-        storePolicies: store.policiesSummary || undefined,
+        storePolicies: storeAnswersPolicies(store) ? store.policiesSummary || undefined : undefined,
         productCatalog: store.productSummary || undefined,
     };
 }

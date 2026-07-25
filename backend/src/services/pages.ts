@@ -1,9 +1,10 @@
 import { db } from '../db';
-import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems } from '../db/schema';
+import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems, ecommerceStores } from '../db/schema';
 import { eq, and, ne, desc, sql, count, isNotNull, inArray } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
+import { storeAnswersPolicies } from './ecommerce';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { imageStorage } from './imageStorage';
@@ -401,43 +402,84 @@ export class PagesService {
             captureError(err, 'Pages stats query failed', { level: 'warning', tags: { service: 'pages' } });
         }
 
-        // Which pages have at least one Post Reply configured (either mode → trigger_reply
-        // set). Kept OUT of the 60s stats cache and computed fresh so the dashboard
-        // "try Post Reply" nudge disappears immediately once a merchant sets their first
-        // trigger. Cheap (two indexed existence scans); best-effort like the stats above.
+        // Three per-page enrichments, all fresh (kept OUT of the 60s stats cache),
+        // all best-effort (a failure zeroes its own result and never sinks the
+        // page list), and independent — so they run CONCURRENTLY: getPages is the
+        // dashboard's hot path, and serial awaits here were pure added latency.
         const triggerPageIds = new Set<string>();
-        try {
-            const [fbTrig, igTrig] = await Promise.all([
-                db.selectDistinct({ pageId: posts.pageId })
-                    .from(posts)
-                    .innerJoin(pages, eq(posts.pageId, pages.id))
-                    .where(and(eq(pages.workspaceId, workspaceId), isNotNull(posts.triggerReply))),
-                db.selectDistinct({ pageId: instagramMedia.pageId })
-                    .from(instagramMedia)
-                    .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                    .where(and(eq(pages.workspaceId, workspaceId), isNotNull(instagramMedia.triggerReply))),
-            ]);
-            for (const r of fbTrig) if (r.pageId) triggerPageIds.add(r.pageId);
-            for (const r of igTrig) if (r.pageId) triggerPageIds.add(r.pageId);
-        } catch (err) {
-            captureError(err, 'Pages Post Reply trigger query failed', { level: 'warning', tags: { service: 'pages' } });
-        }
-
-        // Native-catalog item counts per page. A page with items counts as having
-        // an answer source (needsBusinessInfo / setup checklist) even with an empty
-        // free-text KB. Computed fresh (not in the 60s stats cache) so the KB nudge
-        // clears the moment a merchant adds their first item. Best-effort like above.
         const catalogCountByPage = new Map<string, number>();
-        try {
-            const rows = await db.select({ pageId: catalogItems.pageId, value: count() })
-                .from(catalogItems)
-                .innerJoin(pages, eq(catalogItems.pageId, pages.id))
-                .where(eq(pages.workspaceId, workspaceId))
-                .groupBy(catalogItems.pageId);
-            for (const r of rows) catalogCountByPage.set(r.pageId, Number(r.value));
-        } catch (err) {
-            captureError(err, 'Pages catalog count query failed', { level: 'warning', tags: { service: 'pages' } });
-        }
+        const storesAnsweringPolicies = new Set<string>();
+        await Promise.all([
+            // Which pages have at least one Post Reply configured (either mode →
+            // trigger_reply set). Fresh so the dashboard "try Post Reply" nudge
+            // disappears immediately once a merchant sets their first trigger.
+            // Cheap (two indexed existence scans).
+            (async () => {
+                try {
+                    const [fbTrig, igTrig] = await Promise.all([
+                        db.selectDistinct({ pageId: posts.pageId })
+                            .from(posts)
+                            .innerJoin(pages, eq(posts.pageId, pages.id))
+                            .where(and(eq(pages.workspaceId, workspaceId), isNotNull(posts.triggerReply))),
+                        db.selectDistinct({ pageId: instagramMedia.pageId })
+                            .from(instagramMedia)
+                            .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                            .where(and(eq(pages.workspaceId, workspaceId), isNotNull(instagramMedia.triggerReply))),
+                    ]);
+                    for (const r of fbTrig) if (r.pageId) triggerPageIds.add(r.pageId);
+                    for (const r of igTrig) if (r.pageId) triggerPageIds.add(r.pageId);
+                } catch (err) {
+                    captureError(err, 'Pages Post Reply trigger query failed', { level: 'warning', tags: { service: 'pages' } });
+                }
+            })(),
+
+            // Native-catalog item counts per page. A page with items counts as
+            // having an answer source (needsBusinessInfo / setup checklist) even
+            // with an empty free-text KB. Fresh so the KB nudge clears the moment
+            // a merchant adds their first item.
+            (async () => {
+                try {
+                    const rows = await db.select({ pageId: catalogItems.pageId, value: count() })
+                        .from(catalogItems)
+                        .innerJoin(pages, eq(catalogItems.pageId, pages.id))
+                        .where(eq(pages.workspaceId, workspaceId))
+                        .groupBy(catalogItems.pageId);
+                    for (const r of rows) catalogCountByPage.set(r.pageId, Number(r.value));
+                } catch (err) {
+                    captureError(err, 'Pages catalog count query failed', { level: 'warning', tags: { service: 'pages' } });
+                }
+            })(),
+
+            // Which linked stores ACTUALLY answer policy questions in replies —
+            // decided by `storeAnswersPolicies` (ecommerce.ts), the same predicate
+            // `getStoreContextForAI` derives the prompt from, so what /business
+            // claims and what the model receives can never disagree. The flag
+            // exists because `pages.ecommerce_store_id` alone is NOT proof:
+            // `deactivateStore` (platform-side uninstall) keeps the link for
+            // reconnect, and a live store can sync with no policy text.
+            //
+            // Fails in the SAFE direction: an error leaves the set empty, so the
+            // row shows as a gap to fill rather than claiming an answer that
+            // isn't there.
+            (async () => {
+                const linkedStoreIds = [...new Set(
+                    workspacePages.map(p => p.ecommerceStoreId).filter((id): id is string => !!id),
+                )];
+                if (linkedStoreIds.length === 0) return;
+                try {
+                    const rows = await db.select({
+                        id: ecommerceStores.id,
+                        isActive: ecommerceStores.isActive,
+                        policiesSummary: ecommerceStores.policiesSummary,
+                    })
+                        .from(ecommerceStores)
+                        .where(inArray(ecommerceStores.id, linkedStoreIds));
+                    for (const r of rows) if (storeAnswersPolicies(r)) storesAnsweringPolicies.add(r.id);
+                } catch (err) {
+                    captureError(err, 'Pages store-policy query failed', { level: 'warning', tags: { service: 'pages' } });
+                }
+            })(),
+        ]);
 
         return workspacePages.map(page => {
             const stats = statsMap.get(page.id) ?? {
@@ -453,6 +495,7 @@ export class PagesService {
                     : 0,
                 hasPostReplyTrigger: triggerPageIds.has(page.id),
                 catalogItemsCount: catalogCountByPage.get(page.id) ?? 0,
+                storeAnswersPolicies: !!page.ecommerceStoreId && storesAnsweringPolicies.has(page.ecommerceStoreId),
             };
         });
     }
