@@ -1,0 +1,162 @@
+import { canonicalizeHoursEntry } from '@jawab24/shared';
+
+/**
+ * Week model for the working-hours editor.
+ *
+ * `business_profile.hours` is stored as `Record<day, string[]>` — an ARRAY of
+ * canonical entries per day. That shape already carries everything a real
+ * merchant needs and the rest of the stack already honours it:
+ *   - `parseBusinessHours` (backend/src/services/pages.ts) imports Facebook's
+ *     `mon_1_open` / `mon_2_open` slots as multiple ranges per day,
+ *   - `formatHours` (packages/shared/src/businessInfoPrompt.ts) renders each
+ *     day on its own line and joins split shifts with " / ".
+ *
+ * These helpers are the UI's half of that contract: read the stored week
+ * WITHOUT flattening it, and write it back in the same canonical vocabulary
+ * ("HH:MM-HH:MM" / "closed" / "all day").
+ */
+
+export const DAY_KEYS = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
+export type DayKey = typeof DAY_KEYS[number];
+
+/** Default working week for the region: Friday off. */
+export const DEFAULT_OPEN_DAYS: readonly DayKey[] = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu'];
+
+export const DEFAULT_RANGE: TimeRange = { from: '09:00', to: '17:00' };
+
+/** Long day keys are an accepted storage form (see shared LONG_DAY_KEYS), and
+ *  they are NOT `${short}day` — "sat" → "saturday", not "satday". */
+const LONG_BY_SHORT: Record<DayKey, string> = {
+  sat: 'saturday',
+  sun: 'sunday',
+  mon: 'monday',
+  tue: 'tuesday',
+  wed: 'wednesday',
+  thu: 'thursday',
+  fri: 'friday',
+};
+
+export interface TimeRange { from: string; to: string }
+
+/** One day's schedule. `allDay` is preserved on read but not creatable here —
+ *  it reaches us from Facebook / KB extraction and must survive a round-trip. */
+export type DayState =
+  | { kind: 'closed' }
+  | { kind: 'allDay' }
+  | { kind: 'ranges'; ranges: TimeRange[] };
+
+export type WeekState = Record<DayKey, DayState>;
+
+const RANGE_RE = /^(\d{2}:\d{2})-(\d{2}:\d{2})$/;
+
+/** Read a day's entries under either the short or the long key form. */
+function readDayEntries(
+  hours: Record<string, string[]> | undefined,
+  day: DayKey,
+): string[] | undefined {
+  const raw = hours?.[day] ?? hours?.[LONG_BY_SHORT[day]];
+  return Array.isArray(raw) ? raw : undefined;
+}
+
+function parseDay(entries: string[] | undefined): DayState {
+  if (!entries || entries.length === 0) return { kind: 'closed' };
+
+  const ranges: TimeRange[] = [];
+  for (const entry of entries) {
+    const trimmed = (entry ?? '').trim();
+    if (!trimmed || trimmed === 'closed') continue;
+    if (trimmed === 'all day') return { kind: 'allDay' };
+    const m = RANGE_RE.exec(trimmed);
+    if (m) ranges.push({ from: m[1], to: m[2] });
+  }
+  return ranges.length ? { kind: 'ranges', ranges } : { kind: 'closed' };
+}
+
+/**
+ * Stored hours → editor state. Never collapses a per-day or split-shift week
+ * into a single schedule; an absent/empty week falls back to the regional
+ * default so a first-time merchant starts somewhere sensible.
+ */
+export function parseWeek(hours: Record<string, string[]> | undefined): WeekState {
+  const hasAny = DAY_KEYS.some((d) => (readDayEntries(hours, d)?.length ?? 0) > 0);
+  const week = {} as WeekState;
+  for (const day of DAY_KEYS) {
+    week[day] = hasAny
+      ? parseDay(readDayEntries(hours, day))
+      : DEFAULT_OPEN_DAYS.includes(day)
+        ? { kind: 'ranges', ranges: [{ ...DEFAULT_RANGE }] }
+        : { kind: 'closed' };
+  }
+  return week;
+}
+
+/**
+ * Editor state → stored hours, in the canonical vocabulary. Returns null when
+ * a range can't be canonicalized, so the caller can block the save rather than
+ * persist something the AI will read back wrong.
+ */
+export function serializeWeek(week: WeekState): Record<string, string[]> | null {
+  const out: Record<string, string[]> = {};
+  for (const day of DAY_KEYS) {
+    const state = week[day];
+    if (state.kind === 'closed') { out[day] = ['closed']; continue; }
+    if (state.kind === 'allDay') { out[day] = ['all day']; continue; }
+
+    const entries: string[] = [];
+    for (const range of state.ranges) {
+      // Reuse the shared canonicalizer — never re-implement time parsing.
+      const parsed = canonicalizeHoursEntry(`${range.from}-${range.to}`);
+      if (!parsed.ok) return null;
+      entries.push(parsed.value);
+    }
+    if (entries.length === 0) return null;
+    out[day] = entries;
+  }
+  return out;
+}
+
+/** True when at least one day is open — an all-closed week is not a schedule. */
+export function hasOpenDay(week: WeekState): boolean {
+  return DAY_KEYS.some((d) => week[d].kind !== 'closed');
+}
+
+/** Render one day's schedule, e.g. "09:00-14:00 / 17:00-22:00". */
+function renderDay(state: DayState, labels: SummaryLabels): string {
+  if (state.kind === 'closed') return labels.closed;
+  if (state.kind === 'allDay') return labels.allDay;
+  return state.ranges.map((r) => `${r.from}-${r.to}`).join(' / ');
+}
+
+export interface SummaryLabels {
+  closed: string;
+  allDay: string;
+  /** Localized short day name, e.g. "السبت" / "Sat". */
+  day: (key: DayKey) => string;
+}
+
+/**
+ * One-line summary for the facts row, e.g.
+ *   "السبت–الخميس ٠٩:٠٠-١٧:٠٠ · الجمعة مغلق"
+ *
+ * Consecutive days that share a schedule are grouped, the way merchants are
+ * used to reading opening hours — otherwise a seven-line week is unreadable in
+ * a 56px row, which is why the row used to just say "Saved".
+ */
+export function summarizeWeek(week: WeekState, labels: SummaryLabels): string {
+  const groups: { days: DayKey[]; text: string }[] = [];
+  for (const day of DAY_KEYS) {
+    const text = renderDay(week[day], labels);
+    const last = groups[groups.length - 1];
+    if (last && last.text === text) last.days.push(day);
+    else groups.push({ days: [day], text });
+  }
+
+  return groups
+    .map(({ days, text }) => {
+      const span = days.length === 1
+        ? labels.day(days[0])
+        : `${labels.day(days[0])}–${labels.day(days[days.length - 1])}`;
+      return `${span} ${text}`;
+    })
+    .join(' · ');
+}

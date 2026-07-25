@@ -1,18 +1,19 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { X, Check } from 'lucide-react';
+import { X, Check, Plus, Trash2, Copy } from 'lucide-react';
 import Link from 'next/link';
-import { DetailSheet, Button } from '@/components/ui';
+import { DetailSheet, Button, Toggle } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useMerchantTimezone } from '@/hooks/useMerchantTimezone';
-import { canonicalizeHoursEntry, SHORT_DAY_KEYS } from '@jawab24/shared';
-
-type DayKey = typeof SHORT_DAY_KEYS[number];
-
-/** Week starts Saturday in the Arab market — the order merchants read. */
-const DISPLAY_ORDER: readonly DayKey[] = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
-/** Default working week for the region: Friday off. Merchant can change it. */
-const DEFAULT_OPEN: readonly DayKey[] = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu'];
+import {
+  DAY_KEYS,
+  DEFAULT_RANGE,
+  parseWeek,
+  serializeWeek,
+  hasOpenDay,
+  type DayKey,
+  type WeekState,
+} from '@/utils/businessHours';
 
 interface BusinessHoursSheetProps {
   /** Existing hours (any accepted day-key form). */
@@ -22,76 +23,97 @@ interface BusinessHoursSheetProps {
   onClose: () => void;
 }
 
-/** Pull "HH:MM"/"HH:MM" out of the first canonical entry we can find. */
-function readExisting(hours: Record<string, string[]> | undefined) {
-  const open = new Set<DayKey>();
-  let from = '09:00';
-  let to = '17:00';
-  let found = false;
-  for (const day of DISPLAY_ORDER) {
-    const entries = hours?.[day] ?? hours?.[`${day}day`] ?? [];
-    const first = Array.isArray(entries) ? entries[0] : undefined;
-    if (!first || first === 'closed') continue;
-    open.add(day);
-    const m = /^(\d{2}:\d{2})-(\d{2}:\d{2})$/.exec(first);
-    if (m && !found) { from = m[1]; to = m[2]; found = true; }
-  }
-  return { open: open.size ? open : new Set<DayKey>(DEFAULT_OPEN), from, to };
-}
-
 /**
  * Structured working-hours editor (B1 part 2b).
  *
- * Replaces the free-text fallback the hours row used to route to — the owner
- * hit that immediately («عم يرجع ياخدني على النص الحر... نفس الشي صح») and was
- * right: sending a merchant into a 16k-char textarea to state "9 to 5, closed
- * Friday" is the exact unmaintainability this milestone exists to remove.
+ * Replaces the free-text fallback the hours row used to route to — sending a
+ * merchant into a 16k-char textarea to state "9 to 5, closed Friday" is the
+ * exact unmaintainability this milestone exists to remove.
  *
- * Optimized for the common case rather than the general one: ONE schedule
- * applied to the days you pick. Day chips + two native time inputs = ~4 taps,
- * and the value is written structured (`{sat:['09:00-17:00'], …}`) so it
- * reaches the AI through BUSINESS_INFO as an authoritative field. Per-day
- * different hours remain a Phase-D refinement — deliberately not built here,
- * because it costs every merchant complexity to serve a minority.
+ * PER-DAY by design. The first version applied ONE schedule to every day you
+ * picked, on the theory that per-day hours cost every merchant complexity to
+ * serve a minority. That was wrong in a way that lost data: `business_profile.
+ * hours` stores `Record<day, string[]>`, Facebook import already writes
+ * different hours per day AND split shifts (`mon_1_*`, `mon_2_*`), and the
+ * prompt formatter already renders them. So a merchant whose real week was
+ * "Sat–Thu 09:00–17:00, Fri 14:00–20:00" would open this sheet, see one
+ * flattened range, and overwrite their true hours the moment they saved.
+ *
+ * The fast path is preserved by «apply to all days» rather than by removing
+ * the capability: set one day, copy it across — still ~4 taps for the uniform
+ * case, while a genuinely different Friday survives.
  */
 export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: BusinessHoursSheetProps) {
   const t = useTranslations('business');
   const tc = useTranslations('common');
   const timezone = useMerchantTimezone();
 
-  const existing = useMemo(() => readExisting(initialHours), [initialHours]);
-  const [openDays, setOpenDays] = useState<Set<DayKey>>(existing.open);
-  const [from, setFrom] = useState(existing.from);
-  const [to, setTo] = useState(existing.to);
+  const initial = useMemo(() => parseWeek(initialHours), [initialHours]);
+  const [week, setWeek] = useState<WeekState>(initial);
 
   useEscapeKey(onClose, true);
 
-  const toggleDay = (day: DayKey) => {
-    setOpenDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(day)) next.delete(day); else next.add(day);
+  const setDay = (day: DayKey, next: WeekState[DayKey]) =>
+    setWeek((prev) => ({ ...prev, [day]: next }));
+
+  const toggleDay = (day: DayKey, open: boolean) =>
+    setDay(day, open ? { kind: 'ranges', ranges: [{ ...DEFAULT_RANGE }] } : { kind: 'closed' });
+
+  const setRange = (day: DayKey, index: number, field: 'from' | 'to', value: string) =>
+    setWeek((prev) => {
+      const state = prev[day];
+      if (state.kind !== 'ranges') return prev;
+      const ranges = state.ranges.map((r, i) => (i === index ? { ...r, [field]: value } : r));
+      return { ...prev, [day]: { kind: 'ranges', ranges } };
+    });
+
+  const addPeriod = (day: DayKey) =>
+    setWeek((prev) => {
+      const state = prev[day];
+      if (state.kind !== 'ranges') return prev;
+      return { ...prev, [day]: { kind: 'ranges', ranges: [...state.ranges, { ...DEFAULT_RANGE }] } };
+    });
+
+  const removePeriod = (day: DayKey, index: number) =>
+    setWeek((prev) => {
+      const state = prev[day];
+      if (state.kind !== 'ranges') return prev;
+      const ranges = state.ranges.filter((_, i) => i !== index);
+      return { ...prev, [day]: ranges.length ? { kind: 'ranges', ranges } : { kind: 'closed' } };
+    });
+
+  /** Turn a preserved "all day" into editable times without losing the day. */
+  const setSpecificTimes = (day: DayKey) =>
+    setDay(day, { kind: 'ranges', ranges: [{ ...DEFAULT_RANGE }] });
+
+  /** The day whose schedule «apply to all» copies — the first open one. */
+  const sourceDay = DAY_KEYS.find((d) => week[d].kind !== 'closed');
+
+  const applyToAll = () => {
+    if (!sourceDay) return;
+    const source = week[sourceDay];
+    const copy = (): WeekState[DayKey] =>
+      source.kind === 'ranges'
+        ? { kind: 'ranges', ranges: source.ranges.map((r) => ({ ...r })) }
+        : { ...source };
+    setWeek(() => {
+      const next = {} as WeekState;
+      for (const day of DAY_KEYS) next[day] = copy();
       return next;
     });
   };
 
-  // Reuse the shared canonicalizer (never re-implement time parsing).
-  const parsed = canonicalizeHoursEntry(`${from}-${to}`);
-  const valid = parsed.ok && openDays.size > 0;
+  const serialized = serializeWeek(week);
+  const valid = serialized !== null && hasOpenDay(week);
 
   const submit = () => {
     if (saving || !valid) return;
-    if (openDays.size === 0) { onSave(undefined); return; }
-    const value = (parsed as { ok: true; value: string }).value;
-    const hours: Record<string, string[]> = {};
-    for (const day of DISPLAY_ORDER) {
-      hours[day] = openDays.has(day) ? [value] : ['closed'];
-    }
-    onSave(hours);
+    onSave(serialized ?? undefined);
   };
 
   return (
     <DetailSheet
-      panelClassName="sm:max-h-[70vh]"
+      panelClassName="sm:max-h-[80vh]"
       dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'hours-sheet-title' }}
     >
       <div className="flex items-center justify-between gap-3 px-4 py-3 sm:p-5 border-b border-theme-border flex-shrink-0">
@@ -111,62 +133,105 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5">
         <p className="text-sm text-muted-foreground mb-3">{t('facts.hint_hours')}</p>
 
-        {/* Working days — chips are 44px so they're comfortable one-handed */}
-        <fieldset>
-          <legend className="text-sm font-medium text-foreground mb-2">{t('facts.hoursDays')}</legend>
-          <div className="flex flex-wrap gap-2">
-            {DISPLAY_ORDER.map((day) => {
-              const on = openDays.has(day);
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => toggleDay(day)}
-                  aria-pressed={on}
-                  className={`min-h-[44px] px-3.5 rounded-full text-sm font-medium border transition ${
-                    on
-                      ? 'bg-brand-500 text-white border-transparent'
-                      : 'bg-card text-muted-foreground border-theme-border hover:bg-surface-100'
-                  }`}
-                >
-                  {t(`facts.day_${day}`)}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
+        <ul className="divide-y divide-theme-border">
+          {DAY_KEYS.map((day) => {
+            const state = week[day];
+            const isOpen = state.kind !== 'closed';
+            const dayLabel = t(`facts.day_${day}`);
+            return (
+              <li key={day} className="py-3 first:pt-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-foreground">{dayLabel}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {isOpen ? t('facts.hoursOpen') : t('facts.hoursClosed')}
+                    </span>
+                    <Toggle
+                      enabled={isOpen}
+                      onChange={(next) => toggleDay(day, next)}
+                      aria-label={`${dayLabel} — ${isOpen ? t('facts.hoursOpen') : t('facts.hoursClosed')}`}
+                    />
+                  </span>
+                </div>
 
-        {/* One schedule for the selected days — the common case */}
-        <div className="flex items-end gap-3 mt-5">
-          <div className="flex-1 min-w-0">
-            <label htmlFor="hours-from" className="block text-sm font-medium text-foreground mb-1.5">
-              {t('facts.hoursFrom')}
-            </label>
-            <input
-              id="hours-from"
-              type="time"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              dir="ltr"
-              className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <label htmlFor="hours-to" className="block text-sm font-medium text-foreground mb-1.5">
-              {t('facts.hoursTo')}
-            </label>
-            <input
-              id="hours-to"
-              type="time"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              dir="ltr"
-              className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
-        </div>
+                {state.kind === 'allDay' && (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <span className="rounded-full bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 px-2.5 py-1 text-xs font-medium">
+                      {t('facts.hoursAllDay')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSpecificTimes(day)}
+                      className="min-h-[44px] text-sm font-medium text-brand-600 hover:text-brand-700"
+                    >
+                      {t('facts.hoursSetTimes')}
+                    </button>
+                  </div>
+                )}
 
-        {openDays.size === 0 && (
+                {state.kind === 'ranges' && (
+                  <div className="mt-2 space-y-2">
+                    {state.ranges.map((range, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          type="time"
+                          value={range.from}
+                          onChange={(e) => setRange(day, i, 'from', e.target.value)}
+                          dir="ltr"
+                          aria-label={`${dayLabel} — ${t('facts.hoursFrom')} ${i + 1}`}
+                          className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
+                        <span aria-hidden="true" className="text-muted-foreground">–</span>
+                        <input
+                          type="time"
+                          value={range.to}
+                          onChange={(e) => setRange(day, i, 'to', e.target.value)}
+                          dir="ltr"
+                          aria-label={`${dayLabel} — ${t('facts.hoursTo')} ${i + 1}`}
+                          className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
+                        {state.ranges.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removePeriod(day, i)}
+                            aria-label={`${t('facts.hoursRemovePeriod')} — ${dayLabel} ${i + 1}`}
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {/* Split shifts are real here (open morning, close midday,
+                        reopen evening) and the storage array already holds them. */}
+                    <button
+                      type="button"
+                      onClick={() => addPeriod(day)}
+                      className="min-h-[44px] inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+                    >
+                      <Plus className="w-4 h-4" aria-hidden="true" />
+                      {t('facts.hoursAddPeriod')}
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* The uniform-week fast path: set one day, copy it across. */}
+        {sourceDay && (
+          <button
+            type="button"
+            onClick={applyToAll}
+            className="mt-4 min-h-[44px] inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+          >
+            <Copy className="w-4 h-4" aria-hidden="true" />
+            {t('facts.hoursApplyToAll', { day: t(`facts.day_${sourceDay}`) })}
+          </button>
+        )}
+
+        {!hasOpenDay(week) && (
           <p className="text-xs text-amber-700 mt-3" role="status">{t('facts.hoursPickDay')}</p>
         )}
 
@@ -182,8 +247,6 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
             </Link>
           </p>
         )}
-
-
       </div>
 
       <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">

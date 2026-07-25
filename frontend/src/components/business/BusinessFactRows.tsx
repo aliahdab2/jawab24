@@ -5,16 +5,16 @@ import { unwrapBusinessProfile } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
 import type { LucideIcon } from 'lucide-react';
 import type { EditableFactKey } from './BusinessFactSheet';
+import { parseWeek, summarizeWeek, type DayKey } from '@/utils/businessHours';
 
-/** Row keys = the editable facts plus `hours`, which routes to the free-text
- *  editor until the Phase-D day/range editor exists. */
+/** Row keys = the editable facts plus `hours`, which has its own day/range sheet. */
 export type FactRowKey = EditableFactKey | 'hours';
 
 interface BusinessFactRowsProps {
   page: Page;
   /** Open the single-field sheet for an editable fact. */
   onEditFact: (key: EditableFactKey) => void;
-  /** `hours` has no sheet yet — hand it to the free-text Business Info editor. */
+  /** Open the structured day/range hours sheet. */
   onEditHours: () => void;
 }
 
@@ -45,17 +45,26 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
   const rows: FactRow[] = useMemo(() => {
     const { merchant = {} } = unwrapBusinessProfile(page.businessProfile);
     const hasHours = !!merchant.hours && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0);
+    // Show the actual week, grouped — a merchant with different Friday hours
+    // needs to SEE that from the row, not discover it by opening the sheet.
+    const hoursValue = hasHours
+      ? summarizeWeek(parseWeek(merchant.hours), {
+        closed: t('facts.hoursClosed'),
+        allDay: t('facts.hoursAllDay'),
+        day: (key: DayKey) => t(`facts.day_${key}`),
+      })
+      : null;
     const phones = (merchant.phones ?? []).filter((p) => p?.trim());
     const addressValue = [merchant.address, merchant.city].filter((v) => v?.trim()).join('، ');
     return [
-      { key: 'hours', icon: Clock, value: hasHours ? '' : null },
+      { key: 'hours', icon: Clock, value: hoursValue },
       { key: 'address', icon: MapPin, value: addressValue || null },
       { key: 'phone', icon: Phone, value: phones.length ? phones.join(' · ') : null },
       { key: 'website', icon: Globe, value: merchant.website?.trim() || null },
       { key: 'delivery', icon: Truck, value: merchant.policies?.shipping?.trim() || null },
       { key: 'payment', icon: CreditCard, value: merchant.policies?.payment?.trim() || null },
     ];
-  }, [page.businessProfile]);
+  }, [page.businessProfile, t]);
 
   return (
     <section aria-label={t('facts.title')} className="rounded-2xl border border-theme-border bg-card p-4 sm:p-5">
