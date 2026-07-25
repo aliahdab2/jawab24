@@ -95,7 +95,7 @@ describe('formatBusinessInfoPrompt', () => {
             expect(block).toContain('- Policies / السياسات: [NOT_PROVIDED]');
         });
 
-        // v60. `channels.whatsapp` existed on the type since Stage 2.6 but was
+        // v61. `channels.whatsapp` existed on the type since Stage 2.6 but was
         // read by nothing — B1 gives it a fact row, so it has to reach the model.
         it('renders the merchant WhatsApp contact when set', () => {
             const block = formatBusinessInfoPrompt({
@@ -108,7 +108,7 @@ describe('formatBusinessInfoPrompt', () => {
         // PRESENT-ONLY: no [NOT_PROVIDED] counterpart. An absence line would cost
         // a token on every reply for every merchant (almost none set this) and
         // invite the model to volunteer "we have no WhatsApp". Keeping it absent
-        // makes v60 byte-identical to v59 for anyone who hasn't filled it in.
+        // makes v61 byte-identical to v60 for anyone who hasn't filled it in.
         it('emits no WhatsApp line at all when unset', () => {
             const block = formatBusinessInfoPrompt({ address: 'Damascus' });
             expect(block).not.toContain('WhatsApp');

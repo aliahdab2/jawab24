@@ -1059,13 +1059,22 @@ export {
 // bounded, never dialect-extended: dialect reveals ride the flag), and records every swap
 // with a validator-added `self_identification_stripped` flag — deliberately merchant-visible
 // (flag_reason chip + needs-attention + cache-blocked), never a silent mutation again.
-// v60 — BUSINESS_INFO carries the merchant's WhatsApp contact
+// v60 (2026-07-25): the DM addressing line now carries the customer's WHOLE profile
+// name instead of its first whitespace token, and asks the model to pick the address
+// form itself. First-token truncation addressed a customer as «يا أبو» (prod — the
+// kunya «أبو حسان» minus the part that makes it a name) and does the same to «عبد
+// الرحمن». Arabic-DM-with-a-name traffic only; every other prompt is byte-identical.
+// v61 — BUSINESS_INFO carries the merchant's WhatsApp contact
 // (`channels.whatsapp`). The field had existed on the type since Stage 2.6 but
 // was read by NOTHING: no prompt, no backend, no worker. B1 gives it a fact row,
 // so it now has to reach the model or the merchant fills in a value that can
 // never be told to anyone. Emitted PRESENT-ONLY (no [NOT_PROVIDED] counterpart)
 // so the prompt is byte-identical for every merchant who hasn't set one.
-export const PROMPT_VERSION = 'v60';
+// ⚠️ This block was authored as v60 on the B1 branch while #502 independently
+// took v60 on main for the name-truncation fix above. Renumbered to v61 on merge:
+// PROMPT_VERSION keys the semantic cache, so shipping two different prompts under
+// one version would have served #502's cached replies for this change.
+export const PROMPT_VERSION = 'v61';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
