@@ -176,7 +176,18 @@ export function formatBusinessInfoPrompt(
     const phonesValue = joinPhones(profile);
     const hoursValue = formatHours(profile);
     const policiesValue = formatPolicies(profile);
-    const whatsappValue = formatWhatsapp(profile);
+    // WhatsApp is gated ONCE, up here, because unlike every other field it has
+    // no [NOT_PROVIDED] counterpart below AND no narrative fallback (D-010
+    // keeps channels out of formatBusinessProfile). So a non-authoritative
+    // value — e.g. a store-synced suggestion the merchant never confirmed —
+    // contributes nothing to ANY prompt and must count as absent everywhere.
+    // Were it counted in `anyValueAtAll`, a profile whose only value is an
+    // unconfirmed WhatsApp would conjure a block of pure [NOT_PROVIDED] lines
+    // out of nothing: tokens on every reply, asserting "we don't know our own
+    // address/phone/hours" for a merchant who simply hasn't confirmed a
+    // suggestion yet.
+    const whatsappRaw = formatWhatsapp(profile);
+    const whatsappValue = whatsappRaw && isAuthoritative(provenance, 'channels') ? whatsappRaw : null;
 
     // A truly-empty profile (no field has a value anywhere) → no block, as
     // before: nothing to assert and nothing to guard, and skipping saves
@@ -224,7 +235,8 @@ export function formatBusinessInfoPrompt(
     // would add a token to every reply for every merchant and invite the model
     // to volunteer "we have no WhatsApp", which nobody asked. Omitting it keeps
     // this change a no-op for anyone who hasn't filled it in.
-    if (whatsappValue && isAuthoritative(provenance, 'channels')) {
+    // (Authority already applied where `whatsappValue` is derived, above.)
+    if (whatsappValue) {
         fieldLines.push(`- WhatsApp / واتساب: ${whatsappValue}`);
     }
 

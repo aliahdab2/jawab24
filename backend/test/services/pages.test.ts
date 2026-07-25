@@ -1039,7 +1039,8 @@ describe('PagesService', () => {
     /**
      * `storeAnswersPolicies` tells /business whether it may say «يجيب عنها متجرك
      * المتصل» on delivery/payment instead of asking the merchant to fill them in.
-     * It must mirror `getStoreContextForAI` exactly, because a page keeps its
+     * It derives from the same `storeAnswersPolicies` predicate (ecommerce.ts)
+     * that `getStoreContextForAI` feeds the prompt from, because a page keeps its
      * `ecommerce_store_id` in two states where the model receives NOTHING:
      * after a platform-side uninstall (`deactivateStore` blanks the tokens but
      * keeps the link so a reconnect restores it), and on a live store that synced
@@ -1075,21 +1076,31 @@ describe('PagesService', () => {
         const linkedPage = [{ id: 'page-1', workspaceId, accessToken: '', createdAt: new Date(), name: 'P1', ecommerceStoreId: 'store-1' }];
 
         it('is true when the linked store is active AND has synced policy text', async () => {
-            mockSelect(linkedPage, [{ id: 'store-1' }]);
+            mockSelect(linkedPage, [{ id: 'store-1', isActive: true, policiesSummary: 'التوصيل خلال 3 أيام' }]);
 
             const result = await pagesService.getPages(workspaceId);
 
             expect(result[0].storeAnswersPolicies).toBe(true);
         });
 
-        it('is false when the store no longer qualifies (uninstalled, or no policies synced)', async () => {
-            // The row is filtered out by isActive/policiesSummary — the page still
-            // carries the id, which is exactly the trap this flag exists to close.
-            mockSelect(linkedPage, []);
+        it('is false after a platform-side uninstall (link kept, store inactive)', async () => {
+            // deactivateStore keeps pages.ecommerce_store_id so a reconnect
+            // restores the link — exactly the trap this flag exists to close.
+            mockSelect(linkedPage, [{ id: 'store-1', isActive: false, policiesSummary: 'التوصيل خلال 3 أيام' }]);
 
             const result = await pagesService.getPages(workspaceId);
 
             expect(result[0].ecommerceStoreId).toBe('store-1');
+            expect(result[0].storeAnswersPolicies).toBe(false);
+        });
+
+        it.each([null, ''])('is false for a live store that synced no policy text (%j)', async (policiesSummary) => {
+            // Shopify builds policiesSummary as `policies.join('\n') || null`;
+            // '' guards any writer that skips the || null coercion.
+            mockSelect(linkedPage, [{ id: 'store-1', isActive: true, policiesSummary }]);
+
+            const result = await pagesService.getPages(workspaceId);
+
             expect(result[0].storeAnswersPolicies).toBe(false);
         });
 
