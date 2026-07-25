@@ -1058,7 +1058,12 @@ export {
 // bounded, never dialect-extended: dialect reveals ride the flag), and records every swap
 // with a validator-added `self_identification_stripped` flag — deliberately merchant-visible
 // (flag_reason chip + needs-attention + cache-blocked), never a silent mutation again.
-export const PROMPT_VERSION = 'v59';
+// v60 (2026-07-25): the DM addressing line now carries the customer's WHOLE profile
+// name instead of its first whitespace token, and asks the model to pick the address
+// form itself. First-token truncation addressed a customer as «يا أبو» (prod — the
+// kunya «أبو حسان» minus the part that makes it a name) and does the same to «عبد
+// الرحمن». Arabic-DM-with-a-name traffic only; every other prompt is byte-identical.
+export const PROMPT_VERSION = 'v60';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
