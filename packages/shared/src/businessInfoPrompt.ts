@@ -112,6 +112,13 @@ function joinPhones(p: BusinessProfile): string | null {
     return phones.length > 0 ? phones.join(', ') : null;
 }
 
+/** The merchant's WhatsApp contact, if they gave one. Distinct from `phones`:
+ *  a number customers can MESSAGE, not necessarily one they can call. */
+function formatWhatsapp(p: BusinessProfile): string | null {
+    const wa = p.channels?.whatsapp;
+    return typeof wa === 'string' && wa.trim() !== '' ? wa.trim() : null;
+}
+
 function formatHours(p: BusinessProfile): string | null {
     if (!p.hours || Object.keys(p.hours).length === 0) return null;
 
@@ -169,6 +176,7 @@ export function formatBusinessInfoPrompt(
     const phonesValue = joinPhones(profile);
     const hoursValue = formatHours(profile);
     const policiesValue = formatPolicies(profile);
+    const whatsappValue = formatWhatsapp(profile);
 
     // A truly-empty profile (no field has a value anywhere) → no block, as
     // before: nothing to assert and nothing to guard, and skipping saves
@@ -177,7 +185,7 @@ export function formatBusinessInfoPrompt(
     // there is no value at all, so there's genuinely nothing to hallucinate
     // against.
     const anyValueAtAll =
-        address.hasAnyValue || !!phonesValue || !!hoursValue || !!policiesValue;
+        address.hasAnyValue || !!phonesValue || !!hoursValue || !!policiesValue || !!whatsappValue;
     if (!anyValueAtAll) return null;
 
     // The body lines (everything below the header + directive). A field
@@ -208,6 +216,17 @@ export function formatBusinessInfoPrompt(
     } else if (!hoursValue) {
         fieldLines.push(`- Hours / أوقات الدوام: ${NOT_PROVIDED}`);
     } // else: FB-only → omit.
+
+    // WhatsApp — PRESENT-ONLY, deliberately no [NOT_PROVIDED] counterpart.
+    // The fields above are things customers ask about constantly, so telling the
+    // model they are genuinely absent stops it inventing them. WhatsApp is an
+    // optional extra channel almost no merchant sets: emitting an absence line
+    // would add a token to every reply for every merchant and invite the model
+    // to volunteer "we have no WhatsApp", which nobody asked. Omitting it keeps
+    // this change a no-op for anyone who hasn't filled it in.
+    if (whatsappValue && isAuthoritative(provenance, 'channels')) {
+        fieldLines.push(`- WhatsApp / واتساب: ${whatsappValue}`);
+    }
 
     // Policies.
     if (policiesValue && isAuthoritative(provenance, 'policies')) {

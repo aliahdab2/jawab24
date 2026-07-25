@@ -7,7 +7,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 /** Facts editable through the single-field sheet. `hours` is NOT here — it is a
  *  structured Record<day, ranges[]> and needs the Phase-D day/range editor. */
-export type EditableFactKey = 'address' | 'phone' | 'website' | 'delivery' | 'payment';
+export type EditableFactKey = 'address' | 'phone' | 'whatsapp' | 'website' | 'delivery' | 'payment';
 
 /** Multi-line facts get a textarea; the rest a single-line input. */
 const MULTILINE: ReadonlyArray<EditableFactKey> = ['delivery', 'payment'];
@@ -17,6 +17,7 @@ const MULTI: ReadonlyArray<EditableFactKey> = ['phone'];
 
 const INPUT_MODE: Partial<Record<EditableFactKey, 'tel' | 'url' | 'text'>> = {
   phone: 'tel',
+  whatsapp: 'tel',
   website: 'url',
 };
 

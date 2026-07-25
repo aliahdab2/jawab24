@@ -133,6 +133,7 @@ function BusinessPageInner() {
     switch (key) {
       case 'address': return merchant.address ?? '';
       case 'phone': return (merchant.phones ?? []).filter((p) => p?.trim()).join(', ');
+      case 'whatsapp': return merchant.channels?.whatsapp ?? '';
       case 'website': return merchant.website ?? '';
       case 'delivery': return merchant.policies?.shipping ?? '';
       case 'payment': return merchant.policies?.payment ?? '';
@@ -177,6 +178,9 @@ function BusinessPageInner() {
       switch (key) {
         case 'address': patch.address = value || undefined; break;
         case 'phone': patch.phones = value ? value.split(/[,،]/).map((p) => p.trim()).filter(Boolean) : undefined; break;
+        // Spread the existing container: `channels` also holds `preferred`,
+        // which this sheet must not drop.
+        case 'whatsapp': patch.channels = { ...patch.channels, whatsapp: value || undefined }; break;
         case 'website': patch.website = value || undefined; break;
         case 'delivery': patch.policies = { ...patch.policies, shipping: value || undefined }; break;
         case 'payment': patch.policies = { ...patch.policies, payment: value || undefined }; break;

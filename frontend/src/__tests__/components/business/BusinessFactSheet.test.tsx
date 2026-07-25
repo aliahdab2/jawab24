@@ -43,7 +43,7 @@ describe('BusinessFactSheet — voice input scope', () => {
     },
   );
 
-  it.each<EditableFactKey>(['address', 'website', 'phone'])(
+  it.each<EditableFactKey>(['address', 'website', 'phone', 'whatsapp'])(
     'does not offer voice on the structured fact %s',
     (factKey) => {
       renderSheet(factKey);

@@ -1058,7 +1058,13 @@ export {
 // bounded, never dialect-extended: dialect reveals ride the flag), and records every swap
 // with a validator-added `self_identification_stripped` flag — deliberately merchant-visible
 // (flag_reason chip + needs-attention + cache-blocked), never a silent mutation again.
-export const PROMPT_VERSION = 'v59';
+// v60 — BUSINESS_INFO carries the merchant's WhatsApp contact
+// (`channels.whatsapp`). The field had existed on the type since Stage 2.6 but
+// was read by NOTHING: no prompt, no backend, no worker. B1 gives it a fact row,
+// so it now has to reach the model or the merchant fills in a value that can
+// never be told to anyone. Emitted PRESENT-ONLY (no [NOT_PROVIDED] counterpart)
+// so the prompt is byte-identical for every merchant who hasn't set one.
+export const PROMPT_VERSION = 'v60';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

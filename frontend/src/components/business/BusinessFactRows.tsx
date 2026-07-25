@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Clock, MapPin, Truck, CreditCard, Phone, Globe, ChevronLeft } from 'lucide-react';
+import { WhatsAppIcon } from '@/components/ui';
 import { unwrapBusinessProfile } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
 import type { LucideIcon } from 'lucide-react';
@@ -20,7 +21,9 @@ interface BusinessFactRowsProps {
 
 interface FactRow {
   key: FactRowKey;
-  icon: LucideIcon;
+  /** Widened from LucideIcon: WhatsApp needs its own brand mark, and a generic
+   *  phone glyph would read as "call", which is the wrong affordance. */
+  icon: LucideIcon | React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
   /** Display value; null = not set. Empty string = set but not renderable (hours). */
   value: string | null;
 }
@@ -60,6 +63,9 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
       { key: 'hours', icon: Clock, value: hoursValue },
       { key: 'address', icon: MapPin, value: addressValue || null },
       { key: 'phone', icon: Phone, value: phones.length ? phones.join(' · ') : null },
+      // Its own row, not folded into phones: a WhatsApp number is one customers
+      // MESSAGE, not necessarily one they can call.
+      { key: 'whatsapp', icon: WhatsAppIcon, value: merchant.channels?.whatsapp?.trim() || null },
       { key: 'website', icon: Globe, value: merchant.website?.trim() || null },
       { key: 'delivery', icon: Truck, value: merchant.policies?.shipping?.trim() || null },
       { key: 'payment', icon: CreditCard, value: merchant.policies?.payment?.trim() || null },
