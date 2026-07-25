@@ -46,11 +46,16 @@ const KEY = process.env.STRIPE_SECRET_KEY ?? '';
 // of the suite can boot. It passes a prefix check and then fails on the first
 // API call with Stripe's own opaque message, so name it here and give the
 // runner something actionable instead.
-// Two placeholders reach this test in practice: the `sk_test_…dummy` injected
-// by setup.ts, and the literal `sk_test_...` from a copy-pasted command whose
-// key was never substituted. Both pass a prefix check and then die on Stripe's
-// opaque "Invalid API Key". Real test keys are ~100 chars.
-const IS_PLACEHOLDER = KEY.includes('dummy') || KEY.includes('...') || KEY.length < 20;
+// Validate the FORMAT rather than blocklisting known placeholders — every
+// blocklist so far has been defeated by the next paste. Observed in practice:
+// `sk_test_…dummy` (injected by setup.ts), the literal `sk_test_...`, and
+// `sk_test_51SlAFl…YOUR_REAL_KEY` — the last containing a Unicode ellipsis,
+// which isn't three ASCII dots and, being non-ASCII, corrupts the HTTP auth
+// header so Stripe reports a *connection* error rather than a bad key.
+//
+// A real Stripe secret key is `sk_test_` + base62, ~107 chars total.
+const KEY_FORMAT = /^sk_test_[A-Za-z0-9]{24,}$/;
+const IS_PLACEHOLDER = KEY.startsWith('sk_test_') && (!KEY_FORMAT.test(KEY) || KEY.includes('dummy'));
 const IS_TEST_KEY = KEY.startsWith('sk_test_') && !IS_PLACEHOLDER;
 const REQUESTED = process.env.STRIPE_ROUNDTRIP === '1';
 
@@ -67,9 +72,13 @@ if (REQUESTED) {
     }
     if (IS_PLACEHOLDER) {
         throw new Error(
-            `STRIPE_SECRET_KEY looks like a placeholder, not a real key (length ${KEY.length}). ` +
-            'If you copied the command from docs, replace the literal "sk_test_..." with your actual key. ' +
-            'Get it from Stripe Dashboard → Developers → API keys with the Test mode toggle ON.'
+            `STRIPE_SECRET_KEY is not a real key — got ${KEY.length} chars, expected sk_test_ + ~99 base62 chars.\n` +
+            'It looks like placeholder text from a copied command was left unsubstituted.\n' +
+            'Safest way to avoid paste damage entirely:\n' +
+            "  1. printf '%s' 'PASTE_KEY_HERE' > ~/.jawab24_stripe_test_key && chmod 600 ~/.jawab24_stripe_test_key\n" +
+            '  2. STRIPE_ROUNDTRIP=1 STRIPE_SECRET_KEY=$(cat ~/.jawab24_stripe_test_key) \\\n' +
+            '       npm run test:integration:local -- stripe.roundtrip\n' +
+            'Key comes from https://dashboard.stripe.com/test/apikeys (Test mode ON).'
         );
     }
     if (!KEY.startsWith('sk_test_')) {
