@@ -34,6 +34,14 @@ const VOICE: ReadonlyArray<EditableFactKey> = ['delivery', 'payment'];
  *
  * The preset FILLS the field; it never locks it. The merchant can edit the
  * wording, which matters because these are their words to their customers.
+ *
+ * A preset states ONE negative and stops. It must not append a second fact the
+ * merchant never gave us: "we do not deliver" was once "…— pickup only", which
+ * asserts a shop to collect from. That is false for an online-only or a service
+ * business, and it can flatly contradict the address preset («متجر إلكتروني —
+ * لا يوجد فرع») on the same page. Whatever this text says goes verbatim into
+ * BUSINESS_INFO and is then told to customers as fact, so the safe form is the
+ * bare negative — the merchant adds the pickup detail themselves if it is true.
  */
 const PRESETS: Partial<Record<EditableFactKey, readonly string[]>> = {
   address: ['presetOnlineOnly'],

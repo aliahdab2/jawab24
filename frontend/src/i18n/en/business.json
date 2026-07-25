@@ -71,7 +71,7 @@
     "hoursTimezoneChange": "Change timezone",
     "addAnother_phone": "Add another number",
     "presetOnlineOnly": "Online store — no physical branch",
-    "presetNoDelivery": "We do not deliver — pickup only",
+    "presetNoDelivery": "We do not deliver",
     "storeAnswered": "Answered by your connected store",
     "storeAnsweredHint": "Your connected store already answers this. Write here only if you want a custom answer."
   },

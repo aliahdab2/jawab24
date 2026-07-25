@@ -104,14 +104,23 @@ describe('BusinessFactSheet — voice input scope', () => {
 
   it('fills the field with the preset, editable not locked', () => {
     const onSave = renderSheet('delivery');
-    fireEvent.click(screen.getByText('We do not deliver — pickup only'));
+    fireEvent.click(screen.getByText('We do not deliver'));
     fireEvent.click(screen.getByText('Save'));
-    expect(onSave).toHaveBeenCalledWith('We do not deliver — pickup only');
+    expect(onSave).toHaveBeenCalledWith('We do not deliver');
+  });
+
+  // A preset goes verbatim into BUSINESS_INFO and is then told to customers as
+  // fact, so it may state ONE negative and nothing more. "— pickup only" once
+  // rode along and asserted a shop to collect from: false for an online-only or
+  // service business, and a direct contradiction of the address preset.
+  it('states only the negative, never a second unverified fact', () => {
+    renderSheet('delivery');
+    expect(screen.getByText(/do not deliver/i).textContent).toBe('We do not deliver');
   });
 
   it('hides the preset once the merchant has written something', () => {
     renderSheet('delivery', 'We deliver to Damascus for 5,000');
-    expect(screen.queryByText('We do not deliver — pickup only')).not.toBeInTheDocument();
+    expect(screen.queryByText('We do not deliver')).not.toBeInTheDocument();
   });
 
   it('offers no preset where a negative is not a real answer', () => {
