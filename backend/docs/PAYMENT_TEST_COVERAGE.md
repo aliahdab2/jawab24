@@ -31,7 +31,7 @@ in **zero** test files.
 
 | Endpoint | Unit | Integration | Notes |
 |---|---|---|---|
-| `POST /create-subscription-intent` | — | `payment.paymentElement.test.ts` | **The live subscribe flow.** Had no coverage at all before 2026-07-25 |
+| `POST /create-subscription-intent` | `controllers/payment.test.ts` (13 cases) | `payment.paymentElement.test.ts` | **The live subscribe flow.** Had no coverage at all before 2026-07-25 |
 | `POST /create-checkout-session` | `controllers/payment.test.ts` | `payment.test.ts`, `payment.lifecycle.test.ts` | Legacy Checkout Session flow — heavily covered, **not used by the app** |
 | `POST /create-topup-intent` | `controllers/payment.test.ts`, `services/topup.test.ts` | — | |
 | `POST /change-plan` | `controllers/payment.test.ts` | `payment.test.ts` | |
@@ -39,7 +39,7 @@ in **zero** test files.
 | `POST /billing-portal` | `routes/payment.test.ts` | `payment.test.ts` | |
 | `GET /subscription-status` | `payment_status_ordering.test.ts` | `payment.test.ts` | |
 | `GET /checkout-session-status` | `routes/payment.test.ts` | — | |
-| `POST /webhook` | `controllers/payment.test.ts` | `stripe-webhook.test.ts` | Signature + idempotency |
+| `POST /webhook` | `controllers/payment.test.ts` | `stripe-webhook.test.ts` (transport), `stripe-webhook.dispatch.test.ts` (signed payload → handler → DB) | |
 
 ## Webhook events
 
@@ -96,35 +96,59 @@ activated locally.
 It runs on **every deploy**, as step 6b of `pre-deploy-check.sh`, which
 `deploy-production.sh` invokes as a hard gate.
 
-**Still blocked on the key.** [`ci.yml`](../../.github/workflows/ci.yml) reads
-`secrets.STRIPE_TEST_SECRET_KEY`, which does **not exist** in the repository.
-GitHub substitutes an empty string for a missing secret rather than failing, so
-CI would otherwise run payment checks with `STRIPE_SECRET_KEY=""` and let
-Stripe-dependent paths go inert — silently.
+**Secrets added 2026-07-25** (`STRIPE_TEST_SECRET_KEY` +
+`STRIPE_TEST_PUBLISHABLE_KEY`), but **the test has still never been executed** —
+a harness, not a result.
+
+Two things to know. [`ci.yml`](../../.github/workflows/ci.yml) substitutes an
+empty string for a missing secret rather than failing, so CI would otherwise run
+payment checks with `STRIPE_SECRET_KEY=""` and let Stripe-dependent paths go
+inert, silently. And GitHub Actions is currently blocked on **account billing**
+(jobs never start), so CI proves nothing at all right now — the local
+`deploy-production.sh` gate is the real one.
+
+For a LOCAL deploy the key must be in the LOCAL shell; GitHub secrets do not
+reach a script on the founder's Mac:
+`export STRIPE_TEST_SECRET_KEY=sk_test_…`
 
 That is why the gate treats an absent key as a **hard failure, never a skip**:
 "no key so we skipped it" and "payments verified" look identical in a deploy
 log. Opting out is possible but must be deliberate and visible —
 `ALLOW_UNVERIFIED_PAYMENTS=1`.
 
-To close this: `gh secret set STRIPE_TEST_SECRET_KEY` (Stripe Dashboard →
-Developers → API keys, **Test mode** ON). The harness refuses any key that is
-not `sk_test_`.
+The harness refuses any key that is not `sk_test_`, and refuses the
+`sk_test_…dummy` placeholder from `test/integration/setup.ts`.
 
-### 2. Frontend checkout is mocked end to end
+### 2. Webhook *delivery* → handler → DB
+**Closed 2026-07-25.** Two suites sat either side of this seam and both were
+green while merchants went unactivated: `stripe-webhook.test.ts` proves transport
+(real signatures, tampering, replay, dedup) but **mocks `dispatchStripeEvent`**;
+the handler suites call handlers **directly** and never see a real payload.
+Nothing crossed the middle — which is exactly where the bug lived.
+
+`stripe-webhook.dispatch.test.ts` removes the mock: a genuinely signed
+`customer.subscription.updated` enters at the HTTP entry point and the assertion
+is on the merchant's row.
+
+### 3. Frontend checkout is mocked end to end
 `payment-flow.spec.ts` stubs every API call with `MOCK_PLANS`. No test asserts
 Stripe.js loads or that the Pay button ever becomes enabled — which is why a
 form that was dead for a merchant looked healthy in CI.
 
-### 3. `payment_intent.payment_failed` ships dormant
+### 4. `payment_intent.payment_failed` ships dormant
 Handled in code, never delivered. Enable it on the Stripe webhook endpoint or
 the handler is dead code.
 
-### 4. Legacy Checkout Session flow still fully tested
+### 5. Legacy Checkout Session flow still fully tested
 `create-checkout-session` and its lifecycle tests cover a path the app no longer
 uses. Decide: delete it, or keep it as a documented fallback. Right now it is
 neither — it inflates the apparent coverage of the payment system.
 
-### 5. `npm run lint` is red on `main`
+### 6. `npm run lint` is red on `main`
 2 errors in `packages/shared/src/utils/validation.ts` (`'URL' is not defined`),
 unrelated to payments, but the documented zero-error gate does not pass today.
+
+### 7. Backend `npm run lint` does not cover tests
+`"lint": "eslint src/**/*.ts"` — test files are never linted, which is why
+`test/controllers/payment.test.ts` carries 104 pre-existing `@typescript-eslint/no-explicit-any`
+errors nobody has seen. Not payment-specific, but it means test quality has no gate.

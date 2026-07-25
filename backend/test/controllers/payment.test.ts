@@ -14,6 +14,7 @@ vi.mock('../../src/services/stripe', () => ({
         updateSubscriptionPrice: vi.fn(),
         findOrCreateCustomer: vi.fn(),
         createTopupPaymentIntent: vi.fn(),
+        createSubscriptionIntent: vi.fn(),
     },
     DemoUserStripeError: class DemoUserStripeError extends Error {
         code = 'DEMO_USER_STRIPE_BLOCKED';
@@ -1066,6 +1067,201 @@ describe('Payment Controller', () => {
     });
 
     // ── createTopupIntent ─────────────────────────────────────────────────────
+
+    /**
+     * The LIVE subscribe endpoint. Before 2026-07-25 it appeared in zero test
+     * files — the checkout every paying merchant uses had no controller
+     * coverage at all, while the legacy Checkout Session path beside it was
+     * tested exhaustively. That asymmetry is how a merchant could be charged
+     * and never activated with the suite fully green.
+     */
+    describe('createSubscriptionIntent', () => {
+        const stageDb = (user: unknown[], plan: unknown[], subs: unknown[]) => {
+            const mockDb = vi.mocked(db);
+            mockDb.select
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(user) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(plan) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(subs) }) } as any);
+        };
+        const USER = { id: 'user_123', email: 'merchant@example.com' };
+        const PLAN = { id: 'plan_123', name: 'Business', stripePriceId: 'price_123', trialDays: 0 };
+
+        beforeEach(() => {
+            // Guard tests short-circuit before consuming every staged
+            // mockReturnValueOnce, and vi.clearAllMocks() does NOT drain a
+            // once-queue — leftovers would surface as the NEXT test's first
+            // db.select(). Reset to a clean default so each test is isolated
+            // (this leaked into the createTopupIntent suite before it was fixed).
+            vi.mocked(db.select).mockReset();
+            vi.mocked(db.select).mockImplementation(() => ({
+                from: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })),
+            }) as any);
+
+            mockRequest = {
+                body: { planId: 'plan_123' },
+                user: { userId: 'user_123' },
+                geo: { country: 'LY' },
+                log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+            } as any;
+        });
+
+        // The metadata asserted here is load-bearing: it is the ONLY thing that
+        // later lets a webhook find the local row (see subscriptionLinking.ts).
+        it('passes userId and planId so the subscription can be linked later', async () => {
+            stageDb([USER], [PLAN], []);
+            vi.mocked(stripeService.findOrCreateCustomer).mockResolvedValue('cus_1');
+            vi.mocked(stripeService.createSubscriptionIntent).mockResolvedValue({
+                subscriptionId: 'sub_1', clientSecret: 'pi_1_secret', type: 'payment',
+            } as any);
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(stripeService.createSubscriptionIntent).toHaveBeenCalledWith(
+                expect.objectContaining({ userId: 'user_123', planId: 'plan_123', customerId: 'cus_1' }),
+            );
+            expect(mockReply.send).toHaveBeenCalledWith({
+                clientSecret: 'pi_1_secret', type: 'payment', subscriptionId: 'sub_1',
+            });
+        });
+
+        it('reuses the Stripe customer already on a prior subscription', async () => {
+            stageDb([USER], [PLAN], [{ id: 's1', status: 'canceled', stripeCustomerId: 'cus_existing' }]);
+            vi.mocked(stripeService.createSubscriptionIntent).mockResolvedValue({
+                subscriptionId: 'sub_2', clientSecret: 'pi_2_secret', type: 'payment',
+            } as any);
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(stripeService.findOrCreateCustomer).not.toHaveBeenCalled();
+            expect(stripeService.createSubscriptionIntent).toHaveBeenCalledWith(
+                expect.objectContaining({ customerId: 'cus_existing' }),
+            );
+        });
+
+        // Re-trial loophole: any prior subscription history means no fresh trial.
+        it('gives no trial days to a returning subscriber', async () => {
+            stageDb([USER], [{ ...PLAN, trialDays: 30 }], [{ id: 's1', status: 'canceled' }]);
+            vi.mocked(stripeService.findOrCreateCustomer).mockResolvedValue('cus_1');
+            vi.mocked(stripeService.createSubscriptionIntent).mockResolvedValue({
+                subscriptionId: 'sub_3', clientSecret: 'pi_3_secret', type: 'setup',
+            } as any);
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(stripeService.createSubscriptionIntent).toHaveBeenCalledWith(
+                expect.objectContaining({ trialDays: 0 }),
+            );
+        });
+
+        it('gives the plan trial to a brand-new account', async () => {
+            stageDb([USER], [{ ...PLAN, trialDays: 30 }], []);
+            vi.mocked(stripeService.findOrCreateCustomer).mockResolvedValue('cus_1');
+            vi.mocked(stripeService.createSubscriptionIntent).mockResolvedValue({
+                subscriptionId: 'sub_4', clientSecret: 'seti_secret', type: 'setup',
+            } as any);
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(stripeService.createSubscriptionIntent).toHaveBeenCalledWith(
+                expect.objectContaining({ trialDays: 30 }),
+            );
+        });
+
+        it('uses the yearly price when billingInterval is year', async () => {
+            (mockRequest as any).body = { planId: 'plan_123', billingInterval: 'year' };
+            stageDb([USER], [{ ...PLAN, stripeYearlyPriceId: 'price_yearly' }], []);
+            vi.mocked(stripeService.findOrCreateCustomer).mockResolvedValue('cus_1');
+            vi.mocked(stripeService.createSubscriptionIntent).mockResolvedValue({
+                subscriptionId: 'sub_5', clientSecret: 'pi_5_secret', type: 'payment',
+            } as any);
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(stripeService.createSubscriptionIntent).toHaveBeenCalledWith(
+                expect.objectContaining({ priceId: 'price_yearly' }),
+            );
+        });
+
+        // Guards — every one of these must short-circuit BEFORE Stripe is touched.
+        it('blocks a sanctioned country before any Stripe call', async () => {
+            (mockRequest as any).geo = { country: 'SY' };
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(403);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'SANCTIONED_GEO_BLOCK' }),
+            );
+            expect(stripeService.createSubscriptionIntent).not.toHaveBeenCalled();
+        });
+
+        it('blocks an unresolved geo (fail-closed)', async () => {
+            (mockRequest as any).geo = { country: undefined };
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(403);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'GEO_VERIFICATION_REQUIRED' }),
+            );
+            expect(stripeService.createSubscriptionIntent).not.toHaveBeenCalled();
+        });
+
+        it('returns 401 when unauthenticated', async () => {
+            (mockRequest as any).user = undefined;
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(401);
+        });
+
+        it('returns 400 when planId is missing', async () => {
+            (mockRequest as any).body = {};
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+        });
+
+        it('returns EMAIL_REQUIRED when the account has no email', async () => {
+            stageDb([{ id: 'user_123', email: null }], [PLAN], []);
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'EMAIL_REQUIRED' }),
+            );
+        });
+
+        it('returns 404 when the plan does not exist', async () => {
+            stageDb([USER], [], []);
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
+        });
+
+        it('returns 400 when the plan has no Stripe price configured', async () => {
+            stageDb([USER], [{ ...PLAN, stripePriceId: null }], []);
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+        });
+
+        it('does not leak internals when Stripe throws', async () => {
+            stageDb([USER], [PLAN], []);
+            vi.mocked(stripeService.findOrCreateCustomer).mockResolvedValue('cus_1');
+            vi.mocked(stripeService.createSubscriptionIntent).mockRejectedValue(new Error('stripe exploded'));
+
+            await paymentController.createSubscriptionIntent(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(500);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Failed to create subscription' });
+        });
+    });
+
     describe('createTopupIntent', () => {
         beforeEach(() => {
             mockRequest = {
