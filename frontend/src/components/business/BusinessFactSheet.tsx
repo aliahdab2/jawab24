@@ -9,8 +9,17 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
  *  structured Record<day, ranges[]> and needs the Phase-D day/range editor. */
 export type EditableFactKey = 'address' | 'phone' | 'website' | 'delivery' | 'payment';
 
-/** Multi-line facts get a textarea; the rest a single-line input. */
-const MULTILINE: ReadonlyArray<EditableFactKey> = ['delivery', 'payment'];
+/** Multi-line facts get a textarea; the rest a single-line input. `address`
+ *  is here because a real one runs long — «دمشق، البرامكة، فوق مكتبة الحافظ،
+ *  الطابق الأول» does not fit a single line on a 390px screen, and a merchant
+ *  should be able to see the whole thing while editing it. */
+const MULTILINE: ReadonlyArray<EditableFactKey> = ['address', 'delivery', 'payment'];
+
+/** Facts that offer voice input — free-text ONLY. Kept separate from MULTILINE
+ *  on purpose: the mic APPENDS, which is right when composing a paragraph and
+ *  wrong when correcting a structured value like an address (dictating a new
+ *  one would concatenate it onto the old). */
+const VOICE: ReadonlyArray<EditableFactKey> = ['delivery', 'payment'];
 
 /** Facts that hold MULTIPLE values — rendered as one input per value. */
 const MULTI: ReadonlyArray<EditableFactKey> = ['phone'];
@@ -75,6 +84,7 @@ export function BusinessFactSheet({
   useEscapeKey(onClose, true);
 
   const isMultiline = MULTILINE.includes(factKey);
+  const hasVoice = VOICE.includes(factKey);
   const inputId = `fact-${factKey}`;
   const joined = values.map((v) => v.trim()).filter(Boolean).join(', ');
   const whatsapp = waIndex >= 0 ? values[waIndex]?.trim() || undefined : undefined;
@@ -182,25 +192,23 @@ export function BusinessFactSheet({
             </button>
           </div>
         ) : isMultiline ? (
-          /* Voice only on free-text facts (delivery, payment) — appending a
-             transcription is safe when composing a paragraph, wrong when
-             correcting a structured value (address/website/phone), where it
-             would concatenate the old fact with the new one. */
           <div className="flex items-start gap-2">
             <textarea
               id={inputId}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               dir={value ? 'auto' : undefined}
-              rows={4}
+              rows={factKey === 'address' ? 3 : 4}
               autoFocus
               placeholder={t(`facts.placeholder_${factKey}`)}
               className="flex-1 min-w-0 rounded-xl border border-theme-border bg-card px-3 py-2.5 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"
             />
-            <VoiceRecordButton
-              onTranscribed={(text) => setValue((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
-              disabled={saving}
-            />
+            {hasVoice && (
+              <VoiceRecordButton
+                onTranscribed={(text) => setValue((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
+                disabled={saving}
+              />
+            )}
           </div>
         ) : (
           <input
