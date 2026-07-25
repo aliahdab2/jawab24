@@ -29,6 +29,8 @@ interface FactRow {
   /** Richer rendering when plain text can't carry the meaning (the WhatsApp
    *  mark on a phone number). `value` still drives the is-set logic. */
   valueNode?: React.ReactNode;
+  /** A connected store already answers this fact when the merchant hasn't. */
+  storeAnswered?: boolean;
 }
 
 /**
@@ -90,11 +92,24 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
       // Delivery and payment sit above website on purpose: customers ask about
       // both constantly, while nobody messages a shop to ask whether it has a
       // website. Ordering by question volume, not by field type.
-      { key: 'delivery', icon: Truck, value: merchant.policies?.shipping?.trim() || null },
-      { key: 'payment', icon: CreditCard, value: merchant.policies?.payment?.trim() || null },
+      // On a store-linked page an empty value is NOT a gap — the store's synced
+      // policies already answer these — so the row states that instead of
+      // nagging. It stays tappable: writing a value is a deliberate override.
+      {
+        key: 'delivery',
+        icon: Truck,
+        value: merchant.policies?.shipping?.trim() || null,
+        storeAnswered: !!page.ecommerceStoreId,
+      },
+      {
+        key: 'payment',
+        icon: CreditCard,
+        value: merchant.policies?.payment?.trim() || null,
+        storeAnswered: !!page.ecommerceStoreId,
+      },
       { key: 'website', icon: Globe, value: merchant.website?.trim() || null },
     ];
-  }, [page.businessProfile, t]);
+  }, [page.businessProfile, page.ecommerceStoreId, t]);
 
   return (
     <section aria-label={t('facts.title')} className="rounded-2xl border border-theme-border bg-card p-4 sm:p-5">
@@ -105,6 +120,7 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
         {rows.map((row) => {
           const Icon = row.icon;
           const isSet = row.value !== null;
+          const storeAnswers = !isSet && !!row.storeAnswered;
           return (
             <li key={row.key}>
               <button
@@ -114,7 +130,7 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
                 className="w-full min-h-[56px] flex items-center gap-3 px-4 sm:px-5 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors"
               >
                 <Icon
-                  className={`w-5 h-5 flex-shrink-0 ${isSet ? 'text-brand-600' : 'text-icon-muted'}`}
+                  className={`w-5 h-5 flex-shrink-0 ${isSet || storeAnswers ? 'text-brand-600' : 'text-icon-muted'}`}
                   aria-hidden="true"
                 />
                 <span className="flex-1 min-w-0">
@@ -129,9 +145,13 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
                       it inherit the page direction keeps every row aligned, while
                       bidi still renders the digit run itself left-to-right. */}
                   <span
-                    className={`block text-xs truncate ${isSet ? 'text-muted-foreground' : 'text-brand-600'}`}
+                    className={`block text-xs truncate ${isSet || storeAnswers ? 'text-muted-foreground' : 'text-brand-600'}`}
                   >
-                    {isSet ? (row.valueNode ?? (row.value || t('facts.isSet'))) : t(`facts.add_${row.key}`)}
+                    {isSet
+                      ? (row.valueNode ?? (row.value || t('facts.isSet')))
+                      : storeAnswers
+                        ? t('facts.storeAnswered')
+                        : t(`facts.add_${row.key}`)}
                   </span>
                 </span>
                 <ChevronLeft

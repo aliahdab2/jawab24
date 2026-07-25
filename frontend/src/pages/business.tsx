@@ -3,6 +3,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { Store, ChevronDown } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader, EmptyState, Select, Skeleton } from '@/components/ui';
@@ -60,12 +61,12 @@ function BusinessPageInner() {
     queryFn: () => pagesApi.getAll().then((r) => r.data),
     enabled: canSee,
   });
-  // Store-linked pages are excluded: their catalog comes from the store sync,
-  // and the API rejects manual writes there (409 PAGE_HAS_STORE).
-  const pages = useMemo(
-    () => (pagesData ?? []).filter((p) => !p.ecommerceStoreId),
-    [pagesData],
-  );
+  // Store-linked pages are INCLUDED. The old exclusion was inherited from
+  // /catalog, where it guarded manual catalog writes (409 PAGE_HAS_STORE) —
+  // but that guard is catalog-only, and filtering here locked Salla/Zid/
+  // Shopify merchants out of facts their store does NOT sync (hours, address,
+  // phone, WhatsApp). The catalog section below branches on the store instead.
+  const pages = useMemo(() => pagesData ?? [], [pagesData]);
 
   const { pageId, updatePageId, validPages, syncFromUrl } = usePageFilter(pages, {
     // Shared with the legacy /catalog page so redirects land on the same page.
@@ -87,9 +88,13 @@ function BusinessPageInner() {
     if (!router.isReady || router.query.import !== '1') return;
     const targetPage = router.query.page as string | undefined;
     if (!targetPage) return;
-    setImportRequest({ pageId: targetPage, text: consumeCatalogImportDraft(targetPage) });
+    // A store-linked page has no manual import — its catalog is the store sync
+    // and the API would 409. Clean the URL but don't open the sheet.
+    if (!pagesData?.find((p) => p.id === targetPage)?.ecommerceStoreId) {
+      setImportRequest({ pageId: targetPage, text: consumeCatalogImportDraft(targetPage) });
+    }
     router.replace(`/business?page=${targetPage}`, undefined, { shallow: true });
-  }, [router, router.isReady, router.query.import, router.query.page]);
+  }, [router, router.isReady, router.query.import, router.query.page, pagesData]);
 
   // Default to the first page once loaded.
   useEffect(() => {
@@ -99,12 +104,16 @@ function BusinessPageInner() {
   const selectedPageId = pageId && validPages.some((p) => p.id === pageId) ? pageId : '';
   const selectedPage = validPages.find((p) => p.id === selectedPageId);
 
+  // A store page's products live in the store sync, not the manual catalog —
+  // don't fetch a list that is empty by construction.
+  const hasStore = !!selectedPage?.ecommerceStoreId;
+
   // Same queryKey as CatalogManager below — one fetch feeds both the readiness
   // chip count and the manager list.
   const { data: catalogData } = useQuery<{ data: CatalogItem[]; vertical: CatalogVerticalInfo }>({
     queryKey: ['catalog', selectedPageId],
     queryFn: () => catalogApi.list(selectedPageId).then((r) => r.data),
-    enabled: !!selectedPageId,
+    enabled: !!selectedPageId && !hasStore,
   });
   const productsCount = selectedPageId ? catalogData?.data?.length : 0;
 
@@ -250,12 +259,27 @@ function BusinessPageInner() {
           >
             <h2 className="text-base sm:text-lg font-semibold text-foreground">{t('products.title')}</h2>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 mb-3">{t('products.hint')}</p>
-            <CatalogManager
-              pageId={selectedPage.id}
-              page={selectedPage}
-              importRequested={importRequest?.pageId === selectedPage.id}
-              importInitialText={importRequest?.pageId === selectedPage.id ? importRequest.text : undefined}
-            />
+            {hasStore ? (
+              // Store-linked page: products sync from Salla/Zid/Shopify and the
+              // catalog API rejects manual writes (409 PAGE_HAS_STORE) — so no
+              // import/add affordances, just the truth and where to manage it.
+              <div className="flex items-center gap-3 rounded-xl bg-muted border border-theme-border p-4">
+                <Store className="w-5 h-5 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{t('products.storeSynced')}</p>
+                  <Link href="/integrations" className="text-sm text-brand-600 hover:underline underline-offset-2">
+                    {t('products.manageStores')}
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <CatalogManager
+                pageId={selectedPage.id}
+                page={selectedPage}
+                importRequested={importRequest?.pageId === selectedPage.id}
+                importInitialText={importRequest?.pageId === selectedPage.id ? importRequest.text : undefined}
+              />
+            )}
           </section>
 
           {/* 3 — Structured facts */}
@@ -323,6 +347,7 @@ function BusinessPageInner() {
           label={t(`facts.${editingFact}`)}
           initialValue={factValue(editingFact)}
           initialWhatsapp={unwrapBusinessProfile(selectedPage?.businessProfile).merchant?.channels?.whatsapp}
+          storeAnswered={hasStore && (editingFact === 'delivery' || editingFact === 'payment')}
           saving={savingFact}
           onSave={(value, whatsapp) => saveFact(editingFact, value, whatsapp)}
           onClose={() => setEditingFact(null)}

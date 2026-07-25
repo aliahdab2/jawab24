@@ -19,13 +19,20 @@ vi.mock('@/components/ui', () => ({
   }) => <button onClick={onClick} disabled={disabled}>{children}</button>,
 }));
 
-function renderSheet(factKey: EditableFactKey, initialValue = '', onSave = vi.fn(), initialWhatsapp?: string) {
+function renderSheet(
+  factKey: EditableFactKey,
+  initialValue = '',
+  onSave = vi.fn(),
+  initialWhatsapp?: string,
+  storeAnswered = false,
+) {
   render(
     <BusinessFactSheet
       factKey={factKey}
       label={factKey}
       initialValue={initialValue}
       initialWhatsapp={initialWhatsapp}
+      storeAnswered={storeAnswered}
       saving={false}
       onSave={onSave}
       onClose={vi.fn()}
@@ -110,6 +117,18 @@ describe('BusinessFactSheet — voice input scope', () => {
   it('offers no preset where a negative is not a real answer', () => {
     renderSheet('website');
     expect(screen.queryByText(/Online store|do not deliver/)).not.toBeInTheDocument();
+  });
+
+  // The row is still tappable on a store page — writing here is a deliberate
+  // override, so the sheet says what it is rather than blocking it.
+  it('explains the store already answers, only while empty', () => {
+    renderSheet('delivery', '', vi.fn(), undefined, true);
+    expect(screen.getByText(/Your connected store already answers this/)).toBeInTheDocument();
+  });
+
+  it('drops the store note once an override is written', () => {
+    renderSheet('delivery', 'Free over 300', vi.fn(), undefined, true);
+    expect(screen.queryByText(/Your connected store already answers this/)).not.toBeInTheDocument();
   });
 
   it('still renders an editable input for a structured fact', () => {

@@ -55,6 +55,8 @@ interface BusinessFactSheetProps {
   initialValue: string;
   /** `phone` only: which of the numbers is the merchant's WhatsApp, if any. */
   initialWhatsapp?: string;
+  /** A connected store already answers this fact — writing here is an override. */
+  storeAnswered?: boolean;
   saving: boolean;
   /** `whatsapp` is passed for `phone` only — the number flagged in the sheet. */
   onSave: (value: string, whatsapp?: string) => void;
@@ -76,6 +78,7 @@ export function BusinessFactSheet({
   label,
   initialValue,
   initialWhatsapp,
+  storeAnswered = false,
   saving,
   onSave,
   onClose,
@@ -150,6 +153,14 @@ export function BusinessFactSheet({
         <label htmlFor={inputId} className="block text-sm text-muted-foreground mb-2">
           {t(`facts.hint_${factKey}`)}
         </label>
+
+        {/* Only while empty: once the merchant has written an override, telling
+            them the store also answers is noise. */}
+        {storeAnswered && !value.trim() && (
+          <p className="mb-3 rounded-xl bg-muted border border-theme-border px-3 py-2 text-xs text-muted-foreground">
+            {t('facts.storeAnsweredHint')}
+          </p>
+        )}
 
         {isMulti ? (
           /* Repeatable values (phone): one input per number — a merchant should

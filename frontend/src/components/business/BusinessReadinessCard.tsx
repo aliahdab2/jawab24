@@ -42,18 +42,23 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
   const chips: Chip[] = useMemo(() => {
     const { merchant = {} } = unwrapBusinessProfile(page.businessProfile);
     const hasHours = !!merchant.hours && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0);
+    // A connected store (Salla/Zid/Shopify) already answers these: its product
+    // and policies summaries reach every reply via getStoreContextForAI. The
+    // chips report what Jawab CAN answer, whatever the source — nagging a store
+    // merchant to re-type synced facts would invite drifting duplicates.
+    const store = !!page.ecommerceStoreId;
     return [
       {
         key: 'products',
-        label: t('readiness.productsChip', { count: productsCount ?? 0 }),
-        covered: (productsCount ?? 0) > 0,
+        label: store ? t('readiness.productsChipStore') : t('readiness.productsChip', { count: productsCount ?? 0 }),
+        covered: store || (productsCount ?? 0) > 0,
       },
       { key: 'hours', label: t('readiness.hoursChip'), covered: hasHours, fixKey: 'hours' },
       { key: 'address', label: t('readiness.addressChip'), covered: !!merchant.address?.trim(), fixKey: 'address' },
-      { key: 'delivery', label: t('readiness.deliveryChip'), covered: !!merchant.policies?.shipping?.trim(), fixKey: 'delivery' },
-      { key: 'payment', label: t('readiness.paymentChip'), covered: !!merchant.policies?.payment?.trim(), fixKey: 'payment' },
+      { key: 'delivery', label: t('readiness.deliveryChip'), covered: store || !!merchant.policies?.shipping?.trim(), fixKey: 'delivery' },
+      { key: 'payment', label: t('readiness.paymentChip'), covered: store || !!merchant.policies?.payment?.trim(), fixKey: 'payment' },
     ];
-  }, [page.businessProfile, productsCount, t]);
+  }, [page.businessProfile, page.ecommerceStoreId, productsCount, t]);
 
   return (
     <section

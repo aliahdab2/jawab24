@@ -11,11 +11,14 @@
     "deliveryChip": "Delivery",
     "paymentChip": "Payment",
     "covered": "Covered",
-    "missing": "Missing"
+    "missing": "Missing",
+    "productsChipStore": "Products — from your store"
   },
   "products": {
     "title": "Products & services",
-    "hint": "Prices Jawab quotes to customers. Tap a price to edit it."
+    "hint": "Prices Jawab quotes to customers. Tap a price to edit it.",
+    "storeSynced": "Your products sync automatically from your connected store.",
+    "manageStores": "Manage stores"
   },
   "facts": {
     "title": "Business facts",
@@ -68,7 +71,9 @@
     "hoursTimezoneChange": "Change timezone",
     "addAnother_phone": "Add another number",
     "presetOnlineOnly": "Online store — no physical branch",
-    "presetNoDelivery": "We do not deliver — pickup only"
+    "presetNoDelivery": "We do not deliver — pickup only",
+    "storeAnswered": "Answered by your connected store",
+    "storeAnsweredHint": "Your connected store already answers this. Write here only if you want a custom answer."
   },
   "info": {
     "title": "Additional information",
