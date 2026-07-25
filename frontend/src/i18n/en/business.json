@@ -68,7 +68,7 @@
     "day_thu": "Thu",
     "day_fri": "Fri",
     "hoursTimezone": "Times are in {timezone}.",
-    "hoursTimezoneChange": "Settings › Business hours",
+    "hoursTimezoneChange": "Settings › General",
     "addAnother_phone": "Add another number"
   },
   "info": {
