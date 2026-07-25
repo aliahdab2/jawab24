@@ -130,7 +130,32 @@ export class PaymentController {
                 );
             }
 
-            // Build return URL server-side (no client-supplied URLs = no open-redirect risk)
+            // Build return URLs server-side (no client-supplied URLs = no open-redirect risk)
+
+            // Hosted mode: redirect the customer to checkout.stripe.com, where
+            // Stripe is first-party and privacy browsers have nothing to block
+            // (see createHostedCheckoutSession for the incident that forced
+            // this). Used by the native-app bounce and the web fallback link.
+            if (request.body.uiMode === 'hosted') {
+                // `hosted=1` tells the return page Stripe only redirects here
+                // AFTER a successful payment, so an unauthenticated browser
+                // (the app bounce) can still show an honest success state.
+                const { sessionId, url } = await stripeService.createHostedCheckoutSession(
+                    userId,
+                    user.email,
+                    planId,
+                    stripePriceId,
+                    `${config.frontendUrl}/payment/return?session_id={CHECKOUT_SESSION_ID}&hosted=1`,
+                    `${config.frontendUrl}/pricing`,
+                    trialDays
+                );
+                // Logged so hosted-vs-embedded adoption is measurable — deciding
+                // whether to go hosted-everywhere (D-040's open question) needs
+                // this split, and grep-ability beats adding a metric for it now.
+                request.log.info({ userId, planId, sessionId, uiMode: 'hosted' }, 'Hosted checkout session created');
+                return reply.send({ sessionId, url });
+            }
+
             const returnUrl = `${config.frontendUrl}/payment/return?session_id={CHECKOUT_SESSION_ID}`;
 
             // Create embedded checkout session with appropriate trial.

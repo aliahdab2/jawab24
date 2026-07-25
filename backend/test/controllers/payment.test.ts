@@ -6,6 +6,7 @@ import type Stripe from 'stripe';
 vi.mock('../../src/services/stripe', () => ({
     stripeService: {
         createCheckoutSession: vi.fn(),
+        createHostedCheckoutSession: vi.fn(),
         getCheckoutSession: vi.fn(),
         verifyWebhookSignature: vi.fn(),
         getSubscription: vi.fn(),
@@ -450,6 +451,80 @@ describe('Payment Controller', () => {
             expect(mockReply.send).toHaveBeenCalledWith({
                 error: 'Failed to create checkout session',
             });
+        });
+    });
+
+    /**
+     * Hosted-mode branch (D-040): the native app and the web fallback link
+     * request `uiMode: 'hosted'` and get a checkout.stripe.com redirect URL —
+     * the path privacy browsers cannot block.
+     */
+    describe('createCheckoutSession — uiMode: hosted', () => {
+        const stageDb = (user: unknown[], plan: unknown[], subs: unknown[]) => {
+            const mockDb = vi.mocked(db);
+            mockDb.select.mockReset();
+            mockDb.select
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(user) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(plan) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(subs) }) } as any);
+        };
+        const USER = { id: 'user_123', email: 'merchant@example.com' };
+        const PLAN = { id: 'plan_123', name: 'Business', stripePriceId: 'price_123', trialDays: 0 };
+
+        beforeEach(() => {
+            mockRequest = {
+                body: { planId: 'plan_123', uiMode: 'hosted' },
+                user: { userId: 'user_123' },
+                geo: { country: 'LY' },
+                log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+            } as any;
+        });
+
+        it('returns the Stripe redirect URL instead of a client secret', async () => {
+            stageDb([USER], [PLAN], []);
+            vi.mocked(stripeService.createHostedCheckoutSession).mockResolvedValue({
+                sessionId: 'cs_hosted_1',
+                url: 'https://checkout.stripe.com/c/pay/cs_hosted_1',
+            });
+
+            await paymentController.createCheckoutSession(mockRequest as any, mockReply as FastifyReply);
+
+            expect(stripeService.createHostedCheckoutSession).toHaveBeenCalledWith(
+                'user_123',
+                'merchant@example.com',
+                'plan_123',
+                'price_123',
+                expect.stringContaining('hosted=1'),   // success_url marks the app-return path
+                expect.stringContaining('/pricing'),   // cancel_url
+                0,
+            );
+            expect(stripeService.createCheckoutSession).not.toHaveBeenCalled();
+            expect(mockReply.send).toHaveBeenCalledWith({
+                sessionId: 'cs_hosted_1',
+                url: 'https://checkout.stripe.com/c/pay/cs_hosted_1',
+            });
+        });
+
+        it('applies the same trial rules as the embedded flow', async () => {
+            stageDb([USER], [{ ...PLAN, trialDays: 30 }], []);
+            vi.mocked(stripeService.createHostedCheckoutSession).mockResolvedValue({ sessionId: 'cs_1', url: 'https://checkout.stripe.com/x' });
+
+            await paymentController.createCheckoutSession(mockRequest as any, mockReply as FastifyReply);
+
+            expect(stripeService.createHostedCheckoutSession).toHaveBeenCalledWith(
+                expect.anything(), expect.anything(), expect.anything(), expect.anything(),
+                expect.anything(), expect.anything(),
+                30,
+            );
+        });
+
+        it('is still blocked for a sanctioned country before any Stripe call', async () => {
+            (mockRequest as any).geo = { country: 'SY' };
+
+            await paymentController.createCheckoutSession(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(403);
+            expect(stripeService.createHostedCheckoutSession).not.toHaveBeenCalled();
         });
     });
 

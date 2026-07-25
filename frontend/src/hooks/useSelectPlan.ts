@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { useOwnerGate } from '@/hooks';
-import { subscriptionApi } from '@/lib/api';
+import { api, subscriptionApi } from '@/lib/api';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
@@ -41,19 +41,63 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
   const hasActiveSubscription = Boolean(usage?.subscription?.plan?.slug);
 
   const handleSelectPlan = async (planId: string) => {
-    // On native (Android/iOS), open the web login → checkout flow.
-    // Store policy prohibits in-app purchases via Stripe, and the in-app
-    // browser doesn't share the app's auth session.
-    if (isNativePlatform()) {
-      const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-      const checkoutPath = `/checkout?planId=${planId}&interval=${billingInterval}&theme=${theme}`;
-      await openExternalUrl(buildWebUrl(`/login?redirect=${encodeURIComponent(checkoutPath)}`, router.locale));
+    // Members cannot manage subscriptions — only the workspace owner can.
+    // Checked BEFORE the native branch: the app now talks to the payment API
+    // directly (below), so it no longer passes through the web checkout page
+    // whose withOwnerOnly HOC used to enforce this for app users.
+    if (isBlockedForMember) {
+      toast.error(tPricing('ownerOnlyBilling'));
       return;
     }
 
-    // Members cannot manage subscriptions — only the workspace owner can.
-    if (isBlockedForMember) {
-      toast.error(tPricing('ownerOnlyBilling'));
+    // On native (Android/iOS), hand off to Stripe-HOSTED checkout.
+    //
+    // Store policy prohibits in-app purchases via Stripe, so payment always
+    // happens in the system browser — which is whatever the merchant chose as
+    // their default. This used to bounce to OUR embedded checkout there, and a
+    // privacy browser (Brave Shields) silently blocked the PaymentElement's
+    // cross-origin card tokenisation: form rendered, pay did nothing, no error
+    // anywhere (live incident, 2026-07-25 — the same card paid instantly on a
+    // Stripe-hosted page). On checkout.stripe.com Stripe is first-party and
+    // there is nothing to block, whatever the default browser is.
+    //
+    // The app is authenticated, so it creates the session itself and opens the
+    // Stripe URL directly — which also drops the old log-in-again-in-browser
+    // step. Activation is webhook + reconciliation-sweep driven, so it does not
+    // depend on what the browser does after payment.
+    // Free plans need no Stripe surface at all — fall through to the shared
+    // free-plan handling below (dashboard / downgrade dialog), which works
+    // in-app. Creating a hosted session for a $0 plan would just 400 on the
+    // backend (no stripePriceId) and toast a misleading generic error.
+    const nativeSelectedPlan = plans.find((p) => p.id === planId);
+    if (isNativePlatform() && (nativeSelectedPlan?.price ?? 0) > 0) {
+      if (!isAuthenticated) {
+        // Can't create a session without auth — fall back to the old web flow.
+        const checkoutPath = `/checkout?planId=${planId}&interval=${billingInterval}`;
+        await openExternalUrl(buildWebUrl(`/login?redirect=${encodeURIComponent(checkoutPath)}`, router.locale));
+        return;
+      }
+      setChangingPlan(planId);
+      try {
+        const response = await api.post('/payment/create-checkout-session', {
+          planId,
+          billingInterval,
+          uiMode: 'hosted',
+        });
+        await openExternalUrl(response.data.url);
+      } catch (err: unknown) {
+        const code = (err as { response?: { data?: { code?: string } } }).response?.data?.code;
+        if (code === 'EMAIL_REQUIRED') {
+          router.push(`/complete-profile?redirect=${encodeURIComponent('/pricing')}`);
+        } else if (code === 'SANCTIONED_GEO_BLOCK' || code === 'GEO_VERIFICATION_REQUIRED') {
+          toast.error(tPricing('unavailableRegion'));
+        } else {
+          captureError(err, 'Failed to open hosted checkout from app', { tags: { action: 'hosted_checkout' } });
+          toast.error(tPricing('planChangeError'));
+        }
+      } finally {
+        setChangingPlan(null);
+      }
       return;
     }
 

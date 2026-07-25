@@ -259,6 +259,37 @@ runIf('REAL Stripe round-trip (test mode)', () => {
         expect(rows[0].paymentMethod).toBe('stripe');
     }, 60_000);
 
+    // Hosted checkout (D-040) — the native-app path and the web fallback.
+    // Session params (tax_id_collection, payment_method_collection, locale…)
+    // are only truly validated by the real API: a param combination Stripe
+    // rejects would break every app-originated payment while the mocked suites
+    // stayed green — the exact failure shape this file exists to prevent.
+    it('creates a REAL hosted checkout session and cleans it up', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+
+        const { sessionId, url } = await stripeService.createHostedCheckoutSession(
+            userId,
+            userEmail,
+            planId,
+            priceId,
+            'https://jawab24.com/payment/return?session_id={CHECKOUT_SESSION_ID}&hosted=1',
+            'https://jawab24.com/pricing',
+            0,
+        );
+
+        expect(url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
+
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        expect(session.status).toBe('open');
+        expect(session.mode).toBe('subscription');
+        // The metadata linking depends on must survive to the real object.
+        expect(session.metadata?.userId).toBe(userId);
+
+        // Expire it so the test-mode dashboard doesn't fill with open sessions
+        // (this runs on every deploy).
+        await stripe.checkout.sessions.expire(sessionId);
+    }, 60_000);
+
     it('the reconciliation sweep sees the same subscription Stripe reports as paid', async () => {
         const { stripeService } = await import('../../src/services/stripe');
 

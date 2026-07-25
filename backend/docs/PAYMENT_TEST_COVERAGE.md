@@ -32,7 +32,7 @@ in **zero** test files.
 | Endpoint | Unit | Integration | Notes |
 |---|---|---|---|
 | `POST /create-subscription-intent` | `controllers/payment.test.ts` (13 cases) | `payment.paymentElement.test.ts` | **The live subscribe flow.** Had no coverage at all before 2026-07-25 |
-| `POST /create-checkout-session` | `controllers/payment.test.ts` | `payment.test.ts`, `payment.lifecycle.test.ts` | Legacy Checkout Session flow — heavily covered, **not used by the app** |
+| `POST /create-checkout-session` | `controllers/payment.test.ts` (embedded + hosted branches) | `payment.test.ts`, `payment.lifecycle.test.ts` | Embedded (legacy web) **and hosted (`uiMode: 'hosted'`, D-040)** — the native-app flow and the web fallback link. Hosted service params pinned in `services/stripe.test.ts` |
 | `POST /create-topup-intent` | `controllers/payment.test.ts`, `services/topup.test.ts` | — | |
 | `POST /change-plan` | `controllers/payment.test.ts` | `payment.test.ts` | |
 | `POST /cancel-subscription` | `controllers/payment.test.ts` | `payment.lifecycle.test.ts` | |
@@ -139,10 +139,13 @@ form that was dead for a merchant looked healthy in CI.
 Handled in code, never delivered. Enable it on the Stripe webhook endpoint or
 the handler is dead code.
 
-### 5. Legacy Checkout Session flow still fully tested
-`create-checkout-session` and its lifecycle tests cover a path the app no longer
-uses. Decide: delete it, or keep it as a documented fallback. Right now it is
-neither — it inflates the apparent coverage of the payment system.
+### 5. ~~Legacy Checkout Session flow still fully tested~~ — RESOLVED by D-040
+The Checkout Session flow is no longer legacy: hosted mode (D-040) is the
+native-app payment path and the web fallback for privacy browsers that silently
+block the embedded PaymentElement. Its tests — including the full
+`payment.lifecycle.test.ts` suite through `handleCheckoutComplete` — now cover a
+live production path again. The frontend halves are covered in
+`hooks/useSelectPlan.test.ts` (app handoff) and the checkout fallback link.
 
 ### 6. `npm run lint` is red on `main`
 2 errors in `packages/shared/src/utils/validation.ts` (`'URL' is not defined`),
