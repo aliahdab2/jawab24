@@ -73,11 +73,40 @@ describe('BusinessHoursSheet', () => {
 
   it('lets a merchant add a second period to one day only', () => {
     const onSave = renderSheet(PER_DAY);
-    // Every open day offers the affordance; use Saturday's (first in order).
-    fireEvent.click(screen.getAllByText('Add another period')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /^Sat/ }));
+    fireEvent.click(screen.getByText('Add another period'));
     save();
     expect(onSave.mock.calls[0][0].sat).toHaveLength(2);
     expect(onSave.mock.calls[0][0].sun).toEqual(['09:00-17:00']);
+  });
+
+  // Mobile-first: with hours already saved the week is an overview — the whole
+  // week readable without scrolling, editing costs one tap on the day you change.
+  it('starts collapsed when hours already exist, and expands on tap', () => {
+    renderSheet(PER_DAY);
+    expect(screen.queryByText('Add another period')).not.toBeInTheDocument();
+    // The collapsed row shows the schedule, so the week is readable as a list.
+    expect(screen.getByRole('button', { name: /^Sat/ })).toHaveTextContent('09:00-17:00');
+    fireEvent.click(screen.getByRole('button', { name: /^Sat/ }));
+    expect(screen.getByText('Add another period')).toBeInTheDocument();
+  });
+
+  it('opens the first day for a merchant who has never set hours', () => {
+    renderSheet(undefined);
+    expect(screen.getByText('Add another period')).toBeInTheDocument();
+  });
+
+  it('reveals the times immediately when a closed day is switched on', () => {
+    renderSheet({ ...PER_DAY, fri: ['closed'] });
+    expect(screen.queryByText('Add another period')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: /^Fri/ }));
+    expect(screen.getByText('Add another period')).toBeInTheDocument();
+  });
+
+  it('does not make a closed day look tappable', () => {
+    renderSheet({ ...PER_DAY, fri: ['closed'] });
+    expect(screen.getByRole('button', { name: /^Fri/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Sat/ })).toBeEnabled();
   });
 
   it('closing a day writes "closed" for that day alone', () => {

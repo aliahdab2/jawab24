@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { X, Check, Plus, Trash2, Copy } from 'lucide-react';
+import { X, Check, Plus, Trash2, Copy, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { DetailSheet, Button, Toggle } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -11,6 +11,7 @@ import {
   parseWeek,
   serializeWeek,
   hasOpenDay,
+  describeDay,
   type DayKey,
   type WeekState,
 } from '@/utils/businessHours';
@@ -42,6 +43,14 @@ interface BusinessHoursSheetProps {
  * The fast path is preserved by «apply to all days» rather than by removing
  * the capability: set one day, copy it across — still ~4 taps for the uniform
  * case, while a genuinely different Friday survives.
+ *
+ * MOBILE-FIRST LAYOUT: one 56px line per day, expanded to edit (the Cal.com /
+ * Calendly pattern). Showing every day's time inputs at once measured 153px per
+ * open day — a seven-day shop needed ~2.2 screens of scrolling just to READ its
+ * own hours, and repeated the "add another period" row seven times for a
+ * feature most merchants never touch. Collapsed, the whole week fits one screen,
+ * so the merchant sees what the AI will tell customers without scrolling, and
+ * pays the extra tap only on the day they actually change.
  */
 export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: BusinessHoursSheetProps) {
   const t = useTranslations('business');
@@ -51,13 +60,26 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
   const initial = useMemo(() => parseWeek(initialHours), [initialHours]);
   const [week, setWeek] = useState<WeekState>(initial);
 
+  /** Nothing stored yet = first-time setup: open the first day so the merchant
+   *  sees what to fill in. With hours already saved, start collapsed — the
+   *  overview is the point. */
+  const [expanded, setExpanded] = useState<DayKey | null>(() =>
+    initialHours && Object.keys(initialHours).length > 0
+      ? null
+      : DAY_KEYS.find((d) => initial[d].kind !== 'closed') ?? null,
+  );
+
   useEscapeKey(onClose, true);
 
   const setDay = (day: DayKey, next: WeekState[DayKey]) =>
     setWeek((prev) => ({ ...prev, [day]: next }));
 
-  const toggleDay = (day: DayKey, open: boolean) =>
+  const toggleDay = (day: DayKey, open: boolean) => {
     setDay(day, open ? { kind: 'ranges', ranges: [{ ...DEFAULT_RANGE }] } : { kind: 'closed' });
+    // Opening a day reveals its times straight away — otherwise the merchant
+    // flips the switch and has to hunt for where to set them.
+    setExpanded(open ? day : (prev) => (prev === day ? null : prev));
+  };
 
   const setRange = (day: DayKey, index: number, field: 'from' | 'to', value: string) =>
     setWeek((prev) => {
@@ -138,27 +160,51 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
             const state = week[day];
             const isOpen = state.kind !== 'closed';
             const dayLabel = t(`facts.day_${day}`);
+            const isExpanded = isOpen && expanded === day;
+            const summary = describeDay(state, {
+              closed: t('facts.hoursClosed'),
+              allDay: t('facts.hoursAllDay'),
+            });
             return (
-              <li key={day} className="py-3 first:pt-0">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-foreground">{dayLabel}</span>
-                  <span className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {isOpen ? t('facts.hoursOpen') : t('facts.hoursClosed')}
+              <li key={day}>
+                {/* The toggle is a SIBLING of the expand button, never nested
+                    inside it — one tap target must not contain another. */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => isOpen && setExpanded(isExpanded ? null : day)}
+                    aria-expanded={isOpen ? isExpanded : undefined}
+                    // Closed days have nothing to expand: the toggle is the
+                    // only control, so the row must not pretend to be tappable.
+                    disabled={!isOpen}
+                    className="flex-1 min-w-0 min-h-[56px] flex items-center gap-2 text-start disabled:cursor-default"
+                  >
+                    <span className="text-sm font-medium text-foreground">{dayLabel}</span>
+                    <span
+                      className={`flex-1 min-w-0 truncate text-sm ${isOpen ? 'text-muted-foreground' : 'text-subtle'}`}
+                      dir="ltr"
+                      // Times read LTR in both locales; keep them on the side
+                      // the day name isn't, so the column scans cleanly.
+                      style={{ textAlign: 'end' }}
+                    >
+                      {summary}
                     </span>
-                    <Toggle
-                      enabled={isOpen}
-                      onChange={(next) => toggleDay(day, next)}
-                      aria-label={`${dayLabel} — ${isOpen ? t('facts.hoursOpen') : t('facts.hoursClosed')}`}
-                    />
-                  </span>
+                    {isOpen && (
+                      <ChevronDown
+                        className={`w-4 h-4 flex-shrink-0 text-icon-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                  <Toggle
+                    enabled={isOpen}
+                    onChange={(next) => toggleDay(day, next)}
+                    aria-label={`${dayLabel} — ${isOpen ? t('facts.hoursOpen') : t('facts.hoursClosed')}`}
+                  />
                 </div>
 
-                {state.kind === 'allDay' && (
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <span className="rounded-full bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 px-2.5 py-1 text-xs font-medium">
-                      {t('facts.hoursAllDay')}
-                    </span>
+                {isExpanded && state.kind === 'allDay' && (
+                  <div className="pb-3 flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => setSpecificTimes(day)}
@@ -169,8 +215,8 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
                   </div>
                 )}
 
-                {state.kind === 'ranges' && (
-                  <div className="mt-2 space-y-2">
+                {isExpanded && state.kind === 'ranges' && (
+                  <div className="pb-3 space-y-2">
                     {state.ranges.map((range, i) => (
                       <div key={i} className="flex items-center gap-2">
                         <input

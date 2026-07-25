@@ -120,18 +120,21 @@ export function hasOpenDay(week: WeekState): boolean {
   return DAY_KEYS.some((d) => week[d].kind !== 'closed');
 }
 
+export interface DayLabels {
+  closed: string;
+  allDay: string;
+}
+
+export interface SummaryLabels extends DayLabels {
+  /** Localized short day name, e.g. "السبت" / "Sat". */
+  day: (key: DayKey) => string;
+}
+
 /** Render one day's schedule, e.g. "09:00-14:00 / 17:00-22:00". */
-function renderDay(state: DayState, labels: SummaryLabels): string {
+export function describeDay(state: DayState, labels: DayLabels): string {
   if (state.kind === 'closed') return labels.closed;
   if (state.kind === 'allDay') return labels.allDay;
   return state.ranges.map((r) => `${r.from}-${r.to}`).join(' / ');
-}
-
-export interface SummaryLabels {
-  closed: string;
-  allDay: string;
-  /** Localized short day name, e.g. "السبت" / "Sat". */
-  day: (key: DayKey) => string;
 }
 
 /**
@@ -145,7 +148,7 @@ export interface SummaryLabels {
 export function summarizeWeek(week: WeekState, labels: SummaryLabels): string {
   const groups: { days: DayKey[]; text: string }[] = [];
   for (const day of DAY_KEYS) {
-    const text = renderDay(week[day], labels);
+    const text = describeDay(week[day], labels);
     const last = groups[groups.length - 1];
     if (last && last.text === text) last.days.push(day);
     else groups.push({ days: [day], text });
