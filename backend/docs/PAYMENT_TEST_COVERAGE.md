@@ -86,19 +86,30 @@ dispute, fail-then-retry on the same PaymentIntent, abandoned-PI reconciliation.
 
 ## Known gaps
 
-### 1. No real Stripe round-trip — the big one
-Every test mocks `stripeService`. Nothing exercises a genuine
-`loadStripe → confirmPayment → real webhook → DB` cycle. This is the class of
-bug that reached production twice in one day.
+### 1. Real Stripe round-trip — harness built, key still missing
+`stripe.roundtrip.live.test.ts` makes genuine test-mode API calls: create the
+subscription the way production does → assert the real Stripe object carries
+`metadata.userId` → pay it with `pm_card_visa` → assert Stripe reports `active`
+→ feed the real subscription to the webhook handler → assert the merchant is
+activated locally.
 
-Blocked on CI secrets: [`ci.yml`](../../.github/workflows/ci.yml) reads
-`secrets.STRIPE_TEST_SECRET_KEY` / `STRIPE_TEST_PUBLISHABLE_KEY`, and **neither
-exists** in the repository. GitHub substitutes an empty string for a missing
-secret rather than failing, so CI runs payment checks with
-`STRIPE_SECRET_KEY=""` and Stripe-dependent paths go inert — silently.
+It runs on **every deploy**, as step 6b of `pre-deploy-check.sh`, which
+`deploy-production.sh` invokes as a hard gate.
 
-Fix requires both: add the test-mode keys **and** a CI check that fails when
-they are absent, so this cannot regress to "green but untested".
+**Still blocked on the key.** [`ci.yml`](../../.github/workflows/ci.yml) reads
+`secrets.STRIPE_TEST_SECRET_KEY`, which does **not exist** in the repository.
+GitHub substitutes an empty string for a missing secret rather than failing, so
+CI would otherwise run payment checks with `STRIPE_SECRET_KEY=""` and let
+Stripe-dependent paths go inert — silently.
+
+That is why the gate treats an absent key as a **hard failure, never a skip**:
+"no key so we skipped it" and "payments verified" look identical in a deploy
+log. Opting out is possible but must be deliberate and visible —
+`ALLOW_UNVERIFIED_PAYMENTS=1`.
+
+To close this: `gh secret set STRIPE_TEST_SECRET_KEY` (Stripe Dashboard →
+Developers → API keys, **Test mode** ON). The harness refuses any key that is
+not `sk_test_`.
 
 ### 2. Frontend checkout is mocked end to end
 `payment-flow.spec.ts` stubs every API call with `MOCK_PLANS`. No test asserts
