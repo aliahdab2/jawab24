@@ -86,6 +86,32 @@ describe('BusinessFactSheet — voice input scope', () => {
     expect(onSave).toHaveBeenCalledWith('0935924400', '0935924400');
   });
 
+  // Not every fact applies to every merchant — an online-only store has no
+  // branch, a walk-in shop may not deliver. Hiding the row would leave the AI
+  // reading [NOT_PROVIDED] = "unknown"; recording the negative makes it an
+  // answer the AI can actually give.
+  it('offers a not-applicable answer on address and delivery', () => {
+    renderSheet('address');
+    expect(screen.getByText('Online store — no physical branch')).toBeInTheDocument();
+  });
+
+  it('fills the field with the preset, editable not locked', () => {
+    const onSave = renderSheet('delivery');
+    fireEvent.click(screen.getByText('We do not deliver — pickup only'));
+    fireEvent.click(screen.getByText('Save'));
+    expect(onSave).toHaveBeenCalledWith('We do not deliver — pickup only');
+  });
+
+  it('hides the preset once the merchant has written something', () => {
+    renderSheet('delivery', 'We deliver to Damascus for 5,000');
+    expect(screen.queryByText('We do not deliver — pickup only')).not.toBeInTheDocument();
+  });
+
+  it('offers no preset where a negative is not a real answer', () => {
+    renderSheet('website');
+    expect(screen.queryByText(/Online store|do not deliver/)).not.toBeInTheDocument();
+  });
+
   it('still renders an editable input for a structured fact', () => {
     renderSheet('address', 'Damascus, Al-Baramkeh');
     expect(screen.getByDisplayValue('Damascus, Al-Baramkeh')).toBeInTheDocument();

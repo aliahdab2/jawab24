@@ -67,7 +67,9 @@
     "day_fri": "الجمعة",
     "hoursTimezone": "بتوقيت {timezone}.",
     "hoursTimezoneChange": "الإعدادات ← عام",
-    "addAnother_phone": "أضف رقمًا آخر"
+    "addAnother_phone": "أضف رقمًا آخر",
+    "presetOnlineOnly": "متجر إلكتروني — لا يوجد فرع",
+    "presetNoDelivery": "لا نقدّم خدمة التوصيل — الاستلام من المحل فقط"
   },
   "info": {
     "title": "معلومات إضافية",

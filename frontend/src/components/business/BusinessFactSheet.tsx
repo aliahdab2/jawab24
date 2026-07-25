@@ -21,6 +21,25 @@ const MULTILINE: ReadonlyArray<EditableFactKey> = ['address', 'delivery', 'payme
  *  one would concatenate it onto the old). */
 const VOICE: ReadonlyArray<EditableFactKey> = ['delivery', 'payment'];
 
+/**
+ * One-tap answers for facts where "no" is itself a real customer answer.
+ *
+ * Not every field applies to every merchant — an online-only store has no
+ * branch, a walk-in shop may not deliver. The tempting fix is to hide those
+ * rows, but a hidden field tells the AI NOTHING: `formatBusinessInfoPrompt`
+ * renders an absent policy as [NOT_PROVIDED], i.e. "unknown", so a customer
+ * asking «بتوصلوا؟» gets "I don't have that information" instead of a plain
+ * no. Recording the negative turns a nag into an answer, greens the readiness
+ * chip, and needs no schema change — it is just the fact, stated.
+ *
+ * The preset FILLS the field; it never locks it. The merchant can edit the
+ * wording, which matters because these are their words to their customers.
+ */
+const PRESETS: Partial<Record<EditableFactKey, readonly string[]>> = {
+  address: ['presetOnlineOnly'],
+  delivery: ['presetNoDelivery'],
+};
+
 /** Facts that hold MULTIPLE values — rendered as one input per value. */
 const MULTI: ReadonlyArray<EditableFactKey> = ['phone'];
 
@@ -223,6 +242,24 @@ export function BusinessFactSheet({
             placeholder={t(`facts.placeholder_${factKey}`)}
             className="w-full rounded-xl border border-theme-border bg-card px-3 py-2.5 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
+        )}
+
+        {/* Shown only while the field is EMPTY: a shortcut for the merchant who
+            has nothing to put here because the fact does not apply to them —
+            never a suggestion layered over something they already wrote. */}
+        {!isMulti && !value.trim() && PRESETS[factKey] && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {PRESETS[factKey]!.map((presetKey) => (
+              <button
+                key={presetKey}
+                type="button"
+                onClick={() => setValue(t(`facts.${presetKey}`))}
+                className="min-h-[36px] rounded-full border border-theme-border bg-card px-3 text-xs font-medium text-muted-foreground hover:bg-surface-100 hover:text-foreground"
+              >
+                {t(`facts.${presetKey}`)}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 

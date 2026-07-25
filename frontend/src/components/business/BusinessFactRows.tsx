@@ -87,9 +87,12 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
           </span>
         ) : undefined,
       },
-      { key: 'website', icon: Globe, value: merchant.website?.trim() || null },
+      // Delivery and payment sit above website on purpose: customers ask about
+      // both constantly, while nobody messages a shop to ask whether it has a
+      // website. Ordering by question volume, not by field type.
       { key: 'delivery', icon: Truck, value: merchant.policies?.shipping?.trim() || null },
       { key: 'payment', icon: CreditCard, value: merchant.policies?.payment?.trim() || null },
+      { key: 'website', icon: Globe, value: merchant.website?.trim() || null },
     ];
   }, [page.businessProfile, t]);
 
