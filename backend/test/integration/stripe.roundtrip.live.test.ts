@@ -34,7 +34,8 @@
  * **Test mode** toggle ON. Never commit it; never paste it into a chat.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import Stripe from 'stripe';
 import { createTestUser, testDb } from './setup';
@@ -94,7 +95,9 @@ const runIf = REQUESTED && IS_TEST_KEY ? describe : describe.skip;
 runIf('REAL Stripe round-trip (test mode)', () => {
     let stripe: Stripe;
     let userId: string;
-    let plan: typeof schema.plans.$inferSelect;
+    let planId: string;
+    let planSlug: string;
+    let userEmail: string;
     let customerId: string;
     let priceId: string;
     let subscriptionId: string;
@@ -106,8 +109,15 @@ runIf('REAL Stripe round-trip (test mode)', () => {
         // make this test either falsely pass or falsely fail.
         stripe = new Stripe(KEY, { apiVersion: '2026-06-24.dahlia' });
 
-        const user = await createTestUser({ email: `roundtrip+${Date.now()}@example.com` });
-        userId = user.id;
+        // IDs are generated ONCE and reused, because they are baked into the
+        // Stripe subscription's metadata and must keep matching a local row.
+        // setup.ts TRUNCATEs every table in a global beforeEach, so the rows
+        // themselves are re-created per test (below) — creating them only here
+        // left the FK dangling and blew up the moment a test wrote a row.
+        userId = randomUUID();
+        planId = randomUUID();
+        userEmail = `roundtrip+${Date.now()}@example.com`;
+        planSlug = `roundtrip-${Date.now()}`;
 
         // A throwaway product/price in test mode, so the test owns its fixtures
         // and can't be broken by dashboard changes.
@@ -120,9 +130,21 @@ runIf('REAL Stripe round-trip (test mode)', () => {
         });
         priceId = price.id;
 
-        const [row] = await testDb.insert(schema.plans).values({
+        const customer = await stripe.customers.create({
+            email: userEmail,
+            metadata: { userId },
+        });
+        customerId = customer.id;
+    }, 60_000);
+
+    // Re-seed after setup.ts's global TRUNCATE, keeping the SAME ids so the
+    // Stripe subscription's metadata still resolves to a real local row.
+    beforeEach(async () => {
+        await createTestUser({ id: userId, email: userEmail });
+        await testDb.insert(schema.plans).values({
+            id: planId,
             name: 'Round-trip Business',
-            slug: `roundtrip-${Date.now()}`,
+            slug: planSlug,
             price: 3900,
             stripePriceId: priceId,
             trialDays: 0,
@@ -130,15 +152,8 @@ runIf('REAL Stripe round-trip (test mode)', () => {
             maxTemplates: 20,
             maxRules: 20,
             isActive: true,
-        }).returning();
-        plan = row;
-
-        const customer = await stripe.customers.create({
-            email: user.email!,
-            metadata: { userId },
         });
-        customerId = customer.id;
-    }, 60_000);
+    });
 
     afterAll(async () => {
         // Test-mode objects are harmless, but this runs on every deploy — without
@@ -169,7 +184,7 @@ runIf('REAL Stripe round-trip (test mode)', () => {
             customerId,
             priceId,
             userId,
-            planId: plan.id,
+            planId: planId,
             trialDays: 0,
         });
 
@@ -189,7 +204,7 @@ runIf('REAL Stripe round-trip (test mode)', () => {
         const sub = await stripe.subscriptions.retrieve(subscriptionId);
 
         expect(sub.metadata.userId).toBe(userId);
-        expect(sub.metadata.planId).toBe(plan.id);
+        expect(sub.metadata.planId).toBe(planId);
     }, 60_000);
 
     it('pays it with a test card and Stripe reports it active', async () => {
@@ -234,7 +249,7 @@ runIf('REAL Stripe round-trip (test mode)', () => {
         expect(rows).toHaveLength(1);
         expect(rows[0].externalSubscriptionId).toBe(subscriptionId);
         expect(rows[0].status).toBe('active');
-        expect(rows[0].planId).toBe(plan.id);
+        expect(rows[0].planId).toBe(planId);
         expect(rows[0].stripeCustomerId).toBe(customerId);
         expect(rows[0].paymentMethod).toBe('stripe');
     }, 60_000);
