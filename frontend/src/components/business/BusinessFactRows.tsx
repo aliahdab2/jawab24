@@ -84,9 +84,13 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
                   </span>
                   {/* The prompt sits where the value will be — one line does the
                       job of the old "not set" + "set" pair. */}
+                  {/* No dir="auto" here: a digits-only value (a phone number) has
+                      no STRONG directional character, so `auto` falls back to LTR
+                      and left-aligns the whole row's value in an RTL page. Letting
+                      it inherit the page direction keeps every row aligned, while
+                      bidi still renders the digit run itself left-to-right. */}
                   <span
                     className={`block text-xs truncate ${isSet ? 'text-muted-foreground' : 'text-brand-600'}`}
-                    dir="auto"
                   >
                     {isSet ? (row.value || t('facts.isSet')) : t(`facts.add_${row.key}`)}
                   </span>
