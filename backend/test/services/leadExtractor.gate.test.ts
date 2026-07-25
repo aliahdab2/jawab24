@@ -447,6 +447,131 @@ describe('maybeCaptureLead — our reply echoes the customer own number (July 20
     });
 });
 
+describe('maybeCaptureLead — second number must not erase the first (July 2026 regression)', () => {
+    // Real prod case (page "الفريق الدمشقي للتدريب والتأهيل", 2026-07-25, lead
+    // f66db763): a parent registered TWO daughters. She sent daughter A's name +
+    // number first ("سيدرا محمد كوجك" / "جوال0953256248" → lead created), then
+    // daughter B's in one message ("شهد حسن سلوم جوال 0965219910"). The second
+    // capture's conflict-update silently overwrote leads.phone — the ONE
+    // destructive field in an otherwise non-destructive upsert. Result on the
+    // card: call/WhatsApp buttons dialled B's number while the fields showed A's
+    // name, and 0953256248 survived only because the AI happened to emit it as a
+    // field. The displaced number must be PRESERVED as a card field, always —
+    // never by luck.
+    const tabarakHistory = [
+        { role: 'user', content: 'بنتي وبنت اختي بدي سجلون' },
+        { role: 'assistant', content: 'تمام، عطيني أسماء البنات وأرقام تواصلهم مع تحديد دورة المحاسبة المبتدئة لكل وحدة، ونساعدكم بالتسجيل.' },
+        { role: 'user', content: 'سيدرا محمد كوجك' },
+        { role: 'user', content: 'جوال0953256248' },
+        { role: 'assistant', content: 'تم، سجلنا جوال 0953256248 لدورة المحاسبة المبتدئين. 🌸' },
+        { role: 'user', content: 'شهد حسن سلوم جوال 0965219910' },
+    ] as Awaited<ReturnType<typeof messagesService.getConversationHistory>>;
+
+    beforeEach(() => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            timezone: 'Asia/Damascus',
+        } as Awaited<ReturnType<typeof workspaceSettingsService.getSettings>>);
+        // The lead as daughter A's capture left it.
+        existingRows.push({
+            id: 'lead-1',
+            status: 'new',
+            phone: '0953256248',
+            extractionStatus: 'completed',
+            extractedData: {
+                summary: 'العميل يريد تسجيل بنته في دورة المحاسبة للمبتدئين.',
+                fields: [
+                    { key: 'name', label_en: 'Name', label_ar: 'الاسم', value: 'سيدرا محمد كوجك' },
+                    { key: 'course_of_interest', label_en: 'Course of Interest', label_ar: 'الدورة المهتم بها', value: 'محاسبة مبتدئين' },
+                ],
+            },
+        });
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValue(tabarakHistory);
+    });
+
+    it('REGRESSION: the displaced first number is preserved on the card when a different number arrives', async () => {
+        // The AI does NOT re-emit the old number (worst case — preservation must
+        // not depend on model behavior).
+        openaiCreateMock.mockResolvedValueOnce({
+            choices: [{ message: { content: JSON.stringify({
+                phone: '0965219910',
+                summary: 'العميل يريد تسجيل بنتيه في دورة المحاسبة للمبتدئين.',
+                fields: [{ key: 'name_2', label_en: 'Name (2)', label_ar: 'الاسم (2)', value: 'شهد حسن سلوم' }],
+            }) } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'شهد حسن سلوم جوال 0965219910' }),
+        );
+
+        expect(capturedConflicts).toHaveLength(1);
+        const set = capturedConflicts[0];
+        // Newest number wins the column (the buttons dial the latest share)…
+        expect(set.phone).toBe('0965219910');
+        // …but the displaced number must survive as a card field.
+        const merged = set.extractedData as { fields: Array<{ key: string; value: string }> };
+        const values = merged.fields.map(f => f.value);
+        expect(values.some(v => v.includes('0953256248'))).toBe(true);
+        // And nothing already on the card is lost.
+        expect(values).toContain('سيدرا محمد كوجك');
+        expect(values).toContain('شهد حسن سلوم');
+    });
+
+    it('re-sharing the SAME number adds no duplicate field', async () => {
+        // History without our echo of the number: a prior assistant turn that
+        // echoed it would (correctly) trip paste-back protection and route to
+        // re-extraction instead — the accepted tradeoff from the July 2026
+        // echo-drop fix. Here the capture path runs and must be a phone no-op.
+        vi.mocked(messagesService.getConversationHistory).mockResolvedValue([
+            { role: 'user', content: 'سيدرا محمد كوجك' },
+            { role: 'assistant', content: 'تمام، عطيني رقم التواصل ونساعدك بالتسجيل.' },
+            { role: 'user', content: 'جوال0953256248' },
+        ] as Awaited<ReturnType<typeof messagesService.getConversationHistory>>);
+        openaiCreateMock.mockResolvedValueOnce({
+            choices: [{ message: { content: JSON.stringify({
+                phone: '0953256248',
+                summary: 'العميل أكد رقمه.',
+                fields: [],
+            }) } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'جوال0953256248' }),
+        );
+
+        expect(capturedConflicts).toHaveLength(1);
+        const set = capturedConflicts[0];
+        expect(set.phone).toBe('0953256248');
+        const merged = set.extractedData as { fields: Array<{ key: string; value: string }> };
+        // No phantom "previous number" field when nothing was displaced.
+        expect(merged.fields.filter(f => f.value.includes('0953256248'))).toHaveLength(0);
+    });
+
+    it('does not preserve the displaced number twice when the AI already emitted it as a field', async () => {
+        // Prod reality for lead f66db763: the AI's card DID carry 0953256248 as a
+        // "phone" field. Preservation must detect that and not append a duplicate.
+        openaiCreateMock.mockResolvedValueOnce({
+            choices: [{ message: { content: JSON.stringify({
+                phone: '0965219910',
+                summary: 'العميل يريد تسجيل بنتيه في دورة المحاسبة للمبتدئين.',
+                fields: [
+                    { key: 'name_2', label_en: 'Name (2)', label_ar: 'الاسم (2)', value: 'شهد حسن سلوم' },
+                    { key: 'phone', label_en: 'Phone', label_ar: 'رقم الهاتف', value: '0953256248' },
+                ],
+            }) } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        await leadExtractorService.maybeCaptureLead(
+            baseParams({ messageText: 'شهد حسن سلوم جوال 0965219910' }),
+        );
+
+        const merged = capturedConflicts[0].extractedData as { fields: Array<{ key: string; value: string }> };
+        expect(merged.fields.filter(f => f.value.includes('0953256248'))).toHaveLength(1);
+    });
+});
+
 describe('lead re-engagement (re-shared number)', () => {
     it('upsert conflict clause flags follow-up WITHOUT regressing status (non-destructive)', async () => {
         await leadExtractorService.maybeCaptureLead(baseParams({ messageText: 'رقمي 0934958473' }));
