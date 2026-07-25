@@ -68,6 +68,7 @@ export {
     formatTimeInZone,
     formatUtcOffset,
     detectTimezone,
+    resolveStoredTimezone,
     getTimezoneOptions,
     utcOffsetMinutes,
 } from './timezone';

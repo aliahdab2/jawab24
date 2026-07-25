@@ -1,10 +1,5 @@
 import clsx from 'clsx';
-import {
-  MAX_TEMPLATE_MESSAGE_LENGTH,
-  PLACEHOLDER_TIMEZONE,
-  detectTimezone,
-  formatTimeInZone,
-} from '@jawab24/shared';
+import { MAX_TEMPLATE_MESSAGE_LENGTH, formatTimeInZone } from '@jawab24/shared';
 import { Card, Toggle, Select, InputFieldWrapper, CharCounter } from '@/components/ui';
 import {
   Clock,
@@ -38,16 +33,10 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
           [currentLang]: defaultMsg
         };
       }
-      // The schedule is meaningless without a timezone, and until now nothing ever
-      // wrote one — merchants silently inherited the DB placeholder, so a Libyan
-      // shop ran on Riyadh time and lost an hour every day. Switching the schedule
-      // ON is the moment the value starts to matter, so seed it from this device.
-      // Only ever applied when the stored value is still the untouched placeholder,
-      // and the picker directly below shows the result — visible, not silent.
-      const detected = detectTimezone();
-      if (detected && settings.timezone === PLACEHOLDER_TIMEZONE) {
-        updates.timezone = detected;
-      }
+      // The placeholder-timezone seed that used to live here is gone: settings.tsx
+      // now replaces PLACEHOLDER_TIMEZONE with the device zone at LOAD, for every
+      // merchant, so by the time this toggle runs the value can never still be the
+      // placeholder. Seeding here as well would have been unreachable code.
     }
     setSettings({ ...settings, ...updates });
   };

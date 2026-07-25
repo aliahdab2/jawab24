@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type ReactElement } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, PLACEHOLDER_TIMEZONE, detectTimezone } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, detectTimezone, resolveStoredTimezone } from '@jawab24/shared';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore, useUIStore } from '@/lib/store';
@@ -188,12 +188,8 @@ const SettingsPage: NextPageWithLayout = () => {
         businessHoursOnly: data.businessHoursOnly ?? false,
         businessHoursStart: (data.businessHoursStart && data.businessHoursStart !== '00:00') ? data.businessHoursStart : '09:00',
         businessHoursEnd: (data.businessHoursEnd && data.businessHoursEnd !== '00:00') ? data.businessHoursEnd : '18:00',
-        // 'Asia/Riyadh' is a DB placeholder nobody ever chose, not a merchant
-        // decision — a Libyan shop inherited Riyadh time and lost an hour every
-        // day. Treat it exactly like an empty value: fall back to this device.
-        timezone: (data.timezone && data.timezone !== PLACEHOLDER_TIMEZONE)
-          ? data.timezone
-          : (detectTimezone() || data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone),
+        // The placeholder is a DB default nobody chose — see resolveStoredTimezone.
+        timezone: resolveStoredTimezone(data.timezone, detectTimezone()) || Intl.DateTimeFormat().resolvedOptions().timeZone,
         awayMessageMulti: data.awayMessageMulti || {},
         greetingMessageMulti: data.greetingMessageMulti || {},
         greetingMessageEnabled: data.greetingMessageEnabled ?? false,

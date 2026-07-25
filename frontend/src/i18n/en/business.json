@@ -46,7 +46,6 @@
     "placeholder_delivery": "Where you deliver, the cost, and how long it takes",
     "placeholder_payment": "The methods you accept from customers",
     "hint_hours": "When can customers reach you?",
-    "hoursDays": "Working days",
     "hoursFrom": "Opens at",
     "hoursTo": "Closes at",
     "hoursPickDay": "Pick at least one working day.",

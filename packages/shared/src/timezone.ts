@@ -4,6 +4,8 @@
  * ai-worker prompt builder (today's-date computation).
  */
 
+import { PLACEHOLDER_TIMEZONE } from './constants';
+
 /** True when `tz` is a valid IANA timezone name that Intl can format with. */
 export function isValidTimezone(tz: string | undefined | null): boolean {
     if (!tz) return false;
@@ -83,6 +85,31 @@ export function detectTimezone(): string | undefined {
     } catch {
         return undefined;
     }
+}
+
+/**
+ * The zone to show a merchant, given whatever is stored for them.
+ *
+ * `PLACEHOLDER_TIMEZONE` is a DB default nobody ever chose — every merchant who
+ * never touched the setting inherited it, so a Libyan shop evaluated its
+ * schedule on Riyadh time and lost an hour a day. Treat it exactly like an
+ * empty value and fall back to this device.
+ *
+ * A zone the merchant DID choose is never overridden: the device is frequently
+ * not where the business is (an agency, a reseller, or an owner travelling),
+ * and silently tracking it would shift a Damascus shop's hours every time
+ * someone abroad opened Settings.
+ */
+export function resolveStoredTimezone(
+    stored: string | null | undefined,
+    // REQUIRED, not defaulted: a default would make `f(x, undefined)` fall back
+    // to the real device, so "the device reports nothing" could not be
+    // expressed or tested. Callers pass `detectTimezone()`.
+    detected: string | undefined,
+): string | undefined {
+    const chosen = stored?.trim();
+    if (chosen && chosen !== PLACEHOLDER_TIMEZONE) return chosen;
+    return detected ?? chosen ?? undefined;
 }
 
 /**
