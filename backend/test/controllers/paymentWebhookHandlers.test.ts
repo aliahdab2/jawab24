@@ -52,6 +52,7 @@ vi.mock('../../src/config', () => ({ config: { frontendUrl: 'http://localhost:30
 
 import {
     handleSubscriptionCreated,
+    adoptStripeSubscription,
     handleSubscriptionUpdated,
     handleSubscriptionDeleted,
     handleTopupPaymentSucceeded,
@@ -119,10 +120,89 @@ describe('handleSubscriptionCreated (backup path)', () => {
         expect(db.update).not.toHaveBeenCalled();
     });
 
-    it('warns and does nothing when no DB row exists', async () => {
+    it('warns and does nothing when no DB row exists and there is no metadata to adopt by', async () => {
         vi.mocked(db.select).mockReturnValue(q([]) as never);
         const req = mkReq();
         await handleSubscriptionCreated({ id: 'sub_x', status: 'active' } as Stripe.Subscription, req);
+        expect(db.update).not.toHaveBeenCalled();
+        expect(req.log.warn).toHaveBeenCalled();
+    });
+});
+
+/**
+ * Regression (2026-07-25, production): `externalSubscriptionId` was only ever
+ * written by handleCheckoutComplete, which runs on `checkout.session.completed`
+ * — an event that fires only for Stripe Checkout Sessions. Checkout moved to
+ * the embedded PaymentElement, which creates no Session, so nothing linked the
+ * two sides. Every other handler resolves our row by external_subscription_id
+ * and so matched zero rows: merchants were charged and never activated, with
+ * the webhook still reporting success. One paid merchant sat on a Starter
+ * trial; only 1 of 66 subscription rows was linked at all.
+ */
+describe('adoptStripeSubscription', () => {
+    const paid = {
+        id: 'sub_new',
+        status: 'active',
+        customer: 'cus_1',
+        metadata: { userId: 'u1', planId: 'plan_business' },
+        items: { data: [{ price: { id: 'price_1' } }] },
+    } as unknown as Stripe.Subscription;
+
+    it('takes over the user\'s existing row so the stale trial stops being served', async () => {
+        const chain = q([]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'row_1' }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        const adopted = await adoptStripeSubscription(paid, mkReq());
+
+        expect(adopted).toBe(true);
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            userId: 'u1',
+            planId: 'plan_business',
+            status: 'active',
+            externalSubscriptionId: 'sub_new',
+            paymentMethod: 'stripe',
+            stripeCustomerId: 'cus_1',
+        }));
+        expect(db.insert).not.toHaveBeenCalled();
+        expect(subscriptionsService.invalidateStatusCache).toHaveBeenCalledWith('u1');
+    });
+
+    it('inserts when the user has no row at all', async () => {
+        const chain = q([]);
+        vi.mocked(db.select).mockReturnValue(q([]) as never);
+        vi.mocked(db.insert).mockReturnValue(chain as never);
+
+        const adopted = await adoptStripeSubscription(paid, mkReq());
+
+        expect(adopted).toBe(true);
+        expect(chain.values).toHaveBeenCalledWith(expect.objectContaining({ externalSubscriptionId: 'sub_new' }));
+        expect(db.update).not.toHaveBeenCalled();
+    });
+
+    // The guard that stops retry-spam from hijacking the row. A merchant who
+    // reloads checkout racks up several `default_incomplete` subscriptions
+    // before paying; adopting any of them would mark an unpaid account active.
+    it('refuses to adopt a subscription that has not been paid for', async () => {
+        const req = mkReq();
+        const adopted = await adoptStripeSubscription(
+            { ...paid, status: 'incomplete' } as unknown as Stripe.Subscription,
+            req
+        );
+
+        expect(adopted).toBe(false);
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('refuses to adopt when the metadata is missing', async () => {
+        const req = mkReq();
+        const adopted = await adoptStripeSubscription(
+            { ...paid, metadata: {} } as unknown as Stripe.Subscription,
+            req
+        );
+
+        expect(adopted).toBe(false);
         expect(db.update).not.toHaveBeenCalled();
         expect(req.log.warn).toHaveBeenCalled();
     });
