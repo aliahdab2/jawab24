@@ -309,7 +309,31 @@ function CheckoutPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [intentType, setIntentType] = useState<'payment' | 'setup' | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [hostedLoading, setHostedLoading] = useState(false);
   const isDark = useIsDarkMode();
+
+  // Hand off to Stripe-HOSTED checkout (see the fallback link below the form).
+  // Full-page redirect, not window.open: popup blockers eat new tabs opened
+  // after an await, and there is nothing to come back to — success returns via
+  // success_url.
+  const openHostedCheckout = async () => {
+    if (!plan) return;
+    setHostedLoading(true);
+    try {
+      const response = await api.post('/payment/create-checkout-session', {
+        planId: plan.id,
+        billingInterval,
+        uiMode: 'hosted',
+      });
+      window.location.href = response.data.url;
+    } catch (err) {
+      captureError(err, 'Failed to open hosted checkout fallback', {
+        tags: { page: 'checkout', action: 'hosted-fallback' },
+      });
+      setError(t('errorInitiateCheckout'));
+      setHostedLoading(false);
+    }
+  };
   const [showMobileSummary, setShowMobileSummary] = useState(false);
 
   // "Loaded" gate differs by mode: subscription needs the plan, top-up needs
@@ -767,6 +791,31 @@ function CheckoutPage() {
                               trialDays={isTopup ? undefined : plan?.trialDays}
                             />
                           </Elements>
+
+                          {/* Escape hatch to Stripe-HOSTED checkout. The embedded
+                              form above tokenises the card via a cross-origin
+                              iframe, which privacy browsers (Brave Shields etc.)
+                              can silently block: the form renders, pay does
+                              nothing, and NO error surfaces anywhere — we cannot
+                              detect it, so the merchant needs a way out we don't
+                              have to detect. On checkout.stripe.com Stripe is
+                              first-party and immune (live incident 2026-07-25:
+                              same card, dead here, paid instantly there).
+                              Subscriptions only — top-ups use a PaymentIntent
+                              with no hosted equivalent wired up. */}
+                          {!isTopup && plan && (
+                            <p className="mt-4 text-center text-xs text-muted-foreground">
+                              {t('hostedFallbackPrompt')}{' '}
+                              <button
+                                type="button"
+                                onClick={openHostedCheckout}
+                                disabled={hostedLoading}
+                                className="underline text-brand-600 hover:text-brand-700 disabled:opacity-50 font-medium"
+                              >
+                                {hostedLoading ? t('hostedFallbackOpening') : t('hostedFallbackLink')}
+                              </button>
+                            </p>
+                          )}
                         </div>
                       ) : sessionLoading ? (
                         <div className="flex flex-col items-center justify-center py-16" role="status" aria-busy="true">

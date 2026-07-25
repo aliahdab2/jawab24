@@ -4,7 +4,8 @@
     "message": "Your subscription has been activated. Welcome to Jawab24!",
     "redirecting": "Redirecting to dashboard in",
     "goToDashboard": "Go to Dashboard",
-    "backToPricing": "Back to Pricing"
+    "backToPricing": "Back to Pricing",
+    "returnToApp": "Payment received — you can return to the Jawab24 app now."
   },
   "cancel": {
     "title": "Payment Canceled",

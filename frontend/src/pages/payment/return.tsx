@@ -24,6 +24,11 @@ export default function PaymentReturnPage() {
 
   const iosRedirecting = useIOSPaymentRedirect();
 
+  // Arrived from the native-app hosted-checkout bounce: this browser holds no
+  // auth session, so auto-redirecting to /dashboard would dump a customer who
+  // JUST PAID onto a login page. Show "return to the app" instead.
+  const fromApp = router.query.hosted === '1';
+
   // Check payment status from Stripe query params or legacy session_id
   useEffect(() => {
     if (!router.isReady) return;
@@ -56,7 +61,7 @@ export default function PaymentReturnPage() {
       return;
     }
 
-    // Legacy EmbeddedCheckout flow: check via backend API
+    // Checkout Session flow (hosted or legacy embedded): check via backend API
     if (typeof session_id === 'string') {
       const checkSession = async () => {
         try {
@@ -64,6 +69,17 @@ export default function PaymentReturnPage() {
           const { status: sessionStatus } = response.data;
           setStatus(sessionStatus === 'complete' ? 'complete' : sessionStatus === 'expired' ? 'expired' : 'open');
         } catch (err) {
+          // Hosted checkout's success_url is only ever reached AFTER Stripe has
+          // taken the payment, and the app-originated flow lands here in the
+          // system browser, which holds no auth session — so the status call
+          // 401s even though the payment succeeded. Showing failure to a
+          // customer who just paid is worse than trusting Stripe's redirect
+          // contract. (Activation is webhook/sweep-driven server-side either
+          // way; this page is purely informational.)
+          if (router.query.hosted === '1') {
+            setStatus('complete');
+            return;
+          }
           captureError(err, 'Failed to check checkout session status', { tags: { page: 'payment-return' } });
           setStatus('open');
         }
@@ -76,9 +92,10 @@ export default function PaymentReturnPage() {
     setStatus('open');
   }, [router.isReady, router.query, iosRedirecting]);
 
-  // Countdown redirect on success
+  // Countdown redirect on success (suppressed for the app-originated flow —
+  // see fromApp above)
   useEffect(() => {
-    if (status !== 'complete') return;
+    if (status !== 'complete' || fromApp) return;
 
     const interval = setInterval(() => {
       setCountdown((prev) => {
@@ -92,7 +109,7 @@ export default function PaymentReturnPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [status]);
+  }, [status, fromApp]);
 
   if (iosRedirecting) return null;
 
@@ -132,7 +149,7 @@ export default function PaymentReturnPage() {
 
               <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4 mb-6" aria-live="polite">
                 <p className="text-sm text-brand-700 dark:text-brand-300">
-                  {t('success.redirecting')} {countdown}s...
+                  {fromApp ? t('success.returnToApp') : `${t('success.redirecting')} ${countdown}s...`}
                 </p>
               </div>
 

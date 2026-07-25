@@ -27,5 +27,8 @@
   "topupSummaryTitle": "Credit top-up",
   "topupOneTime": "one-time",
   "submitTopup": "Pay {amount}",
-  "topupTrustNote": "One-time payment · replies credited instantly"
+  "topupTrustNote": "One-time payment · replies credited instantly",
+  "hostedFallbackPrompt": "Having trouble completing the payment?",
+  "hostedFallbackLink": "Pay on Stripe's secure page",
+  "hostedFallbackOpening": "Opening secure page..."
 }
