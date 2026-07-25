@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems } from '../db/schema';
-import { eq, and, desc, sql, count, isNotNull } from 'drizzle-orm';
+import { eq, and, ne, desc, sql, count, isNotNull, inArray } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
@@ -1078,33 +1078,47 @@ export class PagesService {
                 if (globalExisting && isPageDisconnected(globalExisting)) {
                     // Page exists but previous owner disconnected — safe to claim
                     logger.info(`[Pages] Claiming disconnected page "${fbPage.name}" (${fbPage.id}) from workspace ${globalExisting.workspaceId} to ${workspaceId}`);
-                    const [claimed] = await db
-                        .update(pages)
-                        .set({
-                            workspaceId,
-                            userId,
-                            name: fbPage.name,
-                            accessToken: maybeEncryptToken(fbPage.access_token),
-                            tokenLastVerifiedAt: new Date(),
-                            disconnectReason: null,
-                            autoReplyEnabled: shouldAutoEnable,
-                            autoReplyDisabledReason,
-                            instagramAccountId,
-                            instagramUsername,
-                            instagramProfilePicUrl,
-                            businessProfile,
-                            businessProfileUpdatedAt: new Date(),
-                            // Reclaim moves the page from ANOTHER workspace into this one
-                            // — clear the previous owner's per-page lead config so it can't
-                            // leak across workspaces. The page inherits THIS workspace's
-                            // default until re-customized. (A same-workspace reconnect goes
-                            // through the existingPage branch above, which KEEPS the override.)
-                            leadStages: null,
-                            leadFields: null,
-                            updatedAt: new Date(),
-                        })
-                        .where(eq(pages.id, globalExisting.id))
-                        .returning();
+                    // ATOMIC: the page row and the denormalized workspace_id on its
+                    // inbox rows must move together or not at all. If the re-scope
+                    // could fail after the page row committed, the next sync would
+                    // take the `existingPage` branch (the page now lives here) and
+                    // never re-scope again — permanent silent drift, which is the
+                    // exact bug this whole change exists to kill. Prod carried 145
+                    // such stranded messages from before the re-scope existed.
+                    const claimed = await db.transaction(async (tx) => {
+                        const [row] = await tx
+                            .update(pages)
+                            .set({
+                                workspaceId,
+                                userId,
+                                name: fbPage.name,
+                                accessToken: maybeEncryptToken(fbPage.access_token),
+                                tokenLastVerifiedAt: new Date(),
+                                disconnectReason: null,
+                                autoReplyEnabled: shouldAutoEnable,
+                                autoReplyDisabledReason,
+                                instagramAccountId,
+                                instagramUsername,
+                                instagramProfilePicUrl,
+                                businessProfile,
+                                businessProfileUpdatedAt: new Date(),
+                                // Reclaim moves the page from ANOTHER workspace into this one
+                                // — clear the previous owner's per-page lead config so it can't
+                                // leak across workspaces. The page inherits THIS workspace's
+                                // default until re-customized. (A same-workspace reconnect goes
+                                // through the existingPage branch above, which KEEPS the override.)
+                                leadStages: null,
+                                leadFields: null,
+                                updatedAt: new Date(),
+                            })
+                            .where(eq(pages.id, globalExisting.id))
+                            .returning();
+
+                        if (globalExisting.workspaceId !== workspaceId) {
+                            await rescopePageWorkspace(globalExisting.id, workspaceId, logger, tx);
+                        }
+                        return row;
+                    });
                     syncedPages.push(claimed);
                     // Reclaiming a disconnected page (re)establishes its auto-reply
                     // state via Facebook — audit it as an fb_sync transition.
@@ -1425,5 +1439,93 @@ export const pagesService = new PagesService();
 /** Check if a page's Facebook access has been revoked (empty accessToken sentinel) */
 export function isPageDisconnected(page: { accessToken: string } | null | undefined): boolean {
     return !!page && page.accessToken === '';
+}
+
+/**
+ * Either the pooled `db` handle or a transaction handle from `db.transaction`.
+ * Lets a caller run a helper inside its own transaction (see the reclaim path).
+ */
+type DbExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Re-scope every DENORMALIZED copy of `pages.workspace_id` after a page changes
+ * workspace. MUST be called by any code path that moves a page between
+ * workspaces — otherwise the page lands in the new workspace while its inbox
+ * stays behind in the old one, visible to the previous owner and invisible to
+ * the new one.
+ *
+ * Three tables carry the copy (added for the workspace-scoped inbox indexes,
+ * see schema.ts): `comments` (reached via posts.page_id), `instagram_comments`
+ * (via instagram_media.page_id), and `messages` (holds page_id directly).
+ *
+ * Deliberately NOT re-scoped: ai_usage_log / logs / usage. Those record who
+ * incurred a cost or performed an action at the time, and must stay attributed
+ * to the previous owner.
+ *
+ * Returns per-table row counts so callers can log the repair. Safe to re-run:
+ * rows already in `workspaceId` are matched but written identically.
+ */
+export async function rescopePageWorkspace(
+    pageId: string,
+    workspaceId: string,
+    logger: Logger = noopLogger,
+    executor: DbExecutor = db
+): Promise<{ comments: number; instagramComments: number; messages: number }> {
+    // Every statement below runs SEQUENTIALLY, never Promise.all: `executor` may
+    // be a transaction, and a single connection cannot run concurrent statements.
+
+    // comments/instagram_comments have no page_id — resolve their parents first.
+    // Two-step (rather than a subquery) mirrors the existing pattern in auth.ts.
+    const postRows = await executor.select({ id: posts.id }).from(posts).where(eq(posts.pageId, pageId));
+    const mediaRows = await executor.select({ id: instagramMedia.id }).from(instagramMedia).where(eq(instagramMedia.pageId, pageId));
+
+    const postIds = postRows.map(p => p.id);
+    const mediaIds = mediaRows.map(m => m.id);
+
+    // Count-then-update rather than .returning({id}): a reclaimed page can carry
+    // a very large message history, and materializing every row id purely to
+    // count them would spike memory on the sync request. Each WHERE also excludes
+    // rows already in the target workspace, so the count means "rows that had to
+    // move" and a repeat run writes nothing.
+    const commentsWhere = postIds.length
+        ? and(inArray(comments.postId, postIds), ne(comments.workspaceId, workspaceId))
+        : null;
+    const igCommentsWhere = mediaIds.length
+        ? and(inArray(instagramComments.mediaId, mediaIds), ne(instagramComments.workspaceId, workspaceId))
+        : null;
+    const messagesWhere = and(eq(messages.pageId, pageId), ne(messages.workspaceId, workspaceId));
+
+    const moved = { comments: 0, instagramComments: 0, messages: 0 };
+
+    if (commentsWhere) {
+        const [row] = await executor.select({ n: count() }).from(comments).where(commentsWhere);
+        moved.comments = Number(row?.n ?? 0);
+        if (moved.comments > 0) {
+            await executor.update(comments).set({ workspaceId }).where(commentsWhere);
+        }
+    }
+
+    if (igCommentsWhere) {
+        const [row] = await executor.select({ n: count() }).from(instagramComments).where(igCommentsWhere);
+        moved.instagramComments = Number(row?.n ?? 0);
+        if (moved.instagramComments > 0) {
+            await executor.update(instagramComments).set({ workspaceId }).where(igCommentsWhere);
+        }
+    }
+
+    const [messageRow] = await executor.select({ n: count() }).from(messages).where(messagesWhere);
+    moved.messages = Number(messageRow?.n ?? 0);
+    if (moved.messages > 0) {
+        await executor.update(messages).set({ workspaceId }).where(messagesWhere);
+    }
+
+    if (moved.comments || moved.instagramComments || moved.messages) {
+        logger.info(
+            `[Pages] Re-scoped page ${pageId} inbox to workspace ${workspaceId}: ` +
+            `${moved.comments} comment(s), ${moved.instagramComments} IG comment(s), ${moved.messages} message(s)`
+        );
+    }
+
+    return moved;
 }
 

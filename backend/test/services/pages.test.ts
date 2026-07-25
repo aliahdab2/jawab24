@@ -4,15 +4,26 @@ import { db } from '../../src/db';
 import { facebookService } from '../../src/services/facebook';
 import { instagramService } from '../../src/services/instagram';
 import { channelTrialService } from '../../src/services/channelTrial';
+import {
+    comments as commentsTable,
+    instagramComments as instagramCommentsTable,
+    messages as messagesTable,
+    posts as postsTable,
+    instagramMedia as instagramMediaTable,
+} from '../../src/db/schema';
 
-vi.mock('../../src/db', () => ({
-    db: {
+vi.mock('../../src/db', () => {
+    const db: Record<string, unknown> = {
         insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: vi.fn() })) })),
         update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn() })) })) })),
         select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ orderBy: vi.fn() })) })) })),
         execute: vi.fn().mockResolvedValue([]),
-    }
-}));
+    };
+    // The transaction handle IS the mocked db, so a test's select/update mocks
+    // apply identically inside and outside a transaction.
+    db.transaction = vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(db));
+    return { db };
+});
 
 vi.mock('../../src/services/facebook', () => ({
     facebookService: {
@@ -62,6 +73,21 @@ vi.mock('../../src/lib/redis', () => ({
 describe('PagesService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // clearAllMocks() wipes call history but NOT queued mockReturnValueOnce
+        // values or a persisted mockImplementation. Several tests queue an exact
+        // sequence of db.select() chains; if one of them consumes fewer than it
+        // queued (which is what a regression looks like), the leftovers would
+        // leak into the next test and fail it for the wrong reason. Restore the
+        // module-factory defaults so every test starts from a clean chain.
+        vi.mocked(db.select).mockReset().mockImplementation((() => ({
+            from: vi.fn(() => ({ where: vi.fn(() => ({ orderBy: vi.fn() })) })),
+        })) as any);
+        vi.mocked(db.update).mockReset().mockImplementation((() => ({
+            set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn() })) })),
+        })) as any);
+        vi.mocked(db.insert).mockReset().mockImplementation((() => ({
+            values: vi.fn(() => ({ returning: vi.fn() })),
+        })) as any);
     });
 
     describe('syncFromFacebook', () => {
@@ -505,6 +531,97 @@ describe('PagesService', () => {
             expect(result.syncedPages).toEqual([]);
         });
 
+        // Regression guard for the drift that stranded 145 production messages:
+        // claiming a DISCONNECTED page moves it into the claiming workspace, so
+        // the denormalized workspace_id on its inbox rows must move with it.
+        // Before this, the page changed hands and its comments/messages stayed
+        // in the previous owner's scope forever.
+        it('re-scopes the inbox when claiming a disconnected page from another workspace', async () => {
+            const workspaceId = 'ws-claimer';
+            const userId = 'user-claimer';
+
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{ id: 'fb-page-abandoned', name: 'Abandoned Page', access_token: 'pt-fresh' }],
+            });
+
+            const fromOrderByLimitChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(rows) }),
+                    }),
+                }),
+            });
+            const fromWhereChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(rows) }),
+            });
+
+            // First two selects are call-ordered (getPages, then the global
+            // lookup); everything the re-scope reads afterwards is dispatched by
+            // table, so statement order inside the helper doesn't matter here.
+            let selectCall = 0;
+            vi.mocked(db.select).mockImplementation((() => {
+                const idx = selectCall++;
+                if (idx === 0) return fromOrderByLimitChain([]) as any;
+                if (idx === 1) return fromWhereChain([{
+                    id: 'page-row-id',
+                    workspaceId: 'ws-previous-owner',
+                    facebookPageId: 'fb-page-abandoned',
+                    accessToken: '',   // → DISCONNECTED, so claimable
+                }]) as any;
+                return {
+                    from: vi.fn().mockImplementation((table: unknown) => ({
+                        where: vi.fn().mockResolvedValue(
+                            table === postsTable ? [{ id: 'post-1' }]
+                                : table === instagramMediaTable ? []
+                                    : table === commentsTable ? [{ n: 3 }]
+                                        : table === messagesTable ? [{ n: 145 }]
+                                            : []
+                        ),
+                    })),
+                } as any;
+            }) as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            const updatedTables: unknown[] = [];
+            const updatedValues: any[] = [];
+            vi.mocked(db.update).mockImplementation(((table: unknown) => ({
+                set: vi.fn().mockImplementation((values: any) => {
+                    updatedTables.push(table);
+                    updatedValues.push(values);
+                    const result: any = Promise.resolve(undefined);
+                    // pages.update(...) needs .returning(); the re-scope updates
+                    // resolve straight off .where().
+                    result.returning = vi.fn().mockResolvedValue([{ id: 'page-row-id', ...values }]);
+                    return { where: vi.fn().mockReturnValue(result) };
+                }),
+            })) as any);
+
+            await pagesService.syncFromFacebook(workspaceId, userId, 'claimer-fb-token');
+
+            // The page row moved to the claiming workspace...
+            const pageWrite = updatedValues.find(v => v.workspaceId === workspaceId && 'accessToken' in v);
+            expect(pageWrite).toBeDefined();
+            expect(pageWrite.userId).toBe(userId);
+
+            // ...and so did its comments (page has a post) and messages.
+            expect(updatedTables).toContain(commentsTable);
+            expect(updatedTables).toContain(messagesTable);
+            // No IG media on this page → no instagram_comments write attempted
+            expect(updatedTables).not.toContain(instagramCommentsTable);
+
+            for (const table of [commentsTable, messagesTable]) {
+                const write = updatedValues[updatedTables.indexOf(table)];
+                expect(write.workspaceId).toBe(workspaceId);
+            }
+
+            // ATOMICITY: page row + re-scope must share one transaction. Without
+            // it, a mid-way failure leaves the page moved and its inbox behind —
+            // and the next sync takes the existingPage branch, so the drift is
+            // never repaired.
+            expect(db.transaction).toHaveBeenCalledTimes(1);
+        });
+
         // Mixed-case regression guard for the silent-skip rule:
         // when one of the user's FB pages is fresh and another is held by a
         // stranger workspace, the fresh page MUST still sync — silent-skip
@@ -627,6 +744,114 @@ describe('PagesService', () => {
             // suggestedKnowledgeBase should be null when no business info available
             expect(insertedValues).toBeDefined();
             expect(insertedValues.suggestedKnowledgeBase).toBeNull();
+        });
+    });
+
+    // ───────────────────────────────────────────
+    // rescopePageWorkspace — denormalized workspace_id repair
+    //
+    // Regression guard for the drift that stranded 145 production messages:
+    // a page changed workspace while its inbox rows kept pointing at the old
+    // one, leaving them visible to the previous owner and invisible to the new.
+    // ───────────────────────────────────────────
+    describe('rescopePageWorkspace', () => {
+        /**
+         * Dispatches by TABLE rather than call order, so a test can't accidentally
+         * assert the right number against the wrong table, and so the mock stays
+         * valid if the helper's statement order changes.
+         *
+         * The helper reads posts/instagram_media to resolve parents, then does a
+         * count() per denormalized table and only writes when that count > 0.
+         */
+        function mockRescopeDb(opts: {
+            postIds: string[];
+            mediaIds: string[];
+            drifted: { comments: number; instagramComments: number; messages: number };
+        }) {
+            const updates: { table: unknown; set: any }[] = [];
+
+            const selectResultFor = new Map<unknown, unknown[]>([
+                [postsTable, opts.postIds.map(id => ({ id }))],
+                [instagramMediaTable, opts.mediaIds.map(id => ({ id }))],
+                [commentsTable, [{ n: opts.drifted.comments }]],
+                [instagramCommentsTable, [{ n: opts.drifted.instagramComments }]],
+                [messagesTable, [{ n: opts.drifted.messages }]],
+            ]);
+
+            vi.mocked(db.select).mockImplementation((() => ({
+                from: vi.fn().mockImplementation((table: unknown) => ({
+                    where: vi.fn().mockResolvedValue(selectResultFor.get(table) ?? []),
+                })),
+            })) as any);
+
+            vi.mocked(db.update).mockImplementation(((table: unknown) => ({
+                set: vi.fn().mockImplementation((values: any) => ({
+                    // No .returning() any more — the helper counts first and the
+                    // update resolves directly off .where().
+                    where: vi.fn().mockImplementation(() => {
+                        updates.push({ table, set: values });
+                        return Promise.resolve(undefined);
+                    }),
+                })),
+            })) as any);
+
+            return updates;
+        }
+
+        it('moves comments, Instagram comments and messages to the new workspace', async () => {
+            const { rescopePageWorkspace } = await import('../../src/services/pages');
+            const updates = mockRescopeDb({
+                postIds: ['post-1', 'post-2'],
+                mediaIds: ['media-1'],
+                drifted: { comments: 4, instagramComments: 2, messages: 145 },
+            });
+
+            const moved = await rescopePageWorkspace('page-1', 'ws-new');
+
+            expect(moved).toEqual({ comments: 4, instagramComments: 2, messages: 145 });
+            // All three denormalized tables written, each with the NEW workspace
+            expect(updates.map(u => u.table)).toEqual(
+                expect.arrayContaining([commentsTable, instagramCommentsTable, messagesTable])
+            );
+            expect(updates).toHaveLength(3);
+            for (const u of updates) {
+                expect(u.set.workspaceId).toBe('ws-new');
+            }
+        });
+
+        it('skips the comment writes when the page has no posts or media', async () => {
+            const { rescopePageWorkspace } = await import('../../src/services/pages');
+            const updates = mockRescopeDb({
+                postIds: [],
+                mediaIds: [],
+                drifted: { comments: 12, instagramComments: 7, messages: 3 },
+            });
+
+            const moved = await rescopePageWorkspace('page-empty', 'ws-new');
+
+            // An empty inArray() would match nothing at best and throw at worst —
+            // the guard must skip both comment paths entirely. Only `messages` is
+            // touched, and the two comment counts stay 0 even though the mock
+            // would happily have reported 12 and 7 had they been queried.
+            expect(updates).toHaveLength(1);
+            expect(updates[0].table).toBe(messagesTable);
+            expect(moved).toEqual({ comments: 0, instagramComments: 0, messages: 3 });
+        });
+
+        it('writes nothing when no row has drifted', async () => {
+            const { rescopePageWorkspace } = await import('../../src/services/pages');
+            const updates = mockRescopeDb({
+                postIds: ['post-1'],
+                mediaIds: ['media-1'],
+                drifted: { comments: 0, instagramComments: 0, messages: 0 },
+            });
+
+            const moved = await rescopePageWorkspace('page-clean', 'ws-new');
+
+            // Makes the helper safe to re-run: a page already in the target
+            // workspace is counted and left alone, never rewritten.
+            expect(updates).toHaveLength(0);
+            expect(moved).toEqual({ comments: 0, instagramComments: 0, messages: 0 });
         });
     });
 
