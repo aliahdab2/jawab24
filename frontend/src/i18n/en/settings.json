@@ -117,10 +117,10 @@
     "timezoneNoResults": "No matching timezone",
     "localTimeNow": "Your local time now: {time}",
     "useDetectedTimezone": "Use this device's timezone ({timezone})",
-    "timezoneInfo": "The schedule above is evaluated in this timezone, not on your device's clock. If it is wrong, your hours silently shift: a 09:00–18:00 schedule set in the wrong zone can start and end an hour early. Set it to where your business actually operates."
+    "timezoneInfo": "Your reply schedule — and the working hours Jawab24 quotes to customers — are read in this timezone, not your device's clock. If it is wrong, times silently shift: a 09:00–18:00 schedule set in the wrong zone can start and end an hour early. Set it to where your business actually operates."
   },
-  "businessHoursStart": "From",
-  "businessHoursEnd": "To",
+  "businessHoursStart": "Replies start",
+  "businessHoursEnd": "Replies stop",
   "awayMessageDesc": "Message shown outside work hours",
   "awayMessageConnectedDesc": "Sent to customers outside work hours or when auto-reply is off",
   "awayMessageDefault": "Thanks for your message! We're currently away and will get back to you as soon as possible.",
