@@ -139,6 +139,11 @@ runIf('REAL Stripe round-trip (test mode)', () => {
 
     // Re-seed after setup.ts's global TRUNCATE, keeping the SAME ids so the
     // Stripe subscription's metadata still resolves to a real local row.
+    //
+    // The two tables are treated differently ON PURPOSE: setup.ts truncates
+    // `users` but NOT `plans`, so the user must be re-inserted every test while
+    // the plan survives — and re-inserting it unconditionally collides on
+    // plans_pkey. Hence onConflictDoNothing rather than a plain insert.
     beforeEach(async () => {
         await createTestUser({ id: userId, email: userEmail });
         await testDb.insert(schema.plans).values({
@@ -152,7 +157,7 @@ runIf('REAL Stripe round-trip (test mode)', () => {
             maxTemplates: 20,
             maxRules: 20,
             isActive: true,
-        });
+        }).onConflictDoNothing();
     });
 
     afterAll(async () => {
