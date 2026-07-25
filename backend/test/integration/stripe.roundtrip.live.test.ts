@@ -46,7 +46,11 @@ const KEY = process.env.STRIPE_SECRET_KEY ?? '';
 // of the suite can boot. It passes a prefix check and then fails on the first
 // API call with Stripe's own opaque message, so name it here and give the
 // runner something actionable instead.
-const IS_PLACEHOLDER = KEY.includes('dummy');
+// Two placeholders reach this test in practice: the `sk_test_…dummy` injected
+// by setup.ts, and the literal `sk_test_...` from a copy-pasted command whose
+// key was never substituted. Both pass a prefix check and then die on Stripe's
+// opaque "Invalid API Key". Real test keys are ~100 chars.
+const IS_PLACEHOLDER = KEY.includes('dummy') || KEY.includes('...') || KEY.length < 20;
 const IS_TEST_KEY = KEY.startsWith('sk_test_') && !IS_PLACEHOLDER;
 const REQUESTED = process.env.STRIPE_ROUNDTRIP === '1';
 
@@ -63,8 +67,9 @@ if (REQUESTED) {
     }
     if (IS_PLACEHOLDER) {
         throw new Error(
-            'STRIPE_ROUNDTRIP=1 was set but STRIPE_SECRET_KEY is the placeholder from test/integration/setup.ts. ' +
-            'Pass a real test-mode key from Stripe Dashboard → Developers → API keys (Test mode ON).'
+            `STRIPE_SECRET_KEY looks like a placeholder, not a real key (length ${KEY.length}). ` +
+            'If you copied the command from docs, replace the literal "sk_test_..." with your actual key. ' +
+            'Get it from Stripe Dashboard → Developers → API keys with the Test mode toggle ON.'
         );
     }
     if (!KEY.startsWith('sk_test_')) {
@@ -86,7 +91,11 @@ runIf('REAL Stripe round-trip (test mode)', () => {
     let subscriptionId: string;
 
     beforeAll(async () => {
-        stripe = new Stripe(KEY);
+        // Pin the SAME apiVersion as src/services/stripe.ts. `confirmation_secret`
+        // is version-sensitive (it replaced latest_invoice.payment_intent), so an
+        // unpinned client could see a different shape than production does and
+        // make this test either falsely pass or falsely fail.
+        stripe = new Stripe(KEY, { apiVersion: '2026-06-24.dahlia' });
 
         const user = await createTestUser({ email: `roundtrip+${Date.now()}@example.com` });
         userId = user.id;
@@ -123,13 +132,24 @@ runIf('REAL Stripe round-trip (test mode)', () => {
     }, 60_000);
 
     afterAll(async () => {
-        // Test-mode objects are harmless, but leaving live subscriptions behind
-        // makes later runs noisy and the dashboard misleading.
+        // Test-mode objects are harmless, but this runs on every deploy — without
+        // cleanup the test-mode dashboard fills with fixtures and real data gets
+        // hard to see. Each step is independently best-effort so one failure
+        // cannot strand the rest.
         if (subscriptionId) {
             await stripe.subscriptions.cancel(subscriptionId).catch(() => {});
         }
         if (customerId) {
             await stripe.customers.del(customerId).catch(() => {});
+        }
+        // Prices cannot be deleted, only deactivated; products can be archived.
+        if (priceId) {
+            await stripe.prices.update(priceId, { active: false }).catch(() => {});
+            const price = await stripe.prices.retrieve(priceId).catch(() => null);
+            const productId = typeof price?.product === 'string' ? price.product : price?.product?.id;
+            if (productId) {
+                await stripe.products.update(productId, { active: false }).catch(() => {});
+            }
         }
     }, 60_000);
 
@@ -172,8 +192,14 @@ runIf('REAL Stripe round-trip (test mode)', () => {
         const paymentIntentId = clientSecret.split('_secret_')[0];
 
         // Stripe's shared test PaymentMethod — always succeeds in test mode.
+        // `return_url` is required because createSubscriptionIntent does NOT pin
+        // payment_method_types on subscriptions (unlike top-ups), so the invoice
+        // PaymentIntent inherits the account's automatic payment methods, which
+        // may include redirect-based ones. A card never redirects, but Stripe
+        // validates the parameter up front regardless.
         const confirmed = await stripe.paymentIntents.confirm(paymentIntentId, {
             payment_method: 'pm_card_visa',
+            return_url: 'https://jawab24.com/payment/return',
         });
         expect(confirmed.status).toBe('succeeded');
 
