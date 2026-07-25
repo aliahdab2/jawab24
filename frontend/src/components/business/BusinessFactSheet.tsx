@@ -139,9 +139,12 @@ export function BusinessFactSheet({
               {t(`facts.addAnother_${factKey}`)}
             </button>
           </div>
-        ) : (
-        <div className="flex items-start gap-2">
-          {isMultiline ? (
+        ) : isMultiline ? (
+          /* Voice only on free-text facts (delivery, payment) — appending a
+             transcription is safe when composing a paragraph, wrong when
+             correcting a structured value (address/website/phone), where it
+             would concatenate the old fact with the new one. */
+          <div className="flex items-start gap-2">
             <textarea
               id={inputId}
               value={value}
@@ -152,26 +155,24 @@ export function BusinessFactSheet({
               placeholder={t(`facts.placeholder_${factKey}`)}
               className="flex-1 min-w-0 rounded-xl border border-theme-border bg-card px-3 py-2.5 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"
             />
-          ) : (
-            <input
-              id={inputId}
-              type="text"
-              inputMode={INPUT_MODE[factKey] ?? 'text'}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-              dir={value ? 'auto' : undefined}
-              autoFocus
-              placeholder={t(`facts.placeholder_${factKey}`)}
-              className="flex-1 min-w-0 rounded-xl border border-theme-border bg-card px-3 py-2.5 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+            <VoiceRecordButton
+              onTranscribed={(text) => setValue((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
+              disabled={saving}
             />
-          )}
-          {/* Voice: appends, never overwrites (VoiceRecordButton's contract) */}
-          <VoiceRecordButton
-            onTranscribed={(text) => setValue((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))}
-            disabled={saving}
+          </div>
+        ) : (
+          <input
+            id={inputId}
+            type="text"
+            inputMode={INPUT_MODE[factKey] ?? 'text'}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
+            dir={value ? 'auto' : undefined}
+            autoFocus
+            placeholder={t(`facts.placeholder_${factKey}`)}
+            className="w-full rounded-xl border border-theme-border bg-card px-3 py-2.5 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
-        </div>
         )}
       </div>
 
