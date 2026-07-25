@@ -56,8 +56,7 @@
     "day_thu": "Thu",
     "day_fri": "Fri",
     "hoursTimezone": "Times are in {timezone}.",
-    "hoursTimezoneChange": "Change",
-    "hoursScopeNote": "These hours are what Jawab tells your customers. When replies are active is set in Settings.",
+    "hoursTimezoneChange": "Settings › Business hours",
     "addAnother_phone": "Add another number"
   },
   "info": {

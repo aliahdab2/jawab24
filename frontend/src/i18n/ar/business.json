@@ -56,8 +56,7 @@
     "day_thu": "الخميس",
     "day_fri": "الجمعة",
     "hoursTimezone": "بتوقيت {timezone}.",
-    "hoursTimezoneChange": "تغيير",
-    "hoursScopeNote": "هذه الساعات يخبر بها جواب عملاءك. أوقات تشغيل الردود تُضبط من الإعدادات.",
+    "hoursTimezoneChange": "الإعدادات ← ساعات العمل",
     "addAnother_phone": "أضف رقمًا آخر"
   },
   "info": {

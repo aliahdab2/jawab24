@@ -183,11 +183,7 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
           </p>
         )}
 
-        {/* These hours are what Jawab TELLS customers — they are NOT the
-            auto-reply schedule (settings.businessHoursOnly). Different facts:
-            a shop open 9–5 may still want the bot answering at night. Saying so
-            here prevents the merchant assuming one controls the other. */}
-        <p className="text-xs text-subtle mt-2">{t('facts.hoursScopeNote')}</p>
+
       </div>
 
       <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
