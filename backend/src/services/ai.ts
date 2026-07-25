@@ -17,7 +17,8 @@ import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
 import { classifyFallbackIntent } from './reply/fallbackClassifier';
 import { getModelForUser } from './aiModelResolver';
-import { getConfidentGender, recordGenderObservation, firstNameOf } from './genderMap';
+import { getConfidentGender, recordGenderObservation } from './genderMap';
+import { senderNameKeyHash, replyMentionsName } from '../utils/senderName';
 import { cacheRejectReason } from './cacheQualityGate';
 import { normalizeForExactCacheKey } from '../utils/exactCacheNormalize';
 import { generateGenderVariant } from './genderVariantTransform';
@@ -247,12 +248,15 @@ export class AiService {
             } else if (ctx.genderBucket) {
                 key.push(`g:${ctx.genderBucket}`);
             } else {
-                // 16 hex chars (64 bits), widened from v51's 8: two different names
-                // colliding into one bucket would share gendered replies across names —
-                // at 32 bits that reaches ~50% probability around 77k distinct names.
-                // Widening is free in v53 (the pv: bump retires every old key anyway).
-                const firstName = firstNameOf(ctx.senderName);
-                if (firstName) key.push(`n:${crypto.createHash('md5').update(firstName).digest('hex').slice(0, 16)}`);
+                // WHOLE normalized name, not the first token (2026-07-25). First-token
+                // keying collapsed every «أبو …» / «عبد …» customer into ONE bucket, so a
+                // reply that addressed «أبو حسان» by name could be served to «أبو خالد» —
+                // and the model now sees the full name, so name-bearing replies are more
+                // likely, not less. Costs a little sharing on this fallback tier only
+                // («أحمد علي» no longer shares with «أحمد محمد»); the g:d / g:n / g:m|f
+                // tiers above, which carry the volume, are untouched.
+                const nameHash = senderNameKeyHash(ctx.senderName);
+                if (nameHash) key.push(`n:${nameHash}`);
             }
         }
 
@@ -692,13 +696,13 @@ export class AiService {
             // Eval pipeline never writes to cache (see `bypassAllCaches` above).
             const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
 
-            // Shared by both save guards below: does the reply literally embed the
-            // customer's first name (normalized, any alef variant)? Belt-and-braces
-            // on top of the model-reported `usedName` — "أهلاً فاطمة" must never
-            // reach another sender.
-            const firstName = senderName ? firstNameOf(senderName) : '';
-            const replyEmbedsName = firstName.length > 0 &&
-                normalizeArabic(aiReply).toLowerCase().includes(normalizeArabic(firstName).toLowerCase());
+            // Shared by both save guards below: does the reply literally embed ANY part
+            // of the customer's name (normalized, any alef variant)? Belt-and-braces on
+            // top of the model-reported `usedName` — "أهلاً فاطمة" must never reach
+            // another sender. Any-token, not first-token (2026-07-25): the model is
+            // handed the whole display name and shortens it itself, so the part it
+            // actually used is often not the leading one.
+            const replyEmbedsName = senderName ? replyMentionsName(aiReply, senderName) : false;
 
             // Neutral (g:n) save guard — evaluated BEFORE the gender-bucket guard and
             // independent of it (no map needed, works even with the gender bucket

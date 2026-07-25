@@ -119,8 +119,10 @@ vi.mock('../../src/services/genderVariantTransform', () => ({
 }));
 
 vi.mock('../../src/services/genderMap', async (importOriginal) => ({
-    // Keep the real pure helpers (firstNameOf — buildCacheKey and the save
-    // guards depend on it); mock only the Redis-backed map functions.
+    // Keep the real pure helpers (firstNameOf, still the GENDER-map key); mock
+    // only the Redis-backed map functions. buildCacheKey and the save guards now
+    // key on utils/senderName instead — see that module's header for why identity
+    // and gender deliberately hash a name differently.
     ...(await importOriginal<typeof import('../../src/services/genderMap')>()),
     getConfidentGender: vi.fn().mockResolvedValue(null),
     recordGenderObservation: vi.fn().mockResolvedValue(undefined),

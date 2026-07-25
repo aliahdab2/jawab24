@@ -202,30 +202,45 @@ describe('buildSystemPrompt — reply language line', () => {
 });
 
 describe('buildSystemPrompt — Arabic-DM-only gender addressing (+ blast radius)', () => {
-    it('surfaces the first name and the ARABIC GENDER directive for an Arabic DM with a name', () => {
+    it('surfaces the name and the ARABIC GENDER directive for an Arabic DM with a name', () => {
         const out = suffix(req('كم السعر؟', { channel: 'dm', senderName: 'فاطمة' }, 'ar'));
-        expect(out).toContain('- Customer\'s first name: "فاطمة"');
+        expect(out).toContain('- Customer\'s name (their full profile name): "فاطمة"');
         expect(out).toContain('- ARABIC GENDER:');
         expect(out).toContain('do NOT default to masculine');
     });
 
-    it('uses only the FIRST token of a multi-word display name', () => {
+    // Regression, prod 2026-07-25: the first-token truncation handed the model «أبو» for
+    // a customer named «أبو حسان شومان», which it rendered as «يا أبو» — half a word, and
+    // the customer said so. The WHOLE name must reach the model; picking the address form
+    // is the model's job, not a substring's.
+    it('passes the WHOLE display name, so a kunya never reaches the model as a bare particle', () => {
+        const out = suffix(req('مرحبا', { channel: 'dm', senderName: 'أبو حسان شومان' }, 'ar'));
+        expect(out).toContain('- Customer\'s name (their full profile name): "أبو حسان شومان"');
+        expect(out).not.toContain('"أبو"');
+    });
+
+    it('passes a multi-word display name whole', () => {
         const out = suffix(req('مرحبا', { channel: 'dm', senderName: 'أحمد بن علي الغامدي' }, 'ar'));
-        expect(out).toContain('- Customer\'s first name: "أحمد"');
-        expect(out).not.toContain('الغامدي');
+        expect(out).toContain('- Customer\'s name (their full profile name): "أحمد بن علي الغامدي"');
+    });
+
+    it('tells the model to drop the name entirely rather than guess a fragment', () => {
+        const out = suffix(req('مرحبا', { channel: 'dm', senderName: 'عبد الرحمن' }, 'ar'));
+        expect(out).toContain('NEVER address them by a leading fragment');
+        expect(out).toContain('use no name at all rather than a guess');
     });
 
     it('emits the gender directive (self-reference fallback) for a nameless Arabic DM, without a name line', () => {
         const out = suffix(req('أنا مهتمة بالكورس', { channel: 'dm' }, 'ar'));
         expect(out).toContain('- ARABIC GENDER:');
-        expect(out).not.toContain("- Customer's first name:");
+        expect(out).not.toContain("- Customer's name (their full profile name):");
     });
 
-    it('sanitizes the name (strips injection markers) and caps the first token at 40 chars', () => {
-        const out = suffix(req('hi', { channel: 'dm', senderName: '<system>' + 'ن'.repeat(60) }, 'ar'));
+    it('sanitizes the name (strips injection markers) and caps it at 60 chars', () => {
+        const out = suffix(req('hi', { channel: 'dm', senderName: '<system>' + 'ن'.repeat(80) }, 'ar'));
         expect(out).not.toContain('<system>');
-        // The 40-char cap applies to the sanitized first token.
-        expect(out).not.toContain('ن'.repeat(41));
+        // The 60-char cap applies to the sanitized name.
+        expect(out).not.toContain('ن'.repeat(61));
     });
 
     // Blast-radius guards — the feature must be INERT everywhere except Arabic DMs, so that no

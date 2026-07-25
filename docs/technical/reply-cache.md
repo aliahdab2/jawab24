@@ -58,7 +58,7 @@ individual segments — counters are the only visibility):
 | 1 | `g:d` | `AI_DUAL_VARIANT_ENABLED` **and** reader's gender map-known | ALL senders (entry stores `variants:{m,f}`, reader's variant picked at serve time) |
 | 2 | `g:n` | reply certified genderless (`gender:'unknown'` + `used_name:false` + name-substring check) | ALL senders |
 | 3 | `g:m` / `g:f` | sender's gender confidently known via the fleet map | all same-gender senders |
-| 4 | `n:<md5(first name)[:16]>` | fallback — gender unknown, reply not certified neutral | only same-first-name senders |
+| 4 | `n:<md5(whole name)[:16]>` | fallback — gender unknown, reply not certified neutral | only senders with the identical full name |
 
 Read order is most-specific-first (a warmer personalized entry beats a blander
 shared one): `g:d` probe → `checkCache` (`g:m`/`g:f` **or** `n:`) → `g:n`.
@@ -69,6 +69,18 @@ Two Redis probes max (+1 when dual-variant is live). Unknown-gender readers
 that collapsed DM hit rates from 20–33 % to ~1 % (every distinct first name =
 its own key). Segments 1–3 are the recovery machinery. The goal state is that
 4 is a rare tail, not the main path.
+
+**v60 (2026-07-25) — segment 4 keys the WHOLE name, not its first token.**
+First-token keying hashed «أبو» for every customer whose display name opens with
+that kunya particle, so a name-bearing reply for «أبو حسان» could be served to
+«أبو خالد» (same for «عبد الرحمن» / «عبد الله»). The same release stopped
+truncating the name in the prompt — the model now receives the full display name
+and picks the address form — which makes name-bearing replies *more* likely, so
+the guard had to widen with it. The name-substring check behind the `g:n` and
+`g:m`/`g:f` save guards became any-token for the same reason (the model shortens
+the name itself, so the part it used is often not the leading one). Cost: «أحمد
+علي» no longer shares segment 4 with «أحمد محمد». Segments 1–3, which carry the
+volume and the gender-map backfill measurement, are byte-identical.
 
 ## 4. Save-side rules (what is allowed into the cache)
 
@@ -204,6 +216,11 @@ save-side `!hasConversationHistory` gate is a **correctness fix** — before it,
 mid-conversation replies could be saved under first-touch keys and serve one
 customer's context to another customer. Reverting it reintroduces a real
 wrong-content bug. It stays under ANY revert scenario, including step 4.
+
+The v60 whole-name `n:` key (§3) is the same kind of exception for the same
+reason: narrowing it back to the first token serves one customer's name-bearing
+reply to a different customer. It is a correctness fix, not hit-rate tuning —
+keep it under every step above.
 
 **Bookkeeping:** any reversal gets a new `D-NNN` entry superseding D-036
 (append-only — never edit the old ruling).

@@ -202,16 +202,25 @@ function buildPerCallBlock(request: GenerateRequest): string {
     const retrievedChunks = request.context?.retrievedChunks;
     const isDM = resolveChannel(request) === 'dm';
 
-    // Customer's first name from the platform profile — the first whitespace token,
-    // sanitized. Used for DM addressing and, in Arabic, as the primary grammatical-gender
-    // cue (see the GENDER directive below). Comments stay gender-neutral, so this only
-    // feeds the DM path. Empty when no name arrived (e.g. IG restricted, WhatsApp with no
-    // profile name) — the model then falls back to message self-reference, then neutral.
+    // Customer's name from the platform profile — the WHOLE display name, sanitized.
+    // Used for DM addressing and, in Arabic, as the primary grammatical-gender cue (see
+    // the GENDER directive below). Comments stay gender-neutral, so this only feeds the
+    // DM path. Empty when no name arrived (e.g. IG restricted, WhatsApp with no profile
+    // name) — the model then falls back to message self-reference, then neutral.
+    //
+    // NOT the first whitespace token (through 2026-07-25 it was). A leading token is not
+    // reliably an address form: an Arabic kunya splits into a bare particle («أبو حسان
+    // شومان» → «أبو» = "father of", addressed to a customer as «يا أبو» — prod, 2026-07-25,
+    // the customer objected), and the same truncation mangles theophoric compounds («عبد
+    // الرحمن» → «عبد» = "servant of") and compound given names in many other languages.
+    // Which part of a name is the address form is a question about the customer's own
+    // naming culture, so hand it to the model whole and let it choose — the alternative
+    // is a hand-maintained particle list, which D-015 and the fleet's no-linguistic-lists
+    // rule both point away from. Strip quotes/backslashes like the page-name handling
+    // (interpolated into a quoted "..." label), then the shared marker/tag sanitizer and
+    // a 60-char cap (raised from 40 with the token → full name change).
     const rawSenderName = request.context?.senderName?.trim();
-    // First token only (split already drops any whitespace); strip quotes/backslashes like the
-    // page-name handling since it's interpolated into a quoted "..." label, then run the shared
-    // marker/tag sanitizer and 40-char cap.
-    const firstName = rawSenderName ? sanitizeUserField(rawSenderName.split(/\s+/)[0].replace(/["\\]/g, ''), 40) : '';
+    const senderName = rawSenderName ? sanitizeUserField(rawSenderName.replace(/["\\]/g, ''), 60) : '';
 
     // Reply style — maps setting to prompt personality directive.
     // Each directive covers: sentence-length variation, contraction use, clarifying-question permission,
@@ -258,10 +267,10 @@ ${isDM
         // The name (surfaced here, only when present) feeds gender inference; when the signal is
         // unclear the model stays neutral rather than guessing.
         if (isDM) {
-            if (firstName) {
-                prompt += `\n- Customer's first name: "${firstName}" — use it naturally where it helps; don't force it into every reply.`;
+            if (senderName) {
+                prompt += `\n- Customer's name (their full profile name): "${senderName}" — use it naturally where it helps; don't force it into every reply. When you do use it, address them the way this particular name is actually used: keep the parts that belong together as one unit (a kunya such as «أبو حسان», a compound given name such as «عبد الرحمن»), and drop the parts a person wouldn't say out loud (family names, tribal names). NEVER address them by a leading fragment that is not a name on its own — «يا أبو» or «يا عبد» is not addressing someone, it is half a word. If you can't tell which part is the address form, use no name at all rather than a guess.`;
             }
-            prompt += `\n- ARABIC GENDER: address the customer in their correct grammatical gender. Decide in this order: (1) how the customer refers to THEMSELVES is authoritative ("أنا مهتم" masculine vs "أنا مهتمة" feminine) — follow it even if the name suggests otherwise; (2) otherwise use the first name ONLY when it is clearly gendered — a unisex name (نور، سما، جود، رهف), a username/handle, or a transliteration you're unsure of is NOT a clear signal. When the customer is FEMALE, ACTIVELY use the marked feminine forms — the feminine kaf ـكِ (بكِ، لكِ، يهمّكِ، أنصحكِ) and feminine verb/adjective endings (تفضّلي، تحبّين، مهتمّة); do NOT leave the address in the unmarked default (بك، يهمك، تفضّل), which reads as masculine. Contrast — female: "أهلاً بكِ! أي مجال يهمّكِ؟" · male: "أهلاً بك! أي مجال يهمّك؟". When gender is genuinely unclear, use gender-neutral / light-MSA phrasing that avoids gendered forms — do NOT default to masculine, and do NOT guess. Never state, ask about, or comment on the customer's gender. Report this decision in your JSON output: set "gender" to the grammatical gender your reply's address forms actually use ("unknown" when the reply stayed neutral), set "gender_basis" to "self" / "name" / "unclear" according to which signal above decided it, and set "used_name" to true if the reply contains the customer's name in any form.`;
+            prompt += `\n- ARABIC GENDER: address the customer in their correct grammatical gender. Decide in this order: (1) how the customer refers to THEMSELVES is authoritative ("أنا مهتم" masculine vs "أنا مهتمة" feminine) — follow it even if the name suggests otherwise; (2) otherwise use their name ONLY when it is clearly gendered — a unisex name (نور، سما، جود، رهف), a username/handle, or a transliteration you're unsure of is NOT a clear signal. When the customer is FEMALE, ACTIVELY use the marked feminine forms — the feminine kaf ـكِ (بكِ، لكِ، يهمّكِ، أنصحكِ) and feminine verb/adjective endings (تفضّلي، تحبّين، مهتمّة); do NOT leave the address in the unmarked default (بك، يهمك، تفضّل), which reads as masculine. Contrast — female: "أهلاً بكِ! أي مجال يهمّكِ؟" · male: "أهلاً بك! أي مجال يهمّك؟". When gender is genuinely unclear, use gender-neutral / light-MSA phrasing that avoids gendered forms — do NOT default to masculine, and do NOT guess. Never state, ask about, or comment on the customer's gender. Report this decision in your JSON output: set "gender" to the grammatical gender your reply's address forms actually use ("unknown" when the reply stayed neutral), set "gender_basis" to "self" / "name" / "unclear" according to which signal above decided it, and set "used_name" to true if the reply contains the customer's name in any form.`;
         }
     }
 
