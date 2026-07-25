@@ -10,6 +10,7 @@ import {
     messages as messagesTable,
     posts as postsTable,
     instagramMedia as instagramMediaTable,
+    ecommerceStores as ecommerceStoresTable,
 } from '../../src/db/schema';
 
 vi.mock('../../src/db', () => {
@@ -1032,6 +1033,79 @@ describe('PagesService', () => {
             expect(result[0].repliesCount).toBe(expectedRepliesCount);
             // Guard against re-adding manual to the contract by accident.
             expect(result[0].breakdown).not.toHaveProperty('manual');
+        });
+    });
+
+    /**
+     * `storeAnswersPolicies` tells /business whether it may say «يجيب عنها متجرك
+     * المتصل» on delivery/payment instead of asking the merchant to fill them in.
+     * It must mirror `getStoreContextForAI` exactly, because a page keeps its
+     * `ecommerce_store_id` in two states where the model receives NOTHING:
+     * after a platform-side uninstall (`deactivateStore` blanks the tokens but
+     * keeps the link so a reconnect restores it), and on a live store that synced
+     * no policy text. Deriving the claim from the id alone tells the merchant not
+     * to bother, and their customer then gets "I don't know".
+     */
+    describe('getPages — storeAnswersPolicies', () => {
+        const workspaceId = 'ws-store';
+
+        /** Pages query resolves `pageRows`; the ecommerce_stores query resolves `storeRows`. */
+        function mockSelect(pageRows: unknown[], storeRows: unknown[]) {
+            vi.mocked(db.select).mockImplementation(((..._args: unknown[]) => ({
+                from: vi.fn((table: unknown) => {
+                    if (table === ecommerceStoresTable) {
+                        return { where: vi.fn().mockResolvedValue(storeRows) };
+                    }
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            orderBy: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockResolvedValue(pageRows),
+                            }),
+                        }),
+                    };
+                }),
+            })) as any);
+        }
+
+        beforeEach(() => {
+            // Stats come from cache so the (unmocked) aggregate queries stay out of the way.
+            mockRedisGet.mockResolvedValue(JSON.stringify({}));
+        });
+
+        const linkedPage = [{ id: 'page-1', workspaceId, accessToken: '', createdAt: new Date(), name: 'P1', ecommerceStoreId: 'store-1' }];
+
+        it('is true when the linked store is active AND has synced policy text', async () => {
+            mockSelect(linkedPage, [{ id: 'store-1' }]);
+
+            const result = await pagesService.getPages(workspaceId);
+
+            expect(result[0].storeAnswersPolicies).toBe(true);
+        });
+
+        it('is false when the store no longer qualifies (uninstalled, or no policies synced)', async () => {
+            // The row is filtered out by isActive/policiesSummary — the page still
+            // carries the id, which is exactly the trap this flag exists to close.
+            mockSelect(linkedPage, []);
+
+            const result = await pagesService.getPages(workspaceId);
+
+            expect(result[0].ecommerceStoreId).toBe('store-1');
+            expect(result[0].storeAnswersPolicies).toBe(false);
+        });
+
+        it('is false for a page with no store, without querying stores at all', async () => {
+            const selectSpy = vi.mocked(db.select);
+            mockSelect([{ id: 'page-1', workspaceId, accessToken: '', createdAt: new Date(), name: 'P1', ecommerceStoreId: null }], []);
+
+            const result = await pagesService.getPages(workspaceId);
+
+            expect(result[0].storeAnswersPolicies).toBe(false);
+            // No linked store ids → no reason to touch ecommerce_stores.
+            const touchedStores = selectSpy.mock.results.some(r => {
+                const from = (r.value as { from?: ReturnType<typeof vi.fn> })?.from;
+                return !!from && from.mock.calls.some(c => c[0] === ecommerceStoresTable);
+            });
+            expect(touchedStores).toBe(false);
         });
     });
 });

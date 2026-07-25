@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems } from '../db/schema';
+import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems, ecommerceStores } from '../db/schema';
 import { eq, and, ne, desc, sql, count, isNotNull, inArray } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
@@ -439,6 +439,38 @@ export class PagesService {
             captureError(err, 'Pages catalog count query failed', { level: 'warning', tags: { service: 'pages' } });
         }
 
+        // Which linked stores ACTUALLY answer policy questions (delivery, payment,
+        // returns) in replies. Mirrors `getStoreContextForAI`, which returns nothing
+        // for an inactive store or an empty `policiesSummary` — while
+        // `pages.ecommerce_store_id` stays set in BOTH cases: `deactivateStore`
+        // (platform-side uninstall) keeps the link so a reconnect restores it, and a
+        // live store can sync with no policies at all. UI keyed on the id alone
+        // therefore promises the merchant "your store answers this" while the model
+        // receives nothing, and the customer gets "I don't know".
+        //
+        // Best-effort like the queries above, and it fails in the SAFE direction: an
+        // error leaves the set empty, so the row shows as a gap to fill rather than
+        // claiming an answer that isn't there.
+        const storesAnsweringPolicies = new Set<string>();
+        const linkedStoreIds = [...new Set(
+            workspacePages.map(p => p.ecommerceStoreId).filter((id): id is string => !!id),
+        )];
+        if (linkedStoreIds.length > 0) {
+            try {
+                const rows = await db.select({ id: ecommerceStores.id })
+                    .from(ecommerceStores)
+                    .where(and(
+                        inArray(ecommerceStores.id, linkedStoreIds),
+                        eq(ecommerceStores.isActive, true),
+                        isNotNull(ecommerceStores.policiesSummary),
+                        ne(ecommerceStores.policiesSummary, ''),
+                    ));
+                for (const r of rows) storesAnsweringPolicies.add(r.id);
+            } catch (err) {
+                captureError(err, 'Pages store-policy query failed', { level: 'warning', tags: { service: 'pages' } });
+            }
+        }
+
         return workspacePages.map(page => {
             const stats = statsMap.get(page.id) ?? {
                 commentsCount: 0, repliesCount: 0, breakdown: { ...emptyBreakdown }, lastActivity: null,
@@ -453,6 +485,7 @@ export class PagesService {
                     : 0,
                 hasPostReplyTrigger: triggerPageIds.has(page.id),
                 catalogItemsCount: catalogCountByPage.get(page.id) ?? 0,
+                storeAnswersPolicies: !!page.ecommerceStoreId && storesAnsweringPolicies.has(page.ecommerceStoreId),
             };
         });
     }

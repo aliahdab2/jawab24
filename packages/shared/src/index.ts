@@ -349,6 +349,20 @@ export interface Page {
   whatsappAutoReplyEnabled?: boolean | null;
   // E-commerce store linked to this page
   ecommerceStoreId?: string | null;
+  /**
+   * Whether the linked store ACTUALLY answers policy questions (delivery,
+   * payment, returns) in replies — i.e. it is still active AND has synced
+   * policy text. Derived server-side to mirror `getStoreContextForAI`, which
+   * returns nothing for an inactive store or an empty `policiesSummary`.
+   *
+   * Never infer this from `ecommerceStoreId` alone: the id survives a
+   * platform-side uninstall (`deactivateStore` blanks tokens but deliberately
+   * keeps the link so a reconnect restores it), and a live store can sync with
+   * no policies at all. In both cases the id is set while the model receives
+   * nothing — so UI keyed on the id tells the merchant "your store answers
+   * this" and the customer then gets "I don't know".
+   */
+  storeAnswersPolicies?: boolean;
   // KB fields
   knowledgeBase?: string | null;
   suggestedKnowledgeBase?: string | null;

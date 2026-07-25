@@ -92,24 +92,29 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
       // Delivery and payment sit above website on purpose: customers ask about
       // both constantly, while nobody messages a shop to ask whether it has a
       // website. Ordering by question volume, not by field type.
-      // On a store-linked page an empty value is NOT a gap — the store's synced
-      // policies already answer these — so the row states that instead of
-      // nagging. It stays tappable: writing a value is a deliberate override.
+      // When the store genuinely answers these, an empty value is NOT a gap — so
+      // the row says so instead of nagging. It stays tappable: writing a value is
+      // a deliberate override.
+      // Keyed on `storeAnswersPolicies`, NOT on `ecommerceStoreId`: the id stays
+      // set after a platform-side uninstall and on a store that synced no policy
+      // text, and in both cases the model receives nothing. Claiming an answer
+      // there would talk the merchant out of writing the one fact their customers
+      // ask about most.
       {
         key: 'delivery',
         icon: Truck,
         value: merchant.policies?.shipping?.trim() || null,
-        storeAnswered: !!page.ecommerceStoreId,
+        storeAnswered: !!page.storeAnswersPolicies,
       },
       {
         key: 'payment',
         icon: CreditCard,
         value: merchant.policies?.payment?.trim() || null,
-        storeAnswered: !!page.ecommerceStoreId,
+        storeAnswered: !!page.storeAnswersPolicies,
       },
       { key: 'website', icon: Globe, value: merchant.website?.trim() || null },
     ];
-  }, [page.businessProfile, page.ecommerceStoreId, t]);
+  }, [page.businessProfile, page.storeAnswersPolicies, t]);
 
   return (
     <section aria-label={t('facts.title')} className="rounded-2xl border border-theme-border bg-card p-4 sm:p-5">

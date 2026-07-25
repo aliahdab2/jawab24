@@ -347,7 +347,10 @@ function BusinessPageInner() {
           label={t(`facts.${editingFact}`)}
           initialValue={factValue(editingFact)}
           initialWhatsapp={unwrapBusinessProfile(selectedPage?.businessProfile).merchant?.channels?.whatsapp}
-          storeAnswered={hasStore && (editingFact === 'delivery' || editingFact === 'payment')}
+          // Not `hasStore`: the sheet's hint tells the merchant they need not answer,
+          // so it may only appear when the store REALLY answers (active + synced
+          // policies), never merely because a store id is on the page.
+          storeAnswered={!!selectedPage.storeAnswersPolicies && (editingFact === 'delivery' || editingFact === 'payment')}
           saving={savingFact}
           onSave={(value, whatsapp) => saveFact(editingFact, value, whatsapp)}
           onClose={() => setEditingFact(null)}
