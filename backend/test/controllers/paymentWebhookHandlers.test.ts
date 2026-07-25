@@ -55,7 +55,7 @@ import {
     handleSubscriptionUpdated,
     handleSubscriptionDeleted,
     handleTopupPaymentSucceeded,
-    handleTopupPaymentFailed,
+    handlePaymentIntentFailed,
     handlePaymentFailed,
     handlePaymentSucceeded,
     handleChargeRefunded,
@@ -188,17 +188,67 @@ describe('handleTopupPaymentSucceeded (credits money)', () => {
     });
 });
 
-describe('handleTopupPaymentFailed', () => {
-    it('ignores non-top-up PaymentIntents', async () => {
+describe('handlePaymentIntentFailed', () => {
+    // Shaped like a real Stripe decline payload.
+    const declinedPi = (metadata: Record<string, string>) => ({
+        id: 'pi_1',
+        customer: 'cus_1',
+        metadata,
+        last_payment_error: {
+            code: 'card_declined',
+            decline_code: 'do_not_honor',
+            payment_method: { card: { country: 'LY', brand: 'mastercard' } },
+        },
+    } as unknown as Stripe.PaymentIntent);
+
+    // Regression (2026-07-25): the non-top-up branch used to be a bare `return`,
+    // so a merchant whose card was refused on the subscription's first invoice
+    // left no trace at all — the account sat `incomplete` in Stripe and we only
+    // learned about it when he complained.
+    it('logs the decline detail for a subscription PaymentIntent', async () => {
         const req = mkReq();
-        await handleTopupPaymentFailed({ id: 'pi_sub', metadata: { type: 'subscription' } } as unknown as Stripe.PaymentIntent, req);
-        expect(req.log.info).not.toHaveBeenCalled();
+        await handlePaymentIntentFailed(declinedPi({ type: 'subscription' }), req);
+        expect(req.log.warn).toHaveBeenCalledWith(
+            expect.objectContaining({
+                paymentIntentId: 'pi_1',
+                customerId: 'cus_1',
+                errorCode: 'card_declined',
+                declineCode: 'do_not_honor',
+                cardCountry: 'LY',
+                cardBrand: 'mastercard',
+            }),
+            'Subscription card attempt failed',
+        );
     });
 
     it('logs a non-terminal attempt for a top-up (leaves the row open for retry)', async () => {
         const req = mkReq();
-        await handleTopupPaymentFailed({ id: 'pi_topup', metadata: { type: 'topup' } } as unknown as Stripe.PaymentIntent, req);
-        expect(req.log.info).toHaveBeenCalled();
+        await handlePaymentIntentFailed(declinedPi({ type: 'topup' }), req);
+        expect(req.log.warn).toHaveBeenCalledWith(
+            expect.objectContaining({ paymentIntentId: 'pi_1', declineCode: 'do_not_honor' }),
+            expect.stringContaining('Top-up payment attempt failed'),
+        );
+    });
+
+    it('never touches money state on either branch', async () => {
+        await handlePaymentIntentFailed(declinedPi({ type: 'subscription' }), mkReq());
+        await handlePaymentIntentFailed(declinedPi({ type: 'topup' }), mkReq());
+        expect(db.update).not.toHaveBeenCalled();
+        expect(topupService.settleStripeTopup).not.toHaveBeenCalled();
+        expect(topupService.reverseStripeTopup).not.toHaveBeenCalled();
+    });
+
+    it('resolves an expanded customer object and survives a missing last_payment_error', async () => {
+        const req = mkReq();
+        await handlePaymentIntentFailed({
+            id: 'pi_2',
+            customer: { id: 'cus_expanded' },
+            metadata: {},
+        } as unknown as Stripe.PaymentIntent, req);
+        expect(req.log.warn).toHaveBeenCalledWith(
+            expect.objectContaining({ customerId: 'cus_expanded', declineCode: undefined }),
+            'Subscription card attempt failed',
+        );
     });
 });
 
