@@ -110,8 +110,8 @@ $0.02–0.05 / 2,000 names. Run recipe (prod DB/Redis are compose-internal; prod
 image has no tsx): esbuild-bundle → `docker cp` into the active backend
 container → `node /tmp/backfill-gender-map.cjs --dry-run|--apply --limit 2000
 --user-id <admin uuid>`. Suggested cadence: quarterly, or after large merchant
-onboarding. First run staged 2026-07-25 (dry-run over top-2,000 names: 415 m /
-787 f would seed, 578 unknown; `--apply` pending owner execution).
+onboarding. First applied 2026-07-25: top-2,000 names → 1,202 seeded (415 m /
+787 f), 578 unknown, `gender:name:*` keys 350 → 1,558.
 
 ## 6. Warm job (`backend/src/scripts/warm-reply-cache.ts`, #477)
 
@@ -218,7 +218,7 @@ wrong-content bug. It stays under ANY revert scenario, including step 4.
 | Jul 21 | **#474** (D-033) `g:n` certified-neutral shared bucket (~18 % ceiling) |
 | Jul 22 | **#476–#479** (D-036): quality gate + context-leak fix, warm job, backfill script, dual-variant (dark) |
 | Jul 24 | 3-day checkpoint: comment cache verdict KEEP (49.8 % peak; gate healthy) |
-| Jul 25 | v59-flush survival confirmed (26 % same-morning); gender-map backfill staged (dry-runs verified; apply pending) |
+| Jul 25 | v59-flush survival confirmed (26 % same-morning); gender-map backfill APPLIED (1,202 names seeded; map 350 → 1,558 keys) |
 
 Related reading: `DECISIONS.md` D-015 / D-030 / D-033 / D-036 ·
 `.planning/dm-cache-gender-study.md` (the July-22 deep study) · code comments
