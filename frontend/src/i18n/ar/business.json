@@ -65,7 +65,7 @@
     "day_thu": "الخميس",
     "day_fri": "الجمعة",
     "hoursTimezone": "بتوقيت {timezone}.",
-    "hoursTimezoneChange": "الإعدادات ← عام",
+    "hoursTimezoneChange": "تغيير المنطقة الزمنية",
     "addAnother_phone": "أضف رقمًا آخر",
     "presetOnlineOnly": "متجر إلكتروني — لا يوجد فرع",
     "presetNoDelivery": "لا نقدّم خدمة التوصيل — الاستلام من المحل فقط"

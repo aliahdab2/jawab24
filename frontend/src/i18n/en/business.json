@@ -65,7 +65,7 @@
     "day_thu": "Thu",
     "day_fri": "Fri",
     "hoursTimezone": "Times are in {timezone}.",
-    "hoursTimezoneChange": "Settings › General",
+    "hoursTimezoneChange": "Change timezone",
     "addAnother_phone": "Add another number",
     "presetOnlineOnly": "Online store — no physical branch",
     "presetNoDelivery": "We do not deliver — pickup only"
