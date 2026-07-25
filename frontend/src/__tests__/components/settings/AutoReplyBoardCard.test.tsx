@@ -53,17 +53,31 @@ function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {
 
 // D-029 board: three rows = every mechanism that replies in the merchant's name.
 describe('AutoReplyBoardCard — the three-row board', () => {
-  it('renders two Smart-Replies toggles and a toggle-less always-on Post Reply row', () => {
+  it('renders two Smart-Replies toggles and a toggle-less Post Reply row', () => {
     render(<AutoReplyBoardCard settings={makeSettings({ dashboardLanguage: 'en' })} setSettings={() => {}} />);
 
     // AI rows: toggles (consent required)
     expect(screen.getByRole('button', { name: 'Comments' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Private messages' })).toBeInTheDocument();
     // Post Reply row: badge + manage link, NO toggle (own words need no switch, D-027)
-    expect(screen.getByText('Always on')).toBeInTheDocument();
+    expect(screen.getByText('Works even when Smart Replies are off')).toBeInTheDocument();
     // Deep link opens the post picker directly on the comments page
     expect(screen.getByRole('link', { name: /Manage/ })).toHaveAttribute('href', '/comments?openPostReply=true');
     expect(screen.queryByRole('button', { name: /Post Reply/ })).toBeNull();
+  });
+
+  // The badge must never claim "always" unconditionally: Post Reply IS silenced
+  // outside business hours (commentProcessor gates postReplyEligible on
+  // isWithinBusinessHours), so with the schedule on it discloses that instead.
+  it('switches the Post Reply badge to the reply-hours disclosure when businessHoursOnly is on', () => {
+    render(
+      <AutoReplyBoardCard
+        settings={makeSettings({ dashboardLanguage: 'en', businessHoursOnly: true })}
+        setSettings={() => {}}
+      />,
+    );
+    expect(screen.getByText('Follows reply hours')).toBeInTheDocument();
+    expect(screen.queryByText('Works even when Smart Replies are off')).toBeNull();
   });
 
   // "from your Business Info" is a doorway to the info the replies USE — the

@@ -206,7 +206,8 @@
     "smartRepliesSub": "Smart Replies — from your <kb>Business Info</kb>",
     "postReply": "Post Reply",
     "postReplySub": "You write the reply, on posts you choose",
-    "alwaysOn": "Always on",
+    "worksWithoutSmart": "Works even when Smart Replies are off",
+    "followsReplyHours": "Follows reply hours",
     "manage": "Manage",
     "modeQuestion": "Where does the comment reply appear?",
     "modeScopeNote": "Applies to Smart Replies and Post Reply"

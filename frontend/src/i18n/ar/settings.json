@@ -206,7 +206,8 @@
     "smartRepliesSub": "ردود ذكية — من <kb>معلومات نشاطك التجاري</kb>",
     "postReply": "رد البوست",
     "postReplySub": "أنت تكتب الرد، على منشورات تختارها",
-    "alwaysOn": "يعمل دائماً",
+    "worksWithoutSmart": "يعمل حتى مع إيقاف الردود الذكية",
+    "followsReplyHours": "يتبع ساعات الرد",
     "manage": "إدارة",
     "modeQuestion": "أين يظهر الرد على التعليق؟",
     "modeScopeNote": "ينطبق على الردود الذكية وعلى رد البوست"
