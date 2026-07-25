@@ -65,7 +65,10 @@ beforeEach(() => {
     vi.clearAllMocks();
     stripeState.stripe = null;
     stripeState.elements = null;
-    loaderResult.promise = null;
+    // A loader that never settles: the stripe-js#26 quirk the backstop exists
+    // for. `null` means "no publishable key configured" and now reports
+    // immediately, so it belongs only to its own test.
+    loaderResult.promise = new Promise(() => {});
 });
 
 describe('PaymentForm — Stripe.js load rejects', () => {
@@ -135,6 +138,47 @@ describe('PaymentForm — Stripe.js never loads', () => {
         expect(context).toMatchObject({
             tags: { page: 'checkout', type: 'payment' },
             extra: { reason: 'timeout' },
+        });
+    });
+
+    // Regression: the banner used to be sticky. A merchant on a slow connection
+    // would see "the form failed to load" sitting above a working, enabled pay
+    // button — telling them their payment is broken when it is fine.
+    it('retracts the banner when Stripe.js arrives late', async () => {
+        loaderResult.promise = Promise.resolve(null);
+        const { rerender } = renderForm();
+
+        await waitFor(() => {
+            expect(screen.getByText(enCheckout.errorPaymentFormNotReady)).toBeInTheDocument();
+        });
+
+        stripeState.stripe = { confirmPayment: mockConfirmPayment, confirmSetup: mockConfirmSetup };
+        stripeState.elements = {};
+        rerender(<PaymentForm type="payment" submitLabel="Pay" trustNote="secure" />);
+
+        await waitFor(() => {
+            expect(screen.queryByText(enCheckout.errorPaymentFormNotReady)).not.toBeInTheDocument();
+        });
+    });
+
+    // A missing publishable key is a deployment fault, knowable instantly.
+    // Reporting it as `timeout` would send whoever reads Sentry after the network.
+    it('reports a missing publishable key immediately, not as a timeout', async () => {
+        loaderResult.promise = null;
+        renderForm();
+
+        await waitFor(() => expect(mockCaptureError).toHaveBeenCalledTimes(1));
+        expect(mockCaptureError.mock.calls[0][2]).toMatchObject({
+            extra: { reason: 'no-publishable-key' },
+        });
+    });
+
+    it('announces the failure to assistive tech', async () => {
+        loaderResult.promise = Promise.resolve(null);
+        renderForm();
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(enCheckout.errorPaymentFormNotReady);
         });
     });
 

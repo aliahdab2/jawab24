@@ -113,7 +113,13 @@ export function PaymentForm({
   // that quirk would leave the form dead and silent, which is the exact failure
   // this whole effect exists to surface.
   useEffect(() => {
-    if (stripe && elements) return;
+    // Arrived late — after the backstop already fired, say. The form works now,
+    // so retract the banner: leaving it up next to a live, enabled pay button
+    // tells the merchant their payment is broken while it is in fact fine.
+    if (stripe && elements) {
+      setLoadFailed(false);
+      return;
+    }
 
     let settled = false;
     const reportDeadForm = (reason: string, cause?: unknown) => {
@@ -127,8 +133,17 @@ export function PaymentForm({
       setLoadFailed(true);
     };
 
-    getStripePromise()
-      ?.then((loaded) => { if (!loaded) reportDeadForm('resolved-null'); })
+    const loader = getStripePromise();
+    if (!loader) {
+      // No publishable key configured. Knowable immediately, and a deployment
+      // fault rather than a network one — waiting out the backstop would report
+      // it as a `timeout` and send whoever reads Sentry chasing the network.
+      reportDeadForm('no-publishable-key');
+      return;
+    }
+
+    loader
+      .then((loaded) => { if (!loaded) reportDeadForm('resolved-null'); })
       .catch((err) => reportDeadForm('load-rejected', err));
 
     const backstop = setTimeout(() => reportDeadForm('timeout'), STRIPE_LOAD_GRACE_MS);
@@ -188,8 +203,15 @@ export function PaymentForm({
         {t('securePayment')}
       </p>
 
+      {/* role/aria-live because this can appear with no user action at all —
+          the load-failure path surfaces it on a timer, and a screen reader user
+          would otherwise never learn the form is dead. */}
       {(errorMessage || loadFailed) && (
-        <div className="mt-4 p-3 alert-error border rounded-xl text-sm text-start">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mt-4 p-3 alert-error border rounded-xl text-sm text-start"
+        >
           {errorMessage || t('errorPaymentFormNotReady')}
         </div>
       )}
