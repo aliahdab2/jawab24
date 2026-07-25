@@ -1,11 +1,9 @@
 import clsx from 'clsx';
-import { useMemo } from 'react';
 import {
   MAX_TEMPLATE_MESSAGE_LENGTH,
   PLACEHOLDER_TIMEZONE,
   detectTimezone,
   formatTimeInZone,
-  getTimezoneOptions,
 } from '@jawab24/shared';
 import { Card, Toggle, Select, InputFieldWrapper, CharCounter } from '@/components/ui';
 import {
@@ -62,17 +60,6 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
 
   const hasError = settings.businessHoursEnd <= settings.businessHoursStart;
 
-  // Timezone options are derived once per stored/detected zone rather than per
-  // render: the full IANA list is ~400 entries and each label formats an offset.
-  const detectedTimezone = useMemo(() => detectTimezone(), []);
-  const timezoneOptions = useMemo(
-    () => getTimezoneOptions([settings.timezone, detectedTimezone]),
-    [settings.timezone, detectedTimezone],
-  );
-  // Offered as a hint, never auto-applied: silently rewriting the stored zone from
-  // whatever device happens to open Settings is how it became invisible to begin with.
-  const timezoneMismatch = !!detectedTimezone && detectedTimezone !== settings.timezone;
-
   // Compute current status
   const nowTime = formatTimeInZone(settings.timezone, currentTime);
   const isActive = settings.businessHoursOnly && nowTime >= settings.businessHoursStart && nowTime < settings.businessHoursEnd;
@@ -107,52 +94,13 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
         <Toggle enabled={settings.businessHoursOnly} onChange={handleToggle} aria-label={t('businessHoursLabel')} />
       </div>
 
-      {/* Timezone — OUTSIDE the toggle-gated body on purpose. It is workspace
-          level, not a business-hours setting: it drives the AI's "today's date"
-          line, the Post-Reply hours gate, and the working hours on /business,
-          all of which stay live when this card's toggle is off. Gating it meant
-          a merchant who follows the hint from /business, or who simply never
-          turned this feature on, landed on a control they could not touch.
-          Placed above the schedule so it reads zone → hours. */}
-      <div className="rounded-xl bg-muted border border-theme-border p-4 landscape:p-3 mb-4">
-        <TitleWithInfo info={t('businessHours.timezoneInfo')} infoLabel={t('businessHours.timezone')}>
-          <label
-            id="business-hours-timezone-label"
-            // scroll-mt: deep-link target (/business hours sheet). Mobile needs
-            // to clear the fixed top bar (h-14 sm:h-16) the content scrolls
-            // under; on lg that bar doesn't exist.
-            className="block scroll-mt-20 lg:scroll-mt-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest"
-          >
-            {t('businessHours.timezone')}
-          </label>
-        </TitleWithInfo>
-        <div className="mb-1.5" />
-        <Select
-          aria-labelledby="business-hours-timezone-label"
-          value={settings.timezone}
-          onChange={(val) => setSettings({ ...settings, timezone: val })}
-          options={timezoneOptions}
-          searchable
-          searchPlaceholder={t('businessHours.timezoneSearch')}
-          noResultsLabel={t('businessHours.timezoneNoResults')}
-          className="!py-3 font-bold border-none bg-card shadow-sm"
-        />
-        <div className="flex items-center gap-1.5 mt-2">
-          <Globe className="w-3.5 h-3.5 text-icon-muted flex-shrink-0" aria-hidden="true" />
-          <p className="text-[11px] text-muted-foreground font-medium">
-            {t('businessHours.localTimeNow', { time: nowTime })}
-          </p>
-        </div>
-        {timezoneMismatch && detectedTimezone && (
-          <button
-            type="button"
-            onClick={() => setSettings({ ...settings, timezone: detectedTimezone })}
-            className="mt-2 text-[11px] font-semibold text-brand-600 hover:underline text-start"
-          >
-            {t('businessHours.useDetectedTimezone', { timezone: detectedTimezone.replace(/_/g, ' ') })}
-          </button>
-        )}
-      </div>
+      {/* The zone itself is a General setting (TimezoneCard) — it governs far
+          more than this schedule. Echoed read-only here so the hours are never
+          read without the clock they are measured against. */}
+      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium mb-4">
+        <Globe className="w-3.5 h-3.5 text-icon-muted flex-shrink-0" aria-hidden="true" />
+        {t('businessHours.timezoneEcho', { timezone: settings.timezone.split('/').pop()?.replace(/_/g, ' ') ?? settings.timezone })}
+      </p>
 
       <div
         className={clsx(
