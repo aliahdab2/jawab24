@@ -49,6 +49,61 @@ export class StripeService {
      * Create a Stripe Checkout Session for subscription
      * @param trialDays - Number of trial days (0 = no trial, only for new users on eligible plans)
      */
+    /**
+     * Params shared by BOTH subscription-checkout modes (embedded + hosted),
+     * extracted so the two can never drift apart. The subscription_data
+     * metadata in here is load-bearing: it is what lets the webhook handlers
+     * and the reconciliation sweep link the resulting Stripe subscription back
+     * to the local user (see services/subscriptionLinking.ts).
+     */
+    private buildSubscriptionSessionParams(
+        userId: string,
+        userEmail: string,
+        planId: string,
+        priceId: string,
+        trialDays: number
+    ): Stripe.Checkout.SessionCreateParams {
+        // Build subscription data - only include trial if trialDays > 0
+        const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
+            metadata: {
+                userId,
+                planId,
+            },
+        };
+
+        // Only add trial period if explicitly requested (new users on eligible plans)
+        if (trialDays > 0) {
+            subscriptionData.trial_period_days = trialDays;
+        }
+
+        return {
+            customer_email: userEmail,
+            client_reference_id: userId,
+            mode: 'subscription',
+            locale: 'auto',
+            payment_method_collection: 'if_required',
+            // Collect VAT IDs and billing address so Stripe can issue VAT-compliant
+            // invoices (legally required for KSA/UAE/EU B2B customers). Stripe also
+            // emails these invoices automatically when "Email finalized invoices"
+            // is enabled in Dashboard → Invoicing settings. customer_update is not
+            // valid here because we pass customer_email (Stripe creates a new
+            // customer and applies collected fields automatically).
+            tax_id_collection: { enabled: true },
+            billing_address_collection: 'auto',
+            line_items: [
+                {
+                    price: priceId,
+                    quantity: 1,
+                },
+            ],
+            subscription_data: subscriptionData,
+            metadata: {
+                userId,
+                planId,
+            },
+        };
+    }
+
     async createCheckoutSession(
         userId: string,
         userEmail: string,
@@ -64,54 +119,69 @@ export class StripeService {
         const bucket = Math.floor(Date.now() / 60_000);
         const idempotencyKey = `checkout:${userId}:${planId}:${priceId}:${trialDays}:${bucket}`;
 
-        // Build subscription data - only include trial if trialDays > 0
-        const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
-            metadata: {
-                userId,
-                planId,
-            },
-        };
-
-        // Only add trial period if explicitly requested (new users on eligible plans)
-        if (trialDays > 0) {
-            subscriptionData.trial_period_days = trialDays;
-        }
-
         const session = await s.checkout.sessions.create(
             {
-                customer_email: userEmail,
-                client_reference_id: userId,
-                mode: 'subscription',
+                ...this.buildSubscriptionSessionParams(userId, userEmail, planId, priceId, trialDays),
                 // 'embedded' was renamed 'embedded_page' in newer API versions;
                 // it is the same Stripe.js embedded-checkout integration.
                 ui_mode: 'embedded_page',
-                locale: 'auto',
-                payment_method_collection: 'if_required',
-                // Collect VAT IDs and billing address so Stripe can issue VAT-compliant
-                // invoices (legally required for KSA/UAE/EU B2B customers). Stripe also
-                // emails these invoices automatically when "Email finalized invoices"
-                // is enabled in Dashboard → Invoicing settings. customer_update is not
-                // valid here because we pass customer_email (Stripe creates a new
-                // customer and applies collected fields automatically).
-                tax_id_collection: { enabled: true },
-                billing_address_collection: 'auto',
-                line_items: [
-                    {
-                        price: priceId,
-                        quantity: 1,
-                    },
-                ],
                 return_url: returnUrl,
-                subscription_data: subscriptionData,
-                metadata: {
-                    userId,
-                    planId,
-                },
             },
             { idempotencyKey }
         );
 
         return session;
+    }
+
+    /**
+     * HOSTED subscription checkout — the customer pays on checkout.stripe.com.
+     *
+     * WHY THIS EXISTS (2026-07-25, D-040). The embedded PaymentElement embeds
+     * Stripe as a THIRD party: a cross-origin iframe that tokenises the card
+     * against api.stripe.com. Privacy browsers are built to interfere with
+     * exactly that pattern — a merchant on Brave (his phone's default browser,
+     * where our Android app bounces all payments) filled the form, pressed pay,
+     * and the card never left his device: no PaymentMethod in Stripe, no error
+     * anywhere, three attempts. The same card paid instantly on a Stripe-hosted
+     * invoice page, where Stripe is first-party and there is nothing to block.
+     *
+     * Hosted checkout makes that failure impossible rather than detected.
+     * Completion arrives via `checkout.session.completed` (handleCheckoutComplete),
+     * with adoption + the reconciliation sweep as backstops.
+     *
+     * Returns the session with a non-null `url` to redirect the customer to.
+     * `ui_mode` is intentionally omitted — hosted is Stripe's default.
+     */
+    async createHostedCheckoutSession(
+        userId: string,
+        userEmail: string,
+        planId: string,
+        priceId: string,
+        successUrl: string,
+        cancelUrl: string,
+        trialDays: number = 0
+    ): Promise<{ sessionId: string; url: string }> {
+        assertNotDemoUser(userEmail);
+        const s = requireStripe();
+        // 'hosted' in the key so a same-minute retry after switching modes can't
+        // replay the embedded session's params (Stripe rejects an idempotent
+        // replay whose params differ — the customer would see a hard error).
+        const bucket = Math.floor(Date.now() / 60_000);
+        const idempotencyKey = `checkout:hosted:${userId}:${planId}:${priceId}:${trialDays}:${bucket}`;
+
+        const session = await s.checkout.sessions.create(
+            {
+                ...this.buildSubscriptionSessionParams(userId, userEmail, planId, priceId, trialDays),
+                success_url: successUrl,
+                cancel_url: cancelUrl,
+            },
+            { idempotencyKey }
+        );
+
+        if (!session.url) {
+            throw new Error(`Hosted checkout session ${session.id} has no redirect URL`);
+        }
+        return { sessionId: session.id, url: session.url };
     }
 
     /**
@@ -360,6 +430,36 @@ export class StripeService {
      */
     async getSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
         return requireStripe().subscriptions.retrieve(subscriptionId);
+    }
+
+    /**
+     * List subscriptions in a given state, following pagination.
+     *
+     * Used by the reconciliation sweep, which treats Stripe as the authority on
+     * who is actually paying. `limit` caps the total pulled per call so a large
+     * account can't turn one sweep into an unbounded crawl.
+     */
+    async listSubscriptions(params: {
+        status: Stripe.SubscriptionListParams.Status;
+        limit?: number;
+    }): Promise<Stripe.Subscription[]> {
+        const s = requireStripe();
+        const max = params.limit ?? 100;
+        const out: Stripe.Subscription[] = [];
+        let startingAfter: string | undefined;
+
+        while (out.length < max) {
+            const page = await s.subscriptions.list({
+                status: params.status,
+                limit: Math.min(100, max - out.length),
+                ...(startingAfter ? { starting_after: startingAfter } : {}),
+            });
+            out.push(...page.data);
+            if (!page.has_more || page.data.length === 0) break;
+            startingAfter = page.data[page.data.length - 1].id;
+        }
+
+        return out;
     }
 
     /**

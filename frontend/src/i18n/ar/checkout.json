@@ -9,6 +9,7 @@
   "errorInitiateCheckout": "فشل بدء عملية الدفع",
   "errorDemoAccount": "هذا حساب تجريبي، لذا عمليات الشراء معطّلة. أنشئ حسابك الخاص للاشتراك.",
   "errorNetwork": "انقطع الاتصال. تحقق من الإنترنت وحاول مرة أخرى.",
+  "errorPaymentFormNotReady": "لم يكتمل تحميل نموذج الدفع. تحقق من اتصالك وحاول مرة أخرى بعد قليل.",
   "retry": "حاول مرة أخرى",
   "cancel": "إلغاء",
   "loginToCheckout": "سجّل دخولك لإتمام الاشتراك",
@@ -26,5 +27,8 @@
   "topupSummaryTitle": "رصيد ردود إضافي",
   "topupOneTime": "دفعة واحدة",
   "submitTopup": "ادفع {amount}",
-  "topupTrustNote": "دفعة واحدة · يُضاف الرصيد فوراً"
+  "topupTrustNote": "دفعة واحدة · يُضاف الرصيد فوراً",
+  "hostedFallbackPrompt": "هل تواجه مشكلة في إتمام الدفع؟",
+  "hostedFallbackLink": "ادفع عبر صفحة Stripe الآمنة",
+  "hostedFallbackOpening": "جارٍ فتح الصفحة الآمنة..."
 }

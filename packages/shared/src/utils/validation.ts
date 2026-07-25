@@ -242,6 +242,28 @@ export function extractPhoneFromText(text: string, opts?: { defaultCountry?: str
 }
 
 /**
+ * The last-9-significant-digit tail that identifies a phone line across the
+ * `+CC` / leading-`0` / spaced representations (national numbers run ~9–10
+ * significant digits). Empty string when the run is too short to identify one.
+ */
+export function phoneDigitsTail(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 9 ? digits.slice(-9) : '';
+}
+
+/**
+ * Whether two strings denote the SAME real-world number regardless of how it
+ * was written (`+963…` vs `0…` vs spaced): equal identity tails. Runs too short
+ * for a tail fall back to exact digit equality.
+ */
+export function samePhoneNumber(a: string, b: string): boolean {
+  const ta = phoneDigitsTail(a);
+  const tb = phoneDigitsTail(b);
+  if (ta && tb) return ta === tb;
+  return a.replace(/\D/g, '') === b.replace(/\D/g, '');
+}
+
+/**
  * Cross-format identity keys for an extracted phone, so the SAME real number
  * written as `+963…`, `0…`, or with spaces compares equal. Prefers E.164 (set
  * when libphonenumber validates the number under the same region on both sides);
@@ -251,10 +273,8 @@ export function extractPhoneFromText(text: string, opts?: { defaultCountry?: str
 function phoneIdentityKeys(p: ExtractedPhone): string[] {
   const keys: string[] = [];
   if (p.e164) keys.push(`e164:${p.e164}`);
-  // National numbers run ~9–10 significant digits; the last 9 uniquely identify
-  // a mobile line across the +CC / leading-0 / spaced representations.
-  const tail = p.raw.replace(/\D/g, '').slice(-9);
-  if (tail.length >= 9) keys.push(`tail:${tail}`);
+  const tail = phoneDigitsTail(p.raw);
+  if (tail) keys.push(`tail:${tail}`);
   return keys;
 }
 

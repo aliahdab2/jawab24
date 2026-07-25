@@ -12,7 +12,7 @@ import { logAiUsage } from './aiUsageLog';
 import { getModelForUser } from './aiModelResolver';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { noopLogger } from '../types/logger';
-import { extractPhones, extractCustomerPhones, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { extractPhones, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { LeadExtractedData, LeadField, LeadStatus } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
 import { workspaceSettingsService } from './workspaceSettings';
@@ -70,6 +70,7 @@ Rules:
 - Never invent data not explicitly stated by the Customer
 - If the phone number does not belong to the sender (e.g. they are sharing someone else's number, or it is the business's own line), set "phone" to empty string
 - Always include a "name" field if the customer mentioned their name
+- If the Customer provides contact details for MORE THAN ONE person (e.g. a parent registering two children, an order for several recipients), keep EVERY person: emit numbered field pairs — "name" / "phone" for the first person, "name_2" / "phone_2" for the second, and so on — pairing each name with its own number exactly as the Customer stated them, with bilingual labels (e.g. label_ar "الاسم (2)" / "رقم الهاتف (2)"). Never merge two people into one pair and never drop a person. The top-level "phone" still follows the sender-ownership rule above
 - Write the "summary" in the same language as the customer's text (Arabic if they wrote Arabic, English if English). NEVER write a meta-summary like "no conversation provided" or "not enough context" — if intent is unclear, write a short factual statement in the customer's language such as "العميل أرسل رقم هاتفه للتواصل" or "Customer shared their phone number for contact".
 
 Conversation (last 20 messages):
@@ -256,6 +257,35 @@ export function mergeExtractedData(existing: LeadExtractedData, fresh: LeadExtra
     }
     const summary = fresh.summary?.trim() ? fresh.summary : existing.summary;
     return summary !== undefined ? { summary, fields: mergedFields } : { fields: mergedFields };
+}
+
+/** Whether any field value on the card already carries this number (any format) —
+ *  the AI often re-emits it as a `phone`/`phone_2` field, and preserving it a
+ *  second time would clutter the card. */
+function cardContainsPhone(card: LeadExtractedData, phone: string): boolean {
+    const tail = phoneDigitsTail(phone);
+    // Substring on the identity tail, so the number is recognised even when the
+    // AI embedded it in a longer value ("سيدرا 0953256248").
+    if (tail) return card.fields.some(f => f.value.replace(/\D/g, '').includes(tail));
+    // Below the identity-tail floor, compare whole values only: a substring test
+    // on 4–5 digits would false-positive inside an unrelated number and skip
+    // preservation — the exact bug this guard exists to prevent.
+    return card.fields.some(f => samePhoneNumber(f.value, phone));
+}
+
+/**
+ * Append a displaced phone-column value to the card under the first FREE
+ * `additional_phone[_N]` key — a third number must not overwrite the second.
+ * Reuses mergeExtractedData for the append itself (fresh key → appended,
+ * summary preserved). Bilingual labels are baked in at write time, the same
+ * shape the AI emits for every other field.
+ */
+function withAdditionalPhone(card: LeadExtractedData, phone: string): LeadExtractedData {
+    let key = 'additional_phone';
+    for (let n = 2; card.fields.some(f => f.key === key); n++) key = `additional_phone_${n}`;
+    return mergeExtractedData(card, {
+        fields: [{ key, label_en: 'Additional phone', label_ar: 'رقم إضافي', value: phone }],
+    });
 }
 
 class LeadExtractorService {
@@ -831,7 +861,7 @@ class LeadExtractorService {
         // per-sender lock (reply_lock:{pageId}:{senderId}), so card writes for one
         // customer are serialized.
         const existing = await db
-            .select({ id: leads.id, extractedData: leads.extractedData, extractionStatus: leads.extractionStatus })
+            .select({ id: leads.id, phone: leads.phone, extractedData: leads.extractedData, extractionStatus: leads.extractionStatus })
             .from(leads)
             .where(and(eq(leads.senderId, data.senderId), eq(leads.pageId, data.pageId)))
             .limit(1);
@@ -843,9 +873,25 @@ class LeadExtractorService {
         // re-share while over the daily limit or on AI failure arrives with an
         // EMPTY pending card — merging (not replacing) keeps the populated card,
         // and a card that was 'completed' is never demoted to 'pending'.
-        const mergedData = isNew
+        let mergedData = isNew
             ? data.extractedData
             : mergeExtractedData(normalizeExtractedData(existing[0].extractedData), data.extractedData);
+
+        // The phone column is newest-wins (the call/WhatsApp buttons should dial
+        // the latest share) — but a DIFFERENT displaced number must survive as a
+        // card field, never be silently discarded. July 2026 (الفريق الدمشقي): a
+        // parent registered two daughters; the second daughter's number overwrote
+        // the first and one name+number pairing vanished off the card. The AI
+        // usually re-emits the old number as a field, but preservation must be
+        // code, not model behavior — so append it here unless it is already on
+        // the card in some format.
+        if (!isNew
+            && existing[0].phone
+            && !samePhoneNumber(existing[0].phone, data.phone)
+            && !cardContainsPhone(mergedData, existing[0].phone)) {
+            mergedData = withAdditionalPhone(mergedData, existing[0].phone);
+        }
+
         const mergedStatus = isNew
             ? data.extractionStatus
             : (data.extractionStatus === 'completed' || existing[0].extractionStatus === 'completed'

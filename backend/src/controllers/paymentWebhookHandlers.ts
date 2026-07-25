@@ -5,6 +5,7 @@ import { config } from '../config';
 import { stripeService, stripeRefId } from '../services/stripe';
 import { paymentRequestService } from '../services/paymentRequest';
 import { subscriptionsService } from '../services/subscriptions';
+import { adoptStripeSubscription } from '../services/subscriptionLinking';
 import { topupService } from '../services/topup';
 import { notificationService } from '../services/notifications';
 import { emailService } from '../services/email';
@@ -51,7 +52,7 @@ export async function dispatchStripeEvent(event: Stripe.Event, request: FastifyR
             break;
 
         case 'payment_intent.payment_failed':
-            await handleTopupPaymentFailed(event.data.object as Stripe.PaymentIntent, request);
+            await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent, request);
             break;
 
         case 'invoice.payment_failed':
@@ -302,10 +303,7 @@ export async function handleSubscriptionCreated(
             );
         }
     } else {
-        request.log.warn(
-            { subscriptionId: stripeSubscription.id },
-            'Subscription created event received but no matching DB record found'
-        );
+        await adoptStripeSubscription(stripeSubscription, request.log);
     }
 }
 
@@ -361,7 +359,10 @@ export async function handleSubscriptionUpdated(
             'Subscription updated'
         );
     } else {
-        request.log.warn({ subscriptionId: stripeSubscription.id }, 'Subscription update - no matching record found');
+        // Never linked (see adoptStripeSubscription). This is the event that
+        // carries a PaymentElement subscription from `incomplete` to `active`,
+        // so it is the normal moment for a first-time payer to get adopted.
+        await adoptStripeSubscription(stripeSubscription, request.log);
     }
 }
 
@@ -443,10 +444,16 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: F
     }
 
     if (!updatedRow) {
-        request.log.error(
-            { subscriptionId: stripeSubscriptionId },
-            'Failed to activate subscription - not found after retries'
-        );
+        // The row was never linked to Stripe (see adoptStripeSubscription).
+        // Money has demonstrably landed at this point, so adopt on the invoice
+        // rather than logging an error and dropping a paid customer.
+        const adopted = await adoptStripeSubscription(stripeSubscription, request.log);
+        if (!adopted) {
+            request.log.error(
+                { subscriptionId: stripeSubscriptionId },
+                'Failed to activate subscription - not found after retries, and could not adopt'
+            );
+        }
         return;
     }
 
@@ -517,9 +524,9 @@ export async function handleTopupPaymentSucceeded(paymentIntent: Stripe.PaymentI
 }
 
 /**
- * Handle a failed top-up PaymentIntent attempt. Ignores non-top-up
- * PaymentIntents (subscription invoice failures flow through
- * invoice.payment_failed instead).
+ * Handle a failed card attempt on ANY PaymentIntent — top-up or subscription
+ * first invoice. Money state is never touched here; this handler exists purely
+ * so a refused card leaves a trace.
  *
  * IMPORTANT: `payment_intent.payment_failed` marks a single FAILED ATTEMPT,
  * not a dead PaymentIntent. The PI stays at `requires_payment_method` and the
@@ -531,13 +538,35 @@ export async function handleTopupPaymentSucceeded(paymentIntent: Stripe.PaymentI
  * self-heal. Leave the row open and just log the attempt; genuine
  * abandonment/cancellation is terminal-ized by reconcileStripeTopups, which
  * re-queries Stripe before marking a row failed.
+ *
+ * The non-top-up branch used to be a bare `return`. That silence is what hid a
+ * merchant whose card was refused three times in nine minutes (2026-07-25): the
+ * subscription's first-invoice PI fails client-side at `confirmPayment`, so no
+ * `invoice.payment_failed` follows and the account simply sat `incomplete` with
+ * nothing on our side to show for it. Logging the decline code (and the card's
+ * issuing country — cross-border refusals are the common case for our
+ * merchants) makes the next one greppable instead of anecdotal.
  */
-export async function handleTopupPaymentFailed(paymentIntent: Stripe.PaymentIntent, request: FastifyRequest) {
+export async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent, request: FastifyRequest) {
+    const lastError = paymentIntent.last_payment_error;
+    const card = lastError?.payment_method?.card;
+    const attempt = {
+        paymentIntentId: paymentIntent.id,
+        customerId: stripeRefId(paymentIntent.customer),
+        userId: paymentIntent.metadata?.userId,
+        errorCode: lastError?.code,
+        declineCode: lastError?.decline_code,
+        cardCountry: card?.country,
+        cardBrand: card?.brand,
+    };
+
     if (paymentIntent.metadata?.type !== 'topup') {
+        request.log.warn(attempt, 'Subscription card attempt failed');
         return;
     }
-    request.log.info(
-        { paymentIntentId: paymentIntent.id },
+
+    request.log.warn(
+        attempt,
         'Top-up payment attempt failed (non-terminal); leaving row open for retry/reconcile',
     );
 }

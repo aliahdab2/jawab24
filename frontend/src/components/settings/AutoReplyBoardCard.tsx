@@ -136,7 +136,11 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
           />
         </li>
 
-        {/* ⚡ Post Reply — merchant-authored, always on (D-027). No toggle by design. */}
+        {/* ⚡ Post Reply — merchant-authored, no toggle by design (D-027). The badge
+            states the TRUE independence: it runs even with the Smart Reply toggles
+            off — but it is NOT unconditional: outside business hours it goes silent
+            (commentProcessor gates postReplyEligible on isWithinBusinessHours), so
+            when the schedule is on the badge discloses that instead. */}
         <li className="flex items-center gap-3 py-3.5">
           <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center flex-shrink-0">
             <PostReplyIcon className="w-4 h-4" aria-hidden="true" />
@@ -145,7 +149,9 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
             <h3 className="font-bold text-sm text-foreground flex items-center gap-2 flex-wrap">
               {t('autoReplyBoard.postReply')}
               <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full reply-source-post-reply">
-                {t('autoReplyBoard.alwaysOn')}
+                {settings.businessHoursOnly
+                  ? t('autoReplyBoard.followsReplyHours')
+                  : t('autoReplyBoard.worksWithoutSmart')}
               </span>
             </h3>
             <p className="text-xs text-muted-foreground">{t('autoReplyBoard.postReplySub')}</p>

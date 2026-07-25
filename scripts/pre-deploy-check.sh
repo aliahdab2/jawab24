@@ -311,7 +311,18 @@ AUDIT_FAILED=false
 #   Lowest-confidence of the set: framework-internal response caching. Our app caches no
 #   body-keyed responses (the only POST route, /api/revalidate, is an auth'd mutation that
 #   is never cached; pages are getStaticProps). Re-verify at the Next 16 upgrade.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww|GHSA-f88m-g3jw-g9cj|GHSA-4c8g-83qw-93j6|GHSA-v2hh-gcrm-f6hx|GHSA-4633-3j49-mh5q|GHSA-4c39-4ccg-62r3|GHSA-68g3-v927-f742|GHSA-6g55-p6wh-862q|GHSA-89xv-2m56-2m9x|GHSA-955p-x3mx-jcvp|GHSA-m99w-x7hq-7vfj|GHSA-p9j2-gv94-2wf4|GHSA-q8wf-6r8g-63ch|GHSA-c96f-x56v-gq3h|GHSA-83w8-p2f5-377r|GHSA-8pvw-jcv7-9cmj|GHSA-r28c-9q8g-f849"
+# GHSA-mh99-v99m-4gvg (brace-expansion DoS, <=5.0.7) — UNREACHABLE, allowlisted 2026-07-25.
+# Needs an attacker-controlled brace pattern; every instance takes patterns from library
+# code, never from merchant or customer input:
+#   backend  @fastify/swagger-ui -> @fastify/static -> glob -> minimatch@10  (static /docs assets)
+#   backend  exceljs -> archiver -> readdir-glob -> minimatch@5              (xlsx export dir read)
+#   frontend @sentry/nextjs -> bundler-plugin-core -> glob -> minimatch@10   (BUILD time only)
+# `npm update brace-expansion` genuinely fixed the 5.x instances (5.0.6 -> 5.0.8, 48-line
+# lockfile diff). The residual 1.1.x/2.1.x sit under minimatch@3/@5, whose peer ranges
+# (^1.1.7 / ^2.0.1) cannot take 5.x without an override across a major API change.
+# ⚠️ Do NOT reach for `npm audit fix` here: it silently jumped next 15.5.18 -> 16.2.3 and
+# introduced 13 NEW frontend advisories. Verified and reverted 2026-07-25.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww|GHSA-f88m-g3jw-g9cj|GHSA-4c8g-83qw-93j6|GHSA-v2hh-gcrm-f6hx|GHSA-4633-3j49-mh5q|GHSA-4c39-4ccg-62r3|GHSA-68g3-v927-f742|GHSA-6g55-p6wh-862q|GHSA-89xv-2m56-2m9x|GHSA-955p-x3mx-jcvp|GHSA-m99w-x7hq-7vfj|GHSA-p9j2-gv94-2wf4|GHSA-q8wf-6r8g-63ch|GHSA-c96f-x56v-gq3h|GHSA-83w8-p2f5-377r|GHSA-8pvw-jcv7-9cmj|GHSA-r28c-9q8g-f849|GHSA-mh99-v99m-4gvg"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
@@ -697,6 +708,45 @@ if (cd backend && npm run test:integration) > "$_TEST_LOG" 2>&1; then
 else
     echo -e "${RED}   ❌ Backend integration tests failed!${NC}"
     cat "$_TEST_LOG"; rm -f "$_TEST_LOG"
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# 6b. Real Stripe round-trip (test mode) — payments must be PROVEN, not assumed
+#
+# Every other payment test mocks stripeService, which is precisely how merchants
+# were charged and never activated for weeks with a green suite: the tests
+# validated our model of Stripe, not Stripe. This step makes one genuine
+# subscribe → pay → activate cycle against Stripe TEST mode.
+#
+# A missing key is a HARD FAILURE, not a skip. "No key so we skipped it" reads
+# identically to "payments verified" in a deploy log, and that indistinguishable
+# silence is the bug class this whole gate exists to prevent. Opt out only
+# deliberately, with ALLOW_UNVERIFIED_PAYMENTS=1, which says so out loud.
+# ---------------------------------------------------------------------------
+echo "   Testing Backend (real Stripe round-trip, test mode)..."
+if [ -n "${STRIPE_TEST_SECRET_KEY:-}" ] && [[ "${STRIPE_TEST_SECRET_KEY}" == sk_test_* ]]; then
+    _TEST_LOG=$(mktemp)
+    if (cd backend && STRIPE_ROUNDTRIP=1 STRIPE_SECRET_KEY="$STRIPE_TEST_SECRET_KEY" \
+            npm run test:integration -- stripe.roundtrip) > "$_TEST_LOG" 2>&1; then
+        echo -e "${GREEN}   ✅ Real Stripe round-trip passes (subscribe → pay → activate)${NC}"
+        rm -f "$_TEST_LOG"
+    else
+        echo -e "${RED}   ❌ Real Stripe round-trip FAILED — do not deploy payments!${NC}"
+        cat "$_TEST_LOG"; rm -f "$_TEST_LOG"
+        exit 1
+    fi
+elif [ "${ALLOW_UNVERIFIED_PAYMENTS:-}" = "1" ]; then
+    echo -e "${YELLOW}   ⚠️  SKIPPED by ALLOW_UNVERIFIED_PAYMENTS=1 — payments are NOT verified in this deploy.${NC}"
+else
+    echo -e "${RED}   ❌ STRIPE_TEST_SECRET_KEY is not set (or is not an sk_test_ key).${NC}"
+    echo -e "${RED}   The payment path cannot be verified, and an unverified payment path is${NC}"
+    echo -e "${RED}   how merchants got charged without being activated.${NC}"
+    echo ""
+    echo -e "${YELLOW}   Fix: add the test-mode key from Stripe Dashboard → Developers → API keys${NC}"
+    echo -e "${YELLOW}         - locally: export STRIPE_TEST_SECRET_KEY=sk_test_...${NC}"
+    echo -e "${YELLOW}         - in CI:   gh secret set STRIPE_TEST_SECRET_KEY${NC}"
+    echo -e "${YELLOW}   Or, deliberately and visibly: ALLOW_UNVERIFIED_PAYMENTS=1 ./scripts/pre-deploy-check.sh${NC}"
     exit 1
 fi
 

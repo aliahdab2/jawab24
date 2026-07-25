@@ -23,6 +23,10 @@ vi.mock('../../src/services/stripe', () => ({
             id: 'cs_test_123',
             client_secret: 'cs_test_123_secret',
         }),
+        createHostedCheckoutSession: vi.fn().mockResolvedValue({
+            sessionId: 'cs_hosted_123',
+            url: 'https://checkout.stripe.com/c/pay/cs_hosted_123',
+        }),
         getSubscription: vi.fn().mockImplementation(async (id: string) => ({
             id,
             status: 'trialing',
@@ -180,6 +184,61 @@ describe('Payment — createCheckoutSession', () => {
         });
         expect(res.statusCode).toBe(400);
         expect(res.json().error).toMatch(/stripe price id/i);
+    });
+
+    // Hosted mode (D-040): the native-app flow and the web fallback. Same
+    // route, same guards — different Stripe surface.
+    it('uiMode: hosted returns the checkout.stripe.com redirect URL', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        const plan = await createTestPlan();
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: plan.id, uiMode: 'hosted' },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json()).toEqual({
+            sessionId: 'cs_hosted_123',
+            url: 'https://checkout.stripe.com/c/pay/cs_hosted_123',
+        });
+        expect(stripeService.createHostedCheckoutSession).toHaveBeenCalledWith(
+            userId,
+            'payer@test.com',
+            plan.id,
+            expect.any(String),
+            expect.stringContaining('hosted=1'),
+            expect.stringContaining('/pricing'),
+            expect.any(Number),
+        );
+    });
+
+    it('uiMode: hosted still enforces the sanctions guard', async () => {
+        // This file has no global mock reset; drop the call recorded by the
+        // happy-path test above so the not-called assertion is meaningful.
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.createHostedCheckoutSession).mockClear();
+
+        const sanctionedApp = fastify({ logger: false });
+        sanctionedApp.addHook('preHandler', async (request: any) => {
+            request.user = { userId, facebookId: 'fb_test' };
+            request.geo = { country: 'SY', region: null };
+        });
+        const paymentRoutes = (await import('../../src/routes/payment')).default;
+        sanctionedApp.register(paymentRoutes, { prefix: '/' });
+        await sanctionedApp.ready();
+
+        const plan = await createTestPlan();
+        const res = await sanctionedApp.inject({
+            method: 'POST',
+            url: '/create-checkout-session',
+            payload: { planId: plan.id, uiMode: 'hosted' },
+        });
+
+        await sanctionedApp.close();
+        expect(res.statusCode).toBe(403);
+        expect(stripeService.createHostedCheckoutSession).not.toHaveBeenCalled();
     });
 
     it('returns 403 SANCTIONED_GEO_BLOCK for sanctioned country', async () => {

@@ -116,9 +116,10 @@ test.describe('Settings Page', () => {
       page.getByText(t('settings.autoReplyBoard.messages'), { exact: true }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Post Reply row: always-on badge + Manage link, no toggle (D-027/D-029)
+    // Post Reply row: independence badge + Manage link, no toggle (D-027/D-029).
+    // Demo settings have businessHoursOnly=false, so the default badge shows.
     await expect(
-      page.getByText(t('settings.autoReplyBoard.alwaysOn')).first()
+      page.getByText(t('settings.autoReplyBoard.worksWithoutSmart')).first()
     ).toBeVisible({ timeout: 10000 });
   });
 

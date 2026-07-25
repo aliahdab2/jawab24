@@ -71,7 +71,12 @@ function FullPageSpinner() {
  *  - top-up: type is always 'payment'; trialDays omitted; submitLabel is the
  *    one-time "Pay $X" copy.
  */
-function PaymentForm({
+// How long Stripe.js gets to initialise before we tell the merchant the form
+// failed to load. Generous enough not to fire on a slow-but-working connection.
+const STRIPE_LOAD_GRACE_MS = 10_000;
+
+// Exported for unit testing — CheckoutPage is the only production caller.
+export function PaymentForm({
   type,
   submitLabel,
   trustNote,
@@ -86,15 +91,80 @@ function PaymentForm({
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
   const t = useTranslations('checkout');
 
   const returnUrl = `${BRAND_ASSETS.urls.base}/payment/return`;
 
   const hasTrial = !!trialDays && trialDays > 0 && type === 'setup';
 
+  // Stripe.js can fail to load outright — blocked script, hostile network, a
+  // WebView that never fetched js.stripe.com. The submit button below is
+  // disabled while `stripe` is null, so the merchant is left staring at a dead
+  // form with no explanation while we record nothing at all. From support's
+  // side that is indistinguishable from a refused card, which is how a merchant
+  // sat on an `incomplete` subscription across three attempts with no trace in
+  // Stripe or Sentry (2026-07-25).
+  //
+  // The signal is deterministic: loadStripe() REJECTS when the script can't be
+  // fetched, so we listen for that rather than guessing at a duration. The
+  // timeout below is only a backstop for the documented case where the loader
+  // promise neither resolves nor rejects (stripe/stripe-js#26) — without it
+  // that quirk would leave the form dead and silent, which is the exact failure
+  // this whole effect exists to surface.
+  useEffect(() => {
+    // Arrived late — after the backstop already fired, say. The form works now,
+    // so retract the banner: leaving it up next to a live, enabled pay button
+    // tells the merchant their payment is broken while it is in fact fine.
+    if (stripe && elements) {
+      setLoadFailed(false);
+      return;
+    }
+
+    let settled = false;
+    const reportDeadForm = (reason: string, cause?: unknown) => {
+      if (settled) return;
+      settled = true;
+      captureError(
+        cause instanceof Error ? cause : new Error(`Stripe.js unavailable (${reason})`),
+        'Payment form failed to load',
+        { tags: { page: 'checkout', type }, extra: { reason } }
+      );
+      setLoadFailed(true);
+    };
+
+    const loader = getStripePromise();
+    if (!loader) {
+      // No publishable key configured. Knowable immediately, and a deployment
+      // fault rather than a network one — waiting out the backstop would report
+      // it as a `timeout` and send whoever reads Sentry chasing the network.
+      reportDeadForm('no-publishable-key');
+      return;
+    }
+
+    loader
+      .then((loaded) => { if (!loaded) reportDeadForm('resolved-null'); })
+      .catch((err) => reportDeadForm('load-rejected', err));
+
+    const backstop = setTimeout(() => reportDeadForm('timeout'), STRIPE_LOAD_GRACE_MS);
+    return () => { settled = true; clearTimeout(backstop); };
+  }, [stripe, elements, type]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!stripe || !elements) return;
+
+    // Reachable when `elements` is null but `stripe` isn't — the button's
+    // disabled prop only guards on `stripe`, so this submit is live. It used to
+    // be a bare `return` that swallowed the click without a word.
+    if (!stripe || !elements) {
+      captureError(
+        new Error('Checkout submitted before Stripe.js was ready'),
+        'Payment form not ready',
+        { tags: { page: 'checkout', type }, extra: { hasStripe: !!stripe, hasElements: !!elements } }
+      );
+      setErrorMessage(t('errorPaymentFormNotReady'));
+      return;
+    }
 
     setSubmitting(true);
     setErrorMessage('');
@@ -133,9 +203,16 @@ function PaymentForm({
         {t('securePayment')}
       </p>
 
-      {errorMessage && (
-        <div className="mt-4 p-3 alert-error border rounded-xl text-sm text-start">
-          {errorMessage}
+      {/* role/aria-live because this can appear with no user action at all —
+          the load-failure path surfaces it on a timer, and a screen reader user
+          would otherwise never learn the form is dead. */}
+      {(errorMessage || loadFailed) && (
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mt-4 p-3 alert-error border rounded-xl text-sm text-start"
+        >
+          {errorMessage || t('errorPaymentFormNotReady')}
         </div>
       )}
 
@@ -232,7 +309,51 @@ function CheckoutPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [intentType, setIntentType] = useState<'payment' | 'setup' | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [hostedLoading, setHostedLoading] = useState(false);
   const isDark = useIsDarkMode();
+
+  // Hand off to Stripe-HOSTED checkout (see the fallback link below the form).
+  // Full-page redirect, not window.open: popup blockers eat new tabs opened
+  // after an await, and there is nothing to come back to — success returns via
+  // success_url.
+  const openHostedCheckout = async () => {
+    if (!plan) return;
+    setHostedLoading(true);
+    try {
+      const response = await api.post('/payment/create-checkout-session', {
+        planId: plan.id,
+        billingInterval,
+        uiMode: 'hosted',
+      });
+      window.location.href = response.data.url;
+    } catch (err) {
+      captureError(err, 'Failed to open hosted checkout fallback', {
+        tags: { page: 'checkout', action: 'hosted-fallback' },
+      });
+      setError(t('errorInitiateCheckout'));
+      setHostedLoading(false);
+    }
+  };
+
+  // Rendered BOTH inside the payment panel and in the panel's failure states:
+  // the hosted handoff needs no Stripe.js at all (the session is created by our
+  // backend), so it must stay reachable precisely when the embedded form cannot
+  // render — a blocked js.stripe.com or a missing publishable key. Hiding the
+  // escape hatch behind the thing that failed would repeat the incident.
+  const hostedFallbackLink = !isTopup && plan ? (
+    <p className="mt-4 text-center text-xs text-muted-foreground">
+      {t('hostedFallbackPrompt')}{' '}
+      <button
+        type="button"
+        onClick={openHostedCheckout}
+        disabled={hostedLoading}
+        className="underline text-brand-600 hover:text-brand-700 disabled:opacity-50 font-medium"
+      >
+        {hostedLoading ? t('hostedFallbackOpening') : t('hostedFallbackLink')}
+      </button>
+    </p>
+  ) : null;
+
   const [showMobileSummary, setShowMobileSummary] = useState(false);
 
   // "Loaded" gate differs by mode: subscription needs the plan, top-up needs
@@ -690,13 +811,31 @@ function CheckoutPage() {
                               trialDays={isTopup ? undefined : plan?.trialDays}
                             />
                           </Elements>
+
+                          {/* Escape hatch to Stripe-HOSTED checkout. The embedded
+                              form above tokenises the card via a cross-origin
+                              iframe, which privacy browsers (Brave Shields etc.)
+                              can silently block: the form renders, pay does
+                              nothing, and NO error surfaces anywhere — we cannot
+                              detect it, so the merchant needs a way out we don't
+                              have to detect. On checkout.stripe.com Stripe is
+                              first-party and immune (live incident 2026-07-25:
+                              same card, dead here, paid instantly there).
+                              Subscriptions only — top-ups use a PaymentIntent
+                              with no hosted equivalent wired up. */}
+                          {hostedFallbackLink}
                         </div>
                       ) : sessionLoading ? (
                         <div className="flex flex-col items-center justify-center py-16" role="status" aria-busy="true">
                           <Loader2 className="w-8 h-8 animate-spin text-brand-600 mb-3" aria-hidden="true" />
                           <p className="text-muted-foreground text-sm" aria-live="polite">{t('loadingPaymentForm')}</p>
                         </div>
-                      ) : null}
+                      ) : (
+                        // Embedded form could not mount at all (Stripe.js
+                        // unavailable / missing publishable key). The hosted
+                        // handoff is backend-driven and still works — offer it.
+                        hostedFallbackLink
+                      )}
                     </>
                   )}
                 </div>

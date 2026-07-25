@@ -136,6 +136,12 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/autoreply_test
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
           STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_TEST_PUBLISHABLE_KEY }}
+          # Drives the real Stripe round-trip gate in pre-deploy-check.sh. NOTE:
+          # a missing GitHub secret expands to an EMPTY STRING rather than
+          # failing the workflow — which is why that gate treats an absent key as
+          # a hard failure instead of a skip. Until this secret exists, CI is
+          # expected to stop here and say so.
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: whsec_test_secret
           JWT_SECRET: test_jwt_secret_for_ci
           FRONTEND_URL: http://localhost:3001

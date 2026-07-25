@@ -26,7 +26,7 @@
  *   function extractPhoneFromText(text: string, opts?: { defaultCountry?: string }): string | null; // first raw
  */
 import { describe, it, expect } from 'vitest';
-import { extractPhones, extractPhoneFromText, extractCustomerPhones } from '../validation';
+import { extractPhones, extractPhoneFromText, extractCustomerPhones, samePhoneNumber, phoneDigitsTail } from '../validation';
 
 // NOTE: countryFromTimezone (merchant region inference) lives in the BACKEND
 // (backend/src/utils/phoneRegion.ts), backed by the full IANA dataset — it is
@@ -227,5 +227,36 @@ describe('extractCustomerPhones — exclude the business\'s OWN number echoed ba
 
   it('no business texts → behaves exactly like extractPhones', () => {
     expect(extractCustomerPhones('رقمي 0991234567', [], SY)).toEqual(extractPhones('رقمي 0991234567', SY));
+  });
+});
+
+/**
+ * The cross-format identity primitives shared by the gate's business-number
+ * exclusion (phoneIdentityKeys) and the lead card's displaced-number
+ * preservation (leadExtractor). One implementation, one set of rules.
+ */
+describe('phoneDigitsTail / samePhoneNumber', () => {
+  it('identifies the same line written as +CC, national 0…, or spaced', () => {
+    expect(phoneDigitsTail('+963953256248')).toBe('953256248');
+    expect(phoneDigitsTail('0953256248')).toBe('953256248');
+    expect(phoneDigitsTail('0953 256 248')).toBe('953256248');
+  });
+
+  it('returns empty for runs too short to identify a line', () => {
+    expect(phoneDigitsTail('12345')).toBe('');
+  });
+
+  it('matches the same real number across representations', () => {
+    expect(samePhoneNumber('+963953256248', '0953256248')).toBe(true);
+    expect(samePhoneNumber('0953 256 248', '953256248')).toBe(true);
+  });
+
+  it('does NOT match two different numbers (the July 2026 two-daughters case)', () => {
+    expect(samePhoneNumber('0953256248', '0965219910')).toBe(false);
+  });
+
+  it('falls back to exact digit equality below the tail floor', () => {
+    expect(samePhoneNumber('1234', '1234')).toBe(true);
+    expect(samePhoneNumber('1234', '5678')).toBe(false);
   });
 });
