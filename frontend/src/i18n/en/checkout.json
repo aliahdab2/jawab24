@@ -9,6 +9,7 @@
   "errorInitiateCheckout": "Failed to initiate checkout",
   "errorDemoAccount": "This is a demo account, so purchases are disabled. Create your own account to subscribe.",
   "errorNetwork": "Connection lost. Check your internet and try again.",
+  "errorPaymentFormNotReady": "The payment form hasn't finished loading. Check your connection and try again in a moment.",
   "retry": "Try Again",
   "cancel": "Cancel",
   "loginToCheckout": "Log in to complete your subscription",
