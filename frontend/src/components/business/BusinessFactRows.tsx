@@ -26,6 +26,9 @@ interface FactRow {
   icon: LucideIcon | React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
   /** Display value; null = not set. Empty string = set but not renderable (hours). */
   value: string | null;
+  /** Richer rendering when plain text can't carry the meaning (the WhatsApp
+   *  mark on a phone number). `value` still drives the is-set logic. */
+  valueNode?: React.ReactNode;
 }
 
 /**
@@ -58,14 +61,32 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
       })
       : null;
     const phones = (merchant.phones ?? []).filter((p) => p?.trim());
+    const whatsapp = merchant.channels?.whatsapp?.trim();
     const addressValue = [merchant.address, merchant.city].filter((v) => v?.trim()).join('، ');
     return [
       { key: 'hours', icon: Clock, value: hoursValue },
       { key: 'address', icon: MapPin, value: addressValue || null },
-      { key: 'phone', icon: Phone, value: phones.length ? phones.join(' · ') : null },
-      // Its own row, not folded into phones: a WhatsApp number is one customers
-      // MESSAGE, not necessarily one they can call.
-      { key: 'whatsapp', icon: WhatsAppIcon, value: merchant.channels?.whatsapp?.trim() || null },
+      // WhatsApp is a MARK on a number, not a row of its own: in this market it
+      // is nearly always a SIM the merchant already listed, so a second row meant
+      // the same digits typed twice and two copies to keep in sync.
+      {
+        key: 'phone',
+        icon: Phone,
+        value: phones.length ? phones.join(' · ') : null,
+        valueNode: phones.length ? (
+          <span className="inline-flex items-center gap-1 min-w-0">
+            {phones.map((p, i) => (
+              <span key={i} className="inline-flex items-center gap-1">
+                {i > 0 && <span aria-hidden="true" className="text-subtle">·</span>}
+                <span>{p}</span>
+                {whatsapp && p.trim() === whatsapp && (
+                  <WhatsAppIcon size={12} className="text-brand-600 flex-shrink-0" aria-label={t('facts.whatsapp')} />
+                )}
+              </span>
+            ))}
+          </span>
+        ) : undefined,
+      },
       { key: 'website', icon: Globe, value: merchant.website?.trim() || null },
       { key: 'delivery', icon: Truck, value: merchant.policies?.shipping?.trim() || null },
       { key: 'payment', icon: CreditCard, value: merchant.policies?.payment?.trim() || null },
@@ -107,7 +128,7 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
                   <span
                     className={`block text-xs truncate ${isSet ? 'text-muted-foreground' : 'text-brand-600'}`}
                   >
-                    {isSet ? (row.value || t('facts.isSet')) : t(`facts.add_${row.key}`)}
+                    {isSet ? (row.valueNode ?? (row.value || t('facts.isSet'))) : t(`facts.add_${row.key}`)}
                   </span>
                 </span>
                 <ChevronLeft

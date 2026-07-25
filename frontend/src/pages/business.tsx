@@ -133,7 +133,6 @@ function BusinessPageInner() {
     switch (key) {
       case 'address': return merchant.address ?? '';
       case 'phone': return (merchant.phones ?? []).filter((p) => p?.trim()).join(', ');
-      case 'whatsapp': return merchant.channels?.whatsapp ?? '';
       case 'website': return merchant.website ?? '';
       case 'delivery': return merchant.policies?.shipping ?? '';
       case 'payment': return merchant.policies?.payment ?? '';
@@ -172,15 +171,17 @@ function BusinessPageInner() {
     }
   };
 
-  const saveFact = (key: EditableFactKey, raw: string) => {
+  const saveFact = (key: EditableFactKey, raw: string, whatsapp?: string) => {
     const value = raw.trim();
     return saveProfile((patch) => {
       switch (key) {
         case 'address': patch.address = value || undefined; break;
-        case 'phone': patch.phones = value ? value.split(/[,،]/).map((p) => p.trim()).filter(Boolean) : undefined; break;
-        // Spread the existing container: `channels` also holds `preferred`,
-        // which this sheet must not drop.
-        case 'whatsapp': patch.channels = { ...patch.channels, whatsapp: value || undefined }; break;
+        case 'phone':
+          patch.phones = value ? value.split(/[,،]/).map((p) => p.trim()).filter(Boolean) : undefined;
+          // The WhatsApp mark rides with the numbers it belongs to. Spread the
+          // existing container: `channels` also holds `preferred`.
+          patch.channels = { ...patch.channels, whatsapp: whatsapp?.trim() || undefined };
+          break;
         case 'website': patch.website = value || undefined; break;
         case 'delivery': patch.policies = { ...patch.policies, shipping: value || undefined }; break;
         case 'payment': patch.policies = { ...patch.policies, payment: value || undefined }; break;
@@ -321,8 +322,9 @@ function BusinessPageInner() {
           factKey={editingFact}
           label={t(`facts.${editingFact}`)}
           initialValue={factValue(editingFact)}
+          initialWhatsapp={unwrapBusinessProfile(selectedPage?.businessProfile).merchant?.channels?.whatsapp}
           saving={savingFact}
-          onSave={(value) => saveFact(editingFact, value)}
+          onSave={(value, whatsapp) => saveFact(editingFact, value, whatsapp)}
           onClose={() => setEditingFact(null)}
         />
       )}

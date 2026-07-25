@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X, Check, Plus, Trash2 } from 'lucide-react';
-import { DetailSheet, Button } from '@/components/ui';
+import { DetailSheet, Button, WhatsAppIcon } from '@/components/ui';
 import { VoiceRecordButton } from '@/components/knowledge-base/VoiceRecordButton';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 /** Facts editable through the single-field sheet. `hours` is NOT here — it is a
  *  structured Record<day, ranges[]> and needs the Phase-D day/range editor. */
-export type EditableFactKey = 'address' | 'phone' | 'whatsapp' | 'website' | 'delivery' | 'payment';
+export type EditableFactKey = 'address' | 'phone' | 'website' | 'delivery' | 'payment';
 
 /** Multi-line facts get a textarea; the rest a single-line input. */
 const MULTILINE: ReadonlyArray<EditableFactKey> = ['delivery', 'payment'];
@@ -17,7 +17,6 @@ const MULTI: ReadonlyArray<EditableFactKey> = ['phone'];
 
 const INPUT_MODE: Partial<Record<EditableFactKey, 'tel' | 'url' | 'text'>> = {
   phone: 'tel',
-  whatsapp: 'tel',
   website: 'url',
 };
 
@@ -26,8 +25,11 @@ interface BusinessFactSheetProps {
   /** Localized field label — the sheet title. */
   label: string;
   initialValue: string;
+  /** `phone` only: which of the numbers is the merchant's WhatsApp, if any. */
+  initialWhatsapp?: string;
   saving: boolean;
-  onSave: (value: string) => void;
+  /** `whatsapp` is passed for `phone` only — the number flagged in the sheet. */
+  onSave: (value: string, whatsapp?: string) => void;
   onClose: () => void;
 }
 
@@ -45,6 +47,7 @@ export function BusinessFactSheet({
   factKey,
   label,
   initialValue,
+  initialWhatsapp,
   saving,
   onSave,
   onClose,
@@ -59,19 +62,38 @@ export function BusinessFactSheet({
     const parts = initialValue.split(/[,،]/).map((p) => p.trim()).filter(Boolean);
     return parts.length ? parts : [''];
   });
+  // Which number is on WhatsApp. In this market it is nearly always one of the
+  // numbers the merchant already listed — a separate field made them type the
+  // same digits twice and keep two copies in sync. `channels.whatsapp` holds a
+  // single value, so the flag is exclusive.
+  const [waIndex, setWaIndex] = useState<number>(() => {
+    const wa = initialWhatsapp?.trim();
+    if (!wa) return -1;
+    return values.findIndex((v) => v.trim() === wa);
+  });
 
   useEscapeKey(onClose, true);
 
   const isMultiline = MULTILINE.includes(factKey);
   const inputId = `fact-${factKey}`;
   const joined = values.map((v) => v.trim()).filter(Boolean).join(', ');
-  const dirty = isMulti ? joined !== initialValue.trim() : value.trim() !== initialValue.trim();
+  const whatsapp = waIndex >= 0 ? values[waIndex]?.trim() || undefined : undefined;
+  const dirty = isMulti
+    ? joined !== initialValue.trim() || whatsapp !== (initialWhatsapp?.trim() || undefined)
+    : value.trim() !== initialValue.trim();
 
   const addValue = () => setValues((prev) => [...prev, '']);
 
+  const removeValue = (i: number) => {
+    setValues((prev) => prev.filter((_, j) => j !== i));
+    // Keep the flag pinned to the same NUMBER, not the same slot.
+    setWaIndex((prev) => (prev === i ? -1 : prev > i ? prev - 1 : prev));
+  };
+
   const submit = () => {
     if (saving) return;
-    onSave(isMulti ? joined : value.trim());
+    if (isMulti) onSave(joined, whatsapp);
+    else onSave(value.trim());
   };
 
   return (
@@ -104,31 +126,50 @@ export function BusinessFactSheet({
           /* Repeatable values (phone): one input per number — a merchant should
              never have to remember a separator. Joined with ", " on save; the
              page splits it back into the `phones` array. */
-          <div className="space-y-2">
+          <div className="space-y-3">
             {values.map((v, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  inputMode={INPUT_MODE[factKey] ?? 'text'}
-                  value={v}
-                  onChange={(e) => setValues((prev) => prev.map((p, j) => (j === i ? e.target.value : p)))}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addValue(); } }}
-                  dir={v ? 'auto' : undefined}
-                  autoFocus={i === 0}
-                  placeholder={t(`facts.placeholder_${factKey}`)}
-                  aria-label={`${label} ${i + 1}`}
-                  className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-                {values.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setValues((prev) => prev.filter((_, j) => j !== i))}
-                    aria-label={`${tc('delete')} ${label} ${i + 1}`}
-                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
-                  >
-                    <Trash2 className="w-4 h-4" aria-hidden="true" />
-                  </button>
-                )}
+              <div key={i} className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode={INPUT_MODE[factKey] ?? 'text'}
+                    value={v}
+                    onChange={(e) => setValues((prev) => prev.map((p, j) => (j === i ? e.target.value : p)))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addValue(); } }}
+                    dir={v ? 'auto' : undefined}
+                    autoFocus={i === 0}
+                    placeholder={t(`facts.placeholder_${factKey}`)}
+                    aria-label={`${label} ${i + 1}`}
+                    className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  {values.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeValue(i)}
+                      aria-label={`${tc('delete')} ${label} ${i + 1}`}
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+                {/* Marking the number rather than re-entering it: a merchant's
+                    WhatsApp is nearly always a SIM they already listed. */}
+                <button
+                  type="button"
+                  onClick={() => setWaIndex((prev) => (prev === i ? -1 : i))}
+                  disabled={!v.trim()}
+                  aria-pressed={waIndex === i}
+                  className={`min-h-[36px] inline-flex items-center gap-1.5 rounded-full ps-2 pe-3 text-xs font-medium border transition disabled:opacity-40 ${
+                    waIndex === i
+                      ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border-brand-500'
+                      : 'bg-card text-muted-foreground border-theme-border hover:bg-surface-100'
+                  }`}
+                >
+                  <WhatsAppIcon size={14} aria-hidden="true" />
+                  {t('facts.phoneIsWhatsapp')}
+                  {waIndex === i && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
+                </button>
               </div>
             ))}
             <button

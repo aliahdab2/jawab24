@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { BusinessFactSheet, type EditableFactKey } from '@/components/business/BusinessFactSheet';
 
 // The real VoiceRecordButton renders `null` when MediaRecorder is unsupported —
@@ -10,6 +10,7 @@ vi.mock('@/components/knowledge-base/VoiceRecordButton', () => ({
 }));
 
 vi.mock('@/components/ui', () => ({
+  WhatsAppIcon: () => <svg data-testid="wa-icon" />,
   DetailSheet: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Button: ({ children, onClick, disabled }: {
     children: React.ReactNode;
@@ -18,17 +19,19 @@ vi.mock('@/components/ui', () => ({
   }) => <button onClick={onClick} disabled={disabled}>{children}</button>,
 }));
 
-function renderSheet(factKey: EditableFactKey, initialValue = '') {
-  return render(
+function renderSheet(factKey: EditableFactKey, initialValue = '', onSave = vi.fn(), initialWhatsapp?: string) {
+  render(
     <BusinessFactSheet
       factKey={factKey}
       label={factKey}
       initialValue={initialValue}
+      initialWhatsapp={initialWhatsapp}
       saving={false}
-      onSave={vi.fn()}
+      onSave={onSave}
       onClose={vi.fn()}
     />,
   );
+  return onSave;
 }
 
 describe('BusinessFactSheet — voice input scope', () => {
@@ -43,13 +46,45 @@ describe('BusinessFactSheet — voice input scope', () => {
     },
   );
 
-  it.each<EditableFactKey>(['address', 'website', 'phone', 'whatsapp'])(
+  it.each<EditableFactKey>(['address', 'website', 'phone'])(
     'does not offer voice on the structured fact %s',
     (factKey) => {
       renderSheet(factKey);
       expect(screen.queryByTestId('voice-btn')).not.toBeInTheDocument();
     },
   );
+
+  // WhatsApp is a MARK on a number the merchant already listed, not a second
+  // field: in this market it is nearly always the same SIM, and a separate row
+  // meant typing the same digits twice with two copies to keep in sync.
+  it('saves the marked number as the WhatsApp contact alongside the phones', () => {
+    const onSave = renderSheet('phone', '0988888888, 0935924400');
+    fireEvent.click(screen.getAllByRole('button', { name: /Also on WhatsApp/ })[1]);
+    fireEvent.click(screen.getByText('Save'));
+    expect(onSave).toHaveBeenCalledWith('0988888888, 0935924400', '0935924400');
+  });
+
+  it('pre-marks the number already stored as WhatsApp', () => {
+    renderSheet('phone', '0988888888, 0935924400', vi.fn(), '0935924400');
+    const marks = screen.getAllByRole('button', { name: /Also on WhatsApp/ });
+    expect(marks[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(marks[1]).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('clears the WhatsApp contact when the mark is toggled off', () => {
+    const onSave = renderSheet('phone', '0988888888', vi.fn(), '0988888888');
+    fireEvent.click(screen.getByRole('button', { name: /Also on WhatsApp/ }));
+    fireEvent.click(screen.getByText('Save'));
+    expect(onSave).toHaveBeenCalledWith('0988888888', undefined);
+  });
+
+  // The flag must follow the NUMBER, not the row position.
+  it('keeps the mark on the right number when an earlier one is deleted', () => {
+    const onSave = renderSheet('phone', '0988888888, 0935924400', vi.fn(), '0935924400');
+    fireEvent.click(screen.getByRole('button', { name: /delete phone 1/i }));
+    fireEvent.click(screen.getByText('Save'));
+    expect(onSave).toHaveBeenCalledWith('0935924400', '0935924400');
+  });
 
   it('still renders an editable input for a structured fact', () => {
     renderSheet('address', 'Damascus, Al-Baramkeh');
