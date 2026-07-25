@@ -357,10 +357,12 @@ Each service is independently deployable but shares:
      - Keep responses concise (200 chars avg)
    - **Context** — last 10 messages, customer name, returning status, KB excerpt
 
-7. **Caching**:
-   - **Exact cache** — scoped by `kbActiveVersion`, `postMessage`, `replyStyle`, `customerContext`
-   - **Semantic cache** — skipped when `customerContext` present (personalized replies need fresh generation)
-   - Cache key hash: `md5(concat(keys))`
+7. **Caching** — full design, operations, and revert runbook in
+   [`docs/technical/reply-cache.md`](../../docs/technical/reply-cache.md):
+   - **Exact cache** (Redis, 30d TTL) — scoped by `PROMPT_VERSION`, `kbActiveVersion`, `postMessage`, `replyStyle`, `customerContext`; DM keys add a gender/name precedence chain (`g:d` dual-variant → `g:n` certified-neutral → `g:m`/`g:f` fleet-map buckets → hashed first-name fallback); DM reads AND saves first-touch only
+   - **Semantic cache** (pgvector, 30d TTL) — intent-aware similarity thresholds; skipped for PRICE/PURCHASE_INTENT/COMPLAINT, with `customerContext`, and mid-conversation
+   - **Save-side quality gate** (`cacheQualityGate.ts`) blocks low-confidence / not-in-KB / language-mismatch replies from both layers; deploy-time warm job re-warms top comments after prompt-version flushes
+   - Cache key hash: `sha256(concat(segments))`
 
 8. **Error Handling**:
    - OpenAI API errors → Sentry capture + job retry
