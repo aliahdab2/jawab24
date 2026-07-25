@@ -5,6 +5,7 @@ import { config } from '../config';
 import { stripeService, stripeRefId } from '../services/stripe';
 import { paymentRequestService } from '../services/paymentRequest';
 import { subscriptionsService } from '../services/subscriptions';
+import { adoptStripeSubscription } from '../services/subscriptionLinking';
 import { topupService } from '../services/topup';
 import { notificationService } from '../services/notifications';
 import { emailService } from '../services/email';
@@ -302,91 +303,8 @@ export async function handleSubscriptionCreated(
             );
         }
     } else {
-        await adoptStripeSubscription(stripeSubscription, request);
+        await adoptStripeSubscription(stripeSubscription, request.log);
     }
-}
-
-/**
- * Attach a Stripe subscription to the local row it belongs to, keyed on the
- * `metadata.userId` / `metadata.planId` that createSubscriptionIntent stamps.
- *
- * WHY THIS EXISTS. `externalSubscriptionId` was only ever written by
- * handleCheckoutComplete, which runs on `checkout.session.completed` — an event
- * that fires exclusively for Stripe Checkout Sessions. Checkout moved to the
- * embedded PaymentElement (`create-subscription-intent` →
- * `stripe.subscriptions.create`), which creates no Session, so that event
- * stopped firing and nothing linked the two sides any more. Every downstream
- * handler resolves our row `WHERE external_subscription_id = …`, so they all
- * matched zero rows: merchants were charged by Stripe and never activated here,
- * silently, because the handlers still returned success. Confirmed in
- * production 2026-07-25 — one paid merchant left on a Starter trial, and only
- * 1 of 66 subscription rows linked at all.
- *
- * Adoption is deliberately gated on the Stripe subscription being PAID
- * (`active`/`trialing`). A `default_incomplete` subscription is created before
- * the customer pays and one merchant can rack up several by retrying, so
- * adopting on creation would link the row to whichever attempt happened to fire
- * last and mark an unpaid account active.
- */
-export async function adoptStripeSubscription(
-    stripeSubscription: Stripe.Subscription,
-    request: FastifyRequest
-): Promise<boolean> {
-    const { userId, planId } = stripeSubscription.metadata ?? {};
-    const status = stripeSubscription.status;
-
-    if (status !== 'active' && status !== 'trialing') {
-        request.log.info(
-            { subscriptionId: stripeSubscription.id, status },
-            'Unlinked Stripe subscription is not paid yet — not adopting'
-        );
-        return false;
-    }
-
-    if (!userId || !planId) {
-        request.log.warn(
-            { subscriptionId: stripeSubscription.id, status },
-            'Paid Stripe subscription has no userId/planId metadata — cannot adopt'
-        );
-        return false;
-    }
-
-    // Take over the user's existing row rather than inserting a second one:
-    // signup already created a local trial row, and leaving it behind would let
-    // the subscription resolver keep serving the stale trial.
-    const [current] = await db
-        .select({ id: subscriptions.id })
-        .from(subscriptions)
-        .where(eq(subscriptions.userId, userId))
-        .orderBy(desc(subscriptions.createdAt))
-        .limit(1);
-
-    const period = getSubscriptionPeriod(stripeSubscription);
-    const values = {
-        userId,
-        planId,
-        status,
-        externalSubscriptionId: stripeSubscription.id,
-        paymentMethod: 'stripe' as const,
-        stripeCustomerId: stripeRefId(stripeSubscription.customer),
-        currentPeriodStart: stripeTsToDate(period.start),
-        currentPeriodEnd: stripeTsToDate(period.end),
-        trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
-        updatedAt: new Date(),
-    };
-
-    if (current) {
-        await db.update(subscriptions).set(values).where(eq(subscriptions.id, current.id));
-    } else {
-        await db.insert(subscriptions).values(values);
-    }
-
-    await subscriptionsService.invalidateStatusCache(userId);
-    request.log.info(
-        { subscriptionId: stripeSubscription.id, userId, planId, status, adopted: current ? 'updated' : 'inserted' },
-        'Adopted Stripe subscription onto the local row'
-    );
-    return true;
 }
 
 /**
@@ -444,7 +362,7 @@ export async function handleSubscriptionUpdated(
         // Never linked (see adoptStripeSubscription). This is the event that
         // carries a PaymentElement subscription from `incomplete` to `active`,
         // so it is the normal moment for a first-time payer to get adopted.
-        await adoptStripeSubscription(stripeSubscription, request);
+        await adoptStripeSubscription(stripeSubscription, request.log);
     }
 }
 
@@ -529,7 +447,7 @@ export async function handlePaymentSucceeded(invoice: Stripe.Invoice, request: F
         // The row was never linked to Stripe (see adoptStripeSubscription).
         // Money has demonstrably landed at this point, so adopt on the invoice
         // rather than logging an error and dropping a paid customer.
-        const adopted = await adoptStripeSubscription(stripeSubscription, request);
+        const adopted = await adoptStripeSubscription(stripeSubscription, request.log);
         if (!adopted) {
             request.log.error(
                 { subscriptionId: stripeSubscriptionId },

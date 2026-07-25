@@ -500,6 +500,21 @@ const start = async () => {
       recovered: r => ({ count: r.reingested, message: `KB re-ingest reconciler healed ${r.reingested} page(s) whose chunks had drifted from their KB text` }),
     });
 
+    // Subscription reconciliation — activate merchants who paid in Stripe but
+    // were never linked here. The webhook path is a single point of failure: one
+    // dropped delivery and a merchant is charged for nothing, silently, because
+    // every handler resolves our row by external_subscription_id and a missing
+    // link just matches zero rows. Stripe is the authority on who is paying, so
+    // ask it. Idempotent — linked subscriptions are skipped.
+    const { reconcileStripeSubscriptions } = await import('./services/subscriptionLinking');
+    scheduleReconcileCron({
+      label: 'SubscriptionReconcile',
+      tag: 'subscription_reconcile',
+      enabled: () => !!config.stripe.secretKey,
+      run: () => reconcileStripeSubscriptions({ log: server.log }),
+      recovered: r => ({ count: r.healed, message: `Subscription reconciliation activated ${r.healed} merchant(s) who had paid but were never linked` }),
+    });
+
     // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms
     // Catches stock changes from sales that webhooks don't cover (inventory_levels/update)
     const { getAllActiveStores } = await import('./services/ecommerce');
