@@ -23,7 +23,7 @@ interface TimezoneCardProps extends SettingsCardProps {
  * silently shifts all of them.
  *
  * Sits with dashboard language: same class of setting (how this workspace is
- * configured), same always-visible placement. One value, one home (D-039);
+ * configured), same always-visible placement. One value, one home (D-043);
  * everything else shows it read-only and links here.
  */
 export function TimezoneCard({ settings, setSettings, currentTime }: TimezoneCardProps) {

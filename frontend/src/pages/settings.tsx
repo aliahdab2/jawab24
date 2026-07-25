@@ -251,7 +251,7 @@ const SettingsPage: NextPageWithLayout = () => {
     const anchorId = window.location.hash.slice(1);
     // 'business-hours-timezone-label' is the target of the timezone hint in the
     // /business hours sheet — timezone stays HERE (workspace-level, one home per
-    // D-039); the sheet only links in.
+    // D-043); the sheet only links in.
     const KNOWN_ANCHORS = ['limit-fallback-message', 'comment-reply-mode-label', 'business-hours-timezone-label'];
     if (!KNOWN_ANCHORS.includes(anchorId)) return;
     didDeepLinkRef.current = true;

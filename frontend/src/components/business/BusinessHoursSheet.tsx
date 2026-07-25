@@ -325,7 +325,7 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
 
         {/* Timezone is SHOWN, never edited here: it is workspace-level and already
             drives the AI's date awareness + the Post-Reply hours gate. A second
-            control would give one value two homes (D-039). */}
+            control would give one value two homes (D-043). */}
         {timezone && (
           <p className="text-xs text-muted-foreground mt-4">
             {/* Show the city, not the IANA id: "Asia/Damascus" → "Damascus". */}
