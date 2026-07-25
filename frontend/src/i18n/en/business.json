@@ -39,7 +39,7 @@
     "hint_delivery": "Do you deliver? Where to, and what does it cost?",
     "hint_payment": "How can customers pay — cash, transfer, or card?",
     "placeholder_address": "City, district, and a nearby landmark",
-    "placeholder_phone": "Contact number (separate multiple with a comma)",
+    "placeholder_phone": "Number",
     "placeholder_website": "example.com",
     "placeholder_delivery": "Where you deliver, the cost, and how long it takes",
     "placeholder_payment": "The methods you accept from customers",
@@ -57,7 +57,8 @@
     "day_fri": "Fri",
     "hoursTimezone": "Times are in {timezone}.",
     "hoursTimezoneChange": "Change",
-    "hoursScopeNote": "These hours are what Jawab tells your customers. When replies are active is set in Settings."
+    "hoursScopeNote": "These hours are what Jawab tells your customers. When replies are active is set in Settings.",
+    "addAnother_phone": "Add another number"
   },
   "info": {
     "title": "Additional information",

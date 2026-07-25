@@ -39,7 +39,7 @@
     "hint_delivery": "هل توصّل؟ إلى أين، وكم التكلفة والمدة؟",
     "hint_payment": "كيف يدفع العميل؟ نقدًا، تحويلًا، أو بطاقة؟",
     "placeholder_address": "المدينة، الحي، وأقرب معلم معروف",
-    "placeholder_phone": "رقم التواصل (افصل بين الأرقام بفاصلة)",
+    "placeholder_phone": "الرقم",
     "placeholder_website": "example.com",
     "placeholder_delivery": "إلى أين توصّل، وكم التكلفة والمدة؟",
     "placeholder_payment": "الطرق التي تقبلها من عملائك",
@@ -57,7 +57,8 @@
     "day_fri": "الجمعة",
     "hoursTimezone": "بتوقيت {timezone}.",
     "hoursTimezoneChange": "تغيير",
-    "hoursScopeNote": "هذه الساعات يخبر بها جواب عملاءك. أوقات تشغيل الردود تُضبط من الإعدادات."
+    "hoursScopeNote": "هذه الساعات يخبر بها جواب عملاءك. أوقات تشغيل الردود تُضبط من الإعدادات.",
+    "addAnother_phone": "أضف رقمًا آخر"
   },
   "info": {
     "title": "معلومات إضافية",
