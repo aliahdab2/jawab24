@@ -112,7 +112,7 @@ export function BusinessFactSheet({
                   value={v}
                   onChange={(e) => setValues((prev) => prev.map((p, j) => (j === i ? e.target.value : p)))}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addValue(); } }}
-                  dir="auto"
+                  dir={v ? 'auto' : undefined}
                   autoFocus={i === 0}
                   placeholder={t(`facts.placeholder_${factKey}`)}
                   aria-label={`${label} ${i + 1}`}
@@ -146,7 +146,7 @@ export function BusinessFactSheet({
               id={inputId}
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              dir="auto"
+              dir={value ? 'auto' : undefined}
               rows={4}
               autoFocus
               placeholder={t(`facts.placeholder_${factKey}`)}
@@ -160,7 +160,7 @@ export function BusinessFactSheet({
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
-              dir="auto"
+              dir={value ? 'auto' : undefined}
               autoFocus
               placeholder={t(`facts.placeholder_${factKey}`)}
               className="flex-1 min-w-0 rounded-xl border border-theme-border bg-card px-3 py-2.5 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
