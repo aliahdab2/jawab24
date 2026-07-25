@@ -33,8 +33,16 @@ vi.mock('../../src/services/stripe', () => ({
         (!ref ? null : typeof ref === 'string' ? ref : ref.id),
 }));
 
+const mockCaptureError = vi.fn();
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: (...a: unknown[]) => mockCaptureError(...a),
+}));
+
 vi.mock('../../src/services/subscriptions', () => ({
-    subscriptionsService: { invalidateStatusCache: vi.fn().mockResolvedValue(undefined) },
+    subscriptionsService: {
+        invalidateStatusCache: vi.fn().mockResolvedValue(undefined),
+        initializeUsagePeriod: vi.fn().mockResolvedValue(undefined),
+    },
 }));
 
 import { adoptStripeSubscription, reconcileStripeSubscriptions } from '../../src/services/subscriptionLinking';
@@ -98,6 +106,33 @@ describe('adoptStripeSubscription', () => {
 
         expect(chain.values).toHaveBeenCalledWith(expect.objectContaining({ externalSubscriptionId: 'sub_new' }));
         expect(db.update).not.toHaveBeenCalled();
+    });
+
+    // Without this the merchant is activated but keeps the usage row their
+    // SIGNUP TRIAL created — wrong period boundaries and trial-era quota
+    // accounting for someone who is now paying. handlePaymentSucceeded does it
+    // on its normal path; the adoption path returns before reaching that.
+    it('opens the quota window for the period just paid for', async () => {
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'row_1' }]) as never);
+
+        await adoptStripeSubscription(paidSub({
+            current_period_start: 1_800_000_000,
+            current_period_end: 1_802_592_000,
+        }), mkLog());
+
+        expect(subscriptionsService.initializeUsagePeriod).toHaveBeenCalledWith(
+            'u1', expect.any(Date), expect.any(Date),
+        );
+    });
+
+    it('warns instead of throwing when Stripe returns no period boundaries', async () => {
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'row_1' }]) as never);
+        const log = mkLog();
+
+        await expect(adoptStripeSubscription(paidSub(), log)).resolves.toBe(true);
+
+        expect(subscriptionsService.initializeUsagePeriod).not.toHaveBeenCalled();
+        expect(log.warn).toHaveBeenCalled();
     });
 
     it('adopts a trialing subscription — a card is on file, it is a real commitment', async () => {
@@ -172,6 +207,43 @@ describe('reconcileStripeSubscriptions', () => {
         const r = await reconcileStripeSubscriptions({ log: mkLog() });
 
         expect(r).toMatchObject({ scanned: 2, errors: 1, healed: 1 });
+    });
+
+    // A merchant Stripe says is PAID that we cannot link is money taken with no
+    // account activated, and nothing will fix it on its own. The cron scaffold
+    // only alerts on `healed`, so without this it stays buried in a log line.
+    it('raises a Sentry alert when a paid subscription cannot be linked', async () => {
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([paidSub({ metadata: {} })])
+            .mockResolvedValueOnce([]);
+
+        const r = await reconcileStripeSubscriptions({ log: mkLog() });
+
+        expect(r.orphaned).toBe(1);
+        expect(mockCaptureError).toHaveBeenCalledTimes(1);
+        expect(mockCaptureError.mock.calls[0][1]).toContain('orphaned paid subscriptions');
+    });
+
+    it('stays silent when every paid subscription is accounted for', async () => {
+        vi.mocked(stripeService.listSubscriptions).mockResolvedValue([]);
+        await reconcileStripeSubscriptions({ log: mkLog() });
+        expect(mockCaptureError).not.toHaveBeenCalled();
+    });
+
+    // A bounded sweep must never look like a complete one.
+    it('warns when the page cap is hit so a silent truncation cannot pass as full coverage', async () => {
+        const log = mkLog();
+        vi.mocked(stripeService.listSubscriptions)
+            .mockResolvedValueOnce([paidSub(), paidSub({ id: 'sub_b' })])
+            .mockResolvedValueOnce([]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'row_1' }]) as never);
+
+        await reconcileStripeSubscriptions({ limit: 2, log });
+
+        expect(log.warn).toHaveBeenCalledWith(
+            expect.objectContaining({ status: 'active', limit: 2 }),
+            expect.stringContaining('page cap'),
+        );
     });
 
     it('sweeps both paid states', async () => {

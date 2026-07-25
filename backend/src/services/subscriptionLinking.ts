@@ -5,6 +5,7 @@ import { stripeService, stripeRefId } from './stripe';
 import { subscriptionsService } from './subscriptions';
 import { stripeTsToDate } from '../utils/stripeTime';
 import { getSubscriptionPeriod } from '../utils/stripeCompat';
+import { captureError } from '../utils/sentryHelpers';
 import type Stripe from 'stripe';
 
 /**
@@ -96,6 +97,26 @@ export async function adoptStripeSubscription(
         await db.insert(subscriptions).values(values);
     }
 
+    // Establish the quota window for the period just paid for. Without this an
+    // adopted merchant keeps whatever usage row their SIGNUP TRIAL created —
+    // wrong period boundaries and trial-era accounting for someone now paying.
+    // handlePaymentSucceeded does this on its normal path; the adoption path
+    // returns before reaching it, so it has to happen here to cover all four
+    // callers (subscription.created / .updated / invoice.payment_succeeded /
+    // the reconciliation sweep). Idempotent on replay.
+    if (values.currentPeriodStart && values.currentPeriodEnd) {
+        await subscriptionsService.initializeUsagePeriod(
+            userId,
+            values.currentPeriodStart,
+            values.currentPeriodEnd,
+        );
+    } else {
+        log.warn(
+            { subscriptionId: stripeSubscription.id, userId },
+            'Adopted subscription without valid period boundaries — quota window not initialized'
+        );
+    }
+
     await subscriptionsService.invalidateStatusCache(userId);
     log.info(
         { subscriptionId: stripeSubscription.id, userId, planId, status, adopted: current ? 'updated' : 'inserted' },
@@ -144,6 +165,17 @@ export async function reconcileStripeSubscriptions(options?: {
     for (const status of ['active', 'trialing'] as const) {
         const paid = await stripeService.listSubscriptions({ status, limit });
 
+        // Never let a bounded sweep look like a complete one. If the cap is hit,
+        // subscriptions beyond it are NOT examined this round and a merchant
+        // sitting past the boundary would never be healed — silently, which is
+        // the exact failure shape this module exists to end.
+        if (paid.length >= limit) {
+            log.warn(
+                { status, limit },
+                'Subscription reconciliation hit its page cap — subscriptions beyond it were not examined'
+            );
+        }
+
         for (const sub of paid) {
             result.scanned++;
             try {
@@ -171,6 +203,19 @@ export async function reconcileStripeSubscriptions(options?: {
                 );
             }
         }
+    }
+
+    // A merchant Stripe says is PAID that we cannot adopt is the worst state in
+    // this module: money taken, account not activated, and no code path will
+    // ever fix it on its own. The cron scaffold only alerts on `healed`, so
+    // raise this here or it stays buried in a log line nobody reads — the same
+    // silence that let the original bug run for weeks.
+    if (result.orphaned > 0) {
+        captureError(
+            new Error(`${result.orphaned} paid Stripe subscription(s) could not be linked to a user`),
+            'Subscription reconciliation found orphaned paid subscriptions',
+            { level: 'warning', tags: { cron: 'subscription_reconcile' }, extra: { ...result } },
+        );
     }
 
     return result;
