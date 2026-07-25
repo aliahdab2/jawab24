@@ -55,6 +55,25 @@ describe('replyMentionsName — shared-bucket guard', () => {
         expect(replyMentionsName('The price is 35,000.', 'Sarah Smith')).toBe(false);
     });
 
+    // The guard gates entry to the SHARED cache buckets, so every false positive
+    // demotes a perfectly shareable reply to the per-name tier. Arabic attaches
+    // pronouns and particles to the word, so substring matching (what this started
+    // as) fires on ordinary reply text that names nobody.
+    it.each([
+        ['علي', 'شكراً عليك كتير'],
+        ['حسن', 'أحسن سعر عنا'],
+        ['نور', 'نورت المحل'],
+        ['سما', 'عندنا سماعات'],
+        ['رنا', 'بنرناوي عالسعر'],
+    ])('does not fire on «%s» merely appearing INSIDE a reply word: %s', (name, reply) => {
+        expect(replyMentionsName(reply, name)).toBe(false);
+    });
+
+    it('still fires when the same name stands as its own word', () => {
+        expect(replyMentionsName('شكراً علي', 'علي')).toBe(true);
+        expect(replyMentionsName('نور، السعر 35 ألف', 'نور')).toBe(true);
+    });
+
     it('ignores single-character tokens — initials collide with ordinary words', () => {
         // 'و' as a standalone token must not make every Arabic reply (which is full of
         // the conjunction و) look like it named the customer.

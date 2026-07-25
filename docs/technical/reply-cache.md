@@ -78,9 +78,17 @@ truncating the name in the prompt — the model now receives the full display na
 and picks the address form — which makes name-bearing replies *more* likely, so
 the guard had to widen with it. The name-substring check behind the `g:n` and
 `g:m`/`g:f` save guards became any-token for the same reason (the model shortens
-the name itself, so the part it used is often not the leading one). Cost: «أحمد
-علي» no longer shares segment 4 with «أحمد محمد». Segments 1–3, which carry the
-volume and the gender-map backfill measurement, are byte-identical.
+the name itself, so the part it used is often not the leading one). That guard
+matches WHOLE TOKENS, never substrings — Arabic attaches pronouns to the word, so
+«علي» ⊂ «عليك» and «نور» ⊂ «نورت» would demote ordinary replies that name nobody,
+and at three tokens per name instead of one a substring test would visibly cost
+DM hit rate.
+
+Cost: «أحمد علي» no longer shares segment 4 with «أحمد محمد». Segment 1–3 **keys**
+are byte-identical, but their **save eligibility** moves with the widened guard —
+watch `neutral_bucket:save_reject:name_substring` and
+`gender_bucket:save_downgrade:name_substring` after deploy; a jump there means the
+guard is over-matching and is eating shared-bucket entries.
 
 ## 4. Save-side rules (what is allowed into the cache)
 

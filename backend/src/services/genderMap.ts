@@ -38,10 +38,15 @@ export const MIN_MAJORITY_RATIO = 0.9;
 const OBSERVATION_TTL_SECONDS = 90 * 24 * 60 * 60;
 
 /**
- * First whitespace token of a sender's display name ('' when none) — the
- * "first name" every name-derived bucket keys on (exact-cache name/neutral
- * guards in ai.ts and the learning map below). One definition so the buckets
- * can never drift on what counts as the first name.
+ * First whitespace token of a sender's display name ('' when none) — the key
+ * the GENDER map below learns on, and nothing else since 2026-07-25.
+ *
+ * It is deliberately NOT the cache-identity key: a leading token is a fine
+ * GENDER signal (a kunya «أبو …» / «أم …» is decisive, and aggregating every
+ * «أحمد …» into one entry is required for the map to ever reach
+ * MIN_OBSERVATIONS) but a bad IDENTITY one (it collapses «أبو حسان» and «أبو
+ * خالد» into one person). Cache scoping moved to `utils/senderName.ts`, which
+ * keys on the whole name — see that module's header.
  */
 export function firstNameOf(senderName: string): string {
     return senderName.trim().split(/\s+/)[0] ?? '';

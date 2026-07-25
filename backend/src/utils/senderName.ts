@@ -19,16 +19,30 @@
 import crypto from 'crypto';
 import { normalizeArabic } from '@jawab24/shared';
 
-/** Longest display name we key on — matches the prompt-side cap. */
+/**
+ * Bound on the display name we key on. Independent of the prompt's own 60-char
+ * cap (which is applied AFTER sanitization, so the two can see slightly
+ * different tail text on a very long name) — this one only has to be
+ * deterministic, which it is.
+ */
 const MAX_NAME_CHARS = 60;
 
-/** Normalized whitespace-separated parts of a display name, lowercased. */
-function nameTokens(senderName: string): string[] {
-    return normalizeArabic(senderName.slice(0, MAX_NAME_CHARS))
+/**
+ * Normalized, lowercased, punctuation-stripped whitespace tokens. BOTH sides of
+ * every comparison below go through this, so a name and a reply are always
+ * tokenized the same way — that symmetry is what makes token equality safe.
+ */
+function tokenize(text: string): string[] {
+    return normalizeArabic(text)
         .toLowerCase()
         .split(/\s+/)
         .map(t => t.replace(/[^\p{L}\p{N}]/gu, ''))
         .filter(Boolean);
+}
+
+/** Tokens of a display name, bounded. */
+function nameTokens(senderName: string): string[] {
+    return tokenize(senderName.slice(0, MAX_NAME_CHARS));
 }
 
 /**
@@ -56,11 +70,24 @@ export function senderNameKeyHash(senderName: string): string | null {
  * have matched only by accident and which a full-string check would have missed
  * entirely (the model shortens the name it was given).
  *
- * Single-character tokens are ignored: they are initials and particles that
- * collide with ordinary words, and treating them as a name match would reject
- * almost every reply from the shared buckets.
+ * Matching is WHOLE-TOKEN, never substring. Arabic attaches pronouns and
+ * particles to the word, so a substring test drowns in false positives: «علي» ⊂
+ * «عليك», «حسن» ⊂ «أحسن», «نور» ⊂ «نورت», «سما» ⊂ «سماعات» — all ordinary reply
+ * words, none of them naming anyone. Because this guard gates entry to the
+ * SHARED cache buckets, every false positive is a reply needlessly demoted to
+ * the per-name tier; at three tokens per name instead of one, a substring test
+ * would have quietly eaten the DM hit rate.
+ *
+ * Single-character tokens are ignored: initials and particles that collide with
+ * ordinary words.
+ *
+ * Known residuals (both under-match, the safe direction — the model's own
+ * `usedName` report is the primary guard, this is only belt-and-braces):
+ * a clitic-prefixed form («وحسان») is a different token and won't match, and a
+ * LATIN display name with an Arabic reply («Abo Hasan Shoman» → «يا أبو حسان»)
+ * shares no tokens at all, so transliterated names slip past entirely.
  */
 export function replyMentionsName(reply: string, senderName: string): boolean {
-    const normalizedReply = normalizeArabic(reply).toLowerCase();
-    return nameTokens(senderName).some(token => token.length > 1 && normalizedReply.includes(token));
+    const replyTokens = new Set(tokenize(reply));
+    return nameTokens(senderName).some(token => token.length > 1 && replyTokens.has(token));
 }
