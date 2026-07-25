@@ -65,7 +65,12 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
     // Stripe URL directly — which also drops the old log-in-again-in-browser
     // step. Activation is webhook + reconciliation-sweep driven, so it does not
     // depend on what the browser does after payment.
-    if (isNativePlatform()) {
+    // Free plans need no Stripe surface at all — fall through to the shared
+    // free-plan handling below (dashboard / downgrade dialog), which works
+    // in-app. Creating a hosted session for a $0 plan would just 400 on the
+    // backend (no stripePriceId) and toast a misleading generic error.
+    const nativeSelectedPlan = plans.find((p) => p.id === planId);
+    if (isNativePlatform() && (nativeSelectedPlan?.price ?? 0) > 0) {
       if (!isAuthenticated) {
         // Can't create a session without auth — fall back to the old web flow.
         const checkoutPath = `/checkout?planId=${planId}&interval=${billingInterval}`;

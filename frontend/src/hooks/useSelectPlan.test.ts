@@ -132,6 +132,22 @@ describe('useSelectPlan — native app', () => {
     });
 });
 
+describe('useSelectPlan — native app, free plan', () => {
+    // A $0 plan has no stripePriceId; a hosted session for it would 400 and
+    // toast a misleading error. It must take the shared free-plan path, which
+    // works in-app.
+    it('never creates a checkout session for a free plan', async () => {
+        const FREE = { id: 'plan_free', price: 0, slug: 'free' } as unknown as Plan;
+        const { result } = renderHook(() => useSelectPlan({ plans: [FREE], usage: null, billingInterval: 'month' }));
+
+        await act(() => result.current.handleSelectPlan('plan_free'));
+
+        expect(mockApiPost).not.toHaveBeenCalled();
+        expect(mockOpenExternalUrl).not.toHaveBeenCalled();
+        expect(mockPush).toHaveBeenCalledWith('/dashboard');
+    });
+});
+
 describe('useSelectPlan — web unchanged', () => {
     it('still routes to the embedded checkout page in an ordinary browser', async () => {
         nativeState.native = false;

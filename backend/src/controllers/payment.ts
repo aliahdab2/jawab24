@@ -149,6 +149,10 @@ export class PaymentController {
                     `${config.frontendUrl}/pricing`,
                     trialDays
                 );
+                // Logged so hosted-vs-embedded adoption is measurable — deciding
+                // whether to go hosted-everywhere (D-040's open question) needs
+                // this split, and grep-ability beats adding a metric for it now.
+                request.log.info({ userId, planId, sessionId, uiMode: 'hosted' }, 'Hosted checkout session created');
                 return reply.send({ sessionId, url });
             }
 
