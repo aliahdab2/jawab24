@@ -219,7 +219,10 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
             <TitleWithInfo info={t('businessHours.timezoneInfo')} infoLabel={t('businessHours.timezone')}>
               <label
                 id="business-hours-timezone-label"
-                className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest"
+                // scroll-mt: deep-link target (/business hours sheet). Mobile
+                // needs to clear the fixed top bar (h-14 sm:h-16) the content
+                // scrolls under; on lg that bar doesn't exist.
+                className="block scroll-mt-20 lg:scroll-mt-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest"
               >
                 {t('businessHours.timezone')}
               </label>

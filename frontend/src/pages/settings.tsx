@@ -243,7 +243,10 @@ const SettingsPage: NextPageWithLayout = () => {
     if (loading || didDeepLinkRef.current) return;
     if (typeof window === 'undefined') return;
     const anchorId = window.location.hash.slice(1);
-    const KNOWN_ANCHORS = ['limit-fallback-message', 'comment-reply-mode-label'];
+    // 'business-hours-timezone-label' is the target of the timezone hint in the
+    // /business hours sheet — timezone stays HERE (workspace-level, one home per
+    // D-039); the sheet only links in.
+    const KNOWN_ANCHORS = ['limit-fallback-message', 'comment-reply-mode-label', 'business-hours-timezone-label'];
     if (!KNOWN_ANCHORS.includes(anchorId)) return;
     didDeepLinkRef.current = true;
     if (anchorId === 'limit-fallback-message') setForceAdvanced(true);

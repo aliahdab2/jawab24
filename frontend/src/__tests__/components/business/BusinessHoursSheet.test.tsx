@@ -103,6 +103,14 @@ describe('BusinessHoursSheet', () => {
     expect(screen.getByText('Add another period')).toBeInTheDocument();
   });
 
+  // The link text promises the timezone control; landing at the top of
+  // Settings breaks that promise. The anchor must stay in settings.tsx's
+  // KNOWN_ANCHORS and on BusinessHoursCard's timezone label.
+  it('deep-links the timezone hint to the settings timezone control', () => {
+    renderSheet(PER_DAY);
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/settings#business-hours-timezone-label');
+  });
+
   it('does not make a closed day look tappable', () => {
     renderSheet({ ...PER_DAY, fri: ['closed'] });
     expect(screen.getByRole('button', { name: /^Fri/ })).toBeDisabled();

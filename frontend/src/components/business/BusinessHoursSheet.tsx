@@ -288,7 +288,10 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
           <p className="text-xs text-muted-foreground mt-4">
             {/* Show the city, not the IANA id: "Asia/Damascus" → "Damascus". */}
             {t('facts.hoursTimezone', { timezone: timezone.split('/').pop()?.replace(/_/g, ' ') ?? timezone })}{' '}
-            <Link href="/settings" className="text-brand-600 hover:underline underline-offset-2">
+            {/* Deep-link straight to the timezone control — landing at the top
+                of Settings and making the merchant hunt broke the promise the
+                link text makes. */}
+            <Link href="/settings#business-hours-timezone-label" className="text-brand-600 hover:underline underline-offset-2">
               {t('facts.hoursTimezoneChange')}
             </Link>
           </p>
