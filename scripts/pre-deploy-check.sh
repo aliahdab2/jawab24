@@ -700,6 +700,45 @@ else
     exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# 6b. Real Stripe round-trip (test mode) — payments must be PROVEN, not assumed
+#
+# Every other payment test mocks stripeService, which is precisely how merchants
+# were charged and never activated for weeks with a green suite: the tests
+# validated our model of Stripe, not Stripe. This step makes one genuine
+# subscribe → pay → activate cycle against Stripe TEST mode.
+#
+# A missing key is a HARD FAILURE, not a skip. "No key so we skipped it" reads
+# identically to "payments verified" in a deploy log, and that indistinguishable
+# silence is the bug class this whole gate exists to prevent. Opt out only
+# deliberately, with ALLOW_UNVERIFIED_PAYMENTS=1, which says so out loud.
+# ---------------------------------------------------------------------------
+echo "   Testing Backend (real Stripe round-trip, test mode)..."
+if [ -n "${STRIPE_TEST_SECRET_KEY:-}" ] && [[ "${STRIPE_TEST_SECRET_KEY}" == sk_test_* ]]; then
+    _TEST_LOG=$(mktemp)
+    if (cd backend && STRIPE_ROUNDTRIP=1 STRIPE_SECRET_KEY="$STRIPE_TEST_SECRET_KEY" \
+            npm run test:integration -- stripe.roundtrip) > "$_TEST_LOG" 2>&1; then
+        echo -e "${GREEN}   ✅ Real Stripe round-trip passes (subscribe → pay → activate)${NC}"
+        rm -f "$_TEST_LOG"
+    else
+        echo -e "${RED}   ❌ Real Stripe round-trip FAILED — do not deploy payments!${NC}"
+        cat "$_TEST_LOG"; rm -f "$_TEST_LOG"
+        exit 1
+    fi
+elif [ "${ALLOW_UNVERIFIED_PAYMENTS:-}" = "1" ]; then
+    echo -e "${YELLOW}   ⚠️  SKIPPED by ALLOW_UNVERIFIED_PAYMENTS=1 — payments are NOT verified in this deploy.${NC}"
+else
+    echo -e "${RED}   ❌ STRIPE_TEST_SECRET_KEY is not set (or is not an sk_test_ key).${NC}"
+    echo -e "${RED}   The payment path cannot be verified, and an unverified payment path is${NC}"
+    echo -e "${RED}   how merchants got charged without being activated.${NC}"
+    echo ""
+    echo -e "${YELLOW}   Fix: add the test-mode key from Stripe Dashboard → Developers → API keys${NC}"
+    echo -e "${YELLOW}         - locally: export STRIPE_TEST_SECRET_KEY=sk_test_...${NC}"
+    echo -e "${YELLOW}         - in CI:   gh secret set STRIPE_TEST_SECRET_KEY${NC}"
+    echo -e "${YELLOW}   Or, deliberately and visibly: ALLOW_UNVERIFIED_PAYMENTS=1 ./scripts/pre-deploy-check.sh${NC}"
+    exit 1
+fi
+
 # =============================================
 # 7. E2E tests
 # =============================================

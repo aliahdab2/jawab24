@@ -363,6 +363,36 @@ export class StripeService {
     }
 
     /**
+     * List subscriptions in a given state, following pagination.
+     *
+     * Used by the reconciliation sweep, which treats Stripe as the authority on
+     * who is actually paying. `limit` caps the total pulled per call so a large
+     * account can't turn one sweep into an unbounded crawl.
+     */
+    async listSubscriptions(params: {
+        status: Stripe.SubscriptionListParams.Status;
+        limit?: number;
+    }): Promise<Stripe.Subscription[]> {
+        const s = requireStripe();
+        const max = params.limit ?? 100;
+        const out: Stripe.Subscription[] = [];
+        let startingAfter: string | undefined;
+
+        while (out.length < max) {
+            const page = await s.subscriptions.list({
+                status: params.status,
+                limit: Math.min(100, max - out.length),
+                ...(startingAfter ? { starting_after: startingAfter } : {}),
+            });
+            out.push(...page.data);
+            if (!page.has_more || page.data.length === 0) break;
+            startingAfter = page.data[page.data.length - 1].id;
+        }
+
+        return out;
+    }
+
+    /**
      * Cancel a subscription at period end (user-initiated cancellation)
      */
     async cancelSubscription(subscriptionId: string): Promise<Stripe.Subscription> {

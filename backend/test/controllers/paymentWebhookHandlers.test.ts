@@ -119,7 +119,7 @@ describe('handleSubscriptionCreated (backup path)', () => {
         expect(db.update).not.toHaveBeenCalled();
     });
 
-    it('warns and does nothing when no DB row exists', async () => {
+    it('warns and does nothing when no DB row exists and there is no metadata to adopt by', async () => {
         vi.mocked(db.select).mockReturnValue(q([]) as never);
         const req = mkReq();
         await handleSubscriptionCreated({ id: 'sub_x', status: 'active' } as Stripe.Subscription, req);
