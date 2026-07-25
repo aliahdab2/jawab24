@@ -103,7 +103,10 @@ export function serializeWeek(week: WeekState): Record<string, string[]> | null 
     if (state.kind === 'allDay') { out[day] = ['all day']; continue; }
 
     const entries: string[] = [];
-    for (const range of state.ranges) {
+    // Store periods in clock order: a merchant may add the evening shift first,
+    // and "17:00-22:00 / 09:00-14:00" reads wrong wherever it is rendered.
+    const ordered = [...state.ranges].sort((a, b) => toMinutes(a.from) - toMinutes(b.from));
+    for (const range of ordered) {
       // Reuse the shared canonicalizer — never re-implement time parsing.
       const parsed = canonicalizeHoursEntry(`${range.from}-${range.to}`);
       if (!parsed.ok) return null;
@@ -118,6 +121,65 @@ export function serializeWeek(week: WeekState): Record<string, string[]> | null 
 /** True when at least one day is open — an all-closed week is not a schedule. */
 export function hasOpenDay(week: WeekState): boolean {
   return DAY_KEYS.some((d) => week[d].kind !== 'closed');
+}
+
+const toMinutes = (t: string): number => {
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+const toClock = (min: number): string => {
+  const wrapped = ((min % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`;
+};
+
+/** Periods as minute intervals, sorted by start. A period whose end is at or
+ *  before its start runs past midnight (20:00-02:00 is a real late-night
+ *  schedule), so it is extended into the next day rather than rejected. */
+function toIntervals(ranges: TimeRange[]): { start: number; end: number }[] {
+  return ranges
+    .map((r) => {
+      const start = toMinutes(r.from);
+      let end = toMinutes(r.to);
+      if (end <= start) end += 1440;
+      return { start, end };
+    })
+    .sort((a, b) => a.start - b.start);
+}
+
+/**
+ * True when a day's periods collide. Two periods that overlap aren't a
+ * schedule — they'd reach the AI as "09:00-17:00 / 11:00-18:00" and it would
+ * quote a customer something incoherent, so the editor must refuse to save it.
+ */
+export function dayHasOverlap(state: DayState): boolean {
+  if (state.kind !== 'ranges' || state.ranges.length < 2) return false;
+  const iv = toIntervals(state.ranges);
+  for (let i = 1; i < iv.length; i++) {
+    if (iv[i].start < iv[i - 1].end) return true;
+  }
+  // A late-night tail must not wrap back into the first period of the day.
+  return iv[iv.length - 1].end - 1440 > iv[0].start;
+}
+
+/** Days whose periods collide — the sheet blocks saving while any exist. */
+export function overlappingDays(week: WeekState): DayKey[] {
+  return DAY_KEYS.filter((d) => dayHasOverlap(week[d]));
+}
+
+/**
+ * Where a newly added period should start. Defaulting it to the SAME hours as
+ * the existing one guaranteed an overlap on every tap of "add another period" —
+ * the invalid state was the default. An hour after the previous period ends is
+ * the shape merchants actually mean (09:00-14:00, then 15:00-18:00).
+ */
+export function nextPeriodDefault(ranges: TimeRange[]): TimeRange {
+  if (ranges.length === 0) return { ...DEFAULT_RANGE };
+  const iv = toIntervals(ranges);
+  const lastEnd = iv[iv.length - 1].end;
+  const start = Math.min(lastEnd + 60, 22 * 60);
+  const end = Math.min(start + 180, 23 * 60 + 59);
+  return { from: toClock(start), to: toClock(end) };
 }
 
 export interface DayLabels {

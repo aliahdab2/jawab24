@@ -141,6 +141,25 @@ describe('BusinessHoursSheet', () => {
     expect(onSave.mock.calls[0][0].sun).toEqual(['all day']);
   });
 
+  // Overlapping periods would reach the AI as "09:00-17:00 / 11:00-18:00" and
+  // it would quote a customer something incoherent.
+  it('blocks saving overlapping periods and names the offending day', () => {
+    renderSheet({ ...PER_DAY, sun: ['09:00-17:00', '11:00-18:00'] });
+    expect(screen.getByText('Save').closest('button')).toBeDisabled();
+    // Visible on the collapsed row too, so a hidden day is never a dead end.
+    expect(screen.getByRole('button', { name: /^Sun/ }))
+      .toHaveTextContent('These periods overlap');
+  });
+
+  it('a newly added period does not overlap the existing one', () => {
+    const onSave = renderSheet({ ...PER_DAY, sat: ['09:00-14:00'] });
+    fireEvent.click(screen.getByRole('button', { name: /^Sat/ }));
+    fireEvent.click(screen.getByText('Add another period'));
+    expect(screen.getByText('Save').closest('button')).toBeEnabled();
+    save();
+    expect(onSave.mock.calls[0][0].sat).toEqual(['09:00-14:00', '15:00-18:00']);
+  });
+
   it('blocks saving when every day is closed', () => {
     renderSheet(PER_DAY);
     screen.getAllByRole('switch').forEach((s) => fireEvent.click(s));

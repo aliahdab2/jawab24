@@ -12,6 +12,9 @@ import {
   serializeWeek,
   hasOpenDay,
   describeDay,
+  dayHasOverlap,
+  overlappingDays,
+  nextPeriodDefault,
   type DayKey,
   type WeekState,
 } from '@/utils/businessHours';
@@ -93,7 +96,10 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
     setWeek((prev) => {
       const state = prev[day];
       if (state.kind !== 'ranges') return prev;
-      return { ...prev, [day]: { kind: 'ranges', ranges: [...state.ranges, { ...DEFAULT_RANGE }] } };
+      // Starts after the previous period ends, so adding one never creates an
+      // overlap by default.
+      const ranges = [...state.ranges, nextPeriodDefault(state.ranges)];
+      return { ...prev, [day]: { kind: 'ranges', ranges } };
     });
 
   const removePeriod = (day: DayKey, index: number) =>
@@ -126,7 +132,12 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
   };
 
   const serialized = serializeWeek(week);
-  const valid = serialized !== null && hasOpenDay(week);
+  // Google Business Profile requires the same thing of split hours ("if your
+  // first slot ends at 2 PM, your second should begin at 2 PM or later"), and
+  // Google's own day-part API names the failure TIME_PERIODS_OVERLAP. Adjacent
+  // periods are fine; only true overlaps are refused.
+  const overlaps = overlappingDays(week);
+  const valid = serialized !== null && hasOpenDay(week) && overlaps.length === 0;
 
   const submit = () => {
     if (saving || !valid) return;
@@ -161,6 +172,7 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
             const isOpen = state.kind !== 'closed';
             const dayLabel = t(`facts.day_${day}`);
             const isExpanded = isOpen && expanded === day;
+            const hasOverlap = dayHasOverlap(state);
             const summary = describeDay(state, {
               closed: t('facts.hoursClosed'),
               allDay: t('facts.hoursAllDay'),
@@ -181,13 +193,18 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
                   >
                     <span className="text-sm font-medium text-foreground">{dayLabel}</span>
                     <span
-                      className={`flex-1 min-w-0 truncate text-sm ${isOpen ? 'text-muted-foreground' : 'text-subtle'}`}
-                      dir="ltr"
+                      className={`flex-1 min-w-0 truncate text-sm ${
+                        // A collapsed day must still show it is the reason Save
+                        // is disabled — otherwise the merchant hits a dead end.
+                        hasOverlap ? 'text-amber-700 dark:text-amber-400'
+                          : isOpen ? 'text-muted-foreground' : 'text-subtle'
+                      }`}
+                      dir={hasOverlap ? undefined : 'ltr'}
                       // Times read LTR in both locales; keep them on the side
                       // the day name isn't, so the column scans cleanly.
                       style={{ textAlign: 'end' }}
                     >
-                      {summary}
+                      {hasOverlap ? t('facts.hoursOverlap') : summary}
                     </span>
                     {isOpen && (
                       <ChevronDown
@@ -217,37 +234,62 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
 
                 {isExpanded && state.kind === 'ranges' && (
                   <div className="pb-3 space-y-2">
-                    {state.ranges.map((range, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <input
-                          type="time"
-                          value={range.from}
-                          onChange={(e) => setRange(day, i, 'from', e.target.value)}
-                          dir="ltr"
-                          aria-label={`${dayLabel} — ${t('facts.hoursFrom')} ${i + 1}`}
-                          className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        />
-                        <span aria-hidden="true" className="text-muted-foreground">–</span>
-                        <input
-                          type="time"
-                          value={range.to}
-                          onChange={(e) => setRange(day, i, 'to', e.target.value)}
-                          dir="ltr"
-                          aria-label={`${dayLabel} — ${t('facts.hoursTo')} ${i + 1}`}
-                          className="flex-1 min-w-0 min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        />
-                        {state.ranges.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removePeriod(day, i)}
-                            aria-label={`${t('facts.hoursRemovePeriod')} — ${dayLabel} ${i + 1}`}
-                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
-                          >
-                            <Trash2 className="w-4 h-4" aria-hidden="true" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                    {state.ranges.map((range, i) => {
+                      const fromId = `hours-${day}-${i}-from`;
+                      const toId = `hours-${day}-${i}-to`;
+                      return (
+                        // items-end so the dash and the delete button sit on the
+                        // inputs' baseline once the captions push them down.
+                        <div key={i} className="flex items-end gap-2">
+                          <div className="flex-1 min-w-0">
+                            {/* Two bare time boxes and a dash left it to the
+                                merchant to guess which is which — worse in RTL,
+                                where the visual order flips. Google labels both;
+                                so do we. */}
+                            <label htmlFor={fromId} className="block text-[11px] text-muted-foreground mb-1">
+                              {t('facts.hoursFrom')}
+                            </label>
+                            <input
+                              id={fromId}
+                              type="time"
+                              value={range.from}
+                              onChange={(e) => setRange(day, i, 'from', e.target.value)}
+                              dir="ltr"
+                              className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            />
+                          </div>
+                          <span aria-hidden="true" className="text-muted-foreground pb-3">–</span>
+                          <div className="flex-1 min-w-0">
+                            <label htmlFor={toId} className="block text-[11px] text-muted-foreground mb-1">
+                              {t('facts.hoursTo')}
+                            </label>
+                            <input
+                              id={toId}
+                              type="time"
+                              value={range.to}
+                              onChange={(e) => setRange(day, i, 'to', e.target.value)}
+                              dir="ltr"
+                              className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            />
+                          </div>
+                          {state.ranges.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removePeriod(day, i)}
+                              aria-label={`${t('facts.hoursRemovePeriod')} — ${dayLabel} ${i + 1}`}
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4" aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {dayHasOverlap(state) && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400" role="alert">
+                        {t('facts.hoursOverlap')}
+                      </p>
+                    )}
                     {/* Split shifts are real here (open morning, close midday,
                         reopen evening) and the storage array already holds them. */}
                     <button
