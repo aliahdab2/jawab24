@@ -14,6 +14,7 @@ import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { redisScanDelete } from '../lib/redis';
 import { customerNotificationService } from './customerNotifications';
+import { workspaceSettingsService } from './workspaceSettings';
 
 // --- Constants & Types ---
 
@@ -362,6 +363,21 @@ export async function createStore(opts: CreateStoreOptions) {
             updatedAt: new Date(),
         },
     }).returning();
+
+    // A connected store knows where the BUSINESS is — better than the device
+    // that happens to open Settings, and better than the placeholder every
+    // workspace inherits. Only adopted when the merchant has never set one
+    // (see adoptTimezoneIfUnset); never fatal to a store connect.
+    if (opts.workspaceId && opts.shopInfo?.shopTimezone) {
+        try {
+            await workspaceSettingsService.adoptTimezoneIfUnset(opts.workspaceId, opts.shopInfo.shopTimezone);
+        } catch (err) {
+            captureError(err, 'Failed to adopt store timezone', {
+                tags: { service: 'ecommerce', action: 'adopt-store-timezone' },
+                extra: { workspaceId: opts.workspaceId, platform: opts.platform },
+            });
+        }
+    }
 
     return result[0];
 }

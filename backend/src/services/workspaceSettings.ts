@@ -6,7 +6,7 @@ import { t } from '../utils/i18n';
 import { captureError } from '../utils/sentryHelpers';
 import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 import type { WorkspaceSettings, LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
-import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
+import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, isValidTimezone, resolveEffectiveLeadStages, resolveEffectiveLeadFields } from '@jawab24/shared';
 import { PIPELINE_FIELDS, type PipelineField } from './pipelineFields';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
@@ -235,6 +235,47 @@ export class WorkspaceSettingsService {
         }
 
         return merged;
+    }
+
+    /**
+     * Adopt a timezone discovered from an external source (today: a connected
+     * Shopify store's `iana_timezone`) — but ONLY when the workspace has never
+     * set one of its own.
+     *
+     * Why this exists: `settings.timezone` defaults to a placeholder nobody
+     * chose, and a wrong zone silently shifts every time-based behaviour — the
+     * AI's "today's date", the reply-hours gate, and the working hours quoted
+     * to customers. A store's own timezone is a far better signal than the
+     * device that happens to open Settings, because it describes where the
+     * BUSINESS is, not where the phone is.
+     *
+     * ⚠️ Reads the RAW stored JSON, never `getSettings()`. That merges DEFAULTS
+     * over the stored value, so a workspace that never set a timezone is
+     * indistinguishable there from a merchant who deliberately picked
+     * `DEFAULTS.timezone` ('Asia/Damascus') — seeding off it would overwrite a
+     * real choice. Only a genuinely absent value or the untouched placeholder
+     * is treated as unset.
+     *
+     * Returns true when it actually wrote.
+     */
+    async adoptTimezoneIfUnset(workspaceId: string, timezone: string | null | undefined): Promise<boolean> {
+        const candidate = timezone?.trim();
+        if (!candidate || !isValidTimezone(candidate)) return false;
+
+        const [workspace] = await db
+            .select({ settings: workspaces.settings })
+            .from(workspaces)
+            .where(eq(workspaces.id, workspaceId))
+            .limit(1);
+        if (!workspace) return false;
+
+        const stored = (workspace.settings ?? {}) as Partial<WorkspaceSettings>;
+        const existing = stored.timezone?.trim();
+        const unset = !existing || existing === PLACEHOLDER_TIMEZONE;
+        if (!unset || existing === candidate) return false;
+
+        await this.updateSettings(workspaceId, { timezone: candidate });
+        return true;
     }
 
     /**
