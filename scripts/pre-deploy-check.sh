@@ -558,6 +558,17 @@ else
     exit 1
 fi
 
+# @jawab24/shared was omitted here, so its lint errors only ever surfaced in the
+# repo-wide `npm run lint` — it sat red while deploys kept passing. It ships in
+# both the backend and frontend images, so it gets the same gate as they do.
+if npm run lint --workspace=@jawab24/shared > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Shared package lint passes${NC}"
+else
+    echo -e "${RED}   ❌ Shared package lint failed!${NC}"
+    npm run lint --workspace=@jawab24/shared
+    exit 1
+fi
+
 # =============================================
 # 4. Code quality checks
 # =============================================

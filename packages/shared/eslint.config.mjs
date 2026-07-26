@@ -29,6 +29,10 @@ export default [
                 // loading; cwd-independent path resolution in tests).
                 require: 'readonly',
                 __dirname: 'readonly',
+                // WHATWG URL — a standard global in Node and every browser. This package
+                // is consumed by both the backend and the frontend, so it must stay
+                // environment-neutral; `new URL()` is the portable way to parse a URL.
+                URL: 'readonly',
             },
         },
         plugins: {
