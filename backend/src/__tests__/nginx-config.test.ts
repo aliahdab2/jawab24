@@ -127,6 +127,33 @@ describe('nginx.conf - www redirect (CSP guard)', () => {
     expect(imgSrc).toContain('https://*.cdninstagram.com');
     expect(imgSrc).toContain('https://*.backblazeb2.com');
   });
+
+  /**
+   * WhatsApp Embedded Signup (`frontend/src/lib/whatsappSignup.ts`) injects the
+   * Facebook JS SDK at runtime. The SDK was missing from script-src, so the
+   * <script> was blocked, script.onerror fired, and every merchant clicking
+   * "connect WhatsApp" got "Failed to load Facebook SDK" (Sentry
+   * JAWAB24-FRONTEND-2Q). CSP failures are invisible to unit and E2E tests —
+   * only a real browser against real nginx enforces the header — so this test
+   * is the only automated guard. Sources verified against the live loader:
+   * it fetches a second script from connect.facebook.net and builds the
+   * xd_arbiter frame on staticxx.facebook.com.
+   */
+  it('CSP allows the Facebook JS SDK used by WhatsApp Embedded Signup', () => {
+    const cspMatch = nginxConf.match(/Content-Security-Policy\s+"([^"]+)"/);
+    const csp = (cspMatch as RegExpMatchArray)[1];
+    const scriptSrc = (csp.match(/script-src\s+([^;]+)/) as RegExpMatchArray)[1];
+    const frameSrc = (csp.match(/frame-src\s+([^;]+)/) as RegExpMatchArray)[1];
+    const connectSrc = (csp.match(/connect-src\s+([^;]+)/) as RegExpMatchArray)[1];
+
+    // sdk.js itself, plus the /en_US/bundle/… chunk the loader injects
+    expect(scriptSrc).toContain('https://connect.facebook.net');
+    // xd_arbiter cross-domain frame created during FB.init, and the login dialog
+    expect(frameSrc).toContain('https://staticxx.facebook.com');
+    expect(frameSrc).toContain('https://www.facebook.com');
+    // Graph XHR from the SDK
+    expect(connectSrc).toContain('https://graph.facebook.com');
+  });
 });
 
 describe('deploy scripts - nginx upstream keepalive', () => {
