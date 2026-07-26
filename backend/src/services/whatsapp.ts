@@ -137,6 +137,15 @@ class WhatsAppService {
      * exchanged without a redirect_uri.
      */
     async exchangeCodeForToken(code: string): Promise<string> {
+        // NOTE: `client_secret` travels as a query param because that is the shape
+        // Meta documents for this grant — it is not an access token, so it cannot be
+        // moved to an Authorization header. The consequence is that the app secret
+        // lands in the request URL, and the Sentry SDK records the raw query string
+        // of every outgoing request as a breadcrumb (`http.query`) and span
+        // attribute (`http.url`). That is scrubbed centrally in `lib/sentry.ts`
+        // (`beforeBreadcrumb` / `beforeSend` / `beforeSendTransaction`) rather than
+        // here, because the same leak applies to every Graph call that takes a
+        // credential in the URL. Do not remove that scrubbing.
         const res = await this.request(() => axios.get(`${WHATSAPP_API}/oauth/access_token`, {
             params: {
                 client_id: config.facebook.appId,
