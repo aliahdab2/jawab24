@@ -368,6 +368,52 @@ describe('MessagesService', () => {
             expect(db.insert).toHaveBeenCalled();
         });
 
+        /**
+         * WhatsApp Coexistence groundwork: Meta echoes EVERY outbound message on a
+         * coexistence number back to us — including the ones we sent via the API. The
+         * echo handler tells "the merchant answered from their phone" apart from "we
+         * answered" by looking the echoed wamid up among our stored outgoing rows.
+         *
+         * If our own wamid isn't stored, our replies come back looking like human
+         * replies and the bot pauses itself after every message it sends.
+         */
+        it('stores the platform message id when the channel returns one', async () => {
+            const inserted = mockDbRow({ id: 'out-wamid', direction: 'outgoing', replied: true });
+            let capturedValues: Record<string, unknown> = {};
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((vals) => {
+                    capturedValues = vals;
+                    return { returning: vi.fn().mockResolvedValue([inserted]) };
+                }),
+            } as any);
+
+            await messagesService.storeOutgoingMessage(
+                'page-1', 'ws-1', 'sender-1', 'Reply', 'ai',
+                undefined, undefined, undefined, undefined, undefined,
+                'wamid.HBgLOTY2NTAwMDAwMDAVAgARGBI5QTNDMkYzM0E1QjcyM0Q0RjIA',
+            );
+
+            expect(capturedValues.platformMessageId)
+                .toBe('wamid.HBgLOTY2NTAwMDAwMDAVAgARGBI5QTNDMkYzM0E1QjcyM0Q0RjIA');
+        });
+
+        it('falls back to a synthetic id when the channel returns none (FB/IG)', async () => {
+            const inserted = mockDbRow({ id: 'out-synth', direction: 'outgoing', replied: true });
+            let capturedValues: Record<string, unknown> = {};
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((vals) => {
+                    capturedValues = vals;
+                    return { returning: vi.fn().mockResolvedValue([inserted]) };
+                }),
+            } as any);
+
+            await messagesService.storeOutgoingMessage('page-1', 'ws-1', 'sender-1', 'Reply', 'ai');
+
+            // The column is NOT NULL + UNIQUE and predates any channel returning an id,
+            // so the synthetic value must survive untouched for Messenger/Instagram.
+            expect(capturedValues.platformMessageId).toMatch(/^reply_\d+_/);
+        });
+
         it('should set createdTime close to now', async () => {
             const inserted = mockDbRow({ id: 'out-2', direction: 'outgoing', replied: true });
             let capturedValues: Record<string, unknown> = {};

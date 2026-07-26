@@ -58,7 +58,7 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
         // this hook would fire, which is what perceived latency needs.
     }
 
-    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
+    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {
         if (!page.platformAccountId) {
             throw new Error('Page has no WhatsApp phone number ID');
         }
@@ -72,12 +72,18 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
             throw new Error('WhatsApp token unavailable for this page (decrypt failed or not connected)');
         }
         try {
-            await whatsappService.sendTextMessage(
+            // RETURN the wamid — the caller persists it as messages.platformMessageId
+            // so a Coexistence echo of this very message is recognised as ours rather
+            // than as the merchant answering from their phone. Dropping this `return`
+            // silently reverts every WhatsApp outgoing row to a synthetic id, with
+            // every test still green; the failure would only surface later as the bot
+            // muting itself after each reply. See MessagePlatformAdapter.sendReply.
+            return await whatsappService.sendTextMessage(
                 page.platformAccountId,
                 senderId,
                 text,
                 page.accessToken,
-            );
+            ) || undefined;
         } catch (error) {
             // Meta forces a 60-day expiry on WhatsApp business tokens, so 190 here is
             // a terminal state, not a blip: no retry can fix it and every subsequent

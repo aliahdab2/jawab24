@@ -21,10 +21,31 @@ vi.mock('../../src/services/conversations', () => ({
     },
 }));
 
-vi.mock('../../src/services/whatsapp', () => ({
-    whatsappService: {
-        sendTextMessage: vi.fn().mockResolvedValue(undefined),
-    },
+vi.mock('../../src/services/whatsapp', () => {
+    // WhatsAppApiError must be a REAL class — the adapter branches on `instanceof`
+    // to decide whether a failure is a dead token. A plain object here makes every
+    // error fall through and the 190 handler dead code.
+    class WhatsAppApiError extends Error {
+        readonly metaCode?: number;
+        readonly transient: boolean;
+        constructor(message: string, metaCode?: number, transient = false) {
+            super(message);
+            this.name = 'WhatsAppApiError';
+            this.metaCode = metaCode;
+            this.transient = transient;
+        }
+    }
+    return {
+        WhatsAppApiError,
+        META_TOKEN_EXPIRED: 190,
+        whatsappService: {
+            sendTextMessage: vi.fn().mockResolvedValue(undefined),
+        },
+    };
+});
+
+vi.mock('../../src/services/whatsappTokenHealth', () => ({
+    markWhatsAppNeedsReconnect: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { pagesService } from '../../src/services/pages';
@@ -253,5 +274,65 @@ describe('WhatsAppMessageAdapter.getInternalMessageId', () => {
     it('returns wamid as-is (no prefix transformation)', () => {
         const wamid = 'wamid.HBgLMTkxMzExMTExMTEVAgASGBI';
         expect(adapter.getInternalMessageId(wamid)).toBe(wamid);
+    });
+});
+
+/**
+ * The conflict guard.
+ *
+ * PR #507 (token lifecycle) and PR #510 (wamid) both rewrote sendReply. #507's
+ * version wraps the send in a try/catch and returns void; #510's returns the
+ * wamid. Review flagged that resolving the conflict by keeping #507's body drops
+ * the `return` — every WhatsApp outgoing row silently reverts to a synthetic id,
+ * with the whole suite still green, and the damage only surfaces much later as
+ * the bot muting itself after each reply it sends under Coexistence.
+ *
+ * These tests make that resolution impossible to get wrong quietly.
+ */
+describe('WhatsAppMessageAdapter.sendReply — merge-resolution guard', () => {
+    const adapter = new WhatsAppMessageAdapter();
+    const page = {
+        id: 'page-1',
+        userId: 'user-1',
+        workspaceId: 'ws-1',
+        name: 'Falafel House',
+        accessToken: 'wa-token',
+        knowledgeBase: null,
+        kbActiveVersion: null,
+        autoReplyEnabled: true,
+        platformAccountId: 'phone-1',
+    };
+
+    beforeEach(() => vi.clearAllMocks());
+
+    it('RETURNS the wamid so the caller can store it', async () => {
+        const wamid = 'wamid.HBgLOTY2NTAwMDAwMDAVAgARGBI5QTNDMkYzM0E1QjcyM0Q0RjIA';
+        vi.mocked(whatsappService.sendTextMessage).mockResolvedValue(wamid);
+
+        await expect(adapter.sendReply(page, '+966500000000', 'hello')).resolves.toBe(wamid);
+    });
+
+    it('returns undefined rather than an empty string when Meta omits the id', async () => {
+        // sendTextMessage falls back to '' — that must not reach the NOT NULL
+        // platformMessageId column, where it would collide on the unique index.
+        vi.mocked(whatsappService.sendTextMessage).mockResolvedValue('');
+
+        await expect(adapter.sendReply(page, '+966500000000', 'hello')).resolves.toBeUndefined();
+    });
+
+    it('refuses to send with an empty bearer instead of earning a 190', async () => {
+        // safeDecryptToken returns '' on a key misconfiguration. Sending anyway
+        // would be read as "this merchant's token expired" and flag every page.
+        await expect(
+            adapter.sendReply({ ...page, accessToken: '' }, '+966500000000', 'hello'),
+        ).rejects.toThrow(/token unavailable/i);
+        expect(whatsappService.sendTextMessage).not.toHaveBeenCalled();
+    });
+
+    it('still rethrows a send failure after flagging', async () => {
+        const boom = new Error('network down');
+        vi.mocked(whatsappService.sendTextMessage).mockRejectedValue(boom);
+
+        await expect(adapter.sendReply(page, '+966500000000', 'hello')).rejects.toThrow('network down');
     });
 });

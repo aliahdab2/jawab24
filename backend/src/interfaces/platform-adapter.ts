@@ -82,8 +82,21 @@ export interface MessagePlatformAdapter {
      */
     sendTypingOff?(page: PlatformPage, senderId: string): Promise<void>;
 
-    /** Send a reply message to the sender */
-    sendReply(page: PlatformPage, senderId: string, text: string): Promise<void>;
+    /**
+     * Send a reply message to the sender.
+     *
+     * Returns the PLATFORM's own message id when the channel gives us one
+     * (WhatsApp returns a `wamid`), otherwise undefined. Callers persist it as
+     * `messages.platformMessageId` so an inbound echo of that same message can
+     * later be recognised as OUR send rather than a human's.
+     *
+     * That matters for WhatsApp Coexistence, where the merchant keeps the
+     * Business app on the same number: Meta echoes every outbound message back,
+     * including the ones we sent via the API. Without a stored id to compare
+     * against, the echo handler would read our own replies as "a human answered"
+     * and pause the bot after every message it sent.
+     */
+    sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined>;
 
     /**
      * Send rich product cards (Generic Template carousel) as a follow-up to a text reply.

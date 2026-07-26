@@ -1009,6 +1009,9 @@ describe('Webhook Controller', () => {
             // Outgoing message stored
             expect(mockStoreOutgoingMessage).toHaveBeenCalledWith(
                 mockPage.id, mockPage.workspaceId, 'user_123', expect.stringContaining('الرسائل النصية'), 'template',
+                // Trailing args end in platformMessageId — undefined here because this
+                // is the Facebook nudge path; only WhatsApp returns a wamid.
+                undefined, undefined, undefined, undefined, undefined, undefined,
             );
         });
 

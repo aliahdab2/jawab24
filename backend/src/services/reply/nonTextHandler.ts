@@ -514,13 +514,18 @@ async function sendNudge(
         return;
     }
 
+    // Platform's own id for this send (WhatsApp wamid), persisted below so a
+    // Coexistence echo of the nudge is recognised as ours rather than as the
+    // merchant answering from their phone.
+    let sentPlatformMessageId: string | undefined;
+
     if (platform === 'facebook') {
         await facebookService.sendPrivateMessage(page.accessToken, senderId, nudgeText);
     } else if (platform === 'whatsapp') {
         if (page.whatsappPhoneNumberId) {
-            await whatsappService.sendTextMessage(
+            sentPlatformMessageId = await whatsappService.sendTextMessage(
                 page.whatsappPhoneNumberId, senderId, nudgeText, page.accessToken,
-            );
+            ) || undefined;
         }
     } else {
         if (page.instagramAccountId) {
@@ -530,6 +535,10 @@ async function sendNudge(
         }
     }
 
-    await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, nudgeText, 'template');
+    await messagesService.storeOutgoingMessage(
+        page.id, workspaceId, senderId, nudgeText, 'template',
+        undefined, undefined, undefined, undefined, undefined,
+        sentPlatformMessageId,
+    );
     logger.info(`[${platform}] Nudge sent`, { senderId });
 }

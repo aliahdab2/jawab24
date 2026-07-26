@@ -84,8 +84,12 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
         await facebookService.sendTypingOff(page.accessToken, senderId);
     }
 
-    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
+    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {
         await facebookService.sendPrivateMessage(page.accessToken, senderId, text);
+        // No id surfaced: Messenger has no Coexistence equivalent (a Page is not
+        // also running in a consumer app), so nothing needs to recognise our own
+        // sends. Returning undefined keeps the caller on the synthetic id.
+        return undefined;
     }
 
     async sendProductCards(page: PlatformPage, senderId: string, cards: ProductCard[]): Promise<void> {

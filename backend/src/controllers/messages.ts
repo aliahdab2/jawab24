@@ -123,14 +123,19 @@ async function sendAndStoreManualReply(opts: {
         );
     }
 
+    // Platform's own id for this send (WhatsApp wamid). Persisted below so a
+    // Coexistence echo of this message is recognised as ours — the merchant sent it
+    // from OUR inbox, and Meta will echo it back exactly like a phone-sent one.
+    let sentPlatformMessageId: string | undefined;
+
     try {
         if (platform === 'whatsapp') {
-            await whatsappService.sendTextMessage(
+            sentPlatformMessageId = await whatsappService.sendTextMessage(
                 waPhoneNumberId,
                 recipientId,
                 replyText,
                 waAccessToken
-            );
+            ) || undefined;
         } else if (platform === 'instagram' && page.instagramAccountId) {
             await instagramService.sendDirectMessage(
                 page.instagramAccountId,
@@ -165,6 +170,8 @@ async function sendAndStoreManualReply(opts: {
         undefined,
         undefined,
         clientMessageId,
+        undefined,
+        sentPlatformMessageId,
     );
 }
 
