@@ -49,7 +49,7 @@ As usual, we'd rather tell you the limits than have you discover them:
 
 Connecting takes minutes:
 
-1. From **My Pages** in your dashboard, choose **Connect channel**, then **WhatsApp**.
+1. From **Channels** in your dashboard, choose **Connect channel**, then **WhatsApp**.
 2. Sign in with your Meta account and pick your WhatsApp Business number.
 3. Add your Business Info if you haven't yet — Smart Replies start answering immediately.
 
