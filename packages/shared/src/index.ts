@@ -1469,7 +1469,6 @@ export { IMAGE_MESSAGE_RE, IMAGE_PLACEHOLDER_RE, isImageMessageBody, extractImag
 export {
     IMPOSSIBLE_CAPABILITIES,
     SUPPORTED_CAPABILITIES,
-    MERCHANT_FINDING_CAP,
     rankFindings,
     verifyQuote,
     isDirectImageUrl,
@@ -1481,6 +1480,7 @@ export type {
     ImpossibleCapabilityId,
     BusinessAuditCode,
     BusinessAuditFinding,
+    BusinessAuditResult,
     BusinessAuditFindingKind,
     DeterministicFindingCode,
 } from './businessAudit';

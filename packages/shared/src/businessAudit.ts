@@ -93,11 +93,22 @@ export interface BusinessAuditFinding {
 }
 
 /**
- * Merchant-facing cap. Deliberately small: a merchant handed 30 findings
- * fixes zero. The admin view intentionally ignores this — the founder wants
- * completeness, and the cap is merchant psychology, not correctness.
+ * The audit response shape, shared so the service that produces it and the UI
+ * that renders it cannot drift into two hand-maintained copies.
  */
-export const MERCHANT_FINDING_CAP = 5;
+export interface BusinessAuditResult {
+    pageId: string;
+    findings: BusinessAuditFinding[];
+    kbLength: number;
+    /** True when served from cache — no OpenAI call was made. */
+    cached: boolean;
+    /**
+     * True when the classifier failed and only the free deterministic checks
+     * ran. The UI MUST distinguish this from a clean result: "we found
+     * nothing" and "we could not look" are different claims.
+     */
+    classifierFailed: boolean;
+}
 
 /** An impossible rule outranks a broken link, which outranks a typo. */
 const KIND_RANK: Record<BusinessAuditFindingKind, number> = {

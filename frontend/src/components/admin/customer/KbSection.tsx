@@ -4,7 +4,7 @@ import { BookOpen, ChevronDown, ChevronUp, HelpCircle, ShieldAlert } from 'lucid
 import { Card } from '@/components/ui';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
-import type { BusinessAuditFinding, BusinessAuditFindingKind } from '@jawab24/shared';
+import type { BusinessAuditFinding, BusinessAuditFindingKind, BusinessAuditResult } from '@jawab24/shared';
 import type { CustomerDetail, FormatDate } from './types';
 
 interface Props {
@@ -23,12 +23,6 @@ interface KbGap {
     detectedIntent: string | null;
     occurrenceCount: number | null;
     resolved: boolean | null;
-}
-
-interface AuditResult {
-    findings: BusinessAuditFinding[];
-    cached: boolean;
-    classifierFailed: boolean;
 }
 
 /** Tint per finding kind — an impossible rule must not look like a typo. */
@@ -123,7 +117,7 @@ function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: Form
     const [gapsLoading, setGapsLoading] = useState(false);
 
     const [showAudit, setShowAudit] = useState(false);
-    const [audit, setAudit] = useState<AuditResult | null>(null);
+    const [audit, setAudit] = useState<BusinessAuditResult | null>(null);
     const [auditLoading, setAuditLoading] = useState(false);
 
     const toggleText = async () => {
