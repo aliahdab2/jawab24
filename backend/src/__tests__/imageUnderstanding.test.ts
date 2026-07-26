@@ -241,11 +241,21 @@ describe('checkImageUnderstandingGate', () => {
         expect(mockCheckCap).toHaveBeenCalledWith('image_understanding:owner-1:2026-07-05', 5);
     });
 
-    it('denies with cap_reached when the daily cap is exhausted', async () => {
+    // The denial carries the owner + limit so the caller can tell the MERCHANT
+    // which limit they hit. Without them the cap is invisible: we just stop
+    // reading photos and nobody who could act on it ever finds out.
+    it('denies with cap_reached, naming the owner and the limit', async () => {
         mockResolveSub.mockResolvedValue(sub('starter'));
-        mockCheckCap.mockResolvedValue({ allowed: false, used: 5, limit: 5 });
+        mockCheckCap.mockResolvedValue({ allowed: false, used: 15, limit: 15 });
         const result = await checkImageUnderstandingGate('u1', 'w1');
-        expect(result).toEqual({ allowed: false, reason: 'cap_reached' });
+        expect(result).toEqual({ allowed: false, reason: 'cap_reached', ownerId: 'owner-1', limit: 15 });
+    });
+
+    it('gives Starter 15 images a day', async () => {
+        mockResolveSub.mockResolvedValue(sub('starter'));
+        mockCheckCap.mockResolvedValue({ allowed: true, used: 0, limit: 15 });
+        await checkImageUnderstandingGate('u1', 'w1');
+        expect(mockCheckCap).toHaveBeenCalledWith('image_understanding:owner-1:2026-07-05', 15);
     });
 
     it('fails closed (cap_check_failed) + captures when the cap check throws', async () => {
