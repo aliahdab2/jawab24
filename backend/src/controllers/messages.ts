@@ -5,7 +5,7 @@ import { pagesService, isPageDisconnected } from '../services/pages';
 import { invalidateEndpointStatsCaches } from '../services/statsCache';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
-import { whatsappService } from '../services/whatsapp';
+import { whatsappService, META_TOKEN_EXPIRED } from '../services/whatsapp';
 import { workspaceSettingsService } from '../services/workspaceSettings';
 import { promoteDelayedJobs } from '../lib/replyQueue';
 import { parseInboxFilters, parseLimit } from '../lib/queryParsers';
@@ -36,6 +36,18 @@ function mapWhatsAppSendError(error: unknown): AppError {
             'More than 24 hours have passed since the customer\'s last message — WhatsApp only allows template messages now.',
             409,
             'DM_WINDOW_EXPIRED'
+        );
+    }
+    // Meta forces a 60-day expiry on WhatsApp Embedded Signup tokens, so 190 is an
+    // expected end-of-life event, not a fault. 409 (not 502) keeps it out of Sentry's
+    // 5xx bucket for the same reason DM_PLATFORM_AUTH does on FB/IG: the merchant has
+    // to reconnect, there is nothing for us to fix. Without this branch it fell into
+    // DM_UNKNOWN and surfaced as a raw Meta string.
+    if (code === META_TOKEN_EXPIRED) {
+        return new AppError(
+            'Your WhatsApp connection has expired. Reconnect WhatsApp to keep replying.',
+            409,
+            'WHATSAPP_TOKEN_EXPIRED'
         );
     }
     const detail = e.message || e.response?.data?.error?.message || 'Failed to send WhatsApp message';

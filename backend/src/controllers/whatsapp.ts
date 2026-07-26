@@ -140,10 +140,11 @@ export class WhatsAppController {
                 businessAccountId: wabaId,
                 displayPhoneNumber: signup.info.displayPhoneNumber,
                 accessToken: signup.accessToken,
+                tokenExpiresAt: signup.tokenExpiresAt,
             });
 
             request.log.info(
-                { pageId: id, phoneNumberId, wabaId, displayPhoneNumber: signup.info.displayPhoneNumber },
+                { pageId: id, phoneNumberId, wabaId, displayPhoneNumber: signup.info.displayPhoneNumber, tokenExpiresAt: signup.tokenExpiresAt },
                 '[WhatsApp] Number connected',
             );
             return reply.send(serializePage(updated));
@@ -216,6 +217,7 @@ export class WhatsAppController {
                 businessAccountId: wabaId,
                 displayPhoneNumber: signup.info.displayPhoneNumber,
                 accessToken: signup.accessToken,
+                tokenExpiresAt: signup.tokenExpiresAt,
                 verifiedName: signup.info.verifiedName,
             });
 
@@ -248,10 +250,14 @@ export class WhatsAppController {
         phoneNumberId: string,
         wabaId: string,
     ): Promise<
-        | { ok: true; accessToken: string; info: { displayPhoneNumber: string; verifiedName: string } }
+        | { ok: true; accessToken: string; tokenExpiresAt: Date | null; info: { displayPhoneNumber: string; verifiedName: string } }
         | { ok: false }
     > {
-        const accessToken = await whatsappService.exchangeCodeForToken(code);
+        const { token: accessToken, expiresIn } = await whatsappService.exchangeCodeForToken(code);
+        // Meta forces a 60-day expiry on this login variation, so record the deadline
+        // now — it is the only moment we are told it. NULL when Meta reports no
+        // expiry, which the health sweep reads as "no deadline to warn about".
+        const tokenExpiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
 
         // Deliver this WABA's message webhooks to our /webhook endpoint.
         await whatsappService.subscribeAppToWaba(wabaId, accessToken);
@@ -266,7 +272,7 @@ export class WhatsAppController {
         }
 
         const info = await whatsappService.getPhoneNumberInfo(phoneNumberId, accessToken);
-        return { ok: true, accessToken, info };
+        return { ok: true, accessToken, tokenExpiresAt, info };
     }
 
     /**

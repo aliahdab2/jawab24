@@ -98,7 +98,12 @@ export type NotificationType =
     | 'refund_processed'
     | 'topup_credited'
     | 'new_lead'
-    | 'lead_reengaged';
+    | 'lead_reengaged'
+    // WhatsApp business tokens carry a Meta-forced 60-day expiry, so unlike the
+    // Facebook channel they need both an ahead-of-time warning and a dead-token
+    // notice. See services/whatsappTokenHealth.ts.
+    | 'whatsapp_token_expiring'
+    | 'whatsapp_reconnect_needed';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -136,6 +141,9 @@ const PUSH_COOLDOWN_SECONDS: Partial<Record<NotificationType, number>> = {
     provider_failover: 600, // 10 min
     new_lead:        120,  // 2 min — coalesce a burst of distinct leads; bell row still stored
     lead_reengaged:  120,  // 2 min — burst coalescing (per-lead 24h dedup is in leadExtractor)
+    // The 6-hourly sweep re-warns until the merchant reconnects; a day-long cooldown
+    // keeps that a daily reminder rather than 4 pushes a day for a week.
+    whatsapp_token_expiring: 86400, // 24 h
 };
 
 /**
@@ -287,6 +295,20 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: '{senderName} is back and interested again. Tap to follow up.',
             ar: 'عاد {senderName} وأبدى اهتمامه من جديد. اضغط للمتابعة.',
+        },
+    },
+    whatsapp_token_expiring: {
+        titles: { en: 'WhatsApp Connection Expiring', ar: 'ربط واتساب على وشك الانتهاء' },
+        bodies: {
+            en: 'Your WhatsApp connection for {number} expires in {days} day(s). Reconnect now so replies never stop.',
+            ar: 'ينتهي ربط واتساب للرقم {number} خلال {days} يوم. أعد الربط الآن حتى لا تتوقف الردود.',
+        },
+    },
+    whatsapp_reconnect_needed: {
+        titles: { en: 'WhatsApp Reconnection Needed', ar: 'يلزم إعادة ربط واتساب' },
+        bodies: {
+            en: 'Your WhatsApp connection for {number} has expired. Reconnect to keep replying to your customers.',
+            ar: 'انتهت صلاحية ربط واتساب للرقم {number}. أعد الربط لمتابعة الرد على عملائك.',
         },
     },
 };

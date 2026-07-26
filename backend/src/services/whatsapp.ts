@@ -15,6 +15,28 @@ export interface WhatsAppMediaInfo {
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 
 /**
+ * Meta error code 190 — "Your access token has expired." The merchant must
+ * reconnect; no retry will help.
+ *
+ * Key on the code, NOT on error_subcode (463/467): Meta treats the subcodes as
+ * unreliable and they are absent from the WhatsApp error-code reference entirely.
+ */
+export const META_TOKEN_EXPIRED = 190;
+
+/** Result of a debug_token inspection — see whatsappService.debugToken. */
+export interface WhatsAppTokenDebugInfo {
+    isValid: boolean;
+    /** undefined when the token never expires (Meta reports expires_at = 0). */
+    expiresAt?: Date;
+    /** Independent ~90-day data-access clock; can lapse before the token itself. */
+    dataAccessExpiresAt?: Date;
+    scopes: string[];
+    /** WABA ids still covered by whatsapp_business_management on this token. */
+    wabaIds: string[];
+    errorMessage?: string;
+}
+
+/**
  * Per-request socket timeout for Cloud API calls. Without it (axios default is
  * 0 = infinite) a stalled socket to graph.facebook.com would hang a webhook /
  * send worker indefinitely. Matches fbAxios's REQUEST_TIMEOUT_MS.
@@ -136,7 +158,7 @@ class WhatsAppService {
      * system-user access token. Unlike the login OAuth flow, ES codes are
      * exchanged without a redirect_uri.
      */
-    async exchangeCodeForToken(code: string): Promise<string> {
+    async exchangeCodeForToken(code: string): Promise<{ token: string; expiresIn?: number }> {
         // NOTE: `client_secret` travels as a query param because that is the shape
         // Meta documents for this grant — it is not an access token, so it cannot be
         // moved to an Authorization header. The consequence is that the app secret
@@ -156,7 +178,72 @@ class WhatsAppService {
         }));
         const token = res.data?.access_token;
         if (!token) throw new WhatsAppApiError('Embedded Signup code exchange returned no access_token');
-        return token;
+        // expires_in (seconds) is what tells us this merchant's token has a deadline.
+        // Meta forces a 60-day expiry on the WhatsApp Embedded Signup login variation,
+        // so this is normally ~5184000. Absent/0 means no expiry — the caller stores
+        // NULL rather than inventing a date. Discarding it (the original behaviour)
+        // left us unable to warn a merchant before their number went silent.
+        const rawExpiresIn = res.data?.expires_in;
+        const expiresIn = typeof rawExpiresIn === 'number' && rawExpiresIn > 0 ? rawExpiresIn : undefined;
+        return { token, expiresIn };
+    }
+
+    /**
+     * Inspect a stored business token via Graph's debug_token.
+     *
+     * Authenticated with the APP access token (`{app-id}|{app-secret}`), never the
+     * token under test: an app access token cannot itself expire, so the health
+     * checker can't go stale, and we still learn `is_valid: false` for a token that
+     * is already dead. Meta's own Embedded Signup docs use debug_token this way.
+     *
+     * Server-side only — the app secret must never reach a client.
+     */
+    async debugToken(inputToken: string): Promise<WhatsAppTokenDebugInfo> {
+        const res = await this.request(() => axios.get(`${WHATSAPP_API}/debug_token`, {
+            params: {
+                input_token: inputToken,
+                access_token: `${config.facebook.appId}|${config.facebook.appSecret}`,
+            },
+            timeout: WHATSAPP_TIMEOUT_MS,
+        }));
+        const data = res.data?.data;
+        // Require a RECOGNISABLE debug_token body before believing anything it says.
+        //
+        // `data?.data ?? {}` used to silently produce `{}` for any HTTP 200 that was
+        // not the expected shape — a Meta partial outage, a WAF/proxy interstitial, an
+        // HTML error page, a field rename. `{}` then read as `is_valid: false`, i.e.
+        // "this merchant's token is dead", for every page in the sweep, with nothing
+        // thrown for the retry logic to catch. Absence of a positive signal is not
+        // evidence of a negative one: throw so the caller's transient path retries.
+        if (!data || typeof data !== 'object' || typeof data.is_valid !== 'boolean') {
+            throw new WhatsAppApiError('debug_token returned an unrecognised body', undefined, true);
+        }
+        // expires_at === 0 means "never expires" (Meta's documented sentinel for
+        // non-expiring tokens). Mapping it to undefined — rather than new Date(0) —
+        // is load-bearing: a 1970 date would read as "expired 56 years ago" and make
+        // the sweep disconnect every healthy token it saw.
+        const expiresAtSec = typeof data.expires_at === 'number' && data.expires_at > 0 ? data.expires_at : undefined;
+        const dataAccessExpiresAtSec = typeof data.data_access_expires_at === 'number' && data.data_access_expires_at > 0
+            ? data.data_access_expires_at
+            : undefined;
+        return {
+            isValid: data.is_valid === true,
+            expiresAt: expiresAtSec ? new Date(expiresAtSec * 1000) : undefined,
+            // A SECOND, independent clock (~90 days): a token string can be unexpired
+            // while the app's access to the customer's data has lapsed, and either can
+            // fire first. Callers must consider both.
+            dataAccessExpiresAt: dataAccessExpiresAtSec ? new Date(dataAccessExpiresAtSec * 1000) : undefined,
+            scopes: Array.isArray(data.scopes) ? data.scopes.filter((s: unknown): s is string => typeof s === 'string') : [],
+            // WABA ids this token still covers, per scope. A shrinking list is how a
+            // PARTIAL revocation shows up (customer unshared one WABA) — invisible to
+            // an is_valid check on its own.
+            wabaIds: Array.isArray(data.granular_scopes)
+                ? (data.granular_scopes as Array<{ scope?: string; target_ids?: unknown }>)
+                    .filter(g => g?.scope === 'whatsapp_business_management')
+                    .flatMap(g => Array.isArray(g.target_ids) ? g.target_ids.filter((t): t is string => typeof t === 'string') : [])
+                : [],
+            errorMessage: typeof data.error?.message === 'string' ? data.error.message : undefined,
+        };
     }
 
     /**

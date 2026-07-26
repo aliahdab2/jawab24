@@ -299,6 +299,23 @@ export function classifyDmError(err: unknown, platform: FbPlatform): DmFailure {
         return { bucket: 'transient', rawMessage: err.message };
     }
 
+    // 3b. Self-declared Meta auth-expiry (code 190) on a non-FB/IG channel — today
+    //     that means a WhatsApp business token, which Meta forces to expire every 60
+    //     days. Duck-typed on `metaCode` for the same reason as the `transient` check
+    //     above: it keeps the decision channel-agnostic instead of leaking a
+    //     `platform === 'whatsapp'` branch into the core (DECISIONS D-016).
+    //
+    //     What this does and does NOT do — an earlier comment here overclaimed:
+    //     `pageAutoPause` treats 'our_fault' and 'unknown' identically (both are
+    //     PAGE_LEVEL_BUCKETS), so this does NOT save any customer message from the
+    //     auto-pause threshold. What actually protects those messages is the adapter
+    //     flagging the number on the first 190. This branch's real effect is a
+    //     correct, legible bucket for anything that reads the classification.
+    //     FB/IG never reach here — their 190 is already mapped in BUCKET_TABLE.
+    if (err instanceof Error && (err as { metaCode?: unknown }).metaCode === 190) {
+        return { bucket: 'our_fault', code: 190, fbMessage: err.message, rawMessage: err.message };
+    }
+
     // 4. Plain Error or unknown shape
     if (err instanceof Error) {
         return { bucket: 'unknown', rawMessage: err.message };

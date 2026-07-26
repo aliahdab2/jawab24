@@ -381,6 +381,12 @@ export interface Page {
   isConnected?: boolean;
   // True when a WhatsApp business token is stored (Embedded Signup completed)
   whatsappConnected?: boolean;
+  // True when WhatsApp WAS connected and the token has since died (Meta forces a
+  // 60-day expiry on Embedded Signup tokens). Distinct from "never connected":
+  // only this state should raise the reconnect banner.
+  whatsappNeedsReconnect?: boolean;
+  // When the stored WhatsApp business token expires. Null = unknown or no expiry.
+  whatsappTokenExpiresAt?: string | Date | null;
   // Defensive auto-pause: set to 'send_rejected' when the bot was paused after
   // hitting the consecutive-send-failure threshold (Page restricted/unpublished
   // by Meta, permission lost mid-flight). Cleared when the customer re-enables

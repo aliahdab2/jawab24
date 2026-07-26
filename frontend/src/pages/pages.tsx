@@ -701,6 +701,36 @@ const PagesPage: NextPageWithLayout = () => {
                 </div>
               )}
 
+              {/* WhatsApp reconnect banner — a SEPARATE banner from the Facebook one
+                  above, because the two channels fail independently: a page can have a
+                  healthy Facebook token and a dead WhatsApp one (Meta forces a 60-day
+                  expiry on WhatsApp business tokens), and a WhatsApp-only card has no
+                  Facebook credential at all so the banner above never fires for it.
+                  The connect action is the same Embedded Signup popup as a first-time
+                  connect — re-running it mints a fresh token. */}
+              {page.whatsappNeedsReconnect && (
+                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold">{t('whatsappReconnectRequired')}</p>
+                      <p className="text-xs mt-0.5">{t('whatsappReconnectDescription')}</p>
+                    </div>
+                  </div>
+                  {isOwner && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleConnectWhatsApp(page.id)}
+                      disabled={connectingWhatsApp === page.id}
+                      className="w-full"
+                      icon={<LinkIcon className="w-3.5 h-3.5" />}
+                    >
+                      {t('whatsappConnectButton')}
+                    </Button>
+                  )}
+                </div>
+              )}
+
               {/* Full-card lock only when nothing on the card still works: a page
                   whose FB token died but whose WhatsApp is connected keeps replying
                   on WhatsApp, so only the FB/IG rows get locked (below). */}

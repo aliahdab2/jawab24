@@ -57,6 +57,7 @@ import { startWebhookRetryWorker, stopWebhookRetryWorker, setWebhookRetryWorkerL
 import { customerNotificationService } from "./services/customerNotifications";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
+import { startWhatsAppTokenHealthCron, stopWhatsAppTokenHealthCron, setWhatsAppTokenHealthLogger } from "./services/whatsappTokenHealth";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
 import { captureError } from "./utils/sentryHelpers";
 import { smsService } from "./services/sms";
@@ -351,6 +352,14 @@ const start = async () => {
     setTokenRefreshLogger(workerLogger);
     startTokenRefreshCron();
 
+    // WhatsApp token health cron — separate from the Facebook one because WhatsApp
+    // business tokens expire on a CLOCK (Meta forces 60 days on the Embedded Signup
+    // login variation) rather than on revocation. Warns the merchant ahead of expiry
+    // and flags dead tokens, since inbound webhooks keep arriving after expiry and
+    // customers would otherwise just get silence.
+    setWhatsAppTokenHealthLogger(workerLogger);
+    startWhatsAppTokenHealthCron();
+
     // Lead digest cron — once per day, emails owners with ≥10 new leads
     // Threshold + stamping in service guarantees at most one email per user per day.
     setLeadDigestLogger(workerLogger);
@@ -569,6 +578,7 @@ const gracefulShutdown = async (signal: string) => {
     // Stop cron jobs
     stopEscalationCron();
     stopTokenRefreshCron();
+    stopWhatsAppTokenHealthCron();
 
     // Stop workers (wait for in-progress jobs)
     console.log("⏳ Stopping workers...");
