@@ -15,6 +15,17 @@ export default defineConfig({
     actionTimeout: 0,
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001',
     trace: 'on-first-retry',
+    // Pin the browser's zone. `freezeDate` (visual.spec.ts) already pins the
+    // INSTANT; without pinning the ZONE too, anything rendering a timezone or a
+    // local time differs per machine — a visual snapshot then encodes whoever
+    // last regenerated it (this repo: Europe/Stockholm locally vs UTC on a CI
+    // runner) and fails everywhere else. Settings → General displays the
+    // workspace zone, falling back to the DEVICE zone when none is stored
+    // (resolveStoredTimezone), so that card put a machine-dependent string
+    // straight into a snapshotted viewport.
+    // Asia/Riyadh = PLACEHOLDER_TIMEZONE, i.e. what a merchant who never chose
+    // one actually sees in production.
+    timezoneId: 'Asia/Riyadh',
   },
   projects: [
     {
