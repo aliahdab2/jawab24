@@ -28,7 +28,11 @@ export function PageHeader({ title, description, action, beside, className }: Pa
           // always visible regardless of device width / system font scale; the selector
           // beside it keeps its own width. Full size returns at sm+.
           ? 'text-sm sm:text-2xl lg:text-3xl leading-tight min-w-0 flex-1'
-          : 'text-xl sm:text-3xl lg:text-4xl',
+          // min-w-0 even without `beside`: a flex ITEM defaults to min-width:auto,
+          // so without it the h1 refuses to shrink below its content and any
+          // inline control inside it (the InboxTitle page picker) overflows the
+          // row and slides under the header actions instead of ellipsizing.
+          : 'text-xl sm:text-3xl lg:text-4xl min-w-0',
       )}
     >
       {title}

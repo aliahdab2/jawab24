@@ -48,17 +48,48 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
   ];
 
   return (
-    <span ref={containerRef} className="inline-flex items-baseline gap-2 relative">
-      {title}
+    // `flex` (not inline-flex) + min-w-0 so the row can actually distribute width:
+    // an inline-flex sizes to its content and overflows its parent instead, which
+    // is how a long page name ended up UNDER the header actions on 360px.
+    <span ref={containerRef} className="flex items-center gap-2 relative min-w-0 w-full">
+      {/* The screen title never shrinks — it is short and fixed. On mobile it is
+          also REDUNDANT: the bottom nav already labels this screen, so it is
+          sr-only there and the page name becomes the visible identity (the more
+          useful of the two — the nav says where you are, only this says which
+          page you are filtered to). Restored visibly at sm+, where width is not
+          contested. */}
+      <span className="sr-only sm:not-sr-only flex-shrink-0">{title}</span>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-label={tc('allPages')}
-        className="inline-flex items-baseline gap-1 text-muted-foreground hover:text-foreground transition-colors group"
+        // min-h-9 matches the header ACTIONS band (36px — a size="sm" button plus
+        // its container's inset). The row is top-aligned, so a 20px-tall selector
+        // against that band put the page name 8px ABOVE the button's centre —
+        // visibly floating, which is what the owner spotted. Matching the height
+        // aligns the centres exactly, without forcing `items-center` on every
+        // PageHeader in the app. Also lifts the picker's tap target from 20px to
+        // 36px, closer to the 44px guidance.
+        // Mobile: the name IS the header (the h1 title is sr-only there), so it
+        // takes title-grade ink — muted gray next to a coloured «رد البوست» made
+        // the ACTION read as the screen's identity and the identity read as a
+        // hint. sm+: the real title returns, the picker goes back to supporting
+        // muted. hover keeps signalling interactivity on both.
+        className="inline-flex items-center min-h-9 gap-1 min-w-0 text-foreground sm:text-muted-foreground hover:text-foreground transition-colors group"
       >
-        <span dir="auto" className="text-xs sm:text-sm font-semibold max-w-[34vw] sm:max-w-[300px] truncate">
+        {/* No fixed cap. `max-w-[34vw]` was sized for the WORST case (comments,
+            which also carries a labelled «رد البوست») and then applied to every
+            page, so /messages truncated just as hard despite having room to
+            spare. Flexing instead lets the name take whatever the actions leave
+            — automatically wider where there are fewer of them. */}
+        {/* text-sm even though this is the mobile header's identity: ink (white
+            + bold), not SIZE, carries the weight. text-base measured ~15% wider
+            here and pushed the truncation from «…الدمشقي» back to «…الدم» — on
+            a narrow screen every glyph of the NAME is worth more than font
+            size, and this specific cut turned the name into another word. */}
+        <span dir="auto" className="text-sm font-bold sm:font-semibold min-w-0 truncate">
           {selectedPage?.name ?? tc('allPages')}
         </span>
         <ChevronDown className={clsx(
