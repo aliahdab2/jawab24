@@ -43,8 +43,29 @@ declare global {
 
 const SDK_URL = 'https://connect.facebook.net/en_US/sdk.js';
 const GRAPH_VERSION = 'v23.0';
-/** How long to wait for the merchant to finish the signup wizard. */
-const SIGNUP_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * Abandonment sweep — NOT a completion deadline.
+ *
+ * `fb.login`'s callback is the authoritative terminal signal: the SDK invokes it
+ * when the popup closes, with or without a code. This timer exists only so a
+ * promise (and the disabled Connect button behind it) can never hang forever if
+ * the SDK never calls back at all.
+ *
+ * It is deliberately far longer than a real first-time signup. The previous
+ * 10-minute value was SHORTER than Meta's own wizard (business info → WABA →
+ * phone number → OTP → commerce/verification screens), so it fired on live
+ * flows: `cleanup()` then removed the message listener while the popup was
+ * still open, the merchant finished, Meta bound the number to this app, and the
+ * FINISH event was dropped — leaving Meta connected and us not. Observed in
+ * production 2026-07-26 (Sentry JAWAB24-FRONTEND-2R, two occurrences).
+ *
+ * KNOWN LIMITATION: if this timer ever does fire mid-flow, a late FINISH is
+ * still lost — the promise has already rejected and the caller has moved on.
+ * Closing that fully needs a late-completion channel (resolve after reject),
+ * which is a larger change; the merchant's retry surfaces it as
+ * WHATSAPP_NUMBER_TAKEN rather than silently succeeding.
+ */
+const SIGNUP_ABANDON_MS = 30 * 60 * 1000;
 
 /**
  * True only when a message event came from facebook.com or one of its
@@ -64,6 +85,26 @@ function isFacebookOrigin(origin: string): boolean {
 }
 
 let sdkPromise: Promise<FacebookSdk> | null = null;
+
+/**
+ * Warm the Facebook SDK ahead of the merchant's click.
+ *
+ * `fb.login` opens a popup, so it MUST run inside the browser's transient user
+ * activation. Awaiting the SDK download inside the click handler spends that
+ * activation on the network round trip and the popup is blocked — which is why
+ * this is a preload, not a lazy load. Call it when the connect UI mounts; the
+ * click handler then reaches `fb.login` with no network await in between.
+ *
+ * Safe to call repeatedly — `loadFacebookSdk` caches the in-flight promise, and
+ * a failure here is deliberately swallowed: the click path retries and reports.
+ */
+export function preloadWhatsAppSignup(): void {
+    const appId = process.env.NEXT_PUBLIC_FB_APP_ID;
+    if (!appId || typeof window === 'undefined') return;
+    void loadFacebookSdk(appId).catch(() => {
+        // Preload is best-effort; launchWhatsAppSignup() surfaces real errors.
+    });
+}
 
 function loadFacebookSdk(appId: string): Promise<FacebookSdk> {
     if (sdkPromise) return sdkPromise;
@@ -143,10 +184,19 @@ export async function launchWhatsAppSignup(): Promise<WhatsAppSignupResult> {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                 if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
                 if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA') {
-                    sessionInfo = {
-                        phoneNumberId: data.data?.phone_number_id ?? '',
-                        wabaId: data.data?.waba_id ?? '',
-                    };
+                    // Both ids are required. FINISH_ONLY_WABA means the merchant
+                    // created the WhatsApp Business Account but did NOT add a
+                    // phone number (e.g. the number is still pending Meta's
+                    // display-name review). Defaulting these to '' shipped an
+                    // empty phoneNumberId to /connect-whatsapp as if it were a
+                    // real connection — fail loudly instead.
+                    const phoneNumberId = data.data?.phone_number_id;
+                    const wabaId = data.data?.waba_id;
+                    if (!phoneNumberId || !wabaId) {
+                        fail(new Error('WHATSAPP_SIGNUP_NO_NUMBER'));
+                        return;
+                    }
+                    sessionInfo = { phoneNumberId, wabaId };
                     settle();
                 } else if (data.event === 'CANCEL') {
                     fail(new Error('WHATSAPP_SIGNUP_CANCELLED'));
@@ -157,8 +207,8 @@ export async function launchWhatsAppSignup(): Promise<WhatsAppSignupResult> {
         };
 
         const timeout = window.setTimeout(
-            () => fail(new Error('WHATSAPP_SIGNUP_TIMEOUT')),
-            SIGNUP_TIMEOUT_MS,
+            () => fail(new Error('WHATSAPP_SIGNUP_ABANDONED')),
+            SIGNUP_ABANDON_MS,
         );
 
         const cleanup = () => {
@@ -167,6 +217,19 @@ export async function launchWhatsAppSignup(): Promise<WhatsAppSignupResult> {
         };
 
         window.addEventListener('message', onMessage);
+
+        // Transient user activation is what lets `fb.login` open its popup. If it
+        // has already been spent (a slow await between the click and here, or a
+        // programmatic click), the popup is blocked and the SDK never calls back —
+        // the merchant would sit on a disabled button until the abandon sweep.
+        // Fail immediately instead; the SDK is warm by now, so a second click
+        // succeeds. Guarded because navigator.userActivation is unavailable in
+        // Safari < 16.4 and jsdom — absent means "cannot tell", so proceed.
+        const activation = navigator.userActivation;
+        if (activation && !activation.isActive) {
+            fail(new Error('WHATSAPP_SIGNUP_POPUP_BLOCKED'));
+            return;
+        }
 
         fb.login(
             (response) => {

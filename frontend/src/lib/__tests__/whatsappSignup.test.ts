@@ -121,4 +121,72 @@ describe('launchWhatsAppSignup', () => {
 
         await expect(promise).rejects.toThrow('WHATSAPP_SIGNUP_CANCELLED');
     });
+
+    // A WABA with no phone number attached (FINISH_ONLY_WABA, or a FINISH whose
+    // payload lacks an id — e.g. the number is still pending Meta's display-name
+    // review). This used to default the ids to '' and POST an empty
+    // phoneNumberId to /connect-whatsapp as though it were a real connection.
+    it.each([
+        ['FINISH_ONLY_WABA with no phone number', { type: 'WA_EMBEDDED_SIGNUP', event: 'FINISH_ONLY_WABA', data: { waba_id: 'WABA1' } }],
+        ['FINISH missing phone_number_id', { type: 'WA_EMBEDDED_SIGNUP', event: 'FINISH', data: { waba_id: 'WABA1' } }],
+        ['FINISH missing waba_id', { type: 'WA_EMBEDDED_SIGNUP', event: 'FINISH', data: { phone_number_id: 'PN-1' } }],
+    ])('rejects %s instead of resolving with an empty id', async (_label, payload) => {
+        const launch = await loadLauncher();
+        const promise = launch();
+        await vi.waitFor(() => expect(loginCallback).toBeTypeOf('function'));
+
+        loginCallback!({ authResponse: { code: 'c' } });
+        postMessage('https://www.facebook.com', payload);
+
+        await expect(promise).rejects.toThrow('WHATSAPP_SIGNUP_NO_NUMBER');
+    });
+
+    // `fb.login` can only open its popup while transient user activation is live.
+    // Spending it on a network await (the old lazy SDK load) meant the SDK never
+    // called back and the merchant sat on a disabled button for the whole
+    // timeout. Fail fast and precisely instead.
+    it('rejects immediately when user activation has been spent', async () => {
+        Object.defineProperty(navigator, 'userActivation', {
+            value: { isActive: false, hasBeenActive: true },
+            configurable: true,
+        });
+        try {
+            const launch = await loadLauncher();
+            await expect(launch()).rejects.toThrow('WHATSAPP_SIGNUP_POPUP_BLOCKED');
+            // fb.login must not even be attempted — the popup would be blocked.
+            expect(loginCallback).toBeNull();
+        } finally {
+            delete (navigator as unknown as { userActivation?: unknown }).userActivation;
+        }
+    });
+
+    it('proceeds when user activation is live', async () => {
+        Object.defineProperty(navigator, 'userActivation', {
+            value: { isActive: true, hasBeenActive: true },
+            configurable: true,
+        });
+        try {
+            const launch = await loadLauncher();
+            const promise = launch();
+            await vi.waitFor(() => expect(loginCallback).toBeTypeOf('function'));
+
+            loginCallback!({ authResponse: { code: 'c' } });
+            postMessage('https://www.facebook.com', FINISH('PN-ok'));
+
+            await expect(promise).resolves.toMatchObject({ phoneNumberId: 'PN-ok' });
+        } finally {
+            delete (navigator as unknown as { userActivation?: unknown }).userActivation;
+        }
+    });
+
+    // The preload exists so the click handler never awaits the network before
+    // fb.login. It must be safe to call repeatedly and must never throw.
+    it('preloadWhatsAppSignup warms the SDK without throwing', async () => {
+        vi.resetModules();
+        const mod = await import('../whatsappSignup');
+        expect(() => {
+            mod.preloadWhatsAppSignup();
+            mod.preloadWhatsAppSignup();
+        }).not.toThrow();
+    });
 });

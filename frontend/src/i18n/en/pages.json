@@ -45,6 +45,8 @@
   "whatsappConnectSuccess": "WhatsApp connected successfully",
   "whatsappConnectFailed": "Could not connect WhatsApp. Please try again.",
   "whatsappNumberTaken": "This WhatsApp number is already connected to another page.",
+  "whatsappPopupBlocked": "The WhatsApp signup window could not open. Please click Connect again, and allow pop-ups for this site if your browser blocked it.",
+  "whatsappNoNumberSelected": "No phone number was added to your WhatsApp Business account. Complete the signup and choose a number, then try again.",
   "whatsappPinMismatch": "This number has two-step verification enabled in the WhatsApp Business app. Turn it off there, then try connecting again.",
   "whatsappUpgradeButton": "Upgrade to connect",
   "whatsappPlanRequired": "WhatsApp auto-reply is available on the Business plan and higher. Upgrade to connect your number.",

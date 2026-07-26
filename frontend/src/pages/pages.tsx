@@ -111,6 +111,19 @@ const PagesPage: NextPageWithLayout = () => {
     ? undefined
     : Boolean(usage?.subscription?.plan?.whatsappEnabled);
 
+  // Warm the signup chunk AND the Facebook SDK before the merchant clicks.
+  // `fb.login` opens a popup, so it must run inside the browser's transient user
+  // activation; doing `await import(...)` + `await loadFacebookSdk(...)` inside
+  // the click handler spends that activation on two network round trips and the
+  // popup is silently blocked. Preloading leaves the click path awaiting only
+  // already-resolved promises (microtasks, which do not consume activation).
+  useEffect(() => {
+    if (!whatsappVisible || !isOwner) return;
+    void import('@/lib/whatsappSignup').then(m => m.preloadWhatsAppSignup()).catch(() => {
+      // Best-effort warm-up; the click path surfaces any real failure.
+    });
+  }, [whatsappVisible, isOwner]);
+
   const pages = useMemo(() => {
     const raw = pagesRaw ?? [];
     return [...raw].sort((a, b) => {
@@ -496,8 +509,18 @@ const PagesPage: NextPageWithLayout = () => {
       }
     } catch (error) {
       const err = error as { message?: string; response?: { data?: { code?: string } } };
-      if (err.message === 'WHATSAPP_SIGNUP_CANCELLED') {
-        // Merchant closed the signup popup — not an error
+      if (err.message === 'WHATSAPP_SIGNUP_CANCELLED' || err.message === 'WHATSAPP_SIGNUP_ABANDONED') {
+        // Merchant closed or walked away from the signup popup — not an error,
+        // and never a Sentry event: at GA scale this would be constant noise.
+      } else if (err.message === 'WHATSAPP_SIGNUP_POPUP_BLOCKED') {
+        // The popup could not open (spent user activation / popup blocker). The
+        // SDK is warm now, so tell them to click again rather than reporting a
+        // failure they can do nothing about.
+        toast.error(t('whatsappPopupBlocked'));
+      } else if (err.message === 'WHATSAPP_SIGNUP_NO_NUMBER') {
+        // WABA created but no phone number attached (commonly: the number is
+        // still pending Meta's display-name review).
+        toast.error(t('whatsappNoNumberSelected'));
       } else if (err.response?.data?.code === 'WHATSAPP_NUMBER_TAKEN') {
         toast.error(t('whatsappNumberTaken'));
       } else if (err.response?.data?.code === 'WHATSAPP_PIN_MISMATCH') {
