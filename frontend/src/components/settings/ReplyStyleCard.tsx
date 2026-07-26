@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic';
 import clsx from 'clsx';
 import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
-import { Card, InputFieldWrapper, CharCounter } from '@/components/ui';
+import { Card, InputFieldWrapper, CharCounter, Select } from '@/components/ui';
 import { Sparkles, MessageSquare, ArrowRight, X, ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { pagesApi } from '@/lib/api';
@@ -298,19 +298,21 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             <p className="text-[11px] text-muted-foreground">{t('replyStyle.testSaveFirst')}</p>
           )}
           {!hasChanges && selectedPage?.name && pages.length > 1 && (
-            <label className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5" dir="auto">
-              {t('replyStyle.testingOnLabel')}
-              <select
-                value={selectedPage.id}
-                onChange={(e) => setSelectedPageId(e.target.value)}
-                className="bg-transparent border border-theme-border rounded-md px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 max-w-[12rem] truncate"
-                dir="auto"
-              >
-                {pages.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
+            <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5" dir="auto">
+              <span id="reply-style-test-page-label">{t('replyStyle.testingOnLabel')}</span>
+              {/* Shared Select, not a native <select>: the OS draws a native
+                  select's open list, so dark mode got a WHITE popup here (same
+                  bug as the post picker's page selector, fixed together). */}
+              <span className="max-w-[12rem]">
+                <Select
+                  value={selectedPage.id}
+                  onChange={setSelectedPageId}
+                  options={pages.map((p) => ({ value: p.id, label: p.name }))}
+                  aria-labelledby="reply-style-test-page-label"
+                  compact
+                />
+              </span>
+            </span>
           )}
           {!hasChanges && selectedPage?.name && pages.length <= 1 && (
             <p className="text-[11px] text-muted-foreground" dir="auto">

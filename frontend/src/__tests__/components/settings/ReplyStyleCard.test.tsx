@@ -28,6 +28,18 @@ vi.mock('@/components/ui', () => ({
   InputFieldWrapper: ({ children, trailing }: { children: React.ReactNode; trailing?: React.ReactNode }) => (
     <div>{children}{trailing}</div>
   ),
+  // Mirrors the REAL Select's contract closely enough for these tests: a
+  // combobox role carrying the selected value. The real one renders a custom
+  // listbox (the native <select> popup is OS-drawn and rendered WHITE in dark
+  // mode — why the card switched); tests only assert which page is selected.
+  Select: ({ value, onChange, options, 'aria-labelledby': labelledBy }: {
+    value: string; onChange: (v: string) => void;
+    options: { value: string; label: string }[]; 'aria-labelledby'?: string;
+  }) => (
+    <select role="combobox" aria-labelledby={labelledBy} value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  ),
   CharCounter: ({ value, max }: { value: string | number; max: number }) => {
     const len = typeof value === 'string' ? value.length : value;
     return <span>{len}/{max}</span>;

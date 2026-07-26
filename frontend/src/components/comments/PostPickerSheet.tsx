@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { AlignLeft, ImageOff, Loader2 } from 'lucide-react';
 import type { Page, PublishedPost, PublishedPostsResponse } from '@jawab24/shared';
-import { Modal, Button, FacebookIcon, InstagramIcon } from '@/components/ui';
+import { Modal, Button, Select, FacebookIcon, InstagramIcon } from '@/components/ui';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { postsApi } from '@/lib/api';
 import { isPageAutoReplyEnabled } from '@/utils/page';
@@ -121,21 +121,21 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground leading-relaxed">{t('postPickerSubtitle')}</p>
 
-        {/* Page selector — only when the merchant has more than one connected page. */}
+        {/* Page selector — only when the merchant has more than one connected page.
+            The shared Select, NOT a native <select>: a native select's open list
+            is OS-drawn, so in dark mode it popped up WHITE (the UA ignores our
+            CSS there), and native selects misbehave inside modals on iOS — the
+            two problems the shared component exists to solve. */}
         {candidates.length > 1 && (
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold text-muted-foreground">{t('postPickerPageLabel')}</span>
-            <select
+          <div className="flex flex-col gap-1.5">
+            <span id="post-picker-page-label" className="text-xs font-semibold text-muted-foreground">{t('postPickerPageLabel')}</span>
+            <Select
               value={pageId}
-              onChange={(e) => handleSelectPage(e.target.value)}
-              className="rounded-lg border border-surface-200 dark:border-surface-700 bg-card px-3 py-2 text-sm"
-              dir="auto"
-            >
-              {candidates.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </label>
+              onChange={handleSelectPage}
+              options={candidates.map((p) => ({ value: p.id, label: p.name }))}
+              aria-labelledby="post-picker-page-label"
+            />
+          </div>
         )}
 
         {/* Source toggle — only when the selected page has both FB and IG. */}
