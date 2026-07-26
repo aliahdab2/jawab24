@@ -125,7 +125,17 @@ function captureUpdates() {
     mockDbUpdate.mockReturnValue({
         set: vi.fn((vals: Record<string, unknown>) => {
             sets.push(vals);
-            return { where: vi.fn().mockResolvedValue(undefined) };
+            // `.where()` is awaited directly on the alive path and chained with
+            // `.returning()` on the flag path (the conditional-update idempotency
+            // gate), so the mock must satisfy both shapes.
+            const where = vi.fn(() => {
+                const chain = Promise.resolve(undefined) as Promise<unknown> & {
+                    returning: () => Promise<Array<{ id: string }>>;
+                };
+                chain.returning = () => Promise.resolve([{ id: 'page-1' }]);
+                return chain;
+            });
+            return { where };
         }),
     });
     return sets;
@@ -145,8 +155,19 @@ function waPage(over: Partial<Record<string, unknown>> = {}) {
 
 const inDays = (d: number) => new Date(Date.now() + d * 86_400_000);
 
-/** True when a `.set()` payload disconnects the number. */
-const isDisconnect = (s: Record<string, unknown>) => s.whatsappAccessToken === null;
+/**
+ * True when a `.set()` payload DESTROYS the credential.
+ *
+ * This must never be true. The sweep flags via `whatsapp_disconnect_reason` and
+ * deliberately leaves the ciphertext in place, so a false positive is a banner
+ * that clears itself rather than a forced re-onboarding. Kept as an explicit
+ * assertion so a future change back to NULLing fails loudly here.
+ */
+const destroysCredential = (s: Record<string, unknown>) =>
+    s.whatsappAccessToken === null || s.whatsappAccessToken === '';
+
+/** True when a `.set()` payload flags the number as needing a reconnect. */
+const flagsReconnect = (s: Record<string, unknown>) => !!s.whatsappDisconnectReason;
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -162,11 +183,11 @@ describe('verifyWhatsAppTokens — healthy numbers are never disconnected', () =
 
         const result = await verifyWhatsAppTokens();
 
-        expect(result).toEqual({ checked: 1, expiringSoon: 0, dead: 0 });
+        expect(result).toMatchObject({ checked: 1, expiringSoon: 0, dead: 0 });
         expect(sets).toHaveLength(1);
         expect(sets[0].whatsappTokenLastVerifiedAt).toBeInstanceOf(Date);
         expect(sets[0].whatsappDisconnectReason).toBeNull();
-        expect(sets.some(isDisconnect)).toBe(false);
+        expect(sets.some(destroysCredential)).toBe(false);
         expect(mockSendNotification).not.toHaveBeenCalled();
     });
 
@@ -193,14 +214,14 @@ describe('verifyWhatsAppTokens — healthy numbers are never disconnected', () =
         expect(result.dead).toBe(0);
         expect(result.expiringSoon).toBe(0);
         expect(sets[0].whatsappTokenExpiresAt).toBeNull();
-        expect(sets.some(isDisconnect)).toBe(false);
+        expect(sets.some(destroysCredential)).toBe(false);
     });
 
     it('does nothing when no number is stale', async () => {
         mockDbSelect.mockReturnValue(stalePages([]));
         captureUpdates();
 
-        expect(await verifyWhatsAppTokens()).toEqual({ checked: 0, expiringSoon: 0, dead: 0 });
+        expect(await verifyWhatsAppTokens()).toMatchObject({ checked: 0, expiringSoon: 0, dead: 0 });
         expect(mockDebugToken).not.toHaveBeenCalled();
         expect(mockDbUpdate).not.toHaveBeenCalled();
     });
@@ -216,7 +237,7 @@ describe('verifyWhatsAppTokens — transient failures must not disconnect', () =
 
         // A bad minute at Meta must never cost a merchant their WhatsApp.
         expect(result.dead).toBe(0);
-        expect(sets.some(isDisconnect)).toBe(false);
+        expect(sets.some(destroysCredential)).toBe(false);
         expect(mockSendNotification).not.toHaveBeenCalled();
         expect(mockCaptureError).toHaveBeenCalled();
     });
@@ -232,7 +253,7 @@ describe('verifyWhatsAppTokens — transient failures must not disconnect', () =
         // disconnect every number on every sweep until someone noticed.
         expect(result.dead).toBe(0);
         expect(mockDebugToken).not.toHaveBeenCalled();
-        expect(sets.some(isDisconnect)).toBe(false);
+        expect(sets.some(destroysCredential)).toBe(false);
         expect(mockCaptureError).toHaveBeenCalled();
     });
 
@@ -242,7 +263,7 @@ describe('verifyWhatsAppTokens — transient failures must not disconnect', () =
         mockDebugToken.mockRejectedValue(new Error('something odd'));
 
         expect((await verifyWhatsAppTokens()).dead).toBe(0);
-        expect(sets.some(isDisconnect)).toBe(false);
+        expect(sets.some(destroysCredential)).toBe(false);
     });
 });
 
@@ -254,8 +275,8 @@ describe('verifyWhatsAppTokens — expiring soon', () => {
 
         const result = await verifyWhatsAppTokens();
 
-        expect(result).toEqual({ checked: 1, expiringSoon: 1, dead: 0 });
-        expect(sets.some(isDisconnect)).toBe(false);
+        expect(result).toMatchObject({ checked: 1, expiringSoon: 1, dead: 0 });
+        expect(sets.some(destroysCredential)).toBe(false);
         expect(mockSendNotification).toHaveBeenCalledTimes(1);
         const [userId, payload] = mockSendNotification.mock.calls[0];
         expect(userId).toBe('user-1');
@@ -281,20 +302,24 @@ describe('verifyWhatsAppTokens — expiring soon', () => {
 });
 
 describe('verifyWhatsAppTokens — dead tokens', () => {
-    it('clears the credential, stamps the reason, and disables auto-reply', async () => {
+    it('FLAGS the number and preserves the credential', async () => {
         mockDbSelect.mockReturnValue(stalePages([waPage()]));
         const sets = captureUpdates();
         mockDebugToken.mockResolvedValue({ isValid: false, errorMessage: 'Session has expired', scopes: [], wabaIds: [] });
 
         const result = await verifyWhatsAppTokens();
 
-        expect(result).toEqual({ checked: 1, expiringSoon: 0, dead: 1 });
-        const set = sets.find(isDisconnect)!;
+        expect(result).toMatchObject({ checked: 1, expiringSoon: 0, dead: 1 });
+        const set = sets.find(flagsReconnect)!;
         expect(set).toBeDefined();
         expect(set.whatsappDisconnectReason).toBe('token_expired');
-        // Leaving auto-reply on would keep the pipeline picking up jobs it can
-        // never deliver, burning customer messages into delivery_failed.
-        expect(set.whatsappAutoReplyEnabled).toBe(false);
+        // The credential survives — a false positive must be recoverable without
+        // the merchant redoing Embedded Signup (and taking a fresh 60-day clock).
+        expect(set).not.toHaveProperty('whatsappAccessToken');
+        // The merchant's own auto-reply setting is not ours to flip; the reason
+        // column is the gate. Flipping it made "reconnect to start answering
+        // again" a promise nothing kept.
+        expect(set).not.toHaveProperty('whatsappAutoReplyEnabled');
         // Must advance, or the staleness query re-selects this row every sweep.
         expect(set.whatsappTokenLastVerifiedAt).toBeInstanceOf(Date);
     });
@@ -312,15 +337,20 @@ describe('verifyWhatsAppTokens — dead tokens', () => {
         expect(payload.data).toEqual({ action: 'reconnect_whatsapp' });
     });
 
-    it('treats a 190 thrown by debug_token itself as dead', async () => {
+    it('treats a 190 from debug_token as OUR app-token fault, not the merchant\'s', async () => {
         mockDbSelect.mockReturnValue(stalePages([waPage()]));
         const sets = captureUpdates();
         mockDebugToken.mockRejectedValue(new WhatsAppApiError('Session has expired', 190, false));
 
         const result = await verifyWhatsAppTokens();
 
-        expect(result.dead).toBe(1);
-        expect(sets.some(isDisconnect)).toBe(true);
+        // debug_token authenticates with OUR {app-id}|{app-secret}. A wrong or
+        // rotated app secret returns 190 about the APP — for every page in the
+        // loop. Blaming the merchant would flag the entire estate at once.
+        expect(result.checkerFaults).toBe(1);
+        expect(result.dead).toBe(0);
+        expect(sets.some(flagsReconnect)).toBe(false);
+        expect(mockSendNotification).not.toHaveBeenCalled();
     });
 
     it('treats an elapsed expiry as dead even when Meta still says is_valid', async () => {
@@ -329,7 +359,7 @@ describe('verifyWhatsAppTokens — dead tokens', () => {
         mockDebugToken.mockResolvedValue({ isValid: true, expiresAt: inDays(-1), scopes: [], wabaIds: [] });
 
         expect((await verifyWhatsAppTokens()).dead).toBe(1);
-        expect(sets.some(isDisconnect)).toBe(true);
+        expect(sets.some(flagsReconnect)).toBe(true);
     });
 
     it('does not throw when the page has no owner to notify', async () => {
@@ -367,7 +397,7 @@ describe('verifyWhatsAppTokens — one bad number does not strand the rest', () 
         expect(result.expiringSoon).toBe(1);
         expect(result.dead).toBe(0);
         // The broken one must not take the healthy ones down with it.
-        expect(sets.some(isDisconnect)).toBe(false);
+        expect(sets.some(destroysCredential)).toBe(false);
     });
 
     it('retries a transient failure rather than giving up on the number', async () => {
@@ -387,7 +417,7 @@ describe('verifyWhatsAppTokens — one bad number does not strand the rest', () 
         expect(result.dead).toBe(0);
     });
 
-    it('does NOT retry a definitive 190 — no retry can revive a dead token', async () => {
+    it('does NOT retry a definitive 190 — retrying cannot fix a bad app secret', async () => {
         mockDbSelect.mockReturnValue(stalePages([waPage()]));
         captureUpdates();
         let attempts = 0;
@@ -399,6 +429,6 @@ describe('verifyWhatsAppTokens — one bad number does not strand the rest', () 
         const result = await verifyWhatsAppTokens();
 
         expect(attempts).toBe(1);
-        expect(result.dead).toBe(1);
+        expect(result.checkerFaults).toBe(1);
     });
 });

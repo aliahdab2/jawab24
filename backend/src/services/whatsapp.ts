@@ -206,7 +206,18 @@ class WhatsAppService {
             },
             timeout: WHATSAPP_TIMEOUT_MS,
         }));
-        const data = res.data?.data ?? {};
+        const data = res.data?.data;
+        // Require a RECOGNISABLE debug_token body before believing anything it says.
+        //
+        // `data?.data ?? {}` used to silently produce `{}` for any HTTP 200 that was
+        // not the expected shape — a Meta partial outage, a WAF/proxy interstitial, an
+        // HTML error page, a field rename. `{}` then read as `is_valid: false`, i.e.
+        // "this merchant's token is dead", for every page in the sweep, with nothing
+        // thrown for the retry logic to catch. Absence of a positive signal is not
+        // evidence of a negative one: throw so the caller's transient path retries.
+        if (!data || typeof data !== 'object' || typeof data.is_valid !== 'boolean') {
+            throw new WhatsAppApiError('debug_token returned an unrecognised body', undefined, true);
+        }
         // expires_at === 0 means "never expires" (Meta's documented sentinel for
         // non-expiring tokens). Mapping it to undefined — rather than new Date(0) —
         // is load-bearing: a 1970 date would read as "expired 56 years ago" and make

@@ -36,10 +36,12 @@ export function serializePage<T extends {
         ...rest,
         isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : whatsappConnected,
         whatsappConnected,
-        // Distinguishes "the token died, reconnect me" from "never connected" — both
-        // have whatsappConnected false, but only the former should raise a banner.
-        // Derived here so the UI never has to know the reason enum's values.
-        whatsappNeedsReconnect: !whatsappConnected && !!page.whatsappDisconnectReason,
+        // "The token needs attention" — driven by the REASON, not by the absence of a
+        // token. The health sweep deliberately keeps the credential and only flags
+        // (see whatsappTokenHealth.markWhatsAppNeedsReconnect), so gating this on
+        // `!whatsappConnected` would have hidden the banner in exactly the state it
+        // exists for. Derived here so the UI never learns the enum's values.
+        whatsappNeedsReconnect: !!page.whatsappDisconnectReason,
     };
 }
 

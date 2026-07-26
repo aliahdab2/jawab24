@@ -62,6 +62,15 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
         if (!page.platformAccountId) {
             throw new Error('Page has no WhatsApp phone number ID');
         }
+        // Never issue a send with an empty bearer. `safeDecryptToken` deliberately
+        // swallows decryption failures and returns '' (corrupt row, or a rotated /
+        // missing FACEBOOK_TOKEN_ENCRYPTION_KEY), and nothing upstream re-checks it.
+        // Sending anyway earns a 190 from Meta, which the catch below would read as
+        // "this merchant's token expired" — so one key misconfiguration would flag
+        // every WhatsApp page on its first inbound message. Fail loudly instead.
+        if (!page.accessToken) {
+            throw new Error('WhatsApp token unavailable for this page (decrypt failed or not connected)');
+        }
         try {
             await whatsappService.sendTextMessage(
                 page.platformAccountId,
@@ -86,7 +95,11 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
                     id: page.id,
                     name: page.name,
                     userId: page.userId,
-                    whatsappDisplayPhoneNumber: page.platformAccountId ?? null,
+                    // NOT platformAccountId — that is Meta's numeric phone-number ID,
+                    // so the merchant's notification read "your connection for
+                    // 1564356725245618 has expired". The sweep passes the real display
+                    // number; null here lets the notification fall back to the page name.
+                    whatsappDisplayPhoneNumber: null,
                 }, 'token_expired');
             }
             throw error;

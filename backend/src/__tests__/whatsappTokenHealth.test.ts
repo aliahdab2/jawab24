@@ -69,14 +69,29 @@ describe('assessToken', () => {
         expect(verdict.expiringSoon).toBe(true);
     });
 
-    it('is dead when only the data-access clock has elapsed', () => {
-        // The credential string is still valid but the app can no longer read the
-        // customer's data — sends will fail, so this must not be reported healthy.
+    it('does NOT declare dead on the data-access clock alone', () => {
+        // We have NOT verified that an elapsed data_access_expires_at blocks
+        // POST /{phone-number-id}/messages. An earlier revision assumed it did and
+        // would have destroyed credentials on that assumption — and because the
+        // clock is anchored to the original login and is not reset by reconnecting,
+        // an affected merchant would have been disconnected again every sweep,
+        // forever. Only the credential's own expiry may declare a token dead.
         const verdict = assessToken(
             { isValid: true, expiresAt: inDays(30), dataAccessExpiresAt: inDays(-2) },
             now,
         );
-        expect(verdict.dead).toBe(true);
+        expect(verdict.dead).toBe(false);
+    });
+
+    it('folds in the deadline captured at Embedded Signup', () => {
+        // debug_token reports expires_at: 0 for system-user tokens, so the ES-time
+        // expires_in is the only place the real 60-day deadline is known. Without
+        // this the warning would never fire and the merchant would go dark silently.
+        const verdict = assessToken({ isValid: true }, now, inDays(3));
+        expect(verdict.expiringSoon).toBe(true);
+        expect(verdict.dead).toBe(false);
+
+        expect(assessToken({ isValid: true }, now, inDays(-1)).dead).toBe(true);
     });
 
     it('ignores an unparseable date rather than treating it as expired', () => {

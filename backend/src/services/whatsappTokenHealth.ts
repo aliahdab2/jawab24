@@ -69,21 +69,42 @@ export type WhatsAppDisconnectReason = 'token_expired' | 'app_uninstalled';
 export function assessToken(
     info: { isValid: boolean; expiresAt?: Date; dataAccessExpiresAt?: Date },
     now: Date = new Date(),
+    /**
+     * Deadline captured at Embedded Signup (`pages.whatsapp_token_expires_at`).
+     * debug_token reports `expires_at: 0` for system-user tokens, so for those the
+     * ES-time `expires_in` is the ONLY place the real 60-day deadline is known —
+     * without folding it in here, the warning would never fire and the merchant
+     * would go dark on day 60 with no notice, which is the failure this whole
+     * service exists to prevent.
+     */
+    storedExpiresAt?: Date | null,
 ): { dead: boolean; expiringSoon: boolean; msUntilExpiry?: number } {
     if (!info.isValid) return { dead: true, expiringSoon: false };
 
-    // Two INDEPENDENT clocks: the credential itself (expires_at) and the app's
-    // access to the customer's data (data_access_expires_at, ~90 days). Either can
-    // fire first, so the earlier one governs. Both undefined ⇒ nothing to warn about.
-    const deadlines = [info.expiresAt, info.dataAccessExpiresAt]
-        .filter((d): d is Date => d instanceof Date && !Number.isNaN(d.getTime()))
-        .map(d => d.getTime());
+    const usable = (d: Date | null | undefined): d is Date =>
+        d instanceof Date && !Number.isNaN(d.getTime());
 
-    if (deadlines.length === 0) return { dead: false, expiringSoon: false };
+    // Only the CREDENTIAL's own expiry may declare a token dead, because "dead"
+    // costs the merchant their connection.
+    //
+    // `data_access_expires_at` is deliberately NOT part of this. It is a separate
+    // ~90-day clock governing Graph access to user data, and we have NOT verified
+    // that letting it lapse blocks POST /{phone-number-id}/messages. An earlier
+    // revision folded it into the dead verdict on that unverified assumption; the
+    // consequence would have been brutal, because the clock is anchored to the
+    // original login and is NOT reset by reconnecting — a merchant reconnecting
+    // near day 90 would be disconnected again within one sweep, forever. It may
+    // still warn (below), which is useful and costs nothing if the premise is wrong.
+    const hardDeadlines = [info.expiresAt, storedExpiresAt].filter(usable).map(d => d.getTime());
+    const warnDeadlines = [...hardDeadlines, ...[info.dataAccessExpiresAt].filter(usable).map(d => d.getTime())];
 
-    const msUntilExpiry = Math.min(...deadlines) - now.getTime();
+    if (warnDeadlines.length === 0) return { dead: false, expiringSoon: false };
+
+    const msUntilExpiry = Math.min(...warnDeadlines) - now.getTime();
+    const msUntilDead = hardDeadlines.length ? Math.min(...hardDeadlines) - now.getTime() : undefined;
+
     return {
-        dead: msUntilExpiry <= 0,
+        dead: msUntilDead !== undefined && msUntilDead <= 0,
         expiringSoon: msUntilExpiry > 0 && msUntilExpiry <= WARN_BEFORE_EXPIRY_MS,
         msUntilExpiry,
     };
@@ -92,11 +113,13 @@ export function assessToken(
 /**
  * Check every connected WhatsApp number whose token hasn't been verified recently.
  */
-export async function verifyWhatsAppTokens(): Promise<{ checked: number; expiringSoon: number; dead: number }> {
+export async function verifyWhatsAppTokens(): Promise<{ checked: number; expiringSoon: number; dead: number; checkerFaults: number }> {
     const staleThreshold = new Date(Date.now() - VERIFY_INTERVAL_MS);
     let checked = 0;
     let expiringSoon = 0;
     let dead = 0;
+    /** 190s caused by OUR app token, not the merchant's — see the catch below. */
+    let checkerFaults = 0;
 
     const stalePages = await db
         .select({
@@ -106,6 +129,7 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
             workspaceId: pages.workspaceId,
             whatsappAccessToken: pages.whatsappAccessToken,
             whatsappDisplayPhoneNumber: pages.whatsappDisplayPhoneNumber,
+            whatsappTokenExpiresAt: pages.whatsappTokenExpiresAt,
         })
         .from(pages)
         .where(
@@ -122,7 +146,7 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
 
     if (stalePages.length === 0) {
         logger.info('[WhatsAppTokenHealth] All tokens recently verified');
-        return { checked: 0, expiringSoon: 0, dead: 0 };
+        return { checked: 0, expiringSoon: 0, dead: 0, checkerFaults: 0 };
     }
 
     logger.info(`[WhatsAppTokenHealth] ${stalePages.length} number(s) need verification`);
@@ -163,7 +187,7 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
             );
 
             checked++;
-            const verdict = assessToken(info);
+            const verdict = assessToken(info, new Date(), page.whatsappTokenExpiresAt);
 
             if (verdict.dead) {
                 dead++;
@@ -180,7 +204,12 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
             await db
                 .update(pages)
                 .set({
-                    whatsappTokenExpiresAt: info.expiresAt ?? null,
+                    // Never NULL a deadline we already know. debug_token reports
+                    // expires_at: 0 for system-user tokens, so overwriting with null
+                    // would erase the 60-day deadline captured at Embedded Signup —
+                    // no warning would ever fire and the merchant would go dark on
+                    // day 60 in silence, the exact failure this service prevents.
+                    whatsappTokenExpiresAt: info.expiresAt ?? page.whatsappTokenExpiresAt ?? null,
                     whatsappTokenLastVerifiedAt: new Date(),
                     whatsappDisconnectReason: null,
                     updatedAt: new Date(),
@@ -194,13 +223,23 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
                 await warnExpiringSoon(page, days);
             }
         } catch (error) {
-            // A definitive 190 here means the token is already dead — same treatment as
-            // is_valid:false. Anything else (transient, unrecognised) is left alone and
-            // retried next sweep rather than disconnecting a possibly-healthy number.
+            // A 190 here is a CHECKER fault, not a merchant fault.
+            //
+            // debug_token authenticates with OUR app token (`{app-id}|{app-secret}`),
+            // so a wrong, rotated or restricted app secret returns 190 about the APP —
+            // for every page in the loop. An earlier revision read that as "this
+            // merchant's token expired" and flagged the entire estate. Rotating
+            // FACEBOOK_APP_SECRET and missing an env reload is a documented recurring
+            // failure in this repo, so this was reachable in the ordinary course.
+            //
+            // Only `is_valid: false` in a well-formed body (handled above) may declare
+            // a merchant's token dead. Everything thrown here is retried next sweep.
             if (error instanceof WhatsAppApiError && error.metaCode === META_TOKEN_EXPIRED) {
-                dead++;
-                logger.warn(`[WhatsAppTokenHealth] 190 on debug_token for "${page.name}" — treating as expired`);
-                await markWhatsAppNeedsReconnect(page, 'token_expired');
+                checkerFaults++;
+                captureError(error, 'debug_token rejected OUR app token — check FACEBOOK_APP_SECRET, NOT the merchant', {
+                    tags: { service: 'whatsapp-token-health', fault: 'checker' },
+                    extra: { pageId: page.id },
+                });
             } else {
                 captureError(error, 'WhatsApp token verification failed (transient — retrying next sweep)', {
                     tags: { service: 'whatsapp-token-health' },
@@ -211,7 +250,7 @@ export async function verifyWhatsAppTokens(): Promise<{ checked: number; expirin
     }
 
     logger.info(`[WhatsAppTokenHealth] Complete: ${checked} checked, ${expiringSoon} expiring soon, ${dead} dead`);
-    return { checked, expiringSoon, dead };
+    return { checked, expiringSoon, dead, checkerFaults };
 }
 
 /**
@@ -229,16 +268,42 @@ export async function markWhatsAppNeedsReconnect(
     reason: WhatsAppDisconnectReason,
 ): Promise<void> {
     try {
-        await db
+        // FLAG, never destroy.
+        //
+        // An earlier revision NULLed `whatsapp_access_token` here (mirroring the
+        // Facebook sweep). Review found four independent ways a HEALTHY merchant
+        // reaches this function — an unverified data-access assumption, a malformed
+        // HTTP 200 read as `is_valid: false`, a 190 raised by our OWN app token, and
+        // `safeDecryptToken` returning '' after a key misconfiguration, which sends an
+        // empty bearer and earns a 190 on the first inbound message. Any one of them
+        // would have destroyed the ciphertext for every connected number, unrecoverably:
+        // the merchant would have to redo Embedded Signup, and Meta forces a fresh
+        // 60-day clock on the way through.
+        //
+        // Keeping the credential turns every false positive from "catastrophic and
+        // permanent" into "a banner that clears itself on the next healthy sweep".
+        // The reason column — not the absence of a token — is the gate.
+        //
+        // whatsappAutoReplyEnabled is deliberately NOT touched either: it is the
+        // merchant's own setting, and flipping it produced a broken promise (the
+        // banner says "reconnect to start answering again", but reconnect had nothing
+        // to restore it). Sends are gated on the reason instead.
+        const [updated] = await db
             .update(pages)
             .set({
-                whatsappAccessToken: null,
-                whatsappAutoReplyEnabled: false,
                 whatsappDisconnectReason: reason,
                 whatsappTokenLastVerifiedAt: new Date(),
                 updatedAt: new Date(),
             })
-            .where(eq(pages.id, page.id));
+            // Idempotency gate: only the transition into a flagged state notifies.
+            // markWhatsAppNeedsReconnect is called per failed send, so N queued
+            // messages meant N pushes AND N bell rows (the push cooldown does not
+            // gate the bell insert). The row lock serialises concurrent workers, so
+            // exactly one of them gets a row back.
+            .where(and(eq(pages.id, page.id), isNull(pages.whatsappDisconnectReason)))
+            .returning({ id: pages.id });
+
+        if (!updated) return;
 
         if (!page.userId) return;
         const label = page.whatsappDisplayPhoneNumber || page.name || 'WhatsApp';
