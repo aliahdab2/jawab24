@@ -249,9 +249,39 @@ Jawab24 uses the email permission to read the user's primary email address assoc
 
 | Prerequisite | State |
 |---|---|
-| Business verification (Business 867483152446840) | ✅ Done — verified Meta Tech Provider |
+| Business verification (Business 867483152446840) | ✅ Done |
+| Access verification — *business* verified as a Tech Provider | ✅ Done 2026-03-06 (Alert Inbox: "Your business, Jawab24, has been verified as a Tech Provider and no further action is required") |
+| **Tech Provider onboarding — *app* level** | ❌ **NOT done. A THIRD, separate thing from the two rows above** — see the warning below |
 | WhatsApp product added to the app | ☐ Not yet — Part A below |
 | Test number + screencasts | ☐ Not yet — Parts A–B below |
+
+> ⚠️ **THREE different "Tech Provider / verification" things exist. Do not conflate them.**
+> This table originally collapsed them into one row reading "verified Meta Tech Provider",
+> and that wrong belief cost real time on 2026-07-26:
+> 1. **Business verification** of business 867483152446840 — done.
+> 2. **Access verification**: the *business* verified as a Tech Provider — done 2026-03-06,
+>    and its alert says "no further action is required", which is what made rows 1–2 look
+>    like the whole story.
+> 3. **Tech Provider onboarding at the APP level** — *not* done, and it is what Embedded
+>    Signup actually gates on. With App Review approved, the ES config created, the CSP
+>    fixed and the JS-SDK toggle on, the popup still failed with **"Jawab24 can't onboard
+>    customers at the moment"** purely because of this.
+>
+> Where: WhatsApp use case → **Next steps → Become a Partner → Become Tech Provider**.
+> Screen 1 is an intro ("Send messages on behalf of your customers" / "Onboard customers
+> from your website"). Screen 2 asks **Independent Tech Provider** (correct for us — we
+> onboard merchants ourselves) vs *Working with a Solution Partner* (needs a partner app
+> ID), and carries the gate: *"By continuing, you agree to [Tech Provider Terms]"*
+> → https://www.facebook.com/legal/BM-tech-provider-terms
+> Guide: https://developers.facebook.com/docs/whatsapp/solution-providers/get-started-for-tech-providers/
+>
+> 🕒 **Both options state "App review is required" — so this is NOT instant self-serve.**
+> It is a terms acceptance (owner decision, never an assistant's) plus a further App
+> Review cycle. Budget for it in any launch date.
+>
+> Full gate order: Advanced Access → ES configuration → JS-SDK login toggle + allowed
+> domain → nginx CSP → **app-level Tech Provider onboarding (terms + App Review)** →
+> connect works.
 | Review timeline after submitting | 3–5 business days |
 
 **Key fact (verified in Meta docs):** you do NOT need approval to record the evidence. Adding the WhatsApp product gives a free **dev-mode test number** immediately, and Meta explicitly accepts as screencast evidence: (1) the **API Setup cURL** sending a message that arrives in the WhatsApp client, and (2) **WhatsApp Manager** creating a message template. Both work pre-approval.
