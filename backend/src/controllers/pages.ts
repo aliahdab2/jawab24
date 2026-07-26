@@ -24,13 +24,22 @@ import { buildPlaygroundContext } from '../services/reply/playgroundContext';
  *  Facebook token for Facebook-backed pages, the WABA token for WhatsApp-only
  *  pages (facebookPageId null) — otherwise WhatsApp-only cards would render
  *  as broken Facebook pages (reconnect banner, disabled card body). */
-export function serializePage<T extends { accessToken?: string | null; whatsappAccessToken?: string | null; facebookPageId?: string | null }>(page: T) {
+export function serializePage<T extends {
+    accessToken?: string | null;
+    whatsappAccessToken?: string | null;
+    facebookPageId?: string | null;
+    whatsappDisconnectReason?: string | null;
+}>(page: T) {
     const { accessToken, whatsappAccessToken, ...rest } = page;
     const whatsappConnected = !!whatsappAccessToken && whatsappAccessToken !== '';
     return {
         ...rest,
         isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : whatsappConnected,
         whatsappConnected,
+        // Distinguishes "the token died, reconnect me" from "never connected" — both
+        // have whatsappConnected false, but only the former should raise a banner.
+        // Derived here so the UI never has to know the reason enum's values.
+        whatsappNeedsReconnect: !whatsappConnected && !!page.whatsappDisconnectReason,
     };
 }
 

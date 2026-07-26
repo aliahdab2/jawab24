@@ -188,6 +188,21 @@ export const pages = pgTable('pages', {
     // Embedded Signup business token for the merchant's WABA — separate from the
     // Facebook page token in access_token. AES-256-GCM encrypted (enc:v1: prefix).
     whatsappAccessToken: text('whatsapp_access_token'),
+    // When the WABA business token expires. Meta FORCES a 60-day expiry on the
+    // "WhatsApp Embedded Signup" login variation (the never-expire option is only
+    // offered for the "General" variation), so unlike the FB page token this one
+    // dies on a clock. NULL means "unknown or never expires" — Meta's debug_token
+    // reports expires_at = 0 for non-expiring tokens, so callers must treat NULL
+    // as "no deadline" and never compute a days-until from it.
+    whatsappTokenExpiresAt: timestamp('whatsapp_token_expires_at'),
+    // Last successful debug_token health check. Drives the sweep's staleness query,
+    // mirroring token_last_verified_at on the Facebook side.
+    whatsappTokenLastVerifiedAt: timestamp('whatsapp_token_last_verified_at'),
+    // Why WhatsApp is currently disconnected (whatsapp_access_token cleared). Null
+    // when connected. Mirrors disconnect_reason for the Facebook channel.
+    //   - 'token_expired': Meta code 190 / debug_token is_valid=false — merchant must reconnect
+    //   - 'app_uninstalled': account_update webhook said the customer removed our app
+    whatsappDisconnectReason: varchar('whatsapp_disconnect_reason', { length: 30 }),
     // E-commerce store linked to this page (for product-aware AI replies)
     ecommerceStoreId: uuid('ecommerce_store_id').references(() => ecommerceStores.id, { onDelete: 'set null' }),
     // Knowledge base for AI context - business info, products, FAQ

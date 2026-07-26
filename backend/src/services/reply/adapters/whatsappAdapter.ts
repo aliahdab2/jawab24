@@ -1,6 +1,7 @@
 import { pagesService } from '../../pages';
 import { conversationsService } from '../../conversations';
-import { whatsappService } from '../../whatsapp';
+import { whatsappService, WhatsAppApiError, META_TOKEN_EXPIRED } from '../../whatsapp';
+import { markWhatsAppNeedsReconnect } from '../../whatsappTokenHealth';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
 
@@ -61,12 +62,35 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
         if (!page.platformAccountId) {
             throw new Error('Page has no WhatsApp phone number ID');
         }
-        await whatsappService.sendTextMessage(
-            page.platformAccountId,
-            senderId,
-            text,
-            page.accessToken,
-        );
+        try {
+            await whatsappService.sendTextMessage(
+                page.platformAccountId,
+                senderId,
+                text,
+                page.accessToken,
+            );
+        } catch (error) {
+            // Meta forces a 60-day expiry on WhatsApp business tokens, so 190 here is
+            // a terminal state, not a blip: no retry can fix it and every subsequent
+            // send will fail identically.
+            //
+            // Flag the number immediately so send #2 is never attempted. Previously an
+            // expired token was bucketed 'unknown' and burned PAUSE_THRESHOLD (10)
+            // customer messages into delivery_failed before the page auto-paused —
+            // with nothing telling the merchant why their WhatsApp went quiet.
+            //
+            // This lives in the adapter, not messageProcessor, so no
+            // `platform === 'whatsapp'` branch leaks into the shared pipeline (D-016).
+            if (error instanceof WhatsAppApiError && error.metaCode === META_TOKEN_EXPIRED) {
+                await markWhatsAppNeedsReconnect({
+                    id: page.id,
+                    name: page.name,
+                    userId: page.userId,
+                    whatsappDisplayPhoneNumber: page.platformAccountId ?? null,
+                }, 'token_expired');
+            }
+            throw error;
+        }
     }
 
     async sendAwayMessage(page: PlatformPage, senderId: string, text: string): Promise<void> {

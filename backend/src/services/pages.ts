@@ -1390,6 +1390,8 @@ export class PagesService {
             businessAccountId: string;
             displayPhoneNumber: string;
             accessToken: string;
+            /** Null when Meta reports no expiry; see whatsappTokenExpiresAt in schema. */
+            tokenExpiresAt?: Date | null;
             verifiedName?: string;
         },
     ) {
@@ -1407,6 +1409,8 @@ export class PagesService {
                 whatsappDisplayPhoneNumber: data.displayPhoneNumber,
                 whatsappAccessToken: maybeEncryptToken(data.accessToken),
                 whatsappAutoReplyEnabled: false,
+                whatsappTokenExpiresAt: data.tokenExpiresAt ?? null,
+                whatsappTokenLastVerifiedAt: new Date(),
             })
             .returning();
 
@@ -1425,6 +1429,8 @@ export class PagesService {
             businessAccountId: string;
             displayPhoneNumber: string;
             accessToken: string;
+            /** Null when Meta reports no expiry; see whatsappTokenExpiresAt in schema. */
+            tokenExpiresAt?: Date | null;
         },
     ) {
         const [updatedPage] = await db
@@ -1434,6 +1440,12 @@ export class PagesService {
                 whatsappBusinessAccountId: data.businessAccountId,
                 whatsappDisplayPhoneNumber: data.displayPhoneNumber,
                 whatsappAccessToken: maybeEncryptToken(data.accessToken),
+                whatsappTokenExpiresAt: data.tokenExpiresAt ?? null,
+                whatsappTokenLastVerifiedAt: new Date(),
+                // A reconnect clears any prior expiry/uninstall verdict — otherwise a
+                // stale reason would keep the "reconnect WhatsApp" banner up on a
+                // freshly-working number.
+                whatsappDisconnectReason: null,
                 updatedAt: new Date(),
             })
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
@@ -1452,6 +1464,11 @@ export class PagesService {
                 whatsappDisplayPhoneNumber: null,
                 whatsappAccessToken: null,
                 whatsappAutoReplyEnabled: false,
+                whatsappTokenExpiresAt: null,
+                whatsappTokenLastVerifiedAt: null,
+                // Merchant-initiated disconnect is not a fault — leave no reason behind
+                // for support to misread as an expiry.
+                whatsappDisconnectReason: null,
                 updatedAt: new Date(),
             })
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))

@@ -84,3 +84,110 @@ describe('WhatsAppService error sanitization', () => {
         expect(err.transient).toBe(expectedTransient);
     });
 });
+
+/**
+ * Meta FORCES a 60-day expiry on the WhatsApp Embedded Signup login variation, so
+ * the expiry deadline has to be captured at exchange time — it is the only moment
+ * Meta tells us. Discarding it (the original behaviour) left us unable to warn a
+ * merchant before their number went silent.
+ */
+describe('WhatsAppService token expiry capture', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('exchangeCodeForToken returns expires_in alongside the token', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: { access_token: 'wa-tok', expires_in: 5_184_000 }, // 60 days
+        });
+        await expect(whatsappService.exchangeCodeForToken('code')).resolves.toEqual({
+            token: 'wa-tok',
+            expiresIn: 5_184_000,
+        });
+    });
+
+    it.each([
+        ['absent', undefined],
+        ['zero', 0],
+        ['non-numeric', 'soon'],
+    ])('exchangeCodeForToken reports NO expiry when expires_in is %s', async (_label, expiresIn) => {
+        // A missing/zero expires_in must become undefined so the caller stores NULL
+        // rather than inventing a deadline — a fabricated date would disconnect a
+        // perfectly healthy never-expiring token.
+        vi.mocked(axios.get).mockResolvedValueOnce({ data: { access_token: 'wa-tok', expires_in: expiresIn } });
+        const result = await whatsappService.exchangeCodeForToken('code');
+        expect(result.token).toBe('wa-tok');
+        expect(result.expiresIn).toBeUndefined();
+    });
+});
+
+describe('WhatsAppService.debugToken', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('authenticates with the APP access token, never the token under test', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({ data: { data: { is_valid: true } } });
+        await whatsappService.debugToken('token-under-test');
+
+        const params = vi.mocked(axios.get).mock.calls[0][1]?.params as Record<string, string>;
+        expect(params.input_token).toBe('token-under-test');
+        // An app access token cannot itself expire, so the health checker can never
+        // go stale — and it still reports is_valid:false for an already-dead token.
+        expect(params.access_token).toBe('app-1|SUPER_SECRET');
+    });
+
+    it('maps expires_at = 0 to NO expiry rather than 1970', async () => {
+        // Meta's documented sentinel for a non-expiring token. new Date(0) would read
+        // as "expired 56 years ago" and make the sweep disconnect every healthy token.
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: { data: { is_valid: true, expires_at: 0, data_access_expires_at: 0 } },
+        });
+        const info = await whatsappService.debugToken('tok');
+        expect(info.isValid).toBe(true);
+        expect(info.expiresAt).toBeUndefined();
+        expect(info.dataAccessExpiresAt).toBeUndefined();
+    });
+
+    it('converts unix seconds to Date and extracts the covered WABA ids', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: {
+                data: {
+                    is_valid: true,
+                    expires_at: 1_790_000_000,
+                    data_access_expires_at: 1_795_000_000,
+                    scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+                    granular_scopes: [
+                        { scope: 'whatsapp_business_management', target_ids: ['waba-1', 'waba-2'] },
+                        { scope: 'whatsapp_business_messaging', target_ids: ['waba-1'] },
+                    ],
+                },
+            },
+        });
+        const info = await whatsappService.debugToken('tok');
+        expect(info.expiresAt?.getTime()).toBe(1_790_000_000 * 1000);
+        expect(info.dataAccessExpiresAt?.getTime()).toBe(1_795_000_000 * 1000);
+        // A shrinking list is how a PARTIAL revocation shows up — is_valid alone misses it.
+        expect(info.wabaIds).toEqual(['waba-1', 'waba-2']);
+        expect(info.scopes).toContain('whatsapp_business_messaging');
+    });
+
+    it('reports an invalid token with Meta\'s reason', async () => {
+        vi.mocked(axios.get).mockResolvedValueOnce({
+            data: { data: { is_valid: false, error: { message: 'Session has expired' } } },
+        });
+        const info = await whatsappService.debugToken('tok');
+        expect(info.isValid).toBe(false);
+        expect(info.errorMessage).toBe('Session has expired');
+    });
+
+    it('sanitizes failures — the app secret must not escape via the error', async () => {
+        vi.mocked(axios.get).mockRejectedValueOnce(axiosErrorWithSecretsForDebug);
+        const err = await whatsappService.debugToken('tok').catch(e => e);
+        expect(err).toBeInstanceOf(WhatsAppApiError);
+        expect(err).not.toHaveProperty('config');
+        expect(JSON.stringify({ m: err.message, c: err.metaCode })).not.toContain('SUPER_SECRET');
+    });
+});
+
+const axiosErrorWithSecretsForDebug = {
+    message: 'Request failed with status code 400',
+    config: { params: { access_token: 'app-1|SUPER_SECRET', input_token: 'tok' } },
+    response: { status: 400, data: { error: { code: 190, message: 'expired' } } },
+};

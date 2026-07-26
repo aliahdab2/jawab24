@@ -29,7 +29,7 @@ vi.mock('../../src/services/pages', () => ({
 }));
 vi.mock('../../src/services/whatsapp', () => ({
     whatsappService: {
-        exchangeCodeForToken: vi.fn().mockResolvedValue('tok'),
+        exchangeCodeForToken: vi.fn().mockResolvedValue({ token: 'tok' }),
         subscribeAppToWaba: vi.fn(),
         registerPhoneNumber: vi.fn(),
         getPhoneNumberInfo: vi.fn().mockResolvedValue({ displayPhoneNumber: '+966 50 111 2233', verifiedName: 'Noor' }),

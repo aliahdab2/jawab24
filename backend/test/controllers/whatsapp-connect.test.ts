@@ -101,7 +101,7 @@ describe('WhatsAppController.connect', () => {
         vi.clearAllMocks();
         vi.mocked(pagesService.getPage).mockResolvedValue(basePage as never);
         vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(null as never);
-        vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue('wa-business-token');
+        vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue({ token: 'wa-business-token', expiresIn: 5184000 });
         vi.mocked(whatsappService.subscribeAppToWaba).mockResolvedValue(undefined);
         vi.mocked(whatsappService.registerPhoneNumber).mockResolvedValue(undefined);
         vi.mocked(whatsappService.getPhoneNumberInfo).mockResolvedValue({
@@ -124,6 +124,10 @@ describe('WhatsAppController.connect', () => {
             businessAccountId: 'waba-1',
             displayPhoneNumber: '+966 55 000 0000',
             accessToken: 'wa-business-token',
+            // Meta forces a 60-day expiry on this login variation and only tells us
+            // at exchange time, so the deadline must be persisted here — without it
+            // we cannot warn the merchant before their number goes silent.
+            tokenExpiresAt: expect.any(Date),
         });
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({
             whatsappPhoneNumberId: 'phone-1',
@@ -382,7 +386,7 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(null as never);
-        vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue('wa-business-token');
+        vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue({ token: 'wa-business-token', expiresIn: 5184000 });
         vi.mocked(whatsappService.subscribeAppToWaba).mockResolvedValue(undefined);
         vi.mocked(whatsappService.registerPhoneNumber).mockResolvedValue(undefined);
         vi.mocked(whatsappService.getPhoneNumberInfo).mockResolvedValue({
@@ -406,6 +410,7 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
             businessAccountId: 'waba-1',
             displayPhoneNumber: '+966 50 111 2233',
             accessToken: 'wa-business-token',
+            tokenExpiresAt: expect.any(Date),
             verifiedName: 'Noor Store',
         });
         expect(reply.status).toHaveBeenCalledWith(201);
