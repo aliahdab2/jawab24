@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PagesPage from '@/pages/pages';
+// The next-intl mock in test/setup.ts resolves keys against the real EN
+// messages, so assert on the JSON value rather than hardcoding the copy.
+import enPages from '@/i18n/en/pages.json';
 import { pagesApi, api, subscriptionApi } from '@/lib/api';
 
 // Create mock functions
@@ -116,6 +119,7 @@ vi.mock('@/components/ui', () => ({
         ) : null,
     InfoPopover: ({ children }: { children: React.ReactNode; label?: string }) => <>{children}</>,
     UpgradeCTA: ({ children }: { children: React.ReactNode }) => <div data-testid="upgrade-cta">{children}</div>,
+    Badge: ({ children }: { children: React.ReactNode }) => <span data-testid="badge">{children}</span>,
     WhatsAppIcon: () => <svg data-testid="whatsapp-icon" />,
     FacebookIcon: () => <svg data-testid="facebook-icon" />,
     Modal: ({ isOpen, title, children }: { isOpen: boolean; title: string; children: React.ReactNode }) =>
@@ -790,6 +794,25 @@ describe('PagesPage - WhatsApp master switch OFF (dark deploy)', () => {
 
         // The whatsappConnected OR keeps a live number visible regardless of the flag
         expect(screen.getByText('+966 55 000 0000')).toBeInTheDocument();
+    });
+
+    /**
+     * The beta chip is a deliberate expectation-setter on the newest channel —
+     * it must ride along with the WhatsApp row wherever that row appears, so a
+     * merchant never meets WhatsApp without seeing that it is still in beta.
+     */
+    it('labels the WhatsApp row as beta', async () => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...FB_PAGE, whatsappConnected: true, whatsappDisplayPhoneNumber: '+966 55 000 0000', whatsappAutoReplyEnabled: true }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Falafel House')[0]).toBeInTheDocument();
+        });
+
+        expect(screen.getByText(enPages.whatsappBeta)).toBeInTheDocument();
     });
 });
 

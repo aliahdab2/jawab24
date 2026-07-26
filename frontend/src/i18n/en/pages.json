@@ -35,6 +35,7 @@
   "instagramTooltip": "Make sure your Instagram Business account is connected to this Page in Meta settings, then click Sync.",
   "instagramNotConnected": "Instagram not connected",
   "platformWhatsApp": "WhatsApp",
+  "whatsappBeta": "Beta",
   "whatsappNotConnected": "WhatsApp not connected",
   "whatsappTooltip": "Jawab will answer your WhatsApp messages using this page's Business Info. You'll need a phone number that isn't already used on the WhatsApp app. Need different info for this number? Add it as its own WhatsApp card instead.",
   "whatsappConnectButton": "Connect",

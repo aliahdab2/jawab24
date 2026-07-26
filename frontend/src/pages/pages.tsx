@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon, UpgradeCTA } from '@/components/ui';
+import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon, UpgradeCTA, Badge } from '@/components/ui';
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
 import { BusinessInfoNudgeBanner } from '@/components/pages/BusinessInfoNudgeBanner';
 import { needsBusinessInfo } from '@/utils/kb';
@@ -811,12 +811,18 @@ const PagesPage: NextPageWithLayout = () => {
                         <WhatsAppIcon className="w-4 h-4" aria-hidden="true" />
                       </div>
                       <div className="min-w-0">
-                        <p className={clsx(
-                          'text-sm font-bold',
-                          page.whatsappConnected && page.whatsappAutoReplyEnabled
-                            ? 'text-emerald-900 dark:text-emerald-300'
-                            : 'text-muted-foreground'
-                        )}>{t('platformWhatsApp')}</p>
+                        {/* Beta chip sets expectations on the newest channel — it is a
+                            deliberate promise-less label, not a gate. Keep it until
+                            WhatsApp has bedded in (see WHATSAPP_LAUNCH_RUNBOOK). */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={clsx(
+                            'text-sm font-bold',
+                            page.whatsappConnected && page.whatsappAutoReplyEnabled
+                              ? 'text-emerald-900 dark:text-emerald-300'
+                              : 'text-muted-foreground'
+                          )}>{t('platformWhatsApp')}</p>
+                          <Badge variant="warning" size="xs">{t('whatsappBeta')}</Badge>
+                        </div>
                         <div className="flex items-center gap-1">
                           {/* dir=ltr keeps the +NNN phone number readable in RTL */}
                           <p dir={page.whatsappDisplayPhoneNumber ? 'ltr' : undefined} className={clsx(
