@@ -697,9 +697,11 @@ describe('MessagesController', () => {
                 await messagesController.reply(mockRequest as any, mockReply as any);
 
                 expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
-                // Last positional arg of storeOutgoingMessage is clientMessageId.
+                // clientMessageId is the 9th positional arg. (It stopped being the LAST
+                // one when platformMessageId was appended for WhatsApp Coexistence, so
+                // index by position rather than from the end.)
                 const args = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
-                expect(args[args.length - 1]).toBe(validKey);
+                expect(args[8]).toBe(validKey);
             });
 
             it('rejects an oversized clientMessageId with 400 (would otherwise blow the unique index)', async () => {
@@ -758,7 +760,9 @@ describe('MessagesController', () => {
             expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith('token-123', 'sender-1', 'Hello');
             expect(messagesService.storeOutgoingMessage).toHaveBeenCalledWith(
                 'page-uuid', 'test_workspace_id', 'sender-1', 'Hello', 'manual',
-                undefined, undefined, undefined, undefined,
+                // …flagMeta, then platformMessageId — undefined on Facebook, which
+                // surfaces no per-message id (see facebookAdapter.sendReply).
+                undefined, undefined, undefined, undefined, undefined, undefined,
             );
             // No incoming message to mark — markAsReplied must not be called.
             expect(messagesService.markAsReplied).not.toHaveBeenCalled();

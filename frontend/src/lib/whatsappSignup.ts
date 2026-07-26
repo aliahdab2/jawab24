@@ -76,6 +76,10 @@ function loadFacebookSdk(appId: string): Promise<FacebookSdk> {
 
         window.fbAsyncInit = () => {
             if (!window.FB) {
+                // Clear the cached promise like the onerror path below does, or this
+                // module-level rejected promise is returned to every later click and
+                // the merchant can never retry without reloading the page.
+                sdkPromise = null;
                 reject(new Error('Facebook SDK loaded but FB is undefined'));
                 return;
             }

@@ -504,6 +504,12 @@ export class MessagesService {
         // the truncation-retry badge). Distinct from the incoming row's alarm
         // flagMeta set via markAsReplied; never implies needs_attention.
         flagMeta?: import('@jawab24/shared').FlagMeta | null,
+        // The platform's OWN id for this outgoing message (WhatsApp `wamid`), when
+        // the channel returns one. Stored so an inbound echo of this same message
+        // can be recognised as ours rather than as a human reply — the WhatsApp
+        // Coexistence case, where Meta echoes API-sent messages back alongside the
+        // merchant's phone-sent ones. Absent → the synthetic id below, unchanged.
+        platformMessageId?: string,
     ): Promise<Message> {
         // Platform unknown in this call — inherit from existing conversation if present,
         // default to 'facebook' otherwise. This is safe because we never overwrite the
@@ -530,7 +536,10 @@ export class MessagesService {
                 pageId,
                 workspaceId,
                 conversationId: conversation.id,
-                platformMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                // Real platform id when the channel gave us one; otherwise a synthetic
+                // unique value (the column is NOT NULL + UNIQUE and predates any channel
+                // returning an id).
+                platformMessageId: platformMessageId || `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 // Without this the column defaulted to 'facebook', mislabeling every
                 // outgoing WhatsApp/Instagram reply (found in the 2026-07-08 pilot).
                 platform: conversation.platform ?? platform,
