@@ -265,10 +265,13 @@ Report in prose, leading with the verdict. Include, in this order: the one-sente
 | Replies mirroring خليجي/ليبي/مصري dialect | Deliberate dialect mirroring in the reply pipeline. The فصحى-only rule covers Jawab24's own copy, not customer replies. |
 | Refusing currency conversion, general trivia, or arbitrary math | Correct scope refusal. Stress-testers probe this; it is not a defect. |
 | `complaint` / `angry_customer` flags | Working as intended — routing a human-needed thread to Needs Attention. |
-| `template` replies on image/audio-only messages | Unsupported-media template. Expected. |
+| `template` replies on **audio**-only messages | Transcription failed → unsupported-media template. Expected. |
+| **Silence** on a customer **image** (stored `[صورة]`, no reply, `sla_no_reply`) | The merchant's daily photo cap is spent, so we deliberately say nothing rather than tell their customer we cannot read images (2026-07-26). Correct behaviour — but confirm the *merchant* got the `image_limit_reached` notification, and see the image step in `/merchant-settings` for whether the cap is biting them repeatedly. |
 | A single `send_failed_retries_exhausted` | Transient delivery failure. Only a finding if it clusters. |
 | `held_low_confidence` on messages | The merchant enabled "hold low-confidence replies for review". The hold itself is correct — the *finding* is if the merchant never reviews the queue, which leaves the customer in silence. |
 | Post Reply inert on a page the merchant switched off | Deliberate: page-level off means "leave this page alone" (`commentProcessor.ts:121`). D-027 exempts Post Reply from the **workspace** comments toggle only, never the page master switch. Report as merchant confusion, not a bug. |
+
+**A text-only nudge on an IMAGE is now a real finding, not "expected".** Since 2026-07-26 the cap path stays silent, so «حالياً نستطيع الرد على الرسائل النصية والصوتية» sent after a customer photo can only mean a *technical* denial — `env_disabled` (kill switch off), `no_subscription`, `cap_check_failed` (Redis), or a download/format failure. Chase it; do not wave it through.
 
 ## Known product gaps — recognize, don't re-diagnose
 

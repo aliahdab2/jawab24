@@ -19,7 +19,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { makeTrackedOpenAI, APIError } from './openaiClient';
 import { sniffMimeType, VISION_MIME_TYPES } from './kb/file-extractor';
 import { fetchMediaBuffer, MediaDownloadError } from '../utils/mediaDownload';
-import { checkDailyCap, incrementDailyCap, dailyCapKey } from '../lib/dailyCap';
+import { checkDailyCap, incrementDailyCap, dailyCapKey, claimDailyOnce } from '../lib/dailyCap';
 
 /** Max time to download the image from the FB/IG CDN (matches transcription.ts). */
 const DOWNLOAD_TIMEOUT_MS = 10_000;
@@ -327,7 +327,6 @@ export async function incrementImageUnderstandingCounter(ownerId: string): Promi
 
 /** One notification per owner per UTC day — same day boundary as the cap itself. */
 const CAP_NOTICE_PREFIX = 'image_cap_notified';
-const CAP_NOTICE_TTL_SECONDS = 24 * 60 * 60;
 
 /**
  * Tell the MERCHANT they have run out of daily image reads.
@@ -343,15 +342,12 @@ const CAP_NOTICE_TTL_SECONDS = 24 * 60 * 60;
  */
 export async function notifyImageCapReached(ownerId: string, limit: number): Promise<void> {
     try {
-        // Lazy imports for the same reason the gate lazy-loads subscriptions:
-        // the whole reply pipeline imports this module, and neither the redis
-        // client nor the notifications graph should be constructed at its load.
-        const { redis } = await import('../lib/redis');
-        const key = dailyCapKey(CAP_NOTICE_PREFIX, ownerId);
-        // NX: only the first cap hit of the day claims the key and notifies.
-        const claimed = await redis.set(key, '1', 'EX', CAP_NOTICE_TTL_SECONDS, 'NX');
-        if (!claimed) return;
+        // Only the first cap hit of the day notifies (shared Redis primitive).
+        if (!await claimDailyOnce(dailyCapKey(CAP_NOTICE_PREFIX, ownerId))) return;
 
+        // Lazy import for the same reason the gate lazy-loads subscriptions:
+        // the whole reply pipeline imports this module, and the notifications
+        // graph should not be constructed at its load.
         const { notificationService } = await import('./notifications');
         await notificationService.sendTemplateNotification(ownerId, 'image_limit_reached', {
             limit: String(limit),
