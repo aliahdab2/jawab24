@@ -52,7 +52,14 @@ const MODEL_VISION = 'gpt-4.1-mini';
  */
 const IMAGE_DAILY_LIMITS: Record<string, number> = {
     free: 3,
-    starter: 5,
+    // Raised 5 → 15 (2026-07-26). A real Starter store blows through 5 before
+    // lunchtime: the first merchant to use this feature heavily hit the cap on
+    // BOTH of his first two busy days (8 images each), and every image past the
+    // 5th silently stopped being read. At $0.00113 per image the old number was
+    // never protecting meaningful cost — total spend across all merchants since
+    // launch is under $1 — it was just converting a working feature into a
+    // failure the merchant could not see or explain.
+    starter: 15,
     business: 40,
     pro: 75,
     'scale-20k': 150,
@@ -261,7 +268,11 @@ export const imageUnderstandingService = new ImageUnderstandingService();
 
 export type ImageGateResult =
     | { allowed: true; ownerId: string }
-    | { allowed: false; reason: 'env_disabled' | 'no_subscription' | 'cap_reached' | 'cap_check_failed' };
+    // `cap_reached` is the one denial we can attribute and explain: we know the
+    // owner and the limit they hit, so the caller can tell THEM (never their
+    // customer). Every other denial is a technical failure with no owner story.
+    | { allowed: false; reason: 'cap_reached'; ownerId: string; limit: number }
+    | { allowed: false; reason: 'env_disabled' | 'no_subscription' | 'cap_check_failed' };
 
 /**
  * Decide whether a customer image may be understood for this page's workspace:
@@ -294,7 +305,7 @@ export async function checkImageUnderstandingGate(
         const limit = topupBalance > 0 ? baseLimit * PAYG_LIMIT_MULTIPLIER : baseLimit;
 
         const { allowed } = await checkDailyCap(dailyCapKey(IMAGE_CAP_PREFIX, ownerId), limit);
-        if (!allowed) return { allowed: false, reason: 'cap_reached' };
+        if (!allowed) return { allowed: false, reason: 'cap_reached', ownerId, limit };
 
         return { allowed: true, ownerId };
     } catch (err) {
@@ -312,4 +323,45 @@ export async function checkImageUnderstandingGate(
 /** Increment the daily image-understanding counter after a successful describe. */
 export async function incrementImageUnderstandingCounter(ownerId: string): Promise<void> {
     await incrementDailyCap(dailyCapKey(IMAGE_CAP_PREFIX, ownerId));
+}
+
+/** One notification per owner per UTC day — same day boundary as the cap itself. */
+const CAP_NOTICE_PREFIX = 'image_cap_notified';
+const CAP_NOTICE_TTL_SECONDS = 24 * 60 * 60;
+
+/**
+ * Tell the MERCHANT they have run out of daily image reads.
+ *
+ * This limit used to be completely invisible: past it we silently stopped
+ * reading customer photos, and the only outward sign was a message to the
+ * merchant's own customers claiming we cannot read images at all. The merchant
+ * had no way to learn a cap existed, let alone that they had hit it.
+ *
+ * Fire-and-forget and deduped to once per day — a busy page can hit the cap
+ * dozens of times in an evening, and this must never delay or fail the reply
+ * pipeline.
+ */
+export async function notifyImageCapReached(ownerId: string, limit: number): Promise<void> {
+    try {
+        // Lazy imports for the same reason the gate lazy-loads subscriptions:
+        // the whole reply pipeline imports this module, and neither the redis
+        // client nor the notifications graph should be constructed at its load.
+        const { redis } = await import('../lib/redis');
+        const key = dailyCapKey(CAP_NOTICE_PREFIX, ownerId);
+        // NX: only the first cap hit of the day claims the key and notifies.
+        const claimed = await redis.set(key, '1', 'EX', CAP_NOTICE_TTL_SECONDS, 'NX');
+        if (!claimed) return;
+
+        const { notificationService } = await import('./notifications');
+        await notificationService.sendTemplateNotification(ownerId, 'image_limit_reached', {
+            limit: String(limit),
+        });
+    } catch (err) {
+        // Never let a notification failure affect message handling.
+        captureError(
+            err instanceof Error ? err : new Error(String(err)),
+            'image cap notification failed',
+            { tags: { service: 'image_understanding' }, extra: { ownerId } },
+        );
+    }
 }

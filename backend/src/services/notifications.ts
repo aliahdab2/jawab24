@@ -103,7 +103,11 @@ export type NotificationType =
     // Facebook channel they need both an ahead-of-time warning and a dead-token
     // notice. See services/whatsappTokenHealth.ts.
     | 'whatsapp_token_expiring'
-    | 'whatsapp_reconnect_needed';
+    | 'whatsapp_reconnect_needed'
+    // The daily image-reading cap is the one limit a merchant can hit without
+    // any signal at all: past it we simply stop reading customer photos. The
+    // merchant must be told — their CUSTOMERS never are (see nonTextHandler).
+    | 'image_limit_reached';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -253,6 +257,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'You\'ve hit your limit of {limit} Smart Replies this month. Post Replies and away/greeting messages keep working — but comments and DMs outside those rules now receive a generic fallback. Upgrade to resume Smart Replies.',
             ar: 'لقد وصلت إلى الحد الأقصى البالغ {limit} رد ذكي هذا الشهر. تستمر ردود البوست ورسائل الترحيب/الغياب في العمل — لكن التعليقات والرسائل خارج هذه القواعد ستتلقى رداً عاماً. قم بالترقية لاستئناف الردود الذكية.',
+        },
+    },
+    image_limit_reached: {
+        titles: { en: 'Daily photo limit reached', ar: 'انتهى حد قراءة الصور اليومي' },
+        bodies: {
+            en: 'Jawab has read {limit} customer photos today, the most your plan allows. Photos sent for the rest of the day are not read, and appear in your inbox for you to answer. Upgrade to read more each day.',
+            ar: 'قرأ جواب {limit} صورة من العملاء اليوم، وهو أقصى ما تسمح به باقتك. الصور الواردة بقية اليوم لن تُقرأ، وستظهر في صندوق الرسائل لديك للرد عليها. يمكنك الترقية لقراءة عدد أكبر يومياً.',
         },
     },
     ai_usage_on_topup: {
