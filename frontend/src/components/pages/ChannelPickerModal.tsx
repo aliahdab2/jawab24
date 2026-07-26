@@ -1,5 +1,5 @@
 import { useTranslations } from 'next-intl';
-import { Modal, FacebookIcon, WhatsAppIcon } from '@/components/ui';
+import { Modal, FacebookIcon, WhatsAppIcon, Badge } from '@/components/ui';
 import { ChevronRight } from 'lucide-react';
 
 interface ChannelPickerModalProps {
@@ -61,8 +61,13 @@ export function ChannelPickerModal({
               <WhatsAppIcon className="w-5 h-5" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold text-foreground">
-                {whatsappConnecting ? t('whatsappConnecting') : t('channelWhatsApp')}
+              {/* Beta chip here too: the merchant sees it BEFORE committing to the
+                  Embedded Signup flow, not only after the number is connected. */}
+              <span className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-sm font-bold text-foreground">
+                  {whatsappConnecting ? t('whatsappConnecting') : t('channelWhatsApp')}
+                </span>
+                <Badge variant="warning" size="xs">{t('whatsappBeta')}</Badge>
               </span>
               <span className="block text-xs text-muted-foreground">{t('channelWhatsAppDesc')}</span>
             </span>
