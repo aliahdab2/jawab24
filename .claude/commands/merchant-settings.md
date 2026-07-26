@@ -255,7 +255,25 @@ How to read it:
 - **Blind images scattered below the limit** → NOT the cap. Technical: kill switch, missing subscription, Redis (`cap_check_failed` fails closed), or download/format failures. Investigate rather than explaining it away.
 - **Blind on days before the feature existed (pre-July 2026)** → expected, ignore. Do not include those in any percentage you quote, or the number is meaningless.
 
-**Watch for the merchant working around it in their Business Info.** A merchant who hits the cap repeatedly may write a rule telling the assistant not to reply to images at all — this really happened («لما زبون يرسلك صورة لا ترد عليه», written 11 minutes after the nudge went to his customer). Grep the KB for image rules whenever this step shows repeated cap hits: the rule is now stale advice that suppresses a working feature, and it is the merchant's text, so tell them rather than editing it.
+**Watch for the merchant working around it in their Business Info**, and understand that the workaround does nothing. Grep the KB for image rules whenever this step shows repeated cap hits:
+
+```bash
+./scripts/prod-db-query.sh "
+SELECT p.name, LEFT(regexp_replace(l, '^\s+', ''), 120) AS rule_line
+FROM pages p, unnest(string_to_array(p.knowledge_base, E'\n')) AS l
+WHERE p.user_id = '<USER_ID>'
+  AND (l LIKE '%صورة%' OR l LIKE '%صور %')
+  AND (l LIKE '%لا ترد%' OR l LIKE '%ما ترد%' OR l LIKE '%تجاهل%');"
+```
+
+Two separate facts to report, and the merchant needs **both** — reporting either alone leaves them with a wrong model of their own account:
+
+1. **The rule has never taken effect and never will.** Business Info is *knowledge the assistant answers from* — it cannot decide whether the assistant answers. Nothing in the pipeline reads the KB to gate a reply: the silent-skip paths (spam, emoji-only, debounce, hold) are all system-owned (`services/reply/messageProcessor.ts`, `commentProcessor.ts`). A merchant writing «لا ترد على الصورة» gets exactly the same behaviour as a merchant who wrote nothing. This applies to **every** instruction of the form "do / don't do X" — status changes, handing to a human, sending later, taking payment. Say it plainly; a merchant who believes an inert rule is protecting them will keep writing more of them.
+2. **The photos were unread because of the daily cap, not because of their rule.** Give them the day and the counts from the query above, and the limit for their plan. This is what they were actually reacting to.
+
+Real case: «لما زبون يرسلك صورة لا ترد عليه», written 11 minutes after the nudge reached his customer. The rule did nothing for four days; the images kept being read whenever the cap allowed. He was managing a limit he could not see, with a lever that was not connected.
+
+It is the merchant's own text — tell them it can come out, **never edit or delete it yourself**.
 
 ## Step 9 — Report
 
@@ -305,7 +323,8 @@ Map findings to questions:
 | Store `is_active = false` / stale sync | Are you still selling through this store? |
 | Trial ending, low usage | What has stopped you getting value so far? |
 | Daily image cap hit on multiple days (Step 8b) | Your customers send more photos than your plan reads in a day — do you want the assistant answering all of them? (Upgrade conversation, not a defect.) Ask before recommending: some merchants prefer to answer photos personally. |
-| A Business Info rule telling the assistant not to reply to images | Did you add this because the assistant said something wrong about a photo? Explain that photo reading is fixed and the line can come out — **never delete it yourself**. |
+| A Business Info rule telling the assistant not to reply to images | Did you add this because the assistant said something wrong about a photo? Tell them **both** facts: the rule never took effect (Business Info cannot gate replies), and the photos went unread because of the daily limit. Then the line can come out — **never delete it yourself**. |
+| **Any** Business Info line instructing an ACTION rather than stating a fact | «حوّله إلى تم التحويل», «لا ترد», «حوّله لموظف», «أرسل له رابط دفع», «تابع معه بعد ساعة» — all inert. The assistant answers *from* Business Info; it cannot be commanded *by* it. Ask what they were trying to achieve — this is the single best source of feature demand we have, and every one found so far was a real request with nowhere else to go. |
 | `trial_block` on a page | Was this page connected under another account before? |
 
 Two rules: ask about **intent**, never about data you can read yourself (never ask "what's your plan?"), and pair every question with what you'll do with the answer, so it reads as support rather than interrogation.
