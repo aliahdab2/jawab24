@@ -52,12 +52,23 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
     // an inline-flex sizes to its content and overflows its parent instead, which
     // is how a long page name ended up UNDER the header actions on 360px.
     <span ref={containerRef} className="flex items-center gap-2 relative min-w-0 w-full">
-      {/* The screen title never shrinks — it is short and fixed. On mobile it is
-          also REDUNDANT: the bottom nav already labels this screen, so it is
-          sr-only there and the page name becomes the visible identity (the more
-          useful of the two — the nav says where you are, only this says which
-          page you are filtered to). Restored visibly at sm+, where width is not
-          contested. */}
+      {/* «التعليقات · Nourva» — title AND name, always, one stable structure.
+          Hiding the title entirely (tried first) made the band look bare and
+          unlabelled whenever the name was short — the owner flagged it twice,
+          against the bottom nav's label being "enough". Conditional visibility
+          (show title only when the name fits) was rejected with the character-
+          threshold idea: any cutoff is wrong across viewport × page × locale ×
+          font-scale, and the header changing shape per selected page reads as
+          jitter. So both are always present; the NAME absorbs the squeeze
+          (truncates) because the title is short, fixed, and names the screen,
+          while the full page name is one tap away in the picker.
+          Mobile gets its own compact rendering of the title (text-sm, muted —
+          the NAME keeps the identity ink); sm+ keeps the h1's inherited large
+          type exactly as before. Two spans because the mobile one must NOT
+          inherit the h1's font scale; aria-hidden on it so the accessible
+          heading doesn't say the title twice. */}
+      <span className="sm:hidden flex-shrink-0 text-sm font-semibold text-muted-foreground" aria-hidden="true">{title}</span>
+      <span className="sm:hidden flex-shrink-0 text-subtle text-sm" aria-hidden="true">·</span>
       <span className="sr-only sm:not-sr-only flex-shrink-0">{title}</span>
       <button
         type="button"
