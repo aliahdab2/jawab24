@@ -1,9 +1,9 @@
 {
   "title": "Your Business",
-  "subtitle": "Everything Jawab answers from — your products, prices, and business facts in one place.",
+  "subtitle": "Your products, prices, and business facts in one place — what Jawab relies on when it answers your customers.",
   "readiness": {
     "title": "What can Jawab answer about?",
-    "hint": "Jawab answers what it knows. What's missing, customers ask about and get nothing — tap to complete it.",
+    "hint": "Jawab answers instantly from what it knows. What's missing, your customers ask about and get nothing — tap to complete it.",
     "tryButton": "Try asking Jawab",
     "productsChip": "{count, plural, =0 {No products yet} one {# product} other {# products}}",
     "hoursChip": "Working hours",
