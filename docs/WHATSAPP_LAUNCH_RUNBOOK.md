@@ -26,6 +26,19 @@ Defense in depth: the frontend flags control *visibility*; the backend allowlist
 1. [ ] App Dashboard ([app 774211662298446](https://developers.facebook.com/apps/774211662298446)) → confirm `whatsapp_business_messaging` + `whatsapp_business_management` show **Advanced Access**.
 2. [ ] Create the Embedded Signup **configuration**: Facebook Login for Business → **Configurations** → Create → type "WhatsApp Embedded Signup" (also reachable via WhatsApp → Embedded Signup).
 3. [ ] Copy the **Configuration ID** — this becomes `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`.
+4. [ ] **Enable JS-SDK login** — Facebook Login for Business → **Settings** → *Client OAuth settings*:
+   - `Login with the JavaScript SDK` → **Yes** (it defaults to **No**; while off, every connect attempt dies in the popup with *"JSSDK option is not toggled"* and no amount of correct config helps)
+   - `Allowed Domains for the JavaScript SDK` → add `https://jawab24.com` (apex only — `www` 301s to it, so the SDK never runs there). Meta normalises it to a trailing slash. ⚠️ Once this list is non-empty **only** listed domains work.
+   - Click **Save Changes** (the page does NOT autosave), then **reload the page and re-read both values** — the save can succeed with no visible confirmation.
+   - Reachable only by clicking **Settings** in the left sidebar; typing `/fb-login/settings/` or `/fb-login-for-business/settings/` silently redirects to the dashboard.
+5. [ ] Verify the CSP allows the SDK — `curl -sI https://jawab24.com/pages | grep -io 'content-security-policy:.*'` must contain `connect.facebook.net` (script-src), `staticxx.facebook.com` (frame-src) and `graph.facebook.com` (connect-src). Guarded by `backend/src/__tests__/nginx-config.test.ts`; **`graph.facebook.com` also appears in `img-src`, so grep the specific directive, not the whole header.**
+
+> **Two config gates, two different failure signatures — both look like "WhatsApp is broken":**
+> CSP missing `connect.facebook.net` → *"Failed to load Facebook SDK"* (our own error, from `script.onerror`).
+> JS-SDK toggle off → Meta's own dialog says *"JSSDK option is not toggled"*.
+> Both are deterministic for every merchant on every browser, and neither is catchable by any test in the repo except the nginx one — CSP is enforced only by a real browser, and the toggle only by Meta.
+
+**Noted for later (not blocking):** `Use Strict Mode for redirect URIs` is **Yes**, and Meta's own help text says `Valid OAuth Redirect URIs` "is also used by the JavaScript SDK for in-app browsers that suppress popups". A pure `FB.login` popup never uses a redirect URI, and native/Capacitor is already bounced to the web dashboard (`pages.tsx` `handleConnectWhatsApp`) — but if a merchant ever reaches connect from an in-app browser that blocks popups, the SDK falls back to a redirect and would need a matching URI listed.
 
 ## Phase 2 — Canary flip (server + deploy, ~30 min)
 
