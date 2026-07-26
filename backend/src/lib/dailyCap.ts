@@ -33,6 +33,28 @@ export async function checkDailyCap(key: string, limit: number): Promise<DailyCa
 }
 
 /**
+ * Claim `key` for the rest of the day, returning true only for the FIRST
+ * caller. The "tell the merchant once, not once per event" primitive: a page
+ * that hits a cap fifty times in an evening should produce one notification.
+ *
+ * Same SET-NX shape the throttled admin alerts use (`services/adminAlerts.ts`),
+ * lifted here because it is a Redis key primitive, not an alerting concern —
+ * and because merchant-facing notifications need it without dragging in Sentry
+ * and the email service.
+ *
+ * Best-effort: if Redis is unreachable the claim SUCCEEDS. For a notification,
+ * a duplicate beats silence — the opposite of `checkDailyCap`, which fails
+ * closed because it bounds real spend.
+ */
+export async function claimDailyOnce(key: string, ttlSeconds = 86400): Promise<boolean> {
+    try {
+        return (await redis.set(key, '1', 'EX', ttlSeconds, 'NX')) === 'OK';
+    } catch {
+        return true;
+    }
+}
+
+/**
  * Increment today's counter for `key` with a 24h TTL. Best-effort — never
  * throws, so a Redis blip at increment time costs at most one extra call.
  */

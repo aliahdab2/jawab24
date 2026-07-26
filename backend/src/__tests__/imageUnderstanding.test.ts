@@ -3,12 +3,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Hoisted mocks so the vi.mock factories can close over them. Mocking
 // subscriptions + dailyCap also stops the transitive `lib/redis` import (which
 // reads real config at load) from running under the stubbed config.
-const { mockCreate, mockResolveSub, mockGetTopupBalance, mockCheckCap, mockIncrementCap } = vi.hoisted(() => ({
+const {
+    mockCreate, mockResolveSub, mockGetTopupBalance, mockCheckCap, mockIncrementCap,
+    mockClaimOnce, mockSendTemplateNotification,
+} = vi.hoisted(() => ({
     mockCreate: vi.fn(),
     mockResolveSub: vi.fn(),
     mockGetTopupBalance: vi.fn(),
     mockCheckCap: vi.fn(),
     mockIncrementCap: vi.fn(),
+    mockClaimOnce: vi.fn(),
+    mockSendTemplateNotification: vi.fn(),
+}));
+
+// notifications is dynamically imported inside notifyImageCapReached (to keep
+// that graph out of this module's load); vi.mock still intercepts a dynamic
+// import.
+vi.mock('../services/notifications', () => ({
+    notificationService: { sendTemplateNotification: mockSendTemplateNotification },
 }));
 
 vi.mock('../services/openaiClient', () => {
@@ -37,12 +49,14 @@ vi.mock('../lib/dailyCap', () => ({
     checkDailyCap: mockCheckCap,
     incrementDailyCap: mockIncrementCap,
     dailyCapKey: (prefix: string, id: string) => `${prefix}:${id}:2026-07-05`,
+    claimDailyOnce: mockClaimOnce,
 }));
 
 import {
     imageUnderstandingService,
     checkImageUnderstandingGate,
     incrementImageUnderstandingCounter,
+    notifyImageCapReached,
 } from '../services/imageUnderstanding';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
@@ -271,5 +285,50 @@ describe('incrementImageUnderstandingCounter', () => {
     it('increments the owner-keyed daily counter', async () => {
         await incrementImageUnderstandingCounter('owner-1');
         expect(mockIncrementCap).toHaveBeenCalledWith('image_understanding:owner-1:2026-07-05');
+    });
+});
+
+describe('notifyImageCapReached', () => {
+    beforeEach(() => {
+        mockClaimOnce.mockReset();
+        mockSendTemplateNotification.mockReset();
+    });
+
+    it('notifies the owner with the limit they hit', async () => {
+        mockClaimOnce.mockResolvedValue(true);
+
+        await notifyImageCapReached('owner-1', 15);
+
+        expect(mockSendTemplateNotification).toHaveBeenCalledWith(
+            'owner-1', 'image_limit_reached', { limit: '15' },
+        );
+    });
+
+    it('claims a per-owner, per-day key so the first hit wins', async () => {
+        mockClaimOnce.mockResolvedValue(true);
+
+        await notifyImageCapReached('owner-1', 15);
+
+        expect(mockClaimOnce).toHaveBeenCalledWith('image_cap_notified:owner-1:2026-07-05');
+    });
+
+    // A busy page can hit the cap dozens of times in one evening. Without this
+    // the merchant gets a notification per photo — the opposite of a signal.
+    it('stays quiet on every later cap hit the same day', async () => {
+        mockClaimOnce.mockResolvedValue(false);
+
+        await notifyImageCapReached('owner-1', 15);
+
+        expect(mockSendTemplateNotification).not.toHaveBeenCalled();
+    });
+
+    // This runs inside the message pipeline: a notification problem must never
+    // become a message-handling problem.
+    it('swallows a notification failure instead of throwing into the reply pipeline', async () => {
+        mockClaimOnce.mockResolvedValue(true);
+        mockSendTemplateNotification.mockRejectedValue(new Error('push service down'));
+
+        await expect(notifyImageCapReached('owner-1', 15)).resolves.toBeUndefined();
+        expect(captureError).toHaveBeenCalled();
     });
 });
