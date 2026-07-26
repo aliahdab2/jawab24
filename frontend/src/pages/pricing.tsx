@@ -28,7 +28,7 @@ interface PricingPageProps {
 
 // FAQ entries rendered on the page AND emitted as FAQPage JSON-LD — keep in
 // sync with the faq<N>Q/faq<N>A keys in i18n/{en,ar}/pricing.json.
-const FAQ_IDS = [1, 2, 3, 4, 5, 6, 7, 8];
+const FAQ_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 
 function PlanCard({
@@ -209,7 +209,9 @@ function PlanCard({
         <FeatureRow
           included={true}
           text={plan.maxPages === null ? t('pricing.featurePagesUnlimited') : t('pricing.featurePages', { count: plan.maxPages })}
-          subtext={t('pricing.facebookInstagram')}
+          subtext={isWhatsAppMarketable() && plan.whatsappEnabled
+            ? t('pricing.facebookInstagramWhatsapp')
+            : t('pricing.facebookInstagram')}
         />
 
         <FeatureRow
