@@ -7,6 +7,8 @@ interface Section {
   title: string;
   text: string;
   items?: string[];
+  /** Closing paragraph rendered after the bullet list (e.g. a responsibility statement). */
+  note?: string;
   email?: string;
   phone?: { label: string; href: string };
   corporate?: {
@@ -83,6 +85,10 @@ export function LegalPageLayout({
                       <li key={i} className="list-disc">{item}</li>
                     ))}
                   </ul>
+                )}
+
+                {section.note && (
+                  <p className="mt-3 text-foreground/70 leading-relaxed">{section.note}</p>
                 )}
 
                 {section.email && (

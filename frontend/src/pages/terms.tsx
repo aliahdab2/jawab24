@@ -20,7 +20,13 @@ export default function TermsOfService() {
     {
       title: t('useTitle'),
       text: t('useText'),
-      items: [t('useItem1'), t('useItem2'), t('useItem3'), t('useItem4'), t('useItem5')]
+      items: [t('useItem1'), t('useItem2'), t('useItem3'), t('useItem4'), t('useItem5'), t('useItem6')],
+      // Meta's Tech Provider Terms make us jointly liable for our merchants' conduct
+      // on the WhatsApp platform and require us to prohibit it in our own merchant
+      // agreement. This note carries that through — it matters most for Coexistence,
+      // where the merchant answers from their own phone and we never see the message
+      // before it is delivered, so the contract is the only control that reaches it.
+      note: t('useNote')
     },
     {
       title: t('aiTitle'),
