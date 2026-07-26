@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { BookOpen, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, HelpCircle, ShieldAlert } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import type { BusinessAuditFinding, BusinessAuditFindingKind, BusinessAuditResult } from '@jawab24/shared';
 import type { CustomerDetail, FormatDate } from './types';
 
 interface Props {
@@ -24,6 +25,84 @@ interface KbGap {
     resolved: boolean | null;
 }
 
+/** Tint per finding kind — an impossible rule must not look like a typo. */
+const AUDIT_KIND_CLASS: Record<BusinessAuditFindingKind, string> = {
+    impossible: 'status-error',
+    platform: 'status-warning',
+    data: 'bg-muted text-foreground border-theme-border',
+};
+
+/**
+ * One audit finding, admin flavour: the raw `code` is shown as a badge because
+ * the founder scans across merchants and a Latin id reads faster than Arabic
+ * prose. No fix links — this panel diagnoses, it never edits a merchant's KB.
+ */
+function AuditFindingRow({ finding }: { finding: BusinessAuditFinding }) {
+    const t = useTranslations('admin');
+    return (
+        <li className={`border rounded-lg p-3 space-y-2 ${AUDIT_KIND_CLASS[finding.kind]}`}>
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold">
+                    {t(`customer.kbAuditKind_${finding.kind}` as Parameters<typeof t>[0])}
+                </span>
+                <code className="text-[11px] px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono">
+                    {finding.code}
+                </code>
+                {finding.occurrences > 1 && (
+                    <span className="text-xs opacity-80">
+                        {t('customer.kbAuditOccurrences', { count: finding.occurrences })}
+                    </span>
+                )}
+            </div>
+            <p className="text-sm font-medium">
+                {t(`customer.kbAuditCode_${finding.code}` as Parameters<typeof t>[0])}
+            </p>
+            {/* The merchant's own words, verbatim — the server already proved
+                this is a literal substring of their saved Business Info. */}
+            <p className="text-sm opacity-90 break-words font-mono" dir="auto">«{finding.quote}»</p>
+            {finding.meta?.example && (
+                <p className="text-xs opacity-80 break-all" dir="ltr">{finding.meta.example}</p>
+            )}
+        </li>
+    );
+}
+
+/**
+ * The card's disclosure pattern, defined once: brand-coloured toggle with an
+ * icon and a chevron, contents mounted only while open, and a loading line
+ * while the first fetch runs. Three sections use it (full text, gaps,
+ * instruction check) and they must not drift apart.
+ */
+function LazyExpander({ icon, label, expanded, loading, loadingLabel, onToggle, children }: {
+    icon: React.ReactNode;
+    label: string;
+    expanded: boolean;
+    loading: boolean;
+    loadingLabel: string;
+    onToggle: () => void;
+    children: React.ReactNode;
+}) {
+    return (
+        <div>
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-expanded={expanded}
+                className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 hover:underline"
+            >
+                {icon}
+                {label}
+                {expanded ? <ChevronUp className="w-4 h-4" aria-hidden="true" /> : <ChevronDown className="w-4 h-4" aria-hidden="true" />}
+            </button>
+            {expanded && (
+                <div className="mt-2" aria-busy={loading} aria-live="polite">
+                    {loading ? <p className="text-sm text-muted-foreground">{loadingLabel}</p> : children}
+                </div>
+            )}
+        </div>
+    );
+}
+
 /** One page's Business Info health, with lazy expanders for the full text + gaps. */
 function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: FormatDate }) {
     const t = useTranslations('admin');
@@ -36,6 +115,10 @@ function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: Form
     const [showGaps, setShowGaps] = useState(false);
     const [gaps, setGaps] = useState<KbGap[] | null>(null);
     const [gapsLoading, setGapsLoading] = useState(false);
+
+    const [showAudit, setShowAudit] = useState(false);
+    const [audit, setAudit] = useState<BusinessAuditResult | null>(null);
+    const [auditLoading, setAuditLoading] = useState(false);
 
     const toggleText = async () => {
         const next = !showText;
@@ -68,6 +151,28 @@ function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: Form
                 setGaps([]);
             } finally {
                 setGapsLoading(false);
+            }
+        }
+    };
+
+    /**
+     * Unlike the two toggles above (plain reads), a cache MISS here spends one
+     * OpenAI call — so it runs on first open only, never on render, and the
+     * result is kept for the life of the card.
+     */
+    const toggleAudit = async () => {
+        const next = !showAudit;
+        setShowAudit(next);
+        if (next && audit === null && !auditLoading) {
+            setAuditLoading(true);
+            try {
+                const res = await adminApi.auditBusinessInfo(page.id);
+                setAudit(res?.success ? (res.data ?? null) : null);
+            } catch (err) {
+                captureError(err, 'Failed to audit Business Info', { tags: { page: 'admin-customer-kb' } });
+                setAudit(null);
+            } finally {
+                setAuditLoading(false);
             }
         }
     };
@@ -119,65 +224,85 @@ function KbPageCard({ page, formatDate }: { page: CustomerPage; formatDate: Form
 
             {/* Full Business Info text — lazy-loaded on first open. */}
             {kb.kbLength > 0 && (
-                <div>
-                    <button
-                        type="button"
-                        onClick={toggleText}
-                        aria-expanded={showText}
-                        className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 hover:underline"
-                    >
-                        <BookOpen className="w-4 h-4" aria-hidden="true" />
-                        {t('customer.kbViewFull')}
-                        {showText ? <ChevronUp className="w-4 h-4" aria-hidden="true" /> : <ChevronDown className="w-4 h-4" aria-hidden="true" />}
-                    </button>
-                    {showText && (
-                        <div className="mt-2" aria-busy={textLoading}>
-                            {textLoading ? (
-                                <p className="text-sm text-muted-foreground">{t('customer.kbLoading')}</p>
-                            ) : (
-                                <pre className="text-sm text-foreground whitespace-pre-wrap break-words bg-muted rounded-lg p-3 font-sans max-h-96 overflow-y-auto" dir="auto">
-                                    {text}
-                                </pre>
-                            )}
-                        </div>
-                    )}
-                </div>
+                <LazyExpander
+                    icon={<BookOpen className="w-4 h-4" aria-hidden="true" />}
+                    label={t('customer.kbViewFull')}
+                    expanded={showText}
+                    loading={textLoading}
+                    loadingLabel={t('customer.kbLoading')}
+                    onToggle={toggleText}
+                >
+                    <pre className="text-sm text-foreground whitespace-pre-wrap break-words bg-muted rounded-lg p-3 font-sans max-h-96 overflow-y-auto" dir="auto">
+                        {text}
+                    </pre>
+                </LazyExpander>
             )}
 
             {/* Unresolved questions the KB couldn't answer — support gold. */}
             {kb.unresolvedGaps > 0 && (
-                <div>
-                    <button
-                        type="button"
-                        onClick={toggleGaps}
-                        aria-expanded={showGaps}
-                        className="inline-flex items-center gap-1 text-sm text-brand-600 hover:text-brand-700 hover:underline"
-                    >
-                        <HelpCircle className="w-4 h-4" aria-hidden="true" />
-                        {t('customer.kbGapsTitle')}
-                        {showGaps ? <ChevronUp className="w-4 h-4" aria-hidden="true" /> : <ChevronDown className="w-4 h-4" aria-hidden="true" />}
-                    </button>
-                    {showGaps && (
-                        <div className="mt-2" aria-busy={gapsLoading}>
-                            {gapsLoading ? (
-                                <p className="text-sm text-muted-foreground">{t('customer.kbLoading')}</p>
-                            ) : gaps && gaps.length > 0 ? (
+                <LazyExpander
+                    icon={<HelpCircle className="w-4 h-4" aria-hidden="true" />}
+                    label={t('customer.kbGapsTitle')}
+                    expanded={showGaps}
+                    loading={gapsLoading}
+                    loadingLabel={t('customer.kbLoading')}
+                    onToggle={toggleGaps}
+                >
+                    {gaps && gaps.length > 0 ? (
+                        <ul className="space-y-2">
+                            {gaps.map(g => (
+                                <li key={g.id} className="flex items-start justify-between gap-3 p-2 border border-theme-border rounded-lg">
+                                    <span className="text-sm text-foreground" dir="auto">{g.queryText}</span>
+                                    <span className="text-xs text-muted-foreground shrink-0">
+                                        {t('customer.kbGapOccurrences', { count: g.occurrenceCount ?? 0 })}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">{t('customer.kbNoGaps')}</p>
+                    )}
+                </LazyExpander>
+            )}
+
+            {/* Instruction check — what the merchant told Jawab to DO that it
+                cannot. Only offered when there is text to check. */}
+            {kb.kbLength > 0 && (
+                <LazyExpander
+                    icon={<ShieldAlert className="w-4 h-4" aria-hidden="true" />}
+                    label={t('customer.kbAuditTitle')}
+                    expanded={showAudit}
+                    loading={auditLoading}
+                    loadingLabel={t('customer.kbAuditRunning')}
+                    onToggle={toggleAudit}
+                >
+                    {!audit ? (
+                        <p className="text-sm status-error border rounded-lg px-3 py-2">{t('customer.kbAuditError')}</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {/* A failed classifier means only half the KB was checked. Saying
+                                "nothing found" there would be a lie the founder acts on. */}
+                            {audit.classifierFailed && (
+                                <p className="text-sm status-warning border rounded-lg px-3 py-2">
+                                    {t('customer.kbAuditPartial')}
+                                </p>
+                            )}
+                            {/* "Nothing found" only when the check actually ran to
+                                completion — otherwise the warning above stands alone. */}
+                            {audit.findings.length === 0 ? (
+                                !audit.classifierFailed && (
+                                    <p className="text-sm text-muted-foreground">{t('customer.kbAuditClean')}</p>
+                                )
+                            ) : (
                                 <ul className="space-y-2">
-                                    {gaps.map(g => (
-                                        <li key={g.id} className="flex items-start justify-between gap-3 p-2 border border-theme-border rounded-lg">
-                                            <span className="text-sm text-foreground" dir="auto">{g.queryText}</span>
-                                            <span className="text-xs text-muted-foreground shrink-0">
-                                                {t('customer.kbGapOccurrences', { count: g.occurrenceCount ?? 0 })}
-                                            </span>
-                                        </li>
+                                    {audit.findings.map(f => (
+                                        <AuditFindingRow key={`${f.code}:${f.quote}`} finding={f} />
                                     ))}
                                 </ul>
-                            ) : (
-                                <p className="text-sm text-muted-foreground">{t('customer.kbNoGaps')}</p>
                             )}
                         </div>
                     )}
-                </div>
+                </LazyExpander>
             )}
         </Card>
     );

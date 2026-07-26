@@ -56,10 +56,19 @@ export function SettingsSection({ customer }: Props) {
         return String(v);
     };
 
-    // Persona variants: the base notes plus any per-language overrides.
-    const multi = values.brandVoiceNotesMulti ?? {};
-    const multiEntries = Object.entries(multi).filter(([, txt]) => txt && txt.trim());
-    const hasBaseNotes = Boolean(values.brandVoiceNotes && values.brandVoiceNotes.trim());
+    // Persona variants. The jsonb is `{ ar, en, sourceLang }` — `sourceLang` is
+    // METADATA, not a language, so iterating raw keys printed the string "en"
+    // as if it were persona text. Pull it out and use it as a caption instead.
+    const { sourceLang, ...langVariants } = values.brandVoiceNotesMulti ?? {};
+    const baseNotes = (values.brandVoiceNotes ?? '').trim();
+    const hasBaseNotes = Boolean(baseNotes);
+
+    // A translation identical to the original is not worth a second copy of a
+    // 400-word persona — it only matters THAT it exists. Show the differing
+    // ones in full; collapse the identical ones to their language codes.
+    const variants = Object.entries(langVariants).filter(([, txt]) => txt && txt.trim());
+    const differingVariants = variants.filter(([, txt]) => txt.trim() !== baseNotes);
+    const identicalLangs = variants.filter(([, txt]) => txt.trim() === baseNotes).map(([lang]) => lang);
 
     return (
         <div className="space-y-6">
@@ -90,7 +99,7 @@ export function SettingsSection({ customer }: Props) {
                     </pre>
                 )}
 
-                {multiEntries.map(([lang, txt]) => (
+                {differingVariants.map(([lang, txt]) => (
                     <div key={lang}>
                         <span className="text-xs font-medium text-muted-foreground uppercase">{lang}</span>
                         <pre className="text-sm text-foreground whitespace-pre-wrap break-words bg-muted rounded-lg p-3 font-sans mt-1" dir="auto">
@@ -99,7 +108,15 @@ export function SettingsSection({ customer }: Props) {
                     </div>
                 ))}
 
-                {!hasBaseNotes && multiEntries.length === 0 && (
+                {(identicalLangs.length > 0 || sourceLang) && (
+                    <p className="text-xs text-muted-foreground">
+                        {identicalLangs.length > 0 && t('customer.personaSameAsOriginal', { langs: identicalLangs.join(', ').toUpperCase() })}
+                        {identicalLangs.length > 0 && sourceLang && ' · '}
+                        {sourceLang && t('customer.personaSourceLang', { lang: String(sourceLang).toUpperCase() })}
+                    </p>
+                )}
+
+                {!hasBaseNotes && variants.length === 0 && (
                     <p className="text-sm text-muted-foreground">{t('customer.personaEmpty')}</p>
                 )}
             </Card>

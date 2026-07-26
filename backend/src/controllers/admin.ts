@@ -23,6 +23,7 @@ import {
 } from '../services/topup';
 import type { AdminUserAiCostPeriod } from '../services/analytics';
 import { getActivationFunnel } from '../services/activation';
+import { businessAuditService } from '../services/businessAudit';
 import type {
     ManualUpgradeBody,
     SearchUsersQuery,
@@ -512,6 +513,29 @@ export class AdminController {
         } catch (error) {
             request.log.error(error, 'Admin KB gaps failed');
             return reply.status(500).send({ success: false, error: 'Failed to get KB gaps' });
+        }
+    }
+
+    /**
+     * POST /admin/kb/audit/:pageId
+     *
+     * Run the Business Info audit on any page, across workspaces. Read-only:
+     * no KB write, no re-ingestion, no merchant notification. Shares the
+     * merchant-facing service AND its cache, so the founder sees exactly the
+     * findings the merchant would see — a divergence here would make the
+     * panel useless for support.
+     */
+    async auditBusinessInfo(request: FastifyRequest<{ Params: { pageId: string } }>, reply: FastifyReply) {
+        const { pageId } = request.params;
+        try {
+            const data = await businessAuditService.run(pageId, request.log);
+            if (!data) {
+                return reply.status(404).send({ success: false, error: 'Page not found' });
+            }
+            return reply.send({ success: true, data });
+        } catch (error) {
+            request.log.error(error, 'Admin Business Info audit failed');
+            return reply.status(500).send({ success: false, error: 'Failed to audit Business Info' });
         }
     }
 

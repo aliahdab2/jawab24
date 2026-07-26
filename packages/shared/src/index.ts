@@ -1465,3 +1465,22 @@ export { ACTIVATION_FUNNEL_STEPS, KB_FILLED_MIN_CHARS, isBusinessInfoProvided } 
 export type { ActivationEvent, ActivationFunnel, ActivationFunnelStep } from './activation';
 // --- Image-message marker protocol (DM vision descriptions) ---
 export { IMAGE_MESSAGE_RE, IMAGE_PLACEHOLDER_RE, isImageMessageBody, extractImageDescription, isAnyImageMessage } from './imageMessage';
+// --- Business Info audit (merchant «تقييم» button + admin panel) ---
+export {
+    IMPOSSIBLE_CAPABILITIES,
+    SUPPORTED_CAPABILITIES,
+    rankFindings,
+    verifyQuote,
+    isDirectImageUrl,
+    findNonDirectImageUrls,
+    findDuplicateTableRows,
+    runDeterministicChecks,
+} from './businessAudit';
+export type {
+    ImpossibleCapabilityId,
+    BusinessAuditCode,
+    BusinessAuditFinding,
+    BusinessAuditResult,
+    BusinessAuditFindingKind,
+    DeterministicFindingCode,
+} from './businessAudit';

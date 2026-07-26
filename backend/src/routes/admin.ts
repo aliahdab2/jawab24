@@ -318,6 +318,21 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             adminController.getKbGaps,
         );
 
+        adminProtected.post(
+            '/kb/audit/:pageId',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Audit a page\'s Business Info for instructions the AI cannot execute (read-only)',
+                    security: auth,
+                },
+                // One pinned gpt-4.1-mini call per uncached KB. Bounded so a
+                // stuck loop in the panel can't sweep every page's cost.
+                config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+            },
+            adminController.auditBusinessInfo,
+        );
+
         adminProtected.patch(
             '/pages/:pageId/kb',
             { schema: { tags: ['Admin'], summary: 'Update KB text for a page and trigger re-ingestion', security: auth } },
