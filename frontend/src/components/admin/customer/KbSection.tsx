@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { BookOpen, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, HelpCircle, ShieldAlert } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import type { BusinessAuditFinding, BusinessAuditFindingKind } from '@jawab24/shared';
 import type { CustomerDetail, FormatDate } from './types';
 
 interface Props {
@@ -22,6 +23,54 @@ interface KbGap {
     detectedIntent: string | null;
     occurrenceCount: number | null;
     resolved: boolean | null;
+}
+
+interface AuditResult {
+    findings: BusinessAuditFinding[];
+    cached: boolean;
+    classifierFailed: boolean;
+}
+
+/** Tint per finding kind — an impossible rule must not look like a typo. */
+const AUDIT_KIND_CLASS: Record<BusinessAuditFindingKind, string> = {
+    impossible: 'status-error',
+    platform: 'status-warning',
+    data: 'bg-muted text-foreground border-theme-border',
+};
+
+/**
+ * One audit finding, admin flavour: the raw `code` is shown as a badge because
+ * the founder scans across merchants and a Latin id reads faster than Arabic
+ * prose. No fix links — this panel diagnoses, it never edits a merchant's KB.
+ */
+function AuditFindingRow({ finding }: { finding: BusinessAuditFinding }) {
+    const t = useTranslations('admin');
+    return (
+        <li className={`border rounded-lg p-3 space-y-2 ${AUDIT_KIND_CLASS[finding.kind]}`}>
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold">
+                    {t(`customer.kbAuditKind_${finding.kind}` as Parameters<typeof t>[0])}
+                </span>
+                <code className="text-[11px] px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono">
+                    {finding.code}
+                </code>
+                {finding.occurrences > 1 && (
+                    <span className="text-xs opacity-80">
+                        {t('customer.kbAuditOccurrences', { count: finding.occurrences })}
+                    </span>
+                )}
+            </div>
+            <p className="text-sm font-medium">
+                {t(`customer.kbAuditCode_${finding.code}` as Parameters<typeof t>[0])}
+            </p>
+            {/* The merchant's own words, verbatim — the server already proved
+                this is a literal substring of their saved Business Info. */}
+            <p className="text-sm opacity-90 break-words font-mono" dir="auto">«{finding.quote}»</p>
+            {finding.meta?.example && (
+                <p className="text-xs opacity-80 break-all" dir="ltr">{finding.meta.example}</p>
+            )}
+        </li>
+    );
 }
 
 /** One page's Business Info health, with lazy expanders for the full text + gaps. */

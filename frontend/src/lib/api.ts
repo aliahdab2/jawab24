@@ -1072,6 +1072,15 @@ export const adminApi = {
     return response.data;
   },
 
+  // Business Info audit — instructions the AI cannot execute + data defects.
+  // Read-only: never writes the KB or re-ingests. Slower than the sibling KB
+  // calls on a cache miss (one OpenAI classification), so it gets the long
+  // timeout rather than the default.
+  auditBusinessInfo: async (pageId: string) => {
+    const response = await api.post(`/admin/kb/audit/${pageId}`, undefined, { timeout: LONG_RUNNING_TIMEOUT });
+    return response.data;
+  },
+
   // AI Playground — update KB text for a page
   updateKb: async (pageId: string, knowledgeBase: string) => {
     const response = await api.patch(`/admin/pages/${pageId}/kb`, { knowledgeBase });
