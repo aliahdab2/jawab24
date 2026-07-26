@@ -15,13 +15,14 @@
 
 Defense in depth: the frontend flags control *visibility*; the backend allowlist controls *ability*. During canary, set **both**.
 
-## Phase 0 — Prerequisites (before approval day)
+## Phase 0 — Prerequisites (before approval day) — ✅ ALL DONE
 
-- [ ] PR `feat/whatsapp-launch-plumbing` merged + deployed — threads the two `NEXT_PUBLIC_WHATSAPP_*` vars through `frontend/Dockerfile` and all compose files' `build.args`. **Without this, setting the config ID does nothing.** (Inert while the env vars are unset.)
-- [ ] Pre-launch 9-persona review of the WhatsApp surface done; Critical/High fixes merged.
-- [ ] Meta App Review submission **submitted** (unlocks once the API-call gates register; then 3–5 business days).
+- [x] PR `feat/whatsapp-launch-plumbing` (#418) merged + deployed — threads the two `NEXT_PUBLIC_WHATSAPP_*` vars through `frontend/Dockerfile` and all compose files' `build.args`. **Without this, setting the config ID does nothing.** (Inert while the env vars are unset.) Verified deployed 2026-07-10.
+- [x] Pre-launch 9-persona review of the WhatsApp surface done 2026-07-08; both Highs fixed + merged (#420). **Do not re-run it.**
+- [x] Meta App Review submission `949305008122443` submitted 2026-07-08.
+- [x] Canary-leak fix (M3 — nav rename/badges used `isWhatsAppEnabled` instead of `isWhatsAppVisible`) merged; `Sidebar`, `dashboard`, `pages`, `WhatsAppNudgeBanner` all canary-aware.
 
-## Phase 1 — On Meta approval (Meta dashboard, ~10 min)
+## Phase 1 — On Meta approval (Meta dashboard, ~10 min) — ⬅️ **YOU ARE HERE (approved 2026-07-26)**
 
 1. [ ] App Dashboard ([app 774211662298446](https://developers.facebook.com/apps/774211662298446)) → confirm `whatsapp_business_messaging` + `whatsapp_business_management` show **Advanced Access**.
 2. [ ] Create the Embedded Signup **configuration**: Facebook Login for Business → **Configurations** → Create → type "WhatsApp Embedded Signup" (also reachable via WhatsApp → Embedded Signup).
@@ -66,17 +67,23 @@ Notes:
 
 ## Phase 5 — GA flip (after a clean pilot bake, e.g. 2–3 days)
 
-**Marketing + packaging land here, BEFORE the env flip** (plan: `.planning/WHATSAPP_MARKETING_LAUNCH.md`):
+**Marketing lands here, BEFORE the env flip** (plan: `.planning/WHATSAPP_MARKETING_LAUNCH.md`):
 
-- [ ] **Marketing branch:** rebase `feat/whatsapp-ga-marketing` on main, resolve, CI green.
-      Contains: `plans.ts` `whatsappEnabled` flip (business/pro/scale-20k/scale-30k),
-      `WHATSAPP_PLAN_REQUIRED` connect gate, landing/pricing/i18n sweep, teaser post → "now live".
+> **Packaging is already on main (verified 2026-07-26).** The `plans.ts` `whatsappEnabled` flip
+> (starter false; business/pro/scale-20k/scale-30k true) and the `WHATSAPP_PLAN_REQUIRED` connect
+> gate landed independently of the marketing branch, so clearing the allowlist can no longer expose
+> WhatsApp to Starter. The old `feat/whatsapp-ga-marketing` branch is 136 commits behind and 4 of its
+> 8 commits are redundant — do NOT rebase it. Use `feat/whatsapp-ga-launch` (cut fresh off main),
+> which carries only the still-missing marketing surface.
+
+- [ ] **Marketing branch:** `feat/whatsapp-ga-launch` — landing WhatsApp presence (chip, orbit
+      bubble, hero/SEO/FAQ copy), i18n copy sweep (meta/about/blog/help/contact + `what-is-jawab24`
+      JSON-LD), pricing FAQ #9 (Meta conversation fees) + hero/SEO copy, blog teaser → "now live",
+      status docs → live. CI green.
 - [ ] Merge-day-only commit on that branch: bump sitemap `<lastmod>` for `/`, `/pricing`,
       `/blog/whatsapp-auto-reply-jawab24` to today; `npm run sitemap:validate`.
-- [ ] Merge `feat/whatsapp-ga-marketing` to main — the deploy below ships marketing + plan
-      flip + env flip in ONE rebuild (`seed-plans` reconciles `whatsapp_enabled` in the DB).
-      **Ordering is load-bearing:** clearing the allowlist without this merge opens WhatsApp
-      to Starter (no plan gate exists on main today).
+- [ ] Merge `feat/whatsapp-ga-launch` to main — the deploy below ships marketing + env flip in ONE
+      rebuild. (`seed-plans` reconciles `whatsapp_enabled` in the DB; already true in config.)
 
 ```bash
 ssh -i ~/.ssh/id_jawab24_deploy root@91.99.95.196
