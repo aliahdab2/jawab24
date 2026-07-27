@@ -143,7 +143,7 @@ describe('CatalogManager', () => {
       renderManager({ page: pageFixture({ facebookPageId: null }) });
       expect(await screen.findByRole('button', { name: 'Import a list' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Find products in your posts/ })).not.toBeInTheDocument();
-      expect(screen.getByText(/Reading posts works on Facebook pages only/)).toBeInTheDocument();
+      expect(screen.getByText('“Moto” isn’t a Facebook page — reading posts works on Facebook pages only.')).toBeInTheDocument();
       // The one remaining path must still be reachable.
       expect(screen.getByRole('button', { name: 'Add manually' })).toBeInTheDocument();
     });
@@ -158,7 +158,27 @@ describe('CatalogManager', () => {
       renderManager({ page: pageFixture({ isConnected: false }) });
       expect(await screen.findByRole('button', { name: 'Import a list' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Find products in your posts/ })).not.toBeInTheDocument();
-      expect(screen.getByText(/Reconnect this page to Facebook/)).toBeInTheDocument();
+      expect(screen.getByText('Reconnect “Moto” to Facebook to read its posts.')).toBeInTheDocument();
+    });
+
+    /**
+     * Owner report, prod 2026-07-27: «أعد ربط هذه الصفحة بفيسبوك» on an account
+     * with 10 pages — 8 of them blocked, for two DIFFERENT reasons — left no way
+     * to tell which page to reconnect. /business shows one page at a time behind a
+     * selector several rows above this text, so "this page" is not a referent the
+     * merchant can resolve. Both blocker reasons must name the page.
+     */
+    it.each([
+      ['a WhatsApp-only page', { facebookPageId: null }],
+      ['a token-less Facebook page', { isConnected: false }],
+    ])('names the page in the reason — %s', async (_case, overrides) => {
+      renderManager({ page: pageFixture({ ...overrides, name: 'مفروشات القباني' }) });
+      await screen.findByRole('button', { name: 'Import a list' });
+
+      const reason = screen.getByText(/مفروشات القباني/);
+      expect(reason).toBeInTheDocument();
+      // Never the unresolvable referent it replaced.
+      expect(reason.textContent).not.toMatch(/this page/);
     });
 
     // Removing it silently read as "the feature was deleted" (owner report). On a
@@ -171,7 +191,7 @@ describe('CatalogManager', () => {
 
       const scan = screen.getByRole('button', { name: /Find products in your posts/ });
       expect(scan).toBeDisabled();
-      expect(screen.getByText('Reading posts works on Facebook pages only.')).toBeInTheDocument();
+      expect(screen.getByText('“Moto” isn’t a Facebook page — reading posts works on Facebook pages only.')).toBeInTheDocument();
       // The paths that DO work on a WhatsApp-only page stay enabled.
       expect(screen.getByRole('button', { name: 'Import a list' })).toBeEnabled();
     });

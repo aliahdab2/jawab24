@@ -172,8 +172,8 @@
     "upToDate": "You’re up to date",
     "upToDateHint": "No new posts since the last scan. Post something new, or add items manually.",
     "toastError": "Couldn’t read your posts. Please try again.",
-    "unavailableNoFacebook": "Reading posts works on Facebook pages only.",
-    "unavailableDisconnected": "Reconnect this page to Facebook to read its posts.",
+    "unavailableNoFacebook": "“{page}” isn’t a Facebook page — reading posts works on Facebook pages only.",
+    "unavailableDisconnected": "Reconnect “{page}” to Facebook to read its posts.",
     "toastDisconnected": "This page isn’t connected to Facebook, so its posts can’t be read."
   },
   "replyScan": {

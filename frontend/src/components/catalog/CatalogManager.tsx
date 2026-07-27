@@ -231,6 +231,20 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
   const canScanPosts = scanBlocker === null;
   const canScanReplies = !postRepliesAbsent && page?.hasPostReplyTrigger !== false;
 
+  /**
+   * The reason, NAMING the page it applies to. Built once and reused by all three
+   * places that show it (empty state, the toolbar's disabled-button tooltip, the
+   * toolbar line) so they cannot drift apart.
+   *
+   * The name is not decoration: /business shows one page at a time behind a
+   * selector that sits several rows above this text, and «أعد ربط هذه الصفحة»
+   * gave a merchant with 10 pages — 8 of them blocked for two different reasons —
+   * no way to tell WHICH page to reconnect. Reported from prod 2026-07-27.
+   */
+  const scanBlockedReason = scanBlocker !== null && page
+    ? t(SCAN_BLOCKER_KEY[scanBlocker], { page: page.name })
+    : null;
+
   return (
     <div>
       {items.length === 0 ? (
@@ -282,9 +296,9 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
             </button>
           </div>
           {/* Absence needs a reason, or the merchant reads it as a missing
-              feature. Names the one thing that would unlock the scan. */}
-          {scanBlocker !== null && (
-            <p className="text-xs text-muted-foreground mt-3">{t(SCAN_BLOCKER_KEY[scanBlocker])}</p>
+              feature. Names the page and the one thing that would unlock it. */}
+          {scanBlockedReason && (
+            <p className="text-xs text-muted-foreground mt-3">{scanBlockedReason}</p>
           )}
           {verticalControl && <div className="mt-5 flex justify-center">{verticalControl}</div>}
         </div>
@@ -307,7 +321,7 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
                 size="sm"
                 onClick={() => setSheetMode('scan')}
                 disabled={!canScanPosts || items.length >= MAX_CATALOG_ITEMS_PER_PAGE}
-                title={scanBlocker !== null ? t(SCAN_BLOCKER_KEY[scanBlocker]) : undefined}
+                title={scanBlockedReason ?? undefined}
               >
                 <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
                 {t('scan.cta')}
@@ -330,8 +344,8 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
           </div>
           {/* The toolbar's disabled scan button needs its reason VISIBLE — a title
               attribute alone is invisible on touch, where most merchants are. */}
-          {scanBlocker !== null && (
-            <p className="text-xs text-muted-foreground mb-3">{t(SCAN_BLOCKER_KEY[scanBlocker])}</p>
+          {scanBlockedReason && (
+            <p className="text-xs text-muted-foreground mb-3">{scanBlockedReason}</p>
           )}
           <ul className="space-y-2">
             {items.map((item, i) => (
