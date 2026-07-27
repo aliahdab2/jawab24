@@ -490,6 +490,24 @@ export class MessagesService {
         return row ? this.mapToMessage(row) : null;
     }
 
+    /**
+     * Look up any message by the platform's own id, in either direction.
+     *
+     * `platform_message_id` is NOT NULL + UNIQUE, so this doubles as the
+     * idempotency check for redelivered webhooks (Meta retries on 5xx/timeout)
+     * and as a defensive guard that a WhatsApp Coexistence echo is not something
+     * we sent ourselves. Meta documents that echoes exclude Cloud API messages,
+     * so the second case should be unreachable — but treating one of our own
+     * replies as a merchant reply would make the AI mute itself after every
+     * message, which is severe enough to check for rather than trust.
+     */
+    async findByPlatformMessageId(platformMessageId: string): Promise<Message | null> {
+        const row = await db.query.messages.findFirst({
+            where: eq(messages.platformMessageId, platformMessageId),
+        });
+        return row ? this.mapToMessage(row) : null;
+    }
+
     async storeOutgoingMessage(
         pageId: string,
         workspaceId: string,

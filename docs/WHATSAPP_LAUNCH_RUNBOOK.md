@@ -79,14 +79,26 @@ Notes:
 
 ## Phase 5 — GA flip (after a clean pilot bake, e.g. 2–3 days)
 
+> ⛔ **Added gate (D-045, 2026-07-27): Coexistence must ship BEFORE GA.** Without it every merchant
+> must dedicate a fresh number, which is the #1 adoption blocker and guaranteed to be the top
+> support question on day one. Plan: `~/.claude/plans/moonlit-conjuring-moonbeam.md`. Phases 1–2
+> (connect path + echo ingestion) are built; the UI choice, human-first reply mode and the
+> two-path copy remain. Coexistence cannot be validated without a real number already on the
+> WhatsApp Business app — line that merchant up early, it gates the release.
+>
+> ⛔ **Sanctions:** Meta bars businesses AND recipients in Cuba, Iran, North Korea, **Syria** and
+> three sanctioned Ukrainian regions from the WhatsApp Business Platform. Launch copy must not
+> imply Syrian merchants or customers can use it. Libya is unrestricted.
+
 **Marketing + packaging land here, BEFORE the env flip** (plan: `.planning/WHATSAPP_MARKETING_LAUNCH.md`):
 
-- [ ] **Marketing branch:** rebase `feat/whatsapp-ga-marketing` on main, resolve, CI green.
+- [ ] **Marketing branch:** rebase **`feat/whatsapp-ga-launch` (#504)** on main, resolve, CI green.
+      ⚠️ NOT `feat/whatsapp-ga-marketing` (#428) — that branch is SUPERSEDED and 136 commits behind.
       Contains: `plans.ts` `whatsappEnabled` flip (business/pro/scale-20k/scale-30k),
       `WHATSAPP_PLAN_REQUIRED` connect gate, landing/pricing/i18n sweep, teaser post → "now live".
 - [ ] Merge-day-only commit on that branch: bump sitemap `<lastmod>` for `/`, `/pricing`,
       `/blog/whatsapp-auto-reply-jawab24` to today; `npm run sitemap:validate`.
-- [ ] Merge `feat/whatsapp-ga-marketing` to main — the deploy below ships marketing + plan
+- [ ] Merge **`feat/whatsapp-ga-launch` (#504)** to main — the deploy below ships marketing + plan
       flip + env flip in ONE rebuild (`seed-plans` reconciles `whatsapp_enabled` in the DB).
       **Ordering is load-bearing:** clearing the allowlist without this merge opens WhatsApp
       to Starter (no plan gate exists on main today).

@@ -203,6 +203,20 @@ export const pages = pgTable('pages', {
     //   - 'token_expired': Meta code 190 / debug_token is_valid=false — merchant must reconnect
     //   - 'app_uninstalled': account_update webhook said the customer removed our app
     whatsappDisconnectReason: varchar('whatsapp_disconnect_reason', { length: 30 }),
+    // TRUE when the number was onboarded via Meta's Coexistence flow ("API
+    // Solutions for Business App Users") and therefore stays live in the
+    // merchant's WhatsApp Business app; FALSE/NULL means it was migrated to the
+    // Cloud API and no longer works on their phone.
+    //
+    // Load-bearing beyond bookkeeping: a coexistence number must NOT be
+    // registered against the Cloud API on reconnect, it is the only kind that
+    // emits `smb_message_echoes` (a human answering from the phone), and it
+    // decides the default reply mode — a human and the AI share this number, so
+    // answering instantly risks replying twice to the same customer.
+    //
+    // Nullable on purpose: NULL is "connected before this column existed", which
+    // is necessarily a migrated number.
+    whatsappCoexistence: boolean('whatsapp_coexistence'),
     // E-commerce store linked to this page (for product-aware AI replies)
     ecommerceStoreId: uuid('ecommerce_store_id').references(() => ecommerceStores.id, { onDelete: 'set null' }),
     // Knowledge base for AI context - business info, products, FAQ

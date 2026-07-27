@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
  * `window.FB` mock that captures the `fb.login` callback for manual control.
  */
 
-interface LoginOpts { config_id: string; response_type: string }
+interface LoginOpts { config_id: string; response_type: string; extras?: { featureType?: string; sessionInfoVersion?: string } }
 let loginCallback: ((r: { authResponse?: { code?: string } | null }) => void) | null;
 let loginOpts: LoginOpts | null;
 
@@ -71,6 +71,7 @@ describe('launchWhatsAppSignup', () => {
             code: 'auth-code-1',
             phoneNumberId: 'PN-real',
             wabaId: 'WABA1',
+            coexistence: false,
         });
         expect(loginOpts?.config_id).toBe('cfg-1');
     });
@@ -177,6 +178,78 @@ describe('launchWhatsAppSignup', () => {
         } finally {
             delete (navigator as unknown as { userActivation?: unknown }).userActivation;
         }
+    });
+
+    // ── Coexistence ────────────────────────────────────────────────────────
+    // Meta's WhatsApp Business app onboarding lets the merchant KEEP the number
+    // on their phone instead of migrating it to the Cloud API. It is selected by
+    // extras.featureType and completes with its OWN event; before this existed,
+    // such a signup fell through unhandled and the promise hung until the
+    // abandon sweep even though Meta had already connected the number.
+
+    it('does NOT request coexistence by default (migration stays the default path)', async () => {
+        const launch = await loadLauncher();
+        void launch().catch(() => {});
+        await vi.waitFor(() => expect(loginOpts).not.toBeNull());
+
+        expect(loginOpts?.extras?.featureType).toBe('');
+    });
+
+    it('requests coexistence with the value read from Meta\'s Builder', async () => {
+        const launch = await loadLauncher();
+        void launch({ coexistence: true }).catch(() => {});
+        await vi.waitFor(() => expect(loginOpts).not.toBeNull());
+
+        expect(loginOpts?.extras?.featureType).toBe('whatsapp_business_app_onboarding');
+        // v3 is what Meta's docs still show; a silent bump would change the
+        // payload shape we parse.
+        expect(loginOpts?.extras?.sessionInfoVersion).toBe('3');
+    });
+
+    it('resolves coexistence:true on FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING', async () => {
+        const launch = await loadLauncher();
+        const promise = launch({ coexistence: true });
+        await vi.waitFor(() => expect(loginCallback).toBeTypeOf('function'));
+
+        loginCallback!({ authResponse: { code: 'c' } });
+        postMessage('https://www.facebook.com', {
+            type: 'WA_EMBEDDED_SIGNUP',
+            event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+            data: { phone_number_id: 'PN-coex', waba_id: 'WABA9' },
+        });
+
+        await expect(promise).resolves.toEqual({
+            code: 'c', phoneNumberId: 'PN-coex', wabaId: 'WABA9', coexistence: true,
+        });
+    });
+
+    // The merchant can request coexistence and still end up migrating from inside
+    // the wizard. Reporting the REQUEST rather than the OUTCOME would make the
+    // backend skip Cloud-API registration for a number that genuinely needs it.
+    it('reports coexistence:false when the wizard finishes on the migration path', async () => {
+        const launch = await loadLauncher();
+        const promise = launch({ coexistence: true });
+        await vi.waitFor(() => expect(loginCallback).toBeTypeOf('function'));
+
+        loginCallback!({ authResponse: { code: 'c' } });
+        postMessage('https://www.facebook.com', FINISH('PN-migrated'));
+
+        await expect(promise).resolves.toMatchObject({ coexistence: false });
+    });
+
+    it('still rejects a coexistence finish that carries no phone number', async () => {
+        const launch = await loadLauncher();
+        const promise = launch({ coexistence: true });
+        await vi.waitFor(() => expect(loginCallback).toBeTypeOf('function'));
+
+        loginCallback!({ authResponse: { code: 'c' } });
+        postMessage('https://www.facebook.com', {
+            type: 'WA_EMBEDDED_SIGNUP',
+            event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+            data: { waba_id: 'WABA9' },
+        });
+
+        await expect(promise).rejects.toThrow('WHATSAPP_SIGNUP_NO_NUMBER');
     });
 
     // The preload exists so the click handler never awaits the network before

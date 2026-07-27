@@ -14,7 +14,31 @@ export interface WhatsAppSignupResult {
     code: string;
     phoneNumberId: string;
     wabaId: string;
+    /**
+     * True when Meta onboarded the number as a WhatsApp Business app user
+     * ("Coexistence") rather than migrating it to the Cloud API — i.e. the
+     * merchant KEEPS using the number on their phone.
+     *
+     * Taken from the event Meta actually sent, never from what we requested:
+     * the merchant can back out of the coexistence path inside the wizard, and
+     * acting on the request rather than the outcome would leave us skipping
+     * Cloud-API registration for a number that genuinely needs it.
+     */
+    coexistence: boolean;
 }
+
+/**
+ * Meta's feature flag that switches Embedded Signup to WhatsApp Business app
+ * user onboarding (Coexistence). Read verbatim from the Embedded Signup Builder
+ * on 2026-07-26 — its "Feature Type" dropdown offers exactly `None` and
+ * "WhatsApp Business App Onboarding", the latter emitting
+ * `feature_type=whatsapp_business_app_onboarding`.
+ *
+ * Note the casing difference: the Builder emits the snake_case URL PARAM
+ * `feature_type`, while the JS SDK extras KEY is camelCase `featureType`. Same
+ * value, different key.
+ */
+const COEXISTENCE_FEATURE_TYPE = 'whatsapp_business_app_onboarding';
 
 interface FbLoginResponse {
     authResponse?: { code?: string } | null;
@@ -145,8 +169,16 @@ function loadFacebookSdk(appId: string): Promise<FacebookSdk> {
 /**
  * Run the Embedded Signup flow. Rejects when the merchant cancels, the popup
  * is blocked, or configuration is missing.
+ *
+ * @param options.coexistence Request WhatsApp Business app user onboarding, so
+ * the merchant keeps the number on their phone instead of migrating it to the
+ * Cloud API. Requires WhatsApp Business app 2.24.17+ on the merchant's device.
+ * The merchant can still end up on the migration path from inside the wizard —
+ * always read `result.coexistence`, not this argument.
  */
-export async function launchWhatsAppSignup(): Promise<WhatsAppSignupResult> {
+export async function launchWhatsAppSignup(
+    options: { coexistence?: boolean } = {},
+): Promise<WhatsAppSignupResult> {
     const appId = process.env.NEXT_PUBLIC_FB_APP_ID;
     const configId = process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID;
     if (!appId || !configId) {
@@ -158,6 +190,7 @@ export async function launchWhatsAppSignup(): Promise<WhatsAppSignupResult> {
     return new Promise<WhatsAppSignupResult>((resolve, reject) => {
         let code: string | null = null;
         let sessionInfo: { phoneNumberId: string; wabaId: string } | null = null;
+        let coexistence = false;
         let settled = false;
 
         const settle = () => {
@@ -165,7 +198,7 @@ export async function launchWhatsAppSignup(): Promise<WhatsAppSignupResult> {
             if (code && sessionInfo) {
                 settled = true;
                 cleanup();
-                resolve({ code, ...sessionInfo });
+                resolve({ code, ...sessionInfo, coexistence });
             }
         };
 
@@ -183,7 +216,15 @@ export async function launchWhatsAppSignup(): Promise<WhatsAppSignupResult> {
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                 if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
-                if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA') {
+                // Coexistence completes with its own event. Without this branch a
+                // WhatsApp-Business-app onboarding would fall through unhandled and
+                // the promise would hang until the abandon sweep, even though Meta
+                // had already connected the number.
+                if (data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+                    coexistence = true;
+                }
+                if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA'
+                    || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
                     // Both ids are required. FINISH_ONLY_WABA means the merchant
                     // created the WhatsApp Business Account but did NOT add a
                     // phone number (e.g. the number is still pending Meta's
@@ -244,7 +285,11 @@ export async function launchWhatsAppSignup(): Promise<WhatsAppSignupResult> {
                 config_id: configId,
                 response_type: 'code',
                 override_default_response_type: true,
-                extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+                extras: {
+                    setup: {},
+                    featureType: options.coexistence ? COEXISTENCE_FEATURE_TYPE : '',
+                    sessionInfoVersion: '3',
+                },
             },
         );
     });

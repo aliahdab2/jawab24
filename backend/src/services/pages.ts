@@ -1393,6 +1393,8 @@ export class PagesService {
             /** Null when Meta reports no expiry; see whatsappTokenExpiresAt in schema. */
             tokenExpiresAt?: Date | null;
             verifiedName?: string;
+            /** True when onboarded via Coexistence — the number stays on the merchant's phone. */
+            coexistence?: boolean;
         },
     ) {
         const [newPage] = await db
@@ -1410,6 +1412,7 @@ export class PagesService {
                 whatsappAccessToken: maybeEncryptToken(data.accessToken),
                 whatsappAutoReplyEnabled: false,
                 whatsappTokenExpiresAt: data.tokenExpiresAt ?? null,
+                whatsappCoexistence: data.coexistence ?? false,
                 whatsappTokenLastVerifiedAt: new Date(),
             })
             .returning();
@@ -1431,6 +1434,8 @@ export class PagesService {
             accessToken: string;
             /** Null when Meta reports no expiry; see whatsappTokenExpiresAt in schema. */
             tokenExpiresAt?: Date | null;
+            /** True when onboarded via Coexistence — the number stays on the merchant's phone. */
+            coexistence?: boolean;
         },
     ) {
         const [updatedPage] = await db
@@ -1441,6 +1446,7 @@ export class PagesService {
                 whatsappDisplayPhoneNumber: data.displayPhoneNumber,
                 whatsappAccessToken: maybeEncryptToken(data.accessToken),
                 whatsappTokenExpiresAt: data.tokenExpiresAt ?? null,
+                whatsappCoexistence: data.coexistence ?? false,
                 whatsappTokenLastVerifiedAt: new Date(),
                 // A reconnect clears any prior expiry/uninstall verdict — otherwise a
                 // stale reason would keep the "reconnect WhatsApp" banner up on a

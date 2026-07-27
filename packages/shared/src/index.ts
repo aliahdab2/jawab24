@@ -347,6 +347,13 @@ export interface Page {
   whatsappBusinessAccountId?: string | null;
   whatsappDisplayPhoneNumber?: string | null;
   whatsappAutoReplyEnabled?: boolean | null;
+  /**
+   * TRUE when the number was onboarded via Meta's Coexistence flow and so is
+   * STILL live in the merchant's WhatsApp Business app. Load-bearing on
+   * reconnect: re-running Embedded Signup on the migration path would register
+   * the number against the Cloud API and take it off their phone permanently.
+   */
+  whatsappCoexistence?: boolean | null;
   // E-commerce store linked to this page
   ecommerceStoreId?: string | null;
   /**

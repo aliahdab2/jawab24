@@ -22,6 +22,11 @@ const {
     mockWaDownloadMedia,
     mockWaSendTextMessage,
     mockWaMarkAsRead,
+    mockFindByPlatformMessageId,
+    mockStoreOutgoingMessage,
+    mockGetUnrepliedFromSender,
+    mockMarkOlderMessagesAsReplied,
+    TX_SENTINEL,
 } = vi.hoisted(() => ({
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
     mockGetPageByFacebookId: vi.fn().mockResolvedValue(null),
@@ -35,6 +40,11 @@ const {
     mockWaDownloadMedia: vi.fn().mockResolvedValue(Buffer.from('fake-audio')),
     mockWaSendTextMessage: vi.fn().mockResolvedValue('wamid.nudge'),
     mockWaMarkAsRead: vi.fn().mockResolvedValue(undefined),
+    mockFindByPlatformMessageId: vi.fn().mockResolvedValue(null),
+    mockStoreOutgoingMessage: vi.fn().mockResolvedValue({ id: 'out-1' }),
+    mockGetUnrepliedFromSender: vi.fn().mockResolvedValue([]),
+    mockMarkOlderMessagesAsReplied: vi.fn().mockResolvedValue(0),
+    TX_SENTINEL: { __tx: true },
 }));
 
 vi.mock('../../src/lib/replyQueue', () => ({
@@ -71,6 +81,15 @@ vi.mock('../../src/services/pages', () => ({
     invalidateWorkspaceStatsCache: vi.fn(),
 }));
 
+// The echo path writes the manual row and clears the backlog inside ONE
+// transaction. The mock hands the callback a sentinel so tests can assert both
+// writes received the SAME tx handle rather than the default connection.
+vi.mock('../../src/db', () => ({
+    db: {
+        transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(TX_SENTINEL)),
+    },
+}));
+
 vi.mock('../../src/lib/eventBus', () => ({
     publishSSEEvent: vi.fn(),
 }));
@@ -79,11 +98,14 @@ vi.mock('../../src/services/messages', () => ({
     messagesService: {
         findOrCreateFromWebhook: mockFindOrCreateFromWebhook,
         finalizeEnrichment: vi.fn().mockResolvedValue(true),
-        storeOutgoingMessage: vi.fn().mockResolvedValue({}),
+        storeOutgoingMessage: mockStoreOutgoingMessage,
         getLastIncomingTextFromSender: vi.fn().mockResolvedValue(null),
         getSenderNameBySenderId: vi.fn().mockResolvedValue(null),
         markAsResolved: mockMarkAsResolved,
         setCreatedTime: mockSetCreatedTime,
+        findByPlatformMessageId: mockFindByPlatformMessageId,
+        getUnrepliedFromSender: mockGetUnrepliedFromSender,
+        markOlderMessagesAsReplied: mockMarkOlderMessagesAsReplied,
     },
 }));
 
@@ -577,5 +599,209 @@ describe('WhatsApp Webhook — field filter', () => {
         await new Promise(r => setTimeout(r, 50));
 
         expect(mockEnqueueMessage).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * WhatsApp Coexistence — the merchant answers from their own phone.
+ *
+ * On a coexistence number the merchant keeps the WhatsApp Business app while we
+ * also hold the number on Cloud API, so a human and the AI can answer the same
+ * customer. Meta reports the human's messages via `smb_message_echoes`; turning
+ * each into an `outgoing` + `replyMethod='manual'` row is the WHOLE integration —
+ * the already-shipped handoff pause then stands the AI down with no new timing
+ * code.
+ *
+ * Meta documents that echoes exclude Cloud API messages, so an echo is always
+ * human-authored. The self-mute test below guards the case anyway: mistaking one
+ * of our own replies for a merchant reply would silence the AI after every
+ * message it sends.
+ */
+function buildEchoPayload(echoes: object[], phoneNumberId = 'phone-number-id-123') {
+    return {
+        object: 'whatsapp_business_account',
+        entry: [{
+            id: 'waba-123',
+            changes: [{
+                field: 'smb_message_echoes',
+                value: {
+                    messaging_product: 'whatsapp',
+                    metadata: { display_phone_number: '+966 55 000 0000', phone_number_id: phoneNumberId },
+                    message_echoes: echoes,
+                },
+            }],
+        }],
+    };
+}
+
+const ECHO = (id = 'wamid.echo1', body = 'أهلاً، بجاوبك حالاً') => ({
+    from: '+966550000000', to: '+966500000000', id, timestamp: '1700000100',
+    type: 'text', text: { body },
+});
+
+describe('WhatsApp Webhook — Coexistence echoes', () => {
+    let app: Awaited<ReturnType<typeof buildApp>>;
+
+    beforeEach(async () => {
+        app = await buildApp();
+        vi.clearAllMocks();
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(WA_TEST_PAGE);
+        mockFindByPlatformMessageId.mockResolvedValue(null);
+        mockStoreOutgoingMessage.mockResolvedValue({ id: 'out-1' });
+        mockGetUnrepliedFromSender.mockResolvedValue([]);
+        mockMarkOlderMessagesAsReplied.mockResolvedValue(0);
+    });
+
+    const post = (payload: object) => postWebhook(app, payload);
+
+    // Recording the merchant's reply and clearing the customer's backlog are ONE
+    // fact ("a human answered this"). Split across two commits, a failure between
+    // them leaves the reply stored while the customer's message still reads
+    // unanswered — and the AI then answers a question a human already handled.
+    it('writes the reply and clears the backlog in a SINGLE transaction', async () => {
+        mockGetUnrepliedFromSender.mockResolvedValue([{ id: 'in-1' }]);
+
+        await post(buildEchoPayload([ECHO()]));
+
+        // Both writes must receive the same tx handle, not the default db.
+        const storeTx = mockStoreOutgoingMessage.mock.calls[0][5];
+        const clearTx = mockMarkOlderMessagesAsReplied.mock.calls[0][6];
+        expect(storeTx).toBeDefined();
+        expect(clearTx).toBe(storeTx);
+    });
+
+    it('stores a merchant phone reply as an outgoing MANUAL row (what pauses the AI)', async () => {
+        await post(buildEchoPayload([ECHO()]));
+
+        expect(mockStoreOutgoingMessage).toHaveBeenCalledTimes(1);
+        const args = mockStoreOutgoingMessage.mock.calls[0];
+        expect(args[0]).toBe('page-uuid');          // pageId
+        expect(args[1]).toBe('ws-uuid');            // workspaceId
+        expect(args[2]).toBe('+966500000000');      // the CUSTOMER (echo.to), not the business
+        expect(args[3]).toBe('أهلاً، بجاوبك حالاً'); // the merchant's text
+        expect(args[4]).toBe('manual');             // replyMethod — the pause keys on this
+        expect(args[10]).toBe('wamid.echo1');       // platformMessageId = the real wamid
+    });
+
+    // The severe failure mode: if our own Cloud API reply were treated as a
+    // merchant reply, the AI would mute itself after every message it sends.
+    it('SELF-MUTE GUARD: ignores an echo whose wamid is already one of our messages', async () => {
+        mockFindByPlatformMessageId.mockResolvedValue({ id: 'our-own-reply', direction: 'outgoing' });
+
+        await post(buildEchoPayload([ECHO('wamid.ours')]));
+
+        expect(mockStoreOutgoingMessage).not.toHaveBeenCalled();
+        expect(mockMarkOlderMessagesAsReplied).not.toHaveBeenCalled();
+    });
+
+    // Meta redelivers on 5xx/timeout. Without the guard an echo inserts twice AND
+    // re-extends the pause window each time.
+    it('is idempotent: a redelivered echo is stored once', async () => {
+        await post(buildEchoPayload([ECHO('wamid.dup')]));
+        mockFindByPlatformMessageId.mockResolvedValue({ id: 'already-stored' });
+        await post(buildEchoPayload([ECHO('wamid.dup')]));
+
+        expect(mockStoreOutgoingMessage).toHaveBeenCalledTimes(1);
+    });
+
+    // storeOutgoingMessage is a pure INSERT and never touches the incoming row, so
+    // without this the customer's question sits in "Needs Action" forever even
+    // though the merchant answered it.
+    it('clears the customer\'s pending backlog once the merchant has answered', async () => {
+        mockGetUnrepliedFromSender.mockResolvedValue([{ id: 'in-1' }, { id: 'in-2' }]);
+
+        await post(buildEchoPayload([ECHO()]));
+
+        expect(mockMarkOlderMessagesAsReplied).toHaveBeenCalledTimes(1);
+        const args = mockMarkOlderMessagesAsReplied.mock.calls[0];
+        expect(args[2]).toEqual(['in-1', 'in-2']);
+        expect(args[5]).toBe('manual');
+    });
+
+    it('does not call the backlog clear when nothing is pending', async () => {
+        await post(buildEchoPayload([ECHO()]));
+        expect(mockMarkOlderMessagesAsReplied).not.toHaveBeenCalled();
+    });
+
+    it('handles several echoes in one delivery', async () => {
+        await post(buildEchoPayload([ECHO('wamid.a', 'first'), ECHO('wamid.b', 'second')]));
+        expect(mockStoreOutgoingMessage).toHaveBeenCalledTimes(2);
+    });
+
+    // Media echoes carry only a caption, or nothing. The wording is irrelevant to
+    // the pause — what matters is that a human answered — so a placeholder is
+    // enough to create the row.
+    it.each([
+        ['image with caption', { type: 'image', image: { caption: 'شوف الصورة' } }, 'شوف الصورة'],
+        ['image with no caption', { type: 'image', image: {} }, '[image]'],
+        ['document', { type: 'document', document: { filename: 'a.pdf' } }, '[document]'],
+    ])('%s echo still creates the manual row', async (_label, extra, expectedText) => {
+        await post(buildEchoPayload([{
+            from: '+966550000000', to: '+966500000000', id: 'wamid.media',
+            timestamp: '1700000100', ...extra,
+        }]));
+
+        expect(mockStoreOutgoingMessage).toHaveBeenCalledTimes(1);
+        expect(mockStoreOutgoingMessage.mock.calls[0][3]).toBe(expectedText);
+    });
+
+    // Echoes never reach the reply worker — where every other path emits its SSE —
+    // so without an explicit emit the merchant's own phone reply only shows up on
+    // a page refresh, and the Needs-Action count we just cleared stays stale.
+    it('notifies the live inbox and invalidates the stats cache', async () => {
+        const { publishSSEEvent } = await import('../../src/lib/eventBus');
+        const { invalidateWorkspaceStatsCache } = await import('../../src/services/pages');
+
+        await post(buildEchoPayload([ECHO()]));
+
+        expect(publishSSEEvent).toHaveBeenCalledWith('user-uuid', 'message:received',
+            expect.objectContaining({
+                pageId: 'page-uuid',
+                senderId: '+966500000000',
+                message: expect.objectContaining({ direction: 'outgoing', replyMethod: 'manual' }),
+            }));
+        expect(invalidateWorkspaceStatsCache).toHaveBeenCalledWith('ws-uuid');
+    });
+
+    it('drops an echo for an unknown phone number without failing the webhook', async () => {
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(null);
+
+        const res = await post(buildEchoPayload([ECHO()]));
+
+        expect(res.statusCode).toBe(200);
+        expect(mockStoreOutgoingMessage).not.toHaveBeenCalled();
+    });
+
+    // Cross-tenant safety: a page with no workspace cannot be written to without
+    // guessing where the conversation belongs.
+    it('drops an echo when the page has no workspace', async () => {
+        mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue({ ...WA_TEST_PAGE, workspaceId: null });
+
+        await post(buildEchoPayload([ECHO()]));
+
+        expect(mockStoreOutgoingMessage).not.toHaveBeenCalled();
+    });
+
+    // v1 decision: subscribe (Meta requires it for onboarding to be valid) but
+    // persist nothing — 180 days and potentially thousands of messages must not
+    // land in the merchant's inbox.
+    it.each(['history', 'smb_app_state_sync'])('accepts and DISCARDS the %s sync webhook', async (field) => {
+        const res = await post({
+            object: 'whatsapp_business_account',
+            entry: [{ id: 'waba-123', changes: [{ field, value: { messaging_product: 'whatsapp', metadata: { display_phone_number: '+1', phone_number_id: 'phone-number-id-123' } } }] }],
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(mockStoreOutgoingMessage).not.toHaveBeenCalled();
+        expect(mockEnqueueMessage).not.toHaveBeenCalled();
+    });
+
+    // Migrated (non-coexistence) numbers never emit echoes — existing merchants
+    // must see zero behaviour change.
+    it('a normal customer message is unaffected by the new branches', async () => {
+        await post(buildWhatsAppPayload({}));
+
+        expect(mockEnqueueMessage).toHaveBeenCalled();
+        expect(mockStoreOutgoingMessage).not.toHaveBeenCalled();
     });
 });

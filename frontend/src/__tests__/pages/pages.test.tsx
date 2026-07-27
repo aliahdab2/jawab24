@@ -552,6 +552,47 @@ describe('PagesPage - WhatsApp-only cards', () => {
         });
     });
 
+    // ⛔ REGRESSION GUARD — reconnect must preserve the onboarding path.
+    //
+    // The reconnect banner reuses handleConnectWhatsApp. If it re-runs Embedded
+    // Signup WITHOUT requesting coexistence, Meta puts the number on the
+    // MIGRATION path, the backend registers it against the Cloud API, and the
+    // number is taken off the merchant's WhatsApp Business app — permanently,
+    // silently, and it is the exact outcome Coexistence exists to prevent.
+    it('reconnect on a COEXISTENCE number re-requests coexistence', async () => {
+        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_9', wabaId: 'w', coexistence: true });
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_ONLY_PAGE, whatsappCoexistence: true, whatsappNeedsReconnect: true }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockedApi.post.mockResolvedValue({ data: WA_ONLY_PAGE } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument());
+
+        await act(async () => {
+            fireEvent.click(screen.getAllByText('Connect')[0]);
+        });
+
+        expect(mockLaunchWhatsAppSignup).toHaveBeenCalledWith({ coexistence: true });
+    });
+
+    it('reconnect on a MIGRATED number does not request coexistence', async () => {
+        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_9', wabaId: 'w', coexistence: false });
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_ONLY_PAGE, whatsappCoexistence: false, whatsappNeedsReconnect: true }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockedApi.post.mockResolvedValue({ data: WA_ONLY_PAGE } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument());
+
+        await act(async () => {
+            fireEvent.click(screen.getAllByText('Connect')[0]);
+        });
+
+        expect(mockLaunchWhatsAppSignup).toHaveBeenCalledWith({ coexistence: false });
+    });
+
     it('channel picker: WhatsApp option runs signup and appends the created card', async () => {
         mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_new', wabaId: 'w' });
         mockedApi.post.mockResolvedValue({

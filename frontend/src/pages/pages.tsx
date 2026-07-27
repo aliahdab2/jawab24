@@ -477,11 +477,26 @@ const PagesPage: NextPageWithLayout = () => {
     setConnectingWhatsApp(pageId ?? 'new');
     try {
       const { launchWhatsAppSignup } = await import('@/lib/whatsappSignup');
-      const result = await launchWhatsAppSignup();
+      // RECONNECT MUST PRESERVE THE ONBOARDING PATH. This same handler backs the
+      // "reconnect required" banner, so a Coexistence number whose 60-day token
+      // expired comes back through here. Re-running Embedded Signup WITHOUT
+      // requesting coexistence puts Meta on the migration path, the backend then
+      // registers the number against the Cloud API, and it is taken off the
+      // merchant's WhatsApp Business app — permanently, silently, and it is the
+      // exact outcome Coexistence exists to prevent.
+      const existingPage = pageId ? pages.find(p => p.id === pageId) : null;
+      const result = await launchWhatsAppSignup({
+        coexistence: existingPage?.whatsappCoexistence === true,
+      });
       const body = {
         code: result.code,
         phoneNumberId: result.phoneNumberId,
         wabaId: result.wabaId,
+        // Which path Meta actually took, not which one we asked for — the merchant
+        // can switch inside the wizard. Decides whether the backend registers the
+        // number against the Cloud API (a coexistence number must NOT be, or it
+        // leaves their phone) and, later, the default reply mode.
+        coexistence: result.coexistence,
       };
       let connectedPageId: string;
       if (pageId) {

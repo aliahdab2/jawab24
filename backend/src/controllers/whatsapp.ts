@@ -91,7 +91,7 @@ export class WhatsAppController {
     connect = async (
         request: FastifyRequest<{
             Params: { id: string };
-            Body: { code: string; phoneNumberId: string; wabaId: string };
+            Body: { code: string; phoneNumberId: string; wabaId: string; coexistence?: boolean };
         }>,
         reply: FastifyReply,
     ) => {
@@ -103,6 +103,11 @@ export class WhatsAppController {
         const { userId } = req.user;
         const { id } = request.params;
         const { code, phoneNumberId, wabaId } = request.body ?? {};
+        // Reported by the ES popup from the event Meta actually sent, not from
+        // what we requested. Coerced rather than trusted: the only thing it
+        // changes is whether we register the number against the Cloud API, and a
+        // client lying here would just leave its OWN number unregistered.
+        const coexistence = request.body?.coexistence === true;
 
         if (!code || !phoneNumberId || !wabaId
             || typeof code !== 'string' || typeof phoneNumberId !== 'string' || typeof wabaId !== 'string') {
@@ -130,7 +135,7 @@ export class WhatsAppController {
                 return reply.status(409).send(NUMBER_TAKEN_RESPONSE);
             }
 
-            const signup = await this.runEmbeddedSignup(code, phoneNumberId, wabaId);
+            const signup = await this.runEmbeddedSignup(code, phoneNumberId, wabaId, coexistence);
             if (!signup.ok) {
                 return reply.status(422).send(PIN_MISMATCH_RESPONSE);
             }
@@ -141,10 +146,11 @@ export class WhatsAppController {
                 displayPhoneNumber: signup.info.displayPhoneNumber,
                 accessToken: signup.accessToken,
                 tokenExpiresAt: signup.tokenExpiresAt,
+                coexistence,
             });
 
             request.log.info(
-                { pageId: id, phoneNumberId, wabaId, displayPhoneNumber: signup.info.displayPhoneNumber, tokenExpiresAt: signup.tokenExpiresAt },
+                { pageId: id, phoneNumberId, wabaId, displayPhoneNumber: signup.info.displayPhoneNumber, tokenExpiresAt: signup.tokenExpiresAt, coexistence },
                 '[WhatsApp] Number connected',
             );
             return reply.send(serializePage(updated));
@@ -174,7 +180,7 @@ export class WhatsAppController {
      */
     connectNew = async (
         request: FastifyRequest<{
-            Body: { code: string; phoneNumberId: string; wabaId: string };
+            Body: { code: string; phoneNumberId: string; wabaId: string; coexistence?: boolean };
         }>,
         reply: FastifyReply,
     ) => {
@@ -185,6 +191,11 @@ export class WhatsAppController {
         const { workspaceId } = req;
         const { userId } = req.user;
         const { code, phoneNumberId, wabaId } = request.body ?? {};
+        // Reported by the ES popup from the event Meta actually sent, not from
+        // what we requested. Coerced rather than trusted: the only thing it
+        // changes is whether we register the number against the Cloud API, and a
+        // client lying here would just leave its OWN number unregistered.
+        const coexistence = request.body?.coexistence === true;
 
         if (!code || !phoneNumberId || !wabaId
             || typeof code !== 'string' || typeof phoneNumberId !== 'string' || typeof wabaId !== 'string') {
@@ -207,7 +218,7 @@ export class WhatsAppController {
                 return reply.status(409).send(NUMBER_TAKEN_RESPONSE);
             }
 
-            const signup = await this.runEmbeddedSignup(code, phoneNumberId, wabaId);
+            const signup = await this.runEmbeddedSignup(code, phoneNumberId, wabaId, coexistence);
             if (!signup.ok) {
                 return reply.status(422).send(PIN_MISMATCH_RESPONSE);
             }
@@ -219,6 +230,7 @@ export class WhatsAppController {
                 accessToken: signup.accessToken,
                 tokenExpiresAt: signup.tokenExpiresAt,
                 verifiedName: signup.info.verifiedName,
+                coexistence,
             });
 
             request.log.info(
@@ -249,6 +261,7 @@ export class WhatsAppController {
         code: string,
         phoneNumberId: string,
         wabaId: string,
+        coexistence = false,
     ): Promise<
         | { ok: true; accessToken: string; tokenExpiresAt: Date | null; info: { displayPhoneNumber: string; verifiedName: string } }
         | { ok: false }
@@ -262,13 +275,20 @@ export class WhatsAppController {
         // Deliver this WABA's message webhooks to our /webhook endpoint.
         await whatsappService.subscribeAppToWaba(wabaId, accessToken);
 
-        try {
-            await whatsappService.registerPhoneNumber(phoneNumberId, accessToken);
-        } catch (error) {
-            if (metaErrorCode(error) === META_PIN_MISMATCH) {
-                return { ok: false };
+        // Cloud API registration belongs to the MIGRATION path only. A Coexistence
+        // number stays live in the merchant's WhatsApp Business app — Meta onboards
+        // it during Embedded Signup — so registering it here would either fail or
+        // take the number off their phone, which is the exact thing Coexistence
+        // exists to avoid.
+        if (!coexistence) {
+            try {
+                await whatsappService.registerPhoneNumber(phoneNumberId, accessToken);
+            } catch (error) {
+                if (metaErrorCode(error) === META_PIN_MISMATCH) {
+                    return { ok: false };
+                }
+                throw error;
             }
-            throw error;
         }
 
         const info = await whatsappService.getPhoneNumberInfo(phoneNumberId, accessToken);
