@@ -33,6 +33,11 @@ export default [
                 // is consumed by both the backend and the frontend, so it must stay
                 // environment-neutral; `new URL()` is the portable way to parse a URL.
                 URL: 'readonly',
+                // WHATWG abort primitives — likewise standard in Node 15+ and every
+                // browser. Used by aiTimeout, the single definition of "was this our
+                // timeout?" shared by ai-worker and backend OpenAI call sites.
+                AbortController: 'readonly',
+                AbortSignal: 'readonly',
             },
         },
         plugins: {

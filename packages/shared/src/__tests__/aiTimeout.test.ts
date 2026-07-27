@@ -6,7 +6,7 @@
  * here would silently re-book every OpenAI timeout as OpenAIApiError.
  */
 import { describe, it, expect } from 'vitest';
-import { isTimeoutAbort, classifyTimeoutAbort } from '../src/lib/aiTimeout';
+import { isTimeoutAbort, classifyTimeoutAbort } from '../aiTimeout';
 
 describe('isTimeoutAbort', () => {
     it('is false while the request is in flight', () => {

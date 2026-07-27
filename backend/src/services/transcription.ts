@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { isTimeoutAbort } from '@jawab24/shared';
 import { logAiUsage } from './aiUsageLog';
 import { fetchMediaBuffer, MediaDownloadError } from '../utils/mediaDownload';
 
@@ -198,6 +199,11 @@ class TranscriptionService {
         const client = this.getClient();
         if (!client) return null;
 
+        // Declared out here (not next to the API call) so the outer catch can ask
+        // the signal whether OUR timeout fired — the OpenAI SDK's abort error is
+        // indistinguishable by name. See isTimeoutAbort for the full story.
+        const transcribeController = new AbortController();
+
         try {
             // 1. Download audio (shared media downloader: abort timeout + size cap)
             let audioBuffer: Buffer;
@@ -258,7 +264,6 @@ class TranscriptionService {
             const fileType = sniffed ? sniffed.mime : (contentType || 'audio/mp4');
 
             // 2. Send to transcription API with its own timeout
-            const transcribeController = new AbortController();
             const transcribeTimer = setTimeout(() => transcribeController.abort(), WHISPER_TIMEOUT_MS);
 
             try {
@@ -281,7 +286,8 @@ class TranscriptionService {
                 clearTimeout(transcribeTimer);
             }
         } catch (error) {
-            recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, 'OpenAIApiError');
+            const isTimeout = isTimeoutAbort(transcribeController.signal);
+            recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, isTimeout ? 'AiTimeoutError' : 'OpenAIApiError');
             // Whisper 400 means the audio bytes themselves are bad (truncated,
             // unsupported codec, etc.). We already fall back gracefully, so
             // capture as a fingerprinted WARNING (one grouped issue, alert on
@@ -300,10 +306,30 @@ class TranscriptionService {
                 return null;
             }
 
-            const isTimeout = error instanceof Error && error.name === 'AbortError';
+            // Our WHISPER_TIMEOUT_MS fired: the voice note falls back to the nudge
+            // path, so a single slow call is a degradation, not an incident. Same
+            // treatment as the 400 above — one fingerprinted WARNING to alert on
+            // frequency instead of an error-level page per event.
+            if (isTimeout) {
+                console.warn('[transcription] OpenAI transcription timed out', {
+                    timeoutMs: WHISPER_TIMEOUT_MS,
+                });
+                captureError(
+                    error instanceof Error ? error : new Error(String(error)),
+                    'Transcription timeout',
+                    {
+                        level: 'warning',
+                        fingerprint: ['transcription-openai-timeout'],
+                        tags: { service: 'transcription' },
+                        extra: { timeoutMs: WHISPER_TIMEOUT_MS },
+                    },
+                );
+                return null;
+            }
+
             captureError(
                 error instanceof Error ? error : new Error(String(error)),
-                isTimeout ? 'Transcription timeout' : 'Transcription failed',
+                'Transcription failed',
                 { tags: { service: 'transcription' } },
             );
             return null;
@@ -350,12 +376,19 @@ class TranscriptionService {
 
             return { text };
         } catch (error) {
-            recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, 'OpenAIApiError');
-            const isTimeout = error instanceof Error && error.name === 'AbortError';
+            const isTimeout = isTimeoutAbort(controller.signal);
+            recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, isTimeout ? 'AiTimeoutError' : 'OpenAIApiError');
             captureError(
                 error instanceof Error ? error : new Error(String(error)),
                 isTimeout ? 'Transcription buffer timeout' : 'Transcription buffer failed',
-                { tags: { service: 'transcription' } },
+                isTimeout
+                    ? {
+                        level: 'warning',
+                        fingerprint: ['transcription-buffer-openai-timeout'],
+                        tags: { service: 'transcription' },
+                        extra: { timeoutMs: KB_TRANSCRIBE_TIMEOUT_MS },
+                    }
+                    : { tags: { service: 'transcription' } },
             );
             return null;
         } finally {

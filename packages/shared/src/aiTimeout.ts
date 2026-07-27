@@ -1,26 +1,30 @@
 /**
  * Timeout detection for OpenAI SDK calls — one place, one reason.
  *
- * WHY THIS EXISTS (JAWAB24-AI-WORKER-6/9, 2026-07-22): every call site used to
- * decide "was this our timeout?" by sniffing the error's identity:
+ * WHY THIS EXISTS (JAWAB24-AI-WORKER-6/9, 2026-07-22; JAWAB24-BACKEND-1J,
+ * 2026-07-27): every call site used to decide "was this our timeout?" by
+ * sniffing the error's identity:
  *
  *     if (e instanceof Error && e.name === 'APIUserAbortError') …
+ *     if (e instanceof Error && e.name === 'AbortError') …
  *
  * The OpenAI SDK never assigns `name` on its error classes — openai@6.27.0
  * `core/error.js` defines APIUserAbortError → APIError → OpenAIError → Error
- * with no `this.name` anywhere — so `name` inherits "Error" and the branch was
- * DEAD. Every timeout was misreported as `OpenAIApiError`, no `AiTimeoutError`
- * was thrown, and the raw error escaped to Sentry as `Error: Request was
- * aborted.` (that string is the literal Sentry issue title).
+ * with no `this.name` anywhere — so `name` inherits "Error" and BOTH branches
+ * are DEAD. Every timeout was misreported as `OpenAIApiError`, no
+ * `AiTimeoutError` was counted, and the raw error escaped to Sentry as
+ * `Error: Request was aborted.` (that string is the literal Sentry issue title,
+ * raised once for ai-worker and again for the backend's voice/vision paths).
  *
  * The fix is to stop reading the error at all. Each call site owns its
  * AbortController and nothing else aborts it, so the signal IS the answer:
  * authoritative, independent of SDK version details, and impossible to silently
  * break on an SDK upgrade.
  *
- * Keep this the ONLY definition. It is used by the default reply path
- * (openai.ts), the provider abstraction (openai-adapter.ts) and both
- * e-commerce tool-loop calls (ecommerceToolHandler.ts); duplicating the
+ * Keep this the ONLY definition. It is used by ai-worker's default reply path
+ * (openai.ts), the provider abstraction (openai-adapter.ts), both e-commerce
+ * tool-loop calls (ecommerceToolHandler.ts) and the backend's direct-call
+ * pipelines (transcription.ts, imageUnderstanding.ts); duplicating the
  * predicate is what let the original bug hide in plain sight across files.
  */
 import type { FailedBeforeLogClass } from './aiMetrics';

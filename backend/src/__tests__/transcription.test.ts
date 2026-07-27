@@ -6,7 +6,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // enough. Verifies the exact prior behavior is preserved: not_ok/too_large →
 // captureError + null with NO failed_before_log metric; network/timeout →
 // failed_before_log + captureError + null.
-const { mockFetchMediaBuffer } = vi.hoisted(() => ({ mockFetchMediaBuffer: vi.fn() }));
+const { mockFetchMediaBuffer, mockCreate } = vi.hoisted(() => ({
+    mockFetchMediaBuffer: vi.fn(),
+    mockCreate: vi.fn(),
+}));
 
 vi.mock('../config', () => ({ config: { openai: { apiKey: 'test-key' } } }));
 vi.mock('../utils/sentryHelpers', () => ({ captureError: vi.fn() }));
@@ -18,7 +21,7 @@ vi.mock('../lib/aiMetrics', () => ({
 vi.mock('../services/aiUsageLog', () => ({ logAiUsage: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('openai', () => ({
     default: class {
-        audio = { transcriptions: { create: vi.fn() } };
+        audio = { transcriptions: { create: mockCreate } };
     },
     APIError: class APIErrorMock extends Error {},
     toFile: vi.fn(),
@@ -69,5 +72,66 @@ describe('transcriptionService.transcribe — download error handling', () => {
         const result = await transcriptionService.transcribe('https://cdn/a.ogg', 'ar');
         expect(result).toBeNull();
         expect(recordAiFailedBeforeLog).toHaveBeenCalled();
+    });
+});
+
+// JAWAB24-BACKEND-1J: our WHISPER_TIMEOUT_MS aborted an Instagram voice note and
+// the OpenAI SDK threw `Error: Request was aborted.` — the SDK sets no `name` on
+// APIUserAbortError, so the old `error.name === 'AbortError'` check was DEAD: the
+// timeout was counted as `OpenAIApiError` and paged as "Transcription failed".
+// Detection now reads the signal we own, so these assert the classification, not
+// the error's identity.
+describe('transcriptionService.transcribe — OpenAI abort/timeout classification', () => {
+    /** Minimal buffer that sniffs as OGG audio (>=12 bytes, 'OggS' magic). */
+    const oggBuffer = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(16)]);
+
+    beforeEach(() => {
+        mockFetchMediaBuffer.mockResolvedValue({ buffer: oggBuffer, contentType: 'audio/ogg' });
+    });
+
+    it('reports our timeout as AiTimeoutError + a fingerprinted warning', async () => {
+        vi.useFakeTimers();
+        try {
+            // Reject exactly like the SDK does on abort: a bare Error whose name is
+            // "Error", never "AbortError"/"APIUserAbortError".
+            mockCreate.mockImplementation((_params: unknown, opts: { signal: AbortSignal }) =>
+                new Promise((_resolve, reject) => {
+                    opts.signal.addEventListener('abort', () => reject(new Error('Request was aborted.')));
+                }));
+
+            const pending = transcriptionService.transcribe('https://cdn/a.ogg', 'ar');
+            await vi.advanceTimersByTimeAsync(15_000);
+
+            expect(await pending).toBeNull();
+            expect(recordAiFailedBeforeLog).toHaveBeenCalledWith(
+                'transcription', 'gpt-4o-mini-transcribe', 'AiTimeoutError',
+            );
+            expect(captureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                'Transcription timeout',
+                expect.objectContaining({
+                    level: 'warning',
+                    fingerprint: ['transcription-openai-timeout'],
+                }),
+            );
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('still reports a non-abort API failure as OpenAIApiError at error level', async () => {
+        mockCreate.mockRejectedValue(new Error('503 service unavailable'));
+
+        const result = await transcriptionService.transcribe('https://cdn/a.ogg', 'ar');
+
+        expect(result).toBeNull();
+        expect(recordAiFailedBeforeLog).toHaveBeenCalledWith(
+            'transcription', 'gpt-4o-mini-transcribe', 'OpenAIApiError',
+        );
+        expect(captureError).toHaveBeenCalledWith(
+            expect.any(Error),
+            'Transcription failed',
+            { tags: { service: 'transcription' } },
+        );
     });
 });

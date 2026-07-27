@@ -20,6 +20,7 @@ import { makeTrackedOpenAI, APIError } from './openaiClient';
 import { sniffMimeType, VISION_MIME_TYPES } from './kb/file-extractor';
 import { fetchMediaBuffer, MediaDownloadError } from '../utils/mediaDownload';
 import { checkDailyCap, incrementDailyCap, dailyCapKey, claimDailyOnce } from '../lib/dailyCap';
+import { isTimeoutAbort } from '@jawab24/shared';
 
 /** Max time to download the image from the FB/IG CDN (matches transcription.ts). */
 const DOWNLOAD_TIMEOUT_MS = 10_000;
@@ -124,6 +125,7 @@ class ImageUnderstandingService {
         dataUrl: string,
         langHint: string,
         ctx: ImageUnderstandingContext,
+        controller: AbortController,
     ): Promise<ImageDescriptionResult | null> {
         const client = makeTrackedOpenAI(config.openai.apiKey, {
             userId: ctx.userId,
@@ -131,7 +133,6 @@ class ImageUnderstandingService {
             pipeline: 'image_understanding',
         });
 
-        const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
         try {
             const response = await client.chat.completions.create(
@@ -236,8 +237,12 @@ class ImageUnderstandingService {
         }
 
         const dataUrl = `data:${sniffed};base64,${buffer.toString('base64')}`;
+        // The controller is owned HERE, not in describe(), because only the catch
+        // below can tell a timeout from a real failure — and the OpenAI SDK's abort
+        // error is indistinguishable by name (see isTimeoutAbort).
+        const controller = new AbortController();
         try {
-            return await this.describe(dataUrl, langHint, ctx);
+            return await this.describe(dataUrl, langHint, ctx, controller);
         } catch (error) {
             // A 400 means the image bytes are bad (unsupported/corrupt) — we
             // already fall back gracefully. Capture as a fingerprinted WARNING
@@ -253,11 +258,21 @@ class ImageUnderstandingService {
                 });
                 return null;
             }
-            const isTimeout = error instanceof Error && error.name === 'AbortError';
+            // Our VISION_TIMEOUT_MS fired: the image falls back to the nudge path,
+            // so treat it like the 400 above — one fingerprinted warning to alert on
+            // frequency, not an error-level page per slow call.
+            const isTimeout = isTimeoutAbort(controller.signal);
             captureError(
                 error instanceof Error ? error : new Error(String(error)),
                 isTimeout ? 'Image understanding timeout' : 'Image understanding failed',
-                { tags: { service: 'image_understanding' } },
+                isTimeout
+                    ? {
+                        level: 'warning',
+                        fingerprint: ['image-understanding-openai-timeout'],
+                        tags: { service: 'image_understanding' },
+                        extra: { timeoutMs: VISION_TIMEOUT_MS },
+                    }
+                    : { tags: { service: 'image_understanding' } },
             );
             return null;
         }

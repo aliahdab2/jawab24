@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
-import { PROMPT_VERSION } from '@jawab24/shared';
+import { PROMPT_VERSION, classifyTimeoutAbort, isTimeoutAbort } from '@jawab24/shared';
 import {
     AiClientNotConfiguredError,
     AiTimeoutError,
@@ -12,7 +12,6 @@ import {
     AI_TYPED_ERROR_NAMES,
 } from '../lib/errors';
 import { recordAiFailedBeforeLog, withAiMetrics } from '../lib/aiMetrics';
-import { classifyTimeoutAbort, isTimeoutAbort } from '../lib/aiTimeout';
 import { detectLanguage } from './language';
 import {
     KB_MAX_CHARS,
@@ -385,8 +384,8 @@ export class OpenAIService {
                 ),
                 // Timeouts and quota exhaustion get distinct error_classes so the
                 // breakdown script can separate them from generic API errors.
-                // Timeout detection lives in aiTimeout (see it for WHY it reads
-                // the signal rather than the error).
+                // Timeout detection lives in @jawab24/shared's aiTimeout (see it
+                // for WHY it reads the signal rather than the error).
                 classifyTimeoutAbort(controller.signal,
                     (e) => (isInsufficientQuotaError(e) ? 'AiQuotaError' : 'OpenAIApiError')),
             );
