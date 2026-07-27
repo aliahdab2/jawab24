@@ -4,6 +4,17 @@ import { config } from '../config';
 
 const WHATSAPP_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
+/**
+ * Outcome of a read-receipt / typing-indicator call. Cosmetic by design: the
+ * call never throws and never blocks a reply, but the result is reported so the
+ * caller can log a miss instead of discarding it silently.
+ */
+export interface ReceiptResult {
+    delivered: boolean;
+    /** Meta's error message when `delivered` is false. Secret-free. */
+    reason?: string;
+}
+
 /** WhatsApp Cloud API media metadata (GET /{media-id}) */
 export interface WhatsAppMediaInfo {
     url: string;
@@ -136,19 +147,29 @@ class WhatsAppService {
         messageId: string,
         accessToken: string,
         options: { typing?: boolean } = {},
-    ): Promise<void> {
-        await axios.post(
-            `${WHATSAPP_API}/${phoneNumberId}/messages`,
-            {
-                messaging_product: 'whatsapp',
-                status: 'read',
-                message_id: messageId,
-                ...(options.typing ? { typing_indicator: { type: 'text' } } : {}),
-            },
-            { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
-        ).catch(() => {
-            // Fire-and-forget — receipts are cosmetic and must never block the pipeline
-        });
+    ): Promise<ReceiptResult> {
+        try {
+            await axios.post(
+                `${WHATSAPP_API}/${phoneNumberId}/messages`,
+                {
+                    messaging_product: 'whatsapp',
+                    status: 'read',
+                    message_id: messageId,
+                    ...(options.typing ? { typing_indicator: { type: 'text' } } : {}),
+                },
+                { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
+            );
+            return { delivered: true };
+        } catch (error) {
+            // Still swallowed — receipts are cosmetic and must NEVER block a reply.
+            // But the outcome is now returned so the caller can log it with request
+            // context: a bare `.catch(() => {})` made "the typing indicator doesn't
+            // always appear" impossible to diagnose, because a rejected call and a
+            // successful one looked identical from outside (founder report
+            // 2026-07-27). The reason comes from sanitizeWhatsAppError, which reads
+            // only Meta's error code/message — never `config` or the bearer header.
+            return { delivered: false, reason: sanitizeWhatsAppError(error).message };
+        }
     }
 
     // ================== Embedded Signup (connect flow) ==================

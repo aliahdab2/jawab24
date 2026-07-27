@@ -268,13 +268,16 @@ const WA_TEST_PAGE = {
 };
 
 async function postWebhook(app: Awaited<ReturnType<typeof buildApp>>, payload: object) {
-    await app.inject({
+    const res = await app.inject({
         method: 'POST',
         url: '/webhook',
         headers: { 'x-hub-signature-256': generateSignature(payload) },
         payload,
     });
     await new Promise(r => setTimeout(r, 50));
+    // Returned so tests can assert Meta still gets its 200 — a webhook that
+    // errors is retried and duplicates the message. Existing callers ignore it.
+    return res;
 }
 
 describe('WhatsApp Webhook — read receipts + typing', () => {
@@ -285,6 +288,9 @@ describe('WhatsApp Webhook — read receipts + typing', () => {
         vi.clearAllMocks();
         mockGetPageByWhatsAppPhoneNumberId.mockResolvedValue(WA_TEST_PAGE);
         mockFindOrCreateFromWebhook.mockResolvedValue({ message: { id: 'msg-1' }, isNew: true });
+        // clearAllMocks() resets calls but NOT implementations, so the failure
+        // cases below would leak into every later test in the file.
+        mockWaMarkAsRead.mockResolvedValue({ delivered: true });
     });
 
     const post = (payload: object) => postWebhook(app, payload);
@@ -326,6 +332,44 @@ describe('WhatsApp Webhook — read receipts + typing', () => {
         expect(mockWaMarkAsRead).toHaveBeenCalledWith(
             'phone-number-id-123', 'wamid.stk', 'wa-business-token', { typing: false },
         );
+    });
+
+    // Non-sticker media DOES get a reply (voice notes are transcribed and
+    // answered; other attachments get a text-only nudge), so "typing…" is
+    // truthful there. Only the sticker case above may suppress it.
+    it.each([
+        ['voice note', 'audio', { id: 'media-1', mime_type: 'audio/ogg' }],
+        ['image', 'image', { id: 'media-2', mime_type: 'image/jpeg' }],
+    ])('%s: marks read WITH typing (a reply follows)', async (_label, type, media) => {
+        await post(buildWhatsAppPayload({
+            messages: [{ from: '+966500000000', id: `wamid.${type}`, type, timestamp: '1700000000', [type]: media }],
+        }));
+
+        expect(mockWaMarkAsRead).toHaveBeenCalledWith(
+            'phone-number-id-123', `wamid.${type}`, 'wa-business-token', { typing: true },
+        );
+    });
+
+    // A receipt is cosmetic: if Meta rejects it, the message must still be
+    // enqueued and the request must still succeed. Regression for the founder's
+    // 2026-07-27 report — previously a rejected receipt was swallowed with no
+    // trace at all, so this path could not be observed in production.
+    it('receipt rejected by Meta: never blocks the reply pipeline', async () => {
+        mockWaMarkAsRead.mockResolvedValue({ delivered: false, reason: 'Rate limit hit' });
+
+        const res = await post(buildWhatsAppPayload({}));
+
+        expect(res.statusCode).toBe(200);
+        expect(mockEnqueueMessage).toHaveBeenCalled();
+    });
+
+    it('receipt call itself throwing: still never blocks the reply pipeline', async () => {
+        mockWaMarkAsRead.mockRejectedValue(new Error('unexpected'));
+
+        const res = await post(buildWhatsAppPayload({}));
+
+        expect(res.statusCode).toBe(200);
+        expect(mockEnqueueMessage).toHaveBeenCalled();
     });
 });
 

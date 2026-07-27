@@ -730,7 +730,10 @@ export class WebhookController {
                         // without this the wait reads as dead air — Messenger shows typing
                         // for the same window (founder pilot feedback, 2026-07-08).
                         if (receiptToken) {
-                            void whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: true });
+                            void this.logReceiptMiss(
+                                whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: true }),
+                                msg.id, true,
+                            );
                         }
                         try {
                             const jobId = await enqueueMessage({
@@ -759,7 +762,10 @@ export class WebhookController {
                         // Read receipt for media too; typing only when a reply follows —
                         // stickers are stored silently, so typing there would mislead.
                         if (receiptToken) {
-                            void whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: msg.type !== 'sticker' });
+                            void this.logReceiptMiss(
+                                whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: msg.type !== 'sticker' }),
+                                msg.id, msg.type !== 'sticker',
+                            );
                         }
                         await handleWhatsAppNonTextMessage(phoneNumberId, {
                             senderId: msg.from,
@@ -779,6 +785,36 @@ export class WebhookController {
                     });
                 }
             }
+        }
+    }
+
+    /**
+     * Record a read-receipt / typing-indicator that Meta did not accept.
+     *
+     * Deliberately non-blocking and deliberately NOT an error: receipts are
+     * cosmetic, and a failed one must never surface to the merchant or page
+     * Sentry. But it must not vanish either — the previous silent catch meant
+     * "the typing indicator doesn't always appear" could not be answered from
+     * production at all, since a rejected call looked exactly like a delivered
+     * one. `warn` keeps it greppable per phone number without adding noise to
+     * the error budget.
+     */
+    private async logReceiptMiss(
+        pending: Promise<{ delivered: boolean; reason?: string }>,
+        messageId: string,
+        typing: boolean,
+    ): Promise<void> {
+        // markAsRead resolves rather than rejects by contract, but this runs
+        // un-awaited: any throw here would become an unhandled rejection and
+        // could take the process down. Belt-and-braces so a cosmetic receipt can
+        // never destabilise the webhook path.
+        const result = await pending.catch((error: unknown) => ({
+            delivered: false, reason: error instanceof Error ? error.message : String(error),
+        }));
+        if (!result?.delivered) {
+            this.log().warn('[WhatsApp] read receipt / typing indicator not delivered', {
+                messageId, typing, reason: result?.reason,
+            });
         }
     }
 
