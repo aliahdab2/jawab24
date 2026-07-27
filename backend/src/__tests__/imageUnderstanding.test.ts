@@ -166,7 +166,40 @@ describe('imageUnderstandingService.describeFromUrl', () => {
         mockCreate.mockRejectedValue(new Error('rate limited'));
         const result = await imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
         expect(result).toBeNull();
-        expect(captureError).toHaveBeenCalled();
+        expect(captureError).toHaveBeenCalledWith(
+            expect.anything(),
+            'Image understanding failed',
+            { tags: { service: 'image_understanding' } },
+        );
+    });
+
+    // Companion to JAWAB24-BACKEND-1J (the voice-note variant): the OpenAI SDK's
+    // abort error carries no distinguishing `name`, so the old check misfiled our
+    // own VISION_TIMEOUT_MS as a hard failure. Detection reads the signal we own.
+    it('returns null and captures a fingerprinted WARNING when our vision timeout fires', async () => {
+        vi.useFakeTimers();
+        try {
+            (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse({ contentLength: 1000, body: JPEG }));
+            mockCreate.mockImplementation((_params: unknown, opts: { signal: AbortSignal }) =>
+                new Promise((_resolve, reject) => {
+                    opts.signal.addEventListener('abort', () => reject(new Error('Request was aborted.')));
+                }));
+
+            const pending = imageUnderstandingService.describeFromUrl('https://cdn/img.jpg', 'ar', CTX);
+            await vi.advanceTimersByTimeAsync(20_000);
+
+            expect(await pending).toBeNull();
+            expect(captureError).toHaveBeenCalledWith(
+                expect.anything(),
+                'Image understanding timeout',
+                expect.objectContaining({
+                    level: 'warning',
+                    fingerprint: ['image-understanding-openai-timeout'],
+                }),
+            );
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('returns null when the model returns an empty description', async () => {

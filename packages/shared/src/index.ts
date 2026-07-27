@@ -880,6 +880,9 @@ export {
     type FailedBeforeLogClass,
 } from './aiMetrics';
 
+// --- OpenAI abort/timeout classification (keep aiTimeout.ts the only definition) ---
+export { isTimeoutAbort, classifyTimeoutAbort } from './aiTimeout';
+
 /** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
 // v39: lightweight date awareness — inject today's date (merchant timezone) into the
 // prompt so the model stops relaying clearly-past KB/post dates as upcoming. NO

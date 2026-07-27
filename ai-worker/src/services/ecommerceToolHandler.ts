@@ -13,7 +13,7 @@
  */
 import OpenAI from 'openai';
 import { withAiMetrics } from '../lib/aiMetrics';
-import { classifyTimeoutAbort } from '../lib/aiTimeout';
+import { classifyTimeoutAbort } from '@jawab24/shared';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { openaiService, type GenerateRequest, type GenerateResponse } from './openai';

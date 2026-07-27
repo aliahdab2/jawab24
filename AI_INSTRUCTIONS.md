@@ -206,6 +206,8 @@ Gap analysis (read with `scripts/phase6_5_breakdown.ts`):
 
 `error_class` enum: `AiEmptyReplyError`, `AiRefusalError`, `AiTimeoutError`, `OpenAIApiError`, `AiWorkerUnreachable`, `ZeroTokens`, `MissingUserId`, `Other`.
 
+**`AiTimeoutError` vs `OpenAIApiError` — never classify by reading the error.** The OpenAI SDK assigns no `name` to its error classes (`APIUserAbortError → APIError → OpenAIError → Error`), so `err.name === 'AbortError' | 'APIUserAbortError'` is DEAD CODE and every timeout books as `OpenAIApiError`. Ask the AbortSignal the call site owns instead — `isTimeoutAbort(signal)` / `classifyTimeoutAbort(signal, otherwise?)` from `@jawab24/shared` (`packages/shared/src/aiTimeout.ts`) is the ONLY sanctioned predicate. `makeTrackedOpenAI` applies it automatically to every chat/embedding call that passes a `signal`, so tracked pipelines inherit correct classification for free; the ESLint-exempted direct clients (`transcription.ts`, `embedding.ts`, `leadExtractor.ts`) classify at their own emit site. This shipped wrong twice — JAWAB24-AI-WORKER-6/9 (ai-worker, 2026-07-22) and JAWAB24-BACKEND-1J (backend voice/vision, 2026-07-27) — because a fix in one package wasn't adopted in the other.
+
 Emits never block AI calls — `redis.incr(key).catch(() => {})` is the entire pattern. The counters are diagnostic; they do not gate, retry, or fall back.
 
 ### 14. Proper Fixes Only
