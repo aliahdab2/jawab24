@@ -37,6 +37,19 @@ vi.mock('../../src/services/catalogExtractor', () => ({
     catalogExtractor: { extract: vi.fn() },
 }));
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
+// Model the real storage shape: `pages.access_token` holds AES ciphertext that the
+// Graph API cannot use. A fixture that pretended the column was plaintext is why
+// "ciphertext sent to Graph" shipped and no scan ever succeeded in production.
+const CIPHERTEXT = 'enc:tok';
+const PLAINTEXT = 'tok';
+const CORRUPT_CIPHERTEXT = 'enc:corrupt';
+vi.mock('../../src/services/facebookCrypto', () => ({
+    // Mirrors safeDecryptToken: '' for an absent OR undecryptable token.
+    safeDecryptToken: (stored?: string | null) => {
+        if (!stored || stored === 'enc:corrupt') return '';
+        return String(stored).replace('enc:', '');
+    },
+}));
 // `create` returns undefined on purpose — fbAxios has an explicit guard for
 // auto-mocked axios and falls back to the default export (also a mock here).
 vi.mock('axios', () => ({ default: { get: vi.fn(), create: vi.fn() }, isAxiosError: () => false }));
@@ -55,7 +68,7 @@ const CTX = { userId: 'user-1' };
 const dealerPage = (overrides: Record<string, unknown> = {}) => ({
     id: PAGE,
     facebookPageId: 'fb-dealer',
-    accessToken: 'tok',
+    encryptedAccessToken: CIPHERTEXT,
     ecommerceStoreId: null,
     catalogVertical: null,
     catalogScanLastPostTime: null,
@@ -102,8 +115,33 @@ describe('catalogScanService.scanPosts', () => {
     });
 
     it('throws CatalogScanUnavailableError for a disconnected page (blank token)', async () => {
-        state.pageRow = dealerPage({ accessToken: '' });
+        state.pageRow = dealerPage({ encryptedAccessToken: '' });
         await expect(catalogScanService.scanPosts(WS, PAGE, CTX)).rejects.toBeInstanceOf(CatalogScanUnavailableError);
+    });
+
+    it('throws CatalogScanUnavailableError for a WhatsApp-only page (no Facebook identity)', async () => {
+        state.pageRow = dealerPage({ facebookPageId: null });
+        await expect(catalogScanService.scanPosts(WS, PAGE, CTX)).rejects.toBeInstanceOf(CatalogScanUnavailableError);
+    });
+
+    // A token that fails to decrypt is as unusable as an absent one — sending it to
+    // Graph would burn the merchant's daily scan cap on a call that cannot work.
+    it('throws CatalogScanUnavailableError when the stored token cannot be decrypted', async () => {
+        state.pageRow = dealerPage({ encryptedAccessToken: CORRUPT_CIPHERTEXT });
+        await expect(catalogScanService.scanPosts(WS, PAGE, CTX)).rejects.toBeInstanceOf(CatalogScanUnavailableError);
+    });
+
+    // THE regression: `pages.access_token` holds ciphertext, so passing the column
+    // value straight to Graph made every scan fail (0 of 110 prod pages had ever
+    // bookmarked a scan). Assert the DECRYPTED token reaches the Graph call.
+    it('sends the decrypted token to Graph, never the stored ciphertext', async () => {
+        mockPosts([post()]);
+
+        await catalogScanService.scanPosts(WS, PAGE, CTX);
+
+        const [, tokenArg] = vi.mocked(facebookService.getPagePosts).mock.calls[0];
+        expect(tokenArg).toBe(PLAINTEXT);
+        expect(tokenArg).not.toBe(CIPHERTEXT);
     });
 
     it('feeds the post text to the extractor with the derived vertical + posts framing, and bookmarks the newest post', async () => {

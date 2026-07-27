@@ -27,6 +27,15 @@ function item(overrides: Partial<CatalogItem> = {}): CatalogItem {
   };
 }
 
+/** A page as /api/pages returns it — Facebook-connected unless overridden. */
+function pageFixture(overrides: Partial<Page> = {}): Page {
+  return {
+    id: 'p1', name: 'Moto', facebookPageId: '1234567890', isConnected: true,
+    hasPostReplyTrigger: true, knowledgeBase: '', businessProfile: {},
+    ...overrides,
+  } as unknown as Page;
+}
+
 function renderManager(props: Partial<React.ComponentProps<typeof CatalogManager>> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -54,7 +63,7 @@ describe('CatalogManager', () => {
     expect(screen.getByRole('button', { name: 'Import a list' })).toBeInTheDocument();
     // No mocked-up "example" row — a fake listing with a real price read as
     // live data. The scan flow shows the real row shape during review instead.
-    expect(screen.queryByText('Front shock absorbers')).not.toBeInTheDocument();
+    expect(screen.queryByText('Olive oil, 1 litre')).not.toBeInTheDocument();
     expect(screen.queryByText('Example')).not.toBeInTheDocument();
   });
 
@@ -118,6 +127,114 @@ describe('CatalogManager', () => {
     expect(await screen.findByLabelText('Business type')).toBeInTheDocument();
   });
 
+  // The posts scan reads the page's Facebook posts through the Graph API, so a
+  // WhatsApp-only or token-less page can only ever get 409 PAGE_DISCONNECTED
+  // back ("Couldn't read your posts. Please try again." — advice that can never
+  // work). Prod 2026-07-27: 8 of one workspace's 10 pages were in that state.
+  describe('posts-scan availability', () => {
+    it('offers the scan on a Facebook-connected page and shows no blocker note', async () => {
+      renderManager({ page: pageFixture() });
+      expect(await screen.findByRole('button', { name: /Find products in your posts/ })).toBeInTheDocument();
+      expect(screen.queryByText(/Reading posts works on Facebook pages only/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Reconnect this page to Facebook/)).not.toBeInTheDocument();
+    });
+
+    it('WhatsApp-only page: no scan action, import becomes the primary, reason given', async () => {
+      renderManager({ page: pageFixture({ facebookPageId: null }) });
+      expect(await screen.findByRole('button', { name: 'Import a list' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Find products in your posts/ })).not.toBeInTheDocument();
+      expect(screen.getByText(/Reading posts works on Facebook pages only/)).toBeInTheDocument();
+      // The one remaining path must still be reachable.
+      expect(screen.getByRole('button', { name: 'Add manually' })).toBeInTheDocument();
+    });
+
+    it('stops promising the posts pitch in the body when the scan cannot run', async () => {
+      renderManager({ page: pageFixture({ facebookPageId: null }) });
+      expect(await screen.findByText(/Add what you sell with its prices/)).toBeInTheDocument();
+      expect(screen.queryByText(/Your posts already show what you sell/)).not.toBeInTheDocument();
+    });
+
+    it('disconnected Facebook page: no scan action, reason names the reconnect', async () => {
+      renderManager({ page: pageFixture({ isConnected: false }) });
+      expect(await screen.findByRole('button', { name: 'Import a list' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Find products in your posts/ })).not.toBeInTheDocument();
+      expect(screen.getByText(/Reconnect this page to Facebook/)).toBeInTheDocument();
+    });
+
+    it('hides the scan from the toolbar too, not just the empty state', async () => {
+      list.mockResolvedValue(listData([item()]));
+      renderManager({ page: pageFixture({ facebookPageId: null }) });
+      expect(await screen.findByText('دبل صدمات NJT')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Find products in your posts/ })).not.toBeInTheDocument();
+      // The paths that DO work on a WhatsApp-only page stay.
+      expect(screen.getByRole('button', { name: 'Import a list' })).toBeInTheDocument();
+    });
+
+    it('a host that passes no page keeps the scan offered — impossibility unproven', async () => {
+      renderManager();
+      expect(await screen.findByRole('button', { name: /Find products in your posts/ })).toBeInTheDocument();
+    });
+
+    // Same dead-end class: hasPostReplyTrigger already says whether ANY Post
+    // Reply exists, so don't spend a click learning it from the scan's own
+    // noPostReplies answer.
+    it('withholds the post-replies import when the page has no Post Reply configured', async () => {
+      renderManager({ page: pageFixture({ hasPostReplyTrigger: false }) });
+      await screen.findByRole('button', { name: /Find products in your posts/ });
+      expect(screen.queryByRole('button', { name: 'Import from your post replies' })).not.toBeInTheDocument();
+    });
+
+    it('offers the post-replies import when the page has one', async () => {
+      renderManager({ page: pageFixture({ hasPostReplyTrigger: true }) });
+      expect(await screen.findByRole('button', { name: 'Import from your post replies' })).toBeInTheDocument();
+    });
+  });
+
+  // A single example for every trade taught the wrong thing: six of the ten
+  // verticals default to type 'product', so nearly every merchant was shown an
+  // auto-parts example, and a salon (beauty → service) was shown AC maintenance.
+  describe('name example in the add form', () => {
+    /** Renders a fresh manager for one vertical and returns the name input plus
+     *  its unmount — two mounted forms would make `screen` queries ambiguous. */
+    async function openAddForm(vertical: string) {
+      list.mockResolvedValue(listData([], { effective: vertical, source: 'merchant' }));
+      const { unmount } = renderManager();
+      fireEvent.click(await screen.findByText('Add manually'));
+      return { name: await screen.findByLabelText('Name'), unmount };
+    }
+
+    it('teaches a salon with a salon example, not with AC maintenance', async () => {
+      const { name } = await openAddForm('beauty');
+      expect(name).toHaveAttribute('placeholder', 'e.g. Haircut & styling');
+    });
+
+    it('teaches a restaurant with a dish, not with a generic product', async () => {
+      const { name } = await openAddForm('restaurant');
+      expect(name).toHaveAttribute('placeholder', 'e.g. Chicken shawarma meal');
+    });
+
+    it('keeps the type example for a vertical with no tailored one', async () => {
+      const { name } = await openAddForm('services');
+      expect(name).toHaveAttribute('placeholder', 'e.g. AC cleaning & maintenance');
+    });
+
+    it('falls back to the type example when the merchant switches the type chip', async () => {
+      const { name } = await openAddForm('beauty');
+      expect(name).toHaveAttribute('placeholder', 'e.g. Haircut & styling');
+      // A salon adding a training course must not be taught with a haircut.
+      fireEvent.click(screen.getByRole('button', { name: 'Course' }));
+      expect(screen.getByLabelText('Name')).toHaveAttribute('placeholder', 'e.g. ICDL course — beginner level');
+    });
+
+    it('no longer shows the same example to every trade', async () => {
+      const beauty = await openAddForm('beauty');
+      const beautyPlaceholder = beauty.name.getAttribute('placeholder');
+      beauty.unmount();
+      const electronics = await openAddForm('electronics');
+      expect(electronics.name.getAttribute('placeholder')).not.toBe(beautyPlaceholder);
+    });
+  });
+
   it('opens the scan review from the primary action', async () => {
     scanPosts.mockResolvedValue({ data: { items: [], dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, postsScanned: 0, upToDate: true } });
     renderManager();
@@ -142,7 +259,7 @@ describe('CatalogManager', () => {
     renderManager();
     fireEvent.click(await screen.findByText('Add manually'));
 
-    const nameInput = await screen.findByPlaceholderText('e.g. Front shock absorbers');
+    const nameInput = await screen.findByLabelText('Name');
     fireEvent.change(nameInput, { target: { value: 'خوذة LS2' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -163,7 +280,7 @@ describe('CatalogManager', () => {
     renderManager();
     fireEvent.click(await screen.findByText('Add manually'));
 
-    fireEvent.change(await screen.findByPlaceholderText('e.g. Front shock absorbers'), { target: { value: 'دورة ميكانيك' } });
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'دورة ميكانيك' } });
     fireEvent.click(screen.getByRole('button', { name: 'Course' })); // type chip
     fireEvent.change(screen.getByLabelText('Start date (optional)'), { target: { value: '2026-08-10' } });
     fireEvent.click(screen.getByRole('button', { name: '+ Duration' })); // suggested chip prefills the label
@@ -180,7 +297,7 @@ describe('CatalogManager', () => {
     renderManager();
     fireEvent.click(await screen.findByText('Add manually'));
 
-    fireEvent.change(await screen.findByPlaceholderText('e.g. Front shock absorbers'), { target: { value: 'عرض' } });
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'عرض' } });
     // Product type hides dates by default — the offer path reveals them explicitly.
     fireEvent.click(screen.getByRole('button', { name: /Add dates/ }));
     fireEvent.change(screen.getByLabelText('Start date (optional)'), { target: { value: '2026-09-20' } });
