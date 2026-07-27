@@ -4404,7 +4404,7 @@ const TEST_CASES: TestCase[] = [
     // 69.5 — Region attribution: العجيلات is in NEITHER list. Naming outlets and
     // placing them "in العجيلات" is a fabrication even though the names are real.
     // A truthful reply either says it has no outlet for that city or offers the
-    // nearest region BY NAME (الزاوية) — what it must not do is assert العجيلات.
+    // nearest region BY NAME (صبراتة) — what it must not do is assert العجيلات.
     {
         id: 728, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
         message: 'العجيلات، وين نلقى منتجاتكم؟',
@@ -4424,11 +4424,11 @@ const TEST_CASES: TestCase[] = [
     // get its outlets. Pins the fix as "stop fabricating", not "stop answering".
     {
         id: 729, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
-        message: 'أنا ساكن في عين زارة، وين نلقى منتجاتكم؟',
+        message: 'أنا ساكن في عين الدالية، وين نلقى منتجاتكم؟',
         page: 'distributor',
         expected: {
             flagsAbsent: ['info_not_in_kb'],
-            replyContainsAny: ['عين زارة'],
+            replyContainsAny: ['عين الدالية'],
             replyNotContains: ['ما عندي', 'غير متوفرة لدي'],
         },
         notes: 'The listed-district half of the region contract — prod DID do this well once the directory was in the KB. Guards against over-correcting 69.5 into refusing every location question.',
