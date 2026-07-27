@@ -193,6 +193,67 @@ describe('flagHallucinatedPrice — generic across business types', () => {
     });
 });
 
+// Prod regression (BAMBO LIBYA, 2026-07-27): a Libyan distributor whose KB was
+// typed by hand, so the price lines carry NO space between the amount and the
+// currency letter («بسعر38د») and the weight runs straight into it
+// («38دالوزن»). On a closing «نعم» during a purchase the model answered
+// «باكو واحد ... سعره 1200 دينار ليبي» and nothing flagged it — Check 1 was
+// gated to intent QUESTION (fixed in e5313a4c: the check now runs on every
+// intent). These pin the grounding decision itself against the merchant's real
+// formatting, so the fix can't be undone by a future tokenizer change: the
+// invented number MUST flag, and the mangled in-KB ones must NOT — a false
+// positive here would deflect every legitimate price this merchant quotes.
+describe('flagHallucinatedPrice — hand-typed «د» prices without spaces (BAMBO)', () => {
+    // Verbatim shape from kb_chunks (page 8c086c86…, kb_version 10).
+    const distributorKb = [
+        'رقم 1 - 22 قطعة بسعر 38د الوزن (2-4 كيلو).',
+        'رقم 4-24 قطعة بسعر38د الوزن(7-14كيلو).',
+        'رقم 5-22 قطعة بسعر38د الوزن(12-18كيلو).',
+        'رقم 6- 20 قطعة بسعر 38دالوزن (16+كيلو).',
+        'رقم 3 - 52 قطعة بسعر 70د الوزن (4-8 كيلو).',
+        'وهذا سعر حفاظ السباحة',
+        'السعر 46 دينار',
+    ].join('\n');
+
+    it('does NOT flag the pack price even though the KB writes it as «بسعر38د»', () => {
+        expect(flagHallucinatedPrice('حفاضات رقم 5 بسعر 38 دينار.', distributorKb)).toBe(false);
+        expect(flagHallucinatedPrice('حفاضات رقم 5 بسعر 38د.', distributorKb)).toBe(false);
+    });
+
+    it('does NOT flag the jumbo tier or the swim-diaper line', () => {
+        expect(flagHallucinatedPrice('الجامبو رقم 3 بسعر 70 دينار.', distributorKb)).toBe(false);
+        expect(flagHallucinatedPrice('حفاضات السباحة السعر 46 دينار.', distributorKb)).toBe(false);
+    });
+
+    it('FLAGS the invented «1200 دينار ليبي» from the prod purchase turn', () => {
+        expect(
+            flagHallucinatedPrice('باكو واحد من حفاظات رقم 5 سعره 1200 دينار ليبي.', distributorKb),
+        ).toBe(true);
+    });
+
+    it('FLAGS a per-piece price — the KB prices packs only, never single pieces', () => {
+        expect(flagHallucinatedPrice('سعرها 50 دينار.', distributorKb)).toBe(true);
+        expect(flagHallucinatedPrice('القطعة الواحدة بسعر 9 دينار.', distributorKb)).toBe(true);
+    });
+
+    // KNOWN LIMITATION, asserted so a future change to grounding is visible in
+    // the diff rather than discovered in prod. Check 1 grounds against numbers
+    // appearing LITERALLY anywhere in the KB text, and this merchant's KB is
+    // dense with small integers that are not prices — size numbers («رقم 5») and
+    // weight bounds («(2-4 كيلو)»). So a fabricated per-piece price that happens
+    // to be one of those integers grounds by coincidence and is NOT flagged.
+    // Cheap prices are exactly where this collides — every plausible per-piece
+    // price for this merchant (2, 3, 5, 12…) appears somewhere in their KB as a
+    // size or a weight. That is why the Cat 69 eval case (#730) asserts the
+    // CONVERSATION never produces a per-piece number at all: the validator alone
+    // cannot carry that guarantee for this KB shape.
+    it('does NOT flag fabricated prices that collide with size numbers / weight bounds', () => {
+        // 2 appears as «(2-4 كيلو)», 12 as «(12-18كيلو)» — neither is a price.
+        expect(flagHallucinatedPrice('القطعة الواحدة بسعر 2 دينار.', distributorKb)).toBe(false);
+        expect(flagHallucinatedPrice('القطعة الواحدة بسعر 12 دينار.', distributorKb)).toBe(false);
+    });
+});
+
 // Prod regression (متجر إجدابيا, 2026-07-22): the model computed CORRECT cart
 // totals («39 + توصيل 10 = المجموع 49») but the guard grounds every number
 // against LITERAL KB values, so a derived total can never pass and the correct
@@ -292,6 +353,146 @@ describe('flagHallucinatedPrice — verified price_math totals (v56)', () => {
         const reply = 'المجموع ٤٩ دينار.';
         const pm = [{ total: 49, terms: [{ unit: 39, qty: 1 }, { unit: 10, qty: 1 }] }];
         expect(flagHallucinatedPrice(reply, kb, pm)).toBe(false);
+    });
+
+    // ── e5313a4c blast-radius check, replayed on REAL prod order confirmations ──
+    // Stage B of that fix newly runs Check 1 on PURCHASE_INTENT *and* lets the
+    // backend swap the reply. متجر إجدابيا is the merchant most exposed to it:
+    // 100 PURCHASE_INTENT turns in six days, 57 answered with a reply containing a
+    // number, and 20 of those quote a COMPUTED total that does not appear literally
+    // in the KB. Before e5313a4c all 20 shipped unchecked; now each one ships only
+    // if its price_math verifies. These replay real reply text (verbatim from
+    // prod, 2026-07-21→27) with the price_math the model must emit for it, so a
+    // regression that silently converts his order confirmations into the «تواصل
+    // معنا» deflection fails here instead of at the moment of sale.
+    // KB values used below are his real ones: زيت توتيان 39/طرف, عرض الطرفين 69,
+    // and the per-city delivery table (توكرة 20, سبها 35, درنة 30, بنغازي 10).
+    describe('PURCHASE_INTENT order confirmations survive Stage B', () => {
+        const ajdabiaKb = [
+            'زيت توتيان للتساقط يوقف التساقط من اول اسبوع سعر الطرف 39 دينار',
+            'عرض الطرفين مع بعض ب 69 دينار',
+            'سعر الثلاث اطرف 39 دينار (توصيل مجاني لأجدابيا فقط)',
+            'توصيل بنغازي 10 دينار',
+            'توكرة 20', 'سبها 35', 'درنة 30',
+        ].join('\n');
+
+        it('item + delivery total (39+20=59) passes with price_math', () => {
+            const reply = 'طلبك طرف واحد زيت توتيان سعره 39 دينار، وتوصيل توكرة 20 دينار، المجموع 59 دينار. يوصلك الطلب خلال 24 ساعة إن شاء الله.';
+            const pm = [{ total: 59, terms: [{ unit: 39, qty: 1 }, { unit: 20, qty: 1 }] }];
+            expect(flagHallucinatedPrice(reply, ajdabiaKb, pm)).toBe(false);
+        });
+
+        it('quantity product + delivery (39×2=78, +35 = 113) passes with price_math', () => {
+            const reply = 'طلبك 2 طرف من زيت توتيان للتساقط، سعر الطرف 39 دينار × 2 = 78 دينار، وتوصيل سبها 35 دينار، المجموع 113 دينار.';
+            const pm = [{ total: 113, terms: [{ unit: 39, qty: 2 }, { unit: 35, qty: 1 }] }];
+            expect(flagHallucinatedPrice(reply, ajdabiaKb, pm)).toBe(false);
+        });
+
+        it('the offer + free-delivery city (39+0=39) passes with price_math', () => {
+            const reply = 'عرض 3 أطراف من زيت توتيان سعره 39 دينار، وتوصيل أجدابيا مجاني، المجموع 39 دينار.';
+            const pm = [{ total: 39, terms: [{ unit: 39, qty: 1 }, { unit: 0, qty: 1 }] }];
+            expect(flagHallucinatedPrice(reply, ajdabiaKb, pm)).toBe(false);
+        });
+
+        // The OTHER half of the fix, and the reason it is worth its blast radius:
+        // this exact reply shipped to a customer on 2026-07-23 12:22 during a
+        // PURCHASE_INTENT turn and was NOT flagged, because Check 1 was gated off.
+        // His KB prices two أطراف at 69 («عرض الطرفين مع بعض ب 69 دينار») and 70
+        // appears NOWHERE in it, so both the unit and the 100 total are invented —
+        // the customer was quoted a price his merchant never set.
+        it('CATCHES the real invented «70 دينار» order confirmation from prod', () => {
+            const reply = 'تمام، اثنين طرف من زيت توتيان ب 70 دينار، والتوصيل لدرنة 30 دينار، المجموع 100 دينار. أرسل لي اسم المدينة ورقم الاتصال باش نكملك الطلب.';
+            expect(flagHallucinatedPrice(reply, ajdabiaKb)).toBe(true);
+            // Trust-but-VERIFY: even when the model vouches for its own invented
+            // unit in price_math, 70 is not in the KB so the claim is rejected.
+            const selfServingPm = [{ total: 100, terms: [{ unit: 70, qty: 1 }, { unit: 30, qty: 1 }] }];
+            expect(flagHallucinatedPrice(reply, ajdabiaKb, selfServingPm)).toBe(true);
+        });
+
+        // Quantifies the residual risk rather than asserting it away: every total
+        // above is grounded ONLY by price_math. If emission regresses (prompt edit,
+        // model swap, a cache path that drops the field), these become flagged and
+        // — on a purchase turn, post-Stage B — get swapped for the deflection.
+        // Eval #720 is the live proof this can happen: it is the one FAIL in the
+        // 97.0% run, and the same terse shape («الحساب كم بالتوصيل») deflected in
+        // this merchant's real traffic on 2026-07-22 while the restated turn a
+        // minute later answered «المجموع 49 دينار» correctly.
+        it('DOCUMENTS THE RISK: the same totals all flag when price_math is absent', () => {
+            const confirmations = [
+                'طلبك طرف واحد زيت توتيان سعره 39 دينار، وتوصيل توكرة 20 دينار، المجموع 59 دينار.',
+                'طلبك 2 طرف، سعر الطرف 39 دينار × 2 = 78 دينار، وتوصيل سبها 35 دينار، المجموع 113 دينار.',
+            ];
+            for (const reply of confirmations) {
+                expect(flagHallucinatedPrice(reply, ajdabiaKb)).toBe(true);
+            }
+        });
+    });
+
+    // ── BUNDLE-UNIT errors: a THIRD defect class, still OPEN ────────────────
+    // Prod (Nourva, 2026-07-23 11:58 — the fleet's highest-volume page). The KB
+    // sells a 1+1 bundle: «قطعتين بسعر قطعة واحدة فقط! السعر الآن: 160 دينار»,
+    // i.e. 160 buys TWO pieces. A customer ordered four («واحد 34 واثنين 36
+    // واحد 38») and the AI answered «السعر الإجمالي 640 دينار» — it read 160 as
+    // a PER-PIECE price and multiplied by 4. The correct total is 2 bundles =
+    // 320. Exactly double, quoted at the moment of sale, with no flag.
+    // The sale was lost in the next two turns: she asked «ليش كم سعره هو», got
+    // the promo wall instead of an answer, and left with «شكرا القيته في صفحة 45».
+    //
+    // This is NOT the BAMBO class (no grounding at all) nor the إجدابيا class
+    // (right units, arithmetic on them). Here the unit VALUE is real and in the
+    // KB — its MEANING is wrong. Check 1 grounds values, never unit semantics,
+    // so v56's trust-but-verify accepts a self-consistent proof of a false
+    // premise. Contrast the إجدابيا «70» case above, caught only because 70
+    // appears nowhere in that KB.
+    describe('bundle-unit semantics (Nourva) — OPEN defect', () => {
+        // The exact ambiguity from the live KB: nothing states what one unit of
+        // 160 buys in a form that is safe to multiply.
+        const bundleKb = [
+            'اليوم ستحصلين على قطعتين بسعر قطعة واحدة فقط!',
+            '💰 السعر الآن: 160 دينار فقط بدلاً من 320 دينار',
+            '🚚 شحن VIP مجاني حتى باب منزلكِ أينما كنتِ داخل ليبيا.',
+            'هذا العرض متاح لأول 25 عميلة فقط، وبعد اكتمال العدد يعود السعر مباشرة إلى 320 دينار.',
+        ].join('\n');
+
+        const reply640 = 'يا ملكة 👑 طلبك: قطعة واحدة مقاس A (34)، وقطعتين مقاس B (36)، وقطعة واحدة مقاس C (38). السعر الإجمالي 640 دينار فقط مع التوصيل المجاني! 💖';
+
+        // The half e5313a4c DID cure: with the check no longer gated to QUESTION,
+        // a silent model's 640 is caught on the purchase turn and the backend
+        // swaps in PRICE_FALLBACK (shouldUseFallback('price_not_in_kb',
+        // 'PURCHASE_INTENT') === true). Pre-fix this shipped as-is.
+        it('is caught when the model emits no price_math (the half e5313a4c cured)', () => {
+            expect(flagHallucinatedPrice(reply640, bundleKb)).toBe(true);
+        });
+
+        // KNOWN DEFECT — `it.fails` on purpose (same convention as
+        // integration/flagMeta.test.ts). This test PASSES while the hole exists
+        // and starts FAILING the moment someone teaches price_math unit
+        // semantics — at which point flip it to a plain `it` and delete this
+        // comment. Do NOT "fix" it by relaxing the assertion.
+        //
+        // The claim below is what a model FOLLOWING the v56 instruction emits for
+        // this reply: every addend is literally in the KB (160 ✓) and the
+        // arithmetic is internally consistent (160×4 = 640 ✓), so the claim
+        // verifies and the 2× overcharge is laundered straight through. The more
+        // diligently the model shows its work, the more reliably the bug ships.
+        it.fails('SHOULD flag a wrong-premise price_math that multiplies a bundle unit per-piece', () => {
+            const wrongPremise = [{ total: 640, terms: [{ unit: 160, qty: 4 }] }];
+            expect(flagHallucinatedPrice(reply640, bundleKb, wrongPremise)).toBe(true);
+        });
+
+        // The correct answer for four pieces, so a future fix has a green target
+        // and cannot be implemented by rejecting every bundle multiplication.
+        it('the CORRECT total (2 bundles = 320) passes with price_math', () => {
+            const correct = [{ total: 320, terms: [{ unit: 160, qty: 2 }] }];
+            expect(flagHallucinatedPrice('السعر الإجمالي 320 دينار مع التوصيل المجاني', bundleKb, correct)).toBe(false);
+        });
+
+        // Regression guard for the path that works today and must keep working:
+        // the single-bundle quote. Every other total-bearing reply on this page
+        // (11 of 12 sampled over 7 days) is this shape and is correct.
+        it('the single-bundle quote (160) still passes untouched', () => {
+            expect(flagHallucinatedPrice('السعر الإجمالي 160 دينار فقط مع التوصيل المجاني', bundleKb)).toBe(false);
+        });
     });
 
     // REVIEW REGRESSION (2026-07-22): `unit > 0` rejected the whole claim when the
