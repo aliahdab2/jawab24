@@ -12,7 +12,11 @@
     "paymentChip": "Payment",
     "covered": "Covered",
     "missing": "Missing",
-    "productsChipStore": "Products — from your store"
+    "productsChipStore": "Products — from your store",
+    "percentLabel": "Your assistant is {percent}% ready",
+    "coveredOf": "{covered} of {total}",
+    "completeAll": "Add {items} to be fully ready.",
+    "allCovered": "Jawab can answer all of these for your customers."
   },
   "products": {
     "title": "Products & services",

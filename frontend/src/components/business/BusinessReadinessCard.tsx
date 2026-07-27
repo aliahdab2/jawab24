@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { Check, CircleAlert, Sparkles, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { unwrapBusinessProfile } from '@jawab24/shared';
@@ -38,6 +38,7 @@ interface Chip {
  */
 export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixChip }: BusinessReadinessCardProps) {
   const t = useTranslations('business');
+  const locale = useLocale();
 
   const chips: Chip[] = useMemo(() => {
     const { merchant = {} } = unwrapBusinessProfile(page.businessProfile);
@@ -60,6 +61,18 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
     ];
   }, [page.businessProfile, page.ecommerceStoreId, productsCount, t]);
 
+  const coveredCount = chips.filter((c) => c.covered).length;
+  const percent = Math.floor((coveredCount / chips.length) * 100);
+  // The gap sentence names the missing areas with the CHIP labels, so one field
+  // is never called two things on one screen ("الدفع" in a chip vs "طرق الدفع"
+  // in the sentence). Intl.ListFormat handles the locale's own conjunction and
+  // separators — never a hand-built "a، b و c".
+  const missingLabels = chips.filter((c) => !c.covered).map((c) => c.label);
+  const missingList = useMemo(
+    () => new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(missingLabels),
+    [locale, missingLabels],
+  );
+
   return (
     <section
       aria-label={t('readiness.title')}
@@ -78,6 +91,42 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
           <Sparkles className="w-3.5 h-3.5 me-1.5" aria-hidden="true" />
           {t('readiness.tryButton')}
         </Button>
+      </div>
+
+      {/* Progress is derived from `chips` — the very array rendered below — so the
+          number and the badges can never disagree. Two independent readiness
+          computations on one screen is a trust bug: a merchant who fills a field
+          and watches the % ignore it stops believing either surface.
+          Percent is floored so it only reads 100% when nothing is missing. */}
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-sm font-medium text-foreground">
+            {t('readiness.percentLabel', { percent })}
+          </p>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {t('readiness.coveredOf', { covered: coveredCount, total: chips.length })}
+          </span>
+        </div>
+        <div
+          className="mt-1.5 h-2 rounded-full bg-muted overflow-hidden"
+          role="progressbar"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={t('readiness.percentLabel', { percent })}
+        >
+          {/* Width-only transition: the track reserves its height up front, so a
+              late percentage never shifts the layout below it (CLS). */}
+          <div
+            className="h-full rounded-full bg-brand-500 transition-[width] duration-500"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground mt-1.5">
+          {missingLabels.length > 0
+            ? t('readiness.completeAll', { items: missingList })
+            : t('readiness.allCovered')}
+        </p>
       </div>
 
       <ul className="flex flex-wrap gap-2 mt-3" aria-busy={productsCount === undefined}>
