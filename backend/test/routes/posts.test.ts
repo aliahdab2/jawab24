@@ -398,7 +398,13 @@ describe('Posts Routes', () => {
     describe('PATCH /posts/:id/trigger — image validation', () => {
         // Minimal buffer with the PNG magic signature so bufferMatchesMime passes for image/png.
         const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        // Correct PNG magic bytes but undecodable content — enough for the checks that
+        // reject BEFORE normalization (bad MIME, oversized), which never decode the file.
         const validPng = (padBytes = 64) => Buffer.concat([PNG_SIG, Buffer.alloc(padBytes)]).toString('base64');
+        // A real 1x1 PNG. Anything that must get PAST validation needs this: the upload
+        // path now re-encodes the image to strip EXIF, so it has to actually decode.
+        const realPng = () =>
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
         const patch = (triggerImage: unknown) => app.inject({
             method: 'PATCH', url: '/posts/post_1/trigger',
             payload: { source: 'facebook', triggerKeyword: 'k', triggerReply: 'hi', triggerType: 'keyword', triggerImage },
@@ -432,7 +438,7 @@ describe('Posts Routes', () => {
         });
 
         it('accepts a valid image and forwards a set intent to the service', async () => {
-            const res = await patch({ base64: validPng(), mimeType: 'image/png' });
+            const res = await patch({ base64: realPng(), mimeType: 'image/png' });
             expect(res.statusCode).toBe(200);
             expect(postsService.updateTrigger).toHaveBeenCalledWith(expect.objectContaining({
                 contentId: 'post_1', source: 'facebook', triggerKeyword: 'k', triggerReply: 'hi',
@@ -440,9 +446,27 @@ describe('Posts Routes', () => {
             }));
         });
 
+        it('normalizes before handing the image to the service (EXIF never reaches storage)', async () => {
+            await patch({ base64: realPng(), mimeType: 'image/png' });
+            const { image } = vi.mocked(postsService.updateTrigger).mock.calls[0][0] as {
+                image: { action: string; buffer: Buffer };
+            };
+            // Re-encoded, so the buffer the service stores is not the bytes we uploaded.
+            expect(image.buffer.equals(Buffer.from(realPng(), 'base64'))).toBe(false);
+            // Still a PNG — the key's extension and stored mimeType must stay truthful.
+            expect(image.buffer.subarray(0, 8).equals(PNG_SIG)).toBe(true);
+        });
+
+        it('rejects an undecodable image with 400 instead of storing it unprocessed', async () => {
+            const res = await patch({ base64: validPng(), mimeType: 'image/png' });
+            expect(res.statusCode).toBe(400);
+            expect(JSON.parse(res.body).error).toBe('image_unreadable');
+            expect(postsService.updateTrigger).not.toHaveBeenCalled();
+        });
+
         it('maps quota_exceeded to 413', async () => {
             vi.mocked(postsService.updateTrigger).mockResolvedValue({ ok: false, reason: 'quota_exceeded' });
-            const res = await patch({ base64: validPng(), mimeType: 'image/png' });
+            const res = await patch({ base64: realPng(), mimeType: 'image/png' });
             expect(res.statusCode).toBe(413);
             expect(JSON.parse(res.body).error).toBe('image_quota_exceeded');
         });

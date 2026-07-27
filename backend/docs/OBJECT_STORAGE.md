@@ -149,7 +149,45 @@ S3_PUBLIC_BASE_URL=https://jawab24.com/media
 
 See the broader secret-rotation practice for cadence.
 
-## 8. Data lifecycle / GDPR
+## 8. Upload normalization (metadata stripping) — MANDATORY
+
+`normalizeImage` (`src/services/imageNormalize.ts`) re-encodes every upload before it is
+stored. It is called from `controllers/posts.ts` right after the magic-byte check.
+
+**Why it exists:** uploads were previously written byte-for-byte, so EXIF survived —
+including the **GPS coordinates** a phone camera records. The bucket is public and its URL
+is handed to customers (the «عرض الصورة» button redirects to it, see §11), so a merchant
+photographing products at home was publishing their home location to anyone who tapped.
+Re-encoding drops every metadata chunk. Bounding the long edge to 1920px is a secondary
+benefit: with `is_reusable: false` Meta re-fetches per recipient, so it bounds egress too.
+
+**Placement is load-bearing — do NOT move this into `imageStorage.put`.** The quota check
+and the stored `trigger_image_bytes` (`services/posts.ts`) are computed from the buffer
+*before* upload; normalizing inside `put` would leave the DB recording pre-normalization
+sizes forever, permanently drifting the quota from reality.
+
+Invariants (all covered by `test/services/imageNormalize.test.ts`):
+
+- **Format is pinned to the input** — JPEG→JPEG, PNG→PNG, WEBP→WEBP. Changing it would
+  desync the stored `mimeType` and the key's extension (`extForMime`) from the content.
+- **`.rotate()` runs before the metadata is dropped**, baking in the EXIF Orientation tag.
+  Skip it and every photo a phone recorded sideways is stored sideways.
+- **Animated WEBP is re-encoded but not resized** — sharp resizes the stacked frame strip,
+  and getting that wrong corrupts the animation. `{ animated: true }` is required or sharp
+  silently collapses it to frame one.
+- **Transparency is preserved** (no `.flatten()`).
+- **Undecodable input is rejected with a 400**, never stored raw. A silent fallback to the
+  original buffer would reintroduce the leak invisibly — that is the whole failure mode.
+
+`sharp` is a **native** dependency. It is verified to load on `node:22-alpine` (amd64 and
+arm64) even with the Dockerfile's `npm ci --ignore-scripts`, but re-verify in-container on
+any Node or base-image bump — a missing platform binary fails at require time, i.e. boot.
+
+**Images uploaded before this shipped still carry their EXIF.** Normalization applies to new
+uploads only; there is no backfill. A one-off reprocess pass rewrites live objects and needs
+its own decision.
+
+## 9. Data lifecycle / GDPR
 
 - **Key scheme:** `trigger-images/{workspaceId}/{uuid}.{ext}`.
 - **Reference-based lifecycle (industry standard):** an image lives exactly as long as
@@ -160,35 +198,37 @@ See the broader secret-rotation practice for cadence.
   objects — never a live, referenced image.**
 - **Never hand a storage key to something that outlives it.** Deleting a replaced object is
   correct (it keeps the workspace quota honest), but a delivered message is permanent — so a
-  sent message must never embed the bucket URL. See §10.
+  sent message must never embed the bucket URL. See §11.
 - **Audit:** `npx ts-node src/scripts/audit-trigger-images.ts` (READ-ONLY) lists DB
   rows whose object is missing (investigate) and bucket objects with no DB row
   (safe-to-clean orphans). Run before any bulk cleanup.
 
-## 9. Delivery (two messages: text, then a native image)
+## 10. Delivery — differs per platform
 
-Meta's Messenger/IG API has no single message type that carries body text **and** a full
-image, so a Post Reply with an image is delivered as **two messages**:
+**Facebook: ONE message (an inline card).** Meta allows exactly **one** message on a cold
+comment→DM, so image and text must ride together: `sendPrivateReplyWithImage`
+(`sender.ts`) sends a generic-template card whose `image_url` is the bucket URL. A short
+caption shows in full; a long one shows a teaser plus a «Read more» postback. A
+non-transient rejection falls back to a plain-text private reply (`imageDelivered` stays
+false, so the `flagMeta.reply_image` badge never claims an image the customer didn't get);
+a transient error rethrows so the whole job retries with nothing partially sent.
 
-1. **The reply text** — sent first. On Facebook this is the one-shot private reply to the
-   comment (`sendPrivateReplyToComment`), which returns the customer's PSID; on Instagram
-   it is a direct message to the commenter's PSID. This is the reliable, primary delivery.
-2. **The image** — a native image attachment (`sendMetaImageAttachment`) to that PSID,
-   sent **best-effort**: the text already landed, so an image failure is logged
-   (`captureError`, fingerprint `post-reply-image-attachment-failed`) and never throws —
-   throwing would retry the job and re-fire the one-shot private reply, which Meta rejects.
+> A two-message design (text, then a separate image) shipped on 2026-07-18 and was
+> **reversed** on 07-19 (PR #465): the second message is rejected on a cold comment→DM
+> (`code=551`), so **0 of 33** images were delivered for one merchant while the text landed
+> and the image vanished. It only appears to work in warm self-tests, where the customer
+> already has an open 24h window. Do not reintroduce it.
 
-Because the image is its own message, the reply text keeps the **flat 1000-char cap**
-whether or not an image is attached (no shorter "with image" limit). The
-`flagMeta.reply_image` dashboard badge is set only when the image send actually succeeded
-(`imageDelivered`), so it never claims an image the customer didn't receive.
+**Instagram: still two messages** — `sendDirectMessage`, then `deliverReplyImageBestEffort`
+(a native attachment, `sendMetaImageAttachment`) sent best-effort so it never throws
+(a throw would retry the job and re-fire the one-shot private reply). **This carries the
+same latent bug as the reversed FB design and is a known deferred fix.**
 
-A generic-template *card* was tried first (image + title/subtitle in one bubble) but it
-cropped the image to ~1.91:1 and split/capped the caption at 160 chars — see git history.
-WhatsApp, when added, will send a single message with a native `caption` (handled in its
-own adapter; the storage + picker are reused unchanged).
+The reply text keeps the **flat 1000-char cap** whether or not an image is attached.
+WhatsApp, when added, sends a single message with a native `caption` (its own adapter; the
+storage + picker are reused unchanged).
 
-## 10. Tap-through: the stable image link
+## 11. Tap-through: the stable image link
 
 The Facebook image card carries two URLs, and they are deliberately different:
 
@@ -202,7 +242,7 @@ and 302s (`cache-control: no-store`) to its **current** `trigger_image_url`. If 
 cleared it returns 410 with a short bilingual notice; an unknown post returns 404.
 
 **The bug this fixes (2026-07-22):** cards used to point `default_action` at the bucket URL.
-Because replacing or clearing a Post Reply deletes the old object (§8), every card already
+Because replacing or clearing a Post Reply deletes the old object (§9), every card already
 sitting in a customer's thread started rendering Backblaze's raw `NoSuchKey` XML page on tap —
 the thumbnail still showed (Meta's cache), so the failure was invisible from the dashboard.
 Regression coverage: `test/routes/postReplyImage.test.ts`,

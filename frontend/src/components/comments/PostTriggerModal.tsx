@@ -302,6 +302,11 @@ export function PostTriggerModal({
       const status = (err as { response?: { status?: number; data?: { error?: string } } })?.response;
       if (status?.status === 413 && status?.data?.error === 'image_quota_exceeded') {
         toast.error(t('postTriggerImageQuota'));
+      } else if (status?.status === 400 && status?.data?.error === 'image_unreadable') {
+        // The server re-encodes uploads to strip EXIF; a file it cannot decode is
+        // rejected rather than stored raw. Name the file as the problem, otherwise
+        // the generic toast reads as "saving is broken".
+        toast.error(t('postTriggerImageUnreadable'));
       } else {
         captureError(err, 'PostTriggerModal.handleSave');
         toast.error(tc('error'));
