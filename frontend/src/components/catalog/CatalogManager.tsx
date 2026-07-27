@@ -298,12 +298,20 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
               {verticalControl}
             </div>
             <div className="flex flex-wrap gap-2">
-              {canScanPosts && (
-                <Button variant="secondary" size="sm" onClick={() => setSheetMode('scan')} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
-                  <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
-                  {t('scan.cta')}
-                </Button>
-              )}
+              {/* Blocked → DISABLED with the reason, never removed. A button that
+                  silently disappears reads as "the feature was deleted" (owner
+                  report, 2026-07-27); a disabled one keeps it discoverable and
+                  says what would unlock it. */}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSheetMode('scan')}
+                disabled={!canScanPosts || items.length >= MAX_CATALOG_ITEMS_PER_PAGE}
+                title={scanBlocker !== null ? t(SCAN_BLOCKER_KEY[scanBlocker]) : undefined}
+              >
+                <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
+                {t('scan.cta')}
+              </Button>
               {canScanReplies && (
                 <Button variant="secondary" size="sm" onClick={() => setSheetMode('scanReplies')} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
                   <PostReplyIcon className={`w-4 h-4 me-1.5 ${postReplyIconClass}`} aria-hidden="true" />
@@ -320,6 +328,11 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
               </Button>
             </div>
           </div>
+          {/* The toolbar's disabled scan button needs its reason VISIBLE — a title
+              attribute alone is invisible on touch, where most merchants are. */}
+          {scanBlocker !== null && (
+            <p className="text-xs text-muted-foreground mb-3">{t(SCAN_BLOCKER_KEY[scanBlocker])}</p>
+          )}
           <ul className="space-y-2">
             {items.map((item, i) => (
               <CatalogItemRow

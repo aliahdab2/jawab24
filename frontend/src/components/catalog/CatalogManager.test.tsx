@@ -161,13 +161,19 @@ describe('CatalogManager', () => {
       expect(screen.getByText(/Reconnect this page to Facebook/)).toBeInTheDocument();
     });
 
-    it('hides the scan from the toolbar too, not just the empty state', async () => {
+    // Removing it silently read as "the feature was deleted" (owner report). On a
+    // page that already has items the control stays put, disabled, with the reason
+    // shown — a title attribute alone is invisible on touch.
+    it('disables the toolbar scan and shows why, instead of removing it', async () => {
       list.mockResolvedValue(listData([item()]));
       renderManager({ page: pageFixture({ facebookPageId: null }) });
       expect(await screen.findByText('دبل صدمات NJT')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /Find products in your posts/ })).not.toBeInTheDocument();
-      // The paths that DO work on a WhatsApp-only page stay.
-      expect(screen.getByRole('button', { name: 'Import a list' })).toBeInTheDocument();
+
+      const scan = screen.getByRole('button', { name: /Find products in your posts/ });
+      expect(scan).toBeDisabled();
+      expect(screen.getByText('Reading posts works on Facebook pages only.')).toBeInTheDocument();
+      // The paths that DO work on a WhatsApp-only page stay enabled.
+      expect(screen.getByRole('button', { name: 'Import a list' })).toBeEnabled();
     });
 
     it('a host that passes no page keeps the scan offered — impossibility unproven', async () => {
