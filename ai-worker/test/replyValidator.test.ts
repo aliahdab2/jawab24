@@ -428,6 +428,73 @@ describe('flagHallucinatedPrice — verified price_math totals (v56)', () => {
         });
     });
 
+    // ── BUNDLE-UNIT errors: a THIRD defect class, still OPEN ────────────────
+    // Prod (Nourva, 2026-07-23 11:58 — the fleet's highest-volume page). The KB
+    // sells a 1+1 bundle: «قطعتين بسعر قطعة واحدة فقط! السعر الآن: 160 دينار»,
+    // i.e. 160 buys TWO pieces. A customer ordered four («واحد 34 واثنين 36
+    // واحد 38») and the AI answered «السعر الإجمالي 640 دينار» — it read 160 as
+    // a PER-PIECE price and multiplied by 4. The correct total is 2 bundles =
+    // 320. Exactly double, quoted at the moment of sale, with no flag.
+    // The sale was lost in the next two turns: she asked «ليش كم سعره هو», got
+    // the promo wall instead of an answer, and left with «شكرا القيته في صفحة 45».
+    //
+    // This is NOT the BAMBO class (no grounding at all) nor the إجدابيا class
+    // (right units, arithmetic on them). Here the unit VALUE is real and in the
+    // KB — its MEANING is wrong. Check 1 grounds values, never unit semantics,
+    // so v56's trust-but-verify accepts a self-consistent proof of a false
+    // premise. Contrast the إجدابيا «70» case above, caught only because 70
+    // appears nowhere in that KB.
+    describe('bundle-unit semantics (Nourva) — OPEN defect', () => {
+        // The exact ambiguity from the live KB: nothing states what one unit of
+        // 160 buys in a form that is safe to multiply.
+        const bundleKb = [
+            'اليوم ستحصلين على قطعتين بسعر قطعة واحدة فقط!',
+            '💰 السعر الآن: 160 دينار فقط بدلاً من 320 دينار',
+            '🚚 شحن VIP مجاني حتى باب منزلكِ أينما كنتِ داخل ليبيا.',
+            'هذا العرض متاح لأول 25 عميلة فقط، وبعد اكتمال العدد يعود السعر مباشرة إلى 320 دينار.',
+        ].join('\n');
+
+        const reply640 = 'يا ملكة 👑 طلبك: قطعة واحدة مقاس A (34)، وقطعتين مقاس B (36)، وقطعة واحدة مقاس C (38). السعر الإجمالي 640 دينار فقط مع التوصيل المجاني! 💖';
+
+        // The half e5313a4c DID cure: with the check no longer gated to QUESTION,
+        // a silent model's 640 is caught on the purchase turn and the backend
+        // swaps in PRICE_FALLBACK (shouldUseFallback('price_not_in_kb',
+        // 'PURCHASE_INTENT') === true). Pre-fix this shipped as-is.
+        it('is caught when the model emits no price_math (the half e5313a4c cured)', () => {
+            expect(flagHallucinatedPrice(reply640, bundleKb)).toBe(true);
+        });
+
+        // KNOWN DEFECT — `it.fails` on purpose (same convention as
+        // integration/flagMeta.test.ts). This test PASSES while the hole exists
+        // and starts FAILING the moment someone teaches price_math unit
+        // semantics — at which point flip it to a plain `it` and delete this
+        // comment. Do NOT "fix" it by relaxing the assertion.
+        //
+        // The claim below is what a model FOLLOWING the v56 instruction emits for
+        // this reply: every addend is literally in the KB (160 ✓) and the
+        // arithmetic is internally consistent (160×4 = 640 ✓), so the claim
+        // verifies and the 2× overcharge is laundered straight through. The more
+        // diligently the model shows its work, the more reliably the bug ships.
+        it.fails('SHOULD flag a wrong-premise price_math that multiplies a bundle unit per-piece', () => {
+            const wrongPremise = [{ total: 640, terms: [{ unit: 160, qty: 4 }] }];
+            expect(flagHallucinatedPrice(reply640, bundleKb, wrongPremise)).toBe(true);
+        });
+
+        // The correct answer for four pieces, so a future fix has a green target
+        // and cannot be implemented by rejecting every bundle multiplication.
+        it('the CORRECT total (2 bundles = 320) passes with price_math', () => {
+            const correct = [{ total: 320, terms: [{ unit: 160, qty: 2 }] }];
+            expect(flagHallucinatedPrice('السعر الإجمالي 320 دينار مع التوصيل المجاني', bundleKb, correct)).toBe(false);
+        });
+
+        // Regression guard for the path that works today and must keep working:
+        // the single-bundle quote. Every other total-bearing reply on this page
+        // (11 of 12 sampled over 7 days) is this shape and is correct.
+        it('the single-bundle quote (160) still passes untouched', () => {
+            expect(flagHallucinatedPrice('السعر الإجمالي 160 دينار فقط مع التوصيل المجاني', bundleKb)).toBe(false);
+        });
+    });
+
     // REVIEW REGRESSION (2026-07-22): `unit > 0` rejected the whole claim when the
     // model itemized a FREE delivery line as 0 — reinstating the exact deflection
     // v56 exists to fix, for every merchant with a free-delivery city (the shipped
