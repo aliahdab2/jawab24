@@ -568,6 +568,51 @@ describe('validateReply orchestration', () => {
         expect(out.flags).toContain('language_mismatch');
     });
 
+    // BAMBO LIBYA regression (prod, 2026-07-27): Check 1 was gated on
+    // `intent === 'QUESTION'`, so it never ran while the customer was BUYING.
+    // Real thread, one customer, 90 seconds — «نعم» (PURCHASE_INTENT) got
+    // «سعره 1200 دينار ليبي», unflagged; «كم سعره» (QUESTION) was flagged.
+    // 1200 exists nowhere: the KB's only digits are the phone number, and the
+    // page has no catalog items.
+    const bamboKb = [
+        'BAMBO LIBYA هي الصفحة الرسمية للوكيل الحصري لمنتجات BAMBO Nature وAbena في ليبيا.',
+        'إذا سأل عن السعر — إذا لم يكن السعر موجوداً: أرسل اسم المنتج وسنرسل لك السعر في أقرب وقت.',
+        'A صيدلية اكسجين المركزيه - سراج',
+        'A صيدلية الحكمة-جنزور',
+        'الهاتف: +218 92 088 9583',
+    ].join('\n');
+    const bamboPriceReply = 'باكو واحد من حفاظات بامبو رقم 5 أو رقم 6 سعره 1200 دينار ليبي.';
+
+    it('Check 1: an invented price is flagged during PURCHASE_INTENT', () => {
+        const out = validateReply(
+            base({ reply: bamboPriceReply, intent: 'PURCHASE_INTENT', language: 'ar' }),
+            req('نعم', { knowledgeBase: bamboKb }),
+        );
+        expect(out.flags).toContain('price_not_in_kb');
+    });
+
+    it('Check 1: the SAME reply as a QUESTION is flagged (intent is the only difference)', () => {
+        const out = validateReply(
+            base({ reply: bamboPriceReply, intent: 'QUESTION', language: 'ar' }),
+            req('كم سعره', { knowledgeBase: bamboKb }),
+        );
+        expect(out.flags).toContain('price_not_in_kb');
+    });
+
+    it('Check 1: a grounded price is NOT flagged during PURCHASE_INTENT (no false positive)', () => {
+        const out = validateReply(
+            base({ reply: bamboPriceReply, intent: 'PURCHASE_INTENT', language: 'ar' }),
+            req('نعم', { knowledgeBase: `${bamboKb}\nباكو حفاظات بامبو رقم 5 — 1200 دينار` }),
+        );
+        expect(out.flags).not.toContain('price_not_in_kb');
+    });
+
+    // Same thread, «العجيلات» → seven pharmacies listed. العجيلات appears ZERO times
+    // in the KB and five of the seven names appear nowhere. intent was QUESTION so
+    // Check 1 ran — and passed it, because Check 1 grounds only NUMBERS. No name or
+    // place grounding exists anywhere in the validator.
+    it.todo('a place/entity name absent from the KB is flagged (check not built yet)');
+
     it('Check 4: hedging on a QUESTION downgrades confidence and flags info_not_in_kb', () => {
         const out = validateReply(base({ reply: 'let me check with the team', hedging: true }), req('do you deliver?'));
         expect(out.confidence).toBe('low');

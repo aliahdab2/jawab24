@@ -674,7 +674,7 @@ export class MessageProcessor {
             const aiOriginalReply = replyMethod === 'ai' ? (replyText ?? undefined) : undefined;
 
             // 12b. Replace with safe fallback if AI hallucinated a price
-            if (shouldUseFallback(flagReason)) {
+            if (shouldUseFallback(flagReason, aiIntent)) {
                 const lang = resolveFallbackLanguage({
                     text: messageText,
                     knowledgeBase,

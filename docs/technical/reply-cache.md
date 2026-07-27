@@ -244,6 +244,7 @@ keep it under every step above.
 | Jul 22 | **#476–#479** (D-036): quality gate + context-leak fix, warm job, backfill script, dual-variant (dark) |
 | Jul 24 | 3-day checkpoint: comment cache verdict KEEP (49.8 % peak; gate healthy) |
 | Jul 25 | v59-flush survival confirmed (26 % same-morning); gender-map backfill APPLIED (1,202 names seeded; map 350 → 1,558 keys) |
+| Jul 27 | Price-check intent gate removed (BAMBO regression): pre-fix, an ungrounded price on a PURCHASE_INTENT turn carried NO flag → was cache-eligible. **Deploy step: `DELETE /ai/cache` (admin) immediately after rollout** — clears exact + semantic + Redis in one call — so no pre-fix wrong-price entry keeps serving out its 30-day TTL. Expect the usual post-flush hit-rate dip (v59 precedent: recovered same-week) |
 
 Related reading: `DECISIONS.md` D-015 / D-030 / D-033 / D-036 ·
 `.planning/dm-cache-gender-study.md` (the July-22 deep study) · code comments

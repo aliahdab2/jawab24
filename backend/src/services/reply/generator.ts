@@ -58,10 +58,22 @@ export function shouldSilentlySkip(aiIntent?: string): boolean {
     return (SILENT_SKIP_INTENTS as readonly string[]).includes(normalizedIntent);
 }
 
-export function shouldUseFallback(flagReason?: string): boolean {
+export function shouldUseFallback(flagReason?: string, aiIntent?: string): boolean {
     if (!flagReason) return false;
     const flags = flagReason.split(',').map(f => f.trim());
-    return flags.some(f => (SAFE_FALLBACK_FLAGS as readonly string[]).includes(f));
+    if (!flags.some(f => (SAFE_FALLBACK_FLAGS as readonly string[]).includes(f))) return false;
+    // The SWAP is scoped to the two intents where a price claim is the reply's
+    // substance — QUESTION and PURCHASE_INTENT (BAMBO regression, 2026-07-27:
+    // a customer's closing «نعم» was answered with an invented «1200 دينار ليبي»
+    // while the check was QUESTION-gated). Legitimate computed carts survive:
+    // the validator accepts any total whose price_math verifies against the KB
+    // (eval 97.2%, Cat 65 3/3 + Cat 68 4/4), so a flagged purchase reply is
+    // ungrounded by definition. Other intents stay flag-only (needs_attention +
+    // cache-block) — canned price text is never the right substitute for a
+    // complaint or greeting that merely mentions a number. A missing/blank
+    // intent keeps the swap (legacy failover paths predate intent reporting).
+    const normalizedIntent = (aiIntent || '').trim().toUpperCase();
+    return !normalizedIntent || normalizedIntent === 'QUESTION' || normalizedIntent === 'PURCHASE_INTENT';
 }
 
 /** Max stored length for the captured KB-gap question. Enough to convey the
@@ -953,7 +965,7 @@ export class ReplyGenerator {
             ? false
             : shouldSkipReply(flags.join(','), normalizedIntent)
                 && !(solicitedCta && shouldSilentlySkip(normalizedIntent));
-        const useFallback = shouldUseFallback(flags.join(','));
+        const useFallback = shouldUseFallback(flags.join(','), normalizedIntent);
 
         // Gap recording (fire-and-forget, same triggers as processAiResponse)
         let gapRecorded = false;

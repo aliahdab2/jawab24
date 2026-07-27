@@ -503,7 +503,8 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │
 ├── SAFETY FILTERS:
 │   ├── Intent = OFFENSIVE or SPAM? → Flag → ❌ DON'T reply → STOP
-│   ├── Flag = price_not_in_kb? → Replace with SAFE FALLBACK
+│   ├── Flag = price_not_in_kb AND intent QUESTION/PURCHASE_INTENT?
+│   │   → Replace with SAFE FALLBACK (other intents: flag-only, no swap)
 │   │   (Tier A: currency-adjacent number not in KB)
 │   │   (Tier B: price-cue phrase + nearby number not in KB)
 │   ├── Confidence = low AND holdLowConfidence? → ❌ DON'T send (AI draft saved for review) → STOP
@@ -767,7 +768,7 @@ After OpenAI returns, the system runs **6 automated checks**:
 
 | Check | What It Does | Action |
 |-------|-------------|--------|
-| **Hallucinated Prices** | Matches numbers adjacent to currency tokens (SAR, SR, ريال, $, etc.) and checks if they exist in KB. Ignores dates, phone numbers, delivery times. Since v56 the accepted set is KB values **∪ verified `price_math`** — the model self-reports its cart arithmetic `[{total, terms:[{unit, qty}]}]` and code verifies every `unit` against the KB and that Σ(unit×qty)=total, so a correct computed total (items + delivery) is no longer treated as a hallucination. Additive only: absent/malformed/unverifiable claims fall back to the literal-KB check. | Adds `price_not_in_kb` flag |
+| **Hallucinated Prices** | Matches numbers adjacent to currency tokens (SAR, SR, ريال, $, etc.) and checks if they exist in KB. Ignores dates, phone numbers, delivery times. Since v56 the accepted set is KB values **∪ verified `price_math`** — the model self-reports its cart arithmetic `[{total, terms:[{unit, qty}]}]` and code verifies every `unit` against the KB and that Σ(unit×qty)=total, so a correct computed total (items + delivery) is no longer treated as a hallucination. Additive only: absent/malformed/unverifiable claims fall back to the literal-KB check. Runs on **every intent** (was QUESTION-gated until 2026-07-27 — a purchase-turn «نعم» answered with an invented price went unflagged; the BAMBO regression). | Adds `price_not_in_kb` flag; backend swaps the reply for the safe fallback on QUESTION/PURCHASE_INTENT (flag-only on other intents) |
 | **Comment Too Long** | Word count > 50 for comment replies (AI Worker flags it; backend separately truncates at 280 chars for public mode) | Adds `comment_too_long` flag |
 | **Language Mismatch** | Reply language differs from input language | Adds `language_mismatch` flag |
 | **Hedge Words** | Detects "let me check", "سأتحقق", etc. with high/medium confidence | **Downgrades to LOW** + adds `info_not_in_kb` |

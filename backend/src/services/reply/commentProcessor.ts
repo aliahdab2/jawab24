@@ -619,7 +619,7 @@ export class CommentProcessor {
             const aiOriginalReply = replyMethod === 'ai' ? (generatedText ?? undefined) : undefined;
 
             // 8b. Replace with safe fallback if AI hallucinated a price
-            if (shouldUseFallback(flagReason)) {
+            if (shouldUseFallback(flagReason, aiIntent)) {
                 const lang = resolveFallbackLanguage({
                     text: commentMessage,
                     postMessage: content.message || undefined,
