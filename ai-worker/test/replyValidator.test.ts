@@ -355,6 +355,79 @@ describe('flagHallucinatedPrice — verified price_math totals (v56)', () => {
         expect(flagHallucinatedPrice(reply, kb, pm)).toBe(false);
     });
 
+    // ── e5313a4c blast-radius check, replayed on REAL prod order confirmations ──
+    // Stage B of that fix newly runs Check 1 on PURCHASE_INTENT *and* lets the
+    // backend swap the reply. متجر إجدابيا is the merchant most exposed to it:
+    // 100 PURCHASE_INTENT turns in six days, 57 answered with a reply containing a
+    // number, and 20 of those quote a COMPUTED total that does not appear literally
+    // in the KB. Before e5313a4c all 20 shipped unchecked; now each one ships only
+    // if its price_math verifies. These replay real reply text (verbatim from
+    // prod, 2026-07-21→27) with the price_math the model must emit for it, so a
+    // regression that silently converts his order confirmations into the «تواصل
+    // معنا» deflection fails here instead of at the moment of sale.
+    // KB values used below are his real ones: زيت توتيان 39/طرف, عرض الطرفين 69,
+    // and the per-city delivery table (توكرة 20, سبها 35, درنة 30, بنغازي 10).
+    describe('PURCHASE_INTENT order confirmations survive Stage B', () => {
+        const ajdabiaKb = [
+            'زيت توتيان للتساقط يوقف التساقط من اول اسبوع سعر الطرف 39 دينار',
+            'عرض الطرفين مع بعض ب 69 دينار',
+            'سعر الثلاث اطرف 39 دينار (توصيل مجاني لأجدابيا فقط)',
+            'توصيل بنغازي 10 دينار',
+            'توكرة 20', 'سبها 35', 'درنة 30',
+        ].join('\n');
+
+        it('item + delivery total (39+20=59) passes with price_math', () => {
+            const reply = 'طلبك طرف واحد زيت توتيان سعره 39 دينار، وتوصيل توكرة 20 دينار، المجموع 59 دينار. يوصلك الطلب خلال 24 ساعة إن شاء الله.';
+            const pm = [{ total: 59, terms: [{ unit: 39, qty: 1 }, { unit: 20, qty: 1 }] }];
+            expect(flagHallucinatedPrice(reply, ajdabiaKb, pm)).toBe(false);
+        });
+
+        it('quantity product + delivery (39×2=78, +35 = 113) passes with price_math', () => {
+            const reply = 'طلبك 2 طرف من زيت توتيان للتساقط، سعر الطرف 39 دينار × 2 = 78 دينار، وتوصيل سبها 35 دينار، المجموع 113 دينار.';
+            const pm = [{ total: 113, terms: [{ unit: 39, qty: 2 }, { unit: 35, qty: 1 }] }];
+            expect(flagHallucinatedPrice(reply, ajdabiaKb, pm)).toBe(false);
+        });
+
+        it('the offer + free-delivery city (39+0=39) passes with price_math', () => {
+            const reply = 'عرض 3 أطراف من زيت توتيان سعره 39 دينار، وتوصيل أجدابيا مجاني، المجموع 39 دينار.';
+            const pm = [{ total: 39, terms: [{ unit: 39, qty: 1 }, { unit: 0, qty: 1 }] }];
+            expect(flagHallucinatedPrice(reply, ajdabiaKb, pm)).toBe(false);
+        });
+
+        // The OTHER half of the fix, and the reason it is worth its blast radius:
+        // this exact reply shipped to a customer on 2026-07-23 12:22 during a
+        // PURCHASE_INTENT turn and was NOT flagged, because Check 1 was gated off.
+        // His KB prices two أطراف at 69 («عرض الطرفين مع بعض ب 69 دينار») and 70
+        // appears NOWHERE in it, so both the unit and the 100 total are invented —
+        // the customer was quoted a price his merchant never set.
+        it('CATCHES the real invented «70 دينار» order confirmation from prod', () => {
+            const reply = 'تمام، اثنين طرف من زيت توتيان ب 70 دينار، والتوصيل لدرنة 30 دينار، المجموع 100 دينار. أرسل لي اسم المدينة ورقم الاتصال باش نكملك الطلب.';
+            expect(flagHallucinatedPrice(reply, ajdabiaKb)).toBe(true);
+            // Trust-but-VERIFY: even when the model vouches for its own invented
+            // unit in price_math, 70 is not in the KB so the claim is rejected.
+            const selfServingPm = [{ total: 100, terms: [{ unit: 70, qty: 1 }, { unit: 30, qty: 1 }] }];
+            expect(flagHallucinatedPrice(reply, ajdabiaKb, selfServingPm)).toBe(true);
+        });
+
+        // Quantifies the residual risk rather than asserting it away: every total
+        // above is grounded ONLY by price_math. If emission regresses (prompt edit,
+        // model swap, a cache path that drops the field), these become flagged and
+        // — on a purchase turn, post-Stage B — get swapped for the deflection.
+        // Eval #720 is the live proof this can happen: it is the one FAIL in the
+        // 97.0% run, and the same terse shape («الحساب كم بالتوصيل») deflected in
+        // this merchant's real traffic on 2026-07-22 while the restated turn a
+        // minute later answered «المجموع 49 دينار» correctly.
+        it('DOCUMENTS THE RISK: the same totals all flag when price_math is absent', () => {
+            const confirmations = [
+                'طلبك طرف واحد زيت توتيان سعره 39 دينار، وتوصيل توكرة 20 دينار، المجموع 59 دينار.',
+                'طلبك 2 طرف، سعر الطرف 39 دينار × 2 = 78 دينار، وتوصيل سبها 35 دينار، المجموع 113 دينار.',
+            ];
+            for (const reply of confirmations) {
+                expect(flagHallucinatedPrice(reply, ajdabiaKb)).toBe(true);
+            }
+        });
+    });
+
     // REVIEW REGRESSION (2026-07-22): `unit > 0` rejected the whole claim when the
     // model itemized a FREE delivery line as 0 — reinstating the exact deflection
     // v56 exists to fix, for every merchant with a free-delivery city (the shipped

@@ -4442,6 +4442,102 @@ const TEST_CASES: TestCase[] = [
         notes: 'PROD replay (2026-07-27 10:16:14) — the exact turn that produced «باكو واحد ... سعره 1200 دينار ليبي» with no flag. Fixed by e5313a4c (price check on every intent + fallback swap on PURCHASE_INTENT). Pins the regression at the conversation level, above the unit tests.',
     },
 
+    // ── Category 70: Purchase-Turn Price Grounding ───────────────────────────
+    // e5313a4c blast-radius coverage, from متجر إجدابيا's real traffic
+    // (2026-07-21→27). That fix newly runs Check 1 on PURCHASE_INTENT *and* lets
+    // the backend swap the reply, and this merchant is the most exposed page on
+    // the fleet: 100 purchase turns in six days, 20 of them answered with a
+    // computed total that isn't literally in the KB. Cat 68 already proves totals
+    // compute; these prove the SWAP doesn't eat them at the moment of sale, and
+    // that the invented ones are still caught.
+    //
+    // Runs against the `incense` fixture, which is this merchant's anonymized KB
+    // (see seedData.ts). It carries the same bundle-vs-unit trap as his real one:
+    // معطر ريحان is 16/طرف but 28 for the pair — so 2×16=32 is WRONG and an
+    // invented number is wrong too, exactly like his «70» where the KB said 69.
+
+    // 70.1 — The prod defect this half of the fix exists for. Real reply, 07-23
+    // 12:22: «اثنين طرف ... ب 70 دينار ... المجموع 100» on a purchase turn, where
+    // the KB said 69 and 70 appeared nowhere. It shipped unflagged.
+    {
+        id: 731, category: 70, categoryName: 'Purchase-Turn Price Grounding', channel: 'dm',
+        message: 'تمام نبي طرفين',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'بكم معطر الملابس ريحان؟' },
+            { role: 'assistant', content: 'معطر الملابس ريحان الطرف الواحد بـ 16 دينار، والطرفين بـ 28 دينار.' },
+        ],
+        expected: {
+            // 32 = 2×16, the plausible-but-wrong unit-price multiplication; the KB
+            // prices the pair at 28. Any other invented figure fails on the flag.
+            replyNotContains: ['32', '٣٢'],
+            flagsAbsent: ['price_not_in_kb'],
+            replyContainsAny: ['28', '٢٨'],
+        },
+        notes: 'PROD replay (2026-07-23 12:22, invented «70 دينار» where the KB said 69). A purchase turn must quote the merchant\'s pair price, not multiply the unit price and not invent.',
+    },
+
+    // 70.2 — GREEN GUARD, and the case that fails if Stage B over-reaches: a
+    // correct computed total on a PURCHASE_INTENT turn must still reach the
+    // customer. 20 of his real replies are this shape; pre-fix they bypassed
+    // Check 1 entirely, so this is newly-exposed traffic.
+    {
+        id: 732, category: 70, categoryName: 'Purchase-Turn Price Grounding', channel: 'dm',
+        message: 'تمام نبيه، التوصيل لطرابلس',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'نبي علبة بخور الياسمين' },
+            { role: 'assistant', content: 'علبة بخور الياسمين الفاخر بـ 40 دينار.' },
+        ],
+        expected: {
+            flagsAbsent: ['price_not_in_kb'],
+            replyContainsAny: ['52', '٥٢'],
+            replyNotContains: ['أرقامنا', 'يرجى التواصل معنا'],
+        },
+        notes: '40 + توصيل طرابلس 12 = 52 on a PURCHASE_INTENT turn. If the Stage B swap eats verified totals, this is where it shows — and it is the shape that closes his orders.',
+    },
+
+    // 70.3 — The terse follow-up, on a PURCHASE turn rather than a question.
+    // #720 covers the QUESTION variant and is the one FAIL in the 97.0% run;
+    // prod deflected on «الحساب كم بالتوصيل» (2026-07-22 08:20) and then answered
+    // «المجموع 49 دينار» correctly one minute later once the item was restated.
+    // Post-Stage B the same miss now also swaps on purchase turns.
+    {
+        id: 733, category: 70, categoryName: 'Purchase-Turn Price Grounding', channel: 'dm',
+        message: 'تمام نبي، الحساب كم بالتوصيل',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'بكم عطر زهرة الأطلس؟' },
+            { role: 'assistant', content: 'عطر زهرة الأطلس 100 ملي بـ 210 دينار.' },
+            { role: 'user', content: 'التوصيل لطرابلس' },
+            { role: 'assistant', content: 'التوصيل لطرابلس بـ 12 دينار.' },
+        ],
+        expected: {
+            flagsAbsent: ['price_not_in_kb'],
+            replyNotContains: ['أرقامنا', 'يرجى التواصل معنا', 'تواصل معنا مباشرة'],
+        },
+        notes: 'PROD replay (2026-07-22 08:20): terse total with the components only in history → deflection at the moment of sale. Asserts the anti-deflection contract like #720, but on a purchase turn. Expected to FAIL until price_math emission covers this shape.',
+    },
+
+    // 70.4 — Promo bundle that exists only in a Facebook post, never in the KB.
+    // Prod (2026-07-26 00:09): the customer screenshotted the merchant's own ad
+    // («79 دينار بدل 93»), asked «بنفس السعر» three times, got the identical
+    // deflection three times, and the MERCHANT rescued it manually four minutes
+    // later. Refusing to confirm an ungrounded promo is CORRECT — so this asserts
+    // the honest-limit behaviour, not a price.
+    {
+        id: 734, category: 70, categoryName: 'Purchase-Turn Price Grounding', channel: 'dm',
+        message: 'شفت عندكم عرض المجموعة الملكية بـ 79 دينار، بنفس السعر؟',
+        page: 'incense',
+        expected: {
+            // Must not confirm a number the merchant never put in the KB…
+            replyNotContains: ['79', '٧٩', 'نعم نفس السعر'],
+            // …but must still engage rather than dead-end silently.
+            replyContainsAny: ['تواصل', 'نتأكد', 'المشرف', 'الرقم', 'للأسف', 'ما عندي', 'غير متوفر'],
+        },
+        notes: 'PROD replay (2026-07-26 00:09): promo bundles live only in FB posts. The guard was right to refuse 79; the finding is that the merchant had to answer manually. Pins "never confirm an ungrounded promo".',
+    },
+
 ];
 
 /** Accepted textual forms of the dated fixture course's start date (seeded at
