@@ -324,33 +324,32 @@ export const DEMO_PAGES = [
         // exactly, because the structure is the bug).
         //
         // The merchant is an exclusive AGENT, not a shop: customers are routed to
-        // retail outlets, so their KB is ~63% outlet directory — ~200 near-identical
-        // «صيدلية X - district» lines — with the price list four lines from the END.
+        // retail outlets, so their KB is mostly outlet directory — ~200 near-identical
+        // «صيدلية X - district» lines — with the price list four lines from the END,
+        // plus a stale scripted price-deflection instruction written before the
+        // price list existed.
         //
-        // MECHANISM (verified in prod, do not re-diagnose as a retrieval problem):
-        // this is NOT RAG. Non-ecommerce pages bypass retrieval entirely and get the
-        // full KB text verbatim (generator.ts:747-769, ruling D-012), and the prod KB
-        // is 10,641 chars — under the 16,000 KB_MAX_CHARS cap, so it is not truncated
-        // either. The prices ARE in the prompt every single time. They sit at char
-        // 9,730 (91% in), behind ~6,700 chars of low-entropy repetitive directory
-        // text, and the model does not use them: a long-context / lost-in-the-middle
-        // attention failure, amplified by the distractor lines all looking alike.
-        // Prod symptom, on the SAME day the price list was present in the KB:
-        // «حفاظات بامبو رقم 5 و رقم 6» → «ما عندي الأسعار الدقيقة لكل مقاس», and a
-        // swim-diaper photo → price_not_in_kb deflection, while the merchant's own
-        // Post Reply auto-DM quoted the price on that same page.
+        // ⚠️ DIAGNOSIS HISTORY (2026-07-27) — read before "fixing" anything here.
+        // This fixture was born under a "buried facts" theory: prod deflected on
+        // in-KB prices, so the tail position was blamed. A timeline check killed
+        // the theory — the merchant's price list only entered their KB at version
+        // 10 (10:20 UTC), AFTER every observed deflection; those ran against v9,
+        // which had NO prices, so the deflections were honest. Two experiments on
+        // THIS fixture confirm it: Cat 69 passes at prod-scale distractor volume
+        // (236 outlets, prices at 93%/98% depth) and passes WITH the stale
+        // deflection script present. Cat 69 (#724-#727) is therefore a GREEN
+        // GUARD for tail-fact readability, and the fixture is deliberately kept
+        // at full hostile strength (scale + script + tail position) so a future
+        // long-context regression has to show up here first.
         //
-        // This fixture reproduces the BURIAL DEPTH, which is what matters: prices at
-        // 90% and 98% of the text vs prod's 91% and 96%, and likewise under
-        // KB_MAX_CHARS so no truncation masks the effect. It is ~half prod's absolute
-        // length (6,554 vs 10,641), so the distractor volume is lighter — if Cat 69
-        // ever passes here but still fails in prod, grow the directory before
-        // concluding the bug is fixed.
+        // What remains REAL from the prod incident: the region-attribution
+        // fabrication (#728 — العجيلات) and the absence of any validator for
+        // place claims (SYSTEM_ANALYSIS gap 13).
         //
         // FOUR deliberate traps — do NOT "tidy" any of them:
-        //  1. The price list sits at the TAIL, after the outlet directory. Moving it
-        //     to the top is the MERCHANT-SIDE fix under evaluation, so doing it here
-        //     silently defeats Cat 69.
+        //  1. The price list sits at the TAIL, after the outlet directory — the
+        //     hostile position the green guard exists to exercise. Moving it up
+        //     weakens Cat 69.
         //  2. Every standard size is the SAME price (45) — the model must not
         //     treat "which size?" as a precondition for quoting.
         //  3. Prices are PER PACK. Per-PIECE price appears nowhere, so a
@@ -379,6 +378,7 @@ export const DEMO_PAGES = [
 شخصية المساعد: ودود، يتحدث باللهجة المحلية، لا يكتب ردوداً طويلة، يستخدم الإيموجي باعتدال.
 
 إذا سأل عن المقاسات قل: يرجى إخبارنا بعمر الطفل أو وزنه حتى نساعدك في اختيار المقاس المناسب.
+إذا سأل عن السعر إذا لم يكن السعر موجوداً قل: يسعدنا مساعدتك، أرسل اسم المنتج أو صورته وسنرسل لك السعر والتوفر في أقرب وقت.
 إذا سأل عن توفر منتج قل: يرجى إرسال اسم المنتج أو صورة له حتى نتأكد من توفره.
 إذا أرسل صورة منتج اشكره ثم قل: سنراجع المنتج ونخبرك بالتوفر والسعر في أقرب وقت.
 إذا اشتكى من المنتج قل: نأسف لسماع ذلك، يرجى توضيح المشكلة وسيتم تحويلها إلى القسم المختص.
@@ -536,6 +536,105 @@ export const DEMO_PAGES = [
 صيدلية شادن المركزية - ربوة الغزلان
 صيدلية خشف الربوة - ربوة الغزلان
 صيدلية رشأ العافية - ربوة الغزلان
+
+صيدلية الهودج - حي القوافل
+صيدلية الراحلة - حي القوافل
+صيدلية دليل القافلة - حي القوافل
+صيدلية منزل الركب - حي القوافل
+صيدلية سقاية المسافر - حي القوافل
+صيدلية زاد الطريق - حي القوافل
+صيدلية محطة الرمل - حي القوافل
+صيدلية خان القوافل - حي القوافل
+صيدلية مربط الخيل - حي القوافل
+صيدلية عين الركب - حي القوافل
+
+صيدلية الجرة - شارع الفخار
+صيدلية الإبريق الأزرق - شارع الفخار
+صيدلية دولاب الفخار - شارع الفخار
+صيدلية الطين الأبيض - شارع الفخار
+صيدلية المزهرية - شارع الفخار
+صيدلية الفنجان الذهبي - شارع الفخار
+صيدلية قدح الصباح - شارع الفخار
+صيدلية صحن الديار - شارع الفخار
+
+صيدلية ريشة الطاحونة - حي الطواحين
+صيدلية حجر الرحى الكبير - حي الطواحين
+صيدلية مجرى الماء - حي الطواحين
+صيدلية ساقية الطاحون - حي الطواحين
+صيدلية دقيق الصباح - حي الطواحين
+صيدلية خميرة البلدة - حي الطواحين
+صيدلية رغيف العافية - حي الطواحين
+صيدلية تنور الحارة - حي الطواحين
+صيدلية فرن القرية - حي الطواحين
+
+صيدلية ظل الصفصافة - وادي الصفصاف
+صيدلية جدول الوادي - وادي الصفصاف
+صيدلية حصى النهر - وادي الصفصاف
+صيدلية ضفة الوادي - وادي الصفصاف
+صيدلية جسر الخشب - وادي الصفصاف
+صيدلية عبّارة الوادي - وادي الصفصاف
+صيدلية منحدر الريح - وادي الصفصاف
+صيدلية مصب الجدول - وادي الصفصاف
+
+صيدلية فتيلة المصباح - حي المشكاة
+صيدلية زيت المشكاة - حي المشكاة
+صيدلية نور السراج - حي المشكاة
+صيدلية قنديل الحارة - حي المشكاة
+صيدلية شمعة المساء - حي المشكاة
+صيدلية فانوس العيد - حي المشكاة
+صيدلية ضوء القمر الجديد - حي المشكاة
+صيدلية هالة النور - حي المشكاة
+صيدلية شعاع الفجر - حي المشكاة
+صيدلية بريق النجمة - حي المشكاة
+
+صيدلية ريشة العنقاء - تلة العنقاء
+صيدلية جناح الطائر - تلة العنقاء
+صيدلية منقار النورس - تلة العنقاء
+صيدلية عش العنقاء - تلة العنقاء
+صيدلية بيضة الرخ - تلة العنقاء
+صيدلية صوت الهدهد - تلة العنقاء
+صيدلية غناء القبرة - تلة العنقاء
+صيدلية رفرفة السنونو - تلة العنقاء
+
+صيدلية الساقية الأولى - حي السواقي
+صيدلية مجرى السواقي - حي السواقي
+صيدلية ناعورة الحي - حي السواقي
+صيدلية دولاب الماء - حي السواقي
+صيدلية قناة الري - حي السواقي
+صيدلية مقسم الماء - حي السواقي
+صيدلية فوهة النبع - حي السواقي
+صيدلية حوض السقيا - حي السواقي
+صيدلية بركة الحي - حي السواقي
+صيدلية مزراب المطر - حي السواقي
+
+صيدلية منجل الحصاد - شارع الحصادين
+صيدلية سنبلة الذهب - شارع الحصادين
+صيدلية حزمة القمح - شارع الحصادين
+صيدلية جرن البيدر - شارع الحصادين
+صيدلية مذراة التبن - شارع الحصادين
+صيدلية غلة الموسم - شارع الحصادين
+صيدلية قفة الحصاد - شارع الحصادين
+صيدلية ميزان الغلال - شارع الحصادين
+
+صيدلية دفة السفينة - حي الملاحة
+صيدلية شراع الصيد - حي الملاحة
+صيدلية صنارة البحر - حي الملاحة
+صيدلية شبكة الصياد - حي الملاحة
+صيدلية قارب الفجر - حي الملاحة
+صيدلية مجداف الصباح - حي الملاحة
+صيدلية مرفأ الصيادين - حي الملاحة
+صيدلية فنار الليل - حي الملاحة
+صيدلية ملح البحر - حي الملاحة
+صيدلية إسفنجة المرجان - حي الملاحة
+
+صيدلية عش البلارج - ربوة البلاريج
+صيدلية ساق البلارج - ربوة البلاريج
+صيدلية منقار اللقلق - ربوة البلاريج
+صيدلية رحلة الطيور - ربوة البلاريج
+صيدلية سرب الخريف - ربوة البلاريج
+صيدلية محطة الهجرة - ربوة البلاريج
+صيدلية جناح الشمال - ربوة البلاريج
+صيدلية ريش الشتاء - ربوة البلاريج
 
 واذا كان من خارج المدينة تحديداً غرب المدينة ارسل له هذه القائمة:
 

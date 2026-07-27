@@ -4199,10 +4199,12 @@ const TEST_CASES: TestCase[] = [
     // clarifying question on such a terse turn is left FREE (owner ruling,
     // 2026-07-22 — a prompt rule that forced the total was measured, found to
     // buy only this one case ~3/4 of the time, and removed as prompt bloat).
+    // (Renumbered 720→735 on 2026-07-27: two branches both claimed id 720; the
+    // Cat 67 address case keeps the number the owner ruling references.)
     // #721/#722 keep the strict computed-total assertions on well-specified
     // carts, so the suite still proves totalling works end to end.
     {
-        id: 720, category: 68, categoryName: 'Verified Cart Totals', channel: 'dm',
+        id: 735, category: 68, categoryName: 'Verified Cart Totals', channel: 'dm',
         message: 'الحساب كم بالتوصيل',
         page: 'incense',
         conversationHistory: [
@@ -4320,35 +4322,44 @@ const TEST_CASES: TestCase[] = [
     },
 
     // ── Category 69: Distributor / Outlet-Directory KB ──────────────────────
-    // PROD replay (BAMBO LIBYA, 2026-07-25 → 07-27 — a paying Libyan merchant,
-    // ~96 AI replies over three days). This merchant is an exclusive AGENT, so
-    // their Business Info is an outlet directory with a four-line price list at
-    // the tail. That shape breaks price answering in a way no previous category
-    // covers, and it broke it on live buying traffic.
+    // Modeled on BAMBO LIBYA (a paying Libyan merchant, 2026-07-25 → 07-27):
+    // an exclusive AGENT whose Business Info is an outlet directory of ~200
+    // near-identical «صيدلية X - district» lines with a four-line price list at
+    // the very tail, PLUS a stale scripted price-deflection instruction written
+    // before the price list existed. The `distributor` fixture reproduces all of
+    // it (see seedData.ts).
     //
-    // The `distributor` fixture reproduces the shape (see seedData.ts). Two
-    // distinct defects live here, and the cases keep them apart:
-    //   A. BURIED FACTS IN A LONG KB (#724-#727) — in-KB prices came back as
-    //      «ما عندي الأسعار الدقيقة». NOT a retrieval bug: non-ecommerce pages
-    //      bypass RAG and receive the full KB text (generator.ts:747-769, D-012),
-    //      and at 10,641 chars the prod KB is under KB_MAX_CHARS so it isn't
-    //      truncated either. The prices are in the prompt on every call, at 91%
-    //      depth behind ~6,700 chars of ~200 near-identical outlet lines, and the
-    //      model doesn't use them. Prod: «حفاظات بامبو رقم 5 و رقم 6» → no price,
-    //      twice, while the merchant's own Post Reply auto-DM quoted 38د on the
-    //      same page.
-    //   B. REGION-ATTRIBUTION FABRICATION (#728-#729) — asked about العجيلات
-    //      (in NEITHER list), the model returned the الزاوية list and asserted
-    //      «أما للعجيلات تحديداً فهذه هي الصيدليات المتوفرة». The outlet NAMES
-    //      were real; the CITY claim was invented. There is no validator for
-    //      place claims (Check 1 grounds numbers only), so nothing flagged it.
+    // ⚠️ DIAGNOSIS CORRECTED (2026-07-27, first execution of this category).
+    // These cases were added as expectedFail under a "buried facts" theory: prod
+    // answered «ما عندي الأسعار الدقيقة» to in-KB prices. The theory was WRONG —
+    // a timeline check showed the price list only entered the KB at version 10
+    // (10:20 UTC), AFTER every observed deflection (09:56, 10:15, 10:16 all ran
+    // against v9, which had NO prices). The deflections were honest answers and
+    // the price guard was right to fire. Two controlled experiments confirm it:
+    // Cat 69 passes at prod-scale distractor volume (9.5k chars, 236 outlets)
+    // and passes WITH the stale deflection script in the KB.
+    //
+    // So #724-#727 are GREEN GUARDS, not gap pins: they prove a tail price list
+    // behind a huge directory + a stale deflection script stays readable. If one
+    // ever fails, that is a real regression in long-context fact use.
+    //
+    //   B. REGION-ATTRIBUTION FABRICATION (#728-#729) — this half IS real and
+    //      verified against v9 (the western list existed then): asked about
+    //      العجيلات (in NEITHER list), prod returned the الزاوية list and
+    //      asserted «أما للعجيلات تحديداً فهذه هي الصيدليات المتوفرة», twice.
+    //      Real outlet names, invented city. The VALIDATOR gap behind it is
+    //      still open — Check 1 grounds numbers only, so nothing flags a place
+    //      claim (see the it.todo in replyValidator.test.ts). The single-turn
+    //      playground shape passes on v61; the prod failure had conversation
+    //      pressure («اي ساعدني») — kept as a green guard at this shape.
     // #730 pins the ungrounded-price regression that commit e5313a4c fixed,
-    // in the exact conversation shape that produced it in prod.
+    // in the exact conversation shape that produced it in prod (v9, no prices —
+    // which is exactly why the invented «1200» was ungrounded).
 
-    // 69.1 — The headline prod failure. Price IS in the KB; the size is
+    // 69.1 — Tail-price readability. Price IS in the KB; the size is
     // irrelevant to it (every standard size is 45). Must quote, not deflect.
     {
-        id: 724, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        id: 724, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
         message: 'حفاضات رواء رقم 5 و رقم 6 بقداش؟',
         page: 'distributor',
         expected: {
@@ -4356,12 +4367,12 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['45', '٤٥'],
             replyNotContains: ['ما عندي', 'غير متوفرة لدي', 'ما عنديش'],
         },
-        notes: 'PROD replay (2026-07-27 10:15): answered «ما عندي الأسعار الدقيقة لكل مقاس» though the KB tail lists رقم 5 and رقم 6 at the same price, and the full KB text was in the prompt (no RAG, no truncation). Buried behind the outlet directory.',
+        notes: 'GREEN GUARD (diagnosis corrected 2026-07-27): the prod «ما عندي الأسعار» at 10:15 ran against kb v9, which had NO prices — an honest answer, not a burial failure. This pins that a tail price list behind 236 outlet lines + a stale deflection script stays readable.',
     },
 
-    // 69.2 — Same burial, single size, terse Libyan phrasing.
+    // 69.2 — Same guard, single size, terse Libyan phrasing.
     {
-        id: 725, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        id: 725, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
         message: 'بقداش رقم 4؟',
         page: 'distributor',
         expected: {
@@ -4376,7 +4387,7 @@ const TEST_CASES: TestCase[] = [
     // this one with price_not_in_kb while the page's own Post Reply auto-DM quoted
     // the price.
     {
-        id: 726, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        id: 726, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
         message: 'كم سعر حفاضات السباحة؟',
         page: 'distributor',
         expected: {
@@ -4384,13 +4395,13 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['54', '٥٤'],
             replyNotContains: ['أرقامنا', 'يرجى التواصل معنا'],
         },
-        notes: 'PROD replay (2026-07-27 09:56): swim-diaper photo → price_not_in_kb → «للتأكد من السعر بدقة، يرجى التواصل معنا مباشرةً على أرقامنا» — while the merchant\'s Post Reply on the SAME page said «السعر 46 دينار». Last line of the KB.',
+        notes: 'GREEN GUARD: the prod 09:56 deflection ran against kb v9 (no prices) — the guard fired correctly. This pins the LAST line of the KB staying reachable now that the price exists.',
     },
 
     // 69.4 — The jumbo tier, to prove the whole price block is reachable and not
     // just its first line.
     {
-        id: 727, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        id: 727, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
         message: 'عندكم حجم الجامبو رقم 5؟ بقداش',
         page: 'distributor',
         expected: {
@@ -4406,7 +4417,7 @@ const TEST_CASES: TestCase[] = [
     // A truthful reply either says it has no outlet for that city or offers the
     // nearest region BY NAME (صبراتة) — what it must not do is assert العجيلات.
     {
-        id: 728, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        id: 728, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
         message: 'العجيلات، وين نلقى منتجاتكم؟',
         page: 'distributor',
         expected: {
@@ -4511,7 +4522,7 @@ const TEST_CASES: TestCase[] = [
     },
 
     // 70.3 — The terse follow-up, on a PURCHASE turn rather than a question.
-    // #720 covers the QUESTION variant and is the one FAIL in the 97.0% run;
+    // #735 covers the QUESTION variant (stochastic, ~3/4 pass rate);
     // prod deflected on «الحساب كم بالتوصيل» (2026-07-22 08:20) and then answered
     // «المجموع 49 دينار» correctly one minute later once the item was restated.
     // Post-Stage B the same miss now also swaps on purchase turns.
@@ -4529,7 +4540,7 @@ const TEST_CASES: TestCase[] = [
             flagsAbsent: ['price_not_in_kb'],
             replyNotContains: ['أرقامنا', 'يرجى التواصل معنا', 'تواصل معنا مباشرة'],
         },
-        notes: 'PROD replay (2026-07-22 08:20): terse total with the components only in history → deflection at the moment of sale. Asserts the anti-deflection contract like #720, but on a purchase turn. Expected to FAIL until price_math emission covers this shape.',
+        notes: 'PROD replay (2026-07-22 08:20): terse total with the components only in history → deflection at the moment of sale. Asserts the anti-deflection contract like #735, but on a purchase turn. STOCHASTIC (~passes 3/4 of runs, like #735 — the owner-measured rate): expectedFail kept deliberately so a lucky pass never enters the score; remove only when price_math emission covers history-only components deterministically.',
     },
 
     // 70.4 — Promo bundle that exists only in a Facebook post, never in the KB.
