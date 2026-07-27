@@ -10,7 +10,7 @@ import { FileUploadButton } from '@/components/knowledge-base/FileUploadButton';
 import { catalogApi, type CatalogExtractResponse, type CatalogItemInput } from '@/lib/api';
 import {
   MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEMS_PER_PAGE, reconcileCatalogProposals,
-  type ReconcileExistingItem, type ReconcileKind,
+  type CatalogVertical, type ReconcileExistingItem, type ReconcileKind,
 } from '@jawab24/shared';
 import {
   CatalogItemFields, draftDatesInvalid, draftFromInput, draftToInput, formatCatalogPrice, todayISODate, type CatalogItemDraft,
@@ -55,6 +55,8 @@ interface CatalogImportSheetProps {
    *  classified against it (D-038: new / already-there / price-changed)
    *  instead of blind-inserting. */
   existingItems?: ReconcileExistingItem[];
+  /** Page vertical — picks the name example shown on an expanded review row. */
+  vertical?: CatalogVertical;
   /** Applied at save to rows that got a price but no currency (posts and
    *  pasted lists rarely state one; a bare number reads ambiguous to the AI). */
   defaultCurrency?: string;
@@ -84,7 +86,7 @@ interface CatalogImportSheetProps {
  * stay private (only ever sent inside replies/DMs, never posted).
  */
 export function CatalogImportSheet({
-  pageId, mode = 'paste', existingItems, defaultCurrency, initialText, onNoPostReplies, onDone, onClose,
+  pageId, mode = 'paste', existingItems, vertical, defaultCurrency, initialText, onNoPostReplies, onDone, onClose,
 }: CatalogImportSheetProps) {
   const t = useTranslations('catalog');
 
@@ -168,6 +170,10 @@ export function CatalogImportSheet({
         const code = (err as AxiosError<{ code?: string }>).response?.data?.code;
         if (code === 'daily_limit_reached') toast.error(t('import.toastDailyLimit'));
         else if (code === 'CATALOG_LIMIT_REACHED') toast.error(t('toast.limitReached', { max: MAX_CATALOG_ITEMS_PER_PAGE }));
+        // The page lost its Facebook connection (or never had one). `postsScanBlocker`
+        // hides the action for this case, so reaching here means the token died
+        // between render and click — "try again" would be false advice.
+        else if (code === 'PAGE_DISCONNECTED') toast.error(t('scan.toastDisconnected'));
         else toast.error(t('scan.toastError'));
         onClose();
       }
@@ -500,6 +506,7 @@ export function CatalogImportSheet({
                         draft={row.draft}
                         onChange={(patch) => patchRowDraft(row.id, patch)}
                         nameError={row.nameError ? t('errors.nameRequired') : undefined}
+                        vertical={vertical}
                       />
                     </div>
                   )}

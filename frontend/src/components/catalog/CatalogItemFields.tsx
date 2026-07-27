@@ -3,7 +3,10 @@ import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { CalendarPlus, X } from 'lucide-react';
 import { Input, Textarea } from '@/components/ui';
-import { CATALOG_ITEM_TYPES, MAX_CATALOG_ITEM_ATTRIBUTES, type CatalogItem, type CatalogItemType } from '@jawab24/shared';
+import {
+  CATALOG_ITEM_TYPES, CATALOG_VERTICAL_DEFAULT_TYPE, MAX_CATALOG_ITEM_ATTRIBUTES,
+  type CatalogItem, type CatalogItemType, type CatalogVertical,
+} from '@jawab24/shared';
 import type { CatalogItemInput } from '@/lib/api';
 
 /**
@@ -98,11 +101,30 @@ const SUGGESTED_DETAIL_TYPES: CatalogItemType[] = ['product', 'service', 'course
  *  never stare at meaningless schedule pickers (the one-size-fits-none fix). */
 const TIME_BOUND_TYPES: CatalogItemType[] = ['course', 'service'];
 
+/**
+ * Verticals whose name example is more specific than their item type's generic
+ * one — a salon needs a haircut, not the AC-maintenance example every 'service'
+ * would otherwise get. Verticals left out fall back to the type example, which
+ * already fits them (vehicles → vehicle, education → course, services →
+ * service, other → product), so there is no duplicated copy.
+ *
+ * Declared here rather than probed at runtime: a `t.has` check cannot be tested
+ * (the suite's next-intl mock stubs it to always-true) and a missing message
+ * would reach merchants as a raw key. Listed keys are guarded in both
+ * directions by `namePlaceholders.test.ts`.
+ */
+export const VERTICAL_NAME_EXAMPLES: readonly CatalogVertical[] = [
+  'electronics', 'fashion', 'restaurant', 'beauty', 'home_goods', 'real_estate',
+];
+
 interface CatalogItemFieldsProps {
   draft: CatalogItemDraft;
   onChange: (patch: Partial<CatalogItemDraft>) => void;
   nameError?: string;
   nameRef?: RefObject<HTMLInputElement | null>;
+  /** The page's effective vertical, used to pick a name example from the
+   *  merchant's own trade. Optional: without it the item type decides. */
+  vertical?: CatalogVertical;
 }
 
 /**
@@ -110,8 +132,21 @@ interface CatalogItemFieldsProps {
  * via chips; price accepts whatever the merchant types (server normalizes
  * Arabic-Indic digits).
  */
-export function CatalogItemFields({ draft, onChange, nameError, nameRef }: CatalogItemFieldsProps) {
+export function CatalogItemFields({ draft, onChange, nameError, nameRef, vertical }: CatalogItemFieldsProps) {
   const t = useTranslations('catalog');
+
+  // The name example should come from the merchant's own trade. The item TYPE is
+  // too coarse on its own — a salon and an AC repairman are both 'service', and
+  // six of the ten verticals default to 'product' — so when the selected type is
+  // the vertical's natural one, the vertical is the more specific descriptor and
+  // wins. Switch the type chip away from it (a boutique adding a course) and the
+  // type example becomes the honest one again.
+  const useVerticalExample = vertical !== undefined
+    && draft.type === CATALOG_VERTICAL_DEFAULT_TYPE[vertical]
+    && VERTICAL_NAME_EXAMPLES.includes(vertical);
+  const namePlaceholderKey = useVerticalExample
+    ? `namePlaceholders.${vertical}`
+    : `namePlaceholders.${draft.type}`;
 
   // Dates show for time-bound types, for any item that already carries a date
   // (an extracted offer expiry must stay visible/editable on every type), or
@@ -173,9 +208,7 @@ export function CatalogItemFields({ draft, onChange, nameError, nameRef }: Catal
         dir="auto"
         value={draft.name}
         onChange={(e) => onChange({ name: e.target.value })}
-        // The example follows the selected type — a dealer is taught with a
-        // car, an institute with a course, never someone else's trade.
-        placeholder={t(`namePlaceholders.${draft.type}`)}
+        placeholder={t(namePlaceholderKey)}
         error={nameError}
         maxLength={200}
       />

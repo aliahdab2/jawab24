@@ -238,6 +238,18 @@ describe('CatalogImportSheet', () => {
       const { toast } = await import('sonner');
       expect(toast.error).toHaveBeenCalled();
     });
+
+    // CatalogManager hides the action for a page with no Facebook connection, so
+    // this 409 means the token died between render and click. "Try again" would
+    // be false advice — retrying cannot succeed until the page is reconnected.
+    it('names the disconnection on 409 PAGE_DISCONNECTED instead of saying "try again"', async () => {
+      scanPosts.mockRejectedValue({ response: { status: 409, data: { code: 'PAGE_DISCONNECTED' } } });
+      const { onClose } = renderSheet({ mode: 'scan' });
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      const { toast } = await import('sonner');
+      expect(toast.error).toHaveBeenCalledWith('This page isn’t connected to Facebook, so its posts can’t be read.');
+      expect(toast.error).not.toHaveBeenCalledWith('Couldn’t read your posts. Please try again.');
+    });
   });
 
   describe('reconcile against the existing catalog (D-038)', () => {

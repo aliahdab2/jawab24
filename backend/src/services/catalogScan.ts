@@ -1,12 +1,13 @@
 import axios from 'axios';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
-import { MAX_CATALOG_IMPORT_CHARS } from '@jawab24/shared';
+import { MAX_CATALOG_IMPORT_CHARS, postsScanEligibility } from '@jawab24/shared';
 import { db } from '../db';
 import { pages, catalogItems, posts, instagramMedia } from '../db/schema';
 import { facebookService } from './facebook';
 import { extractFromImage } from './kb/file-extractor';
 import { catalogExtractor, type CatalogExtractionResult } from './catalogExtractor';
 import { CatalogStoreConflictError, resolveCatalogVertical } from './catalog';
+import { safeDecryptToken } from './facebookCrypto';
 import { captureError } from '../utils/sentryHelpers';
 import type { StoredBusinessProfile } from '@jawab24/shared';
 
@@ -103,7 +104,11 @@ export class CatalogScanService {
             .select({
                 id: pages.id,
                 facebookPageId: pages.facebookPageId,
-                accessToken: pages.accessToken,
+                // Named for what the column actually holds: AES ciphertext (the
+                // Graph API cannot use it). Decrypted below before any use — the
+                // original `accessToken` name let ciphertext be passed straight
+                // to Graph, which is why no scan ever succeeded in production.
+                encryptedAccessToken: pages.accessToken,
                 ecommerceStoreId: pages.ecommerceStoreId,
                 catalogVertical: pages.catalogVertical,
                 catalogScanLastPostTime: pages.catalogScanLastPostTime,
@@ -114,7 +119,20 @@ export class CatalogScanService {
             .limit(1);
         if (!page) return null;
         if (page.ecommerceStoreId) throw new CatalogStoreConflictError();
-        if (!page.facebookPageId || !page.accessToken) throw new CatalogScanUnavailableError();
+
+        // Every Graph consumer decrypts at the point of use — via pagesService or
+        // explicitly (resubscribe-messaging-postbacks.ts, whatsappTokenHealth.ts).
+        // `safeDecryptToken` yields '' for an absent OR undecryptable token, which
+        // is exactly "no usable token": both must block the scan, not reach Graph.
+        const accessToken = safeDecryptToken(page.encryptedAccessToken, { entity: 'page', id: page.id });
+        // Same rule the client gates the button with (@jawab24/shared), so what the
+        // UI offers and what this service accepts cannot drift apart. The eligible
+        // branch carries the non-null page id straight to the Graph call.
+        const eligibility = postsScanEligibility({
+            facebookPageId: page.facebookPageId,
+            hasUsableToken: !!accessToken,
+        });
+        if (!eligibility.eligible) throw new CatalogScanUnavailableError();
 
         // The re-scan bookmark means "skip posts I've already reviewed" — it only
         // makes sense once a catalog EXISTS. With zero items there is nothing to be
@@ -130,7 +148,7 @@ export class CatalogScanService {
             .limit(1);
         const hasCatalog = existingItem !== undefined;
 
-        const { posts } = await facebookService.getPagePosts(page.facebookPageId, page.accessToken, {
+        const { posts } = await facebookService.getPagePosts(eligibility.facebookPageId, accessToken, {
             limit: MAX_SCAN_POSTS,
             fullImages: true,
         });

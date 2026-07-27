@@ -9,6 +9,7 @@
   "empty": {
     "title": "Add what you sell",
     "body": "Your posts already show what you sell. Let Jawab find your products — then add your prices, and it answers your customers with the exact details.",
+    "bodyNoScan": "Add what you sell with its prices, and Jawab answers your customers with the exact details.",
     "cta": "Add manually",
     "or": "or:"
   },
@@ -38,11 +39,17 @@
     "vehicle": "Year|Mileage|Condition"
   },
   "namePlaceholders": {
-    "product": "e.g. Front shock absorbers",
+    "product": "e.g. Olive oil, 1 litre",
     "service": "e.g. AC cleaning & maintenance",
     "course": "e.g. ICDL course — beginner level",
     "vehicle": "e.g. Kia Rio 2018, 60k km",
-    "custom": "e.g. Front shock absorbers"
+    "custom": "e.g. Annual maintenance package",
+    "electronics": "e.g. Wireless headphones",
+    "fashion": "e.g. Men's cotton shirt, large",
+    "restaurant": "e.g. Chicken shawarma meal",
+    "beauty": "e.g. Haircut & styling",
+    "home_goods": "e.g. Glass mug set, 6 pieces",
+    "real_estate": "e.g. 120 m² apartment, third floor"
   },
   "badges": {
     "ended": "Ended",
@@ -164,7 +171,10 @@
     "emptyResultHint": "You can import a price list or add items manually instead.",
     "upToDate": "You’re up to date",
     "upToDateHint": "No new posts since the last scan. Post something new, or add items manually.",
-    "toastError": "Couldn’t read your posts. Please try again."
+    "toastError": "Couldn’t read your posts. Please try again.",
+    "unavailableNoFacebook": "Reading posts works on Facebook pages only.",
+    "unavailableDisconnected": "Reconnect this page to Facebook to read its posts.",
+    "toastDisconnected": "This page isn’t connected to Facebook, so its posts can’t be read."
   },
   "replyScan": {
     "cta": "Import from your post replies",
