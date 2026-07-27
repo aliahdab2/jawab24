@@ -14,7 +14,7 @@ import { detectIntent } from './kb/intent-detector';
 import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
-import { captureError } from '../utils/sentryHelpers';
+import { captureError, tagError } from '../utils/sentryHelpers';
 import { classifyFallbackIntent } from './reply/fallbackClassifier';
 import { getModelForUser } from './aiModelResolver';
 import { getConfidentGender, recordGenderObservation } from './genderMap';
@@ -979,25 +979,39 @@ export class AiService {
                 const refusalReason = typeof wireError.refusalReason === 'string' ? wireError.refusalReason : undefined;
 
                 if (name) {
-                    Sentry.setTag('aiErrorClass', name);
+                    // Build the typed error FIRST so the class can be attached to it.
+                    // This used to call `Sentry.setTag('aiErrorClass', name)` on the
+                    // ambient scope — but this runs in the BullMQ reply worker, not an
+                    // HTTP request, so there is no per-request isolation scope and the
+                    // tag landed on the PROCESS-WIDE scope. It then rode along on every
+                    // unrelated event afterwards: observed in production tagging a
+                    // POST /pages/:id/connect-whatsapp stream error with
+                    // `aiErrorClass: AiRefusalError` (Sentry JAWAB24-BACKEND-1H).
+                    let aiError: Error | undefined;
                     switch (name) {
                         case 'AiRefusalError':
-                            throw new AiRefusalError(refusalReason ?? 'unknown', message);
+                            aiError = new AiRefusalError(refusalReason ?? 'unknown', message);
+                            break;
                         case 'AiTimeoutError':
-                            throw new AiTimeoutError(undefined, message);
+                            aiError = new AiTimeoutError(undefined, message);
+                            break;
                         case 'AiEmptyReplyError':
-                            throw new AiEmptyReplyError(message);
+                            aiError = new AiEmptyReplyError(message);
+                            break;
                         case 'AiClientNotConfiguredError':
                             // ai-worker's "no client" maps to backend's AiUnavailableError
                             // (same semantics: permanent-but-flag-via-retry-exhaustion).
-                            throw new AiUnavailableError(message);
+                            aiError = new AiUnavailableError(message);
+                            break;
                         case 'AiQuotaExhaustedError':
                             // OpenAI out of credit. Fire a throttled "top up" alert,
                             // then rethrow the typed error so the worker PARKS the job
                             // (re-enqueue with long delay) instead of flagging it.
                             await this.alertQuotaExhausted(pipeline, message).catch(() => {});
-                            throw new AiQuotaExhaustedError(message);
+                            aiError = new AiQuotaExhaustedError(message);
+                            break;
                     }
+                    if (aiError) throw tagError(aiError, { aiErrorClass: name });
                     // Unknown name: fall through to generic rethrow below — don't
                     // over-classify by inventing a typed error we don't recognize.
                 }
