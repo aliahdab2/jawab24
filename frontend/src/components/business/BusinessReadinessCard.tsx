@@ -139,20 +139,24 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
       aria-label={t('readiness.title')}
       className="rounded-2xl border border-theme-border bg-card p-4 sm:p-5"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base sm:text-lg font-semibold text-foreground">
-            {t('readiness.title')}
-          </h2>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            {t('readiness.hint')}
-          </p>
-        </div>
-        <Button type="button" variant="secondary" size="sm" onClick={onTryReply}>
+      {/* Title and action share ONE row; the hint spans the full card beneath
+          them. Previously the hint sat inside the flex row, so once the card was
+          narrowed to the reading column the whole row wrapped and dropped the
+          button onto a line of its own, floating above the ring. Pairing the
+          button with the title instead keeps it anchored at every width — and
+          puts it beside the thing it tests rather than a viewport away. */}
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-base sm:text-lg font-semibold text-foreground min-w-0">
+          {t('readiness.title')}
+        </h2>
+        <Button type="button" variant="secondary" size="sm" onClick={onTryReply} className="flex-shrink-0">
           <Sparkles className="w-3.5 h-3.5 me-1.5" aria-hidden="true" />
           {t('readiness.tryButton')}
         </Button>
       </div>
+      <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+        {t('readiness.hint')}
+      </p>
 
       {/* The ring is the mock's headline, but it is never the only carrier of the
           number: the percentage sits beside it as text with role="progressbar".
@@ -188,13 +192,20 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
         </div>
 
         <div className="min-w-0 flex-1">
+          {/* The percentage and the fraction were stacked on separate lines, so
+              the same fact appeared three times down the card (ring, «80%
+              ready», «4 of 5»). The fraction earns its place — it is what makes
+              the ring reconcilable against the chips — but as a trailing detail
+              on the same line, not as its own claim. */}
           <p className="text-sm font-medium text-foreground">
             {score ? t('readiness.percentLabel', { percent: score.percent }) : ' '}
+            {score && (
+              <span className="font-normal text-muted-foreground tabular-nums ms-2">
+                {t('readiness.coveredOf', { covered: score.covered, total: score.total })}
+              </span>
+            )}
           </p>
-          <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
-            {score ? t('readiness.coveredOf', { covered: score.covered, total: score.total }) : ' '}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1.5">
+          <p className="text-xs text-muted-foreground mt-1">
             {score
               ? (score.missing.length > 0
                 ? t('readiness.completeAll', { items: missingList })
@@ -207,12 +218,24 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
       <ul className="flex flex-wrap gap-2 mt-4" aria-busy={loading}>
         {chips.map((chip) => {
           const Icon = chip.covered ? Check : CircleAlert;
+          // Five equally-loud pills gave the four settled facts the same visual
+          // shout as the one thing left to do. Covered areas go QUIET (the answer
+          // to the card's question, stated once) so the amber gaps — the only
+          // tappable chips here — carry the emphasis they earn. The per-field
+          // detail lives in the fact rows' badges; this row is the summary.
           const chipClass = `inline-flex items-center gap-1.5 rounded-full text-xs font-medium border ${
-            chip.covered ? 'status-success' : 'status-warning'
+            chip.covered
+              ? 'border-transparent bg-transparent text-muted-foreground'
+              : 'status-warning'
           }`;
           const body = (
             <>
-              <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+              {/* The ICON is what carries covered-vs-gap without colour (check
+                  vs alert), so the quiet style below stays WCAG 1.4.1-safe. */}
+              <Icon
+                className={`w-3.5 h-3.5 flex-shrink-0 ${chip.covered ? 'text-brand-600' : ''}`}
+                aria-hidden="true"
+              />
               {chip.label}
               <span className="sr-only">
                 — {chip.covered ? t('state.covered') : t('state.missing')}
