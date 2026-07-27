@@ -10,13 +10,17 @@
     "addressChip": "العنوان",
     "deliveryChip": "التوصيل",
     "paymentChip": "الدفع",
-    "covered": "متوفر",
-    "missing": "ناقص",
     "productsChipStore": "منتجاتك — من متجرك",
     "percentLabel": "مساعدك جاهز بنسبة {percent}%",
     "coveredOf": "{covered} من {total}",
     "completeAll": "أضف {items} ليصبح جاهزًا بالكامل.",
     "allCovered": "يستطيع «جواب» الإجابة عن كل هذه لعملائك."
+  },
+  "state": {
+    "covered": "مكتمل",
+    "missing": "ناقص",
+    "legendCovered": "مكتمل — يستخدمه جواب",
+    "legendMissing": "ناقص — يحتاج إدخالك"
   },
   "products": {
     "title": "المنتجات والخدمات",
@@ -36,6 +40,8 @@
     "phoneIsWhatsapp": "هذا الرقم على واتساب",
     "website": "الموقع الإلكتروني",
     "isSet": "محفوظ",
+    "edit": "تعديل",
+    "add": "إضافة",
     "add_hours": "أضف أوقات الدوام",
     "add_address": "أضف عنوان نشاطك",
     "add_phone": "أضف رقم التواصل",

@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
 import { consumeCatalogImportDraft } from '@/lib/catalogImportDraft';
+import { isStorePolicyKey } from '@/utils/businessCoverage';
 import { usePageFilter } from '@/hooks/usePageFilter';
 import { useSaveKnowledgeBase } from '@/hooks/useSaveKnowledgeBase';
 import { makeGetStaticProps } from '@/i18n/getMessages';
@@ -350,7 +351,9 @@ function BusinessPageInner() {
           // Not `hasStore`: the sheet's hint tells the merchant they need not answer,
           // so it may only appear when the store REALLY answers (active + synced
           // policies), never merely because a store id is on the page.
-          storeAnswered={!!selectedPage.storeAnswersPolicies && (editingFact === 'delivery' || editingFact === 'payment')}
+          // The field list comes from `STORE_POLICY_KEYS` (via isStorePolicyKey)
+          // so adding a store-answerable policy row never leaves this hint behind.
+          storeAnswered={!!selectedPage.storeAnswersPolicies && isStorePolicyKey(editingFact)}
           saving={savingFact}
           onSave={(value, whatsapp) => saveFact(editingFact, value, whatsapp)}
           onClose={() => setEditingFact(null)}

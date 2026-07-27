@@ -69,9 +69,65 @@ describe('BusinessReadinessCard progress', () => {
   });
 
   it('counts a connected store as covering delivery, payment and products', () => {
-    const page = { ...pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] }, address: 'جرمانا' }), ecommerceStoreId: 'store-1' } as Page;
+    const page = {
+      ...pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] }, address: 'جرمانا' }),
+      ecommerceStoreId: 'store-1',
+      storeAnswersPolicies: true,
+    } as Page;
     renderCard(page, 0);
     expect(screen.getByText('Your assistant is 100% ready')).toBeInTheDocument();
+  });
+
+  /**
+   * Regression — the chips used to key the delivery/payment areas on
+   * `ecommerceStoreId` alone, which is NOT proof the store answers: the id
+   * survives a platform-side uninstall and is set on a live store that synced no
+   * policy text (see `storeAnswersPolicies` in backend/src/services/ecommerce.ts).
+   * That scored two areas green while the fact row beneath said «أضف معلومات
+   * التوصيل» — one screen, two scoreboards. Both now read the server flag.
+   */
+  it('does not treat a store id alone as covering delivery and payment', () => {
+    const page = {
+      ...pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] }, address: 'جرمانا' }),
+      ecommerceStoreId: 'store-1',
+    } as Page;
+    renderCard(page, 0);
+    // products (store-linked) + hours + address = 3 of 5.
+    expect(screen.getByText('Your assistant is 60% ready')).toBeInTheDocument();
+    expect(screen.getByText('3 of 5')).toBeInTheDocument();
+  });
+
+  // A city with no street line still answers «وين محلكم؟» — and the fact row
+  // DISPLAYS it, so scoring it as a gap would contradict the value on screen.
+  it('counts a city-only address as covered', () => {
+    renderCard(pageWith({ city: 'دمشق' }));
+    expect(screen.getByText('Your assistant is 20% ready')).toBeInTheDocument();
+  });
+});
+
+describe('BusinessReadinessCard ring', () => {
+  it('carries the number as text, not only as an arc', () => {
+    renderCard(pageWith({
+      hours: { sat: [{ from: '09:00', to: '19:00' }] },
+      address: 'جرمانا',
+    }));
+
+    // The ring is aria-hidden; the number must survive without it.
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-label', 'Your assistant is 40% ready');
+    expect(screen.getByText('Your assistant is 40% ready')).toBeInTheDocument();
+  });
+
+  it('sweeps the arc in proportion to the percentage', () => {
+    const { container } = renderCard(pageWith({
+      hours: { sat: [{ from: '09:00', to: '19:00' }] },
+      address: 'جرمانا',
+      policies: { shipping: 'توصيل داخل دمشق', payment: 'نقداً' },
+    }), 3);
+
+    const arc = container.querySelector('circle[stroke-dasharray]');
+    // 100% ready → nothing left undrawn.
+    expect(arc).toHaveAttribute('stroke-dashoffset', '0');
   });
 });
 

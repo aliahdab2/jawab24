@@ -1,8 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Check, CircleAlert, Sparkles, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui';
-import { unwrapBusinessProfile } from '@jawab24/shared';
+import {
+  computeReadiness,
+  READINESS_AREAS,
+  type ReadinessAreaKey,
+} from '@/utils/businessCoverage';
 import type { Page } from '@jawab24/shared';
 
 interface BusinessReadinessCardProps {
@@ -22,63 +26,98 @@ interface BusinessReadinessCardProps {
 export type FixableChipKey = 'hours' | 'address' | 'delivery' | 'payment';
 
 interface Chip {
-  key: string;
+  key: ReadinessAreaKey;
   label: string;
   covered: boolean;
   /** Set when tapping the chip should open the matching fact editor. */
   fixKey?: FixableChipKey;
 }
 
+/** Ring geometry. r is in the 0–36 viewBox, so the SVG scales with its box. */
+const RING_RADIUS = 15.5;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+/**
+ * The readiness ring. Purely decorative to assistive tech (`aria-hidden`): the
+ * percentage next to it carries `role="progressbar"` + `aria-valuenow`, so a
+ * screen-reader user gets the number and never an unlabelled SVG.
+ *
+ * Fills clockwise from 12 o'clock in BOTH directions. A percentage dial is not a
+ * text run — mirroring it in RTL would make «60%» read as 40% to anyone who has
+ * seen the LTR build, and no platform mirrors this control.
+ */
+function ReadinessRing({ percent }: { percent: number }) {
+  return (
+    <svg viewBox="0 0 36 36" className="w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0 -rotate-90" aria-hidden="true">
+      <circle
+        cx="18"
+        cy="18"
+        r={RING_RADIUS}
+        fill="none"
+        strokeWidth="3.5"
+        className="stroke-muted"
+      />
+      <circle
+        cx="18"
+        cy="18"
+        r={RING_RADIUS}
+        fill="none"
+        strokeWidth="3.5"
+        strokeLinecap="round"
+        strokeDasharray={RING_CIRCUMFERENCE}
+        strokeDashoffset={RING_CIRCUMFERENCE * (1 - percent / 100)}
+        className="stroke-brand-500 transition-[stroke-dashoffset] duration-500"
+      />
+    </svg>
+  );
+}
+
 /**
  * «عمّ يستطيع جواب أن يجيب؟» — the top-of-page readiness summary (B1).
  * Green chips = Jawab holds this info; amber = customers may ask and get no
- * answer. Reads only the CONFIRMED merchant half of the business profile
- * (same authority rule as the reply pipeline — suggestions never count as
- * covered) plus the catalog count for products.
+ * answer. Coverage comes from `computeReadiness` — the same module, and the same
+ * per-field rules, the fact rows badge themselves from, so the ring and the
+ * badges below it can never disagree about a field.
  */
 export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixChip }: BusinessReadinessCardProps) {
   const t = useTranslations('business');
   const locale = useLocale();
 
-  const chips: Chip[] = useMemo(() => {
-    const { merchant = {} } = unwrapBusinessProfile(page.businessProfile);
-    const hasHours = !!merchant.hours && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0);
-    // A connected store (Salla/Zid/Shopify) already answers these: its product
-    // and policies summaries reach every reply via getStoreContextForAI. The
-    // chips report what Jawab CAN answer, whatever the source — nagging a store
-    // merchant to re-type synced facts would invite drifting duplicates.
-    const store = !!page.ecommerceStoreId;
-    return [
-      {
-        key: 'products',
-        label: store ? t('readiness.productsChipStore') : t('readiness.productsChip', { count: productsCount ?? 0 }),
-        covered: store || (productsCount ?? 0) > 0,
-      },
-      { key: 'hours', label: t('readiness.hoursChip'), covered: hasHours, fixKey: 'hours' },
-      { key: 'address', label: t('readiness.addressChip'), covered: !!merchant.address?.trim(), fixKey: 'address' },
-      { key: 'delivery', label: t('readiness.deliveryChip'), covered: store || !!merchant.policies?.shipping?.trim(), fixKey: 'delivery' },
-      { key: 'payment', label: t('readiness.paymentChip'), covered: store || !!merchant.policies?.payment?.trim(), fixKey: 'payment' },
-    ];
-  }, [page.businessProfile, page.ecommerceStoreId, productsCount, t]);
+  const { covered, score } = useMemo(
+    () => computeReadiness(page, productsCount),
+    [page, productsCount],
+  );
+  /** No score until the catalog count lands. One flag, so the ring and the chips
+   *  can never announce different busy states for the same wait. */
+  const loading = score === null;
 
-  // Held back until the catalog count lands: `productsCount ?? 0` would publish a
-  // confident "40% ready" and then jump to 60% a tick later. A chip flipping is
-  // noise; a NUMBER that corrects itself reads as a wrong number.
-  const progress = useMemo(() => {
-    if (productsCount === undefined) return null;
-    const covered = chips.filter((c) => c.covered).length;
-    return {
-      covered,
-      percent: Math.floor((covered / chips.length) * 100),
-      // The gap sentence names the missing areas with the CHIP labels, so one
-      // field is never called two things on one screen («الدفع» in a chip vs
-      // «طرق الدفع» in the sentence). Intl.ListFormat renders the locale's own
-      // conjunction — never a hand-built «a، b و c».
-      missingList: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' })
-        .format(chips.filter((c) => !c.covered).map((c) => c.label)),
-      hasGaps: covered < chips.length,
-    };
-  }, [chips, locale, productsCount]);
+  /** Chip label per scored area. Also used for the gap sentence, so one field is
+   *  never called two things on one screen («الدفع» in a chip vs «طرق الدفع» in
+   *  the sentence). */
+  const labelFor = useCallback((key: ReadinessAreaKey): string => {
+    if (key !== 'products') return t(`readiness.${key}Chip`);
+    return page.ecommerceStoreId
+      ? t('readiness.productsChipStore')
+      : t('readiness.productsChip', { count: productsCount ?? 0 });
+  }, [t, page.ecommerceStoreId, productsCount]);
+
+  const chips: Chip[] = READINESS_AREAS.map((key) => ({
+    key,
+    label: labelFor(key),
+    covered: covered[key],
+    ...(key === 'products' ? {} : { fixKey: key }),
+  }));
+
+  // Intl.ListFormat renders the locale's own conjunction — never a hand-built
+  // «a، b و c». Memoized because the card re-renders on every unrelated
+  // /business state change (opening a sheet, toggling the info panel), and an
+  // Intl constructor is not free.
+  const missingList = useMemo(
+    () => (score
+      ? new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(score.missing.map(labelFor))
+      : ''),
+    [score, locale, labelFor],
+  );
 
   return (
     <section
@@ -100,64 +139,68 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
         </Button>
       </div>
 
-      {/* Progress is derived from `chips` — the very array rendered below — so the
-          number and the badges can never disagree. Two independent readiness
-          computations on one screen is a trust bug: a merchant who fills a field
-          and watches the % ignore it stops believing either surface.
-          Percent is floored so it only reads 100% when nothing is missing. */}
-      {/* The block keeps its footprint whether or not the number is known, so the
+      {/* The ring is the mock's headline, but it is never the only carrier of the
+          number: the percentage sits beside it as text with role="progressbar".
+          The block keeps its footprint whether or not the number is known, so the
           chips below never shift when the count lands (CLS). */}
-      <div className="mt-3" aria-busy={progress === null}>
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="text-sm font-medium text-foreground">
-            {progress ? t('readiness.percentLabel', { percent: progress.percent }) : ' '}
-          </p>
-          {progress && (
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {t('readiness.coveredOf', { covered: progress.covered, total: chips.length })}
-            </span>
-          )}
-        </div>
+      <div className="mt-4 flex items-center gap-4" aria-busy={loading}>
+        {/* The meter itself is the progressbar. The percentage sentence beside it
+            stays PLAIN text: role="progressbar" takes its accessible name from
+            aria-label, not from its content, so wrapping the sentence in the role
+            would have hidden the words it is made of. */}
         <div
-          className="mt-1.5 h-2 rounded-full bg-muted overflow-hidden"
-          {...(progress
+          className="relative flex-shrink-0"
+          {...(score
             ? {
               role: 'progressbar',
-              'aria-valuenow': progress.percent,
+              'aria-valuenow': score.percent,
               'aria-valuemin': 0,
               'aria-valuemax': 100,
-              'aria-label': t('readiness.percentLabel', { percent: progress.percent }),
+              'aria-label': t('readiness.percentLabel', { percent: score.percent }),
             }
             : {})}
         >
-          <div
-            className="h-full rounded-full bg-brand-500 transition-[width] duration-500"
-            style={{ width: `${progress?.percent ?? 0}%` }}
-          />
+          <ReadinessRing percent={score?.percent ?? 0} />
+          {/* The number inside the ring, matching the mock. Hidden from assistive
+              tech — the labelled progressbar and the sentence beside it already
+              say it, and hearing "60%" three times is noise. */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center justify-center text-lg sm:text-xl font-semibold text-foreground tabular-nums"
+          >
+            {score ? `${score.percent}%` : ''}
+          </span>
         </div>
-        <p className="text-xs text-muted-foreground mt-1.5">
-          {progress
-            ? (progress.hasGaps
-              ? t('readiness.completeAll', { items: progress.missingList })
-              : t('readiness.allCovered'))
-            : ' '}
-        </p>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-foreground">
+            {score ? t('readiness.percentLabel', { percent: score.percent }) : ' '}
+          </p>
+          <p className="text-xs text-muted-foreground tabular-nums mt-0.5">
+            {score ? t('readiness.coveredOf', { covered: score.covered, total: score.total }) : ' '}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1.5">
+            {score
+              ? (score.missing.length > 0
+                ? t('readiness.completeAll', { items: missingList })
+                : t('readiness.allCovered'))
+              : ' '}
+          </p>
+        </div>
       </div>
 
-      <ul className="flex flex-wrap gap-2 mt-3" aria-busy={productsCount === undefined}>
+      <ul className="flex flex-wrap gap-2 mt-4" aria-busy={loading}>
         {chips.map((chip) => {
           const Icon = chip.covered ? Check : CircleAlert;
           const chipClass = `inline-flex items-center gap-1.5 rounded-full text-xs font-medium border ${
-            chip.covered
-              ? 'status-active border-transparent'
-              : 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/40'
+            chip.covered ? 'status-success' : 'status-warning'
           }`;
           const body = (
             <>
               <Icon className="w-3.5 h-3.5" aria-hidden="true" />
               {chip.label}
               <span className="sr-only">
-                — {chip.covered ? t('readiness.covered') : t('readiness.missing')}
+                — {chip.covered ? t('state.covered') : t('state.missing')}
               </span>
             </>
           );
@@ -170,7 +213,7 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
                 <button
                   type="button"
                   onClick={() => onFixChip(chip.fixKey!)}
-                  aria-label={`${chip.label} — ${t('readiness.missing')}`}
+                  aria-label={`${chip.label} — ${t('state.missing')}`}
                   className={`${chipClass} min-h-[44px] ps-3 pe-2.5 hover:brightness-95 active:brightness-90 transition`}
                 >
                   {body}
