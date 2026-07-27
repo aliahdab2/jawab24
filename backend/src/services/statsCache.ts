@@ -60,6 +60,40 @@ function writeStatsCache(key: string, value: unknown, ttlSeconds: number): void 
 }
 
 /**
+ * Invalidation counter for a workspace's endpoint stats. Bumped in the SAME
+ * MULTI as the DEL, so "this cache was invalidated" is one atomic fact a
+ * concurrent compute can be checked against.
+ */
+export const statsEpochKey = (workspaceId: string) => `stats:epoch:${workspaceId}`;
+
+/**
+ * Write only if the workspace's epoch still matches the one captured before the
+ * compute started — otherwise the snapshot is already stale and is dropped
+ * (the next read recomputes) rather than cached for a full TTL.
+ *
+ * Lua, because GET-then-SET from the client is the very race being fixed.
+ * A missing epoch key reads as '' on both sides, so the first write still lands.
+ */
+const CAS_WRITE_LUA = `
+if (redis.call('GET', KEYS[1]) or '') == ARGV[1] then
+  redis.call('SET', KEYS[2], ARGV[2], 'EX', ARGV[3])
+  return 1
+end
+return 0
+`;
+
+function writeStatsCacheIfFresh(
+    epochKey: string,
+    capturedEpoch: string,
+    cacheKey: string,
+    value: unknown,
+    ttlSeconds: number,
+): void {
+    redis.eval(CAS_WRITE_LUA, 2, epochKey, cacheKey, capturedEpoch, JSON.stringify(value), String(ttlSeconds))
+        .catch(() => {});
+}
+
+/**
  * Cache-through wrapper for stats aggregations: returns the cached value when
  * present, otherwise computes, stores (fire-and-forget), and returns it.
  * Pass `cacheKey: null` to bypass caching entirely (e.g. page-filtered calls).
@@ -68,13 +102,31 @@ export async function withStatsCache<T>(
     cacheKey: string | null,
     ttlSeconds: number,
     compute: () => Promise<T>,
+    /**
+     * Pass for caches whose staleness is user-visible with no polling to correct
+     * it (the inbox needs-action chips). The epoch is captured BEFORE the compute
+     * and the write is CAS-guarded on it, so a DEL that lands mid-compute wins
+     * over the in-flight snapshot instead of being overwritten by it.
+     *
+     * Omitted for the heavy pages aggregate: its invalidation is throttled and
+     * read rarely, so guarding it would only convert frequent epoch bumps into
+     * repeated expensive recomputes.
+     */
+    epochKey?: string,
 ): Promise<T> {
     if (cacheKey) {
         const cached = await readStatsCache<T>(cacheKey);
         if (cached !== null) return cached;
     }
+    // Captured before the compute — that ordering IS the guard.
+    const capturedEpoch = cacheKey && epochKey
+        ? (await redis.get(epochKey).catch(() => null)) ?? ''
+        : '';
     const value = await compute();
-    if (cacheKey) writeStatsCache(cacheKey, value, ttlSeconds);
+    if (cacheKey) {
+        if (epochKey) writeStatsCacheIfFresh(epochKey, capturedEpoch, cacheKey, value, ttlSeconds);
+        else writeStatsCache(cacheKey, value, ttlSeconds);
+    }
     return value;
 }
 
@@ -84,7 +136,15 @@ export async function withStatsCache<T>(
  * refetches immediately and must see the change. Fire-and-forget.
  */
 export function invalidateEndpointStatsCaches(workspaceId: string): void {
-    redis.del(messagesStatsCacheKey(workspaceId), commentsStatsCacheKey(workspaceId)).catch(() => {});
+    // DEL + epoch bump in ONE MULTI: a compute that started before this point can
+    // no longer re-cache its stale snapshot (see writeStatsCacheIfFresh). Without
+    // the bump the DEL alone loses the race — the in-flight compute SETs the old
+    // count back with a fresh 60s TTL, and the chip has no polling to correct it.
+    redis.multi()
+        .del(messagesStatsCacheKey(workspaceId), commentsStatsCacheKey(workspaceId))
+        .incr(statsEpochKey(workspaceId))
+        .exec()
+        .catch(() => {});
 }
 
 /**

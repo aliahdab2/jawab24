@@ -1,12 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../lib/redis', () => ({
-    redis: {
-        get: vi.fn().mockResolvedValue(null),
-        set: vi.fn().mockResolvedValue('OK'),
-        del: vi.fn().mockResolvedValue(1),
-    },
-}));
+vi.mock('../lib/redis', () => {
+    // The MULTI chain delegates to the SAME del/incr spies as the direct calls, so
+    // assertions read the same way whether a command was pipelined or not.
+    const del = vi.fn().mockResolvedValue(1);
+    const incr = vi.fn().mockResolvedValue(1);
+    const multi = vi.fn(() => {
+        const chain: Record<string, unknown> = {};
+        chain.del = (...args: unknown[]) => { del(...args); return chain; };
+        chain.incr = (...args: unknown[]) => { incr(...args); return chain; };
+        chain.exec = () => Promise.resolve([]);
+        return chain;
+    });
+    return {
+        redis: {
+            get: vi.fn().mockResolvedValue(null),
+            set: vi.fn().mockResolvedValue('OK'),
+            eval: vi.fn().mockResolvedValue(1),
+            del,
+            incr,
+            multi,
+        },
+    };
+});
 
 import { redis } from '../lib/redis';
 import {
@@ -17,6 +33,7 @@ import {
     withStatsCache,
     invalidateEndpointStatsCaches,
     invalidateWorkspaceStatsCache,
+    statsEpochKey,
     STATS_INVALIDATION_THROTTLE,
 } from '../services/statsCache';
 
@@ -27,7 +44,22 @@ const mockRedis = redis as unknown as {
     get: ReturnType<typeof vi.fn>;
     set: ReturnType<typeof vi.fn>;
     del: ReturnType<typeof vi.fn>;
+    eval: ReturnType<typeof vi.fn>;
+    incr: ReturnType<typeof vi.fn>;
+    multi: ReturnType<typeof vi.fn>;
 };
+
+/** Chainable MULTI stub that records the queued commands. */
+function stubMulti() {
+    const calls: Array<[string, unknown[]]> = [];
+    const chain: Record<string, unknown> = {};
+    for (const cmd of ['del', 'incr'] as const) {
+        chain[cmd] = (...args: unknown[]) => { calls.push([cmd, args]); return chain; };
+    }
+    chain.exec = () => Promise.resolve([]);
+    mockRedis.multi.mockReturnValue(chain);
+    return calls;
+}
 
 describe('statsCache', () => {
     beforeEach(() => {
@@ -125,5 +157,58 @@ describe('statsCache', () => {
         mockRedis.get.mockResolvedValueOnce(null);
         mockRedis.set.mockRejectedValueOnce(new Error('redis down'));
         await expect(withStatsCache('k', 60, compute)).resolves.toEqual({ total: 9 });
+    });
+});
+
+// The chip showed 1 over an empty list THREE times. Root cause 1 (a throttled
+// DEL) was fixed in #464; this covers root cause 2, the read-compute-write race:
+// a compute that started before the DEL used to re-SET the stale count with a
+// fresh TTL, and with no polling on the chip query it stuck until reload.
+describe('statsCache epoch CAS (stuck needs-action chip, root cause 2)', () => {
+    beforeEach(() => { vi.clearAllMocks(); });
+
+    it('bumps the epoch in the SAME multi as the endpoint DEL', async () => {
+        const queued = stubMulti();
+        invalidateEndpointStatsCaches('ws-1');
+        await flush();
+
+        expect(queued).toEqual([
+            ['del', [messagesStatsCacheKey('ws-1'), commentsStatsCacheKey('ws-1')]],
+            ['incr', [statsEpochKey('ws-1')]],
+        ]);
+    });
+
+    it('captures the epoch BEFORE computing and CAS-writes against it', async () => {
+        mockRedis.get.mockImplementation((key: string) =>
+            Promise.resolve(key === statsEpochKey('ws-1') ? '7' : null));
+
+        await withStatsCache('k', 60, async () => ({ actionRequired: 0 }), statsEpochKey('ws-1'));
+        await flush();
+
+        // Guarded write, not a bare SET — the bare path would clobber a DEL.
+        expect(mockRedis.set).not.toHaveBeenCalled();
+        const [, numKeys, epochKey, cacheKey, captured] = mockRedis.eval.mock.calls[0];
+        expect([numKeys, epochKey, cacheKey, captured]).toEqual([2, statsEpochKey('ws-1'), 'k', '7']);
+    });
+
+    it('treats a missing epoch key as the empty sentinel so the first write still lands', async () => {
+        mockRedis.get.mockResolvedValue(null);
+        await withStatsCache('k', 60, async () => ({ actionRequired: 1 }), statsEpochKey('ws-1'));
+        await flush();
+        expect(mockRedis.eval.mock.calls[0][4]).toBe('');
+    });
+
+    it('leaves the heavy pages aggregate on the unguarded write — no epochKey, no CAS', async () => {
+        await withStatsCache(pagesStatsCacheKey('ws-1'), 300, async () => ({ total: 1 }));
+        await flush();
+        expect(mockRedis.eval).not.toHaveBeenCalled();
+        expect(mockRedis.set).toHaveBeenCalled();
+    });
+
+    it('does not read an epoch when the call bypasses caching entirely', async () => {
+        await withStatsCache(null, 60, async () => ({ total: 1 }), statsEpochKey('ws-1'));
+        await flush();
+        expect(mockRedis.get).not.toHaveBeenCalled();
+        expect(mockRedis.eval).not.toHaveBeenCalled();
     });
 });
