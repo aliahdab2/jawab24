@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Page } from '@jawab24/shared';
 import { computeFactCoverage, computeReadiness, READINESS_AREAS } from '../businessCoverage';
-
-function pageWith(merchant: Record<string, unknown>, extra: Partial<Page> = {}): Page {
-  return { id: 'p1', name: 'Shop', businessProfile: { merchant }, ...extra } as unknown as Page;
-}
+import { businessPage as pageWith } from './businessPageFixture';
 
 const FILLED_HOURS = { sat: ['09:00-19:00'] };
 

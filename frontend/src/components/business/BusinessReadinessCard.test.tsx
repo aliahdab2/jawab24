@@ -3,11 +3,8 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import type { Page } from '@jawab24/shared';
 import { BusinessReadinessCard } from './BusinessReadinessCard';
+import { businessPage as pageWith } from '@/utils/__tests__/businessPageFixture';
 
-/** A page whose confirmed merchant profile holds exactly the given facts. */
-function pageWith(merchant: Record<string, unknown>): Page {
-  return { id: 'p1', name: 'Shop', businessProfile: { merchant } } as unknown as Page;
-}
 
 function renderCard(page: Page, productsCount: number | undefined = 0) {
   return render(

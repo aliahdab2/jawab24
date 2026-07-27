@@ -180,9 +180,7 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
                     a deliberate override. */}
                 <span
                   className={`flex-shrink-0 inline-flex items-center justify-center min-w-[64px] rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
-                    row.covered
-                      ? 'border-theme-border text-muted-foreground'
-                      : 'border-brand-200 text-brand-700 bg-brand-50 dark:border-brand-800 dark:bg-brand-900/30 dark:text-brand-300'
+                    row.covered ? 'border-theme-border text-muted-foreground' : 'status-brand'
                   }`}
                 >
                   {isSet ? t('facts.edit') : t('facts.add')}
@@ -193,7 +191,11 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
         })}
       </ul>
 
-      {/* What makes the badge colours legible rather than decorative. */}
+      {/* What makes the badge colours legible rather than decorative.
+          The swatches are literal emerald/amber because `status-success` and
+          `status-warning` are 50/700 background+text pairs with no solid-fill
+          token to borrow — these two values must be kept in step with those
+          classes by hand. */}
       <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-muted-foreground">
         <li className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className="w-2 h-2 rounded-full bg-emerald-500" />

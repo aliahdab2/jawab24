@@ -3,10 +3,8 @@ import { render, screen, within, fireEvent } from '@testing-library/react';
 import { BusinessFactRows } from '@/components/business/BusinessFactRows';
 import { BusinessReadinessCard } from '@/components/business/BusinessReadinessCard';
 import type { Page } from '@jawab24/shared';
+import { businessPage as makePage } from '@/utils/__tests__/businessPageFixture';
 
-function makePage(merchant: Record<string, unknown> = {}, extra: Partial<Page> = {}): Page {
-  return { id: 'p1', name: 'Test', businessProfile: { merchant }, ...extra } as unknown as Page;
-}
 
 function renderRows(page: Page) {
   return render(<BusinessFactRows page={page} onEditFact={vi.fn()} onEditHours={vi.fn()} />);
