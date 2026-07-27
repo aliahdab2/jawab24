@@ -4466,6 +4466,33 @@ const TEST_CASES: TestCase[] = [
         notes: 'PROD replay (2026-07-27 10:16:14) — the exact turn that produced «باكو واحد ... سعره 1200 دينار ليبي» with no flag. Fixed by e5313a4c (price check on every intent + fallback swap on PURCHASE_INTENT). Pins the regression at the conversation level, above the unit tests.',
     },
 
+    // 69.9 — THE TURN THAT ACTUALLY SHIPPED. #728 only asks once; prod did not fail
+    // on the first ask, it failed on the SECOND. The AI listed outlets under
+    // العجيلات, the customer objected «هدوم مش في العجيلات», and the AI conceded the
+    // outlets were «في مناطق مختلفة حول طرابلس» and then re-asserted the identical
+    // list as العجيلات anyway (2026-07-27 10:20:23). Standing its ground against a
+    // correction is a harder behaviour than answering cleanly, so this is the case
+    // most likely to expose an ungrounded place claim — and, unlike 728, it carries
+    // the conversation state that produced the real defect.
+    {
+        id: 737, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'هدوم مش في العجيلات',
+        page: 'distributor',
+        conversationHistory: [
+            { role: 'user', content: 'العجيلات، وين نلقى منتجاتكم؟' },
+            { role: 'assistant', content: 'في العجيلات متوفر في صيدلية نبع الدالية وصيدلية ساقية العين.' },
+        ],
+        expected: {
+            replyNotContains: [
+                'في العجيلات، هذه',
+                'للعجيلات تحديداً',
+                'في العجيلات تحديدا',
+                'المتوفرة في العجيلات',
+            ],
+        },
+        notes: 'PROD replay of the doubling-down turn (BAMBO LIBYA, 2026-07-27 10:20:23) — the prior assistant turn is deliberately the FABRICATED one, so the model is invited to defend a claim it should retract. OPEN GAP, expectedFail: measured 2026-07-28 at temp 0 it re-asserts العجيلات in ~2 of 4 runs. A self-reported place-claim guard was built and REJECTED on this evidence: across four full suites the flag fired exactly once and that once was a false positive, while on the runs where this case reproduced the fabrication the model reported no claim at all (fails open precisely when it matters). Closing this needs detection from the REPLY TEXT against the KB, not a model self-report. This is currently the only case in the suite that reproduces the defect — #728 passes even on wholly unfixed code.',
+    },
+
     // ── Category 70: Purchase-Turn Price Grounding ───────────────────────────
     // e5313a4c blast-radius coverage, from متجر إجدابيا's real traffic
     // (2026-07-21→27). That fix newly runs Check 1 on PURCHASE_INTENT *and* lets

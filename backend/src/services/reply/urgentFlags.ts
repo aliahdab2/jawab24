@@ -6,6 +6,8 @@
  * messageProcessor.ts (which imports notificationService) and
  * notifications.ts (which needs these flag keys).
  */
+import { parseFlagReason } from '@jawab24/shared';
+
 export const URGENT_FLAGS = new Set([
     'cancellation_request',
     'refund_request',
@@ -70,7 +72,7 @@ export function isUrgentNotification(flagReason: string | undefined, aiIntent?: 
 export function buildNotificationReason(flagReason: string | undefined, messageText: string): string {
     if (!flagReason) return 'AI flagged this reply';
 
-    const flags = flagReason.split(',').map(f => f.trim());
+    const flags = parseFlagReason(flagReason);
     const urgentFlag = flags.find(f => URGENT_FLAGS.has(f));
     if (!urgentFlag) return flagReason;
 

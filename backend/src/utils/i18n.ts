@@ -33,7 +33,13 @@ const messages: Record<Locale, Record<MessageKey, string>> = {
  * Optional `vars` replaces `{key}` placeholders in the string.
  */
 export function t(key: MessageKey, lang: string, vars?: Record<string, string>): string {
-    const locale = (lang === 'ar' ? 'ar' : 'en') as Locale;
+    // Resolve against the `messages` table rather than testing for 'ar' explicitly.
+    // The old form (`lang === 'ar' ? 'ar' : 'en'`) silently collapsed EVERY other
+    // locale to English, so adding a language to the `Locale` union — which the
+    // header above promises is enough — would have compiled, type-checked, and
+    // still shipped English to those customers. Behaviour is identical for the
+    // current ar/en pair; this makes the third language work by construction.
+    const locale = (Object.prototype.hasOwnProperty.call(messages, lang) ? lang : 'en') as Locale;
     let text: string = messages[locale][key] ?? messages.en[key];
     if (vars) {
         for (const [k, v] of Object.entries(vars)) {

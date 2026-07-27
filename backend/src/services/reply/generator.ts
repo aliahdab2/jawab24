@@ -10,7 +10,7 @@ import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '.
 import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
-import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, type ProductCard, type FlagMeta } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta } from '@jawab24/shared';
 import { detectLanguage, detectLanguageCode, isLowSignalLatinToken } from '../../utils/language';
 import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
 import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
@@ -45,9 +45,8 @@ export const SILENT_SKIP_INTENTS = ['SPAM_OR_IRRELEVANT'] as const;
 
 export function shouldSkipReply(flagReason?: string, aiIntent?: string): boolean {
     if (!flagReason && !aiIntent) return false;
-    const flags = (flagReason || '').split(',').map(f => f.trim());
     const normalizedIntent = (aiIntent || '').trim().toUpperCase();
-    return flags.some(f => (SKIP_REPLY_FLAGS as readonly string[]).includes(f)) ||
+    return hasAnyFlag(flagReason, SKIP_REPLY_FLAGS) ||
            (SKIP_REPLY_INTENTS as readonly string[]).includes(normalizedIntent);
 }
 
@@ -60,8 +59,7 @@ export function shouldSilentlySkip(aiIntent?: string): boolean {
 
 export function shouldUseFallback(flagReason?: string, aiIntent?: string): boolean {
     if (!flagReason) return false;
-    const flags = flagReason.split(',').map(f => f.trim());
-    if (!flags.some(f => (SAFE_FALLBACK_FLAGS as readonly string[]).includes(f))) return false;
+    if (!hasAnyFlag(flagReason, SAFE_FALLBACK_FLAGS)) return false;
     // The SWAP is scoped to the two intents where a price claim is the reply's
     // substance — QUESTION and PURCHASE_INTENT (BAMBO regression, 2026-07-27:
     // a customer's closing «نعم» was answered with an invented «1200 دينار ليبي»
@@ -244,6 +242,17 @@ export const PRICE_FALLBACK: Record<string, string> = {
     ar: t('priceFallback', 'ar'),
     en: t('priceFallback', 'en'),
 };
+
+/**
+ * Locale-correct price fallback text. Resolves through `t(key, lang)` rather than
+ * indexing PRICE_FALLBACK: that table is a `Record<string, string>` literal holding
+ * only `ar`/`en`, so a third locale would have a correct translation in its JSON and
+ * still be served English. `t()` reads the locale table, so new languages work here
+ * with no code change.
+ */
+export function priceFallbackText(lang: string): string {
+    return t('priceFallback', lang);
+}
 
 /**
  * Pick a language for canned fallback text (PRICE_FALLBACK, etc.).
@@ -985,7 +994,7 @@ export class ReplyGenerator {
                 knowledgeBase,
                 defaultReplyLanguage,
             });
-            finalReply = PRICE_FALLBACK[lang];
+            finalReply = priceFallbackText(lang);
         }
 
         return {
