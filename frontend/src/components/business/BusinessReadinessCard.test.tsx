@@ -74,3 +74,22 @@ describe('BusinessReadinessCard progress', () => {
     expect(screen.getByText('Your assistant is 100% ready')).toBeInTheDocument();
   });
 });
+
+describe('BusinessReadinessCard while the catalog count is still loading', () => {
+  it('publishes no number until the count lands — a self-correcting number reads as a wrong one', () => {
+    // NOT via renderCard: its `productsCount = 0` default swallows an explicit
+    // undefined (JS default params fire on undefined), which would silently test
+    // the loaded path instead of the loading one.
+    render(
+      <BusinessReadinessCard
+        page={pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] } })}
+        productsCount={undefined}
+        onTryReply={vi.fn()}
+        onFixChip={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.queryByText(/% ready/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Add /)).not.toBeInTheDocument();
+  });
+});

@@ -61,17 +61,24 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
     ];
   }, [page.businessProfile, page.ecommerceStoreId, productsCount, t]);
 
-  const coveredCount = chips.filter((c) => c.covered).length;
-  const percent = Math.floor((coveredCount / chips.length) * 100);
-  // The gap sentence names the missing areas with the CHIP labels, so one field
-  // is never called two things on one screen ("الدفع" in a chip vs "طرق الدفع"
-  // in the sentence). Intl.ListFormat handles the locale's own conjunction and
-  // separators — never a hand-built "a، b و c".
-  const missingLabels = chips.filter((c) => !c.covered).map((c) => c.label);
-  const missingList = useMemo(
-    () => new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(missingLabels),
-    [locale, missingLabels],
-  );
+  // Held back until the catalog count lands: `productsCount ?? 0` would publish a
+  // confident "40% ready" and then jump to 60% a tick later. A chip flipping is
+  // noise; a NUMBER that corrects itself reads as a wrong number.
+  const progress = useMemo(() => {
+    if (productsCount === undefined) return null;
+    const covered = chips.filter((c) => c.covered).length;
+    return {
+      covered,
+      percent: Math.floor((covered / chips.length) * 100),
+      // The gap sentence names the missing areas with the CHIP labels, so one
+      // field is never called two things on one screen («الدفع» in a chip vs
+      // «طرق الدفع» in the sentence). Intl.ListFormat renders the locale's own
+      // conjunction — never a hand-built «a، b و c».
+      missingList: new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' })
+        .format(chips.filter((c) => !c.covered).map((c) => c.label)),
+      hasGaps: covered < chips.length,
+    };
+  }, [chips, locale, productsCount]);
 
   return (
     <section
@@ -98,34 +105,42 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
           computations on one screen is a trust bug: a merchant who fills a field
           and watches the % ignore it stops believing either surface.
           Percent is floored so it only reads 100% when nothing is missing. */}
-      <div className="mt-3">
+      {/* The block keeps its footprint whether or not the number is known, so the
+          chips below never shift when the count lands (CLS). */}
+      <div className="mt-3" aria-busy={progress === null}>
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-sm font-medium text-foreground">
-            {t('readiness.percentLabel', { percent })}
+            {progress ? t('readiness.percentLabel', { percent: progress.percent }) : ' '}
           </p>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {t('readiness.coveredOf', { covered: coveredCount, total: chips.length })}
-          </span>
+          {progress && (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {t('readiness.coveredOf', { covered: progress.covered, total: chips.length })}
+            </span>
+          )}
         </div>
         <div
           className="mt-1.5 h-2 rounded-full bg-muted overflow-hidden"
-          role="progressbar"
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={t('readiness.percentLabel', { percent })}
+          {...(progress
+            ? {
+              role: 'progressbar',
+              'aria-valuenow': progress.percent,
+              'aria-valuemin': 0,
+              'aria-valuemax': 100,
+              'aria-label': t('readiness.percentLabel', { percent: progress.percent }),
+            }
+            : {})}
         >
-          {/* Width-only transition: the track reserves its height up front, so a
-              late percentage never shifts the layout below it (CLS). */}
           <div
             className="h-full rounded-full bg-brand-500 transition-[width] duration-500"
-            style={{ width: `${percent}%` }}
+            style={{ width: `${progress?.percent ?? 0}%` }}
           />
         </div>
         <p className="text-xs text-muted-foreground mt-1.5">
-          {missingLabels.length > 0
-            ? t('readiness.completeAll', { items: missingList })
-            : t('readiness.allCovered')}
+          {progress
+            ? (progress.hasGaps
+              ? t('readiness.completeAll', { items: progress.missingList })
+              : t('readiness.allCovered'))
+            : ' '}
         </p>
       </div>
 
