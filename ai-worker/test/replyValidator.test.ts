@@ -193,6 +193,67 @@ describe('flagHallucinatedPrice — generic across business types', () => {
     });
 });
 
+// Prod regression (BAMBO LIBYA, 2026-07-27): a Libyan distributor whose KB was
+// typed by hand, so the price lines carry NO space between the amount and the
+// currency letter («بسعر38د») and the weight runs straight into it
+// («38دالوزن»). On a closing «نعم» during a purchase the model answered
+// «باكو واحد ... سعره 1200 دينار ليبي» and nothing flagged it — Check 1 was
+// gated to intent QUESTION (fixed in e5313a4c: the check now runs on every
+// intent). These pin the grounding decision itself against the merchant's real
+// formatting, so the fix can't be undone by a future tokenizer change: the
+// invented number MUST flag, and the mangled in-KB ones must NOT — a false
+// positive here would deflect every legitimate price this merchant quotes.
+describe('flagHallucinatedPrice — hand-typed «د» prices without spaces (BAMBO)', () => {
+    // Verbatim shape from kb_chunks (page 8c086c86…, kb_version 10).
+    const distributorKb = [
+        'رقم 1 - 22 قطعة بسعر 38د الوزن (2-4 كيلو).',
+        'رقم 4-24 قطعة بسعر38د الوزن(7-14كيلو).',
+        'رقم 5-22 قطعة بسعر38د الوزن(12-18كيلو).',
+        'رقم 6- 20 قطعة بسعر 38دالوزن (16+كيلو).',
+        'رقم 3 - 52 قطعة بسعر 70د الوزن (4-8 كيلو).',
+        'وهذا سعر حفاظ السباحة',
+        'السعر 46 دينار',
+    ].join('\n');
+
+    it('does NOT flag the pack price even though the KB writes it as «بسعر38د»', () => {
+        expect(flagHallucinatedPrice('حفاضات رقم 5 بسعر 38 دينار.', distributorKb)).toBe(false);
+        expect(flagHallucinatedPrice('حفاضات رقم 5 بسعر 38د.', distributorKb)).toBe(false);
+    });
+
+    it('does NOT flag the jumbo tier or the swim-diaper line', () => {
+        expect(flagHallucinatedPrice('الجامبو رقم 3 بسعر 70 دينار.', distributorKb)).toBe(false);
+        expect(flagHallucinatedPrice('حفاضات السباحة السعر 46 دينار.', distributorKb)).toBe(false);
+    });
+
+    it('FLAGS the invented «1200 دينار ليبي» from the prod purchase turn', () => {
+        expect(
+            flagHallucinatedPrice('باكو واحد من حفاظات رقم 5 سعره 1200 دينار ليبي.', distributorKb),
+        ).toBe(true);
+    });
+
+    it('FLAGS a per-piece price — the KB prices packs only, never single pieces', () => {
+        expect(flagHallucinatedPrice('سعرها 50 دينار.', distributorKb)).toBe(true);
+        expect(flagHallucinatedPrice('القطعة الواحدة بسعر 9 دينار.', distributorKb)).toBe(true);
+    });
+
+    // KNOWN LIMITATION, asserted so a future change to grounding is visible in
+    // the diff rather than discovered in prod. Check 1 grounds against numbers
+    // appearing LITERALLY anywhere in the KB text, and this merchant's KB is
+    // dense with small integers that are not prices — size numbers («رقم 5») and
+    // weight bounds («(2-4 كيلو)»). So a fabricated per-piece price that happens
+    // to be one of those integers grounds by coincidence and is NOT flagged.
+    // Cheap prices are exactly where this collides — every plausible per-piece
+    // price for this merchant (2, 3, 5, 12…) appears somewhere in their KB as a
+    // size or a weight. That is why the Cat 69 eval case (#730) asserts the
+    // CONVERSATION never produces a per-piece number at all: the validator alone
+    // cannot carry that guarantee for this KB shape.
+    it('does NOT flag fabricated prices that collide with size numbers / weight bounds', () => {
+        // 2 appears as «(2-4 كيلو)», 12 as «(12-18كيلو)» — neither is a price.
+        expect(flagHallucinatedPrice('القطعة الواحدة بسعر 2 دينار.', distributorKb)).toBe(false);
+        expect(flagHallucinatedPrice('القطعة الواحدة بسعر 12 دينار.', distributorKb)).toBe(false);
+    });
+});
+
 // Prod regression (متجر إجدابيا, 2026-07-22): the model computed CORRECT cart
 // totals («39 + توصيل 10 = المجموع 49») but the guard grounds every number
 // against LITERAL KB values, so a derived total can never pass and the correct

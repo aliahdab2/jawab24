@@ -56,7 +56,7 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense';
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -139,6 +139,7 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     clinic: /الشفاء|عيادة|clinic/i,
     moto: /المجد|موتوسيكلات|motoshop/i,
     incense: /بيت البخور|incense/i,
+    distributor: /رواء|distributor/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -170,7 +171,8 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 395 total (385 previous + 10 native-catalog tests, Cat 62)
+// Test cases — 395 total (385 previous + 10 native-catalog tests, Cat 62),
+// plus Cat 69 (7 distributor / outlet-directory cases, BAMBO LIBYA prod replay)
 // ---------------------------------------------------------------------------
 
 /**
@@ -4302,6 +4304,142 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['العزيزية'],
         },
         notes: 'The OTHER authority axis, finally testable: merchant-confirmed address (النسيم) vs the stale address still sitting in the KB text (العزيزية). Case 411 claimed this precedence but only ever ran it on an AGREEING page — this is the real conflict.',
+    },
+
+    // ── Category 69: Distributor / Outlet-Directory KB ──────────────────────
+    // PROD replay (BAMBO LIBYA, 2026-07-25 → 07-27 — a paying Libyan merchant,
+    // ~96 AI replies over three days). This merchant is an exclusive AGENT, so
+    // their Business Info is an outlet directory with a four-line price list at
+    // the tail. That shape breaks price answering in a way no previous category
+    // covers, and it broke it on live buying traffic.
+    //
+    // The `distributor` fixture reproduces the shape (see seedData.ts). Two
+    // distinct defects live here, and the cases keep them apart:
+    //   A. BURIED FACTS IN A LONG KB (#724-#727) — in-KB prices came back as
+    //      «ما عندي الأسعار الدقيقة». NOT a retrieval bug: non-ecommerce pages
+    //      bypass RAG and receive the full KB text (generator.ts:747-769, D-012),
+    //      and at 10,641 chars the prod KB is under KB_MAX_CHARS so it isn't
+    //      truncated either. The prices are in the prompt on every call, at 91%
+    //      depth behind ~6,700 chars of ~200 near-identical outlet lines, and the
+    //      model doesn't use them. Prod: «حفاظات بامبو رقم 5 و رقم 6» → no price,
+    //      twice, while the merchant's own Post Reply auto-DM quoted 38د on the
+    //      same page.
+    //   B. REGION-ATTRIBUTION FABRICATION (#728-#729) — asked about العجيلات
+    //      (in NEITHER list), the model returned the الزاوية list and asserted
+    //      «أما للعجيلات تحديداً فهذه هي الصيدليات المتوفرة». The outlet NAMES
+    //      were real; the CITY claim was invented. There is no validator for
+    //      place claims (Check 1 grounds numbers only), so nothing flagged it.
+    // #730 pins the ungrounded-price regression that commit e5313a4c fixed,
+    // in the exact conversation shape that produced it in prod.
+
+    // 69.1 — The headline prod failure. Price IS in the KB; the size is
+    // irrelevant to it (every standard size is 45). Must quote, not deflect.
+    {
+        id: 724, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'حفاضات رواء رقم 5 و رقم 6 بقداش؟',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'],
+            replyContainsAny: ['45', '٤٥'],
+            replyNotContains: ['ما عندي', 'غير متوفرة لدي', 'ما عنديش'],
+        },
+        notes: 'PROD replay (2026-07-27 10:15): answered «ما عندي الأسعار الدقيقة لكل مقاس» though the KB tail lists رقم 5 and رقم 6 at the same price, and the full KB text was in the prompt (no RAG, no truncation). Buried behind the outlet directory.',
+    },
+
+    // 69.2 — Same burial, single size, terse Libyan phrasing.
+    {
+        id: 725, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'بقداش رقم 4؟',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'],
+            replyContainsAny: ['45', '٤٥'],
+        },
+        notes: 'Terse «بقداش» — the price must survive a query with almost no lexical overlap with the price lines.',
+    },
+
+    // 69.3 — Swim diapers: a DIFFERENT product line whose price is the very last
+    // line of the KB (97% depth — the single most buried fact). Prod deflected on
+    // this one with price_not_in_kb while the page's own Post Reply auto-DM quoted
+    // the price.
+    {
+        id: 726, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'كم سعر حفاضات السباحة؟',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'],
+            replyContainsAny: ['54', '٥٤'],
+            replyNotContains: ['أرقامنا', 'يرجى التواصل معنا'],
+        },
+        notes: 'PROD replay (2026-07-27 09:56): swim-diaper photo → price_not_in_kb → «للتأكد من السعر بدقة، يرجى التواصل معنا مباشرةً على أرقامنا» — while the merchant\'s Post Reply on the SAME page said «السعر 46 دينار». Last line of the KB.',
+    },
+
+    // 69.4 — The jumbo tier, to prove the whole price block is reachable and not
+    // just its first line.
+    {
+        id: 727, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'عندكم حجم الجامبو رقم 5؟ بقداش',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'],
+            replyContainsAny: ['82', '٨٢'],
+            replyNotContains: ['45', '٤٥'],
+        },
+        notes: 'Jumbo رقم 5 = 82د, standard رقم 5 = 45د. Banning 45 catches the tier confusion the flat pricing invites.',
+    },
+
+    // 69.5 — Region attribution: العجيلات is in NEITHER list. Naming outlets and
+    // placing them "in العجيلات" is a fabrication even though the names are real.
+    // A truthful reply either says it has no outlet for that city or offers the
+    // nearest region BY NAME (الزاوية) — what it must not do is assert العجيلات.
+    {
+        id: 728, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'العجيلات، وين نلقى منتجاتكم؟',
+        page: 'distributor',
+        expected: {
+            replyNotContains: [
+                'في العجيلات، هذه',
+                'للعجيلات تحديداً',
+                'في العجيلات تحديدا',
+                'المتوفرة في العجيلات',
+            ],
+        },
+        notes: 'PROD replay (2026-07-27 10:18-10:20): returned the الزاوية list under «أما للعجيلات تحديداً فهذه هي الصيدليات المتوفرة», and repeated it after the customer objected «هدوم مش في العجيلات». Real names, invented city. No validator covers place claims.',
+    },
+
+    // 69.6 — GREEN GUARD for 69.5: a district that IS in the directory must still
+    // get its outlets. Pins the fix as "stop fabricating", not "stop answering".
+    {
+        id: 729, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'أنا ساكن في عين زارة، وين نلقى منتجاتكم؟',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb'],
+            replyContainsAny: ['عين زارة'],
+            replyNotContains: ['ما عندي', 'غير متوفرة لدي'],
+        },
+        notes: 'The listed-district half of the region contract — prod DID do this well once the directory was in the KB. Guards against over-correcting 69.5 into refusing every location question.',
+    },
+
+    // 69.7 — The invented-price regression (commit e5313a4c). Per-PIECE price is
+    // nowhere in the KB — only per-pack. Prod answered a closing «نعم» with
+    // «سعره 1200 دينار ليبي», UNFLAGGED, because Check 1 only ran on QUESTION
+    // intent and v54 made purchase turns price-bearing. Either grounding the
+    // pack price or declining is acceptable; inventing a number is not.
+    {
+        id: 730, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'نعم',
+        page: 'distributor',
+        conversationHistory: [
+            { role: 'user', content: 'نبي حفاضات رواء رقم 5' },
+            { role: 'assistant', content: 'حفاضات رواء رقم 5 متوفرة، العلبة 22 قطعة بسعر 45 دينار.' },
+            { role: 'user', content: 'نبي باكو واحد' },
+            { role: 'assistant', content: 'باكو واحد من حفاضات رواء رقم 5؟' },
+        ],
+        expected: {
+            replyNotContains: ['1200', '١٢٠٠', '120 دينار', '450', '٤٥٠'],
+        },
+        notes: 'PROD replay (2026-07-27 10:16:14) — the exact turn that produced «باكو واحد ... سعره 1200 دينار ليبي» with no flag. Fixed by e5313a4c (price check on every intent + fallback swap on PURCHASE_INTENT). Pins the regression at the conversation level, above the unit tests.',
     },
 
 ];
