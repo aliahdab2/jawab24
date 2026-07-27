@@ -100,11 +100,21 @@ process.once('beforeExit', async () => {
 
 // ===================== Helpers =====================
 
+/**
+ * Collision-proof suffix for generated platform ids. `Date.now()` alone has
+ * millisecond resolution, so two inserts in the same tick produce the SAME id
+ * and trip a UNIQUE constraint — a test creating several pages back-to-back
+ * fails or passes purely on whether it straddles a millisecond boundary
+ * (reingestReconciler.test.ts blocked a deploy this way, 2026-07-27). The
+ * message/post/comment/ig helpers below already inline this pattern.
+ */
+const uniqueSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 export async function createTestUser(overrides: Partial<typeof schema.users.$inferInsert> = {}) {
     const [user] = await testDb
         .insert(schema.users)
         .values({
-            facebookId: overrides.facebookId ?? `test-fb-${Date.now()}`,
+            facebookId: overrides.facebookId ?? `test-fb-${uniqueSuffix()}`,
             name: overrides.name ?? 'Test User',
             email: overrides.email ?? 'test@example.com',
             ...overrides,
@@ -144,7 +154,7 @@ export async function createTestPage(
         .insert(schema.pages)
         .values({
             userId,
-            facebookPageId: overrides.facebookPageId ?? `page-${Date.now()}`,
+            facebookPageId: overrides.facebookPageId ?? `page-${uniqueSuffix()}`,
             name: overrides.name ?? 'Test Page',
             accessToken: overrides.accessToken ?? 'test-access-token',
             autoReplyEnabled: overrides.autoReplyEnabled ?? true,
