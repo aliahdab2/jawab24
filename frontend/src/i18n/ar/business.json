@@ -11,6 +11,7 @@
     "deliveryChip": "التوصيل",
     "paymentChip": "الدفع",
     "productsChipStore": "منتجاتك — من متجرك",
+    "productsArea": "المنتجات",
     "percentLabel": "مساعدك جاهز بنسبة {percent}%",
     "coveredOf": "{covered} من {total}",
     "completeAll": "أضف {items} ليصبح جاهزًا بالكامل.",

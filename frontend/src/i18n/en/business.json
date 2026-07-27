@@ -11,6 +11,7 @@
     "deliveryChip": "Delivery",
     "paymentChip": "Payment",
     "productsChipStore": "Products — from your store",
+    "productsArea": "Products",
     "percentLabel": "Your assistant is {percent}% ready",
     "coveredOf": "{covered} of {total}",
     "completeAll": "Add {items} to be fully ready.",

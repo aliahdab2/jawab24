@@ -45,6 +45,29 @@ describe('BusinessReadinessCard progress', () => {
     expect(gap.textContent).toMatch(/to be fully ready\.$/);
   });
 
+  /**
+   * Regression — the sentence used to interpolate the products CHIP label, which
+   * is a count readout, so it read "Add No products yet to be fully ready." /
+   * «أضف لا منتجات بعد ليصبح جاهزًا بالكامل.» Caught on prod. A list of things to
+   * add needs the area's NOUN, not its status.
+   */
+  it('names products with a noun in the gap sentence, not with the chip\'s count', () => {
+    const { container } = renderCard(pageWith({
+      hours: { sat: [{ from: '09:00', to: '19:00' }] },
+      address: 'جرمانا',
+      policies: { shipping: 'توصيل داخل دمشق', payment: 'نقداً' },
+    }), 0);
+
+    // Exact, not `toContain`: reverting to the chip label would still "contain"
+    // products and pass, while reading "Add 0 products to be fully ready."
+    expect(screen.getByText(/to be fully ready/).textContent).toBe('Add Products to be fully ready.');
+    // The chip keeps the count — that IS what a chip should show. (Asserted on
+    // the chip list rather than by its text: the count phrasing differs between
+    // this environment and the browser, where ICU's `=0` branch selects «No
+    // products yet» — the plural form is not what this test is about.)
+    expect(container.querySelector('li')?.textContent).toMatch(/products/);
+  });
+
   it('only reads 100% when nothing is missing, and then drops the gap sentence', () => {
     renderCard(pageWith({
       hours: { sat: [{ from: '09:00', to: '19:00' }] },

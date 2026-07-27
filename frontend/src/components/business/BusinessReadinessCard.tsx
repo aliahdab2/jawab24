@@ -91,15 +91,30 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
    *  can never announce different busy states for the same wait. */
   const loading = score === null;
 
-  /** Chip label per scored area. Also used for the gap sentence, so one field is
-   *  never called two things on one screen («الدفع» in a chip vs «طرق الدفع» in
-   *  the sentence). */
+  /** Chip label per scored area. For `products` this is a COUNT readout («لا
+   *  منتجات بعد» / «٣ منتجات»), which is what a chip should show. */
   const labelFor = useCallback((key: ReadinessAreaKey): string => {
     if (key !== 'products') return t(`readiness.${key}Chip`);
     return page.ecommerceStoreId
       ? t('readiness.productsChipStore')
       : t('readiness.productsChip', { count: productsCount ?? 0 });
   }, [t, page.ecommerceStoreId, productsCount]);
+
+  /**
+   * The area's NAME, for the gap sentence. Identical to the chip label wherever
+   * that label is already a name, so one field is never called two things on one
+   * screen («الدفع» in a chip vs «طرق الدفع» in the sentence).
+   *
+   * `products` is the one exception, and it has to be: its chip shows a COUNT, so
+   * feeding the chip label into the sentence produced «أضف لا منتجات بعد ليصبح
+   * جاهزًا بالكامل» — "Add no products yet to be fully ready", which is not a
+   * sentence in either language. A count is a status; a list of things to add
+   * needs a noun.
+   */
+  const areaNameFor = useCallback(
+    (key: ReadinessAreaKey): string => (key === 'products' ? t('readiness.productsArea') : labelFor(key)),
+    [t, labelFor],
+  );
 
   const chips: Chip[] = READINESS_AREAS.map((key) => ({
     key,
@@ -114,9 +129,9 @@ export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixCh
   // Intl constructor is not free.
   const missingList = useMemo(
     () => (score
-      ? new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(score.missing.map(labelFor))
+      ? new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format(score.missing.map(areaNameFor))
       : ''),
-    [score, locale, labelFor],
+    [score, locale, areaNameFor],
   );
 
   return (
