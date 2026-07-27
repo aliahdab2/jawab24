@@ -79,6 +79,64 @@ describe('errorHandler middleware', () => {
         );
     });
 
+    // ─── Client disconnects ───────────────────────────────
+    //
+    // The client closing the socket mid-response is not a server fault. These
+    // carry no statusCode, so they used to fall through to the 500 branch and be
+    // reported to Sentry — while the response had already gone out as 200.
+    // Observed on POST /pages/:id/connect-whatsapp (JAWAB24-BACKEND-1H): the
+    // Embedded Signup popup closes the moment Meta returns the auth code, tearing
+    // the socket down mid-stream. Unfixed, it would fire on EVERY successful
+    // WhatsApp connect at GA.
+    it.each([
+        ['ERR_STREAM_PREMATURE_CLOSE (the @fastify/compress case)'],
+        ['ERR_STREAM_DESTROYED'],
+        ['ECONNRESET'],
+        ['EPIPE'],
+    ])('treats %s as a client disconnect, NOT a server error', (label) => {
+        const code = label.split(' ')[0];
+        const error = Object.assign(new Error('Premature close'), { code });
+
+        errorHandler(error, mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+        expect(Sentry.captureException).not.toHaveBeenCalled();
+        expect(mockRequest.log!.error).not.toHaveBeenCalled();
+        expect(mockRequest.log!.info).toHaveBeenCalledWith(
+            expect.objectContaining({ requestId: 'req-123', url: '/api/test', code }),
+            'Client disconnected before the response completed',
+        );
+    });
+
+    // The socket is already gone — writing to it would raise ERR_STREAM_DESTROYED
+    // on top of the original error.
+    it('does not attempt to send a response body after a client disconnect', () => {
+        const error = Object.assign(new Error('Premature close'), { code: 'ERR_STREAM_PREMATURE_CLOSE' });
+
+        errorHandler(error, mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+        expect(mockReply.status).not.toHaveBeenCalled();
+        expect(mockReply.send).not.toHaveBeenCalled();
+    });
+
+    // Guard the narrowness of the rule: a genuine failure that merely mentions
+    // one of those words must still be reported.
+    it('still reports a real error whose message resembles a disconnect', () => {
+        const error = new Error('Premature close of the payment session');
+
+        errorHandler(error, mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+        expect(Sentry.captureException).toHaveBeenCalled();
+        expect(mockRequest.log!.error).toHaveBeenCalled();
+    });
+
+    it('still reports an error carrying an unrelated code', () => {
+        const error = Object.assign(new Error('db down'), { code: 'ECONNREFUSED' });
+
+        errorHandler(error, mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+        expect(Sentry.captureException).toHaveBeenCalled();
+    });
+
     // ─── Sentry ───────────────────────────────────────────
 
     it('should send 500 errors to Sentry', () => {
