@@ -122,6 +122,30 @@ export const config = {
         evalKeyId: process.env.OPENAI_EVAL_KEY_ID || '',
     },
 
+    // Post-send grounding verification (SYSTEM_ANALYSIS gap 13). A second model
+    // call audits a sent reply against the merchant's Business Info and flags
+    // unsupported assertions into Needs Attention. Detection only — it never
+    // alters a reply. OFF by default: it adds a real per-reply cost
+    // (~$0.001 on the gated subset), so it is enabled deliberately, and the
+    // switch doubles as the instant rollback.
+    groundingVerify: {
+        enabled: process.env.GROUNDING_VERIFY_ENABLED === 'true',
+        // 'shadow' (default): verdicts are recorded on the row's flag_meta only —
+        // no flag_reason, no needs_attention, nothing merchant-visible. Data
+        // accumulates for precision measurement while the merchant relationship
+        // stays untouched (owner ruling 2026-07-28: no merchant contact, direct
+        // or via UI, until a real fix exists). 'flag' switches on the visible
+        // behaviour: flag chip + Needs Attention.
+        mode: (process.env.GROUNDING_VERIFY_MODE === 'flag' ? 'flag' : 'shadow') as 'shadow' | 'flag',
+        // Page allowlist. EMPTY = every page (once enabled); non-empty = only
+        // these page UUIDs. A pilot belongs to one merchant, not the fleet:
+        // precision has to be judged by someone who knows the business well
+        // enough to say whether a flag is right, and one merchant's Needs
+        // Attention is where that judgement actually happens.
+        pageIds: (process.env.GROUNDING_VERIFY_PAGE_IDS || '')
+            .split(',').map(id => id.trim()).filter(Boolean),
+    },
+
     // Proactive AI-spend monitoring: credit runway + early-warning alert thresholds
     // for the admin AI Cost panel. The org credit wallet is drained by ALL keys, so
     // burn/runway are computed from the OpenAI Costs API org total, not ai_usage_log.

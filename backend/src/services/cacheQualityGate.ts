@@ -16,6 +16,7 @@
  *     rotates on KB saves, so an early cache entry would keep serving the
  *     "I don't have that information" answer meanwhile.
  *   - `price_not_in_kb` — the reply mentions a price not grounded in the KB.
+ *   - `reply_not_grounded` — the grounding verifier found an unsupported claim.
  *     Never worth repeating.
  *   - `language_mismatch` — the reply came back in the wrong language.
  *
@@ -33,6 +34,7 @@ export type CacheRejectReason =
     | 'low_confidence'
     | 'info_not_in_kb'
     | 'price_not_in_kb'
+    | 'reply_not_grounded'
     | 'language_mismatch'
     | 'self_identification_stripped';
 
@@ -51,6 +53,10 @@ const REJECT_FLAGS: readonly CacheRejectReason[] = [
     'low_confidence',
     'info_not_in_kb',
     'price_not_in_kb',
+    // Post-send grounding audit found an assertion Business Info doesn't
+    // support. Caching it would serve the same fabrication to every customer
+    // who asks a similar question — the one failure mode worse than one bad reply.
+    'reply_not_grounded',
     'language_mismatch',
     // Check 6 swapped the reply (often to a generic self-id fallback) — caching
     // that against the customer's actual question would serve the wrong answer

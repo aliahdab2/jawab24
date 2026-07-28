@@ -34,5 +34,6 @@
   "no_reply_generated": "يحتاج ردّاً يدوياً",
   "AI flagged this reply": "تم تمييز هذا الرد للمراجعة",
   "self_identified_as_automation": "رُصدت إشارة إلى هوية آلية",
-  "self_identification_stripped": "أُزيلت من الرد صياغة تكشف أنه آلي"
+  "self_identification_stripped": "أُزيلت من الرد صياغة تكشف أنه آلي",
+  "reply_not_grounded": "رد غير مستند إلى معلومات النشاط"
 }
