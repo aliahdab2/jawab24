@@ -35,6 +35,7 @@ import dynamic from 'next/dynamic';
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
+import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
 import { isWhatsAppVisible } from '@/lib/featureFlags';
 import { captureError } from '@/lib/sentryHelpers';
 import { useWorkspaceRole, useSaveKnowledgeBase, useSubscriptionUsage, useOpenOnQueryParam } from '@/hooks';
@@ -77,6 +78,9 @@ const PagesPage: NextPageWithLayout = () => {
   const [testSmartReplyPage, setTestSmartReplyPage] = useState<Page | null>(null);
   // Page ID currently running the WhatsApp Embedded Signup popup (null = none)
   const [connectingWhatsApp, setConnectingWhatsApp] = useState<string | null>(null);
+  // Target of the pending onboarding-path question — a page ID, or 'new' for a
+  // WhatsApp-only card. Same shape as connectingWhatsApp; null = not asking.
+  const [whatsAppPathPageId, setWhatsAppPathPageId] = useState<string | null>(null);
   // Page whose WhatsApp disconnect confirmation is open (null = none)
   const [disconnectWhatsAppPage, setDisconnectWhatsAppPage] = useState<Page | null>(null);
   // WhatsApp-only card whose remove confirmation is open (removal deletes the page row)
@@ -459,14 +463,21 @@ const PagesPage: NextPageWithLayout = () => {
   };
 
   /**
-   * Run the Embedded Signup popup and connect the resulting number.
-   * pageId set → attach to that Facebook-backed page card.
-   * pageId null → create a new WhatsApp-only card (no Facebook page).
+   * Entry point for every WhatsApp connect button on this screen.
+   *
+   * A FIRST connect has to ask which Meta onboarding path to take — the answer
+   * decides whether the number keeps working on the merchant's phone — but a
+   * RECONNECT must never ask: the path is already fixed for that number, and a
+   * different answer would migrate a live coexistence number off their phone.
+   * `whatsappConnected` is the discriminator (the card's Connect button only
+   * renders when it is false; the reconnect banner only when it is true).
    */
-  const handleConnectWhatsApp = async (pageId: string | null) => {
+  const requestConnectWhatsApp = async (pageId: string | null) => {
     // Embedded Signup runs in a Facebook JS SDK popup — a real browser context.
     // The Capacitor WebView can't host it, but Meta's wizard works in mobile
-    // browsers, so hand off to the web dashboard instead of dead-ending.
+    // browsers, so hand off to the web dashboard instead of dead-ending. Checked
+    // HERE, before the path question: asking on a device that then bounces to
+    // the browser would just make the merchant answer the same question twice.
     if (Capacitor.isNativePlatform()) {
       toast.info(t('whatsappConnectWebOnly'));
       const { openExternalUrl } = await import('@/lib/openExternalUrl');
@@ -474,20 +485,32 @@ const PagesPage: NextPageWithLayout = () => {
       await openExternalUrl(buildWebUrl('/pages', language));
       return;
     }
+    const existingPage = pageId ? pages.find(p => p.id === pageId) : null;
+    if (existingPage?.whatsappConnected) {
+      // RECONNECT MUST PRESERVE THE ONBOARDING PATH. Re-running Embedded Signup
+      // WITHOUT requesting coexistence puts Meta on the migration path, the
+      // backend then registers the number against the Cloud API, and it is taken
+      // off the merchant's WhatsApp Business app — permanently, silently, and it
+      // is the exact outcome Coexistence exists to prevent.
+      void handleConnectWhatsApp(pageId, existingPage.whatsappCoexistence === true);
+      return;
+    }
+    setWhatsAppPathPageId(pageId ?? 'new');
+  };
+
+  /**
+   * Run the Embedded Signup popup and connect the resulting number.
+   * pageId set → attach to that Facebook-backed page card.
+   * pageId null → create a new WhatsApp-only card (no Facebook page).
+   * coexistence → which onboarding path to ask Meta for.
+   */
+  const handleConnectWhatsApp = async (pageId: string | null, coexistence: boolean) => {
     setConnectingWhatsApp(pageId ?? 'new');
     try {
       const { launchWhatsAppSignup } = await import('@/lib/whatsappSignup');
-      // RECONNECT MUST PRESERVE THE ONBOARDING PATH. This same handler backs the
-      // "reconnect required" banner, so a Coexistence number whose 60-day token
-      // expired comes back through here. Re-running Embedded Signup WITHOUT
-      // requesting coexistence puts Meta on the migration path, the backend then
-      // registers the number against the Cloud API, and it is taken off the
-      // merchant's WhatsApp Business app — permanently, silently, and it is the
-      // exact outcome Coexistence exists to prevent.
-      const existingPage = pageId ? pages.find(p => p.id === pageId) : null;
-      const result = await launchWhatsAppSignup({
-        coexistence: existingPage?.whatsappCoexistence === true,
-      });
+      // Requested path: the merchant's answer on a first connect, the number's
+      // stored path on a reconnect. Both are decided by requestConnectWhatsApp.
+      const result = await launchWhatsAppSignup({ coexistence });
       const body = {
         code: result.code,
         phoneNumberId: result.phoneNumberId,
@@ -758,7 +781,7 @@ const PagesPage: NextPageWithLayout = () => {
                   {isOwner && (
                     <Button
                       size="sm"
-                      onClick={() => handleConnectWhatsApp(page.id)}
+                      onClick={() => requestConnectWhatsApp(page.id)}
                       disabled={connectingWhatsApp === page.id}
                       className="w-full"
                       icon={<LinkIcon className="w-3.5 h-3.5" />}
@@ -938,7 +961,7 @@ const PagesPage: NextPageWithLayout = () => {
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => handleConnectWhatsApp(page.id)}
+                          onClick={() => requestConnectWhatsApp(page.id)}
                           disabled={connectingWhatsApp === page.id}
                         >
                           {connectingWhatsApp === page.id ? t('whatsappConnecting') : t('whatsappConnectButton')}
@@ -1128,10 +1151,23 @@ const PagesPage: NextPageWithLayout = () => {
         }}
         onPickWhatsApp={() => {
           setShowChannelPicker(false);
-          handleConnectWhatsApp(null);
+          void requestConnectWhatsApp(null);
         }}
         whatsappAvailable={whatsappVisible && whatsappEntitled === true}
         whatsappConnecting={connectingWhatsApp === 'new'}
+      />
+
+      {/* Onboarding-path question — first connect only (see requestConnectWhatsApp) */}
+      <WhatsAppPathModal
+        isOpen={whatsAppPathPageId !== null}
+        onClose={() => setWhatsAppPathPageId(null)}
+        onChoose={(coexistence) => {
+          // Read before clearing — the modal only renders while this is set, so
+          // by the time onChoose can fire it is never null.
+          const target = whatsAppPathPageId;
+          setWhatsAppPathPageId(null);
+          void handleConnectWhatsApp(target === 'new' ? null : target, coexistence);
+        }}
       />
 
       {/* Connect Page confirmation dialog */}

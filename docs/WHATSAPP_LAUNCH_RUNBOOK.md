@@ -82,9 +82,11 @@ Notes:
 > ⛔ **Added gate (D-045, 2026-07-27): Coexistence must ship BEFORE GA.** Without it every merchant
 > must dedicate a fresh number, which is the #1 adoption blocker and guaranteed to be the top
 > support question on day one. Plan: `~/.claude/plans/moonlit-conjuring-moonbeam.md`. Phases 1–2
-> (connect path + echo ingestion) are built; the UI choice, human-first reply mode and the
-> two-path copy remain. Coexistence cannot be validated without a real number already on the
-> WhatsApp Business app — line that merchant up early, it gates the release.
+> (connect path + echo ingestion), the connect-time path question (`WhatsAppPathModal`) and the
+> two-path copy are built — coexistence is now reachable by a merchant. **Human-first reply mode
+> (Phase 3) is deliberately NOT built**: the plan defers it until a real coexistence number has
+> been connected and we have seen real timing. Coexistence cannot be validated without a number
+> already on the WhatsApp Business app — line that merchant up early, it gates the release.
 >
 > ⛔ **Sanctions:** Meta bars businesses AND recipients in Cuba, Iran, North Korea, **Syria** and
 > three sanctioned Ukrainian regions from the WhatsApp Business Platform. Launch copy must not
@@ -119,7 +121,8 @@ exit
       toast; Business account → Embedded Signup opens and connects.
 - [ ] Plans flip is seed-driven — confirm `plans` table shows `whatsapp_enabled=true` for
       business/pro/scale-20k/scale-30k after deploy (seed runs post-migrate).
-- [ ] Revisit the **coexistence copy** (`pages.whatsappTooltip`, `pages.channelWhatsAppDesc` in `frontend/src/i18n/{en,ar}/pages.json`) — "use a number not already on the WhatsApp app" is the #1 adoption barrier; decide softening/Coexistence support post-launch.
+- [x] ~~Revisit the **coexistence copy**~~ — done: `pages.whatsappTooltip` and `pages.channelWhatsAppDesc` now state both paths instead of "use a number not already on the WhatsApp app", and the blog's "no QR-code hacks" line (which pre-contradicted Coexistence, since it uses a QR step) was rewritten in both locales.
+- [ ] **Verify the path question live in BOTH locales** (`/en/pages`, `/ar/pages`): picking "WhatsApp only" asks the question before the Meta popup, both options render translated (no raw `pages.whatsappPath*` keys), and the RTL layout is correct.
 - [ ] Update `SYSTEM_ANALYSIS.md` + `.planning/codebase/INTEGRATIONS.md` (WhatsApp status → live) in the same commit as any code change.
 
 ## Kill switch (if something goes wrong live)
