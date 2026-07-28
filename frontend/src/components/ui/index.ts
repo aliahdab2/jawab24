@@ -7,6 +7,7 @@ export { Select } from './Select';
 export { Textarea } from './Textarea';
 export { FormField } from './FormField';
 export { Modal } from './Modal';
+export { ChoiceRow, type ChoiceRowAccent } from './ChoiceRow';
 export { DetailSheet } from './DetailSheet';
 export { SidePanel } from './SidePanel';
 export { EmptyState } from './EmptyState';
