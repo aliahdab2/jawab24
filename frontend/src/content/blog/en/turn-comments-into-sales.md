@@ -127,4 +127,4 @@ That's not a job for a chatbot. That's a job for an AI sales agent.
 
 ---
 
-*Jawab24 is an AI sales agent for Facebook and Instagram that turns comments and DMs into sales. It understands Arabic dialects, handles voice messages, pulls real prices from your catalog, and works 24/7. [Try it free →](https://jawab24.com)*
+*Jawab24 is an AI sales agent for Facebook, Instagram, and WhatsApp that turns comments and DMs into sales. It understands Arabic dialects, handles voice messages, pulls real prices from your catalog, and works 24/7. [Try it free →](https://jawab24.com)*
