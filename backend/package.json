@@ -18,6 +18,8 @@
     "cache:warm-replies:dev": "tsx src/scripts/warm-reply-cache.ts",
     "seed:plans": "node dist/scripts/seed-plans.js",
     "seed:plans:dev": "npx tsx src/scripts/seed-plans.ts",
+    "gdpr:batch-delete": "node dist/scripts/gdpr-batch-delete.js",
+    "gdpr:batch-delete:dev": "npx tsx src/scripts/gdpr-batch-delete.ts",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check:pg",
     "db:validate": "ts-node scripts/validate-migrations.ts",

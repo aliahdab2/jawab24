@@ -100,7 +100,9 @@
     (`/gdpr/deletion-status?code=…`) + confirmation code per Meta spec.
   - Callback URL must be registered in App Dashboard (Facebook Login settings) — registered 2026-07-11;
     while unregistered, Meta instead emails batch ID files, processed manually with
-    `backend/scripts/gdpr-batch-delete.ts` (dry-run by default, same shared purge service; kept as fallback).
+    `backend/src/scripts/gdpr-batch-delete.ts` (dry-run by default, same shared purge service; kept as fallback).
+    Runs in prod as `node dist/scripts/gdpr-batch-delete.js` — it lived in `backend/scripts/` until
+    2026-07-28, where `tsconfig` (rootDir `./src`) never compiled it, so it could not run there at all.
 
 ---
 
