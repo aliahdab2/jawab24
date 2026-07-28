@@ -1475,6 +1475,12 @@ export class PagesService {
                 // Merchant-initiated disconnect is not a fault — leave no reason behind
                 // for support to misread as an expiry.
                 whatsappDisconnectReason: null,
+                // The onboarding path belonged to the number that just left, not to
+                // the card. Leaving it set strands a flag that means "this number is
+                // still live on the merchant's phone" on a card with no number at all
+                // — and it is the flag that decides whether a future connect skips
+                // Cloud-API registration. NULL = no WhatsApp, nothing to preserve.
+                whatsappCoexistence: null,
                 updatedAt: new Date(),
             })
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))

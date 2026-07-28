@@ -109,3 +109,28 @@ describe('pagesService.getPages — integration', () => {
         expect(pages).toEqual([]);
     });
 });
+
+describe('pagesService.disconnectWhatsApp — integration', () => {
+    // whatsapp_coexistence means "this number is ALSO live on the merchant's
+    // phone", and it is what makes a later connect skip Cloud-API registration.
+    // Left set on a card whose number is gone, it is a claim about a number that
+    // is no longer there — the same reason this function already clears
+    // whatsapp_disconnect_reason rather than leaving support a false trail.
+    it('clears the coexistence flag along with the number', async () => {
+        const user = await createTestUser();
+        const workspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, {
+            workspaceId: workspace.id,
+            whatsappPhoneNumberId: `pn-${Date.now()}`,
+            whatsappAccessToken: 'wa-token',
+            whatsappCoexistence: true,
+            whatsappAutoReplyEnabled: true,
+        });
+
+        const updated = await pagesService.disconnectWhatsApp(workspace.id, page.id);
+
+        expect(updated?.whatsappCoexistence).toBeNull();
+        expect(updated?.whatsappAccessToken).toBeNull();
+        expect(updated?.whatsappPhoneNumberId).toBeNull();
+    });
+});
