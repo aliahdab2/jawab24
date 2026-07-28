@@ -83,7 +83,13 @@ export interface HealthInput {
         trialEndsAt: Date | null;
     } | null;
     pages: HealthInputPage[];
-    usage: { aiRepliesCount: number; limit: number | null };
+    /**
+     * Current-period plan usage plus the non-expiring top-up balance. The balance
+     * is REQUIRED because the runtime gate (`canUseAiReplies`) falls through to
+     * top-up when the plan cap is exhausted — without it the usage flags would
+     * claim replies stop at the cap when they actually keep flowing.
+     */
+    usage: { aiRepliesCount: number; limit: number | null; topupBalance: number };
     /** True when the user owns no pages but is a member of someone else's workspace. */
     isTeamMemberOnly: boolean;
 }
@@ -144,6 +150,7 @@ const NO_OFFERING_FAQ_DOWNGRADE = 3;
 export const HEALTH_FLAG_KEYS = [
     'no_pages', 'ai_disabled', 'all_channels_silent', 'channel_silent',
     'trial_expired', 'subscription_inactive', 'usage_over_cap', 'usage_near_cap',
+    'usage_on_topup', 'usage_near_cap_on_topup',
     'limit_fallback_off', 'page_disconnected', 'auto_reply_user_off',
     'auto_reply_system_off', 'auto_reply_off_unknown', 'kb_empty',
     'no_offering_chunks', 'kb_thin', 'unresolved_kb_gaps', 'persona_placeholder',
@@ -268,18 +275,41 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
     }
 
     // Usage vs plan cap.
+    //
+    // A non-expiring top-up balance keeps Smart Replies flowing past the plan cap:
+    // `canUseAiReplies` falls through to top-up, and `incrementAiReplies` charges
+    // the overflow against the balance. So while a balance exists, the plan cap is
+    // NOT a wall — the red "limit reached" and the "replies will go silent at the
+    // cap" lines would both be false. Mirrors the merchant-facing states
+    // (`AiUsageWarningBanner`, `resolveAiUsageNotificationType`).
     const limit = usage.limit;
+    const onTopup = usage.topupBalance > 0;
     if (limit !== null && limit > 0) {
         const used = usage.aiRepliesCount;
         // Floor, not round — 999/1000 must read "99%", never "100%" under the
         // near-cap (not over-cap) message.
         const percent = Math.floor((used / limit) * 100);
+        const nearCap = used >= USAGE_NEAR_CAP_RATIO * limit;
+        const balance = usage.topupBalance;
         if (used >= limit) {
-            add('red', 'usage_over_cap', { meta: { used, limit } });
-        } else if (used >= USAGE_NEAR_CAP_RATIO * limit) {
-            add('yellow', 'usage_near_cap', { meta: { used, limit, percent } });
+            // Past the cap but covered: replies still send, nothing to fix — info.
+            if (onTopup) {
+                add('info', 'usage_on_topup', { meta: { used, limit, balance } });
+            } else {
+                add('red', 'usage_over_cap', { meta: { used, limit } });
+            }
+        } else if (nearCap) {
+            // Still yellow when covered — the overflow starts burning paid top-up
+            // credit — but the message says so instead of implying a stop.
+            if (onTopup) {
+                add('yellow', 'usage_near_cap_on_topup', { meta: { used, limit, percent, balance } });
+            } else {
+                add('yellow', 'usage_near_cap', { meta: { used, limit, percent } });
+            }
         }
-        if (used >= USAGE_NEAR_CAP_RATIO * limit && settings?.limitFallbackEnabled === false) {
+        // The limit fallback only runs on the `!limitCheck.allowed` branch of the
+        // generator — unreachable while top-up covers the overflow.
+        if (nearCap && !onTopup && settings?.limitFallbackEnabled === false) {
             add('yellow', 'limit_fallback_off');
         }
     }
