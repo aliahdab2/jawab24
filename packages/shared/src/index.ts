@@ -1128,11 +1128,16 @@ export {
 // prod conversation (إجدابيا, 2026-07-28) answering «موجود مخمليه بودي» /
 // «مخمريه» in flat MSA on a page whose own KB opens with «ارجو التحدث باللهجة
 // الليبية مع الزباين». Two failures in one string — it reads as a machine, and it
-// drops the merchant's persona. Fixed the way the wording rules already work in
-// this file: the stock sentence and its paraphrases are BANNED, the rule now
-// demands naming the specific missing thing in the customer's dialect and the
-// page's brand voice, and Examples 4/4b demonstrate the SAME missing-info case
-// answered two different ways so there is no fixed sentence left to copy.
+// drops the merchant's persona. Fixed DEMONSTRATION-FIRST, which is the
+// escalation order this file's own history settles on: Examples 4/4b answer the
+// SAME missing-info case two different ways, so no single sentence is left to
+// recite, and the rule asks for the specific missing thing in the customer's
+// dialect and the page's brand voice. The offending sentence is named ONCE as the
+// attractor to avoid — deliberately NOT a blocklist of paraphrases, since a
+// paraphrasing model routes around those (proven here: the closing-phrase rule
+// already banned that shape and was ignored while an example contradicted it).
+// If the demonstrations prove insufficient on eval, that is when a harder guard
+// earns its place — and it gets removed again if it doesn't measurably help.
 export const PROMPT_VERSION = 'v63';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
