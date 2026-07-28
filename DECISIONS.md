@@ -232,3 +232,34 @@ Template for new entries:
 <What was decided, in 1-3 lines.>
 **Why:** <The reasoning, so it isn't re-derived.>
 -->
+
+## D-046 · Facebook sync becomes suggestions-only: nothing lands in merchant-facing data without approval, and the merchant's own KB text always outranks Facebook
+
+Owner rulings, 2026-07-28. (1) A re-sync must never replace merchant-side structured
+data — Facebook data may be stale; the existing editor/kb_extract protection stays, and
+the "Option B" auto-promotion of fb_sync values into the `merchant` half is reversed:
+FB sync writes ONLY the `suggestions` half, surfaced as one-tap-approve proposals in
+/business and onboarding. Approval is what mints `editor` + `confirmedAt` — the same
+currency the authority layer and the readiness metric already count. Cost of the
+reversal is ~zero for replies because D-009 already bars unconfirmed FB facts from the
+prompt. (2) Operational facts hand-written in the KB (hours, phones, address) are the
+truth by authorship — `kb_extract` outranks `fb_sync` end-to-end (already the D-008
+merge rules; activation = `KB_OPFACTS_EXTRACT`, set to `shadow` in prod this date, then
+`on` + the one-off backfill). (3) Planned companion, not yet built: a SYNC-DRIFT alert —
+when a refresh brings a Facebook value that DIFFERS from the merchant-owned value, the
+sync stays silent in data but notifies the merchant («فيسبوك يقول دوامك تغيّر — تحدّث؟»)
+with a one-tap adopt; silence-by-design must not hide real-world changes from the one
+person who can judge them. (4) `website` loses its
+"descriptive, low-harm" privilege (owner, same date: most merchants have no website, and
+FB's value is often a dead link) — today `formatBusinessProfile` (businessProfile.ts:42)
+is the last spot where an UNCONFIRMED fb_sync value still reaches the prompt; website
+joins the operational facts behind the confirmation gate, stated only when
+merchant-confirmed or present in his own KB text, and gets no readiness-card weight.
+And "no website" becomes an EXPLICIT one-tap state (owner: «لازم نعطي خيار انه لا يوجد
+موقع الكتروني») — same third-state pattern as storefront/online-only and the B2-V2
+delivery negative: stored as a confirmed fact, rendered as a confident negative
+(«لا يوجد موقع إلكتروني — التواصل هنا مباشرة»), and the readiness card treats it as
+RESOLVED, not missing. An empty field reaches the model as unknown and produces a
+hedge; only a stored negative produces a plain, selling "no".
+Also fix in the same work: the stale comment at
+`pages.ts:1042` claiming the merchant half is editor-write-only (false since Option B).
