@@ -1122,22 +1122,31 @@ export {
 // collision above is what happens when two prompts share one version — the cache
 // serves the other change's replies. A GAP is harmless (the value is a cache key
 // and a telemetry tag, never compared for order); a DUPLICATE is not.
-// v63 — the no-answer reply is composed, not recited. "هذه المعلومة غير متوفرة
-// لدي حالياً" shipped as the literal `reply` of few-shot Example 4, so the model
-// copied it verbatim instead of writing its own sentence: observed twice in one
-// prod conversation (إجدابيا, 2026-07-28) answering «موجود مخمليه بودي» /
-// «مخمريه» in flat MSA on a page whose own KB opens with «ارجو التحدث باللهجة
-// الليبية مع الزباين». Two failures in one string — it reads as a machine, and it
-// drops the merchant's persona. Fixed DEMONSTRATION-FIRST, which is the
-// escalation order this file's own history settles on: Examples 4/4b answer the
-// SAME missing-info case two different ways, so no single sentence is left to
-// recite, and the rule asks for the specific missing thing in the customer's
-// dialect and the page's brand voice. The offending sentence is named ONCE as the
-// attractor to avoid — deliberately NOT a blocklist of paraphrases, since a
-// paraphrasing model routes around those (proven here: the closing-phrase rule
-// already banned that shape and was ignored while an example contradicted it).
-// If the demonstrations prove insufficient on eval, that is when a harder guard
-// earns its place — and it gets removed again if it doesn't measurably help.
+// v63 — the no-answer reply carries the page's own voice instead of a stock
+// sentence. "هذه المعلومة غير متوفرة لدي حالياً" shipped as the literal `reply` of
+// few-shot Example 4, so the model reproduced it: seen twice in one prod
+// conversation (إجدابيا, 2026-07-28) answering «موجود مخمليه بودي» / «مخمريه» in
+// flat MSA, on a page whose own Business Info opens with «التحدث باللهجة الليبية
+// مع الزباين». Two failures in one string — it reads as a machine, and it drops
+// the merchant's persona.
+// The operative variable was NOT how many times the sentence appeared in the
+// prompt. On entering the info_not_in_kb path the model looks for a successful
+// example OF THAT PATH, and the only Arabic one was that sentence. So the fix is
+// to make that single example worth imitating: it is now a PRODUCT question (the
+// failure mode that actually occurs — the English Example 2 was already fine),
+// and its reply names the product without inferring absence.
+// Expected and accepted: the model will generalise the SHAPE «ما عندي معلومة عن
+// ‹X›» into a new default rather than composing freshly every time. That is the
+// goal, not a regression — the new default names the subject, cannot assert
+// non-existence, and leaves room for the customer's dialect. It does mean the
+// example's wording is a fleet-wide template decision, so it stays pan-Arabic
+// (readable for Egyptian, Gulf, Levantine and Maghrebi customers alike).
+// Also removed the sentence from the four rule sites that restated it, and
+// deliberately did NOT keep a "never say X" mention: restating the string adds
+// nothing the shape rules don't already cover, and a paraphrasing model routes
+// around literal blocklists anyway — proven in this very prompt, where the
+// closing-phrase rule banned that shape and was ignored while an example
+// contradicted it.
 export const PROMPT_VERSION = 'v63';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
