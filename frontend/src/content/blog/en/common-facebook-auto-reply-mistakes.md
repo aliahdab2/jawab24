@@ -26,7 +26,7 @@ Your auto-reply should be contextual. If someone asks about pricing, they should
 
 This means moving beyond a single generic reply and setting up either preset replies (keyword-triggered) or AI smart replies (context-aware). At minimum, create preset replies for your 5-10 most common questions and use a keyword trigger for each one.
 
-The best AI tools go further — they load the conversation history (not just the latest message) so they understand context. When a customer asks "how much?" on a post showing a leather bag, the AI knows they're asking about *that* bag and replies with the correct price. No keyword rules needed. No flow building. Just business information in a Knowledge Base and AI that understands what customers mean.
+The best AI tools go further — they load the conversation history (not just the latest message) so they understand context. When a customer asks "how much?" on a post showing a leather bag, the AI knows they're asking about *that* bag and replies with the correct price. No keyword rules needed. No flow building. Just your business information and AI that understands what customers mean.
 
 Even your fallback reply (when the AI doesn't match a specific question) should be more useful than "thanks for your message." Include your business hours, a link to your FAQ or product catalog, and a realistic timeline for when you'll respond personally.
 
@@ -82,9 +82,9 @@ A good away message for off-hours: "Thanks for your message! We're currently off
 
 This sets expectations, provides value, and prevents the frustration of trying to have a complex conversation with an AI at midnight.
 
-## Mistake 5: Never Updating Your Knowledge Base
+## Mistake 5: Never Updating Your Business Info
 
-Your auto-reply is only as good as the information behind it. If you added new products last month but your Knowledge Base still has old products, the AI will give outdated answers. If you changed your return policy but didn't update the templates, customers get wrong information.
+Your auto-reply is only as good as the information behind it. If you added new products last month but your Business Info still has old products, the AI will give outdated answers. If you changed your return policy but didn't update the templates, customers get wrong information.
 
 This is especially damaging because the customer doesn't know they're getting outdated info. They trust the auto-reply, act on it, and then feel betrayed when reality doesn't match.
 
@@ -94,7 +94,7 @@ Schedule a monthly review of your auto-reply content. Check that product informa
 
 If your auto-reply tool connects to your e-commerce store (Shopify, Salla, or [Zid](/blog/zid-store-facebook-auto-reply)), product information updates automatically. But policies, FAQ answers, and business information still need manual updates.
 
-**Use KB gap detection if your tool offers it.** The best auto-reply systems track what customers ask about that isn't covered in your Knowledge Base. Instead of guessing what information to add, you see exactly what real customers are asking that the AI can't answer well. This turns your Knowledge Base maintenance from guesswork into a data-driven process — you add the information that actually matters based on real customer demand.
+**Use KB gap detection if your tool offers it.** The best auto-reply systems track what customers ask about that isn't covered in your Business Info. Instead of guessing what information to add, you see exactly what real customers are asking that the AI can't answer well. This turns your Business Info maintenance from guesswork into a data-driven process — you add the information that actually matters based on real customer demand.
 
 Create a simple checklist:
 
@@ -114,6 +114,6 @@ Similarly, when customers send rapid-fire messages ("How much is this?", "Is it 
 
 Auto-reply should feel like a helpful assistant, not a wall between you and your customers. The businesses that get the most value from auto-reply follow a simple principle: automate the routine, escalate the complex, and never stop improving.
 
-Start with templates for your most common questions. Add AI smart replies for everything in between. Set up proper escalation with push notifications for complaints. Configure business hours and away messages. Review your Knowledge Base monthly using gap detection data. And make sure your tool steps aside when you step in.
+Start with templates for your most common questions. Add AI smart replies for everything in between. Set up proper escalation with push notifications for complaints. Configure business hours and away messages. Review your Business Info monthly using gap detection data. And make sure your tool steps aside when you step in.
 
 Your customers want fast, accurate, helpful replies. Auto-reply delivers exactly that — as long as you avoid these mistakes.

@@ -20,7 +20,7 @@ The solution: connect your Salla product catalog directly to your Facebook auto-
 
 When you connect your Salla store to an auto-reply tool like Jawab24, here's what happens:
 
-**Product import:** Your entire Salla catalog is imported — product names, descriptions, prices, images, and availability. This becomes part of the AI's Knowledge Base.
+**Product import:** Your entire Salla catalog is imported — product names, descriptions, prices, images, and availability. This becomes part of the AI's Business Info.
 
 **Automatic updates:** When you change a price or mark a product as out of stock in Salla, the auto-reply system updates automatically through webhooks. No manual sync needed.
 
@@ -64,7 +64,7 @@ Reply: "This item is currently out of stock, but we're expecting a restock soon.
 
 **Scenario 4 — Shipping question:**
 Customer: "Do you deliver to Riyadh?"
-AI checks Knowledge Base, shipping policy covers all Saudi cities
+AI checks Business Info, shipping policy covers all Saudi cities
 Reply: "We deliver to all cities in the Kingdom. Delivery to Riyadh takes 2-3 business days."
 
 Jawab24 handles conversations in both English and Arabic — including 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA). So whether your customers write in English or in their local dialect, the AI replies naturally in the same language. Turkish, Swedish, and German support is coming soon.
