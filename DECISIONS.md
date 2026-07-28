@@ -263,3 +263,90 @@ RESOLVED, not missing. An empty field reaches the model as unknown and produces 
 hedge; only a stored negative produces a plain, selling "no".
 Also fix in the same work: the stale comment at
 `pages.ts:1042` claiming the merchant half is editor-write-only (false since Option B).
+
+## D-047 · Facts the model must not judge are decided in code and enforced by what it is SHOWN — not by prompt rules
+
+Owner ruling, 2026-07-28, after three measured attempts on the same defect (a reply
+naming real outlets and placing them in a city that appears in no list — SYSTEM_ANALYSIS
+gap 13, the BAMBO LIBYA العجيلات incident): «عم نضل نضيف قواعد على البرومبت وعم يكبر…
+لازم نلاقي طريقة ما نحتاج خلص، متل داتابيز محفوظ فيها القيم الدقيقة وبس».
+
+The evidence behind it, all from `scripts/place-fabrication-probe.ts` (48 absent-place
+samples through the real reply path, judged by the shipped grounding verifier;
+"controls" = a LISTED area and a real price, which must stay answerable):
+
+| arm | absent-place | first ask | near-name | doubling down | controls |
+|---|---|---|---|---|---|
+| no mechanism | 9/32 (28%) | — | — | — | — |
+| L1 derived coverage statement | 8/48 (16.7%) | 1/6 | 5/6 | 2/6 | 0/24 |
+| + prompt rule "match exactly" | 8/48 | 1/6 | 6/6 | 2/6 | 0/24 |
+| + computed match stated as a fact | 12/48 | 3/6 | 5/6 | 4/6 | 0/24 |
+| **L2 row gating (shipped default)** | 12/48 | **0/6** | 6/6 † | 6/6 ‡ | **0/24** |
+
+**The ruling.** Where a fact is decidable by code — "is what the customer named one of
+this merchant's registered values?" is a string comparison — it is decided in code, and
+the decision is enforced by CONTROLLING WHAT THE MODEL SEES, not by telling the model
+about it. Both telling variants failed: the rule was neutral, and stating the computed
+result made things worse (the model answered "yes, but I don't have the list"). Gating
+the rows eliminated the first-ask class outright, because a model never given
+«صيدلية السنونو» cannot place it anywhere.
+
+† Under gating this class stops being a fabrication: no unmatched outlet name is named at
+all. What remains is an unsupported availability inference about the business's OWN
+address («سوق الثلاثاء هو عنواننا ومنتجاتنا متوفرة هناك») — a DATA GAP only the merchant
+can close, and it is already on the question list for Feras («هل مقرّك نقطة بيع مباشرة؟»).
+Converting a fabrication into a question the Business Surface can ask is the intended
+direction, not a leftover.
+‡ This probe injects an already-fabricated assistant turn into the history; gating leaves
+the model no other names, so it defends the history. In production that prior turn is
+what gating prevents (0/6 above), so the number measures recovery from a lie this mode
+stops telling. Tracked by the shadow verifier; eval #737 stays `expectedFail` for it.
+History sanitization is deliberately NOT built (it would touch every DM's history
+rendering) until prod shadow verdicts show real echo cases.
+
+**Binding constraints on any such deterministic output** (owner, same date: «بركي في
+فعلاً صيدلية عنوانها سوق الجمعة — لازم تتأكد من قاعدة المعرفة قبل»):
+1. A no-match may NEVER become "that place is not available". «سوق الثلاثاء» genuinely
+   exists in the merchant's data — as the business's own address. The knowledge base stays
+   in the prompt and answers for itself.
+2. The derived coverage statement always renders, computed over EVERY live row, even when
+   zero rows are printed — so the model still knows every area the list covers and a
+   normalizer miss («الرمال» vs «حي الرمال») degrades to naming areas, never to a denial.
+3. Under-answering beats misdirecting: the acceptable failure is "I can name my areas but
+   not the shops", never "go to a pharmacy that isn't there".
+
+**Ship-the-measured-improvement corollary** (owner, same date): a residual that no data
+change can fix does not block a measured win. It ships with the number stated, the eval
+case left red, and the shadow verifier watching — never with another prompt rule bolted on.
+
+Rollback lever: `FACT_LIST_MODE=list` restores the pre-gating behaviour in one env var.
+
+<!-- Appendix to D-047, added the same day: measured interaction with an in-flight
+     prompt change from a parallel session. Recorded here because whoever ships
+     either change needs to see it before choosing a PROMPT_VERSION. -->
+
+### D-047 addendum · the G1a block and the "no-answer wording" prompt change conflict on the listed-area answer
+
+Controlled same-day A/B at temp 0 (this work stashed in one arm, nothing else changed)
+showed **no regression from G1a**: baseline 97.3% (401 PASS / 17 PARTIAL / 3 FAIL) vs
+G1a 97.3% (401 / 17 / 3), with an IDENTICAL fail set (#511, #544, #720) — all three
+predate this work and two of them (#511, #544) appear only with the parallel session's
+`systemPrompt.ts` change loaded, which is the arm's constant.
+
+Then a 2×2 probe on eval #729 — the listed-area control, «أنا ساكن في عين الدالية، وين
+نلقى منتجاتكم؟», which MUST name that area's pharmacies:
+
+| ai-worker prompt | rows | result |
+|---|---|---|
+| main | in `<business_lists>`, gated | names the area's pharmacies 3/3 ✅ |
+| main | in `<business_lists>`, ungated | 4/4 ✅ |
+| main | in KB prose (pre-G1a fixture) | ✅ (eval baseline arm) |
+| **+ no-answer-wording change** | in `<business_lists>` | **4/4 answers with the shop ADDRESS instead ❌** |
+| **+ no-answer-wording change** | ungated | **4/4 ❌** (so it is the block-vs-prose difference, not the gate) |
+
+Neither change is defective on its own; the pair is. Do not ship them under one
+PROMPT_VERSION and do not eval them separately and assume the sum — the eval suite scored
+97.3% in both arms while this case was broken in one of them, because a single sampled run
+of one case cannot see a 4-of-4 behavioural flip. Required before either merges: run the
+full suite AND the place battery with BOTH changes loaded, and settle the version numbers
+(v62 was taken for G1a, v63 for the wording change).

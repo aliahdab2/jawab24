@@ -1,8 +1,15 @@
 import { db } from '../../db';
-import { pages, posts, comments, settings, notifications, messages, ecommerceStores, ecommerceProducts, catalogItems } from '../../db/schema';
+import { pages, posts, comments, settings, notifications, messages, ecommerceStores, ecommerceProducts, catalogItems, factCollections } from '../../db/schema';
 import { eq, and, ne, inArray } from 'drizzle-orm';
 import { Logger, noopLogger } from '../../types';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
+// factCollectionsService is imported LAZILY inside its seeder (see
+// seedDistributorFactCollections). It reaches pagesService → facebook/instagram/
+// imageStorage/redis, and this module is also imported by offline harnesses
+// (scripts/grounding-audit.ts reads DEMO_PAGES + renderDemoDistributorLists), where
+// a static import opens a Redis connection and the script never exits. The renderer
+// below is pure, so it stays a normal import.
+import { renderFactCollectionBlock } from '../../services/factCollectionsRenderer';
 import { DAMASCUS_DEMO_KB } from './damascusKb';
 
 /**
@@ -324,10 +331,22 @@ export const DEMO_PAGES = [
         // exactly, because the structure is the bug).
         //
         // The merchant is an exclusive AGENT, not a shop: customers are routed to
-        // retail outlets, so their KB is mostly outlet directory — ~200 near-identical
-        // «صيدلية X - district» lines — with the price list four lines from the END,
-        // plus a stale scripted price-deflection instruction written before the
-        // price list existed.
+        // retail outlets, so their business facts are mostly outlet directory — 236
+        // near-identical «صيدلية X - district» entries — plus a price list and a
+        // stale scripted price-deflection instruction written before the price list
+        // existed.
+        //
+        // ⚠️ G1a (2026-07-28): the 236 outlets NO LONGER live in this KB text. They
+        // are seeded as fact_collections rows (DEMO_DISTRIBUTOR_COLLECTIONS below)
+        // and reach the model through <business_lists>, WITH the derived coverage
+        // statement — which is the whole point: eval #737 now gates the product path
+        // instead of a hand-written KB line. Do NOT "restore" them to the prose: the
+        // same facts in prose AND rows is the #720 contradiction factory, and prose
+        // carries no boundary statement, so the fabrication comes straight back.
+        // The long-context burial that Cat 69's green guards exercise is PRESERVED —
+        // <business_lists> is rendered after <business_knowledge> in the stable page
+        // block, so the price list still sits behind/before ~9.5k chars of
+        // near-identical pharmacy names in the assembled prompt.
         //
         // ⚠️ DIAGNOSIS HISTORY (2026-07-27) — read before "fixing" anything here.
         // This fixture was born under a "buried facts" theory: prod deflected on
@@ -346,18 +365,23 @@ export const DEMO_PAGES = [
         // fabrication (#728 — العجيلات) and the absence of any validator for
         // place claims (SYSTEM_ANALYSIS gap 13).
         //
-        // FOUR deliberate traps — do NOT "tidy" any of them:
-        //  1. The price list sits at the TAIL, after the outlet directory — the
-        //     hostile position the green guard exists to exercise. Moving it up
-        //     weakens Cat 69.
+        // FIVE deliberate traps — do NOT "tidy" any of them:
+        //  1. The price list sits at the TAIL of this KB text, and the 236-entry
+        //     directory renders after it — the hostile position the green guard
+        //     exists to exercise. Moving the prices up weakens Cat 69.
         //  2. Every standard size is the SAME price (45) — the model must not
         //     treat "which size?" as a precondition for quoting.
         //  3. Prices are PER PACK. Per-PIECE price appears nowhere, so a
         //     «قطعة واحدة بكم» turn is genuinely ungrounded (the shape that
         //     produced an invented «1200 دينار» in prod on a closing «نعم»).
-        //  4. The second region list covers صبراتة/صرمان/زلطن ONLY. العجيلات
-        //     is deliberately ABSENT from both lists so a region-attribution
-        //     fabrication is detectable.
+        //  4. The west collection covers صبراتة/صرمان/زلطن ONLY. العجيلات is
+        //     deliberately ABSENT from both collections so a region-attribution
+        //     fabrication is detectable (#728/#737).
+        //  5. The page's own address is «سوق الثلاثاء» while «سوق الخميس» is a
+        //     LISTED district. That near-miss pair reproduces the probe battery's
+        //     worst class (the business's own address answered as an outlet
+        //     location, 8/8 before the coverage statement) without needing any
+        //     assumption about whether the HQ sells anything.
         //
         // Named to dodge every other page's name pattern in playground-eval.ts
         // (no متجر/معهد/مدارس/عيادة/أزياء/دمشقي/المجد/بيت البخور/النور/الأمل/الشفاء/الخليج).
@@ -387,272 +411,6 @@ export const DEMO_PAGES = [
 لا تختلق أسعاراً.
 لا تؤكد توفر أي منتج إلا إذا كانت المعلومة مؤكدة.
 لا تقدم نصائح أو تشخيصات طبية.
-
-اذا سألك احد عن منتجات رواء ومناطق تواجدها وكتب لك عنوان سكنه أو المنطقة جاوب عليه من هذه القائمة:
-
-صيدلية النرجس المركزية - حي الرمال
-صيدلية الياقوتة - حي الرمال
-صيدلية السنبلة - حي الرمال
-صيدلية قوس المطر - حي الرمال
-صيدلية المشكاة - حي الرمال
-
-صيدلية الفيروز - تلة الريح
-صيدلية المرجانة الطبية - تلة الريح
-صيدلية العقيق المركزية - تلة الريح
-صيدلية الريحانة - تلة الريح
-صيدلية الغدير - تلة الريح
-صيدلية الينبوع - تلة الريح
-صيدلية السرو - تلة الريح
-صيدلية العنبرية - تلة الريح
-صيدلية الصفصاف - تلة الريح
-صيدلية الميرمية - تلة الريح
-صيدلية قنديل البحر - تلة الريح
-صيدلية الشعاع 2 - تلة الريح
-
-صيدلية البابونج - وادي الرمان
-صيدلية الزنبقة - وادي الرمان
-صيدلية السوسنة المركزية - وادي الرمان
-صيدلية الداليا - وادي الرمان
-صيدلية الكاميليا - وادي الرمان
-صيدلية الماغنوليا - وادي الرمان
-صيدلية اللوتس الأبيض - وادي الرمان
-صيدلية النيلوفر - وادي الرمان
-صيدلية الأوركيدا - وادي الرمان
-صيدلية الغاردينيا - وادي الرمان
-صيدلية البنفسجة - وادي الرمان
-صيدلية الأقحوانة - وادي الرمان
-صيدلية التوليب 2 - وادي الرمان
-صيدلية نسمة الوادي - وادي الرمان
-صيدلية ظل الرمان - وادي الرمان
-صيدلية بستان الشفاء الجديد - وادي الرمان
-صيدلية قطرة الندى - وادي الرمان
-صيدلية الفجر الساطع - وادي الرمان
-صيدلية نبض الوادي - وادي الرمان
-صيدلية روضة العافية - وادي الرمان
-
-صيدلية المرساة - الميناء القديم
-صيدلية الشراع الذهبي - الميناء القديم
-صيدلية البوصلة - الميناء القديم
-صيدلية النورس - الميناء القديم
-صيدلية الدلفين الطبية - الميناء القديم
-صيدلية الصدف - الميناء القديم
-صيدلية المحارة - الميناء القديم
-صيدلية اللؤلؤة البيضاء - الميناء القديم
-صيدلية الموجة - الميناء القديم
-صيدلية الرصيف الغربي - الميناء القديم
-صيدلية فنار الميناء - الميناء القديم
-صيدلية شاطئ الأمواج - الميناء القديم
-صيدلية رمال الميناء - الميناء القديم
-
-صيدلية السنونو - سوق الخميس
-صيدلية الكروان - سوق الخميس
-صيدلية العندليب - سوق الخميس
-صيدلية البلبل الذهبي - سوق الخميس
-صيدلية الحسّون المركزية - سوق الخميس
-صيدلية طيور الجنة - سوق الخميس
-صيدلية ريش النعام - سوق الخميس
-صيدلية صوت الكروان - سوق الخميس
-صيدلية عش الدوري - سوق الخميس
-صيدلية جناح اليمامة - سوق الخميس
-
-صيدلية الصنوبرة - حي الصنوبر
-صيدلية خضراء الصنوبر - حي الصنوبر
-صيدلية ظل الأرزة - حي الصنوبر
-صيدلية الغصن الندي - حي الصنوبر
-صيدلية الجذع الأبيض - حي الصنوبر
-صيدلية ورقة التوت - حي الصنوبر
-صيدلية ثمرة الجميز - حي الصنوبر
-صيدلية عطر الغابة - حي الصنوبر
-
-صيدلية بوابة العافية - باب البستان
-صيدلية سور البستان - باب البستان
-صيدلية مفتاح الحياة الجديدة - باب البستان
-صيدلية سلة الرمان - باب البستان
-صيدلية قنطرة الشفاء الحديثة - باب البستان
-صيدلية عتبة النور الساطع - باب البستان
-صيدلية دالية البستان - باب البستان
-
-صيدلية نبع الدالية - عين الدالية
-صيدلية ساقية العين - عين الدالية
-صيدلية جدول الصفاء - عين الدالية
-صيدلية بئر الروضة - عين الدالية
-صيدلية خرير الماء - عين الدالية
-صيدلية سبيل العطاء - عين الدالية
-صيدلية مزن العين - عين الدالية
-صيدلية غيث الدالية - عين الدالية
-صيدلية قطاف الخير - عين الدالية
-صيدلية سنابل العين - عين الدالية
-صيدلية مروج الدالية - عين الدالية
-صيدلية ضفاف الجدول - عين الدالية
-صيدلية ريف العين - عين الدالية
-صيدلية ندى الفجر الجديد - عين الدالية
-صيدلية هطول الغيم - عين الدالية
-صيدلية رذاذ الصباح - عين الدالية
-صيدلية سحابة الخير الدائم - عين الدالية
-صيدلية مطرة الربيع - عين الدالية
-صيدلية وابل الرحمات - عين الدالية
-صيدلية ديمة العطاء - عين الدالية
-صيدلية هتان الدالية - عين الدالية
-صيدلية طلّ المروج - عين الدالية
-صيدلية غدق البشائر - عين الدالية
-صيدلية مزنة الوادي الأخضر - عين الدالية
-صيدلية قطر السماء - عين الدالية
-صيدلية سيل العافية الجديد - عين الدالية
-صيدلية فيض البركات - عين الدالية
-
-صيدلية القنطرة الأولى - شارع القناطر
-صيدلية جسر الرحمة الجديد - شارع القناطر
-صيدلية عقد القناطر - شارع القناطر
-صيدلية قوس الشارع - شارع القناطر
-صيدلية معبر السلامة - شارع القناطر
-صيدلية رواق القناطر - شارع القناطر
-صيدلية عمود النور الأبيض - شارع القناطر
-
-صيدلية المرآة الصافية - حي المرايا
-صيدلية بلور المرايا - حي المرايا
-صيدلية زجاج الصفاء - حي المرايا
-صيدلية صقيل الحكمة الجديدة - حي المرايا
-صيدلية لمعة الفجر - حي المرايا
-صيدلية بريق الأمل الطبية - حي المرايا
-صيدلية وميض الشفاء الحديث - حي المرايا
-صيدلية التماعة - حي المرايا
-صيدلية إشراقة الضحى - حي المرايا
-صيدلية سنا البرق - حي المرايا
-
-صيدلية حجر الرحى - تقاطع الرحى
-صيدلية طاحونة الخير - تقاطع الرحى
-صيدلية دقيق البركة - تقاطع الرحى
-صيدلية سنبلة الرحى - تقاطع الرحى
-صيدلية قمح العافية - تقاطع الرحى
-صيدلية بيدر السلامة - تقاطع الرحى
-صيدلية مذراة الحصاد - تقاطع الرحى
-صيدلية غربال الصفاء - تقاطع الرحى
-
-صيدلية الغزالة البيضاء - ربوة الغزلان
-صيدلية ظبي الربوة - ربوة الغزلان
-صيدلية ريم الهضاب الجديدة - ربوة الغزلان
-صيدلية مها الروابي - ربوة الغزلان
-صيدلية عفراء الطبية - ربوة الغزلان
-صيدلية شادن المركزية - ربوة الغزلان
-صيدلية خشف الربوة - ربوة الغزلان
-صيدلية رشأ العافية - ربوة الغزلان
-
-صيدلية الهودج - حي القوافل
-صيدلية الراحلة - حي القوافل
-صيدلية دليل القافلة - حي القوافل
-صيدلية منزل الركب - حي القوافل
-صيدلية سقاية المسافر - حي القوافل
-صيدلية زاد الطريق - حي القوافل
-صيدلية محطة الرمل - حي القوافل
-صيدلية خان القوافل - حي القوافل
-صيدلية مربط الخيل - حي القوافل
-صيدلية عين الركب - حي القوافل
-
-صيدلية الجرة - شارع الفخار
-صيدلية الإبريق الأزرق - شارع الفخار
-صيدلية دولاب الفخار - شارع الفخار
-صيدلية الطين الأبيض - شارع الفخار
-صيدلية المزهرية - شارع الفخار
-صيدلية الفنجان الذهبي - شارع الفخار
-صيدلية قدح الصباح - شارع الفخار
-صيدلية صحن الديار - شارع الفخار
-
-صيدلية ريشة الطاحونة - حي الطواحين
-صيدلية حجر الرحى الكبير - حي الطواحين
-صيدلية مجرى الماء - حي الطواحين
-صيدلية ساقية الطاحون - حي الطواحين
-صيدلية دقيق الصباح - حي الطواحين
-صيدلية خميرة البلدة - حي الطواحين
-صيدلية رغيف العافية - حي الطواحين
-صيدلية تنور الحارة - حي الطواحين
-صيدلية فرن القرية - حي الطواحين
-
-صيدلية ظل الصفصافة - وادي الصفصاف
-صيدلية جدول الوادي - وادي الصفصاف
-صيدلية حصى النهر - وادي الصفصاف
-صيدلية ضفة الوادي - وادي الصفصاف
-صيدلية جسر الخشب - وادي الصفصاف
-صيدلية عبّارة الوادي - وادي الصفصاف
-صيدلية منحدر الريح - وادي الصفصاف
-صيدلية مصب الجدول - وادي الصفصاف
-
-صيدلية فتيلة المصباح - حي المشكاة
-صيدلية زيت المشكاة - حي المشكاة
-صيدلية نور السراج - حي المشكاة
-صيدلية قنديل الحارة - حي المشكاة
-صيدلية شمعة المساء - حي المشكاة
-صيدلية فانوس العيد - حي المشكاة
-صيدلية ضوء القمر الجديد - حي المشكاة
-صيدلية هالة النور - حي المشكاة
-صيدلية شعاع الفجر - حي المشكاة
-صيدلية بريق النجمة - حي المشكاة
-
-صيدلية ريشة العنقاء - تلة العنقاء
-صيدلية جناح الطائر - تلة العنقاء
-صيدلية منقار النورس - تلة العنقاء
-صيدلية عش العنقاء - تلة العنقاء
-صيدلية بيضة الرخ - تلة العنقاء
-صيدلية صوت الهدهد - تلة العنقاء
-صيدلية غناء القبرة - تلة العنقاء
-صيدلية رفرفة السنونو - تلة العنقاء
-
-صيدلية الساقية الأولى - حي السواقي
-صيدلية مجرى السواقي - حي السواقي
-صيدلية ناعورة الحي - حي السواقي
-صيدلية دولاب الماء - حي السواقي
-صيدلية قناة الري - حي السواقي
-صيدلية مقسم الماء - حي السواقي
-صيدلية فوهة النبع - حي السواقي
-صيدلية حوض السقيا - حي السواقي
-صيدلية بركة الحي - حي السواقي
-صيدلية مزراب المطر - حي السواقي
-
-صيدلية منجل الحصاد - شارع الحصادين
-صيدلية سنبلة الذهب - شارع الحصادين
-صيدلية حزمة القمح - شارع الحصادين
-صيدلية جرن البيدر - شارع الحصادين
-صيدلية مذراة التبن - شارع الحصادين
-صيدلية غلة الموسم - شارع الحصادين
-صيدلية قفة الحصاد - شارع الحصادين
-صيدلية ميزان الغلال - شارع الحصادين
-
-صيدلية دفة السفينة - حي الملاحة
-صيدلية شراع الصيد - حي الملاحة
-صيدلية صنارة البحر - حي الملاحة
-صيدلية شبكة الصياد - حي الملاحة
-صيدلية قارب الفجر - حي الملاحة
-صيدلية مجداف الصباح - حي الملاحة
-صيدلية مرفأ الصيادين - حي الملاحة
-صيدلية فنار الليل - حي الملاحة
-صيدلية ملح البحر - حي الملاحة
-صيدلية إسفنجة المرجان - حي الملاحة
-
-صيدلية عش البلارج - ربوة البلاريج
-صيدلية ساق البلارج - ربوة البلاريج
-صيدلية منقار اللقلق - ربوة البلاريج
-صيدلية رحلة الطيور - ربوة البلاريج
-صيدلية سرب الخريف - ربوة البلاريج
-صيدلية محطة الهجرة - ربوة البلاريج
-صيدلية جناح الشمال - ربوة البلاريج
-صيدلية ريش الشتاء - ربوة البلاريج
-
-واذا كان من خارج المدينة تحديداً غرب المدينة ارسل له هذه القائمة:
-
-صبراتة
-صيدلية الميناء الأثري
-صيدلية قوس المسرح
-صيدلية حجر الساحل
-صيدلية مرفأ الغرب
-صيدلية لؤلؤة الساحل الغربي
-صرمان
-صيدلية بشائر الخير
-صيدلية واحة السلامة
-صيدلية ركن العافية الجديد
-صيدلية ضياء الغرب
-زلطن
-صيدلية نخلة الواحة
-صيدلية ثمر الدوم
-صيدلية سعف النخيل
 
 هادي قائمة اسعار حفاضات رواء لو اي شخص طلب منك السعر
 
@@ -749,6 +507,347 @@ function isoDateFromToday(offsetDays: number): string {
     const d = new Date();
     d.setDate(d.getDate() + offsetDays);
     return d.toLocaleDateString('en-CA');
+}
+
+/**
+ * G1a: the distributor fixture's outlet directory as fact COLLECTIONS — the same
+ * 236 entries that used to sit in its knowledgeBase prose, now the shape a real
+ * import produces (fact_collections + fact_rows, source 'kb_extract').
+ *
+ * Why this moved out of the KB text: prose carries no boundary. The model saw all
+ * 236 lines and still fabricated ATTRIBUTION — real outlet names placed in a city
+ * that appears in neither list (BAMBO LIBYA, العجيلات, twice in prod). As rows,
+ * the renderer derives «this list covers only these «المنطقة»: …» + what absence
+ * means, which is the measured 28% to 0% mechanism. Keeping the entries in BOTH
+ * places would re-introduce the contradiction (#720) and hand the model a
+ * boundary-free copy of the same facts.
+ *
+ * `isComplete` is deliberately NOT set here — a fixture may not put words in a
+ * merchant's mouth any more than an import may (D-038). The rendered absence
+ * wording is therefore the honest «غير مسجّل لدينا» form, which is exactly what
+ * production says for BAMBO until Feras confirms his list.
+ *
+ * Entries stay in the merchant's own «name - key» line format (split at seed
+ * time): it keeps this fixture diffable against the prod KB it was cloned from.
+ */
+export const DEMO_DISTRIBUTOR_COLLECTIONS: {
+    label: string;
+    keyAttr: string;
+    rows: string[];
+}[] = [
+    {
+        label: 'صيدليات المدينة التي تبيع منتجات رواء',
+        keyAttr: 'المنطقة',
+        rows: [
+            'صيدلية النرجس المركزية - حي الرمال',
+            'صيدلية الياقوتة - حي الرمال',
+            'صيدلية السنبلة - حي الرمال',
+            'صيدلية قوس المطر - حي الرمال',
+            'صيدلية المشكاة - حي الرمال',
+            'صيدلية الفيروز - تلة الريح',
+            'صيدلية المرجانة الطبية - تلة الريح',
+            'صيدلية العقيق المركزية - تلة الريح',
+            'صيدلية الريحانة - تلة الريح',
+            'صيدلية الغدير - تلة الريح',
+            'صيدلية الينبوع - تلة الريح',
+            'صيدلية السرو - تلة الريح',
+            'صيدلية العنبرية - تلة الريح',
+            'صيدلية الصفصاف - تلة الريح',
+            'صيدلية الميرمية - تلة الريح',
+            'صيدلية قنديل البحر - تلة الريح',
+            'صيدلية الشعاع 2 - تلة الريح',
+            'صيدلية البابونج - وادي الرمان',
+            'صيدلية الزنبقة - وادي الرمان',
+            'صيدلية السوسنة المركزية - وادي الرمان',
+            'صيدلية الداليا - وادي الرمان',
+            'صيدلية الكاميليا - وادي الرمان',
+            'صيدلية الماغنوليا - وادي الرمان',
+            'صيدلية اللوتس الأبيض - وادي الرمان',
+            'صيدلية النيلوفر - وادي الرمان',
+            'صيدلية الأوركيدا - وادي الرمان',
+            'صيدلية الغاردينيا - وادي الرمان',
+            'صيدلية البنفسجة - وادي الرمان',
+            'صيدلية الأقحوانة - وادي الرمان',
+            'صيدلية التوليب 2 - وادي الرمان',
+            'صيدلية نسمة الوادي - وادي الرمان',
+            'صيدلية ظل الرمان - وادي الرمان',
+            'صيدلية بستان الشفاء الجديد - وادي الرمان',
+            'صيدلية قطرة الندى - وادي الرمان',
+            'صيدلية الفجر الساطع - وادي الرمان',
+            'صيدلية نبض الوادي - وادي الرمان',
+            'صيدلية روضة العافية - وادي الرمان',
+            'صيدلية المرساة - الميناء القديم',
+            'صيدلية الشراع الذهبي - الميناء القديم',
+            'صيدلية البوصلة - الميناء القديم',
+            'صيدلية النورس - الميناء القديم',
+            'صيدلية الدلفين الطبية - الميناء القديم',
+            'صيدلية الصدف - الميناء القديم',
+            'صيدلية المحارة - الميناء القديم',
+            'صيدلية اللؤلؤة البيضاء - الميناء القديم',
+            'صيدلية الموجة - الميناء القديم',
+            'صيدلية الرصيف الغربي - الميناء القديم',
+            'صيدلية فنار الميناء - الميناء القديم',
+            'صيدلية شاطئ الأمواج - الميناء القديم',
+            'صيدلية رمال الميناء - الميناء القديم',
+            'صيدلية السنونو - سوق الخميس',
+            'صيدلية الكروان - سوق الخميس',
+            'صيدلية العندليب - سوق الخميس',
+            'صيدلية البلبل الذهبي - سوق الخميس',
+            'صيدلية الحسّون المركزية - سوق الخميس',
+            'صيدلية طيور الجنة - سوق الخميس',
+            'صيدلية ريش النعام - سوق الخميس',
+            'صيدلية صوت الكروان - سوق الخميس',
+            'صيدلية عش الدوري - سوق الخميس',
+            'صيدلية جناح اليمامة - سوق الخميس',
+            'صيدلية الصنوبرة - حي الصنوبر',
+            'صيدلية خضراء الصنوبر - حي الصنوبر',
+            'صيدلية ظل الأرزة - حي الصنوبر',
+            'صيدلية الغصن الندي - حي الصنوبر',
+            'صيدلية الجذع الأبيض - حي الصنوبر',
+            'صيدلية ورقة التوت - حي الصنوبر',
+            'صيدلية ثمرة الجميز - حي الصنوبر',
+            'صيدلية عطر الغابة - حي الصنوبر',
+            'صيدلية بوابة العافية - باب البستان',
+            'صيدلية سور البستان - باب البستان',
+            'صيدلية مفتاح الحياة الجديدة - باب البستان',
+            'صيدلية سلة الرمان - باب البستان',
+            'صيدلية قنطرة الشفاء الحديثة - باب البستان',
+            'صيدلية عتبة النور الساطع - باب البستان',
+            'صيدلية دالية البستان - باب البستان',
+            'صيدلية نبع الدالية - عين الدالية',
+            'صيدلية ساقية العين - عين الدالية',
+            'صيدلية جدول الصفاء - عين الدالية',
+            'صيدلية بئر الروضة - عين الدالية',
+            'صيدلية خرير الماء - عين الدالية',
+            'صيدلية سبيل العطاء - عين الدالية',
+            'صيدلية مزن العين - عين الدالية',
+            'صيدلية غيث الدالية - عين الدالية',
+            'صيدلية قطاف الخير - عين الدالية',
+            'صيدلية سنابل العين - عين الدالية',
+            'صيدلية مروج الدالية - عين الدالية',
+            'صيدلية ضفاف الجدول - عين الدالية',
+            'صيدلية ريف العين - عين الدالية',
+            'صيدلية ندى الفجر الجديد - عين الدالية',
+            'صيدلية هطول الغيم - عين الدالية',
+            'صيدلية رذاذ الصباح - عين الدالية',
+            'صيدلية سحابة الخير الدائم - عين الدالية',
+            'صيدلية مطرة الربيع - عين الدالية',
+            'صيدلية وابل الرحمات - عين الدالية',
+            'صيدلية ديمة العطاء - عين الدالية',
+            'صيدلية هتان الدالية - عين الدالية',
+            'صيدلية طلّ المروج - عين الدالية',
+            'صيدلية غدق البشائر - عين الدالية',
+            'صيدلية مزنة الوادي الأخضر - عين الدالية',
+            'صيدلية قطر السماء - عين الدالية',
+            'صيدلية سيل العافية الجديد - عين الدالية',
+            'صيدلية فيض البركات - عين الدالية',
+            'صيدلية القنطرة الأولى - شارع القناطر',
+            'صيدلية جسر الرحمة الجديد - شارع القناطر',
+            'صيدلية عقد القناطر - شارع القناطر',
+            'صيدلية قوس الشارع - شارع القناطر',
+            'صيدلية معبر السلامة - شارع القناطر',
+            'صيدلية رواق القناطر - شارع القناطر',
+            'صيدلية عمود النور الأبيض - شارع القناطر',
+            'صيدلية المرآة الصافية - حي المرايا',
+            'صيدلية بلور المرايا - حي المرايا',
+            'صيدلية زجاج الصفاء - حي المرايا',
+            'صيدلية صقيل الحكمة الجديدة - حي المرايا',
+            'صيدلية لمعة الفجر - حي المرايا',
+            'صيدلية بريق الأمل الطبية - حي المرايا',
+            'صيدلية وميض الشفاء الحديث - حي المرايا',
+            'صيدلية التماعة - حي المرايا',
+            'صيدلية إشراقة الضحى - حي المرايا',
+            'صيدلية سنا البرق - حي المرايا',
+            'صيدلية حجر الرحى - تقاطع الرحى',
+            'صيدلية طاحونة الخير - تقاطع الرحى',
+            'صيدلية دقيق البركة - تقاطع الرحى',
+            'صيدلية سنبلة الرحى - تقاطع الرحى',
+            'صيدلية قمح العافية - تقاطع الرحى',
+            'صيدلية بيدر السلامة - تقاطع الرحى',
+            'صيدلية مذراة الحصاد - تقاطع الرحى',
+            'صيدلية غربال الصفاء - تقاطع الرحى',
+            'صيدلية الغزالة البيضاء - ربوة الغزلان',
+            'صيدلية ظبي الربوة - ربوة الغزلان',
+            'صيدلية ريم الهضاب الجديدة - ربوة الغزلان',
+            'صيدلية مها الروابي - ربوة الغزلان',
+            'صيدلية عفراء الطبية - ربوة الغزلان',
+            'صيدلية شادن المركزية - ربوة الغزلان',
+            'صيدلية خشف الربوة - ربوة الغزلان',
+            'صيدلية رشأ العافية - ربوة الغزلان',
+            'صيدلية الهودج - حي القوافل',
+            'صيدلية الراحلة - حي القوافل',
+            'صيدلية دليل القافلة - حي القوافل',
+            'صيدلية منزل الركب - حي القوافل',
+            'صيدلية سقاية المسافر - حي القوافل',
+            'صيدلية زاد الطريق - حي القوافل',
+            'صيدلية محطة الرمل - حي القوافل',
+            'صيدلية خان القوافل - حي القوافل',
+            'صيدلية مربط الخيل - حي القوافل',
+            'صيدلية عين الركب - حي القوافل',
+            'صيدلية الجرة - شارع الفخار',
+            'صيدلية الإبريق الأزرق - شارع الفخار',
+            'صيدلية دولاب الفخار - شارع الفخار',
+            'صيدلية الطين الأبيض - شارع الفخار',
+            'صيدلية المزهرية - شارع الفخار',
+            'صيدلية الفنجان الذهبي - شارع الفخار',
+            'صيدلية قدح الصباح - شارع الفخار',
+            'صيدلية صحن الديار - شارع الفخار',
+            'صيدلية ريشة الطاحونة - حي الطواحين',
+            'صيدلية حجر الرحى الكبير - حي الطواحين',
+            'صيدلية مجرى الماء - حي الطواحين',
+            'صيدلية ساقية الطاحون - حي الطواحين',
+            'صيدلية دقيق الصباح - حي الطواحين',
+            'صيدلية خميرة البلدة - حي الطواحين',
+            'صيدلية رغيف العافية - حي الطواحين',
+            'صيدلية تنور الحارة - حي الطواحين',
+            'صيدلية فرن القرية - حي الطواحين',
+            'صيدلية ظل الصفصافة - وادي الصفصاف',
+            'صيدلية جدول الوادي - وادي الصفصاف',
+            'صيدلية حصى النهر - وادي الصفصاف',
+            'صيدلية ضفة الوادي - وادي الصفصاف',
+            'صيدلية جسر الخشب - وادي الصفصاف',
+            'صيدلية عبّارة الوادي - وادي الصفصاف',
+            'صيدلية منحدر الريح - وادي الصفصاف',
+            'صيدلية مصب الجدول - وادي الصفصاف',
+            'صيدلية فتيلة المصباح - حي المشكاة',
+            'صيدلية زيت المشكاة - حي المشكاة',
+            'صيدلية نور السراج - حي المشكاة',
+            'صيدلية قنديل الحارة - حي المشكاة',
+            'صيدلية شمعة المساء - حي المشكاة',
+            'صيدلية فانوس العيد - حي المشكاة',
+            'صيدلية ضوء القمر الجديد - حي المشكاة',
+            'صيدلية هالة النور - حي المشكاة',
+            'صيدلية شعاع الفجر - حي المشكاة',
+            'صيدلية بريق النجمة - حي المشكاة',
+            'صيدلية ريشة العنقاء - تلة العنقاء',
+            'صيدلية جناح الطائر - تلة العنقاء',
+            'صيدلية منقار النورس - تلة العنقاء',
+            'صيدلية عش العنقاء - تلة العنقاء',
+            'صيدلية بيضة الرخ - تلة العنقاء',
+            'صيدلية صوت الهدهد - تلة العنقاء',
+            'صيدلية غناء القبرة - تلة العنقاء',
+            'صيدلية رفرفة السنونو - تلة العنقاء',
+            'صيدلية الساقية الأولى - حي السواقي',
+            'صيدلية مجرى السواقي - حي السواقي',
+            'صيدلية ناعورة الحي - حي السواقي',
+            'صيدلية دولاب الماء - حي السواقي',
+            'صيدلية قناة الري - حي السواقي',
+            'صيدلية مقسم الماء - حي السواقي',
+            'صيدلية فوهة النبع - حي السواقي',
+            'صيدلية حوض السقيا - حي السواقي',
+            'صيدلية بركة الحي - حي السواقي',
+            'صيدلية مزراب المطر - حي السواقي',
+            'صيدلية منجل الحصاد - شارع الحصادين',
+            'صيدلية سنبلة الذهب - شارع الحصادين',
+            'صيدلية حزمة القمح - شارع الحصادين',
+            'صيدلية جرن البيدر - شارع الحصادين',
+            'صيدلية مذراة التبن - شارع الحصادين',
+            'صيدلية غلة الموسم - شارع الحصادين',
+            'صيدلية قفة الحصاد - شارع الحصادين',
+            'صيدلية ميزان الغلال - شارع الحصادين',
+            'صيدلية دفة السفينة - حي الملاحة',
+            'صيدلية شراع الصيد - حي الملاحة',
+            'صيدلية صنارة البحر - حي الملاحة',
+            'صيدلية شبكة الصياد - حي الملاحة',
+            'صيدلية قارب الفجر - حي الملاحة',
+            'صيدلية مجداف الصباح - حي الملاحة',
+            'صيدلية مرفأ الصيادين - حي الملاحة',
+            'صيدلية فنار الليل - حي الملاحة',
+            'صيدلية ملح البحر - حي الملاحة',
+            'صيدلية إسفنجة المرجان - حي الملاحة',
+            'صيدلية عش البلارج - ربوة البلاريج',
+            'صيدلية ساق البلارج - ربوة البلاريج',
+            'صيدلية منقار اللقلق - ربوة البلاريج',
+            'صيدلية رحلة الطيور - ربوة البلاريج',
+            'صيدلية سرب الخريف - ربوة البلاريج',
+            'صيدلية محطة الهجرة - ربوة البلاريج',
+            'صيدلية جناح الشمال - ربوة البلاريج',
+            'صيدلية ريش الشتاء - ربوة البلاريج',
+        ],
+    },
+    {
+        label: 'منافذ غرب المدينة',
+        keyAttr: 'المدينة',
+        rows: [
+            'صيدلية الميناء الأثري - صبراتة',
+            'صيدلية قوس المسرح - صبراتة',
+            'صيدلية حجر الساحل - صبراتة',
+            'صيدلية مرفأ الغرب - صبراتة',
+            'صيدلية لؤلؤة الساحل الغربي - صبراتة',
+            'صيدلية بشائر الخير - صرمان',
+            'صيدلية واحة السلامة - صرمان',
+            'صيدلية ركن العافية الجديد - صرمان',
+            'صيدلية ضياء الغرب - صرمان',
+            'صيدلية نخلة الواحة - زلطن',
+            'صيدلية ثمر الدوم - زلطن',
+            'صيدلية سعف النخيل - زلطن',
+        ],
+    },
+];
+
+/**
+ * Seed the distributor fixture's collections. Idempotent: wipes the page's
+ * collections first (fact_rows cascade), then writes through
+ * `factCollectionsService.createCollection` — the SAME writer an import uses, so
+ * the fixture cannot drift from the production path (atomic transaction, cache
+ * invalidation, the refusal to claim completeness).
+ */
+async function seedDistributorFactCollections(pageId: string): Promise<void> {
+    // Lazy on purpose — see the import note at the top of this file. Same pattern as
+    // generator.ts's `await import('../ecommerceToolLoop')`.
+    const { factCollectionsService } = await import('../../services/factCollections');
+    await db.delete(factCollections).where(eq(factCollections.pageId, pageId));
+    for (const collection of DEMO_DISTRIBUTOR_COLLECTIONS) {
+        await factCollectionsService.createCollection(pageId, {
+            label: collection.label,
+            keyAttr: collection.keyAttr,
+            source: 'kb_extract',
+            rows: collection.rows.map((line) => {
+                const [name, keyValue] = splitOutletLine(line);
+                return { name, attributes: [{ label: collection.keyAttr, value: keyValue }] };
+            }),
+        });
+    }
+}
+
+/**
+ * The distributor fixture's collections rendered EXACTLY as production renders
+ * them, for offline harnesses that need the fixture's full grounding source
+ * (scripts/grounding-audit.ts).
+ *
+ * It exists because the outlets left the KB text: a harness that kept reading only
+ * `suggestedKnowledgeBase` would judge replies against a source missing 236 facts
+ * the model actually saw, and every CORRECT outlet answer would score as invented
+ * — silently turning the labeled precision gate red. Composed through the shipped
+ * renderer + the one splitter, so it cannot drift from what the reply pipeline
+ * assembles (`buildGroundingSource`).
+ */
+export function renderDemoDistributorLists(todayIso: string): string {
+    return DEMO_DISTRIBUTOR_COLLECTIONS
+        .map(c => renderFactCollectionBlock(
+            // isComplete stays null — the fixture never claims completeness (D-038).
+            { label: c.label, keyAttr: c.keyAttr, isComplete: null },
+            c.rows.map((line) => {
+                const [name, keyValue] = splitOutletLine(line);
+                return {
+                    name,
+                    attributes: [{ label: c.keyAttr, value: keyValue }],
+                    price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true,
+                };
+            }),
+            todayIso,
+        ))
+        .filter((block): block is string => !!block)
+        .join('\n\n');
+}
+
+/** «صيدلية النرجس المركزية - حي الرمال» to name + key value. Throws on a malformed
+ *  line so a typo in the fixture fails the seed instead of silently producing a
+ *  keyless row (which would suppress the coverage index — the H2 failure mode). */
+function splitOutletLine(line: string): [string, string] {
+    const at = line.lastIndexOf(' - ');
+    if (at < 0) throw new Error(`Malformed outlet fixture line (expected «name - key»): ${line}`);
+    return [line.slice(0, at).trim(), line.slice(at + 3).trim()];
 }
 
 async function seedMotoshopCatalog(pageId: string): Promise<void> {
@@ -1807,6 +1906,13 @@ export async function seedDemoData(
             logger.debug('[DemoData] Refreshed motoshop catalog items', { count: DEMO_CATALOG_ITEMS.length });
         }
 
+        // Refresh the distributor outlet collections (G1a, Cat 69)
+        const distributorRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_distributor');
+        if (distributorRefresh) {
+            await seedDistributorFactCollections(distributorRefresh.id);
+            logger.debug('[DemoData] Refreshed distributor fact collections', { collections: DEMO_DISTRIBUTOR_COLLECTIONS.length });
+        }
+
         // Refresh messages: delete old → re-seed with fresh timestamps
         await db.delete(messages).where(inArray(messages.pageId, existingPageIds));
         for (const msgData of DEMO_MESSAGES) {
@@ -1958,6 +2064,15 @@ export async function seedDemoData(
     if (motoshopPage) {
         await seedMotoshopCatalog(motoshopPage.id);
         logger.debug('[DemoData] Seeded motoshop catalog items', { count: DEMO_CATALOG_ITEMS.length });
+    }
+
+    // Seed the distributor outlet collections (G1a, Cat 69) — the 236 outlets that
+    // used to live in the fixture's KB prose. Eval #737 only gates the product path
+    // if these rows exist, so a skipped seed silently turns that case green.
+    const distributorPage = createdPages.find(p => p.facebookPageId === 'demo_page_distributor');
+    if (distributorPage) {
+        await seedDistributorFactCollections(distributorPage.id);
+        logger.debug('[DemoData] Seeded distributor fact collections', { collections: DEMO_DISTRIBUTOR_COLLECTIONS.length });
     }
 
     // Create demo posts

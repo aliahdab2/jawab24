@@ -2,6 +2,7 @@ import { settingsService } from '../settings';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
+import { factCollectionsService } from '../factCollections';
 import { captureError } from '../../utils/sentryHelpers';
 import { pickNudgeVariation } from './nudge';
 import { detectLanguageCode } from '../../utils/language';
@@ -122,6 +123,18 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         }
     }
 
+    // 2a2. G1a fact collections — built for EVERY page (store or not), same as
+    //      contextEnricher. Without this the eval/playground would test the
+    //      product path with the coverage statement missing, i.e. it would grade a
+    //      prompt production never sends (the reason #737 must gate the rendered
+    //      block, not a hand-written KB line).
+    let factCollectionsBlock: string | undefined;
+    try {
+        factCollectionsBlock = (await factCollectionsService.buildFactCollectionsContext(page.id, question)).block;
+    } catch (err) {
+        captureError(err, 'Fact collections prompt block failed (playground)', { level: 'warning', tags: { service: 'factCollections' }, extra: { pageId: page.id } });
+    }
+
     // 2b. Stage 2.6 structured BUSINESS_INFO block — built from merchant half only,
     //     gated by provenance so unconfirmed FB-sync values don't override KB text.
     const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
@@ -149,6 +162,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         pageName: page.name ?? undefined,
         productCatalog,
         storePolicies,
+        factCollectionsBlock,
         // Forwarded for BOTH channels: the DM pipeline injects the origin post + the
         // merchant's Post Reply as [current_post] for comment-originated threads, so the
         // playground/eval must be able to exercise the dm+postMessage combination too.

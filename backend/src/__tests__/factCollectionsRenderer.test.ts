@@ -198,3 +198,56 @@ describe('rows that are present but unavailable', () => {
         expect(block).toContain('غير متاح حالياً');
     });
 });
+
+/**
+ * L2 row gating — the renderer half. The deterministic matcher decides WHICH rows
+ * the model sees; this pins that withholding rows never withholds the boundary.
+ *
+ * Why it matters: with every row visible, the model attributed pharmacies listed
+ * under «سوق الخميس» to «سوق الثلاثاء» in 5 of 6 measured runs. Rows it was never
+ * given cannot be misattributed — but only if the coverage statement survives,
+ * because that statement is the merchant's actual boundary.
+ */
+describe('displayRows gating', () => {
+    const rmal = row({ name: 'صيدلية النرجس', attributes: [{ label: 'المدينة', value: 'حي الرمال' }] });
+    const reeh = row({ name: 'صيدلية الفيروز', attributes: [{ label: 'المدينة', value: 'تلة الريح' }] });
+
+    it('prints only the matched rows', () => {
+        const block = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY, { displayRows: [reeh] }));
+        expect(block).toContain('صيدلية الفيروز');
+        expect(block).not.toContain('صيدلية النرجس');
+    });
+
+    it('keeps the coverage statement computed over ALL rows, not the printed subset', () => {
+        const block = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY, { displayRows: [reeh] }));
+        // «حي الرمال» is withheld as a ROW yet still named as a covered value —
+        // a boundary computed from what happens to be visible is not a boundary.
+        expect(block).toContain('حي الرمال');
+        expect(block).toContain('تغطي');
+    });
+
+    it('renders header + coverage with ZERO rows when nothing matched', () => {
+        const block = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY, { displayRows: [] }));
+        expect(block).not.toContain('صيدلية النرجس');
+        expect(block).not.toContain('صيدلية الفيروز');
+        // The model still holds every covered value, so it can name the areas it
+        // serves instead of inventing an outlet — the recoverable failure.
+        expect(block).toContain('حي الرمال');
+        expect(block).toContain('تلة الريح');
+        expect(block).toContain('غير مسجّل لدينا');
+    });
+
+    it('never prints an expired row even when the gate selects it', () => {
+        const expired = row({ name: 'صيدلية منتهية', endsAt: '2020-01-01' });
+        const block = must(renderFactCollectionBlock(outlets, [rmal, expired], TODAY, { displayRows: [expired] }));
+        expect(block).not.toContain('صيدلية منتهية');
+    });
+
+    it('is inert when the caller passes no gate (undefined = print everything)', () => {
+        const gatedOff = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY));
+        const explicit = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY, { displayRows: undefined }));
+        expect(explicit).toBe(gatedOff);
+        expect(gatedOff).toContain('صيدلية النرجس');
+        expect(gatedOff).toContain('صيدلية الفيروز');
+    });
+});

@@ -64,13 +64,30 @@ export function renderFactCollectionBlock(
     collection: FactCollectionForPrompt,
     rows: FactRowForPrompt[],
     todayIso: string,
+    opts?: {
+        /**
+         * The subset of rows to PRINT. The coverage statement is still computed over
+         * every live row, so the boundary stays truthful while the visible detail
+         * shrinks — that asymmetry is the whole point (G1 stage L2 row gating):
+         * a model that was never given «صيدلية السنونو» cannot place it in a city.
+         *
+         * Undefined → print everything (the pre-gating behaviour).
+         */
+        displayRows?: FactRowForPrompt[];
+    },
 ): string | undefined {
     // Expired rows vanish from the prompt entirely (catalog endsAt precedent —
     // the v38 stale-date class is killed by dates, not by model judgement).
     const live = rows.filter(r => !r.endsAt || r.endsAt >= todayIso);
     if (live.length === 0) return undefined;
 
-    const anyPrice = live.some(r => r.price !== null);
+    // Gating may legitimately leave NOTHING to print. That is not an empty block:
+    // the coverage statement (which enumerates the key values) still renders, so the
+    // model can name the areas it covers even when it holds no row detail — the
+    // recoverable failure, chosen over the unrecoverable one.
+    const display = (opts?.displayRows ?? live).filter(r => !r.endsAt || r.endsAt >= todayIso);
+
+    const anyPrice = display.some(r => r.price !== null);
 
     const renderRow = (r: FactRowForPrompt, withDetails: boolean): string => {
         const parts = [r.name];
@@ -91,13 +108,15 @@ export function renderFactCollectionBlock(
     };
 
     const header = `${collection.label}:`;
+    // Coverage over ALL live rows, never over the printed subset — a boundary
+    // computed from what happens to be visible is not a boundary.
     const coverage = renderCoverageStatement(collection, live);
 
     const render = (withDetails: boolean, subset: FactRowForPrompt[]): string =>
         [header, ...subset.map(r => renderRow(r, withDetails)), ...(coverage ? [coverage] : [])].join('\n');
 
-    let block = render(true, live);
-    if (block.length > FACT_BLOCK_MAX_CHARS) block = render(false, live);
+    let block = render(true, display);
+    if (block.length > FACT_BLOCK_MAX_CHARS) block = render(false, display);
     if (block.length > FACT_BLOCK_MAX_CHARS) {
         // Drop rows from the tail but KEEP the coverage line — and because the
         // key index in the coverage line is computed over ALL live rows (not
@@ -105,13 +124,13 @@ export function renderFactCollectionBlock(
         // individual rows are omitted.
         const kept: FactRowForPrompt[] = [];
         let length = header.length + (coverage ? coverage.length + 1 : 0) + 80; // tail reserve
-        for (const r of live) {
+        for (const r of display) {
             const line = renderRow(r, false);
             if (length + line.length + 1 > FACT_BLOCK_MAX_CHARS) break;
             kept.push(r);
             length += line.length + 1;
         }
-        const omitted = live.length - kept.length;
+        const omitted = display.length - kept.length;
         block = [
             header,
             ...kept.map(r => renderRow(r, false)),

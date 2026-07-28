@@ -18,12 +18,19 @@ vi.mock('../../src/services/catalog', () => ({
     },
 }));
 
+vi.mock('../../src/services/factCollections', () => ({
+    factCollectionsService: {
+        buildFactCollectionsContext: vi.fn(),
+    },
+}));
+
 vi.mock('../../src/integrations', () => ({
     integrationRegistry: { getEnabled: () => [] },
 }));
 
 const { getStoreContextForAI } = await import('../../src/services/ecommerce');
 const { catalogService } = await import('../../src/services/catalog');
+const { factCollectionsService } = await import('../../src/services/factCollections');
 
 const PAGE_ID = '11111111-1111-1111-1111-111111111111';
 const STORE_ID = '22222222-2222-2222-2222-222222222222';
@@ -73,5 +80,63 @@ describe('enrichPageContext — catalog branch', () => {
 
         expect(ctx.productCatalog).toBeUndefined();
         expect(ctx.knowledgeBase).toContain('kb text'); // reply still proceeds with the KB
+    });
+});
+
+/**
+ * G1a — the fact-collections branch. Deliberately NOT inside the store/no-store
+ * either-or above: a list of outlets or delivery zones is orthogonal to whether the
+ * page sells online, and the measured worst page in the sweep (BAMBO LIBYA, 28%
+ * fabrication) is store-less while متجر إجدابيا's delivery table is not. Gating this
+ * on the store branch the way productCatalog is gated would silently skip the block
+ * for half the fleet.
+ */
+describe('enrichPageContext — fact-collections branch', () => {
+    const LISTS = 'صيدليات المدينة:\n- صيدلية الفيروز — المنطقة: تلة الريح\nهذه القائمة تغطي «المنطقة» التالية فقط: تلة الريح.';
+
+    it('fills factCollectionsBlock for a store-less page', async () => {
+        vi.mocked(factCollectionsService.buildFactCollectionsContext).mockResolvedValue({ block: LISTS, gated: false });
+
+        const ctx = await enrichPageContext({ id: PAGE_ID }, {}, 'وين نلقاكم؟', undefined);
+
+        expect(factCollectionsService.buildFactCollectionsContext).toHaveBeenCalledWith(PAGE_ID, 'وين نلقاكم؟');
+        expect(ctx.factCollectionsBlock).toContain('صيدلية الفيروز');
+    });
+
+    it('ALSO fills it for a store-linked page (unlike the catalog, this is not either-or)', async () => {
+        vi.mocked(getStoreContextForAI).mockResolvedValue({
+            storePolicies: 'Free shipping',
+            productCatalog: 'Top Products:\n- Store Product — 220 AED — in stock',
+        });
+        vi.mocked(factCollectionsService.buildFactCollectionsContext).mockResolvedValue({ block: LISTS, gated: false });
+
+        const ctx = await enrichPageContext({ id: PAGE_ID, ecommerceStoreId: STORE_ID }, {}, 'توصلون لبنغازي؟', undefined);
+
+        expect(ctx.productCatalog).toContain('Store Product');
+        expect(ctx.factCollectionsBlock).toContain('صيدلية الفيروز');
+    });
+
+    it('leaves the block undefined when the page has no collections (inertness)', async () => {
+        vi.mocked(factCollectionsService.buildFactCollectionsContext).mockResolvedValue({ block: undefined, gated: false });
+
+        const ctx = await enrichPageContext({ id: PAGE_ID }, {}, 'وين نلقاكم؟', undefined);
+
+        expect(ctx.factCollectionsBlock).toBeUndefined();
+    });
+
+    it('degrades to no block when the query fails, and the reply still proceeds', async () => {
+        vi.mocked(factCollectionsService.buildFactCollectionsContext).mockRejectedValue(new Error('db down'));
+
+        const ctx = await enrichPageContext({ id: PAGE_ID }, {}, 'وين نلقاكم؟', 'kb text');
+
+        expect(ctx.factCollectionsBlock).toBeUndefined();
+        expect(ctx.knowledgeBase).toContain('kb text');
+    });
+
+    it('skips the query entirely when there is no pageId', async () => {
+        const ctx = await enrichPageContext({}, {}, 'وين نلقاكم؟', 'kb text');
+
+        expect(factCollectionsService.buildFactCollectionsContext).not.toHaveBeenCalled();
+        expect(ctx.factCollectionsBlock).toBeUndefined();
     });
 });

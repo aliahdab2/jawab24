@@ -48,6 +48,21 @@ export interface GenerateRequest {
          * marked `[NOT_PROVIDED]`. Null/absent → no block injected.
          */
         businessInfoBlock?: string | null;
+        /**
+         * G1a fact-collections block, pre-rendered by the backend
+         * (`factCollectionsService.buildFactCollectionsContext`): the
+         * merchant's enumerable LIST facts — outlets, coverage areas, delivery
+         * zones — each list followed by its DERIVED coverage/absence statement.
+         *
+         * Injected verbatim as <business_lists>. The coverage statement is the
+         * measured mechanism (fabrication on absent-place questions 28% → 0%,
+         * distributor fixture at prod sampling, 2026-07-28): it tells the model
+         * what the list's boundary is and, in wording the merchant's
+         * completeness declaration has earned, what absence from it means.
+         * Absent → no block, and the prompt is byte-identical to a page that has
+         * no collections.
+         */
+        factCollectionsBlock?: string;
         customerContext?: string;
         /**
          * Customer's display name from the platform profile (FB display name,

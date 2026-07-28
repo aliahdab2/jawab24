@@ -38,7 +38,7 @@ describe('fact collections — the engine end to end', () => {
             rows: OUTLETS,
         });
 
-        const block = await factCollectionsService.buildFactCollectionsPromptBlock(pageId, '2026-07-28');
+        const block = (await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28')).block;
         expect(block).toBeDefined();
         // the list itself
         expect(block).toContain('صيدلية النرجس المركزية');
@@ -70,7 +70,7 @@ describe('fact collections — the engine end to end', () => {
 
         await factCollectionsService.setCompleteness(pageId, c.id, true);
 
-        const block = await factCollectionsService.buildFactCollectionsPromptBlock(pageId, '2026-07-28');
+        const block = (await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28')).block;
         expect(block).toContain('كاملة ونهائية');
         expect(block).toContain('غير متوفر لدينا');
     });
@@ -82,7 +82,7 @@ describe('fact collections — the engine end to end', () => {
 
         await factCollectionsService.setCompleteness(pageId, c.id, false);
 
-        const block = await factCollectionsService.buildFactCollectionsPromptBlock(pageId, '2026-07-28');
+        const block = (await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28')).block;
         expect(block).toContain('غير مسجّل لدينا');
         expect(block).not.toContain('كاملة ونهائية');
     });
@@ -110,7 +110,7 @@ describe('fact collections — the engine end to end', () => {
             ],
         });
 
-        const block = await factCollectionsService.buildFactCollectionsPromptBlock(pageId, '2026-07-28');
+        const block = (await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28')).block;
         expect(block).toContain('عرض ساري');
         expect(block).not.toContain('عرض منتهي');
 
@@ -131,7 +131,7 @@ describe('fact collections — the engine end to end', () => {
 
         await factCollectionsService.setCompleteness(pageId, outlets.id, true);
 
-        const block = await factCollectionsService.buildFactCollectionsPromptBlock(pageId, '2026-07-28') ?? '';
+        const block = (await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28')).block ?? '';
         // both blocks present
         expect(block).toContain('الصيدليات:');
         expect(block).toContain('مناطق التوصيل:');
@@ -175,7 +175,7 @@ describe('fact collections — the engine end to end', () => {
     });
 
     it('a page with no collections contributes no block at all', async () => {
-        expect(await factCollectionsService.buildFactCollectionsPromptBlock(pageId, '2026-07-28')).toBeUndefined();
+        expect((await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28')).block).toBeUndefined();
     });
 
     // A partially-written collection would render a coverage statement over an
@@ -188,7 +188,7 @@ describe('fact collections — the engine end to end', () => {
         })).rejects.toThrow(/500 rows/);
 
         expect(await factCollectionsService.listCollections(pageId)).toHaveLength(0);
-        expect(await factCollectionsService.buildFactCollectionsPromptBlock(pageId, '2026-07-28')).toBeUndefined();
+        expect((await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28')).block).toBeUndefined();
     });
 
     it('deleting a collection removes its rows and retires the caches', async () => {
@@ -200,7 +200,7 @@ describe('fact collections — the engine end to end', () => {
         await factCollectionsService.deleteCollection(pageId, c.id);
 
         expect(await factCollectionsService.getRows(c.id)).toHaveLength(0);
-        expect(await factCollectionsService.buildFactCollectionsPromptBlock(pageId, '2026-07-28')).toBeUndefined();
+        expect((await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28')).block).toBeUndefined();
         expect(await readKbVersion(pageId)).toBeGreaterThan(beforeDelete);
     });
 

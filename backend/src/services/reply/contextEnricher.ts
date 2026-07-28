@@ -1,6 +1,7 @@
 import { integrationRegistry } from '../../integrations';
 import { getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
+import { factCollectionsService } from '../factCollections';
 import { captureError } from '../../utils/sentryHelpers';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { detectLanguageCode } from '../../utils/language';
@@ -24,6 +25,18 @@ export interface EnrichedContext {
      * AI falls back to merged narrative KB via `formatBusinessProfile`).
      */
     businessInfoBlock: string | null;
+    /**
+     * G1a: the merchant's enumerable LIST facts (outlets, coverage areas,
+     * delivery zones) rendered as a prompt block, each list carrying its own
+     * DERIVED coverage/absence statement. Undefined when the page has no
+     * collections — which is every page until one is imported, so the prompt
+     * stays byte-identical for the rest of the fleet.
+     *
+     * Independent of `productCatalog`: catalog_items are things the business
+     * SELLS (money semantics); collections are enumerable lists that are not
+     * sold. A page can have both, either, or neither.
+     */
+    factCollectionsBlock: string | undefined;
 }
 
 /**
@@ -33,6 +46,7 @@ export interface EnrichedContext {
  * Steps:
  *  1. Integration KB enrichment (e.g. Shopify product summaries injected into KB)
  *  2. Store policies + product catalog (survive RAG which drops static KB)
+ *  2b. Enumerable list facts + their derived coverage statements (also survive RAG)
  *  3. Business profile (hours, location, phone) appended to KB
  *  4. Language-appropriate brand voice notes
  */
@@ -82,6 +96,30 @@ export async function enrichPageContext(
         }
     }
 
+    // 2b. Enumerable LIST facts (G1a) — outlets, coverage areas, delivery zones.
+    //     NOT gated on the store branch above: a list is orthogonal to whether the
+    //     page sells online, and BAMBO LIBYA (the measured worst page: 22/79 replies
+    //     fabricated, 17 of them availability-by-city) is store-less. The block
+    //     carries its own derived coverage statement — the measured 28%→0%
+    //     mechanism — so it must reach the model on every reply, RAG or not.
+    let factCollectionsBlock: string | undefined;
+    if (pageId) {
+        try {
+            // ONE pass builds both: the rendered list and the deterministic match of
+            // this message against its key values. The match is the L2 stage — the
+            // model is never asked whether «سوق الثلاثاء» is «سوق الخميس»; code
+            // answers that from the rows, and in the default 'gated' mode the answer
+            // decides which rows the model is shown at all.
+            factCollectionsBlock = (await factCollectionsService.buildFactCollectionsContext(pageId, messageText)).block;
+        } catch (err) {
+            // Non-critical for delivering a reply, but never silent: a persistent
+            // failure here silently removes the coverage statement, and the reply
+            // then answers absence questions from the bare list again — the exact
+            // fabrication this block exists to prevent, with no signal.
+            captureError(err, 'Fact collections prompt block failed', { level: 'warning', tags: { service: 'factCollections' }, extra: { pageId } });
+        }
+    }
+
     // 3a. Narrative business profile appended to KB. DESCRIPTIVE fields only
     //     (business type, about, website) — operational facts (hours/phone/
     //     address/channels) are NOT emitted here (D-010): this is the merged
@@ -111,7 +149,7 @@ export async function enrichPageContext(
     // 4. Language-appropriate brand voice notes
     const brandVoiceNotes = resolveBrandVoiceNotes(userSettings, messageText);
 
-    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock };
+    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock };
 }
 
 /**

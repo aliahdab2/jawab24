@@ -592,6 +592,7 @@ export class CommentProcessor {
             generatorContext.productCatalog = enriched.productCatalog;
             generatorContext.brandVoiceNotes = enriched.brandVoiceNotes;
             generatorContext.businessInfoBlock = enriched.businessInfoBlock;
+            generatorContext.factCollectionsBlock = enriched.factCollectionsBlock;
             generatorContext.replyStyle = userSettings.replyStyle;
             generatorContext.defaultReplyLanguage = userSettings.defaultReplyLanguage;
             generatorContext.timezone = userSettings.timezone;
@@ -761,6 +762,7 @@ export class CommentProcessor {
                     postMessage: content.message,
                     storePolicies: generatorContext.storePolicies,
                     productCatalog: generatorContext.productCatalog,
+                    factCollectionsBlock: generatorContext.factCollectionsBlock,
                 }),
             });
             // Keep the debounce slot only if the reply actually went out.

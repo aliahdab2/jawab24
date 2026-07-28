@@ -56,6 +56,9 @@ export interface CommentReplyContext {
     brandVoiceNotes?: string;
     /** Stage 2.6 structured BUSINESS_INFO block (merchant-confirmed only). */
     businessInfoBlock?: string | null;
+    /** G1a fact-collections prompt block — enumerable lists (outlets, coverage
+     *  areas, delivery zones) plus their derived coverage statements. */
+    factCollectionsBlock?: string;
     senderName?: string;
     defaultReplyLanguage?: string;
     /** Merchant's IANA timezone (workspace settings) — drives the "Today's date" prompt line. */

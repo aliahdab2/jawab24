@@ -1,7 +1,7 @@
 /**
  * Fact-collections service — the generic fact engine's read/write layer.
  *
- * Reaches the AI as TEXT via buildFactCollectionsPromptBlock (same contract as
+ * Reaches the AI as TEXT via buildFactCollectionsContext (same contract as
  * the catalog block, D-004: no function-calling tools). Every write invalidates
  * the page's reply caches so the next reply sees the change immediately —
  * without that, a merchant confirming their outlet list would keep serving the
@@ -22,6 +22,7 @@ import {
     type FactCollectionForPrompt,
     type FactRowForPrompt,
 } from './factCollectionsRenderer';
+import { matchCollections } from './factCollectionsMatcher';
 
 /** Bound per page so an import can't balloon the prompt or the UI. Generous
  *  relative to reality: BAMBO's real directory is ~240 rows in ONE collection,
@@ -29,6 +30,59 @@ import {
  *  look at, not a case to serve. */
 export const MAX_COLLECTIONS_PER_PAGE = 12;
 export const MAX_ROWS_PER_COLLECTION = 500;
+
+/**
+ * How much of a list the model is allowed to see.
+ *
+ *   'gated'  (default) — the deterministic match decides WHICH rows the model is
+ *            shown. Nothing matched ⇒ no row detail, only the derived coverage
+ *            statement. A model that was never given «صيدلية السنونو» cannot
+ *            place it in a market it does not belong to.
+ *   'list'   — every row, every time (the pre-L2 behaviour). Kept as the
+ *            single-env-var rollback if gating ever misbehaves in prod.
+ *
+ * MEASURED, 48 absent-place samples on the distributor fixture judged by the
+ * shipped grounding verifier (`scripts/place-fabrication-probe.ts`); controls
+ * (a LISTED area, a real price) stayed 0/24 in every arm:
+ *
+ *   | class                        | 'list' | +prompt rule | +computed line | 'gated' |
+ *   | first ask, absent city       |  1/6   |     1/6      |      3/6       |  0/6 ✅ |
+ *   | near-name (own address)      |  5/6   |     6/6      |      5/6       |  6/6 †  |
+ *   | doubling down after a lie    |  2/6   |     2/6      |      4/6       |  6/6 ‡  |
+ *
+ * † Under 'gated' this stops being a FABRICATION: no unmatched outlet name is
+ *   named any more. What the verifier still flags is an unsupported availability
+ *   inference about the business's OWN address — a data gap only the merchant can
+ *   close («is your head office a point of sale?»), not an invented attribution.
+ * ‡ This probe injects an already-fabricated assistant turn into the history, and
+ *   gating leaves the model no other names, so it defends the history. In
+ *   production that prior turn is exactly what 'gated' prevents (0/6 above), so
+ *   the number measures recovery from a lie this mode stops telling. Tracked by
+ *   the shadow verifier; eval #737 stays red for it.
+ *
+ * Two attempts to fix this by TELLING the model both failed — a prompt rule
+ * (neutral) and the computed match stated as a fact (worse). Do not re-add
+ * either; the model was never short of information.
+ */
+export type FactListMode = 'list' | 'gated';
+
+export function resolveFactListMode(): FactListMode {
+    const raw = (process.env.FACT_LIST_MODE || '').trim().toLowerCase();
+    return raw === 'list' || raw === 'gated' ? raw : DEFAULT_FACT_LIST_MODE;
+}
+
+/** Default is the measured winner; the env var is the rollback lever, not a knob
+ *  merchants or callers are expected to touch. */
+const DEFAULT_FACT_LIST_MODE: FactListMode = 'gated';
+
+export interface FactCollectionsContext {
+    /** The <business_lists> block, or undefined when the page has no collections. */
+    block: string | undefined;
+    /** True when row detail was withheld for at least one collection. Diagnostic
+     *  only: it is the difference between "the model chose not to answer" and
+     *  "the model was never shown the rows", which is unanswerable from logs. */
+    gated: boolean;
+}
 
 export class FactCollectionLimitError extends Error {
     constructor(message: string) {
@@ -72,8 +126,14 @@ class FactCollectionsService {
      * `todayIso` is injected rather than read from the clock so the render stays
      * a pure function of its inputs and expiry is testable.
      */
-    async buildFactCollectionsPromptBlock(pageId: string, todayIso?: string): Promise<string | undefined> {
+    async buildFactCollectionsContext(
+        pageId: string,
+        messageText?: string,
+        todayIso?: string,
+    ): Promise<FactCollectionsContext> {
         const today = todayIso ?? new Date().toISOString().slice(0, 10);
+        const mode = resolveFactListMode();
+        const empty: FactCollectionsContext = { block: undefined, gated: false };
 
         const collections = await db
             .select()
@@ -81,11 +141,13 @@ class FactCollectionsService {
             .where(eq(factCollections.pageId, pageId))
             .orderBy(asc(factCollections.sortOrder), asc(factCollections.createdAt))
             .limit(MAX_COLLECTIONS_PER_PAGE);
-        if (collections.length === 0) return undefined;
+        if (collections.length === 0) return empty;
 
         // ONE query for every collection's rows — this runs on every AI reply,
         // so a per-collection query would add a round-trip per collection to the
-        // reply's latency budget, growing as merchants adopt the feature.
+        // reply's latency budget, growing as merchants adopt the feature. The
+        // match and the block are computed from this SAME result set: two passes
+        // would double the hot-path cost and could disagree about the rows.
         // Expired rows are filtered here to keep the payload small; the renderer
         // filters again so it stays honest when handed unfiltered rows.
         const allRows = await db
@@ -106,6 +168,8 @@ class FactCollectionsService {
         }
 
         const blocks: string[] = [];
+        let gated = false;
+
         for (const c of collections) {
             const rows = (rowsByCollection.get(c.id) ?? []).slice(0, MAX_ROWS_PER_COLLECTION);
             if (rows.length === 0) {
@@ -122,19 +186,50 @@ class FactCollectionsService {
             // phrasing (an index that omits them cannot be called a boundary).
             // Log it: the fix belongs in the merchant's data, and silence here is
             // what turned this into a High finding in review.
-            const { rowsMissingKey } = indexKeyValues(c.keyAttr, promptRows);
+            const { keyValues, rowsMissingKey } = indexKeyValues(c.keyAttr, promptRows);
             if (rowsMissingKey > 0) {
                 this.logger.warn('fact collection has rows missing its key attribute — coverage index suppressed', {
                     pageId, collectionId: c.id, label: c.label, keyAttr: c.keyAttr,
                     rowsMissingKey, totalRows: promptRows.length,
                 });
             }
+            // ── L2 row gating ───────────────────────────────────────────────
+            // The deterministic match decides what the model is SHOWN, not what it
+            // is told. Two attempts at telling it both failed to move the measured
+            // rate (a prompt rule: neutral; the computed fact line: worse), because
+            // the model was not missing information — it was holding 236 names it
+            // could attach to a place the customer named. It cannot misattribute a
+            // name it was never given.
+            //
+            // Gating applies ONLY to keyed collections with a usable index: without
+            // a key there is nothing to match, and with rows missing the key the
+            // index is not a boundary (the H2 finding), so withholding rows there
+            // would hide facts on the strength of a comparison we know is partial.
+            let displayRows: FactRowForPrompt[] | undefined;
+            if (mode === 'gated' && c.keyAttr && rowsMissingKey === 0 && messageText && messageText.trim().length > 0) {
+                const matched = matchCollections(messageText, [{ label: c.label, keyAttr: c.keyAttr, keyValues }])[0]?.matched ?? [];
+                const wanted = new Set(matched.map(v => v.trim()));
+                // No match → NO rows. The coverage statement still renders (it is
+                // computed over every live row), so the model keeps the list's
+                // boundary and can still name the areas it covers — the
+                // recoverable failure, deliberately chosen over the unrecoverable
+                // one. A normalizer miss («الرمال» vs «حي الرمال») lands here, and
+                // the customer still sees their area named in that statement.
+                displayRows = wanted.size === 0
+                    ? []
+                    : promptRows.filter(r => r.attributes?.some(a => wanted.has(a.value.trim())));
+                if (displayRows.length !== promptRows.length) gated = true;
+            }
 
-            const block = renderFactCollectionBlock(toPromptCollection(c), promptRows, today);
+            const block = renderFactCollectionBlock(toPromptCollection(c), promptRows, today, { displayRows });
             if (block) blocks.push(block);
         }
 
-        return blocks.length > 0 ? blocks.join('\n\n') : undefined;
+        if (gated) {
+            this.logger.info('fact collection rows gated by deterministic match', { pageId });
+        }
+
+        return { block: blocks.length > 0 ? blocks.join('\n\n') : undefined, gated };
     }
 
     /** Collections + row counts for the review/edit surfaces. */

@@ -638,7 +638,7 @@ export class MessageProcessor {
                 messageText,
                 page.knowledgeBase || undefined,
             );
-            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock } = enriched;
+            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock } = enriched;
 
             const generated =
                 await replyGenerator.generateForMessage(
@@ -659,6 +659,7 @@ export class MessageProcessor {
                         replyStyle: userSettings.replyStyle,
                         brandVoiceNotes,
                         businessInfoBlock,
+                        factCollectionsBlock,
                         ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
                         defaultReplyLanguage: userSettings.defaultReplyLanguage,
                         timezone: userSettings.timezone,
@@ -930,7 +931,7 @@ export class MessageProcessor {
                 pageId: page.id,
                 sourceId: storedMessage.id,
                 sourceType: 'message',
-                kb: buildGroundingSource({ knowledgeBase, storePolicies, productCatalog }),
+                kb: buildGroundingSource({ knowledgeBase, storePolicies, productCatalog, factCollectionsBlock }),
                 question: consolidatedText,
                 reply: replyText ?? '',
                 intent: aiIntent,

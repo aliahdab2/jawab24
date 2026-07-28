@@ -14,7 +14,7 @@ vi.mock('../../src/db', () => ({
 }));
 
 import { db } from '../../src/db';
-import { seedDemoData, DEMO_PAGES } from '../../src/plugins/demo/seedData';
+import { seedDemoData, DEMO_PAGES, DEMO_DISTRIBUTOR_COLLECTIONS } from '../../src/plugins/demo/seedData';
 
 // Helper to build a chainable select mock
 function mockSelectChain(result: any[]) {
@@ -130,5 +130,67 @@ describe('seedDemoData', () => {
         for (const store of storeInserts) {
             expect(store.platformData.demo).toBe(true);
         }
+    });
+});
+
+
+/**
+ * G1a fixture integrity. The distributor fixture's 236 outlets moved out of KB
+ * prose into fact rows, and every eval case in Cat 69 now depends on properties of
+ * that data rather than of a paragraph. These assertions machine-check the traps the
+ * fixture comment documents — a silent edit to the list would otherwise turn #728 /
+ * #737 green without fixing anything.
+ */
+describe('distributor fact-collections fixture (G1a)', () => {
+    const CITY = DEMO_DISTRIBUTOR_COLLECTIONS[0];
+    const WEST = DEMO_DISTRIBUTOR_COLLECTIONS[1];
+    const keyValues = (c: typeof CITY) => c.rows.map(r => r.slice(r.lastIndexOf(' - ') + 3).trim());
+    const allRows = DEMO_DISTRIBUTOR_COLLECTIONS.flatMap(c => c.rows);
+
+    it('keeps the prod-scale directory: 236 entries across two keyed collections', () => {
+        expect(allRows).toHaveLength(236);
+        expect(CITY.keyAttr).toBe('المنطقة');
+        expect(WEST.keyAttr).toBe('المدينة');
+        expect(new Set(keyValues(CITY)).size).toBe(22);
+        expect(new Set(keyValues(WEST)).size).toBe(3);
+    });
+
+    // H2 (the review's dangerous finding): a row with no key value is invisible to
+    // the coverage index, and the renderer then refuses to present the index as a
+    // boundary at all — silently dropping the mechanism these cases measure.
+    it('gives EVERY row a key value, so the coverage index stays a boundary', () => {
+        for (const line of allRows) {
+            expect(line, `row must be «name - key»: ${line}`).toContain(' - ');
+            expect(line.slice(line.lastIndexOf(' - ') + 3).trim().length).toBeGreaterThan(0);
+        }
+    });
+
+    it('keeps العجيلات out of both collections (#728 / #737 depend on its absence)', () => {
+        for (const line of allRows) expect(line).not.toContain('العجيلات');
+    });
+
+    it('keeps عين الدالية listed (#729 green guard: a listed area must still be answered)', () => {
+        expect(keyValues(CITY)).toContain('عين الدالية');
+    });
+
+    // Trap 5: the near-miss pair that reproduces the probe battery's worst class —
+    // the business's own address answered as an outlet location.
+    it('lists سوق الخميس but never the page own address سوق الثلاثاء', () => {
+        expect(keyValues(CITY)).toContain('سوق الخميس');
+        expect(keyValues(CITY)).not.toContain('سوق الثلاثاء');
+    });
+
+    // #720: the same facts in prose AND rows is the contradiction factory. Prose
+    // also carries no boundary, so a restored copy brings the fabrication straight
+    // back while the rows make it look fixed.
+    it('leaves no outlet directory behind in the fixture KB text', () => {
+        const distributor = DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_distributor');
+        expect(distributor).toBeDefined();
+        const kb = distributor?.suggestedKnowledgeBase ?? '';
+        expect(kb).not.toContain('صيدلية');
+        expect(kb).not.toContain('حي الرمال');
+        // …while the traps that DO belong in the KB text stay: the tail price list.
+        expect(kb).toContain('45د');
+        expect(kb).toContain('54 دينار');
     });
 });

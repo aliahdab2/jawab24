@@ -1147,7 +1147,23 @@ export {
 // around literal blocklists anyway — proven in this very prompt, where the
 // closing-phrase rule banned that shape and was ignored while an example
 // contradicted it.
-export const PROMPT_VERSION = 'v63';
+// v64 — G1a: the <business_lists> block reaches the model. (Authored as v62; #527
+// took v63 for the no-answer wording change while this branch was open, and two
+// different prompt shapes must never share one version — the same collision the
+// v60/v61 note above records, so this renumbered on rebase.) Enumerable LIST facts
+// (outlets, coverage areas, delivery zones) are rendered from fact_collections
+// with a DERIVED coverage/absence statement per list, plus the attribution rules
+// that make the model follow it (never re-attribute an entry to a key it doesn't
+// carry; the business's own address is not a list entry). Measured mechanism:
+// fabrication on absent-place questions 9/32 → 0/32 on the distributor fixture at
+// prod sampling, grounded answers intact (2026-07-28).
+// The block is gated on the page HAVING collections, so the rendered prompt is
+// byte-identical for every page without them — but the version still bumps: pv
+// keys the semantic cache and its rows record it, and two different prompt shapes
+// living under one version is exactly what that key exists to prevent (see the
+// v60/v61 collision noted above). One bump for the whole milestone — the plan's
+// «One prompt bump, not three» rule; opfacts/C-F1/G5 must not add their own.
+export const PROMPT_VERSION = 'v64';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
