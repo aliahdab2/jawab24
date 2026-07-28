@@ -1,0 +1,115 @@
+/**
+ * Admin customer detail — usage health flags read the REAL top-up balance
+ * (real Postgres, real getUserDetail).
+ *
+ * The unit tests around computeHealthFlags prove the policy; they cannot prove
+ * the WIRING. `HealthInput.usage.topupBalance` is a required field, so the type
+ * checker forces getUserDetail to pass *a* number — it would happily accept a
+ * hardcoded 0, which is exactly the bug that shipped (a merchant with 9,417
+ * top-up replies told "replies will go silent at the cap"). These tests read the
+ * balance out of the users table through the real service to close that gap.
+ */
+import { describe, it, expect, afterEach } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { createTestUser, testDb } from './setup';
+import * as schema from '../../src/db/schema';
+import { adminUsersService } from '../../src/services/admin/users';
+
+// Plans are NOT truncated by the shared setup (subscriptions reference them with
+// ON DELETE RESTRICT), so create them per-test and clean up here. The referencing
+// subscriptions go first — deleting the plan while a subscription still points at
+// it fails, and a swallowed failure would leak rows that collide with the unique
+// slug on the next run. Slugs also carry a per-run suffix so a leak from an
+// interrupted run can never wedge the suite.
+const createdPlanIds: string[] = [];
+
+afterEach(async () => {
+    for (const id of createdPlanIds.splice(0)) {
+        await testDb.delete(schema.subscriptions).where(eq(schema.subscriptions.planId, id));
+        await testDb.delete(schema.plans).where(eq(schema.plans.id, id));
+    }
+});
+
+async function createPlanWithCap(label: string, maxAiRepliesPerMonth: number) {
+    const slug = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const [plan] = await testDb
+        .insert(schema.plans)
+        .values({ name: `Plan ${label}`, slug, price: 0, maxAiRepliesPerMonth })
+        .returning();
+    createdPlanIds.push(plan.id);
+    return plan;
+}
+
+/**
+ * A merchant mid-period: active subscription on a capped plan, `used` replies
+ * consumed, and `topupBalance` non-expiring replies in the bank.
+ *
+ * The settings row matters: computeHealthFlags reads `limitFallbackEnabled ===
+ * false`, so a merchant with NO settings row can never raise limit_fallback_off
+ * and every assertion about it would pass vacuously. Real accounts always have
+ * one, so seed it at the schema default (fallback OFF).
+ */
+async function seedMerchant(opts: { used: number; cap: number; topupBalance: number; slug: string }) {
+    const user = await createTestUser({
+        facebookId: `fb-${opts.slug}`,
+        email: `${opts.slug}@shop.com`,
+        topupBalance: opts.topupBalance,
+    });
+    await testDb.insert(schema.settings).values({ userId: user.id, limitFallbackEnabled: false });
+    const plan = await createPlanWithCap(opts.slug, opts.cap);
+    await testDb.insert(schema.subscriptions).values({
+        userId: user.id, planId: plan.id, status: 'active',
+    });
+    const now = new Date();
+    await testDb.insert(schema.usage).values({
+        userId: user.id,
+        aiRepliesCount: opts.used,
+        periodStart: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+        periodEnd: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+    });
+    return user;
+}
+
+const flagKeys = (flags: { key: string }[]) => flags.map(f => f.key);
+
+describe('adminUsersService.getUserDetail — usage flags vs top-up balance (integration)', () => {
+    it('surfaces the stored balance and drops the false "replies will stop" flag', async () => {
+        // The live report: 8,746 of 10,000 plan replies, 9,417 top-up in the bank.
+        const user = await seedMerchant({ used: 8746, cap: 10000, topupBalance: 9417, slug: 'near-cap-covered' });
+
+        const detail = await adminUsersService.getUserDetail(user.id);
+
+        expect(detail).not.toBeNull();
+        expect(detail!.topupBalance).toBe(9417);
+        const keys = flagKeys(detail!.health);
+        expect(keys).toContain('usage_near_cap_on_topup');
+        // The two lines that were wrong on the live page.
+        expect(keys).not.toContain('limit_fallback_off');
+        expect(keys).not.toContain('usage_over_cap');
+        // The balance really came from the row, not a placeholder.
+        const flag = detail!.health.find(f => f.key === 'usage_near_cap_on_topup');
+        expect(flag?.meta).toMatchObject({ used: 8746, limit: 10000, balance: 9417 });
+    });
+
+    it('a merchant with no balance still gets the red wall + fallback warning', async () => {
+        const user = await seedMerchant({ used: 1000, cap: 1000, topupBalance: 0, slug: 'at-cap-uncovered' });
+
+        const detail = await adminUsersService.getUserDetail(user.id);
+
+        const keys = flagKeys(detail!.health);
+        expect(keys).toContain('usage_over_cap');
+        expect(keys).toContain('limit_fallback_off');
+        expect(detail!.health.find(f => f.key === 'usage_over_cap')?.severity).toBe('red');
+    });
+
+    it('a nearly-drained balance is flagged, not silently treated as covered', async () => {
+        const user = await seedMerchant({ used: 1000, cap: 1000, topupBalance: 3, slug: 'topup-drained' });
+
+        const detail = await adminUsersService.getUserDetail(user.id);
+
+        const keys = flagKeys(detail!.health);
+        expect(keys).toContain('usage_topup_nearly_drained');
+        expect(keys).not.toContain('usage_on_topup');
+        expect(detail!.health.find(f => f.key === 'usage_topup_nearly_drained')?.severity).toBe('yellow');
+    });
+});

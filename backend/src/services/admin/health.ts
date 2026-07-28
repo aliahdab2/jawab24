@@ -1,4 +1,4 @@
-import { DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus } from '@jawab24/shared';
 
 /**
  * Admin support-console health flags.
@@ -133,7 +133,6 @@ const TRIAL_ENDING_SOON_DAYS = 3;
 const DORMANT_DAYS = 14;
 const KB_THIN_CHARS = 500;
 const KB_THIN_CHUNKS = 5;
-const USAGE_NEAR_CAP_RATIO = 0.8;
 // A page with chunks but no `offering` is red (can't answer pricing) UNLESS the
 // KB is a substantial FAQ/info knowledge base — a legitimate service business
 // shouldn't sit permanently red. At/above this many FAQ chunks it downgrades to
@@ -150,7 +149,7 @@ const NO_OFFERING_FAQ_DOWNGRADE = 3;
 export const HEALTH_FLAG_KEYS = [
     'no_pages', 'ai_disabled', 'all_channels_silent', 'channel_silent',
     'trial_expired', 'subscription_inactive', 'usage_over_cap', 'usage_near_cap',
-    'usage_on_topup', 'usage_near_cap_on_topup',
+    'usage_on_topup', 'usage_near_cap_on_topup', 'usage_topup_nearly_drained',
     'limit_fallback_off', 'page_disconnected', 'auto_reply_user_off',
     'auto_reply_system_off', 'auto_reply_off_unknown', 'kb_empty',
     'no_offering_chunks', 'kb_thin', 'unresolved_kb_gaps', 'persona_placeholder',
@@ -274,42 +273,52 @@ export function computeHealthFlags(input: HealthInput): HealthFlag[] {
         }
     }
 
-    // Usage vs plan cap.
+    // Usage vs the merchant's real runway (plan cap + top-up balance), classified
+    // by the shared `resolveAiQuotaStatus` policy so this console can't drift from
+    // the runtime gate the way it did before (a merchant with 9,417 top-up replies
+    // was told "replies will go silent at the cap").
     //
-    // A non-expiring top-up balance keeps Smart Replies flowing past the plan cap:
-    // `canUseAiReplies` falls through to top-up, and `incrementAiReplies` charges
-    // the overflow against the balance. So while a balance exists, the plan cap is
-    // NOT a wall — the red "limit reached" and the "replies will go silent at the
-    // cap" lines would both be false. Mirrors the merchant-facing states
-    // (`AiUsageWarningBanner`, `resolveAiUsageNotificationType`).
+    // `nearWall` — not the plan cap — is what the "replies will stop" wording keys
+    // off. With no top-up balance it reduces to the historical 80%-of-cap rule, so
+    // nothing changes for merchants who never bought a top-up.
     const limit = usage.limit;
-    const onTopup = usage.topupBalance > 0;
-    if (limit !== null && limit > 0) {
+    const balance = usage.topupBalance;
+    const quota = resolveAiQuotaStatus({ used: usage.aiRepliesCount, limit, topupBalance: balance });
+    if (limit !== null && quota.state !== 'unmetered') {
         const used = usage.aiRepliesCount;
         // Floor, not round — 999/1000 must read "99%", never "100%" under the
         // near-cap (not over-cap) message.
         const percent = Math.floor((used / limit) * 100);
-        const nearCap = used >= USAGE_NEAR_CAP_RATIO * limit;
-        const balance = usage.topupBalance;
-        if (used >= limit) {
-            // Past the cap but covered: replies still send, nothing to fix — info.
-            if (onTopup) {
-                add('info', 'usage_on_topup', { meta: { used, limit, balance } });
-            } else {
+        switch (quota.state) {
+            case 'exhausted':
+                // Plan cap AND top-up both spent: replies really have stopped.
                 add('red', 'usage_over_cap', { meta: { used, limit } });
-            }
-        } else if (nearCap) {
-            // Still yellow when covered — the overflow starts burning paid top-up
-            // credit — but the message says so instead of implying a stop.
-            if (onTopup) {
-                add('yellow', 'usage_near_cap_on_topup', { meta: { used, limit, percent, balance } });
-            } else {
+                break;
+            case 'on_topup':
+                // Past the cap, running on top-up. Calm unless the balance itself
+                // is nearly gone — that's an imminent outage, not context.
+                add(
+                    quota.nearWall ? 'yellow' : 'info',
+                    quota.nearWall ? 'usage_topup_nearly_drained' : 'usage_on_topup',
+                    { meta: { used, limit, balance } },
+                );
+                break;
+            case 'near_cap_on_topup':
+                // Approaching the cap with a balance behind it. Still yellow (the
+                // overflow burns paid credit) but the message says replies continue.
+                // If the balance is too thin to change the outcome (`nearWall`), fall
+                // through to the plain near-cap warning instead — it IS the wall.
+                add('yellow', quota.nearWall ? 'usage_near_cap' : 'usage_near_cap_on_topup', {
+                    meta: { used, limit, percent, balance },
+                });
+                break;
+            case 'near_cap':
                 add('yellow', 'usage_near_cap', { meta: { used, limit, percent } });
-            }
+                break;
         }
         // The limit fallback only runs on the `!limitCheck.allowed` branch of the
-        // generator — unreachable while top-up covers the overflow.
-        if (nearCap && !onTopup && settings?.limitFallbackEnabled === false) {
+        // generator, i.e. at the real wall — never while top-up covers the overflow.
+        if (quota.nearWall && settings?.limitFallbackEnabled === false) {
             add('yellow', 'limit_fallback_off');
         }
     }

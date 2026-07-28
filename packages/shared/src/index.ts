@@ -886,6 +886,15 @@ export {
 // --- OpenAI abort/timeout classification (keep aiTimeout.ts the only definition) ---
 export { isTimeoutAbort, classifyTimeoutAbort } from './aiTimeout';
 
+// --- AI reply quota runway (plan cap + top-up balance) — keep aiQuota.ts the only definition ---
+export {
+    resolveAiQuotaStatus,
+    AI_QUOTA_NEAR_WALL_RATIO,
+    type AiQuotaState,
+    type AiQuotaInput,
+    type AiQuotaStatus,
+} from './aiQuota';
+
 /** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
 // v39: lightweight date awareness — inject today's date (merchant timezone) into the
 // prompt so the model stops relaying clearly-past KB/post dates as upcoming. NO

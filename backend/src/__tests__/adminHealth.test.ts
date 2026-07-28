@@ -257,6 +257,9 @@ describe('computeHealthFlags — usage boundaries', () => {
  * canUseAiReplies falls through to top-up, so any flag claiming replies stop at
  * the cap is false. Regression coverage for the live report (87% of 10,000 with
  * a 9,417 top-up balance rendering "replies will go silent at the cap").
+ *
+ * The warnings key off the REAL wall (plan + top-up, via resolveAiQuotaStatus),
+ * so a thin balance must NOT buy the same silence a large one does.
  */
 describe('computeHealthFlags — usage with a top-up balance', () => {
     const withTopup = (aiRepliesCount: number, topupBalance: number, limitFallbackEnabled = false) =>
@@ -265,7 +268,7 @@ describe('computeHealthFlags — usage with a top-up balance', () => {
             settings: healthySettings({ limitFallbackEnabled }),
         }));
 
-    it('near cap + balance → usage_near_cap_on_topup, no bare near-cap flag', () => {
+    it('near cap + ample balance → usage_near_cap_on_topup, no bare near-cap flag', () => {
         const flags = withTopup(870, 9417);
         const f = flags.find(x => x.key === 'usage_near_cap_on_topup');
         expect(f?.severity).toBe('yellow');
@@ -273,21 +276,49 @@ describe('computeHealthFlags — usage with a top-up balance', () => {
         expect(keys(flags)).not.toContain('usage_near_cap');
     });
 
-    it('near cap + balance → NO limit_fallback_off (the fallback can never fire)', () => {
+    it('near cap + ample balance → NO limit_fallback_off (the fallback can never fire)', () => {
         expect(keys(withTopup(870, 9417))).not.toContain('limit_fallback_off');
     });
 
-    it('over cap + balance → usage_on_topup as info, not red usage_over_cap', () => {
-        const flags = withTopup(1200, 500);
+    it('at the cap + ample balance → usage_on_topup as info, not red usage_over_cap', () => {
+        const flags = withTopup(1000, 500);
         const f = flags.find(x => x.key === 'usage_on_topup');
         expect(f?.severity).toBe('info');
-        expect(f?.meta).toEqual({ used: 1200, limit: 1000, balance: 500 });
+        expect(f?.meta).toEqual({ used: 1000, limit: 1000, balance: 500 });
         expect(keys(flags)).not.toContain('usage_over_cap');
         expect(keys(flags)).not.toContain('limit_fallback_off');
     });
 
-    it('a covered merchant raises no red flag at all', () => {
-        expect(withTopup(1200, 500).filter(f => f.severity === 'red')).toEqual([]);
+    it('a comfortably covered merchant raises no red flag', () => {
+        expect(withTopup(1000, 500).filter(f => f.severity === 'red')).toEqual([]);
+    });
+
+    it('at the cap + NEARLY DRAINED balance → yellow drained warning, not a calm info line', () => {
+        // 1000 plan + 3 top-up: replies stop after 3 more. Must not read as healthy.
+        const flags = withTopup(1000, 3);
+        const f = flags.find(x => x.key === 'usage_topup_nearly_drained');
+        expect(f?.severity).toBe('yellow');
+        expect(f?.meta).toEqual({ used: 1000, limit: 1000, balance: 3 });
+        expect(keys(flags)).not.toContain('usage_on_topup');
+    });
+
+    it('a thin balance does NOT suppress limit_fallback_off', () => {
+        // 850 of a 1050 real runway — the fallback matters again, so the warning
+        // that it is switched off must come back.
+        expect(keys(withTopup(850, 50))).toContain('limit_fallback_off');
+    });
+
+    it('a thin balance near the cap falls back to the plain near-cap warning', () => {
+        const flags = withTopup(850, 50);
+        expect(flags.find(x => x.key === 'usage_near_cap')?.severity).toBe('yellow');
+        expect(keys(flags)).not.toContain('usage_near_cap_on_topup');
+    });
+
+    it('plan AND balance both spent → red usage_over_cap', () => {
+        const flags = withTopup(1050, 50);
+        expect(flags.find(x => x.key === 'usage_over_cap')?.severity).toBe('red');
+        expect(keys(flags)).not.toContain('usage_on_topup');
+        expect(keys(flags)).not.toContain('usage_topup_nearly_drained');
     });
 
     it('balance drained to 0 → the wall flags come back', () => {
@@ -297,7 +328,7 @@ describe('computeHealthFlags — usage with a top-up balance', () => {
         expect(keys(flags)).not.toContain('usage_on_topup');
     });
 
-    it('near cap + balance + fallback ENABLED → still no fallback flag', () => {
+    it('near cap + ample balance + fallback ENABLED → still no fallback flag', () => {
         expect(keys(withTopup(870, 9417, true))).not.toContain('limit_fallback_off');
     });
 });
