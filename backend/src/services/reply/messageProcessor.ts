@@ -34,6 +34,7 @@ import {
     classifyDmError,
 } from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
+import { groundingVerifierService, buildGroundingSource } from '../groundingVerifier';
 import { recordActivationEvent } from '../activation';
 import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
 import { extractPostId } from '../../utils/instagram';
@@ -919,6 +920,22 @@ export class MessageProcessor {
                 senderName,
                 messageText: consolidatedText,
             }).catch(() => { /* errors captured inside maybeCaptureLead */ });
+
+            // Fire-and-forget grounding verification (SYSTEM_ANALYSIS gap 13).
+            // Detection only: it flags the stored row, never the sent reply.
+            // Gated internally (shouldVerifyGrounding) and off unless
+            // GROUNDING_VERIFY_ENABLED=true, so this is inert until switched on.
+            groundingVerifierService.maybeVerifyGrounding({
+                userId,
+                pageId: page.id,
+                sourceId: storedMessage.id,
+                sourceType: 'message',
+                kb: buildGroundingSource({ knowledgeBase, storePolicies, productCatalog }),
+                question: consolidatedText,
+                reply: replyText ?? '',
+                intent: aiIntent,
+                replyMethod,
+            }).catch(() => { /* errors captured inside maybeVerifyGrounding */ });
 
             pipelineMetrics.record(pipeline, 'success');
             lap('DONE');

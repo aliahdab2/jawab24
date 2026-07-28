@@ -35,5 +35,10 @@ if echo "$SQL" | grep -qiE '\b(insert|update|delete|drop|alter|truncate|create|g
   exit 1
 fi
 
+# Output formatting. Default -x (expanded rows) is right for reading diagnostics
+# by eye; PSQL_ARGS=-At gives tuples-only unaligned output, which is what a query
+# ending in json_agg needs so its result can be piped straight into a file.
+PSQL_ARGS="${PSQL_ARGS:--x}"
+
 echo "$SQL" | ssh -i "$SSH_KEY" -o ConnectTimeout=15 -o BatchMode=yes "${SERVER_USER}@${SERVER_HOST}" \
-  'docker exec -i jawab24-postgres sh -c "psql -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -v ON_ERROR_STOP=1 -x"'
+  "docker exec -i jawab24-postgres sh -c \"psql -U \\\"\\\$POSTGRES_USER\\\" -d \\\"\\\$POSTGRES_DB\\\" -v ON_ERROR_STOP=1 ${PSQL_ARGS}\""

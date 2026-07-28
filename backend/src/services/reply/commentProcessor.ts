@@ -23,6 +23,7 @@ import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { leadExtractorService } from '../leadExtractor';
+import { groundingVerifierService, buildGroundingSource } from '../groundingVerifier';
 import { recordActivationEvent } from '../activation';
 import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
 import {
@@ -755,6 +756,12 @@ export class CommentProcessor {
                 contentId: content.id,
                 needsAttention, flagReason, flagMeta, aiIntent, aiOriginalReply,
                 confidence,
+                groundingSource: buildGroundingSource({
+                    knowledgeBase: generatorContext.knowledgeBase,
+                    postMessage: content.message,
+                    storePolicies: generatorContext.storePolicies,
+                    productCatalog: generatorContext.productCatalog,
+                }),
             });
             // Keep the debounce slot only if the reply actually went out.
             replyCommitted = finalizeResult.success;
@@ -889,6 +896,10 @@ export class CommentProcessor {
         fromName?: string;
         userSettings: Record<string, unknown>;
         postMessage?: string;
+        /** Business Info exactly as the generator saw it, for the post-send
+         *  grounding audit. Absent on the post_reply path (merchant-authored
+         *  text — nothing to verify), which the gate rejects anyway. */
+        groundingSource?: string;
         /** The originating post/media UUID. Persisted on the conversation so
          *  follow-up DMs can inherit post context (see messageProcessor). */
         contentId: string;
@@ -1071,6 +1082,22 @@ export class CommentProcessor {
             postMessage: opts.postMessage,
             replyText,
         }).catch(() => { /* errors captured inside maybeCaptureLead */ });
+
+        // Fire-and-forget grounding verification (SYSTEM_ANALYSIS gap 13).
+        // Detection only: it flags the stored row, never the sent reply. Gated
+        // internally (shouldVerifyGrounding) and off unless
+        // GROUNDING_VERIFY_ENABLED=true, so this is inert until switched on.
+        groundingVerifierService.maybeVerifyGrounding({
+            userId,
+            pageId,
+            sourceId: comment.id,
+            sourceType: 'comment',
+            kb: opts.groundingSource ?? '',
+            question: commentMessage,
+            reply: replyText ?? '',
+            intent: aiIntent,
+            replyMethod,
+        }).catch(() => { /* errors captured inside maybeVerifyGrounding */ });
 
         pipelineMetrics.record(pipeline, 'success');
 
