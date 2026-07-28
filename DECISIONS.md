@@ -319,6 +319,16 @@ rendering) until prod shadow verdicts show real echo cases.
 change can fix does not block a measured win. It ships with the number stated, the eval
 case left red, and the shadow verifier watching — never with another prompt rule bolted on.
 
+**Binding cache rule that falls out of this (review finding C1).** A reply whose list
+rows were filtered to the customer's message must NOT enter or be served from the
+SEMANTIC cache. That cache matches by embedding similarity, and «وين نلقاكم في تلة
+الريح؟» vs «… في عين الدالية؟» sit far inside the 0.91 LOCATION threshold — a hit would
+return one area's REAL outlets under another area's name, i.e. manufacture the exact
+defect gating removes. `context.factCollectionsGated` therefore skips the semantic cache
+on both read and write (read too, so entries written before this guard cannot be served).
+The exact-text cache is untouched: identical text matches identical rows. Anyone
+"optimizing" cache hit-rate on pages with collections must not undo this.
+
 Rollback lever: `FACT_LIST_MODE=list` restores the pre-gating behaviour in one env var.
 
 <!-- Appendix to D-047, added the same day: measured interaction with an in-flight

@@ -321,6 +321,9 @@ export interface GenerateReplyContext {
      * undefined when the page has no collections.
      */
     factCollectionsBlock?: string;
+    /** See EnrichedContext.factCollectionsGated — disables the semantic cache for
+     *  replies whose list content was specific to this message. */
+    factCollectionsGated?: boolean;
     // E-commerce tools (DMs only)
     ecommerceStoreId?: string;
     // Language fallback
@@ -398,6 +401,8 @@ export interface PlaygroundInput {
     /** G1a fact-collections prompt block — built by playgroundContext from the
      *  page's real collections, so eval exercises the production block. */
     factCollectionsBlock?: string;
+    /** See GenerateReplyContext.factCollectionsGated. */
+    factCollectionsGated?: boolean;
     customerContext?: string;
     /** Customer display name (DM only) — feeds gender-aware Arabic DM addressing. */
     senderName?: string;
@@ -603,7 +608,7 @@ export class ReplyGenerator {
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
-                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
@@ -724,7 +729,7 @@ export class ReplyGenerator {
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };
 
                 const aiResponse = await dispatchAiReply(aiRequest);
@@ -862,7 +867,7 @@ export class ReplyGenerator {
         const {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
-            replyStyle, brandVoiceNotes, businessInfoBlock, factCollectionsBlock, customerContext, senderName, minutesSinceLastMessage, model, defaultReplyLanguage,
+            replyStyle, brandVoiceNotes, businessInfoBlock, factCollectionsBlock, factCollectionsGated, customerContext, senderName, minutesSinceLastMessage, model, defaultReplyLanguage,
             timezone, messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
         } = input;
 
@@ -947,6 +952,7 @@ export class ReplyGenerator {
                 ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
                 ...(businessInfoBlock ? { businessInfoBlock } : {}),
                 ...(factCollectionsBlock ? { factCollectionsBlock } : {}),
+                ...(factCollectionsGated ? { factCollectionsGated } : {}),
                 ...(mergedCustomerCtx ? { customerContext: mergedCustomerCtx } : {}),
                 ...(defaultReplyLanguage ? { defaultReplyLanguage } : {}),
                 ...(timezone ? { timezone } : {}),

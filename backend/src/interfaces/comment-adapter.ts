@@ -59,6 +59,8 @@ export interface CommentReplyContext {
     /** G1a fact-collections prompt block — enumerable lists (outlets, coverage
      *  areas, delivery zones) plus their derived coverage statements. */
     factCollectionsBlock?: string;
+    /** See GenerateReplyContext.factCollectionsGated. */
+    factCollectionsGated?: boolean;
     senderName?: string;
     defaultReplyLanguage?: string;
     /** Merchant's IANA timezone (workspace settings) — drives the "Today's date" prompt line. */

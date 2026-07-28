@@ -637,8 +637,11 @@ export class MessageProcessor {
                 userSettings,
                 messageText,
                 page.knowledgeBase || undefined,
+                // Match the fact lists against the whole consolidated burst, not just
+                // the last line of it — see enrichPageContext's `matchText`.
+                consolidatedText,
             );
-            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock } = enriched;
+            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated } = enriched;
 
             const generated =
                 await replyGenerator.generateForMessage(
@@ -660,6 +663,7 @@ export class MessageProcessor {
                         brandVoiceNotes,
                         businessInfoBlock,
                         factCollectionsBlock,
+                        factCollectionsGated,
                         ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
                         defaultReplyLanguage: userSettings.defaultReplyLanguage,
                         timezone: userSettings.timezone,

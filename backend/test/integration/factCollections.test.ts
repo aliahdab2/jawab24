@@ -230,3 +230,120 @@ async function readKbVersion(pageId: string): Promise<number> {
         .limit(1);
     return row?.v ?? 0;
 }
+
+/**
+ * L2 row gating, end to end (review finding H3 — the gating path had no
+ * service-level test, and finding H1 lived exactly here: the row filter matched
+ * any attribute's VALUE without checking the attribute's LABEL).
+ */
+describe('fact collections — deterministic row gating', () => {
+    let pageId: string;
+
+    beforeEach(async () => {
+        const user = await createTestUser();
+        const page = await createTestPage(user.id, { name: 'Distributor', knowledgeBase: 'وكيل حصري' });
+        pageId = page.id;
+        await factCollectionsService.createCollection(pageId, {
+            label: 'الصيدليات التي تتوفر فيها منتجاتنا',
+            keyAttr: 'المدينة',
+            rows: OUTLETS,
+        });
+    });
+
+    it('shows only the matched area, and reports that it gated', async () => {
+        const ctx = await factCollectionsService.buildFactCollectionsContext(
+            pageId, 'أنا ساكن في تلة الريح، وين نلقى منتجاتكم؟', '2026-07-28');
+        expect(ctx.gated).toBe(true);
+        expect(ctx.block).toContain('صيدلية الفيروز');
+        expect(ctx.block).not.toContain('صيدلية النرجس المركزية');
+        // The boundary survives: every covered value is still named.
+        expect(ctx.block).toContain('حي الرمال');
+    });
+
+    it('withholds EVERY row when nothing matched, keeping the coverage line', async () => {
+        const ctx = await factCollectionsService.buildFactCollectionsContext(
+            pageId, 'سوق الثلاثاء فيه صيدليات تبيع منتجاتكم؟', '2026-07-28');
+        expect(ctx.gated).toBe(true);
+        for (const row of OUTLETS) expect(ctx.block).not.toContain(row.name);
+        expect(ctx.block).toContain('عين الدالية');
+        expect(ctx.block).toContain('غير مسجّل لدينا');
+    });
+
+    // H1: the value must be carried UNDER THE COLLECTION'S KEY. A row whose
+    // unrelated attribute happens to hold a matched string must NOT surface — that
+    // would attribute an outlet to an area it does not belong to, inside the module
+    // whose entire purpose is attribution.
+    it('does not surface a row whose NON-KEY attribute merely contains the matched value', async () => {
+        const user = await createTestUser();
+        const page = await createTestPage(user.id, { name: 'D2', knowledgeBase: 'وكيل' });
+        await factCollectionsService.createCollection(page.id, {
+            label: 'الصيدليات',
+            keyAttr: 'المدينة',
+            rows: [
+                { name: 'صيدلية الفيروز', attributes: [{ label: 'المدينة', value: 'تلة الريح' }] },
+                // Lives in another city. Its NOTE holds the matched value EXACTLY —
+                // that is what makes this test bite: the pre-fix filter did a set
+                // lookup on any attribute's value, so an exact-but-wrong-label match
+                // (not a substring) was the actual hole.
+                { name: 'صيدلية بعيدة', attributes: [
+                    { label: 'المدينة', value: 'صبراتة' },
+                    { label: 'ملاحظة', value: 'تلة الريح' },
+                ] },
+            ],
+        });
+        const ctx = await factCollectionsService.buildFactCollectionsContext(
+            page.id, 'أنا في تلة الريح', '2026-07-28');
+        expect(ctx.block).toContain('صيدلية الفيروز');
+        expect(ctx.block).not.toContain('صيدلية بعيدة');
+    });
+
+    it('does not gate when the collection has no key (nothing to match against)', async () => {
+        const user = await createTestUser();
+        const page = await createTestPage(user.id, { name: 'D3', knowledgeBase: 'وكيل' });
+        await factCollectionsService.createCollection(page.id, {
+            label: 'خدماتنا',
+            keyAttr: null,
+            rows: [{ name: 'توصيل' }, { name: 'تركيب' }],
+        });
+        const ctx = await factCollectionsService.buildFactCollectionsContext(page.id, 'أي شيء', '2026-07-28');
+        expect(ctx.gated).toBe(false);
+        expect(ctx.block).toContain('توصيل');
+        expect(ctx.block).toContain('تركيب');
+    });
+
+    it('does not gate when a row is missing the key — a partial index is not a boundary', async () => {
+        const user = await createTestUser();
+        const page = await createTestPage(user.id, { name: 'D4', knowledgeBase: 'وكيل' });
+        await factCollectionsService.createCollection(page.id, {
+            label: 'الصيدليات',
+            keyAttr: 'المدينة',
+            rows: [
+                { name: 'صيدلية الفيروز', attributes: [{ label: 'المدينة', value: 'تلة الريح' }] },
+                { name: 'صيدلية بلا منطقة' },
+            ],
+        });
+        const ctx = await factCollectionsService.buildFactCollectionsContext(
+            page.id, 'أنا في تلة الريح', '2026-07-28');
+        expect(ctx.gated).toBe(false);
+        expect(ctx.block).toContain('صيدلية بلا منطقة');
+    });
+
+    it('does not gate with no message text (cache-warm / block-only callers)', async () => {
+        const ctx = await factCollectionsService.buildFactCollectionsContext(pageId, undefined, '2026-07-28');
+        expect(ctx.gated).toBe(false);
+        for (const row of OUTLETS) expect(ctx.block).toContain(row.name);
+    });
+
+    it('honours FACT_LIST_MODE=list as the rollback lever', async () => {
+        const prev = process.env.FACT_LIST_MODE;
+        process.env.FACT_LIST_MODE = 'list';
+        try {
+            const ctx = await factCollectionsService.buildFactCollectionsContext(
+                pageId, 'سوق الثلاثاء فيه صيدليات؟', '2026-07-28');
+            expect(ctx.gated).toBe(false);
+            for (const row of OUTLETS) expect(ctx.block).toContain(row.name);
+        } finally {
+            if (prev === undefined) delete process.env.FACT_LIST_MODE; else process.env.FACT_LIST_MODE = prev;
+        }
+    });
+});

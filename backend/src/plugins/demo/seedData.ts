@@ -1909,8 +1909,17 @@ export async function seedDemoData(
         // Refresh the distributor outlet collections (G1a, Cat 69)
         const distributorRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_distributor');
         if (distributorRefresh) {
-            await seedDistributorFactCollections(distributorRefresh.id);
-            logger.debug('[DemoData] Refreshed distributor fact collections', { collections: DEMO_DISTRIBUTOR_COLLECTIONS.length });
+            // Contained on purpose: splitOutletLine THROWS on a malformed fixture
+            // line (a keyless row would silently suppress the coverage index), and
+            // /auth/demo is the public landing-page demo — a typo in a fixture must
+            // cost that one fixture, not every demo signup. The unit test in
+            // demo-seed.test.ts is what actually catches the typo.
+            try {
+                await seedDistributorFactCollections(distributorRefresh.id);
+                logger.debug('[DemoData] Refreshed distributor fact collections', { collections: DEMO_DISTRIBUTOR_COLLECTIONS.length });
+            } catch (err) {
+                logger.error('[DemoData] Distributor fact collections failed — demo continues without them', { err });
+            }
         }
 
         // Refresh messages: delete old → re-seed with fresh timestamps
@@ -2071,8 +2080,13 @@ export async function seedDemoData(
     // if these rows exist, so a skipped seed silently turns that case green.
     const distributorPage = createdPages.find(p => p.facebookPageId === 'demo_page_distributor');
     if (distributorPage) {
-        await seedDistributorFactCollections(distributorPage.id);
-        logger.debug('[DemoData] Seeded distributor fact collections', { collections: DEMO_DISTRIBUTOR_COLLECTIONS.length });
+        // Same containment as the refresh path above.
+        try {
+            await seedDistributorFactCollections(distributorPage.id);
+            logger.debug('[DemoData] Seeded distributor fact collections', { collections: DEMO_DISTRIBUTOR_COLLECTIONS.length });
+        } catch (err) {
+            logger.error('[DemoData] Distributor fact collections failed — demo continues without them', { err });
+        }
     }
 
     // Create demo posts

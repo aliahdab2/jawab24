@@ -61,6 +61,14 @@ export interface AiGenerateRequest {
          * prompt, which is the case for every page without collections.
          */
         factCollectionsBlock?: string;
+        /**
+         * True when the block's rows were filtered to this message (G1 stage L2).
+         * Disables the SEMANTIC cache for the reply — that cache matches by
+         * embedding similarity, and two "where can I find you in X" questions with
+         * different X are far inside the LOCATION threshold, so a hit would return
+         * one area's outlets for another. The exact-text cache is unaffected.
+         */
+        factCollectionsGated?: boolean;
         /** Customer's display name — used for personalization only, never affects cache keys. */
         senderName?: string;
         /** Substantive customer context (history, returning-customer summary, etc.) that changes the answer. */

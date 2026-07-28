@@ -129,8 +129,11 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     //      prompt production never sends (the reason #737 must gate the rendered
     //      block, not a hand-written KB line).
     let factCollectionsBlock: string | undefined;
+    let factCollectionsGated = false;
     try {
-        factCollectionsBlock = (await factCollectionsService.buildFactCollectionsContext(page.id, question)).block;
+        const facts = await factCollectionsService.buildFactCollectionsContext(page.id, question);
+        factCollectionsBlock = facts.block;
+        factCollectionsGated = facts.gated;
     } catch (err) {
         captureError(err, 'Fact collections prompt block failed (playground)', { level: 'warning', tags: { service: 'factCollections' }, extra: { pageId: page.id } });
     }
@@ -163,6 +166,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         productCatalog,
         storePolicies,
         factCollectionsBlock,
+        factCollectionsGated,
         // Forwarded for BOTH channels: the DM pipeline injects the origin post + the
         // merchant's Post Reply as [current_post] for comment-originated threads, so the
         // playground/eval must be able to exercise the dm+postMessage combination too.

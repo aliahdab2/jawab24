@@ -37,6 +37,19 @@ export interface EnrichedContext {
      * sold. A page can have both, either, or neither.
      */
     factCollectionsBlock: string | undefined;
+    /**
+     * True when the deterministic match withheld row detail for at least one
+     * collection, i.e. this reply's list content is specific to THIS message.
+     *
+     * It exists to disable the SEMANTIC cache for such replies (review finding
+     * C1): that cache matches by embedding similarity, and «وين نلقاكم في تلة
+     * الريح؟» vs «… في عين الدالية؟» sit far inside the 0.91 LOCATION threshold —
+     * two questions with different correct answers and nearly identical wording.
+     * Serving one for the other would hand back real outlets under the wrong area,
+     * which is the exact defect this whole path removes. The exact-text cache is
+     * unaffected: identical text matches identical rows.
+     */
+    factCollectionsGated: boolean;
 }
 
 /**
@@ -59,6 +72,15 @@ export async function enrichPageContext(
     },
     messageText: string,
     initialKnowledgeBase: string | undefined,
+    /**
+     * Text the fact-collections matcher should read, when it differs from
+     * `messageText`. The DM pipeline passes the CONSOLIDATED burst: a customer who
+     * writes «أنا ساكن في عين الدالية» and then «وين نلقاكم؟» seconds later would
+     * otherwise match nothing on the second message, and their own area's rows
+     * would be withheld from a page that covers them (review finding H2).
+     * `messageText` stays the brand-voice / language signal — unchanged.
+     */
+    matchText?: string,
 ): Promise<EnrichedContext> {
     let knowledgeBase = initialKnowledgeBase;
 
@@ -103,6 +125,7 @@ export async function enrichPageContext(
     //     carries its own derived coverage statement — the measured 28%→0%
     //     mechanism — so it must reach the model on every reply, RAG or not.
     let factCollectionsBlock: string | undefined;
+    let factCollectionsGated = false;
     if (pageId) {
         try {
             // ONE pass builds both: the rendered list and the deterministic match of
@@ -110,7 +133,9 @@ export async function enrichPageContext(
             // model is never asked whether «سوق الثلاثاء» is «سوق الخميس»; code
             // answers that from the rows, and in the default 'gated' mode the answer
             // decides which rows the model is shown at all.
-            factCollectionsBlock = (await factCollectionsService.buildFactCollectionsContext(pageId, messageText)).block;
+            const facts = await factCollectionsService.buildFactCollectionsContext(pageId, matchText ?? messageText);
+            factCollectionsBlock = facts.block;
+            factCollectionsGated = facts.gated;
         } catch (err) {
             // Non-critical for delivering a reply, but never silent: a persistent
             // failure here silently removes the coverage statement, and the reply
@@ -149,7 +174,7 @@ export async function enrichPageContext(
     // 4. Language-appropriate brand voice notes
     const brandVoiceNotes = resolveBrandVoiceNotes(userSettings, messageText);
 
-    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock };
+    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated };
 }
 
 /**

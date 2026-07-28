@@ -133,6 +133,36 @@ describe('enrichPageContext — fact-collections branch', () => {
         expect(ctx.knowledgeBase).toContain('kb text');
     });
 
+    // C1: this flag is what disables the semantic cache for a place-specific reply.
+    // If it stops being propagated, the cache silently starts serving one area's
+    // outlets for another — a failure with no local symptom, so it is pinned here.
+    it('propagates the gated flag so the caller can refuse to semantic-cache', async () => {
+        vi.mocked(factCollectionsService.buildFactCollectionsContext).mockResolvedValue({ block: LISTS, gated: true });
+
+        const ctx = await enrichPageContext({ id: PAGE_ID }, {}, 'وين نلقاكم؟', undefined);
+
+        expect(ctx.factCollectionsGated).toBe(true);
+    });
+
+    it('reports not-gated when the page has no collections', async () => {
+        vi.mocked(factCollectionsService.buildFactCollectionsContext).mockResolvedValue({ block: undefined, gated: false });
+
+        const ctx = await enrichPageContext({ id: PAGE_ID }, {}, 'وين نلقاكم؟', undefined);
+
+        expect(ctx.factCollectionsGated).toBe(false);
+    });
+
+    // H2: the DM pipeline passes the consolidated burst, so «أنا من عين الدالية» +
+    // «وين نلقاكم؟» sent seconds apart still matches the customer's own area.
+    it('matches against matchText when the caller supplies one', async () => {
+        vi.mocked(factCollectionsService.buildFactCollectionsContext).mockResolvedValue({ block: LISTS, gated: true });
+
+        await enrichPageContext({ id: PAGE_ID }, {}, 'وين نلقاكم؟', undefined, 'أنا من عين الدالية\nوين نلقاكم؟');
+
+        expect(factCollectionsService.buildFactCollectionsContext)
+            .toHaveBeenCalledWith(PAGE_ID, 'أنا من عين الدالية\nوين نلقاكم؟');
+    });
+
     it('skips the query entirely when there is no pageId', async () => {
         const ctx = await enrichPageContext({}, {}, 'وين نلقاكم؟', 'kb text');
 

@@ -206,27 +206,42 @@ class FactCollectionsService {
             // index is not a boundary (the H2 finding), so withholding rows there
             // would hide facts on the strength of a comparison we know is partial.
             let displayRows: FactRowForPrompt[] | undefined;
-            if (mode === 'gated' && c.keyAttr && rowsMissingKey === 0 && messageText && messageText.trim().length > 0) {
-                const matched = matchCollections(messageText, [{ label: c.label, keyAttr: c.keyAttr, keyValues }])[0]?.matched ?? [];
+            const keyAttr = c.keyAttr;
+            if (mode === 'gated' && keyAttr && rowsMissingKey === 0 && messageText && messageText.trim().length > 0) {
+                const matched = matchCollections(messageText, [{ label: c.label, keyAttr, keyValues }])[0]?.matched ?? [];
                 const wanted = new Set(matched.map(v => v.trim()));
+                // The row must carry the matched value UNDER THE COLLECTION'S KEY.
+                // Testing every attribute's value instead would show a row because
+                // some unrelated attribute («الشارع», «ملاحظة») happens to hold a
+                // matched string — an attribution bug inside the module whose whole
+                // purpose is attribution. Labels are compared with the renderer's
+                // normalization for the same reason indexKeyValues does it: they come
+                // from extraction and merchant typing, where «المنطقة » and «المنطقة»
+                // are one intent (review finding H1, same class as the earlier H2).
+                const carriesMatchedKey = (r: FactRowForPrompt): boolean =>
+                    !!r.attributes?.some(a => sameLabel(a.label, keyAttr) && wanted.has(a.value.trim()));
                 // No match → NO rows. The coverage statement still renders (it is
                 // computed over every live row), so the model keeps the list's
                 // boundary and can still name the areas it covers — the
                 // recoverable failure, deliberately chosen over the unrecoverable
                 // one. A normalizer miss («الرمال» vs «حي الرمال») lands here, and
                 // the customer still sees their area named in that statement.
-                displayRows = wanted.size === 0
-                    ? []
-                    : promptRows.filter(r => r.attributes?.some(a => wanted.has(a.value.trim())));
-                if (displayRows.length !== promptRows.length) gated = true;
+                displayRows = wanted.size === 0 ? [] : promptRows.filter(carriesMatchedKey);
+                if (displayRows.length !== promptRows.length) {
+                    gated = true;
+                    // M3: the merchant-facing symptom of gating is "the AI stopped
+                    // naming my shops", so the log must say WHICH list, how the
+                    // message matched, and how much was withheld — pageId alone
+                    // cannot answer that question after the fact.
+                    this.logger.info('fact collection rows gated by deterministic match', {
+                        pageId, collectionId: c.id, label: c.label, keyAttr,
+                        matchedValues: matched, rowsShown: displayRows.length, rowsTotal: promptRows.length,
+                    });
+                }
             }
 
             const block = renderFactCollectionBlock(toPromptCollection(c), promptRows, today, { displayRows });
             if (block) blocks.push(block);
-        }
-
-        if (gated) {
-            this.logger.info('fact collection rows gated by deterministic match', { pageId });
         }
 
         return { block: blocks.length > 0 ? blocks.join('\n\n') : undefined, gated };
@@ -363,6 +378,14 @@ class FactCollectionsService {
         await pagesService.invalidatePageCaches(pageId);
         return deleted;
     }
+}
+
+/** Same label normalization the renderer's key index uses (trim + collapse inner
+ *  whitespace). Kept here rather than importing a private helper so the two cannot
+ *  silently diverge in only one direction — if this ever needs more than whitespace
+ *  folding, both must change together. */
+function sameLabel(a: string, b: string): boolean {
+    return a.trim().replace(/\s+/g, ' ') === b.trim().replace(/\s+/g, ' ');
 }
 
 /** Row/collection shapes are decoupled from drizzle in the renderer, so map at

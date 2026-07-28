@@ -531,7 +531,17 @@ export class AiService {
         // reach it anyway (history/customerContext are skipped below), and it yields ~0 real hits —
         // gating here (not inside the block) also skips the throwaway embedding call for those DMs.
         // The exact cache still serves DMs, name-bucketed (see buildCacheKey).
-        if (config.ai.semanticCacheEnabled && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches && request.context?.channel !== 'dm') {
+        // G1 stage L2 (review finding C1): a reply whose <business_lists> rows were
+        // filtered to THIS message must not be served to a similar-but-different
+        // question. «وين نلقاكم في تلة الريح؟» and «… في عين الدالية؟» sit far inside
+        // the 0.91 LOCATION threshold, and a hit would hand back one area's real
+        // outlets under another area's name — precisely the fabrication the gating
+        // exists to make impossible. Skipped on BOTH sides: the write so we never
+        // poison the store, the read so entries written before this guard (or by a
+        // page whose collections arrived later) cannot be served either. The
+        // exact-text cache keeps working — identical text matches identical rows.
+        const factListsGated = request.context?.factCollectionsGated === true;
+        if (config.ai.semanticCacheEnabled && !factListsGated && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches && request.context?.channel !== 'dm') {
             try {
                 // Use full fallback classifier (covers COMPLIMENT, SPAM, BUSINESS_INQUIRY etc.)
                 // instead of basic detectIntent() which only handles GREETING/PRICE/HOURS/etc.
@@ -835,7 +845,7 @@ export class AiService {
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
             // Model is stored in metadata so check-time can filter to same-model entries.
             // Eval pipeline never writes (see `bypassAllCaches` above).
-            if (config.ai.semanticCacheEnabled && !bypassAllCaches && !cacheReject && !hasConversationHistory && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
+            if (config.ai.semanticCacheEnabled && !factListsGated && !bypassAllCaches && !cacheReject && !hasConversationHistory && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,
