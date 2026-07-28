@@ -1116,7 +1116,24 @@ export {
 // took v60 on main for the name-truncation fix above. Renumbered to v61 on merge:
 // PROMPT_VERSION keys the semantic cache, so shipping two different prompts under
 // one version would have served #502's cached replies for this change.
-export const PROMPT_VERSION = 'v61';
+// v62 is RESERVED, deliberately skipped here: the in-flight G1a fact-collections
+// work (<business_lists> block) is already authored as v62 and not yet merged.
+// Taking v62 for this change would force that branch to renumber, and the v60/v61
+// collision above is what happens when two prompts share one version — the cache
+// serves the other change's replies. A GAP is harmless (the value is a cache key
+// and a telemetry tag, never compared for order); a DUPLICATE is not.
+// v63 — the no-answer reply is composed, not recited. "هذه المعلومة غير متوفرة
+// لدي حالياً" shipped as the literal `reply` of few-shot Example 4, so the model
+// copied it verbatim instead of writing its own sentence: observed twice in one
+// prod conversation (إجدابيا, 2026-07-28) answering «موجود مخمليه بودي» /
+// «مخمريه» in flat MSA on a page whose own KB opens with «ارجو التحدث باللهجة
+// الليبية مع الزباين». Two failures in one string — it reads as a machine, and it
+// drops the merchant's persona. Fixed the way the wording rules already work in
+// this file: the stock sentence and its paraphrases are BANNED, the rule now
+// demands naming the specific missing thing in the customer's dialect and the
+// page's brand voice, and Examples 4/4b demonstrate the SAME missing-info case
+// answered two different ways so there is no fixed sentence left to copy.
+export const PROMPT_VERSION = 'v63';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
