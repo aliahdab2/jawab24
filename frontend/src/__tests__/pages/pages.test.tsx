@@ -887,7 +887,7 @@ describe('PagesPage - WhatsApp plan gate (Business+ entitlement)', () => {
         });
 
         await waitFor(() => {
-            expect(mockToastError).toHaveBeenCalledWith('WhatsApp auto-reply is available on the Business plan and higher. Upgrade to connect your number.');
+            expect(mockToastError).toHaveBeenCalledWith(enPages.whatsappPlanRequired);
         });
         // Optimistic update rolled back
         expect(screen.getAllByRole('switch')[1].getAttribute('aria-checked')).toBe('false');
