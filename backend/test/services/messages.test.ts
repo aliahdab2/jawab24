@@ -1,5 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// getStats wraps its query in withStatsCache, and test/setup.ts mocks the db but
+// NOT redis — so without this the suite read and wrote a real local Redis. A
+// workspace-wide getStats caches under a fixed key for 60s, so a second run inside
+// that window was served from the cache, never called db.select, and left this
+// file's queued mockReturnValueOnce unconsumed — shifting every later mock by one
+// and failing unrelated tests (isFirstIncomingMessage among them). Order- and
+// clock-dependent, and green in isolation.
+//
+// Same shape as src/__tests__/statsCache.test.ts, which is where the caching itself
+// (including the epoch CAS) is asserted. Here `get` always misses, so every call
+// computes and these tests can assert the QUERY they were written to assert.
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue('OK'),
+        eval: vi.fn().mockResolvedValue(1),
+        del: vi.fn().mockResolvedValue(1),
+        incr: vi.fn().mockResolvedValue(1),
+    },
+}));
+
 vi.mock('../../src/db', () => ({
     db: {
         select: vi.fn(),
