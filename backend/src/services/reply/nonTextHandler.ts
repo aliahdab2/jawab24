@@ -4,7 +4,7 @@ import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
 import { whatsappService } from '../whatsapp';
 import { transcriptionService } from '../transcription';
-import { imageUnderstandingService, checkImageUnderstandingGate, incrementImageUnderstandingCounter } from '../imageUnderstanding';
+import { imageUnderstandingService, checkImageUnderstandingGate, incrementImageUnderstandingCounter, notifyImageCapReached } from '../imageUnderstanding';
 import { redis } from '../../lib/redis';
 import { enqueueMessage } from '../../lib/replyQueue';
 import { publishSSEEvent } from '../../lib/eventBus';
@@ -297,6 +297,25 @@ export async function handleNonTextMessage(
                     return; // AI pipeline handles the reply from here
                 }
                 logger.warn(`[${platform}] Image understanding failed, falling back to nudge`, { senderId, messageId });
+            } else if (gate.reason === 'cap_reached') {
+                // We DID NOT try to read this image — the merchant's daily quota
+                // is spent. That is a different event from "we tried and could
+                // not understand it", and the text-only nudge is the wrong reply
+                // to it on two counts: it tells the customer we cannot read
+                // images (false — we read several for this same page earlier
+                // today), and it makes the merchant's assistant announce a
+                // limitation to the person they are selling to. One merchant
+                // watched that message go to five of his customers and wrote
+                // «لما زبون يرسلك صورة لا ترد عليه» into his Business Info to
+                // make it stop — he wanted silence, not an apology.
+                //
+                // So: say nothing to the customer. The photo still lands in the
+                // merchant's inbox (flagged unanswered by the SLA sweep) and the
+                // merchant — never the customer — is told the quota ran out.
+                logger.info(`[${platform}] Image cap reached, staying silent`, { senderId, messageId, limit: gate.limit });
+                await messagesService.finalizeEnrichment(stub.id, 'failed');
+                await notifyImageCapReached(gate.ownerId, gate.limit);
+                return;
             } else {
                 logger.info(`[${platform}] Image understanding gated (${gate.reason}), falling back to nudge`, { senderId, messageId });
             }
@@ -514,13 +533,18 @@ async function sendNudge(
         return;
     }
 
+    // Platform's own id for this send (WhatsApp wamid), persisted below so a
+    // Coexistence echo of the nudge is recognised as ours rather than as the
+    // merchant answering from their phone.
+    let sentPlatformMessageId: string | undefined;
+
     if (platform === 'facebook') {
         await facebookService.sendPrivateMessage(page.accessToken, senderId, nudgeText);
     } else if (platform === 'whatsapp') {
         if (page.whatsappPhoneNumberId) {
-            await whatsappService.sendTextMessage(
+            sentPlatformMessageId = await whatsappService.sendTextMessage(
                 page.whatsappPhoneNumberId, senderId, nudgeText, page.accessToken,
-            );
+            ) || undefined;
         }
     } else {
         if (page.instagramAccountId) {
@@ -530,6 +554,10 @@ async function sendNudge(
         }
     }
 
-    await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, nudgeText, 'template');
+    await messagesService.storeOutgoingMessage(
+        page.id, workspaceId, senderId, nudgeText, 'template',
+        undefined, undefined, undefined, undefined, undefined,
+        sentPlatformMessageId,
+    );
     logger.info(`[${platform}] Nudge sent`, { senderId });
 }

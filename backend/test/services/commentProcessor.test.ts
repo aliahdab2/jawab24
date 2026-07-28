@@ -977,13 +977,13 @@ describe('CommentProcessor', () => {
 
     // --- Price fallback tests ---
 
-    it('should replace AI text with safe fallback for price_not_in_kb flag', async () => {
+    it('should replace AI text with safe fallback for price_not_in_kb flag (QUESTION)', async () => {
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'The price is $99!',  // hallucinated price
             replyMethod: 'ai',
             needsAttention: true,
             flagReason: 'price_not_in_kb',
-            aiIntent: 'PURCHASE_INTENT',
+            aiIntent: 'QUESTION',
         });
         const adapter = createMockAdapter();
 
@@ -992,11 +992,62 @@ describe('CommentProcessor', () => {
         );
 
         expect(result.success).toBe(true);
-        // Reply IS sent (not skipped), but with safe fallback text + DM CTA (PURCHASE_INTENT in public mode)
+        // Reply IS sent (not skipped), but with safe fallback text
         const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
         expect(sendCall.replyText).toContain(PRICE_FALLBACK['en']);
         expect(adapter.flagComment).not.toHaveBeenCalled(); // not offensive
         expect(adapter.markAsReplied).toHaveBeenCalled();
+    });
+
+    // BAMBO regression (2026-07-27), Stage B: an ungrounded price on a
+    // PURCHASE_INTENT turn is swapped for the safe fallback — this is the exact
+    // prod path where a customer's closing «نعم» was answered with an invented
+    // «1200 دينار ليبي». Legitimate computed carts are protected upstream: the
+    // validator accepts any total whose price_math verifies against the KB
+    // (eval Cat 68 4/4), so a flagged purchase reply here is ungrounded by
+    // definition. This fixture was impossible pre-change (the validator only
+    // flagged QUESTION).
+    it('price_not_in_kb on PURCHASE_INTENT swaps to the safe fallback (Stage B)', async () => {
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'The price is $99!',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'price_not_in_kb',
+            aiIntent: 'PURCHASE_INTENT',
+        });
+        const adapter = createMockAdapter();
+
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'I want one', 'from-1', 'Lead',
+        );
+
+        expect(result.success).toBe(true);
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText).toContain(PRICE_FALLBACK['en']);
+        expect(sendCall.replyText).not.toContain('The price is $99!');
+        expect(adapter.markAsReplied).toHaveBeenCalled();
+    });
+
+    // The swap must NOT leak past the two price-bearing intents: a complaint
+    // that happens to mention an ungrounded number keeps its real reply.
+    it('price_not_in_kb on COMPLAINT sends the original reply — flag-only, no swap', async () => {
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'So sorry about the delay — our team is on it.',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'price_not_in_kb',
+            aiIntent: 'COMPLAINT',
+        });
+        const adapter = createMockAdapter();
+
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'I paid $99 and got nothing!', 'from-1', 'Lead',
+        );
+
+        expect(result.success).toBe(true);
+        const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
+        expect(sendCall.replyText).toContain('So sorry about the delay');
+        expect(sendCall.replyText).not.toContain(PRICE_FALLBACK['en']);
     });
 
     // --- Duplicate webhook guard tests ---
@@ -1509,6 +1560,40 @@ describe('shouldUseFallback', () => {
 
     it('should handle comma-separated flags', () => {
         expect(shouldUseFallback('low_confidence,price_not_in_kb')).toBe(true);
+    });
+
+    // BAMBO regression (2026-07-27): the validator flags hallucinated prices on
+    // EVERY intent (Stage A), and the reply SWAP fires on the two intents where
+    // a price claim is the reply's substance — QUESTION and PURCHASE_INTENT
+    // (Stage B; a prod customer was quoted an invented «1200 دينار ليبي» at the
+    // closing «نعم» turn). Gated on the eval proving price_math emission is
+    // reliable (97.2%, Cat 65 3/3 + Cat 68 4/4 — verified totals never flag, so
+    // legitimate computed carts survive the swap). Other intents stay flag-only:
+    // canned price text is never the right substitute for a complaint/greeting.
+    it('QUESTION intent keeps the swap', () => {
+        expect(shouldUseFallback('price_not_in_kb', 'QUESTION')).toBe(true);
+    });
+
+    it('PURCHASE_INTENT swaps too (Stage B — the BAMBO «1200 دينار» path)', () => {
+        expect(shouldUseFallback('price_not_in_kb', 'PURCHASE_INTENT')).toBe(true);
+    });
+
+    it('other known intents are flag-only — no swap', () => {
+        expect(shouldUseFallback('price_not_in_kb', 'COMPLAINT')).toBe(false);
+        expect(shouldUseFallback('price_not_in_kb', 'GREETING')).toBe(false);
+        expect(shouldUseFallback('price_not_in_kb', 'COMPLIMENT')).toBe(false);
+    });
+
+    it('missing/blank intent preserves legacy behavior (swap)', () => {
+        expect(shouldUseFallback('price_not_in_kb')).toBe(true);
+        expect(shouldUseFallback('price_not_in_kb', '')).toBe(true);
+        expect(shouldUseFallback('price_not_in_kb', undefined)).toBe(true);
+    });
+
+    it('intent is normalized (case/whitespace) like shouldSkipReply', () => {
+        expect(shouldUseFallback('price_not_in_kb', ' question ')).toBe(true);
+        expect(shouldUseFallback('price_not_in_kb', 'purchase_intent')).toBe(true);
+        expect(shouldUseFallback('price_not_in_kb', ' complaint ')).toBe(false);
     });
 });
 

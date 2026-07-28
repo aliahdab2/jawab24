@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PagesPage from '@/pages/pages';
+// The next-intl mock in test/setup.ts resolves keys against the real EN
+// messages, so assert on the JSON value rather than hardcoding the copy.
+import enPages from '@/i18n/en/pages.json';
 import { pagesApi, api, subscriptionApi } from '@/lib/api';
 
 // Create mock functions
@@ -116,12 +119,25 @@ vi.mock('@/components/ui', () => ({
         ) : null,
     InfoPopover: ({ children }: { children: React.ReactNode; label?: string }) => <>{children}</>,
     UpgradeCTA: ({ children }: { children: React.ReactNode }) => <div data-testid="upgrade-cta">{children}</div>,
+    Badge: ({ children }: { children: React.ReactNode }) => <span data-testid="badge">{children}</span>,
     WhatsAppIcon: () => <svg data-testid="whatsapp-icon" />,
     FacebookIcon: () => <svg data-testid="facebook-icon" />,
-    Modal: ({ isOpen, title, children }: { isOpen: boolean; title: string; children: React.ReactNode }) =>
+    // One option in a pick-one modal — shared by the channel picker and the
+    // WhatsApp onboarding-path question.
+    ChoiceRow: ({ title, description, badge, onClick, disabled }: { title: React.ReactNode; description: React.ReactNode; badge?: React.ReactNode; onClick: () => void; disabled?: boolean }) => (
+        <button onClick={onClick} disabled={disabled}>
+            <span>{title}</span>
+            <span>{description}</span>
+            {badge}
+        </button>
+    ),
+    // Shared by the channel picker and the WhatsApp onboarding-path question.
+    // They are never open at once — picking WhatsApp closes the picker first.
+    Modal: ({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) =>
         isOpen ? (
-            <div data-testid="channel-picker-modal">
+            <div data-testid="modal">
                 <p>{title}</p>
+                <button data-testid="modal-close" onClick={onClose}>close</button>
                 {children}
             </div>
         ) : null,
@@ -451,6 +467,33 @@ describe('PagesPage - WhatsApp', () => {
         expect(screen.getByText('+966 55 000 0000')).toBeInTheDocument();
     });
 
+    // The card row reaches a DIFFERENT endpoint than the channel picker
+    // (/pages/:id/connect-whatsapp vs /pages/connect-whatsapp), so the path
+    // answer has to be proven to survive on this route too.
+    it('attaching WhatsApp to an existing page card asks the path question first', async () => {
+        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_2', wabaId: 'w', coexistence: true });
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockedApi.post.mockResolvedValue({ data: { whatsappConnected: true } } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument());
+
+        fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+        expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.whatsappPathKeep));
+        });
+
+        expect(mockLaunchWhatsAppSignup).toHaveBeenCalledWith({ coexistence: true });
+        expect(mockedApi.post).toHaveBeenCalledWith('/pages/page_x/connect-whatsapp', {
+            code: 'c', phoneNumberId: 'pn_2', wabaId: 'w', coexistence: true,
+        });
+    });
+
     it('mobile: Connect hands off to the web dashboard instead of the popup', async () => {
         const { Capacitor } = await import('@capacitor/core');
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
@@ -472,6 +515,10 @@ describe('PagesPage - WhatsApp', () => {
             expect(mockOpenExternalUrl).toHaveBeenCalledWith('https://jawab24.com/en/pages');
         });
         expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+        // And the path question is SKIPPED, not asked-then-abandoned: the merchant
+        // answers it in the browser we just handed off to, so asking here would
+        // make them answer the same question twice.
+        expect(screen.queryByText(enPages.whatsappPathTitle)).not.toBeInTheDocument();
 
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
     });
@@ -548,8 +595,49 @@ describe('PagesPage - WhatsApp-only cards', () => {
         });
     });
 
-    it('channel picker: WhatsApp option runs signup and appends the created card', async () => {
-        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_new', wabaId: 'w' });
+    // ⛔ REGRESSION GUARD — reconnect must preserve the onboarding path.
+    //
+    // The reconnect banner reuses handleConnectWhatsApp. If it re-runs Embedded
+    // Signup WITHOUT requesting coexistence, Meta puts the number on the
+    // MIGRATION path, the backend registers it against the Cloud API, and the
+    // number is taken off the merchant's WhatsApp Business app — permanently,
+    // silently, and it is the exact outcome Coexistence exists to prevent.
+    it('reconnect on a COEXISTENCE number re-requests coexistence', async () => {
+        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_9', wabaId: 'w', coexistence: true });
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_ONLY_PAGE, whatsappCoexistence: true, whatsappNeedsReconnect: true }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockedApi.post.mockResolvedValue({ data: WA_ONLY_PAGE } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument());
+
+        await act(async () => {
+            fireEvent.click(screen.getAllByText('Connect')[0]);
+        });
+
+        expect(mockLaunchWhatsAppSignup).toHaveBeenCalledWith({ coexistence: true });
+    });
+
+    it('reconnect on a MIGRATED number does not request coexistence', async () => {
+        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_9', wabaId: 'w', coexistence: false });
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_ONLY_PAGE, whatsappCoexistence: false, whatsappNeedsReconnect: true }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+        mockedApi.post.mockResolvedValue({ data: WA_ONLY_PAGE } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument());
+
+        await act(async () => {
+            fireEvent.click(screen.getAllByText('Connect')[0]);
+        });
+
+        expect(mockLaunchWhatsAppSignup).toHaveBeenCalledWith({ coexistence: false });
+    });
+
+    it('channel picker: WhatsApp option asks the path question, then runs signup and appends the created card', async () => {
+        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_new', wabaId: 'w', coexistence: false });
         mockedApi.post.mockResolvedValue({
             data: { ...WA_ONLY_PAGE, id: 'wa_new', name: 'Second Branch', whatsappDisplayPhoneNumber: '+966 50 999 8877' },
         } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
@@ -562,20 +650,96 @@ describe('PagesPage - WhatsApp-only cards', () => {
 
         // Header "Connect channel" opens the picker
         fireEvent.click(screen.getByText('Connect channel'));
-        expect(screen.getByTestId('channel-picker-modal')).toBeInTheDocument();
+        expect(screen.getByTestId('modal')).toBeInTheDocument();
         expect(screen.getByText('Which channel do you want to connect?')).toBeInTheDocument();
 
+        // Picking WhatsApp does NOT launch signup yet — Meta needs the onboarding
+        // path at popup launch, so the merchant is asked first.
+        fireEvent.click(screen.getByText('WhatsApp only'));
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+        expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
+
         await act(async () => {
-            fireEvent.click(screen.getByText('WhatsApp only'));
+            fireEvent.click(screen.getByText(enPages.whatsappPathDedicated));
         });
 
-        expect(mockLaunchWhatsAppSignup).toHaveBeenCalled();
+        expect(mockLaunchWhatsAppSignup).toHaveBeenCalledWith({ coexistence: false });
         expect(mockedApi.post).toHaveBeenCalledWith('/pages/connect-whatsapp', {
-            code: 'c', phoneNumberId: 'pn_new', wabaId: 'w',
+            code: 'c', phoneNumberId: 'pn_new', wabaId: 'w', coexistence: false,
         });
         await waitFor(() => {
             expect(screen.getAllByText('Second Branch')[0]).toBeInTheDocument();
         });
+    });
+
+    // The whole point of Coexistence: answering "I already use this number"
+    // must reach Meta as the coexistence request, or the merchant's number is
+    // migrated to the Cloud API and leaves their phone.
+    it('channel picker: choosing "I already use this number" requests coexistence', async () => {
+        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_new', wabaId: 'w', coexistence: true });
+        mockedApi.post.mockResolvedValue({
+            data: { ...WA_ONLY_PAGE, id: 'wa_new', name: 'Second Branch' },
+        } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument());
+
+        fireEvent.click(screen.getByText('Connect channel'));
+        fireEvent.click(screen.getByText('WhatsApp only'));
+
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.whatsappPathKeep));
+        });
+
+        expect(mockLaunchWhatsAppSignup).toHaveBeenCalledWith({ coexistence: true });
+        // The path Meta actually took is what reaches the backend, not the request.
+        expect(mockedApi.post).toHaveBeenCalledWith('/pages/connect-whatsapp', {
+            code: 'c', phoneNumberId: 'pn_new', wabaId: 'w', coexistence: true,
+        });
+    });
+
+    // A merchant can back out of the coexistence path INSIDE Meta's wizard. What
+    // reaches the backend must be the path Meta actually took, because it decides
+    // whether the number is registered against the Cloud API — send the requested
+    // value instead and a migrated number silently never gets registered.
+    it('sends the path Meta took, not the one the merchant asked for', async () => {
+        mockLaunchWhatsAppSignup.mockResolvedValue({ code: 'c', phoneNumberId: 'pn_new', wabaId: 'w', coexistence: false });
+        mockedApi.post.mockResolvedValue({
+            data: { ...WA_ONLY_PAGE, id: 'wa_new', name: 'Second Branch' },
+        } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument());
+
+        fireEvent.click(screen.getByText('Connect channel'));
+        fireEvent.click(screen.getByText('WhatsApp only'));
+
+        await act(async () => {
+            // Merchant asks to keep the number...
+            fireEvent.click(screen.getByText(enPages.whatsappPathKeep));
+        });
+
+        expect(mockLaunchWhatsAppSignup).toHaveBeenCalledWith({ coexistence: true });
+        // ...but Meta migrated it, and that is what the backend is told.
+        expect(mockedApi.post).toHaveBeenCalledWith('/pages/connect-whatsapp', {
+            code: 'c', phoneNumberId: 'pn_new', wabaId: 'w', coexistence: false,
+        });
+    });
+
+    it('dismissing the path question connects nothing', async () => {
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('Noor Store')[0]).toBeInTheDocument());
+
+        fireEvent.click(screen.getByText('Connect channel'));
+        fireEvent.click(screen.getByText('WhatsApp only'));
+        expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByTestId('modal-close'));
+        });
+
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+        expect(mockedApi.post).not.toHaveBeenCalled();
     });
 
     it('channel picker: Facebook option opens the FB connect dialog', async () => {
@@ -602,7 +766,7 @@ describe('PagesPage - WhatsApp-only cards', () => {
         });
 
         fireEvent.click(screen.getByText('Connect New Page'));
-        expect(screen.queryByTestId('channel-picker-modal')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
         expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
     });
 });
@@ -666,7 +830,7 @@ describe('PagesPage - WhatsApp plan gate (Business+ entitlement)', () => {
         });
 
         fireEvent.click(screen.getByText('Connect channel'));
-        expect(screen.queryByTestId('channel-picker-modal')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
         expect(screen.getByTestId('confirmation-modal')).toBeInTheDocument();
         expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
     });
@@ -790,6 +954,25 @@ describe('PagesPage - WhatsApp master switch OFF (dark deploy)', () => {
 
         // The whatsappConnected OR keeps a live number visible regardless of the flag
         expect(screen.getByText('+966 55 000 0000')).toBeInTheDocument();
+    });
+
+    /**
+     * The beta chip is a deliberate expectation-setter on the newest channel —
+     * it must ride along with the WhatsApp row wherever that row appears, so a
+     * merchant never meets WhatsApp without seeing that it is still in beta.
+     */
+    it('labels the WhatsApp row as beta', async () => {
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...FB_PAGE, whatsappConnected: true, whatsappDisplayPhoneNumber: '+966 55 000 0000', whatsappAutoReplyEnabled: true }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Falafel House')[0]).toBeInTheDocument();
+        });
+
+        expect(screen.getByText(enPages.whatsappBeta)).toBeInTheDocument();
     });
 });
 

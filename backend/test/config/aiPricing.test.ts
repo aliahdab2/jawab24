@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AI_PRICING, PRICING_VERSION, estimateCostUsd, estimateWhisperCostUsd } from '../../src/config/aiPricing';
+import { AI_PRICING, PRICING_VERSION, cacheSavingsUsd, estimateCostUsd, estimateWhisperCostUsd } from '../../src/config/aiPricing';
 
 describe('AI Pricing', () => {
     it('exports PRICING_VERSION v2', () => {
@@ -176,6 +176,45 @@ describe('AI Pricing', () => {
                 expect(warnSpy).toHaveBeenCalledTimes(1);
                 expect(warnSpy.mock.calls[0][0]).toContain(name);
             });
+        });
+    });
+
+    /**
+     * Regression — the catalog posts-scan's vision calls booked at $0 for weeks:
+     * we REQUEST the rolling alias 'gpt-4o-mini', OpenAI returns the dated
+     * snapshot 'gpt-4o-mini-2024-07-18', and ai_usage_log records the response's
+     * name. 42 calls / 1.24M input tokens were invisible to /admin/ai-cost by
+     * 2026-07-27. The 4.1 family had already been patched one alias at a time;
+     * this guards the CLASS instead.
+     */
+    describe('dated snapshot aliases', () => {
+        it('prices the vision snapshot that the posts-scan actually logs', () => {
+            expect(estimateCostUsd('gpt-4o-mini-2024-07-18', 30_000, 500))
+                .toBeCloseTo(estimateCostUsd('gpt-4o-mini', 30_000, 500), 10);
+        });
+
+        it('never books a known family at zero just because the snapshot is new', () => {
+            // An alias nobody has added yet must still cost SOMETHING.
+            const cost = estimateCostUsd('gpt-4.1-mini-2099-01-01', 10_000, 1_000);
+            expect(cost).toBeGreaterThan(0);
+            expect(cost).toBeCloseTo(estimateCostUsd('gpt-4.1-mini', 10_000, 1_000), 10);
+        });
+
+        it('warns on the fallback — "same price" is an assumption, not a guarantee', () => {
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            estimateCostUsd('gpt-4.1-nano-2099-02-02', 1_000, 100);
+            expect(warnSpy).toHaveBeenCalled();
+            expect(warnSpy.mock.calls[0][0]).toContain('snapshot fallback');
+            warnSpy.mockRestore();
+        });
+
+        it('still records 0 for a model of no known family', () => {
+            expect(estimateCostUsd('llama-9000-2030-01-01', 1_000, 100)).toBe(0);
+        });
+
+        it('applies the base cached rate to a snapshot', () => {
+            expect(cacheSavingsUsd('gpt-4o-mini-2024-07-18', 10_000))
+                .toBeCloseTo(cacheSavingsUsd('gpt-4o-mini', 10_000), 10);
         });
     });
 

@@ -78,9 +78,12 @@ export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
 export { isSafeRedirectPath } from './utils/redirect';
 export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
+export { parseFlagReason, hasAnyFlag } from './utils/flag-reason';
 export { matchCatalogLinesInKb, matchStructuredFieldLinesInKb, removeKbLines } from './catalogKbMatch';
 export { reconcileCatalogProposals } from './catalogReconcile';
 export type { ReconcileExistingItem, ReconcileProposalItem, ReconcileKind, ReconcileResult } from './catalogReconcile';
+export { postsScanEligibility } from './catalogScanEligibility';
+export type { PostsScanBlocker, PostsScanEligibility, PostsScanEligibilityInput } from './catalogScanEligibility';
 // presentFieldsFromProfile is defined in this file (needs unwrapBusinessProfile).
 export type { CatalogMatchItem, KbLineMatch, KbLineMatchConfidence, StructuredFieldKind, PresentFields, StructuredFieldLineMatch } from './catalogKbMatch';
 export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, isValidHttpUrl, normalizeHttpUrl, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhones, extractPhoneFromText, extractPhonesFromText, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, SMS_BLOCKED_DIAL_PREFIXES, isSmsBlockedPhone } from './utils/validation';
@@ -347,6 +350,13 @@ export interface Page {
   whatsappBusinessAccountId?: string | null;
   whatsappDisplayPhoneNumber?: string | null;
   whatsappAutoReplyEnabled?: boolean | null;
+  /**
+   * TRUE when the number was onboarded via Meta's Coexistence flow and so is
+   * STILL live in the merchant's WhatsApp Business app. Load-bearing on
+   * reconnect: re-running Embedded Signup on the migration path would register
+   * the number against the Cloud API and take it off their phone permanently.
+   */
+  whatsappCoexistence?: boolean | null;
   // E-commerce store linked to this page
   ecommerceStoreId?: string | null;
   /**
@@ -381,6 +391,12 @@ export interface Page {
   isConnected?: boolean;
   // True when a WhatsApp business token is stored (Embedded Signup completed)
   whatsappConnected?: boolean;
+  // True when WhatsApp WAS connected and the token has since died (Meta forces a
+  // 60-day expiry on Embedded Signup tokens). Distinct from "never connected":
+  // only this state should raise the reconnect banner.
+  whatsappNeedsReconnect?: boolean;
+  // When the stored WhatsApp business token expires. Null = unknown or no expiry.
+  whatsappTokenExpiresAt?: string | Date | null;
   // Defensive auto-pause: set to 'send_rejected' when the bot was paused after
   // hitting the consecutive-send-failure threshold (Page restricted/unpublished
   // by Meta, permission lost mid-flight). Cleared when the customer re-enables
@@ -867,6 +883,18 @@ export {
     type FailedBeforeLogClass,
 } from './aiMetrics';
 
+// --- OpenAI abort/timeout classification (keep aiTimeout.ts the only definition) ---
+export { isTimeoutAbort, classifyTimeoutAbort } from './aiTimeout';
+
+// --- AI reply quota runway (plan cap + top-up balance) — keep aiQuota.ts the only definition ---
+export {
+    resolveAiQuotaStatus,
+    AI_QUOTA_NEAR_WALL_RATIO,
+    type AiQuotaState,
+    type AiQuotaInput,
+    type AiQuotaStatus,
+} from './aiQuota';
+
 /** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
 // v39: lightweight date awareness — inject today's date (merchant timezone) into the
 // prompt so the model stops relaying clearly-past KB/post dates as upcoming. NO
@@ -1088,7 +1116,38 @@ export {
 // took v60 on main for the name-truncation fix above. Renumbered to v61 on merge:
 // PROMPT_VERSION keys the semantic cache, so shipping two different prompts under
 // one version would have served #502's cached replies for this change.
-export const PROMPT_VERSION = 'v61';
+// v62 is RESERVED, deliberately skipped here: the in-flight G1a fact-collections
+// work (<business_lists> block) is already authored as v62 and not yet merged.
+// Taking v62 for this change would force that branch to renumber, and the v60/v61
+// collision above is what happens when two prompts share one version — the cache
+// serves the other change's replies. A GAP is harmless (the value is a cache key
+// and a telemetry tag, never compared for order); a DUPLICATE is not.
+// v63 — the no-answer reply carries the page's own voice instead of a stock
+// sentence. "هذه المعلومة غير متوفرة لدي حالياً" shipped as the literal `reply` of
+// few-shot Example 4, so the model reproduced it: seen twice in one prod
+// conversation (إجدابيا, 2026-07-28) answering «موجود مخمليه بودي» / «مخمريه» in
+// flat MSA, on a page whose own Business Info opens with «التحدث باللهجة الليبية
+// مع الزباين». Two failures in one string — it reads as a machine, and it drops
+// the merchant's persona.
+// The operative variable was NOT how many times the sentence appeared in the
+// prompt. On entering the info_not_in_kb path the model looks for a successful
+// example OF THAT PATH, and the only Arabic one was that sentence. So the fix is
+// to make that single example worth imitating: it is now a PRODUCT question (the
+// failure mode that actually occurs — the English Example 2 was already fine),
+// and its reply names the product without inferring absence.
+// Expected and accepted: the model will generalise the SHAPE «ما عندي معلومة عن
+// ‹X›» into a new default rather than composing freshly every time. That is the
+// goal, not a regression — the new default names the subject, cannot assert
+// non-existence, and leaves room for the customer's dialect. It does mean the
+// example's wording is a fleet-wide template decision, so it stays pan-Arabic
+// (readable for Egyptian, Gulf, Levantine and Maghrebi customers alike).
+// Also removed the sentence from the four rule sites that restated it, and
+// deliberately did NOT keep a "never say X" mention: restating the string adds
+// nothing the shape rules don't already cover, and a paraphrasing model routes
+// around literal blocklists anyway — proven in this very prompt, where the
+// closing-phrase rule banned that shape and was ignored while an example
+// contradicted it.
+export const PROMPT_VERSION = 'v63';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
@@ -1459,3 +1518,22 @@ export { ACTIVATION_FUNNEL_STEPS, KB_FILLED_MIN_CHARS, isBusinessInfoProvided } 
 export type { ActivationEvent, ActivationFunnel, ActivationFunnelStep } from './activation';
 // --- Image-message marker protocol (DM vision descriptions) ---
 export { IMAGE_MESSAGE_RE, IMAGE_PLACEHOLDER_RE, isImageMessageBody, extractImageDescription, isAnyImageMessage } from './imageMessage';
+// --- Business Info audit (merchant «تقييم» button + admin panel) ---
+export {
+    IMPOSSIBLE_CAPABILITIES,
+    SUPPORTED_CAPABILITIES,
+    rankFindings,
+    verifyQuote,
+    isDirectImageUrl,
+    findNonDirectImageUrls,
+    findDuplicateTableRows,
+    runDeterministicChecks,
+} from './businessAudit';
+export type {
+    ImpossibleCapabilityId,
+    BusinessAuditCode,
+    BusinessAuditFinding,
+    BusinessAuditResult,
+    BusinessAuditFindingKind,
+    DeterministicFindingCode,
+} from './businessAudit';

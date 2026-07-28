@@ -10,7 +10,7 @@ import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '.
 import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
-import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, type ProductCard, type FlagMeta } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta } from '@jawab24/shared';
 import { detectLanguage, detectLanguageCode, isLowSignalLatinToken } from '../../utils/language';
 import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
 import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
@@ -45,9 +45,8 @@ export const SILENT_SKIP_INTENTS = ['SPAM_OR_IRRELEVANT'] as const;
 
 export function shouldSkipReply(flagReason?: string, aiIntent?: string): boolean {
     if (!flagReason && !aiIntent) return false;
-    const flags = (flagReason || '').split(',').map(f => f.trim());
     const normalizedIntent = (aiIntent || '').trim().toUpperCase();
-    return flags.some(f => (SKIP_REPLY_FLAGS as readonly string[]).includes(f)) ||
+    return hasAnyFlag(flagReason, SKIP_REPLY_FLAGS) ||
            (SKIP_REPLY_INTENTS as readonly string[]).includes(normalizedIntent);
 }
 
@@ -58,10 +57,21 @@ export function shouldSilentlySkip(aiIntent?: string): boolean {
     return (SILENT_SKIP_INTENTS as readonly string[]).includes(normalizedIntent);
 }
 
-export function shouldUseFallback(flagReason?: string): boolean {
+export function shouldUseFallback(flagReason?: string, aiIntent?: string): boolean {
     if (!flagReason) return false;
-    const flags = flagReason.split(',').map(f => f.trim());
-    return flags.some(f => (SAFE_FALLBACK_FLAGS as readonly string[]).includes(f));
+    if (!hasAnyFlag(flagReason, SAFE_FALLBACK_FLAGS)) return false;
+    // The SWAP is scoped to the two intents where a price claim is the reply's
+    // substance — QUESTION and PURCHASE_INTENT (BAMBO regression, 2026-07-27:
+    // a customer's closing «نعم» was answered with an invented «1200 دينار ليبي»
+    // while the check was QUESTION-gated). Legitimate computed carts survive:
+    // the validator accepts any total whose price_math verifies against the KB
+    // (eval 97.2%, Cat 65 3/3 + Cat 68 4/4), so a flagged purchase reply is
+    // ungrounded by definition. Other intents stay flag-only (needs_attention +
+    // cache-block) — canned price text is never the right substitute for a
+    // complaint or greeting that merely mentions a number. A missing/blank
+    // intent keeps the swap (legacy failover paths predate intent reporting).
+    const normalizedIntent = (aiIntent || '').trim().toUpperCase();
+    return !normalizedIntent || normalizedIntent === 'QUESTION' || normalizedIntent === 'PURCHASE_INTENT';
 }
 
 /** Max stored length for the captured KB-gap question. Enough to convey the
@@ -232,6 +242,17 @@ export const PRICE_FALLBACK: Record<string, string> = {
     ar: t('priceFallback', 'ar'),
     en: t('priceFallback', 'en'),
 };
+
+/**
+ * Locale-correct price fallback text. Resolves through `t(key, lang)` rather than
+ * indexing PRICE_FALLBACK: that table is a `Record<string, string>` literal holding
+ * only `ar`/`en`, so a third locale would have a correct translation in its JSON and
+ * still be served English. `t()` reads the locale table, so new languages work here
+ * with no code change.
+ */
+export function priceFallbackText(lang: string): string {
+    return t('priceFallback', lang);
+}
 
 /**
  * Pick a language for canned fallback text (PRICE_FALLBACK, etc.).
@@ -953,7 +974,7 @@ export class ReplyGenerator {
             ? false
             : shouldSkipReply(flags.join(','), normalizedIntent)
                 && !(solicitedCta && shouldSilentlySkip(normalizedIntent));
-        const useFallback = shouldUseFallback(flags.join(','));
+        const useFallback = shouldUseFallback(flags.join(','), normalizedIntent);
 
         // Gap recording (fire-and-forget, same triggers as processAiResponse)
         let gapRecorded = false;
@@ -973,7 +994,7 @@ export class ReplyGenerator {
                 knowledgeBase,
                 defaultReplyLanguage,
             });
-            finalReply = PRICE_FALLBACK[lang];
+            finalReply = priceFallbackText(lang);
         }
 
         return {

@@ -13,7 +13,8 @@
  */
 import OpenAI, { APIError, BadRequestError, RateLimitError } from 'openai';
 import { logAiUsage } from './aiUsageLog';
-import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog, type FailedBeforeLogClass } from '../lib/aiMetrics';
+import { isTimeoutAbort } from '@jawab24/shared';
 import type { AiPipeline } from '../types/aiPipeline';
 
 /**
@@ -36,6 +37,23 @@ export interface TrackedOpenAI {
     embeddings: OpenAI['embeddings'];
     /** Escape hatch for the raw client. Callers that use this are responsible for logging. */
     raw: OpenAI;
+}
+
+/**
+ * Classify a thrown OpenAI error for the `failed_before_log` counter.
+ *
+ * When the call site passed its OWN AbortSignal and that signal is aborted, our
+ * timeout fired. That is the only way to tell: the SDK's abort error carries no
+ * distinguishing `name` (see `isTimeoutAbort` for the full story) — the same trap
+ * that shipped JAWAB24-BACKEND-1J. Call sites without a signal have no timeout of
+ * ours to attribute, so they keep reporting `OpenAIApiError`.
+ *
+ * Lives here because this wrapper is the single canonical `failed_before_log` emit
+ * site for every pipeline routed through it (AI_INSTRUCTIONS §13c) — classifying
+ * at the call sites instead would either duplicate the predicate or double-count.
+ */
+function classifyFailure(opts: { signal?: AbortSignal | null } | undefined): FailedBeforeLogClass {
+    return opts?.signal && isTimeoutAbort(opts.signal) ? 'AiTimeoutError' : 'OpenAIApiError';
 }
 
 /**
@@ -65,7 +83,7 @@ export function makeTrackedOpenAI(apiKey: string, ctx: TrackedOpenAIContext): Tr
         try {
             response = await chatCreate(...(args as Parameters<typeof chatCreate>));
         } catch (err) {
-            recordAiFailedBeforeLog(ctx.pipeline, requestedModel, 'OpenAIApiError');
+            recordAiFailedBeforeLog(ctx.pipeline, requestedModel, classifyFailure(args[1]));
             throw err;
         }
         recordAiReturn(ctx.pipeline, requestedModel);
@@ -97,7 +115,7 @@ export function makeTrackedOpenAI(apiKey: string, ctx: TrackedOpenAIContext): Tr
         try {
             response = await embedCreate(...(args as Parameters<typeof embedCreate>));
         } catch (err) {
-            recordAiFailedBeforeLog(ctx.pipeline, requestedModel, 'OpenAIApiError');
+            recordAiFailedBeforeLog(ctx.pipeline, requestedModel, classifyFailure(args[1]));
             throw err;
         }
         recordAiReturn(ctx.pipeline, requestedModel);

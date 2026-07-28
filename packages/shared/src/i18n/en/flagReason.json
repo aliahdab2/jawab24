@@ -34,5 +34,6 @@
   "no_reply_generated": "Needs manual reply",
   "AI flagged this reply": "Flagged for review",
   "self_identified_as_automation": "AI self-reference detected",
-  "self_identification_stripped": "Automated-identity wording removed from the reply"
+  "self_identification_stripped": "Automated-identity wording removed from the reply",
+  "reply_not_grounded": "Reply not grounded in Business Info"
 }

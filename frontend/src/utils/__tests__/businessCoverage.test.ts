@@ -1,0 +1,117 @@
+import { describe, it, expect } from 'vitest';
+import type { Page } from '@jawab24/shared';
+import { computeFactCoverage, computeReadiness, READINESS_AREAS } from '../businessCoverage';
+import { businessPage as pageWith } from './businessPageFixture';
+
+const FILLED_HOURS = { sat: ['09:00-19:00'] };
+
+describe('computeFactCoverage — values', () => {
+  it('reads only the CONFIRMED merchant half', () => {
+    // A legacy flat profile unwraps into `suggestions`, i.e. unconfirmed
+    // FB-sync data, which must never count as covered.
+    const { covered } = computeFactCoverage(
+      { id: 'p1', businessProfile: { address: 'حي العزيزية' } } as unknown as Page,
+    );
+    expect(covered.address).toBe(false);
+  });
+
+  it('joins address and city for display, and counts either as covered', () => {
+    expect(computeFactCoverage(pageWith({ address: 'البرامكة', city: 'دمشق' })).values.address)
+      .toBe('البرامكة، دمشق');
+    expect(computeFactCoverage(pageWith({ city: 'دمشق' })).covered.address).toBe(true);
+    expect(computeFactCoverage(pageWith({ address: '   ' })).covered.address).toBe(false);
+  });
+
+  it('treats blank contents as absent', () => {
+    const { covered, values } = computeFactCoverage(
+      pageWith({ phones: ['', '  '], hours: { sat: [] }, website: ' ' }),
+    );
+    expect(values.phones).toEqual([]);
+    expect(covered.phone).toBe(false);
+    expect(covered.hours).toBe(false);
+    expect(covered.website).toBe(false);
+  });
+
+  it('defines coverage as "the value is there", so a badge cannot contradict the value beside it', () => {
+    const { values, covered } = computeFactCoverage(
+      pageWith({ hours: FILLED_HOURS, address: 'دمشق', phones: ['0912'], policies: { shipping: 'مجاني', payment: 'نقداً' }, website: 'x.com' }),
+    );
+    expect(covered.hours).toBe(values.hours !== null);
+    expect(covered.address).toBe(values.address !== null);
+    expect(covered.delivery).toBe(values.delivery !== null);
+    expect(covered.website).toBe(values.website !== null);
+  });
+});
+
+describe('computeFactCoverage — connected store', () => {
+  it('lets a policy-answering store cover delivery and payment', () => {
+    const { covered, storeAnswered } = computeFactCoverage(
+      pageWith({}, { ecommerceStoreId: 's1', storeAnswersPolicies: true } as Partial<Page>),
+    );
+    expect(covered.delivery).toBe(true);
+    expect(covered.payment).toBe(true);
+    expect(storeAnswered).toEqual({ delivery: true, payment: true });
+  });
+
+  /**
+   * `ecommerceStoreId` alone is NOT proof — it survives a platform-side
+   * uninstall and is set on a live store that synced no policy text. Both cases
+   * send the model nothing, so claiming coverage would talk the merchant out of
+   * writing the fact their customers ask about most.
+   */
+  it('does not let a store id alone cover policies', () => {
+    const { covered, storeAnswered } = computeFactCoverage(
+      pageWith({}, { ecommerceStoreId: 's1' } as Partial<Page>),
+    );
+    expect(covered.delivery).toBe(false);
+    expect(covered.payment).toBe(false);
+    expect(storeAnswered).toEqual({ delivery: false, payment: false });
+  });
+
+  it('stops claiming the store answers once the merchant writes their own value', () => {
+    const { covered, storeAnswered } = computeFactCoverage(
+      pageWith({ policies: { shipping: 'مجاني فوق ٣٠٠' } }, { ecommerceStoreId: 's1', storeAnswersPolicies: true } as Partial<Page>),
+    );
+    expect(covered.delivery).toBe(true);
+    expect(storeAnswered.delivery).toBe(false); // the merchant's words win
+    expect(storeAnswered.payment).toBe(true);
+  });
+
+  it('counts a store link as covering products, which cannot be typed on such a page', () => {
+    expect(computeReadiness(pageWith({}, { ecommerceStoreId: 's1' } as Partial<Page>), 0).covered.products)
+      .toBe(true);
+  });
+});
+
+describe('computeReadiness — score', () => {
+  it('is withheld until the catalog count lands', () => {
+    expect(computeReadiness(pageWith({ hours: FILLED_HOURS }), undefined).score).toBeNull();
+  });
+
+  it('scores only READINESS_AREAS — a website is not a gap that fails a customer', () => {
+    const { score } = computeReadiness(pageWith({ website: 'x.com', phones: ['0912'] }), 0);
+    expect(score).toEqual({
+      covered: 0,
+      total: READINESS_AREAS.length,
+      percent: 0,
+      missing: ['products', 'hours', 'address', 'delivery', 'payment'],
+    });
+  });
+
+  it('floors the percentage so only a complete profile reads 100%', () => {
+    const { score } = computeReadiness(
+      pageWith({ hours: FILLED_HOURS, address: 'دمشق', policies: { shipping: 'مجاني', payment: 'نقداً' } }),
+      0, // no products → 4 of 5
+    );
+    expect(score?.percent).toBe(80);
+    expect(score?.missing).toEqual(['products']);
+  });
+
+  it('reads 100% and reports no gaps once every area is covered', () => {
+    const { score } = computeReadiness(
+      pageWith({ hours: FILLED_HOURS, address: 'دمشق', policies: { shipping: 'مجاني', payment: 'نقداً' } }),
+      3,
+    );
+    expect(score).toEqual({ covered: 5, total: 5, percent: 100, missing: [] });
+  });
+});

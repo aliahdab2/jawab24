@@ -188,6 +188,35 @@ export const pages = pgTable('pages', {
     // Embedded Signup business token for the merchant's WABA — separate from the
     // Facebook page token in access_token. AES-256-GCM encrypted (enc:v1: prefix).
     whatsappAccessToken: text('whatsapp_access_token'),
+    // When the WABA business token expires. Meta FORCES a 60-day expiry on the
+    // "WhatsApp Embedded Signup" login variation (the never-expire option is only
+    // offered for the "General" variation), so unlike the FB page token this one
+    // dies on a clock. NULL means "unknown or never expires" — Meta's debug_token
+    // reports expires_at = 0 for non-expiring tokens, so callers must treat NULL
+    // as "no deadline" and never compute a days-until from it.
+    whatsappTokenExpiresAt: timestamp('whatsapp_token_expires_at'),
+    // Last successful debug_token health check. Drives the sweep's staleness query,
+    // mirroring token_last_verified_at on the Facebook side.
+    whatsappTokenLastVerifiedAt: timestamp('whatsapp_token_last_verified_at'),
+    // Why WhatsApp is currently disconnected (whatsapp_access_token cleared). Null
+    // when connected. Mirrors disconnect_reason for the Facebook channel.
+    //   - 'token_expired': Meta code 190 / debug_token is_valid=false — merchant must reconnect
+    //   - 'app_uninstalled': account_update webhook said the customer removed our app
+    whatsappDisconnectReason: varchar('whatsapp_disconnect_reason', { length: 30 }),
+    // TRUE when the number was onboarded via Meta's Coexistence flow ("API
+    // Solutions for Business App Users") and therefore stays live in the
+    // merchant's WhatsApp Business app; FALSE/NULL means it was migrated to the
+    // Cloud API and no longer works on their phone.
+    //
+    // Load-bearing beyond bookkeeping: a coexistence number must NOT be
+    // registered against the Cloud API on reconnect, it is the only kind that
+    // emits `smb_message_echoes` (a human answering from the phone), and it
+    // decides the default reply mode — a human and the AI share this number, so
+    // answering instantly risks replying twice to the same customer.
+    //
+    // Nullable on purpose: NULL is "connected before this column existed", which
+    // is necessarily a migrated number.
+    whatsappCoexistence: boolean('whatsapp_coexistence'),
     // E-commerce store linked to this page (for product-aware AI replies)
     ecommerceStoreId: uuid('ecommerce_store_id').references(() => ecommerceStores.id, { onDelete: 'set null' }),
     // Knowledge base for AI context - business info, products, FAQ
@@ -1207,6 +1236,92 @@ export const catalogItems = pgTable('catalog_items', {
         pageSortIdx: index('idx_catalog_items_page_sort').on(table.pageId, table.sortOrder),
     };
 });
+
+// ============================================
+// GENERIC FACT COLLECTIONS (G1 — the fact engine)
+// ============================================
+// Owner ruling 2026-07-28: «the data should be generic and the code should
+// support it». Nothing in this schema knows what a pharmacy, course, or
+// delivery zone is — a NEW KIND of business fact is an INSERT into
+// fact_collections, never a migration. catalog_items stays specialized for
+// SALE items (money semantics: price guards, checkout naming); these tables
+// generalize every enumerable list a business has that is not sold: outlet
+// directories, coverage areas, per-city delivery zones, branch lists, staff…
+//
+// Why this exists (measured, 2026-07-28 grounding sweep): the largest
+// unstructured defect class is list attribution — real outlet names attached
+// to cities the merchant never listed (BAMBO LIBYA fired on 28% of replies).
+// A rendered, DERIVED completeness/absence statement took the fabrication
+// rate from 28% to 0% in the A/B battery while every honest answer survived.
+// The renderer derives that statement from is_complete + the distinct
+// key-attribute values; it is never hand-written (a hand-written line rots
+// and can embed assumptions the merchant never stated).
+
+export const factCollections = pgTable('fact_collections', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    // Merchant-visible name, in the merchant's language: «الصيدليات التي تبيع
+    // منتجاتنا», «مناطق التوصيل», «فروعنا». Doubles as the prompt block header.
+    label: varchar('label', { length: 120 }).notNull(),
+    // The attribute rows are keyed/filtered by («المدينة», «الحي», «المستوى»).
+    // Nullable: a flat list (services offered, brands carried) has no key.
+    keyAttr: varchar('key_attr', { length: 60 }),
+    // The completeness declaration — the merchant's statement that this list
+    // is EXHAUSTIVE. Three states, and the distinction is customer-facing:
+    //   NULL  → unconfirmed: absence renders as «غير مسجّل في قائمتي» + contact
+    //           (honest — the list is what WE know, not what exists)
+    //   true  → confirmed complete: absence renders as a confident negative
+    //           («لا يوجد لدينا منفذ هناك») — rule-108 semantics, activated
+    //   false → merchant explicitly said the list is partial: absence stays
+    //           on the honest wording permanently
+    // Only a merchant action may set this (D-038 discipline); extraction and
+    // sync never touch it.
+    isComplete: boolean('is_complete'),
+    completenessConfirmedAt: timestamp('completeness_confirmed_at'),
+    // Who authored the collection: 'editor' (merchant created it in the UI) |
+    // 'kb_extract' (extracted from their own KB text, merchant-reviewed).
+    // fb_sync is deliberately NOT a valid source here — Facebook has no
+    // structured lists worth trusting (D-046). ENFORCED by a CHECK constraint in
+    // migration 0142 (drizzle-kit 0.20 cannot express one), alongside a unique
+    // index on (page_id, label): two collections sharing a label would emit two
+    // contradictory coverage statements for the same list.
+    source: varchar('source', { length: 20 }).notNull().default('kb_extract'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+    pageIdIdx: index('idx_fact_collections_page_id').on(table.pageId),
+}));
+
+export const factRows = pgTable('fact_rows', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    collectionId: uuid('collection_id').references(() => factCollections.id, { onDelete: 'cascade' }).notNull(),
+    // The row's display name: «صيدلية النرجس المركزية», «توصيل بنغازي».
+    name: varchar('name', { length: 200 }).notNull(),
+    // label/value pairs, same shape and same driver caveat as
+    // catalog_items.attributes (drizzle ONLY — postgres.js double-encodes
+    // jsonb, raw `->>` returns NULL). The collection's keyAttr names which
+    // label carries the key («المدينة»: «حي الرمال»).
+    attributes: jsonb('attributes').$type<{ label: string; value: string }[]>(),
+    // Optional money — a delivery-zone row has a price, an outlet row does
+    // not. The renderer shows the column only when ANY row in the collection
+    // prices it (no "price on request" stamped on pharmacies — the defect
+    // that disqualified catalog_items as the home for lists).
+    price: numeric('price', { precision: 12, scale: 2 }),
+    currency: varchar('currency', { length: 10 }),
+    // Optional validity window — same self-expiry semantics as catalog_items:
+    // a passed endsAt EXCLUDES the row from the prompt while the merchant UI
+    // keeps it (the v38 stale-date class, killed by dates not by memory).
+    startsAt: isoDateString('starts_at'),
+    endsAt: isoDateString('ends_at'),
+    isAvailable: boolean('is_available').notNull().default(true),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+    collectionIdIdx: index('idx_fact_rows_collection_id').on(table.collectionId),
+    collectionSortIdx: index('idx_fact_rows_collection_sort').on(table.collectionId, table.sortOrder),
+}));
 
 // ============================================
 // RAG / KNOWLEDGE BASE TABLES

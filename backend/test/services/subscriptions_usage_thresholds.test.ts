@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { resolveAiQuotaStatus } from '@jawab24/shared';
 import { computeCrossedAiThresholds, resolveAiUsageNotificationType, AI_USAGE_THRESHOLDS } from '../../src/services/subscriptions';
 
 describe('computeCrossedAiThresholds', () => {
@@ -64,24 +65,47 @@ describe('computeCrossedAiThresholds', () => {
     });
 });
 
+/**
+ * The notification copy is chosen from the shared plan+top-up runway policy, not
+ * from `topupBalance > 0`. The distinction that matters: a merchant crossing 100%
+ * with a real runway behind the cap gets the calm notice, one whose balance is
+ * nearly gone gets warned — the case a bare `> 0` check got wrong by promising
+ * "no interruption" to someone with three replies left.
+ *
+ * `used: limit` mirrors the real call site: this only runs on the increment that
+ * crosses the boundary, and incrementAiReplies never pushes the plan counter past
+ * the cap (overflow is charged to the balance).
+ */
+const atThreshold = (threshold: 80 | 100, limit: number, topupBalance: number) =>
+    resolveAiUsageNotificationType(
+        threshold,
+        resolveAiQuotaStatus({ used: threshold === 100 ? limit : 0.8 * limit, limit, topupBalance }),
+    );
+
 describe('resolveAiUsageNotificationType', () => {
-    it('sends the reassuring top-up notice at 100% when a top-up balance exists', () => {
+    it('sends the reassuring top-up notice at 100% when the balance is a real runway', () => {
         // Replies keep flowing from top-up — the "limit reached / upgrade" copy would be false.
-        expect(resolveAiUsageNotificationType(100, 10000)).toBe('ai_usage_on_topup');
-        expect(resolveAiUsageNotificationType(100, 1)).toBe('ai_usage_on_topup');
+        expect(atThreshold(100, 10000, 10000)).toBe('ai_usage_on_topup');
+        expect(atThreshold(100, 1000, 500)).toBe('ai_usage_on_topup');
+    });
+
+    it('warns instead of reassuring at 100% when the balance is nearly drained', () => {
+        // 1,000-cap plan with 3 top-up replies banked: "no interruption" is a lie.
+        expect(atThreshold(100, 1000, 3)).toBe('ai_usage_topup_low');
+        expect(atThreshold(100, 1000, 1)).toBe('ai_usage_topup_low');
     });
 
     it('sends the limit-reached notice at 100% when there is no top-up balance', () => {
-        expect(resolveAiUsageNotificationType(100, 0)).toBe('ai_usage_limit_reached');
+        expect(atThreshold(100, 1000, 0)).toBe('ai_usage_limit_reached');
     });
 
     it('treats a negative (refunded) top-up balance as no balance at 100%', () => {
         // topup_balance may go negative after a partial-pack refund (anti-abuse design).
-        expect(resolveAiUsageNotificationType(100, -50)).toBe('ai_usage_limit_reached');
+        expect(atThreshold(100, 1000, -50)).toBe('ai_usage_limit_reached');
     });
 
     it('always sends the 80% warning regardless of top-up balance', () => {
-        expect(resolveAiUsageNotificationType(80, 0)).toBe('ai_usage_warning_80');
-        expect(resolveAiUsageNotificationType(80, 10000)).toBe('ai_usage_warning_80');
+        expect(atThreshold(80, 1000, 0)).toBe('ai_usage_warning_80');
+        expect(atThreshold(80, 1000, 10000)).toBe('ai_usage_warning_80');
     });
 });

@@ -7,7 +7,12 @@ import { redis } from '../lib/redis';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 import type { NotificationType } from './notifications';
-import type { Subscription, Plan, Usage, UsageSummary, SubscriptionStatus, LimitCheckResult } from '@jawab24/shared';
+import {
+    resolveAiQuotaStatus,
+    type AiQuotaStatus,
+    type Subscription, type Plan, type Usage, type UsageSummary,
+    type SubscriptionStatus, type LimitCheckResult,
+} from '@jawab24/shared';
 
 /**
  * AI usage notification thresholds (percent of monthly limit).
@@ -19,6 +24,13 @@ export type AiUsageThreshold = typeof AI_USAGE_THRESHOLDS[number];
 /**
  * Return the thresholds newly crossed by an increment from `oldUsed` to `newUsed`.
  * Pure function — returns [] if limit is null/<=0 or nothing crossed.
+ *
+ * Measured against the PLAN CAP on purpose, not against plan + top-up: this is the
+ * billing boundary, and `incrementAiReplies` never drives `aiRepliesCount` past the
+ * cap (overflow is charged to the balance instead). An 80%-of-capacity boundary
+ * would therefore sit beyond anything this counter can reach, silently deleting the
+ * 80% notification for every top-up holder. The top-up balance changes the MESSAGE,
+ * not the trigger — see `resolveAiUsageNotificationType`.
  */
 export function computeCrossedAiThresholds(
     oldUsed: number,
@@ -36,22 +48,32 @@ export function computeCrossedAiThresholds(
  * Pick the notification to send for a newly-crossed AI-usage threshold.
  *
  * The 100% boundary is the plan-quota wall, NOT the point where replies stop.
- * When the merchant holds a top-up balance, Smart Replies keep flowing from it
- * (canUseAiReplies falls through to top-up), so the alarming "limit reached —
- * upgrade to resume" message would be false. Send the reassuring
- * `ai_usage_on_topup` instead. Only when there's no top-up balance does hitting
- * 100% actually pause Smart Replies → `ai_usage_limit_reached`.
+ * `canUseAiReplies` falls through to the top-up balance, so the real wall is
+ * plan + top-up — which is why the choice is made from `resolveAiQuotaStatus`
+ * rather than from `topupBalance > 0`:
+ *
+ *   - `exhausted`         → nothing left; replies really have paused → limit_reached
+ *   - `on_topup`, roomy   → replies keep flowing → the calm `ai_usage_on_topup`
+ *   - `on_topup`, at the
+ *     wall (`nearWall`)   → a balance too thin to be a runway → `ai_usage_topup_low`
+ *
+ * That last case is the one a bare `topupBalance > 0` got wrong: a merchant with
+ * THREE top-up replies left was sent "no interruption — replies keep running from
+ * your top-up balance", moments before they stopped. The admin console already
+ * separates these two (`usage_on_topup` vs `usage_topup_nearly_drained`); this
+ * keeps the merchant's own notification telling the same story.
  *
  * Pure function — exported for unit testing.
  */
 export function resolveAiUsageNotificationType(
     threshold: AiUsageThreshold,
-    topupBalance: number,
+    quota: AiQuotaStatus,
 ): NotificationType {
-    if (threshold === 100) {
-        return topupBalance > 0 ? 'ai_usage_on_topup' : 'ai_usage_limit_reached';
+    if (threshold !== 100) return 'ai_usage_warning_80';
+    if (quota.state === 'on_topup') {
+        return quota.nearWall ? 'ai_usage_topup_low' : 'ai_usage_on_topup';
     }
-    return 'ai_usage_warning_80';
+    return 'ai_usage_limit_reached';
 }
 
 /**
@@ -658,11 +680,13 @@ export const subscriptionsService = {
                 }
                 if (!firstCrossing) continue;
 
-                // At the 100% wall, the message depends on whether a top-up
-                // balance is keeping Smart Replies alive — read it only then.
+                // At the 100% wall the message depends on how much runway the
+                // top-up balance actually buys — read it only then.
                 const topupBalance = threshold === 100 ? await this.getTopupBalance(userId) : 0;
-                const type = resolveAiUsageNotificationType(threshold, topupBalance);
-                const variables: Record<string, string> = type === 'ai_usage_on_topup'
+                const quota = resolveAiQuotaStatus({ used: newUsed, limit, topupBalance });
+                const type = resolveAiUsageNotificationType(threshold, quota);
+                // Both top-up messages quote the balance; the plan-cap ones quote usage.
+                const variables: Record<string, string> = type === 'ai_usage_on_topup' || type === 'ai_usage_topup_low'
                     ? { limit: limit.toLocaleString('en-US'), balance: topupBalance.toLocaleString('en-US') }
                     : { used: String(newUsed), limit: String(limit), percent: String(threshold) };
                 await notificationService.sendTemplateNotification(userId, type, variables);

@@ -9,6 +9,14 @@
  */
 export const AI_PRICING = {
     'gpt-4o-mini': { inputPer1K: 0.00015, cachedInputPer1K: 0.000075, outputPer1K: 0.0006 },
+    // Dated snapshot alias — same price as the rolling 'gpt-4o-mini'. This is the
+    // name OpenAI returns for the VISION calls the catalog posts-scan makes
+    // (file-extractor OCR), and its absence here meant every one of them was
+    // recorded at cost 0: 42 calls / 1.24M input tokens over the 30 days to
+    // 2026-07-27, i.e. the whole image-OCR pipeline was invisible to /admin/ai-cost.
+    // Image OCR is token-heavy (~25–37k input per image), so a missing alias here
+    // understates the feature's cost by far more than a chat call would.
+    'gpt-4o-mini-2024-07-18': { inputPer1K: 0.00015, cachedInputPer1K: 0.000075, outputPer1K: 0.0006 },
     'gpt-4.1-mini': { inputPer1K: 0.0004, cachedInputPer1K: 0.0001, outputPer1K: 0.0016 },
     // Dated snapshot alias — OpenAI sometimes returns this name in `response.model`
     // even when the request used the rolling 'gpt-4.1-mini' alias. Same price.
@@ -40,6 +48,44 @@ export type ModelName = keyof typeof AI_PRICING;
 export const PRICING_VERSION = 'v2';
 
 const warnedUnknownModels = new Set<string>();
+const warnedSnapshotFallbacks = new Set<string>();
+
+/** `gpt-4o-mini-2024-07-18` → `gpt-4o-mini`. */
+const SNAPSHOT_SUFFIX = /-\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Price a model, falling back to its rolling alias when OpenAI hands back a
+ * DATED SNAPSHOT we have no explicit row for.
+ *
+ * We request rolling aliases ('gpt-4o-mini'), but `response.model` — which is
+ * what `ai_usage_log` records — often carries the snapshot instead. Each time
+ * that happened the row was simply missing and the call booked at $0: first for
+ * the 4.1 family, then again for 4o-mini's vision calls (42 calls / 1.24M input
+ * tokens invisible to /admin/ai-cost by 2026-07-27). Adding one more alias each
+ * time only fixes the instance; this fixes the class.
+ *
+ * It still WARNS, because the assumption is "same price", and that is not
+ * guaranteed — OpenAI has priced two snapshots of one family differently before
+ * (gpt-4o-2024-05-13 vs -2024-08-06). An approximate cost at the base rate beats
+ * a confident $0, and the warning is how the exact row gets added.
+ */
+function lookupPricing(model: string) {
+    const exact = AI_PRICING[model as ModelName];
+    if (exact) return exact;
+
+    const base = model.replace(SNAPSHOT_SUFFIX, '');
+    if (base === model) return undefined;
+
+    const viaBase = AI_PRICING[base as ModelName];
+    if (viaBase && !warnedSnapshotFallbacks.has(model)) {
+        warnedSnapshotFallbacks.add(model);
+        console.warn(
+            `[aiPricing] "${model}" priced at "${base}" rates (snapshot fallback). `
+            + 'Verify the snapshot shares its base price and add an explicit row.',
+        );
+    }
+    return viaBase;
+}
 
 /**
  * Calculate estimated cost in USD for a given model and token counts.
@@ -55,7 +101,7 @@ export function estimateCostUsd(
     tokensOut: number,
     cachedTokensIn: number = 0,
 ): number {
-    const pricing = AI_PRICING[model as ModelName];
+    const pricing = lookupPricing(model);
     if (!pricing) {
         if (!warnedUnknownModels.has(model)) {
             warnedUnknownModels.add(model);
@@ -79,7 +125,7 @@ export function estimateCostUsd(
  * Returns 0 for unknown models or models without a cached rate.
  */
 export function cacheSavingsUsd(model: string, cachedTokensIn: number): number {
-    const pricing = AI_PRICING[model as ModelName];
+    const pricing = lookupPricing(model);
     if (!pricing || !('cachedInputPer1K' in pricing)) return 0;
     const cached = Math.max(cachedTokensIn, 0);
     return (cached / 1000) * (pricing.inputPer1K - pricing.cachedInputPer1K);

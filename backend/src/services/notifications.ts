@@ -94,11 +94,23 @@ export type NotificationType =
     | 'ai_usage_warning_80'
     | 'ai_usage_limit_reached'
     | 'ai_usage_on_topup'
+    // Same 100% crossing as ai_usage_on_topup, but the balance behind the cap is
+    // too thin to be a runway — "no interruption" would be a false promise.
+    | 'ai_usage_topup_low'
     | 'auto_reply_paused_billing'
     | 'refund_processed'
     | 'topup_credited'
     | 'new_lead'
-    | 'lead_reengaged';
+    | 'lead_reengaged'
+    // WhatsApp business tokens carry a Meta-forced 60-day expiry, so unlike the
+    // Facebook channel they need both an ahead-of-time warning and a dead-token
+    // notice. See services/whatsappTokenHealth.ts.
+    | 'whatsapp_token_expiring'
+    | 'whatsapp_reconnect_needed'
+    // The daily image-reading cap is the one limit a merchant can hit without
+    // any signal at all: past it we simply stop reading customer photos. The
+    // merchant must be told — their CUSTOMERS never are (see nonTextHandler).
+    | 'image_limit_reached';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -136,6 +148,9 @@ const PUSH_COOLDOWN_SECONDS: Partial<Record<NotificationType, number>> = {
     provider_failover: 600, // 10 min
     new_lead:        120,  // 2 min — coalesce a burst of distinct leads; bell row still stored
     lead_reengaged:  120,  // 2 min — burst coalescing (per-lead 24h dedup is in leadExtractor)
+    // The 6-hourly sweep re-warns until the merchant reconnects; a day-long cooldown
+    // keeps that a daily reminder rather than 4 pushes a day for a week.
+    whatsapp_token_expiring: 86400, // 24 h
 };
 
 /**
@@ -247,11 +262,25 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
             ar: 'لقد وصلت إلى الحد الأقصى البالغ {limit} رد ذكي هذا الشهر. تستمر ردود البوست ورسائل الترحيب/الغياب في العمل — لكن التعليقات والرسائل خارج هذه القواعد ستتلقى رداً عاماً. قم بالترقية لاستئناف الردود الذكية.',
         },
     },
+    image_limit_reached: {
+        titles: { en: 'Daily photo limit reached', ar: 'انتهى حد قراءة الصور اليومي' },
+        bodies: {
+            en: 'Jawab has read {limit} customer photos today, the most your plan allows. Photos sent for the rest of the day are not read, and appear in your inbox for you to answer. Upgrade to read more each day.',
+            ar: 'قرأ جواب {limit} صورة من العملاء اليوم، وهو أقصى ما تسمح به باقتك. الصور الواردة بقية اليوم لن تُقرأ، وستظهر في صندوق الرسائل لديك للرد عليها. يمكنك الترقية لقراءة عدد أكبر يومياً.',
+        },
+    },
     ai_usage_on_topup: {
         titles: { en: 'You\'re now using your top-up balance', ar: 'ردودك مستمرة من رصيدك الإضافي' },
         bodies: {
             en: 'You\'ve used all {limit} Smart Replies in your monthly plan — no interruption. Smart Replies keep running from your top-up balance ({balance} left).',
             ar: 'استهلكت كامل ردودك الذكية الـ{limit} في باقتك الشهرية، والخدمة مستمرة دون انقطاع — تتابع الردود الذكية العمل من رصيدك الإضافي (المتبقّي {balance} رد).',
+        },
+    },
+    ai_usage_topup_low: {
+        titles: { en: 'Your top-up balance is almost gone', ar: 'رصيدك الإضافي على وشك النفاد' },
+        bodies: {
+            en: 'You\'ve used all {limit} Smart Replies in your monthly plan and only {balance} top-up replies are left. Smart Replies stop once the balance runs out — upgrade or add a top-up to keep them running.',
+            ar: 'استهلكت كامل ردودك الذكية الـ{limit} في باقتك الشهرية، ولم يتبقَّ من رصيدك الإضافي سوى {balance} رد. تتوقف الردود الذكية عند نفاد الرصيد — قم بالترقية أو أضف رصيداً إضافياً لتستمر.',
         },
     },
     auto_reply_paused_billing: {
@@ -287,6 +316,20 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: '{senderName} is back and interested again. Tap to follow up.',
             ar: 'عاد {senderName} وأبدى اهتمامه من جديد. اضغط للمتابعة.',
+        },
+    },
+    whatsapp_token_expiring: {
+        titles: { en: 'WhatsApp Connection Expiring', ar: 'ربط واتساب على وشك الانتهاء' },
+        bodies: {
+            en: 'Your WhatsApp connection for {number} expires in {days} day(s). Reconnect now so replies never stop.',
+            ar: 'ينتهي ربط واتساب للرقم {number} خلال {days} يوم. أعد الربط الآن حتى لا تتوقف الردود.',
+        },
+    },
+    whatsapp_reconnect_needed: {
+        titles: { en: 'WhatsApp Reconnection Needed', ar: 'يلزم إعادة ربط واتساب' },
+        bodies: {
+            en: 'Your WhatsApp connection for {number} has expired. Reconnect to keep replying to your customers.',
+            ar: 'انتهت صلاحية ربط واتساب للرقم {number}. أعد الربط لمتابعة الرد على عملائك.',
         },
     },
 };

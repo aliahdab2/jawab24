@@ -24,13 +24,24 @@ import { buildPlaygroundContext } from '../services/reply/playgroundContext';
  *  Facebook token for Facebook-backed pages, the WABA token for WhatsApp-only
  *  pages (facebookPageId null) — otherwise WhatsApp-only cards would render
  *  as broken Facebook pages (reconnect banner, disabled card body). */
-export function serializePage<T extends { accessToken?: string | null; whatsappAccessToken?: string | null; facebookPageId?: string | null }>(page: T) {
+export function serializePage<T extends {
+    accessToken?: string | null;
+    whatsappAccessToken?: string | null;
+    facebookPageId?: string | null;
+    whatsappDisconnectReason?: string | null;
+}>(page: T) {
     const { accessToken, whatsappAccessToken, ...rest } = page;
     const whatsappConnected = !!whatsappAccessToken && whatsappAccessToken !== '';
     return {
         ...rest,
         isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : whatsappConnected,
         whatsappConnected,
+        // "The token needs attention" — driven by the REASON, not by the absence of a
+        // token. The health sweep deliberately keeps the credential and only flags
+        // (see whatsappTokenHealth.markWhatsAppNeedsReconnect), so gating this on
+        // `!whatsappConnected` would have hidden the banner in exactly the state it
+        // exists for. Derived here so the UI never learns the enum's values.
+        whatsappNeedsReconnect: !!page.whatsappDisconnectReason,
     };
 }
 

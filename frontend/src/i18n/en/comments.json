@@ -154,6 +154,7 @@
   "postTriggerImageBadType": "Unsupported image type. Use JPG, PNG, or WEBP.",
   "postTriggerImageTooLarge": "Image is too large (max 2 MB).",
   "postTriggerImageQuota": "Your store's image storage is full. Deleted posts' images are cleaned up automatically — upgrade your plan for more space.",
+  "postTriggerImageUnreadable": "This image couldn't be processed. Try saving it again or choose another file.",
   "postTriggerImageLockedHint": "Images are available in private-message mode",
   "postReplyIntroTitle": "Auto-reply to commenters",
   "postReplyIntroText": "Set keywords on any post, and your ready-made message is sent as-is when someone comments them — great for replies you send often.",

@@ -391,7 +391,13 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // truth), and a computed total often isn't literally in the static KB — so
     // this heuristic would false-flag it, and price_not_in_kb triggers a
     // destructive fallback swap in the backend. The tool is the check there.
-    if (reply && parsed.intent === 'QUESTION' && !opts?.skipPriceCheck) {
+    // Runs on EVERY intent. It was once gated on `intent === 'QUESTION'`, which
+    // switched price grounding off exactly where a wrong price costs money: a
+    // PURCHASE_INTENT customer («نعم» to "which size?") was quoted an invented
+    // «1200 دينار ليبي» in prod (BAMBO LIBYA, 2026-07-27) with nothing flagged,
+    // while the same claim as a QUESTION was caught. An empty reply (OFFENSIVE)
+    // short-circuits on `reply` below.
+    if (reply && !opts?.skipPriceCheck) {
         const kbText = getKBText(request, { includeProductCatalog: true });
         if (kbText && flagHallucinatedPrice(reply, kbText, parsed.price_math) && !flags.includes('price_not_in_kb')) {
             flags.push('price_not_in_kb');

@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
 import { consumeCatalogImportDraft } from '@/lib/catalogImportDraft';
+import { isStorePolicyKey } from '@/utils/businessCoverage';
 import { usePageFilter } from '@/hooks/usePageFilter';
 import { useSaveKnowledgeBase } from '@/hooks/useSaveKnowledgeBase';
 import { makeGetStaticProps } from '@/i18n/getMessages';
@@ -210,12 +211,23 @@ function BusinessPageInner() {
 
   return (
     <>
+      {/* A reading column, matching /settings' `max-w-4xl`. Unconstrained, this
+          page inherits the shell's 1600px: measured at a 1728px viewport the
+          cards ran 1312px wide, which put the subtitle at 109 characters per line
+          (readable prose is 45–75) and left ~1200px between a fact row's label
+          and its own Edit button — the eye had to cross the whole viewport to
+          pair a field with its control. The cards are lists and prose, not a
+          data grid; they do not benefit from the width. */}
+      <div className="max-w-4xl mx-auto">
       <PageHeader
         title={t('title')}
         description={t('subtitle')}
         beside={
           validPages.length > 1 ? (
-            <div className="min-w-[9rem] max-w-[14rem]">
+            // Wider than the 14rem it used to cap at: «الفريق الدمشقي للتدريب
+            // والتأهيل» truncated, and this control scopes the ENTIRE page, so a
+            // half-read name is a wrong-page read on an account with 10 pages.
+            <div className="min-w-[9rem] max-w-[14rem] sm:max-w-[20rem]">
               <Select
                 value={selectedPageId}
                 onChange={updatePageId}
@@ -327,7 +339,10 @@ function BusinessPageInner() {
           </section>
         </div>
       )}
+      </div>
 
+      {/* Sheets and modals stay OUTSIDE the reading column — they are fixed /
+          full-screen overlays and must not inherit its width. */}
       {testReplyOpen && selectedPage && (
         <TestSmartReplyModal page={selectedPage} onClose={() => setTestReplyOpen(false)} />
       )}
@@ -350,7 +365,9 @@ function BusinessPageInner() {
           // Not `hasStore`: the sheet's hint tells the merchant they need not answer,
           // so it may only appear when the store REALLY answers (active + synced
           // policies), never merely because a store id is on the page.
-          storeAnswered={!!selectedPage.storeAnswersPolicies && (editingFact === 'delivery' || editingFact === 'payment')}
+          // The field list comes from `STORE_POLICY_KEYS` (via isStorePolicyKey)
+          // so adding a store-answerable policy row never leaves this hint behind.
+          storeAnswered={!!selectedPage.storeAnswersPolicies && isStorePolicyKey(editingFact)}
           saving={savingFact}
           onSave={(value, whatsapp) => saveFact(editingFact, value, whatsapp)}
           onClose={() => setEditingFact(null)}

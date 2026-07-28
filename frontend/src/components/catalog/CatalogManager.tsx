@@ -5,13 +5,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ClipboardPaste, Plus, ScanSearch, Tag } from 'lucide-react';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
+import { postsScanBlockerForPage } from '@/utils/page';
 import { AxiosError } from 'axios';
 import { Button, EmptyState, Select, Skeleton, ConfirmationModal } from '@/components/ui';
 import { catalogApi, type CatalogItemInput, type CatalogVerticalInfo } from '@/lib/api';
 import {
   CATALOG_VERTICALS, CATALOG_VERTICAL_DEFAULT_TYPE, MAX_CATALOG_ITEMS_PER_PAGE,
   matchCatalogLinesInKb, matchStructuredFieldLinesInKb, presentFieldsFromProfile,
-  type CatalogItem, type CatalogVertical, type Page,
+  type CatalogItem, type CatalogVertical, type Page, type PostsScanBlocker,
 } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
 import { CatalogItemRow } from './CatalogItemRow';
@@ -23,6 +24,13 @@ const TestSmartReplyModal = dynamic(
   () => import('@/components/test-smart-reply/TestSmartReplyModal').then((m) => ({ default: m.TestSmartReplyModal })),
   { ssr: false },
 );
+
+/** Why the posts scan is unavailable → the line shown in its place. Flat keys:
+ *  the translation validator caps nesting at two levels. */
+const SCAN_BLOCKER_KEY: Record<PostsScanBlocker, string> = {
+  noFacebook: 'scan.unavailableNoFacebook',
+  disconnected: 'scan.unavailableDisconnected',
+};
 
 interface CatalogManagerProps {
   pageId: string;
@@ -48,9 +56,9 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
   /** Which entry to the review flow is open: paste/upload import, the posts
    *  scan, or the Post Reply scan. */
   const [sheetMode, setSheetMode] = useState<'paste' | 'scan' | 'scanReplies' | null>(null);
-  /** Presence gate (learned from the scan itself — no free-standing probe
-   *  endpoint): once a scan reports the page has no Post Reply configured,
-   *  stop offering the action for the rest of the mount. */
+  /** Presence gate (learned from the scan itself): once a scan reports the page
+   *  has no Post Reply configured, stop offering the action for the rest of the
+   *  mount. `hasPostReplyTrigger` below closes the same gate BEFORE the click. */
   const [postRepliesAbsent, setPostRepliesAbsent] = useState(false);
   /** Prefilled question for the post-save "try it" moment (null = modal closed). */
   const [tryItQuestion, setTryItQuestion] = useState<string | null>(null);
@@ -213,6 +221,30 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
     </div>
   );
 
+  // Don't offer an import path that cannot work on this page. Both gates read
+  // data the pages query already carries, so the dead end is closed before the
+  // click rather than explained after it (the scan answered 409 PAGE_DISCONNECTED
+  // on every WhatsApp-only or token-less page, surfaced as "please try again").
+  // A host that passes no `page` keeps the unguarded behaviour — we can't prove
+  // the action is impossible without it.
+  const scanBlocker: PostsScanBlocker | null = page ? postsScanBlockerForPage(page) : null;
+  const canScanPosts = scanBlocker === null;
+  const canScanReplies = !postRepliesAbsent && page?.hasPostReplyTrigger !== false;
+
+  /**
+   * The reason, NAMING the page it applies to. Built once and reused by all three
+   * places that show it (empty state, the toolbar's disabled-button tooltip, the
+   * toolbar line) so they cannot drift apart.
+   *
+   * The name is not decoration: /business shows one page at a time behind a
+   * selector that sits several rows above this text, and «أعد ربط هذه الصفحة»
+   * gave a merchant with 10 pages — 8 of them blocked for two different reasons —
+   * no way to tell WHICH page to reconnect. Reported from prod 2026-07-27.
+   */
+  const scanBlockedReason = scanBlocker !== null && page
+    ? t(SCAN_BLOCKER_KEY[scanBlocker], { page: page.name })
+    : null;
+
   return (
     <div>
       {items.length === 0 ? (
@@ -222,31 +254,52 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
               price read as live data (to merchants and to a prior UX review),
               and the scan flow shows the real row shape during review anyway. */}
           <h3 className="text-base font-semibold text-foreground">{t('empty.title')}</h3>
-          <p className="text-sm text-muted-foreground mt-1 mb-5 max-w-md mx-auto">{t('empty.body')}</p>
-          {/* ONE decision: scan. The manual paths exist but read as footnotes —
-              an ordinary merchant should never have to weigh three buttons. */}
-          <Button variant="primary" onClick={() => setSheetMode('scan')}>
-            <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
-            {t('scan.cta')}
-          </Button>
+          {/* The default body pitches the posts scan; don't promise it on a page
+              whose posts we cannot read. */}
+          <p className="text-sm text-muted-foreground mt-1 mb-5 max-w-md mx-auto">
+            {t(canScanPosts ? 'empty.body' : 'empty.bodyNoScan')}
+          </p>
+          {/* ONE decision. Normally that's the scan; on a page whose posts we
+              cannot read it's the paste import, so the empty state still leads
+              with something that works instead of a button that always fails. */}
+          {canScanPosts ? (
+            <Button variant="primary" onClick={() => setSheetMode('scan')}>
+              <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
+              {t('scan.cta')}
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={() => setSheetMode('paste')}>
+              <ClipboardPaste className="w-4 h-4 me-1.5" aria-hidden="true" />
+              {t('import.cta')}
+            </Button>
+          )}
           <div className="flex flex-wrap items-center justify-center gap-1 mt-3 text-sm text-muted-foreground">
             <span>{t('empty.or')}</span>
-            <button type="button" onClick={() => setSheetMode('paste')} className="underline underline-offset-2 hover:text-foreground transition-colors">
-              {t('import.cta')}
-            </button>
-            {!postRepliesAbsent && (
+            {canScanPosts && (
               <>
+                <button type="button" onClick={() => setSheetMode('paste')} className="underline underline-offset-2 hover:text-foreground transition-colors">
+                  {t('import.cta')}
+                </button>
                 <span aria-hidden="true">·</span>
+              </>
+            )}
+            {canScanReplies && (
+              <>
                 <button type="button" onClick={() => setSheetMode('scanReplies')} className="underline underline-offset-2 hover:text-foreground transition-colors">
                   {t('replyScan.cta')}
                 </button>
+                <span aria-hidden="true">·</span>
               </>
             )}
-            <span aria-hidden="true">·</span>
             <button type="button" onClick={openAdd} className="underline underline-offset-2 hover:text-foreground transition-colors">
               {t('empty.cta')}
             </button>
           </div>
+          {/* Absence needs a reason, or the merchant reads it as a missing
+              feature. Names the page and the one thing that would unlock it. */}
+          {scanBlockedReason && (
+            <p className="text-xs text-muted-foreground mt-3">{scanBlockedReason}</p>
+          )}
           {verticalControl && <div className="mt-5 flex justify-center">{verticalControl}</div>}
         </div>
       ) : (
@@ -259,11 +312,21 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
               {verticalControl}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setSheetMode('scan')} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
+              {/* Blocked → DISABLED with the reason, never removed. A button that
+                  silently disappears reads as "the feature was deleted" (owner
+                  report, 2026-07-27); a disabled one keeps it discoverable and
+                  says what would unlock it. */}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSheetMode('scan')}
+                disabled={!canScanPosts || items.length >= MAX_CATALOG_ITEMS_PER_PAGE}
+                title={scanBlockedReason ?? undefined}
+              >
                 <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
                 {t('scan.cta')}
               </Button>
-              {!postRepliesAbsent && (
+              {canScanReplies && (
                 <Button variant="secondary" size="sm" onClick={() => setSheetMode('scanReplies')} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
                   <PostReplyIcon className={`w-4 h-4 me-1.5 ${postReplyIconClass}`} aria-hidden="true" />
                   {t('replyScan.cta')}
@@ -279,6 +342,11 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
               </Button>
             </div>
           </div>
+          {/* The toolbar's disabled scan button needs its reason VISIBLE — a title
+              attribute alone is invisible on touch, where most merchants are. */}
+          {scanBlockedReason && (
+            <p className="text-xs text-muted-foreground mb-3">{scanBlockedReason}</p>
+          )}
           <ul className="space-y-2">
             {items.map((item, i) => (
               <CatalogItemRow
@@ -304,6 +372,7 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
           item={editing}
           defaultCurrency={lastCurrency}
           defaultType={defaultType}
+          vertical={vertical?.effective}
           saving={createMutation.isPending || updateMutation.isPending}
           onSave={handleSave}
           onClose={() => { setFormOpen(false); setEditing(null); }}
@@ -316,6 +385,7 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
           pageId={pageId}
           mode={sheetMode}
           existingItems={items}
+          vertical={vertical?.effective}
           defaultCurrency={lastCurrency}
           initialText={importRequested ? importInitialText : undefined}
           onNoPostReplies={() => setPostRepliesAbsent(true)}

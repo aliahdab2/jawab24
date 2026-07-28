@@ -3,7 +3,8 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { messagesService } from '../services/messages';
-import { pagesService, isPageDisconnected } from '../services/pages';
+import { pagesService, isPageDisconnected, invalidateWorkspaceStatsCache } from '../services/pages';
+import { publishSSEEvent } from '../lib/eventBus';
 import { postsService } from '../services/posts';
 import { facebookService } from '../services/facebook';
 import { acquireMutex } from '../lib/redisMutex';
@@ -105,6 +106,22 @@ interface WhatsAppWebhookEntry {
                 };
             }>;
             statuses?: Array<unknown>;
+            // Coexistence: messages the merchant sent from the WhatsApp Business
+            // app (or a companion device) on a number that is ALSO on Cloud API.
+            // Meta explicitly does NOT echo our own Cloud API sends here, so these
+            // are always human-authored — that is what makes them safe to treat as
+            // a manual reply. `to` is the customer; `from` is the business number.
+            message_echoes?: Array<{
+                id: string;
+                from: string;
+                to: string;
+                timestamp: string;
+                type: string;
+                text?: { body: string };
+                image?: { caption?: string };
+                video?: { caption?: string };
+                document?: { caption?: string; filename?: string };
+            }>;
         };
     }>;
 }
@@ -692,6 +709,37 @@ export class WebhookController {
     private async processWhatsAppWebhookAsync(entries: WhatsAppWebhookEntry[]) {
         for (const entry of entries) {
             for (const change of entry.changes) {
+                // Coexistence fields. Subscribing to all three is required by Meta
+                // for WhatsApp-Business-app onboarding to be valid, but only the
+                // echo is acted on in v1.
+                if (change.field === 'smb_message_echoes') {
+                    await this.processWhatsAppEchoes(change.value).catch(error => {
+                        // Never let an echo failure abort the loop — a later change
+                        // in the same delivery may be a real customer message.
+                        this.log().error('[WhatsApp] Failed to process message echoes', {
+                            error: String(error),
+                        });
+                    });
+                    continue;
+                }
+                // `history` (up to 180 days, potentially thousands of messages) and
+                // `smb_app_state_sync` (contacts) are deliberately ACCEPTED AND
+                // DISCARDED in v1 — we return 200 so onboarding stays valid without
+                // importing anyone's back-catalogue into the inbox. Logged at debug
+                // so we can see they arrive before deciding to persist them.
+                if (change.field === 'history' || change.field === 'smb_app_state_sync') {
+                    // INFO, not debug: Meta's onboarding docs warn that partners
+                    // have 24h to "synchronize" history or the merchant must
+                    // offboard and restart, and whether receiving-and-discarding
+                    // satisfies that is UNVERIFIED. We cannot answer it from
+                    // production if the evidence is below the log level. Revisit
+                    // once a real coexistence number has connected.
+                    this.log().info('[WhatsApp] Coexistence sync webhook received (accepted, not persisted)', {
+                        field: change.field,
+                        phoneNumberId: change.value?.metadata?.phone_number_id,
+                    });
+                    continue;
+                }
                 if (change.field !== 'messages') continue;
 
                 const { metadata, messages: waMessages, contacts, statuses } = change.value;
@@ -730,7 +778,10 @@ export class WebhookController {
                         // without this the wait reads as dead air — Messenger shows typing
                         // for the same window (founder pilot feedback, 2026-07-08).
                         if (receiptToken) {
-                            void whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: true });
+                            void this.logReceiptMiss(
+                                whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: true }),
+                                msg.id, true,
+                            );
                         }
                         try {
                             const jobId = await enqueueMessage({
@@ -759,7 +810,10 @@ export class WebhookController {
                         // Read receipt for media too; typing only when a reply follows —
                         // stickers are stored silently, so typing there would mislead.
                         if (receiptToken) {
-                            void whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: msg.type !== 'sticker' });
+                            void this.logReceiptMiss(
+                                whatsappService.markAsRead(phoneNumberId, msg.id, receiptToken, { typing: msg.type !== 'sticker' }),
+                                msg.id, msg.type !== 'sticker',
+                            );
                         }
                         await handleWhatsAppNonTextMessage(phoneNumberId, {
                             senderId: msg.from,
@@ -779,6 +833,180 @@ export class WebhookController {
                     });
                 }
             }
+        }
+    }
+
+    /**
+     * WhatsApp Coexistence — the merchant answered from their own phone.
+     *
+     * On a coexistence number the merchant keeps using the WhatsApp Business app
+     * while we also hold the number on Cloud API, so both a human and the AI can
+     * answer the same customer. Meta reports the human's messages via
+     * `smb_message_echoes`; we turn each one into an `outgoing` +
+     * `replyMethod='manual'` row, which is exactly what the ALREADY-SHIPPED
+     * handoff pause (`conversationPause._getRecentManualReply`) looks for. No new
+     * timing code: writing the row is the whole integration.
+     *
+     * Meta states echoes cover "messages from the WhatsApp Business app or
+     * companion devices only, not Cloud API messages", so these are always
+     * human-authored — our own replies are never echoed back.
+     */
+    private async processWhatsAppEchoes(
+        value: WhatsAppWebhookEntry['changes'][number]['value'],
+    ): Promise<void> {
+        const echoes = value.message_echoes;
+        if (!echoes?.length) return;
+
+        const phoneNumberId = value.metadata.phone_number_id;
+        const page = await pagesService.getPageByWhatsAppPhoneNumberId(phoneNumberId).catch(() => null);
+        // Unknown number (disconnected, or moved to another workspace) — nothing to
+        // attach the reply to. Dropping is correct; Meta still gets its 200.
+        if (!page) {
+            this.log().warn('[WhatsApp] Echo for an unknown phone number', { phoneNumberId });
+            return;
+        }
+        // Every message row is workspace-scoped. A page without one cannot be
+        // written to safely, and silently attributing it elsewhere would leak the
+        // conversation across tenants — drop instead.
+        const { workspaceId } = page;
+        if (!workspaceId) {
+            this.log().warn('[WhatsApp] Echo for a page with no workspace', { phoneNumberId, pageId: page.id });
+            return;
+        }
+
+        for (const echo of echoes) {
+            // `to` is the customer. Conversations are keyed by the customer's id,
+            // so without it the row has nowhere to live.
+            const customerId = echo.to;
+            if (!customerId || !echo.id) continue;
+
+            // Idempotency + self-send guard in one lookup. The UNIQUE constraint on
+            // platform_message_id is the authoritative race guard behind it, the
+            // same pattern findOrCreateFromWebhook uses.
+            const existing = await messagesService.findByPlatformMessageId(echo.id);
+            if (existing) continue;
+
+            const text = this.extractEchoText(echo);
+            const epochSeconds = Number(echo.timestamp);
+            const echoSentAt = Number.isFinite(epochSeconds) && epochSeconds > 0
+                ? new Date(epochSeconds * 1000).toISOString()
+                : null;
+            // Recording the merchant's reply and clearing the customer's backlog
+            // are ONE fact: "a human has answered this conversation". Split across
+            // two commits, a failure in between leaves the reply stored while the
+            // customer's message still reads unanswered — and the AI then answers
+            // a question a human already handled. Same transaction shape the AI
+            // reply path uses in messageProcessor.
+            let stored: { id: string; senderName?: string | null };
+            let cleared = 0;
+            try {
+                ({ stored, cleared } = await db.transaction(async (tx) => {
+                    const row = await messagesService.storeOutgoingMessage(
+                        page.id, workspaceId, customerId, text, 'manual', tx,
+                        undefined, undefined, undefined, undefined, echo.id,
+                    );
+                    // storeOutgoingMessage is a pure INSERT and never touches the
+                    // incoming row, so without this the customer's question sits in
+                    // "Needs Action" forever even though it was answered.
+                    const unreplied = await messagesService.getUnrepliedFromSender(page.id, customerId);
+                    const n = unreplied.length > 0
+                        ? await messagesService.markOlderMessagesAsReplied(
+                            page.id, customerId, unreplied.map(m => m.id), '', text, 'manual', tx,
+                        )
+                        : 0;
+                    return { stored: row, cleared: n };
+                }));
+            } catch (error) {
+                // Concurrent delivery of the same echo lost the unique-constraint
+                // race. Already recorded by the winner — not an error. The whole
+                // transaction rolled back, so nothing partial was left behind.
+                this.log().debug('[WhatsApp] Echo already stored (race)', { messageId: echo.id, error: String(error) });
+                continue;
+            }
+
+            // Live inbox. Unlike a customer message, an echo never reaches the
+            // reply worker — which is where every other path emits its SSE — so
+            // without this the merchant's own phone reply only appears on a
+            // refresh, and the "Needs Action" count we just cleared stays stale.
+            if (page.userId) {
+                publishSSEEvent(page.userId, 'message:received', {
+                    messageId: echo.id,
+                    pageId: page.id,
+                    senderId: customerId,
+                    // storeOutgoingMessage resolves the name off the conversation;
+                    // reusing it keeps the live row from rendering nameless and then
+                    // correcting itself on the next refresh.
+                    senderName: stored.senderName ?? null,
+                    message: {
+                        id: stored.id,
+                        pageId: page.id,
+                        platformMessageId: echo.id,
+                        senderId: customerId,
+                        senderName: stored.senderName ?? null,
+                        message: text,
+                        direction: 'outgoing' as const,
+                        replied: true,
+                        replyText: text,
+                        replyMethod: 'manual' as const,
+                        // Meta's own send time (epoch seconds), not ours — an echo
+                        // can arrive late, and ordering the thread by our clock
+                        // would sort it after messages that really came later.
+                        createdTime: echoSentAt,
+                        repliedAt: echoSentAt ?? new Date().toISOString(),
+                        createdAt: new Date().toISOString(),
+                    },
+                });
+                invalidateWorkspaceStatsCache(workspaceId);
+            }
+
+            this.log().info('[WhatsApp] Merchant replied from their phone — AI will stand down', {
+                messageId: echo.id, cleared,
+            });
+        }
+    }
+
+    /**
+     * Text of an echoed merchant reply. Media echoes carry only a caption (or
+     * nothing) — the exact wording does not matter for the pause, what matters is
+     * that a human answered, so a placeholder is enough to create the row.
+     */
+    private extractEchoText(
+        echo: NonNullable<WhatsAppWebhookEntry['changes'][number]['value']['message_echoes']>[number],
+    ): string {
+        return echo.text?.body
+            ?? echo.image?.caption
+            ?? echo.video?.caption
+            ?? echo.document?.caption
+            ?? `[${echo.type}]`;
+    }
+
+    /**
+     * Record a read-receipt / typing-indicator that Meta did not accept.
+     *
+     * Deliberately non-blocking and deliberately NOT an error: receipts are
+     * cosmetic, and a failed one must never surface to the merchant or page
+     * Sentry. But it must not vanish either — the previous silent catch meant
+     * "the typing indicator doesn't always appear" could not be answered from
+     * production at all, since a rejected call looked exactly like a delivered
+     * one. `warn` keeps it greppable per phone number without adding noise to
+     * the error budget.
+     */
+    private async logReceiptMiss(
+        pending: Promise<{ delivered: boolean; reason?: string }>,
+        messageId: string,
+        typing: boolean,
+    ): Promise<void> {
+        // markAsRead resolves rather than rejects by contract, but this runs
+        // un-awaited: any throw here would become an unhandled rejection and
+        // could take the process down. Belt-and-braces so a cosmetic receipt can
+        // never destabilise the webhook path.
+        const result = await pending.catch((error: unknown) => ({
+            delivered: false, reason: error instanceof Error ? error.message : String(error),
+        }));
+        if (!result?.delivered) {
+            this.log().warn('[WhatsApp] read receipt / typing indicator not delivered', {
+                messageId, typing, reason: result?.reason,
+            });
         }
     }
 

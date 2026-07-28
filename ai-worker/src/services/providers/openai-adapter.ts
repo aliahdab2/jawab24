@@ -4,7 +4,7 @@ import { config } from '../../config';
 import type { LLMProvider, LLMChatParams, LLMChatResult, LLMMessage } from './types';
 import { AI_REPLY_JSON_SCHEMA } from './types';
 import { withAiMetrics } from '../../lib/aiMetrics';
-import { classifyTimeoutAbort, isTimeoutAbort } from '../../lib/aiTimeout';
+import { classifyTimeoutAbort, isTimeoutAbort } from '@jawab24/shared';
 import { AiTimeoutError } from '../../lib/errors';
 
 export class OpenAIAdapter implements LLMProvider {

@@ -4,6 +4,17 @@ import { config } from '../config';
 
 const WHATSAPP_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
+/**
+ * Outcome of a read-receipt / typing-indicator call. Cosmetic by design: the
+ * call never throws and never blocks a reply, but the result is reported so the
+ * caller can log a miss instead of discarding it silently.
+ */
+export interface ReceiptResult {
+    delivered: boolean;
+    /** Meta's error message when `delivered` is false. Secret-free. */
+    reason?: string;
+}
+
 /** WhatsApp Cloud API media metadata (GET /{media-id}) */
 export interface WhatsAppMediaInfo {
     url: string;
@@ -13,6 +24,28 @@ export interface WhatsAppMediaInfo {
 
 /** Voice notes cap well below this; guards the buffer download. */
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Meta error code 190 — "Your access token has expired." The merchant must
+ * reconnect; no retry will help.
+ *
+ * Key on the code, NOT on error_subcode (463/467): Meta treats the subcodes as
+ * unreliable and they are absent from the WhatsApp error-code reference entirely.
+ */
+export const META_TOKEN_EXPIRED = 190;
+
+/** Result of a debug_token inspection — see whatsappService.debugToken. */
+export interface WhatsAppTokenDebugInfo {
+    isValid: boolean;
+    /** undefined when the token never expires (Meta reports expires_at = 0). */
+    expiresAt?: Date;
+    /** Independent ~90-day data-access clock; can lapse before the token itself. */
+    dataAccessExpiresAt?: Date;
+    scopes: string[];
+    /** WABA ids still covered by whatsapp_business_management on this token. */
+    wabaIds: string[];
+    errorMessage?: string;
+}
 
 /**
  * Per-request socket timeout for Cloud API calls. Without it (axios default is
@@ -114,19 +147,29 @@ class WhatsAppService {
         messageId: string,
         accessToken: string,
         options: { typing?: boolean } = {},
-    ): Promise<void> {
-        await axios.post(
-            `${WHATSAPP_API}/${phoneNumberId}/messages`,
-            {
-                messaging_product: 'whatsapp',
-                status: 'read',
-                message_id: messageId,
-                ...(options.typing ? { typing_indicator: { type: 'text' } } : {}),
-            },
-            { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
-        ).catch(() => {
-            // Fire-and-forget — receipts are cosmetic and must never block the pipeline
-        });
+    ): Promise<ReceiptResult> {
+        try {
+            await axios.post(
+                `${WHATSAPP_API}/${phoneNumberId}/messages`,
+                {
+                    messaging_product: 'whatsapp',
+                    status: 'read',
+                    message_id: messageId,
+                    ...(options.typing ? { typing_indicator: { type: 'text' } } : {}),
+                },
+                { headers: { Authorization: `Bearer ${accessToken}` }, timeout: WHATSAPP_TIMEOUT_MS },
+            );
+            return { delivered: true };
+        } catch (error) {
+            // Still swallowed — receipts are cosmetic and must NEVER block a reply.
+            // But the outcome is now returned so the caller can log it with request
+            // context: a bare `.catch(() => {})` made "the typing indicator doesn't
+            // always appear" impossible to diagnose, because a rejected call and a
+            // successful one looked identical from outside (founder report
+            // 2026-07-27). The reason comes from sanitizeWhatsAppError, which reads
+            // only Meta's error code/message — never `config` or the bearer header.
+            return { delivered: false, reason: sanitizeWhatsAppError(error).message };
+        }
     }
 
     // ================== Embedded Signup (connect flow) ==================
@@ -136,7 +179,16 @@ class WhatsAppService {
      * system-user access token. Unlike the login OAuth flow, ES codes are
      * exchanged without a redirect_uri.
      */
-    async exchangeCodeForToken(code: string): Promise<string> {
+    async exchangeCodeForToken(code: string): Promise<{ token: string; expiresIn?: number }> {
+        // NOTE: `client_secret` travels as a query param because that is the shape
+        // Meta documents for this grant — it is not an access token, so it cannot be
+        // moved to an Authorization header. The consequence is that the app secret
+        // lands in the request URL, and the Sentry SDK records the raw query string
+        // of every outgoing request as a breadcrumb (`http.query`) and span
+        // attribute (`http.url`). That is scrubbed centrally in `lib/sentry.ts`
+        // (`beforeBreadcrumb` / `beforeSend` / `beforeSendTransaction`) rather than
+        // here, because the same leak applies to every Graph call that takes a
+        // credential in the URL. Do not remove that scrubbing.
         const res = await this.request(() => axios.get(`${WHATSAPP_API}/oauth/access_token`, {
             params: {
                 client_id: config.facebook.appId,
@@ -147,7 +199,72 @@ class WhatsAppService {
         }));
         const token = res.data?.access_token;
         if (!token) throw new WhatsAppApiError('Embedded Signup code exchange returned no access_token');
-        return token;
+        // expires_in (seconds) is what tells us this merchant's token has a deadline.
+        // Meta forces a 60-day expiry on the WhatsApp Embedded Signup login variation,
+        // so this is normally ~5184000. Absent/0 means no expiry — the caller stores
+        // NULL rather than inventing a date. Discarding it (the original behaviour)
+        // left us unable to warn a merchant before their number went silent.
+        const rawExpiresIn = res.data?.expires_in;
+        const expiresIn = typeof rawExpiresIn === 'number' && rawExpiresIn > 0 ? rawExpiresIn : undefined;
+        return { token, expiresIn };
+    }
+
+    /**
+     * Inspect a stored business token via Graph's debug_token.
+     *
+     * Authenticated with the APP access token (`{app-id}|{app-secret}`), never the
+     * token under test: an app access token cannot itself expire, so the health
+     * checker can't go stale, and we still learn `is_valid: false` for a token that
+     * is already dead. Meta's own Embedded Signup docs use debug_token this way.
+     *
+     * Server-side only — the app secret must never reach a client.
+     */
+    async debugToken(inputToken: string): Promise<WhatsAppTokenDebugInfo> {
+        const res = await this.request(() => axios.get(`${WHATSAPP_API}/debug_token`, {
+            params: {
+                input_token: inputToken,
+                access_token: `${config.facebook.appId}|${config.facebook.appSecret}`,
+            },
+            timeout: WHATSAPP_TIMEOUT_MS,
+        }));
+        const data = res.data?.data;
+        // Require a RECOGNISABLE debug_token body before believing anything it says.
+        //
+        // `data?.data ?? {}` used to silently produce `{}` for any HTTP 200 that was
+        // not the expected shape — a Meta partial outage, a WAF/proxy interstitial, an
+        // HTML error page, a field rename. `{}` then read as `is_valid: false`, i.e.
+        // "this merchant's token is dead", for every page in the sweep, with nothing
+        // thrown for the retry logic to catch. Absence of a positive signal is not
+        // evidence of a negative one: throw so the caller's transient path retries.
+        if (!data || typeof data !== 'object' || typeof data.is_valid !== 'boolean') {
+            throw new WhatsAppApiError('debug_token returned an unrecognised body', undefined, true);
+        }
+        // expires_at === 0 means "never expires" (Meta's documented sentinel for
+        // non-expiring tokens). Mapping it to undefined — rather than new Date(0) —
+        // is load-bearing: a 1970 date would read as "expired 56 years ago" and make
+        // the sweep disconnect every healthy token it saw.
+        const expiresAtSec = typeof data.expires_at === 'number' && data.expires_at > 0 ? data.expires_at : undefined;
+        const dataAccessExpiresAtSec = typeof data.data_access_expires_at === 'number' && data.data_access_expires_at > 0
+            ? data.data_access_expires_at
+            : undefined;
+        return {
+            isValid: data.is_valid === true,
+            expiresAt: expiresAtSec ? new Date(expiresAtSec * 1000) : undefined,
+            // A SECOND, independent clock (~90 days): a token string can be unexpired
+            // while the app's access to the customer's data has lapsed, and either can
+            // fire first. Callers must consider both.
+            dataAccessExpiresAt: dataAccessExpiresAtSec ? new Date(dataAccessExpiresAtSec * 1000) : undefined,
+            scopes: Array.isArray(data.scopes) ? data.scopes.filter((s: unknown): s is string => typeof s === 'string') : [],
+            // WABA ids this token still covers, per scope. A shrinking list is how a
+            // PARTIAL revocation shows up (customer unshared one WABA) — invisible to
+            // an is_valid check on its own.
+            wabaIds: Array.isArray(data.granular_scopes)
+                ? (data.granular_scopes as Array<{ scope?: string; target_ids?: unknown }>)
+                    .filter(g => g?.scope === 'whatsapp_business_management')
+                    .flatMap(g => Array.isArray(g.target_ids) ? g.target_ids.filter((t): t is string => typeof t === 'string') : [])
+                : [],
+            errorMessage: typeof data.error?.message === 'string' ? data.error.message : undefined,
+        };
     }
 
     /**

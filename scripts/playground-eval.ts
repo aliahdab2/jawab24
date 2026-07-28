@@ -56,7 +56,7 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense';
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -86,6 +86,19 @@ interface TestCase {
         replyMaxLength?: number;        // reply length must be <= this
     };
     notes?: string;
+    /**
+     * A case that pins a KNOWN OPEN GAP — it is expected to fail today, and its
+     * failure is the documentation. Excluded from the score and reported in a
+     * separate XGAP bucket, so adding gap coverage never silently erodes the
+     * headline number (the alternative is leaving the case on a branch, where it
+     * never runs against current code and rots).
+     *
+     * If an XGAP case PASSES, the run says so loudly: the gap is fixed, and the
+     * flag must be removed in the same change that fixed it. Never add this to
+     * quiet a case that is merely flaky — the score is the wrong place to hide
+     * noise, and a silenced flake is indistinguishable from a silenced defect.
+     */
+    expectedFail?: true;
 }
 
 interface PlaygroundResponse {
@@ -139,6 +152,7 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     clinic: /الشفاء|عيادة|clinic/i,
     moto: /المجد|موتوسيكلات|motoshop/i,
     incense: /بيت البخور|incense/i,
+    distributor: /رواء|distributor/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -170,7 +184,8 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 395 total (385 previous + 10 native-catalog tests, Cat 62)
+// Test cases — 395 total (385 previous + 10 native-catalog tests, Cat 62),
+// plus Cat 69 (7 distributor / outlet-directory cases, BAMBO LIBYA prod replay)
 // ---------------------------------------------------------------------------
 
 /**
@@ -4184,10 +4199,12 @@ const TEST_CASES: TestCase[] = [
     // clarifying question on such a terse turn is left FREE (owner ruling,
     // 2026-07-22 — a prompt rule that forced the total was measured, found to
     // buy only this one case ~3/4 of the time, and removed as prompt bloat).
+    // (Renumbered 720→735 on 2026-07-27: two branches both claimed id 720; the
+    // Cat 67 address case keeps the number the owner ruling references.)
     // #721/#722 keep the strict computed-total assertions on well-specified
     // carts, so the suite still proves totalling works end to end.
     {
-        id: 720, category: 68, categoryName: 'Verified Cart Totals', channel: 'dm',
+        id: 735, category: 68, categoryName: 'Verified Cart Totals', channel: 'dm',
         message: 'الحساب كم بالتوصيل',
         page: 'incense',
         conversationHistory: [
@@ -4302,6 +4319,274 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['العزيزية'],
         },
         notes: 'The OTHER authority axis, finally testable: merchant-confirmed address (النسيم) vs the stale address still sitting in the KB text (العزيزية). Case 411 claimed this precedence but only ever ran it on an AGREEING page — this is the real conflict.',
+    },
+
+    // ── Category 69: Distributor / Outlet-Directory KB ──────────────────────
+    // Modeled on BAMBO LIBYA (a paying Libyan merchant, 2026-07-25 → 07-27):
+    // an exclusive AGENT whose Business Info is an outlet directory of ~200
+    // near-identical «صيدلية X - district» lines with a four-line price list at
+    // the very tail, PLUS a stale scripted price-deflection instruction written
+    // before the price list existed. The `distributor` fixture reproduces all of
+    // it (see seedData.ts).
+    //
+    // ⚠️ DIAGNOSIS CORRECTED (2026-07-27, first execution of this category).
+    // These cases were added as expectedFail under a "buried facts" theory: prod
+    // answered «ما عندي الأسعار الدقيقة» to in-KB prices. The theory was WRONG —
+    // a timeline check showed the price list only entered the KB at version 10
+    // (10:20 UTC), AFTER every observed deflection (09:56, 10:15, 10:16 all ran
+    // against v9, which had NO prices). The deflections were honest answers and
+    // the price guard was right to fire. Two controlled experiments confirm it:
+    // Cat 69 passes at prod-scale distractor volume (9.5k chars, 236 outlets)
+    // and passes WITH the stale deflection script in the KB.
+    //
+    // So #724-#727 are GREEN GUARDS, not gap pins: they prove a tail price list
+    // behind a huge directory + a stale deflection script stays readable. If one
+    // ever fails, that is a real regression in long-context fact use.
+    //
+    //   B. REGION-ATTRIBUTION FABRICATION (#728-#729) — this half IS real and
+    //      verified against v9 (the western list existed then): asked about
+    //      العجيلات (in NEITHER list), prod returned the الزاوية list and
+    //      asserted «أما للعجيلات تحديداً فهذه هي الصيدليات المتوفرة», twice.
+    //      Real outlet names, invented city. The VALIDATOR gap behind it is
+    //      still open — Check 1 grounds numbers only, so nothing flags a place
+    //      claim (see the it.todo in replyValidator.test.ts). The single-turn
+    //      playground shape passes on v61; the prod failure had conversation
+    //      pressure («اي ساعدني») — kept as a green guard at this shape.
+    // #730 pins the ungrounded-price regression that commit e5313a4c fixed,
+    // in the exact conversation shape that produced it in prod (v9, no prices —
+    // which is exactly why the invented «1200» was ungrounded).
+
+    // 69.1 — Tail-price readability. Price IS in the KB; the size is
+    // irrelevant to it (every standard size is 45). Must quote, not deflect.
+    {
+        id: 724, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'حفاضات رواء رقم 5 و رقم 6 بقداش؟',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'],
+            replyContainsAny: ['45', '٤٥'],
+            replyNotContains: ['ما عندي', 'غير متوفرة لدي', 'ما عنديش'],
+        },
+        notes: 'GREEN GUARD (diagnosis corrected 2026-07-27): the prod «ما عندي الأسعار» at 10:15 ran against kb v9, which had NO prices — an honest answer, not a burial failure. This pins that a tail price list behind 236 outlet lines + a stale deflection script stays readable.',
+    },
+
+    // 69.2 — Same guard, single size, terse Libyan phrasing.
+    {
+        id: 725, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'بقداش رقم 4؟',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'],
+            replyContainsAny: ['45', '٤٥'],
+        },
+        notes: 'Terse «بقداش» — the price must survive a query with almost no lexical overlap with the price lines.',
+    },
+
+    // 69.3 — Swim diapers: a DIFFERENT product line whose price is the very last
+    // line of the KB (97% depth — the single most buried fact). Prod deflected on
+    // this one with price_not_in_kb while the page's own Post Reply auto-DM quoted
+    // the price.
+    {
+        id: 726, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'كم سعر حفاضات السباحة؟',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'],
+            replyContainsAny: ['54', '٥٤'],
+            replyNotContains: ['أرقامنا', 'يرجى التواصل معنا'],
+        },
+        notes: 'GREEN GUARD: the prod 09:56 deflection ran against kb v9 (no prices) — the guard fired correctly. This pins the LAST line of the KB staying reachable now that the price exists.',
+    },
+
+    // 69.4 — The jumbo tier, to prove the whole price block is reachable and not
+    // just its first line.
+    {
+        id: 727, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'عندكم حجم الجامبو رقم 5؟ بقداش',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'],
+            replyContainsAny: ['82', '٨٢'],
+            replyNotContains: ['45', '٤٥'],
+        },
+        notes: 'Jumbo رقم 5 = 82د, standard رقم 5 = 45د. Banning 45 catches the tier confusion the flat pricing invites.',
+    },
+
+    // 69.5 — Region attribution: العجيلات is in NEITHER list. Naming outlets and
+    // placing them "in العجيلات" is a fabrication even though the names are real.
+    // A truthful reply either says it has no outlet for that city or offers the
+    // nearest region BY NAME (صبراتة) — what it must not do is assert العجيلات.
+    {
+        id: 728, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'العجيلات، وين نلقى منتجاتكم؟',
+        page: 'distributor',
+        expected: {
+            replyNotContains: [
+                'في العجيلات، هذه',
+                'للعجيلات تحديداً',
+                'في العجيلات تحديدا',
+                'المتوفرة في العجيلات',
+            ],
+        },
+        notes: 'PROD replay (2026-07-27 10:18-10:20): returned the الزاوية list under «أما للعجيلات تحديداً فهذه هي الصيدليات المتوفرة», and repeated it after the customer objected «هدوم مش في العجيلات». Real names, invented city. No validator covers place claims.',
+    },
+
+    // 69.6 — GREEN GUARD for 69.5: a district that IS in the directory must still
+    // get its outlets. Pins the fix as "stop fabricating", not "stop answering".
+    {
+        id: 729, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'أنا ساكن في عين الدالية، وين نلقى منتجاتكم؟',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb'],
+            replyContainsAny: ['عين الدالية'],
+            replyNotContains: ['ما عندي', 'غير متوفرة لدي'],
+        },
+        notes: 'The listed-district half of the region contract — prod DID do this well once the directory was in the KB. Guards against over-correcting 69.5 into refusing every location question.',
+    },
+
+    // 69.7 — The invented-price regression (commit e5313a4c). Per-PIECE price is
+    // nowhere in the KB — only per-pack. Prod answered a closing «نعم» with
+    // «سعره 1200 دينار ليبي», UNFLAGGED, because Check 1 only ran on QUESTION
+    // intent and v54 made purchase turns price-bearing. Either grounding the
+    // pack price or declining is acceptable; inventing a number is not.
+    {
+        id: 730, category: 69, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'نعم',
+        page: 'distributor',
+        conversationHistory: [
+            { role: 'user', content: 'نبي حفاضات رواء رقم 5' },
+            { role: 'assistant', content: 'حفاضات رواء رقم 5 متوفرة، العلبة 22 قطعة بسعر 45 دينار.' },
+            { role: 'user', content: 'نبي باكو واحد' },
+            { role: 'assistant', content: 'باكو واحد من حفاضات رواء رقم 5؟' },
+        ],
+        expected: {
+            replyNotContains: ['1200', '١٢٠٠', '120 دينار', '450', '٤٥٠'],
+        },
+        notes: 'PROD replay (2026-07-27 10:16:14) — the exact turn that produced «باكو واحد ... سعره 1200 دينار ليبي» with no flag. Fixed by e5313a4c (price check on every intent + fallback swap on PURCHASE_INTENT). Pins the regression at the conversation level, above the unit tests.',
+    },
+
+    // 69.9 — THE TURN THAT ACTUALLY SHIPPED. #728 only asks once; prod did not fail
+    // on the first ask, it failed on the SECOND. The AI listed outlets under
+    // العجيلات, the customer objected «هدوم مش في العجيلات», and the AI conceded the
+    // outlets were «في مناطق مختلفة حول طرابلس» and then re-asserted the identical
+    // list as العجيلات anyway (2026-07-27 10:20:23). Standing its ground against a
+    // correction is a harder behaviour than answering cleanly, so this is the case
+    // most likely to expose an ungrounded place claim — and, unlike 728, it carries
+    // the conversation state that produced the real defect.
+    {
+        id: 737, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'هدوم مش في العجيلات',
+        page: 'distributor',
+        conversationHistory: [
+            { role: 'user', content: 'العجيلات، وين نلقى منتجاتكم؟' },
+            { role: 'assistant', content: 'في العجيلات متوفر في صيدلية نبع الدالية وصيدلية ساقية العين.' },
+        ],
+        expected: {
+            replyNotContains: [
+                'في العجيلات، هذه',
+                'للعجيلات تحديداً',
+                'في العجيلات تحديدا',
+                'المتوفرة في العجيلات',
+            ],
+        },
+        notes: 'PROD replay of the doubling-down turn (BAMBO LIBYA, 2026-07-27 10:20:23) — the prior assistant turn is deliberately the FABRICATED one, so the model is invited to defend a claim it should retract. OPEN GAP, expectedFail: measured 2026-07-28 at temp 0 it re-asserts العجيلات in ~2 of 4 runs. A self-reported place-claim guard was built and REJECTED on this evidence: across four full suites the flag fired exactly once and that once was a false positive, while on the runs where this case reproduced the fabrication the model reported no claim at all (fails open precisely when it matters). Closing this needs detection from the REPLY TEXT against the KB, not a model self-report. This is currently the only case in the suite that reproduces the defect — #728 passes even on wholly unfixed code.',
+    },
+
+    // ── Category 70: Purchase-Turn Price Grounding ───────────────────────────
+    // e5313a4c blast-radius coverage, from متجر إجدابيا's real traffic
+    // (2026-07-21→27). That fix newly runs Check 1 on PURCHASE_INTENT *and* lets
+    // the backend swap the reply, and this merchant is the most exposed page on
+    // the fleet: 100 purchase turns in six days, 20 of them answered with a
+    // computed total that isn't literally in the KB. Cat 68 already proves totals
+    // compute; these prove the SWAP doesn't eat them at the moment of sale, and
+    // that the invented ones are still caught.
+    //
+    // Runs against the `incense` fixture, which is this merchant's anonymized KB
+    // (see seedData.ts). It carries the same bundle-vs-unit trap as his real one:
+    // معطر ريحان is 16/طرف but 28 for the pair — so 2×16=32 is WRONG and an
+    // invented number is wrong too, exactly like his «70» where the KB said 69.
+
+    // 70.1 — The prod defect this half of the fix exists for. Real reply, 07-23
+    // 12:22: «اثنين طرف ... ب 70 دينار ... المجموع 100» on a purchase turn, where
+    // the KB said 69 and 70 appeared nowhere. It shipped unflagged.
+    {
+        id: 731, category: 70, categoryName: 'Purchase-Turn Price Grounding', channel: 'dm',
+        message: 'تمام نبي طرفين',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'بكم معطر الملابس ريحان؟' },
+            { role: 'assistant', content: 'معطر الملابس ريحان الطرف الواحد بـ 16 دينار، والطرفين بـ 28 دينار.' },
+        ],
+        expected: {
+            // 32 = 2×16, the plausible-but-wrong unit-price multiplication; the KB
+            // prices the pair at 28. Any other invented figure fails on the flag.
+            replyNotContains: ['32', '٣٢'],
+            flagsAbsent: ['price_not_in_kb'],
+            replyContainsAny: ['28', '٢٨'],
+        },
+        notes: 'PROD replay (2026-07-23 12:22, invented «70 دينار» where the KB said 69). A purchase turn must quote the merchant\'s pair price, not multiply the unit price and not invent.',
+    },
+
+    // 70.2 — GREEN GUARD, and the case that fails if Stage B over-reaches: a
+    // correct computed total on a PURCHASE_INTENT turn must still reach the
+    // customer. 20 of his real replies are this shape; pre-fix they bypassed
+    // Check 1 entirely, so this is newly-exposed traffic.
+    {
+        id: 732, category: 70, categoryName: 'Purchase-Turn Price Grounding', channel: 'dm',
+        message: 'تمام نبيه، التوصيل لطرابلس',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'نبي علبة بخور الياسمين' },
+            { role: 'assistant', content: 'علبة بخور الياسمين الفاخر بـ 40 دينار.' },
+        ],
+        expected: {
+            flagsAbsent: ['price_not_in_kb'],
+            replyContainsAny: ['52', '٥٢'],
+            replyNotContains: ['أرقامنا', 'يرجى التواصل معنا'],
+        },
+        notes: '40 + توصيل طرابلس 12 = 52 on a PURCHASE_INTENT turn. If the Stage B swap eats verified totals, this is where it shows — and it is the shape that closes his orders.',
+    },
+
+    // 70.3 — The terse follow-up, on a PURCHASE turn rather than a question.
+    // #735 covers the QUESTION variant (stochastic, ~3/4 pass rate);
+    // prod deflected on «الحساب كم بالتوصيل» (2026-07-22 08:20) and then answered
+    // «المجموع 49 دينار» correctly one minute later once the item was restated.
+    // Post-Stage B the same miss now also swaps on purchase turns.
+    {
+        id: 733, category: 70, expectedFail: true, categoryName: 'Purchase-Turn Price Grounding', channel: 'dm',
+        message: 'تمام نبي، الحساب كم بالتوصيل',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'بكم عطر زهرة الأطلس؟' },
+            { role: 'assistant', content: 'عطر زهرة الأطلس 100 ملي بـ 210 دينار.' },
+            { role: 'user', content: 'التوصيل لطرابلس' },
+            { role: 'assistant', content: 'التوصيل لطرابلس بـ 12 دينار.' },
+        ],
+        expected: {
+            flagsAbsent: ['price_not_in_kb'],
+            replyNotContains: ['أرقامنا', 'يرجى التواصل معنا', 'تواصل معنا مباشرة'],
+        },
+        notes: 'PROD replay (2026-07-22 08:20): terse total with the components only in history → deflection at the moment of sale. Asserts the anti-deflection contract like #735, but on a purchase turn. STOCHASTIC (~passes 3/4 of runs, like #735 — the owner-measured rate): expectedFail kept deliberately so a lucky pass never enters the score; remove only when price_math emission covers history-only components deterministically.',
+    },
+
+    // 70.4 — Promo bundle that exists only in a Facebook post, never in the KB.
+    // Prod (2026-07-26 00:09): the customer screenshotted the merchant's own ad
+    // («79 دينار بدل 93»), asked «بنفس السعر» three times, got the identical
+    // deflection three times, and the MERCHANT rescued it manually four minutes
+    // later. Refusing to confirm an ungrounded promo is CORRECT — so this asserts
+    // the honest-limit behaviour, not a price.
+    {
+        id: 734, category: 70, categoryName: 'Purchase-Turn Price Grounding', channel: 'dm',
+        message: 'شفت عندكم عرض المجموعة الملكية بـ 79 دينار، بنفس السعر؟',
+        page: 'incense',
+        expected: {
+            // Must not confirm a number the merchant never put in the KB…
+            replyNotContains: ['79', '٧٩', 'نعم نفس السعر'],
+            // …but must still engage rather than dead-end silently.
+            replyContainsAny: ['تواصل', 'نتأكد', 'المشرف', 'الرقم', 'للأسف', 'ما عندي', 'غير متوفر'],
+        },
+        notes: 'PROD replay (2026-07-26 00:09): promo bundles live only in FB posts. The guard was right to refuse 79; the finding is that the merchant had to answer manually. Pins "never confirm an ungrounded promo".',
     },
 
 ];
@@ -4682,10 +4967,21 @@ async function main() {
     let totalFail = 0;
     let totalLatency = 0;
 
+    // Known-gap cases are scored separately (see TestCase.expectedFail) so that
+    // documenting an open defect never moves the headline number.
+    const xgapStillFailing: TestResult[] = [];
+    const xgapNowPassing: TestResult[] = [];
+
     for (const [catNum, cat] of [...categories.entries()].sort((a, b) => a[0] - b[0])) {
-        const pass = cat.results.filter(r => r.verdict === 'PASS').length;
-        const partial = cat.results.filter(r => r.verdict === 'PARTIAL').length;
-        const fail = cat.results.filter(r => r.verdict === 'FAIL').length;
+        const scored = cat.results.filter(r => !r.test.expectedFail);
+        const xgap = cat.results.filter(r => r.test.expectedFail);
+        for (const r of xgap) {
+            (r.verdict === 'PASS' ? xgapNowPassing : xgapStillFailing).push(r);
+        }
+
+        const pass = scored.filter(r => r.verdict === 'PASS').length;
+        const partial = scored.filter(r => r.verdict === 'PARTIAL').length;
+        const fail = scored.filter(r => r.verdict === 'FAIL').length;
         const avgLatency = Math.round(cat.results.reduce((s, r) => s + r.latencyMs, 0) / cat.results.length);
 
         totalPass += pass;
@@ -4696,12 +4992,14 @@ async function main() {
         const parts = [`${pass} PASS`];
         if (partial > 0) parts.push(`${partial} PARTIAL`);
         if (fail > 0) parts.push(`${fail} FAIL`);
+        if (xgap.length > 0) parts.push(`${xgap.length} XGAP`);
 
         console.log(`  Cat ${catNum}: ${cat.name.padEnd(22)} ${parts.join('  ')}  (avg ${avgLatency}ms)`);
 
-        // Show failures in summary mode
+        // Show failures in summary mode (scored cases only — XGAP is listed once
+        // at the end, where the "gap fixed" signal can't be missed).
         if (!VERBOSE) {
-            for (const r of cat.results) {
+            for (const r of scored) {
                 if (r.verdict !== 'PASS') {
                     console.log(`    #${r.test.id} ${r.verdict}: ${r.reasons.join(', ')}`);
                 }
@@ -4709,14 +5007,31 @@ async function main() {
         }
     }
 
-    const total = results.length;
-    const score = ((totalPass + totalPartial * 0.5) / total * 100).toFixed(1);
-    const avgLatency = Math.round(totalLatency / total);
+    const total = results.length - xgapStillFailing.length - xgapNowPassing.length;
+    // A CATEGORY run can legitimately contain nothing but known-gap cases, so
+    // there is no score to report — printing NaN% (or dividing by zero into the
+    // <70 exit check below) would fail the run for having no scored tests.
+    const score = total > 0 ? ((totalPass + totalPartial * 0.5) / total * 100).toFixed(1) : null;
+    const avgLatency = Math.round(totalLatency / results.length);
 
     console.log('─'.repeat(60));
-    console.log(`  TOTAL: ${totalPass} PASS  ${totalPartial} PARTIAL  ${totalFail} FAIL  (${total} tests)`);
-    console.log(`  SCORE: ${score}%`);
+    console.log(`  TOTAL: ${totalPass} PASS  ${totalPartial} PARTIAL  ${totalFail} FAIL  (${total} scored tests)`);
+    console.log(`  SCORE: ${score === null ? 'n/a (no scored tests — known-gap cases only)' : `${score}%`}`);
     console.log(`  AVG LATENCY: ${avgLatency}ms`);
+
+    if (xgapStillFailing.length > 0 || xgapNowPassing.length > 0) {
+        console.log('─'.repeat(60));
+        console.log(`  KNOWN GAPS (excluded from score): ${xgapStillFailing.length} still open, ${xgapNowPassing.length} now passing`);
+        for (const r of xgapStillFailing) {
+            console.log(`    #${r.test.id} still open — ${r.test.notes?.slice(0, 90) ?? r.test.categoryName}`);
+        }
+        // A gap that starts passing is a RESULT, not noise — surface it loudly so
+        // the flag gets removed in the change that fixed it rather than lingering
+        // and quietly excluding a case that now works.
+        for (const r of xgapNowPassing) {
+            console.log(`    🎉 #${r.test.id} NOW PASSES — gap appears fixed; remove expectedFail from this case`);
+        }
+    }
     if (transientRetries > 0) {
         // Throttling visibility: retried-and-recovered calls are not failures,
         // but a high count means the run was rate-limited — lower CONCURRENCY.
@@ -4724,9 +5039,10 @@ async function main() {
     }
     console.log('═'.repeat(60));
 
-    // Exit with non-zero if score below threshold
-    const scoreNum = parseFloat(score);
-    if (scoreNum < 70) {
+    // Exit with non-zero if score below threshold. Skipped when there is no
+    // score (known-gap-only run) — `parseFloat(null)` would be NaN, and NaN < 70
+    // is false, so this would silently pass rather than being explicit about it.
+    if (score !== null && parseFloat(score) < 70) {
         console.log('\nScore below 70% threshold — exiting with code 1');
         process.exit(1);
     }

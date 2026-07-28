@@ -211,6 +211,19 @@ The Business Surface plan asserted «the freshest prices live in posts + post-re
 `settings.timezone` is edited in exactly one place: `TimezoneCard`, in the **General** section of Settings, always visible and behind no feature toggle. Every other surface that depends on it — today the `/business` working-hours sheet via `useMerchantTimezone` — DISPLAYS it read-only and links to that control (anchor `business-hours-timezone-label`); none may offer a second editor. The detected device zone (`Intl.DateTimeFormat().resolvedOptions().timeZone`) is used once, as the default when nothing is stored, and the stored value is never auto-corrected toward the device afterwards.
 **Why:** The timezone governs every time-based behaviour in the product — the AI's "today's date" line, the Post-Reply hours gate, the reply schedule, and the working hours quoted to customers — so a wrong value silently shifts all of them. It had been gated **three ways** behind `businessHoursOnly` (wrapper `pointer-events-none`, the Select's own `disabled`, and the hint button's) and buried in Advanced, which is `usePersistedBoolean(…, false)` — collapsed by default. A merchant who left the reply-schedule toggle off therefore could not reach the setting at all, and the first deep-link attempt silently did nothing because the anchor was never rendered. (⚠️ Test any deep link into Advanced with that persisted flag CLEARED.) A second control inside the hours sheet was rejected on placement grounds: one value with two homes drifts, and the sheet's own concern is what the bot TELLS customers, not the workspace clock. Auto-tracking the device was rejected by owner ruling — a "use this device's timezone" hint fires whenever stored ≠ device, so a Damascus business configured from Sweden is permanently offered the wrong answer; the backend needs a stored zone regardless, since the AI replies at 3am with no browser open. Related, still open: the DB default is literally `PLACEHOLDER_TIMEZONE` (`schema.ts`) and nothing at signup captures a zone, so a new merchant inherits Riyadh time until they open Settings — the proper fix is sending the detected zone with the signup/connect request.
 
+## D-044 · Do NOT rotate `FACEBOOK_APP_SECRET` for the 2026-07-26 Sentry exposure — the rotation costs more than the leak, and it is a coordinated cutover, never a routine task
+**Decided:** 2026-07-26 · **Status:** Active
+The Facebook app secret was reaching Sentry via outgoing-HTTP breadcrumbs (`http.query` records the raw query string; `exchangeCodeForToken` passes `client_secret` as a query param). The leak is FIXED going forward by the scrubbing in `lib/sentry.ts` (#512, deployed). The historical exposure is accepted and NOT remediated by rotation.
+**Why:** Reading the exposed value requires access to the Sentry project, and the owner confirmed he is its only user — so the practical risk is close to theoretical. Rotation, by contrast, is genuinely expensive and was initially mis-recommended as "cheap" before the code was checked. Two hard costs: (1) `controllers/webhook.ts` verifies Meta's `x-hub-signature-256` with an HMAC of the app secret, so any divergence between Meta's value and ours rejects EVERY inbound webhook — Facebook comments, Messenger, Instagram and WhatsApp — for every customer until the env is updated and the container recreated; it is a coordinated cutover, not an env edit. (2) Worse and permanent: the WhatsApp two-step-verification PIN is DERIVED from the secret — `HMAC(appSecret, phoneNumberId)`, documented in `services/whatsapp.ts` as "reproducible on reconnect, never stored" — so rotating changes the PIN and any already-registered number can never be re-registered by us (Meta rejects it as a PIN mismatch). Re-open this decision if Sentry access is ever widened (contractor, shared login, integration), or if a breach is suspected.
+**Follow-up (separate from this ruling):** deriving the WhatsApp PIN from a rotatable credential couples it to a value that must stay stable forever, which means the app secret can effectively never be rotated once merchants are connected. Storing an encrypted per-number PIN would remove the coupling. Worth doing before WhatsApp GA, while exactly one number is affected.
+
+
+## D-045 · WhatsApp Coexistence ships BEFORE GA — and Syria can never use WhatsApp at all, regardless of it
+**Decided:** 2026-07-27 · **Status:** Active · **Reverses the 2026-07-26 ruling that Coexistence was a post-GA project**
+Coexistence ("API Solutions for Business App Users" — the merchant keeps their number live in the WhatsApp Business app while we also hold it on Cloud API) is built before WhatsApp GA rather than after. v1 does NOT import chat history: the three webhook fields Meta requires (`history`, `smb_app_state_sync`, `smb_message_echoes`) are all subscribed so onboarding stays valid, but only `smb_message_echoes` is acted on — `history` and `smb_app_state_sync` are accepted and discarded. Coexistence numbers default to a human-first reply mode; migrated numbers keep replying instantly.
+**Why:** Virtually every Arabic SMB already runs its business number on the WhatsApp Business app, so without Coexistence GA announces a feature most merchants can only adopt by buying a second SIM — and "can I keep my number?" was always going to be the top support question on day one. The original deferral was also made under a constraint that no longer holds: the authoritative `featureType` value was unreadable until app-level Tech Provider onboarding completed (2026-07-26), and Rule 12 forbids hardcoding a third-party value from memory. Two findings shrank the work: Meta documents that echoes cover "the WhatsApp Business app or companion devices only, **not Cloud API messages**", so the self-mute risk both prior plans treated as the hardest problem cannot occur; and #510 already stores the real `wamid` in the UNIQUE `platform_message_id`, so idempotency and the defensive self-send guard are one lookup instead of adapter surgery. History was excluded from v1 because Meta pushes up to **180 days**, the window cannot be limited on their side, and one webhook "could potentially describe thousands of messages" — importing that into merchant inboxes is a separate project with its own GDPR and retention questions. ⚠️ Meta's onboarding docs warn partners have **24h to synchronize history or the business must offboard and restart**; whether receiving-and-discarding satisfies that is UNVERIFIED and must be checked on the first real coexistence connect.
+**Separate, larger finding (not Coexistence-specific):** Meta states businesses in **Cuba, Iran, North Korea, Syria** and three sanctioned Ukrainian regions "are not eligible to use the WhatsApp Business Platform", and users there "are not eligible to **receive** messages sent via" it. So a Syrian merchant can never connect WhatsApp to Jawab24, and Syrian customers of ANY merchant can never receive an AI reply — this is a product-wide constraint that must be reflected in launch copy and in the existing sanctioned-country handling, not a limitation of this feature. Libya appears in no restriction list, so the paying customer base is unaffected.
+
 <!--
 Template for new entries:
 
@@ -219,3 +232,34 @@ Template for new entries:
 <What was decided, in 1-3 lines.>
 **Why:** <The reasoning, so it isn't re-derived.>
 -->
+
+## D-046 · Facebook sync becomes suggestions-only: nothing lands in merchant-facing data without approval, and the merchant's own KB text always outranks Facebook
+
+Owner rulings, 2026-07-28. (1) A re-sync must never replace merchant-side structured
+data — Facebook data may be stale; the existing editor/kb_extract protection stays, and
+the "Option B" auto-promotion of fb_sync values into the `merchant` half is reversed:
+FB sync writes ONLY the `suggestions` half, surfaced as one-tap-approve proposals in
+/business and onboarding. Approval is what mints `editor` + `confirmedAt` — the same
+currency the authority layer and the readiness metric already count. Cost of the
+reversal is ~zero for replies because D-009 already bars unconfirmed FB facts from the
+prompt. (2) Operational facts hand-written in the KB (hours, phones, address) are the
+truth by authorship — `kb_extract` outranks `fb_sync` end-to-end (already the D-008
+merge rules; activation = `KB_OPFACTS_EXTRACT`, set to `shadow` in prod this date, then
+`on` + the one-off backfill). (3) Planned companion, not yet built: a SYNC-DRIFT alert —
+when a refresh brings a Facebook value that DIFFERS from the merchant-owned value, the
+sync stays silent in data but notifies the merchant («فيسبوك يقول دوامك تغيّر — تحدّث؟»)
+with a one-tap adopt; silence-by-design must not hide real-world changes from the one
+person who can judge them. (4) `website` loses its
+"descriptive, low-harm" privilege (owner, same date: most merchants have no website, and
+FB's value is often a dead link) — today `formatBusinessProfile` (businessProfile.ts:42)
+is the last spot where an UNCONFIRMED fb_sync value still reaches the prompt; website
+joins the operational facts behind the confirmation gate, stated only when
+merchant-confirmed or present in his own KB text, and gets no readiness-card weight.
+And "no website" becomes an EXPLICIT one-tap state (owner: «لازم نعطي خيار انه لا يوجد
+موقع الكتروني») — same third-state pattern as storefront/online-only and the B2-V2
+delivery negative: stored as a confirmed fact, rendered as a confident negative
+(«لا يوجد موقع إلكتروني — التواصل هنا مباشرة»), and the readiness card treats it as
+RESOLVED, not missing. An empty field reaches the model as unknown and produces a
+hedge; only a stored negative produces a plain, selling "no".
+Also fix in the same work: the stale comment at
+`pages.ts:1042` claiming the merchant half is editor-write-only (false since Option B).

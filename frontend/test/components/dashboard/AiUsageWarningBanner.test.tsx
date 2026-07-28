@@ -72,8 +72,43 @@ describe('AiUsageWarningBanner — top-up awareness', () => {
     expect(screen.getByTestId('ai-usage-warning-banner')).toHaveAttribute('data-severity', 'critical');
   });
 
-  it('shows the amber warning between 80% and 100% regardless of balance', () => {
-    render(<AiUsageWarningBanner aiReplies={aiReplies({ used: 9000, percentUsed: 90 })} topupBalance={10000} />);
+  it('shows the amber warning near the cap when there is no balance behind it', () => {
+    render(<AiUsageWarningBanner aiReplies={aiReplies({ used: 9000, percentUsed: 90 })} topupBalance={0} />);
     expect(screen.getByTestId('ai-usage-warning-banner')).toHaveAttribute('data-severity', 'warning');
+  });
+
+  /**
+   * The plan cap is a billing boundary, not the wall. These two cases are the
+   * whole point of deriving state from plan + top-up: an identical 90%-of-cap
+   * merchant is warned or not depending on whether the balance behind the cap
+   * actually changes the outcome.
+   */
+  it('stays silent near the cap when the top-up balance comfortably absorbs the overflow', () => {
+    // 9,000 of 10,000 with 10,000 banked — 19k of runway. Warning the merchant
+    // that "replies will stop" here is simply false. This asserted 'warning'
+    // before, which is the live false alarm it was written from.
+    const { container } = render(
+      <AiUsageWarningBanner aiReplies={aiReplies({ used: 9000, percentUsed: 90 })} topupBalance={10000} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('still warns near the cap when the balance is too thin to change the outcome', () => {
+    // 8,500 used against a 10,500 real runway — past 80% of it, so the wall is real.
+    render(<AiUsageWarningBanner aiReplies={aiReplies({ used: 8500, percentUsed: 85 })} topupBalance={500} />);
+    expect(screen.getByTestId('ai-usage-warning-banner')).toHaveAttribute('data-severity', 'warning');
+  });
+
+  it('warns instead of reassuring when the top-up balance is nearly drained', () => {
+    // At the cap with 100 replies left: the calm "no interruption" notice would be
+    // a false promise moments before Smart Replies stop.
+    render(<AiUsageWarningBanner aiReplies={aiReplies()} topupBalance={100} />);
+
+    const banner = screen.getByTestId('ai-usage-warning-banner');
+    expect(banner).toHaveAttribute('data-severity', 'topup-low');
+    expect(screen.getByText(/almost gone/i)).toBeInTheDocument();
+    expect(screen.getByText(/Only 100 top-up replies left/)).toBeInTheDocument();
+    // Explicitly NOT the calm notice.
+    expect(screen.queryByText("You're now using your top-up balance")).not.toBeInTheDocument();
   });
 });

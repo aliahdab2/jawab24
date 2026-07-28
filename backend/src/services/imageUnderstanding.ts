@@ -19,7 +19,8 @@ import { captureError } from '../utils/sentryHelpers';
 import { makeTrackedOpenAI, APIError } from './openaiClient';
 import { sniffMimeType, VISION_MIME_TYPES } from './kb/file-extractor';
 import { fetchMediaBuffer, MediaDownloadError } from '../utils/mediaDownload';
-import { checkDailyCap, incrementDailyCap, dailyCapKey } from '../lib/dailyCap';
+import { checkDailyCap, incrementDailyCap, dailyCapKey, claimDailyOnce } from '../lib/dailyCap';
+import { isTimeoutAbort } from '@jawab24/shared';
 
 /** Max time to download the image from the FB/IG CDN (matches transcription.ts). */
 const DOWNLOAD_TIMEOUT_MS = 10_000;
@@ -52,7 +53,14 @@ const MODEL_VISION = 'gpt-4.1-mini';
  */
 const IMAGE_DAILY_LIMITS: Record<string, number> = {
     free: 3,
-    starter: 5,
+    // Raised 5 → 15 (2026-07-26). A real Starter store blows through 5 before
+    // lunchtime: the first merchant to use this feature heavily hit the cap on
+    // BOTH of his first two busy days (8 images each), and every image past the
+    // 5th silently stopped being read. At $0.00113 per image the old number was
+    // never protecting meaningful cost — total spend across all merchants since
+    // launch is under $1 — it was just converting a working feature into a
+    // failure the merchant could not see or explain.
+    starter: 15,
     business: 40,
     pro: 75,
     'scale-20k': 150,
@@ -117,6 +125,7 @@ class ImageUnderstandingService {
         dataUrl: string,
         langHint: string,
         ctx: ImageUnderstandingContext,
+        controller: AbortController,
     ): Promise<ImageDescriptionResult | null> {
         const client = makeTrackedOpenAI(config.openai.apiKey, {
             userId: ctx.userId,
@@ -124,7 +133,6 @@ class ImageUnderstandingService {
             pipeline: 'image_understanding',
         });
 
-        const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
         try {
             const response = await client.chat.completions.create(
@@ -229,8 +237,12 @@ class ImageUnderstandingService {
         }
 
         const dataUrl = `data:${sniffed};base64,${buffer.toString('base64')}`;
+        // The controller is owned HERE, not in describe(), because only the catch
+        // below can tell a timeout from a real failure — and the OpenAI SDK's abort
+        // error is indistinguishable by name (see isTimeoutAbort).
+        const controller = new AbortController();
         try {
-            return await this.describe(dataUrl, langHint, ctx);
+            return await this.describe(dataUrl, langHint, ctx, controller);
         } catch (error) {
             // A 400 means the image bytes are bad (unsupported/corrupt) — we
             // already fall back gracefully. Capture as a fingerprinted WARNING
@@ -246,11 +258,21 @@ class ImageUnderstandingService {
                 });
                 return null;
             }
-            const isTimeout = error instanceof Error && error.name === 'AbortError';
+            // Our VISION_TIMEOUT_MS fired: the image falls back to the nudge path,
+            // so treat it like the 400 above — one fingerprinted warning to alert on
+            // frequency, not an error-level page per slow call.
+            const isTimeout = isTimeoutAbort(controller.signal);
             captureError(
                 error instanceof Error ? error : new Error(String(error)),
                 isTimeout ? 'Image understanding timeout' : 'Image understanding failed',
-                { tags: { service: 'image_understanding' } },
+                isTimeout
+                    ? {
+                        level: 'warning',
+                        fingerprint: ['image-understanding-openai-timeout'],
+                        tags: { service: 'image_understanding' },
+                        extra: { timeoutMs: VISION_TIMEOUT_MS },
+                    }
+                    : { tags: { service: 'image_understanding' } },
             );
             return null;
         }
@@ -261,7 +283,11 @@ export const imageUnderstandingService = new ImageUnderstandingService();
 
 export type ImageGateResult =
     | { allowed: true; ownerId: string }
-    | { allowed: false; reason: 'env_disabled' | 'no_subscription' | 'cap_reached' | 'cap_check_failed' };
+    // `cap_reached` is the one denial we can attribute and explain: we know the
+    // owner and the limit they hit, so the caller can tell THEM (never their
+    // customer). Every other denial is a technical failure with no owner story.
+    | { allowed: false; reason: 'cap_reached'; ownerId: string; limit: number }
+    | { allowed: false; reason: 'env_disabled' | 'no_subscription' | 'cap_check_failed' };
 
 /**
  * Decide whether a customer image may be understood for this page's workspace:
@@ -294,7 +320,7 @@ export async function checkImageUnderstandingGate(
         const limit = topupBalance > 0 ? baseLimit * PAYG_LIMIT_MULTIPLIER : baseLimit;
 
         const { allowed } = await checkDailyCap(dailyCapKey(IMAGE_CAP_PREFIX, ownerId), limit);
-        if (!allowed) return { allowed: false, reason: 'cap_reached' };
+        if (!allowed) return { allowed: false, reason: 'cap_reached', ownerId, limit };
 
         return { allowed: true, ownerId };
     } catch (err) {
@@ -312,4 +338,41 @@ export async function checkImageUnderstandingGate(
 /** Increment the daily image-understanding counter after a successful describe. */
 export async function incrementImageUnderstandingCounter(ownerId: string): Promise<void> {
     await incrementDailyCap(dailyCapKey(IMAGE_CAP_PREFIX, ownerId));
+}
+
+/** One notification per owner per UTC day — same day boundary as the cap itself. */
+const CAP_NOTICE_PREFIX = 'image_cap_notified';
+
+/**
+ * Tell the MERCHANT they have run out of daily image reads.
+ *
+ * This limit used to be completely invisible: past it we silently stopped
+ * reading customer photos, and the only outward sign was a message to the
+ * merchant's own customers claiming we cannot read images at all. The merchant
+ * had no way to learn a cap existed, let alone that they had hit it.
+ *
+ * Fire-and-forget and deduped to once per day — a busy page can hit the cap
+ * dozens of times in an evening, and this must never delay or fail the reply
+ * pipeline.
+ */
+export async function notifyImageCapReached(ownerId: string, limit: number): Promise<void> {
+    try {
+        // Only the first cap hit of the day notifies (shared Redis primitive).
+        if (!await claimDailyOnce(dailyCapKey(CAP_NOTICE_PREFIX, ownerId))) return;
+
+        // Lazy import for the same reason the gate lazy-loads subscriptions:
+        // the whole reply pipeline imports this module, and the notifications
+        // graph should not be constructed at its load.
+        const { notificationService } = await import('./notifications');
+        await notificationService.sendTemplateNotification(ownerId, 'image_limit_reached', {
+            limit: String(limit),
+        });
+    } catch (err) {
+        // Never let a notification failure affect message handling.
+        captureError(
+            err instanceof Error ? err : new Error(String(err)),
+            'image cap notification failed',
+            { tags: { service: 'image_understanding' }, extra: { ownerId } },
+        );
+    }
 }

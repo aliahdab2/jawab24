@@ -27,6 +27,19 @@ Defense in depth: the frontend flags control *visibility*; the backend allowlist
 1. [ ] App Dashboard ([app 774211662298446](https://developers.facebook.com/apps/774211662298446)) → confirm `whatsapp_business_messaging` + `whatsapp_business_management` show **Advanced Access**.
 2. [ ] Create the Embedded Signup **configuration**: Facebook Login for Business → **Configurations** → Create → type "WhatsApp Embedded Signup" (also reachable via WhatsApp → Embedded Signup).
 3. [ ] Copy the **Configuration ID** — this becomes `NEXT_PUBLIC_WHATSAPP_CONFIG_ID`.
+4. [ ] **Enable JS-SDK login** — Facebook Login for Business → **Settings** → *Client OAuth settings*:
+   - `Login with the JavaScript SDK` → **Yes** (it defaults to **No**; while off, every connect attempt dies in the popup with *"JSSDK option is not toggled"* and no amount of correct config helps)
+   - `Allowed Domains for the JavaScript SDK` → add `https://jawab24.com` (apex only — `www` 301s to it, so the SDK never runs there). Meta normalises it to a trailing slash. ⚠️ Once this list is non-empty **only** listed domains work.
+   - Click **Save Changes** (the page does NOT autosave), then **reload the page and re-read both values** — the save can succeed with no visible confirmation.
+   - Reachable only by clicking **Settings** in the left sidebar; typing `/fb-login/settings/` or `/fb-login-for-business/settings/` silently redirects to the dashboard.
+5. [ ] Verify the CSP allows the SDK — `curl -sI https://jawab24.com/pages | grep -io 'content-security-policy:.*'` must contain `connect.facebook.net` (script-src), `staticxx.facebook.com` (frame-src) and `graph.facebook.com` (connect-src). Guarded by `backend/src/__tests__/nginx-config.test.ts`; **`graph.facebook.com` also appears in `img-src`, so grep the specific directive, not the whole header.**
+
+> **Two config gates, two different failure signatures — both look like "WhatsApp is broken":**
+> CSP missing `connect.facebook.net` → *"Failed to load Facebook SDK"* (our own error, from `script.onerror`).
+> JS-SDK toggle off → Meta's own dialog says *"JSSDK option is not toggled"*.
+> Both are deterministic for every merchant on every browser, and neither is catchable by any test in the repo except the nginx one — CSP is enforced only by a real browser, and the toggle only by Meta.
+
+**Noted for later (not blocking):** `Use Strict Mode for redirect URIs` is **Yes**, and Meta's own help text says `Valid OAuth Redirect URIs` "is also used by the JavaScript SDK for in-app browsers that suppress popups". A pure `FB.login` popup never uses a redirect URI, and native/Capacitor is already bounced to the web dashboard (`pages.tsx` `handleConnectWhatsApp`) — but if a merchant ever reaches connect from an in-app browser that blocks popups, the SDK falls back to a redirect and would need a matching URI listed.
 
 ## Phase 2 — Canary flip (server + deploy, ~30 min)
 
@@ -67,19 +80,43 @@ Notes:
 
 ## Phase 5 — GA flip (after a clean pilot bake, e.g. 2–3 days)
 
+> ✅ **D-045 Coexistence gate — SATISFIED (#530, 2026-07-28).** The connect path, echo ingestion,
+> the connect-time path question (`WhatsAppPathModal`) and the two-path copy are all on main, so a
+> merchant can keep their number on the WhatsApp Business app. Verified live in production
+> 2026-07-29: `featureType` reaches Meta correctly for BOTH paths (empty vs
+> `whatsapp_business_app_onboarding`), Meta honours it with a distinct 6-step flow containing a
+> "Select your setup" stage, and **Meta itself refuses a number that is not registered in the
+> Business app** rather than silently migrating it.
+>
+> ⚠️ **What is still UNPROVEN at GA** — know this before blaming a customer report on something else:
+> no Coexistence connect has ever completed, so the backend's skip-`registerPhoneNumber` branch and
+> **the whole of echo ingestion (`smb_message_echoes`) have never executed in production.** Their
+> failure modes are the AI muting itself after every reply, or double-replying alongside the
+> merchant. Contained: those branches only run for pages with `whatsapp_coexistence = true`, so
+> Facebook/Instagram/migration merchants cannot be affected. **Human-first reply mode (Phase 3) is
+> deliberately NOT built** — deferred until a real coexistence number exists and its timing is
+> observable. Also unverified: whether receive-and-discard satisfies Meta's 24h "synchronize or
+> offboard" warning on the `history` field.
+>
+> ⛔ **Sanctions:** Meta bars businesses AND recipients in Cuba, Iran, North Korea, **Syria** and
+> three sanctioned Ukrainian regions from the WhatsApp Business Platform. Launch copy must not
+> imply Syrian merchants or customers can use it. Libya is unrestricted. **Not yet enforced in
+> code** — `utils/geoCheck.ts` is not called from the WhatsApp connect path.
+
 **Marketing lands here, BEFORE the env flip** (plan: `.planning/WHATSAPP_MARKETING_LAUNCH.md`):
 
-> **Packaging is already on main (verified 2026-07-26).** The `plans.ts` `whatsappEnabled` flip
-> (starter false; business/pro/scale-20k/scale-30k true) and the `WHATSAPP_PLAN_REQUIRED` connect
-> gate landed independently of the marketing branch, so clearing the allowlist can no longer expose
-> WhatsApp to Starter. The old `feat/whatsapp-ga-marketing` branch is 136 commits behind and 4 of its
-> 8 commits are redundant — do NOT rebase it. Use `feat/whatsapp-ga-launch` (cut fresh off main),
-> which carries only the still-missing marketing surface.
+> **Packaging is already on main — do NOT repeat the old "ordering is load-bearing" warning.**
+> Re-verified against the production database 2026-07-29: `plans.whatsapp_enabled` is `true` for
+> business/pro/scale-20k/scale-30k and `false` for starter and the trial, and the
+> `WHATSAPP_PLAN_REQUIRED` connect gate is live in `controllers/whatsapp.ts`. Clearing the allowlist
+> therefore CANNOT expose WhatsApp to Starter. The old `feat/whatsapp-ga-marketing` (#428) branch is
+> superseded and 136 commits behind — do NOT rebase it.
 
-- [ ] **Marketing branch:** `feat/whatsapp-ga-launch` — landing WhatsApp presence (chip, orbit
+- [ ] **Marketing branch:** `feat/whatsapp-ga-launch` (#504) — landing WhatsApp presence (chip, orbit
       bubble, hero/SEO/FAQ copy), i18n copy sweep (meta/about/blog/help/contact + `what-is-jawab24`
       JSON-LD), pricing FAQ #9 (Meta conversation fees) + hero/SEO copy, blog teaser → "now live",
-      status docs → live. CI green.
+      status docs → live. Merge main in first and re-run the local gates (GitHub CI is dead — the
+      real gate is `scripts/pre-deploy-check.sh`).
 - [ ] Merge-day-only commit on that branch: bump sitemap `<lastmod>` for `/`, `/pricing`,
       `/blog/whatsapp-auto-reply-jawab24` to today; `npm run sitemap:validate`.
 - [ ] Merge `feat/whatsapp-ga-launch` to main — the deploy below ships marketing + env flip in ONE
@@ -101,7 +138,8 @@ exit
       toast; Business account → Embedded Signup opens and connects.
 - [ ] Plans flip is seed-driven — confirm `plans` table shows `whatsapp_enabled=true` for
       business/pro/scale-20k/scale-30k after deploy (seed runs post-migrate).
-- [ ] Revisit the **coexistence copy** (`pages.whatsappTooltip`, `pages.channelWhatsAppDesc` in `frontend/src/i18n/{en,ar}/pages.json`) — "use a number not already on the WhatsApp app" is the #1 adoption barrier; decide softening/Coexistence support post-launch.
+- [x] ~~Revisit the **coexistence copy**~~ — done: `pages.whatsappTooltip` and `pages.channelWhatsAppDesc` now state both paths instead of "use a number not already on the WhatsApp app", and the blog's "no QR-code hacks" line (which pre-contradicted Coexistence, since it uses a QR step) was rewritten in both locales.
+- [ ] **Verify the path question live in BOTH locales** (`/en/pages`, `/ar/pages`): picking "WhatsApp only" asks the question before the Meta popup, both options render translated (no raw `pages.whatsappPath*` keys), and the RTL layout is correct.
 - [ ] Update `SYSTEM_ANALYSIS.md` + `.planning/codebase/INTEGRATIONS.md` (WhatsApp status → live) in the same commit as any code change.
 
 ## Kill switch (if something goes wrong live)

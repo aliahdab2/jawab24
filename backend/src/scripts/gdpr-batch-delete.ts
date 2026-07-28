@@ -17,20 +17,36 @@
  * Auto-detects JSON (array of strings / array of objects) and CSV/TXT (one ID per
  * line or comma-separated). Extracts the long numeric Meta IDs and ignores headers.
  *
- * Usage:
+ * Takes ONE OR MORE identifier files — Meta sends one per alert, and they must be
+ * passed separately rather than `cat`-ed together (see the note in main()).
+ *
+ * Usage (local, from backend/):
  *   Dry-run (default — reports matches, deletes nothing):
- *     npx tsx backend/scripts/gdpr-batch-delete.ts <path-to-ids-file>
+ *     npm run gdpr:batch-delete:dev -- ~/Downloads/2026-06-28.csv ~/Downloads/2026-07-11.csv
  *   Execute the deletion:
- *     npx tsx backend/scripts/gdpr-batch-delete.ts <path-to-ids-file> --confirm
- *   Production:
- *     docker exec jawab24-backend-green node backend/dist/scripts/gdpr-batch-delete.js /data/ids.csv --confirm
+ *     npm run gdpr:batch-delete:dev -- <ids-file> [<ids-file>...] --confirm
+ *
+ * Production. The image is pruned with `npm prune --omit=dev` and ships no `tsx`,
+ * so the compiled `dist/` build is the ONLY form that runs there. The container's
+ * WORKDIR is /app/backend, hence the relative `dist/...` path. Prod Postgres is
+ * container-internal, so this must run INSIDE the container — and the identifier
+ * file has to be copied in first, because the report is written next to it:
+ *     docker cp ./ids.csv jawab24-backend-green:/tmp/ids.csv
+ *     docker exec jawab24-backend-green node dist/scripts/gdpr-batch-delete.js /tmp/ids.csv
+ *     docker exec jawab24-backend-green node dist/scripts/gdpr-batch-delete.js /tmp/ids.csv --confirm
+ *     docker cp jawab24-backend-green:/tmp/ /tmp/gdpr-reports/   # retrieve the compliance report
+ *
+ * This file MUST live under src/ — backend/tsconfig.json sets rootDir ./src and
+ * include ["src/**"], so anything in backend/scripts/ is never compiled and can
+ * never exist in dist/. It sat in backend/scripts/ until 2026-07-28, which made
+ * every production usage line above impossible to run.
  *
  * A timestamped JSON compliance report (which IDs matched, per-table counts) is written
  * next to the input file as <input>.gdpr-report-<ISO>.json — keep it as proof of deletion.
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { eq, inArray, sql } from 'drizzle-orm';
-import { db, client } from '../src/db';
+import { db, client } from '../db';
 import {
     conversations,
     messages,
@@ -43,8 +59,9 @@ import {
     pages,
     workspaces,
     users,
-} from '../src/db/schema';
-import { CUSTOMER_ID_TARGETS, purgeCustomerData } from '../src/services/gdprCustomerDeletion';
+} from '../db/schema';
+import { CUSTOMER_ID_TARGETS, purgeCustomerData } from '../services/gdprCustomerDeletion';
+import { parseMetaIdentifierIds } from '../services/gdprIdentifierFile';
 
 // Each end-customer table that stores a platform user identifier we must purge.
 // Shared with the real-time Meta data-deletion callback (services/gdprCustomerDeletion).
@@ -59,58 +76,6 @@ function chunked<T>(arr: T[], size: number): T[][] {
     return out;
 }
 
-/**
- * Parse the downloaded identifier file into a deduped list of Meta IDs.
- * Handles JSON arrays (of strings or of objects with an id-like field) and
- * CSV/TXT. Meta user IDs are long numeric strings, so we keep tokens matching
- * /^\d{5,}$/ — this naturally skips CSV headers and quoting.
- */
-function parseIds(raw: string): string[] {
-    const ids = new Set<string>();
-    const ID_RE = /^\d{5,}$/;
-
-    const trimmed = raw.trim();
-    let handledAsJson = false;
-    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-        try {
-            const json = JSON.parse(trimmed);
-            const arr: unknown[] = Array.isArray(json)
-                ? json
-                : Array.isArray((json as Record<string, unknown>).data)
-                    ? (json as { data: unknown[] }).data
-                    : [];
-            for (const item of arr) {
-                if (typeof item === 'string' || typeof item === 'number') {
-                    const v = String(item).trim();
-                    if (ID_RE.test(v)) ids.add(v);
-                } else if (item && typeof item === 'object') {
-                    const o = item as Record<string, unknown>;
-                    const cand = o.id ?? o.user_id ?? o.asid ?? o.psid ?? o.identifier;
-                    if (cand != null) {
-                        const v = String(cand).trim();
-                        if (ID_RE.test(v)) ids.add(v);
-                    }
-                }
-            }
-            handledAsJson = true;
-        } catch {
-            handledAsJson = false;
-        }
-    }
-
-    if (!handledAsJson) {
-        // CSV / TXT: split on newlines + commas, keep numeric-id cells.
-        for (const line of raw.split(/\r?\n/)) {
-            for (const cell of line.split(',')) {
-                const v = cell.trim().replace(/^["']|["']$/g, '');
-                if (ID_RE.test(v)) ids.add(v);
-            }
-        }
-    }
-
-    return [...ids];
-}
-
 async function countMatches(target: typeof TARGETS[number], ids: string[]): Promise<{ ids: string[]; rows: number }> {
     const matched = new Set<string>();
     let rows = 0;
@@ -119,7 +84,7 @@ async function countMatches(target: typeof TARGETS[number], ids: string[]): Prom
             .selectDistinct({ id: target.col })
             .from(target.table)
             .where(inArray(target.col, batch));
-        for (const r of found) if (r.id != null) matched.add(r.id);
+        for (const r of found) if (r.id !== null && r.id !== undefined) matched.add(r.id);
 
         const [{ c }] = await db
             .select({ c: sql<number>`count(*)::int` })
@@ -208,22 +173,35 @@ async function resolveAffectedPages(ids: string[]): Promise<AffectedPage[]> {
 async function main() {
     const args = process.argv.slice(2);
     const confirm = args.includes('--confirm');
-    const filePath = args.find(a => !a.startsWith('--'));
+    // Meta sends ONE file per deletion alert, so a real purge usually spans
+    // several. Accepting them all is deliberate: the obvious alternative —
+    // `cat a.csv b.csv > all.csv` — silently corrupts the batch, because these
+    // files do NOT end with a newline. The join welds the last id of one file to
+    // the first of the next, and the merged token fails the numeric test, so TWO
+    // real deletion requests vanish with no error. (Hit exactly that on
+    // 2026-07-28: 38 ids became 36.) Parsing each file separately makes it
+    // impossible.
+    const filePaths = args.filter(a => !a.startsWith('--'));
 
-    if (!filePath) {
-        console.error('Usage: gdpr-batch-delete.ts <path-to-ids-file> [--confirm]');
+    if (filePaths.length === 0) {
+        console.error('Usage: gdpr-batch-delete.ts <ids-file> [<ids-file>...] [--confirm]');
         process.exit(1);
     }
 
     const startedAt = new Date().toISOString();
     console.log('=== GDPR Batch Data Deletion ===');
     console.log(`Time:    ${startedAt}`);
-    console.log(`File:    ${filePath}`);
+    console.log(`File(s): ${filePaths.join(', ')}`);
     console.log(`Mode:    ${confirm ? 'CONFIRM (will delete)' : 'DRY-RUN (no changes)'}\n`);
 
-    const raw = readFileSync(filePath, 'utf-8');
-    const ids = parseIds(raw);
-    console.log(`Parsed ${ids.length} unique Meta ID(s) from the file.\n`);
+    const idSet = new Set<string>();
+    for (const path of filePaths) {
+        const parsed = parseMetaIdentifierIds(readFileSync(path, 'utf-8'));
+        parsed.forEach(id => idSet.add(id));
+        console.log(`  ${path}: ${parsed.length} id(s)`);
+    }
+    const ids = [...idSet];
+    console.log(`\nParsed ${ids.length} unique Meta ID(s) across ${filePaths.length} file(s).\n`);
     if (ids.length === 0) {
         console.error('No IDs parsed — check the file format. Aborting.');
         process.exit(1);
@@ -286,7 +264,7 @@ async function main() {
         startedAt,
         finishedAt: new Date().toISOString(),
         mode: confirm ? 'confirm' : 'dry-run',
-        inputFile: filePath,
+        inputFiles: filePaths,
         requestedIdCount: ids.length,
         matchedIdCount: allMatchedIds.size,
         totalCustomerRows: totalRows,
@@ -294,7 +272,7 @@ async function main() {
         affectedPages,
         merchantMatches,
     };
-    const reportPath = `${filePath}.gdpr-report-${startedAt.replace(/[:.]/g, '-')}.json`;
+    const reportPath = `${filePaths[0]}.gdpr-report-${startedAt.replace(/[:.]/g, '-')}.json`;
     writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf-8');
     console.log(`\nReport written: ${reportPath}`);
 

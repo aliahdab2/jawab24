@@ -5,7 +5,7 @@ import { ConversationMessage } from '../types';
 import { Message } from '@jawab24/shared';
 import { conversationPauseService } from './conversationPause';
 import { conversationsService, type Platform } from './conversations';
-import { ENDPOINT_STATS_CACHE_TTL, messagesStatsCacheKey, withStatsCache } from './statsCache';
+import { ENDPOINT_STATS_CACHE_TTL, messagesStatsCacheKey, withStatsCache, statsEpochKey } from './statsCache';
 
 /** DB connection or transaction — methods accepting this can participate in a transaction. */
 type DbConn = typeof db;
@@ -490,6 +490,24 @@ export class MessagesService {
         return row ? this.mapToMessage(row) : null;
     }
 
+    /**
+     * Look up any message by the platform's own id, in either direction.
+     *
+     * `platform_message_id` is NOT NULL + UNIQUE, so this doubles as the
+     * idempotency check for redelivered webhooks (Meta retries on 5xx/timeout)
+     * and as a defensive guard that a WhatsApp Coexistence echo is not something
+     * we sent ourselves. Meta documents that echoes exclude Cloud API messages,
+     * so the second case should be unreachable — but treating one of our own
+     * replies as a merchant reply would make the AI mute itself after every
+     * message, which is severe enough to check for rather than trust.
+     */
+    async findByPlatformMessageId(platformMessageId: string): Promise<Message | null> {
+        const row = await db.query.messages.findFirst({
+            where: eq(messages.platformMessageId, platformMessageId),
+        });
+        return row ? this.mapToMessage(row) : null;
+    }
+
     async storeOutgoingMessage(
         pageId: string,
         workspaceId: string,
@@ -504,6 +522,12 @@ export class MessagesService {
         // the truncation-retry badge). Distinct from the incoming row's alarm
         // flagMeta set via markAsReplied; never implies needs_attention.
         flagMeta?: import('@jawab24/shared').FlagMeta | null,
+        // The platform's OWN id for this outgoing message (WhatsApp `wamid`), when
+        // the channel returns one. Stored so an inbound echo of this same message
+        // can be recognised as ours rather than as a human reply — the WhatsApp
+        // Coexistence case, where Meta echoes API-sent messages back alongside the
+        // merchant's phone-sent ones. Absent → the synthetic id below, unchanged.
+        platformMessageId?: string,
     ): Promise<Message> {
         // Platform unknown in this call — inherit from existing conversation if present,
         // default to 'facebook' otherwise. This is safe because we never overwrite the
@@ -530,7 +554,10 @@ export class MessagesService {
                 pageId,
                 workspaceId,
                 conversationId: conversation.id,
-                platformMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                // Real platform id when the channel gave us one; otherwise a synthetic
+                // unique value (the column is NOT NULL + UNIQUE and predates any channel
+                // returning an id).
+                platformMessageId: platformMessageId || `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 // Without this the column defaulted to 'facebook', mislabeling every
                 // outgoing WhatsApp/Instagram reply (found in the 2026-07-08 pilot).
                 platform: conversation.platform ?? platform,
@@ -868,7 +895,14 @@ export class MessagesService {
         // workspace-wide variant is cached briefly. Page-filtered calls are
         // rare and skip the cache. Invalidation: see services/statsCache.ts.
         const cacheKey = options?.pageId ? null : messagesStatsCacheKey(workspaceId);
-        return withStatsCache(cacheKey, ENDPOINT_STATS_CACHE_TTL, () => this.computeStats(workspaceId, options));
+        return withStatsCache(
+            cacheKey,
+            ENDPOINT_STATS_CACHE_TTL,
+            () => this.computeStats(workspaceId, options),
+            // CAS-guard the write: this count drives a chip with no polling,
+            // so a snapshot that lost its race must be dropped, not cached.
+            statsEpochKey(workspaceId),
+        );
     }
 
     private async computeStats(workspaceId: string, options?: { pageId?: string }): Promise<MessageStats> {

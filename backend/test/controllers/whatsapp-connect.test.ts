@@ -101,7 +101,7 @@ describe('WhatsAppController.connect', () => {
         vi.clearAllMocks();
         vi.mocked(pagesService.getPage).mockResolvedValue(basePage as never);
         vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(null as never);
-        vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue('wa-business-token');
+        vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue({ token: 'wa-business-token', expiresIn: 5184000 });
         vi.mocked(whatsappService.subscribeAppToWaba).mockResolvedValue(undefined);
         vi.mocked(whatsappService.registerPhoneNumber).mockResolvedValue(undefined);
         vi.mocked(whatsappService.getPhoneNumberInfo).mockResolvedValue({
@@ -110,6 +110,46 @@ describe('WhatsAppController.connect', () => {
         });
         vi.mocked(pagesService.connectWhatsApp).mockResolvedValue(connectedPage as never);
         vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(entitledSubscription as never);
+    });
+
+    // ── Coexistence ────────────────────────────────────────────────────────
+    // A Coexistence number stays live in the merchant's WhatsApp Business app.
+    // Cloud API /register belongs to the MIGRATION path: running it on a
+    // coexistence number would either fail or take the number OFF their phone —
+    // the exact outcome Coexistence exists to prevent. The token exchange and
+    // WABA webhook subscribe still run; only registration is skipped.
+    it('COEXISTENCE: skips Cloud-API registration but still exchanges + subscribes', async () => {
+        const reply = buildReply();
+        await whatsappController.connect(
+            buildRequest({ body: { code: 'es-code', phoneNumberId: 'phone-1', wabaId: 'waba-1', coexistence: true } }) as never,
+            reply,
+        );
+
+        expect(whatsappService.registerPhoneNumber).not.toHaveBeenCalled();
+        expect(whatsappService.exchangeCodeForToken).toHaveBeenCalledWith('es-code');
+        expect(whatsappService.subscribeAppToWaba).toHaveBeenCalledWith('waba-1', 'wa-business-token');
+        expect(pagesService.connectWhatsApp).toHaveBeenCalledWith('ws-1', 'page-1',
+            expect.objectContaining({ coexistence: true }));
+    });
+
+    // Only an explicit `true` may skip registration — a missing, null or
+    // string-y value must take the safe migration path rather than silently
+    // leaving a number unregistered and unable to send.
+    it.each([
+        ['omitted', {}],
+        ['false', { coexistence: false }],
+        ['a truthy string', { coexistence: 'yes' }],
+        ['null', { coexistence: null }],
+    ])('treats coexistence %s as the migration path (registers the number)', async (_label, extra) => {
+        const reply = buildReply();
+        await whatsappController.connect(
+            buildRequest({ body: { code: 'es-code', phoneNumberId: 'phone-1', wabaId: 'waba-1', ...extra } }) as never,
+            reply,
+        );
+
+        expect(whatsappService.registerPhoneNumber).toHaveBeenCalledWith('phone-1', 'wa-business-token');
+        expect(pagesService.connectWhatsApp).toHaveBeenCalledWith('ws-1', 'page-1',
+            expect.objectContaining({ coexistence: false }));
     });
 
     it('runs the full connect flow: exchange → subscribe → register → store', async () => {
@@ -124,6 +164,13 @@ describe('WhatsAppController.connect', () => {
             businessAccountId: 'waba-1',
             displayPhoneNumber: '+966 55 000 0000',
             accessToken: 'wa-business-token',
+            // Meta forces a 60-day expiry on this login variation and only tells us
+            // at exchange time, so the deadline must be persisted here — without it
+            // we cannot warn the merchant before their number goes silent.
+            tokenExpiresAt: expect.any(Date),
+            // Migration path: the number moves to the Cloud API and leaves the
+            // merchant's phone. Persisted so a reconnect takes the same path.
+            coexistence: false,
         });
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({
             whatsappPhoneNumberId: 'phone-1',
@@ -382,7 +429,7 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(pagesService.getPageByWhatsAppPhoneNumberId).mockResolvedValue(null as never);
-        vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue('wa-business-token');
+        vi.mocked(whatsappService.exchangeCodeForToken).mockResolvedValue({ token: 'wa-business-token', expiresIn: 5184000 });
         vi.mocked(whatsappService.subscribeAppToWaba).mockResolvedValue(undefined);
         vi.mocked(whatsappService.registerPhoneNumber).mockResolvedValue(undefined);
         vi.mocked(whatsappService.getPhoneNumberInfo).mockResolvedValue({
@@ -406,7 +453,9 @@ describe('WhatsAppController.connectNew (WhatsApp-only page)', () => {
             businessAccountId: 'waba-1',
             displayPhoneNumber: '+966 50 111 2233',
             accessToken: 'wa-business-token',
+            tokenExpiresAt: expect.any(Date),
             verifiedName: 'Noor Store',
+            coexistence: false,
         });
         expect(reply.status).toHaveBeenCalledWith(201);
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({

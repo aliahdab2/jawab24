@@ -70,7 +70,10 @@ describe('Meta Webhook Subscriptions', () => {
             }
         );
 
-        // WhatsApp subscription
+        // WhatsApp subscription. The three extra fields are required by Meta for
+        // Coexistence (WhatsApp-Business-app) onboarding to be valid — dropping any
+        // of them silently breaks that flow, so they are asserted explicitly rather
+        // than loosely matched. Numbers onboarded the migration way never emit them.
         expect(axios.post).toHaveBeenCalledWith(
             'https://graph.facebook.com/v18.0/test_app_id/subscriptions',
             null,
@@ -79,7 +82,7 @@ describe('Meta Webhook Subscriptions', () => {
                     object: 'whatsapp_business_account',
                     callback_url: CALLBACK_URL,
                     verify_token: 'test_verify_token',
-                    fields: 'messages',
+                    fields: 'messages,smb_message_echoes,history,smb_app_state_sync',
                     access_token: APP_TOKEN,
                 },
             }

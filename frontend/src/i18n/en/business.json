@@ -10,9 +10,18 @@
     "addressChip": "Address",
     "deliveryChip": "Delivery",
     "paymentChip": "Payment",
-    "covered": "Covered",
+    "productsChipStore": "Products — from your store",
+    "productsArea": "Products",
+    "percentLabel": "Your assistant is {percent}% ready",
+    "coveredOf": "{covered} of {total}",
+    "completeAll": "Add {items} to be fully ready.",
+    "allCovered": "Jawab can answer all of these for your customers."
+  },
+  "state": {
+    "covered": "Complete",
     "missing": "Missing",
-    "productsChipStore": "Products — from your store"
+    "legendCovered": "Complete — Jawab uses it",
+    "legendMissing": "Missing — needs your input"
   },
   "products": {
     "title": "Products & services",
@@ -32,6 +41,8 @@
     "phoneIsWhatsapp": "Also on WhatsApp",
     "website": "Website",
     "isSet": "Saved",
+    "edit": "Edit",
+    "add": "Add",
     "add_hours": "Add working hours",
     "add_address": "Add your address",
     "add_phone": "Add a contact number",

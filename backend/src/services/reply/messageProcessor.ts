@@ -34,6 +34,7 @@ import {
     classifyDmError,
 } from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
+import { groundingVerifierService, buildGroundingSource } from '../groundingVerifier';
 import { recordActivationEvent } from '../activation';
 import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
 import { extractPostId } from '../../utils/instagram';
@@ -298,6 +299,8 @@ export class MessageProcessor {
             // we abandon a reply, surfacing as the "typing forever" UX bug.
             let typingShown = false;
             let replySent = false;
+            /** Platform's own id for the sent reply (WhatsApp wamid); undefined on FB/IG. */
+            let sentPlatformMessageId: string | undefined;
 
             try {
             // Load settings early — needed for debounce gating and downstream checks
@@ -473,8 +476,12 @@ export class MessageProcessor {
                     // (1a) Pure opener tap ("Get Started" / "بدء الاستخدام") — there is no
                     // question to answer, so the greeting IS the whole reply.
                     try {
-                        await adapter.sendReply(page, senderId, configured);
-                        await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, configured, 'template');
+                        const greetingPlatformMessageId = await adapter.sendReply(page, senderId, configured);
+                        await messagesService.storeOutgoingMessage(
+                            page.id, workspaceId, senderId, configured, 'template',
+                            undefined, undefined, undefined, undefined, undefined,
+                            greetingPlatformMessageId,
+                        );
                         await messagesService.markAsReplied(storedMessage.id, configured, 'template');
                         this.logger.info(`[${platform}] Sent greeting message`, { senderId, source: 'opener' });
                         pipelineMetrics.record(pipeline, 'greeting_sent');
@@ -668,7 +675,7 @@ export class MessageProcessor {
             const aiOriginalReply = replyMethod === 'ai' ? (replyText ?? undefined) : undefined;
 
             // 12b. Replace with safe fallback if AI hallucinated a price
-            if (shouldUseFallback(flagReason)) {
+            if (shouldUseFallback(flagReason, aiIntent)) {
                 const lang = resolveFallbackLanguage({
                     text: messageText,
                     knowledgeBase,
@@ -760,7 +767,10 @@ export class MessageProcessor {
 
             // 13. Send reply
             try {
-                await adapter.sendReply(page, senderId, replyText);
+                // The platform's own id for this send (WhatsApp wamid), when the channel
+                // returns one. Persisted on the outgoing row at step 15 so a Coexistence
+                // echo of this message is recognised as ours, not as a human reply.
+                sentPlatformMessageId = await adapter.sendReply(page, senderId, replyText);
                 // Messenger/Instagram auto-clear the typing indicator when a message
                 // arrives, so no explicit typing_off needed on the happy path.
                 replySent = true;
@@ -827,6 +837,7 @@ export class MessageProcessor {
                     page.id, workspaceId, senderId, replyText, replyMethod, tx,
                     undefined, undefined, undefined,
                     replyShortened ? { reply_shortened: {} } : undefined,
+                    sentPlatformMessageId,
                 );
                 outgoingMessage = {
                     id: stored.id,
@@ -909,6 +920,22 @@ export class MessageProcessor {
                 senderName,
                 messageText: consolidatedText,
             }).catch(() => { /* errors captured inside maybeCaptureLead */ });
+
+            // Fire-and-forget grounding verification (SYSTEM_ANALYSIS gap 13).
+            // Detection only: it flags the stored row, never the sent reply.
+            // Gated internally (shouldVerifyGrounding) and off unless
+            // GROUNDING_VERIFY_ENABLED=true, so this is inert until switched on.
+            groundingVerifierService.maybeVerifyGrounding({
+                userId,
+                pageId: page.id,
+                sourceId: storedMessage.id,
+                sourceType: 'message',
+                kb: buildGroundingSource({ knowledgeBase, storePolicies, productCatalog }),
+                question: consolidatedText,
+                reply: replyText ?? '',
+                intent: aiIntent,
+                replyMethod,
+            }).catch(() => { /* errors captured inside maybeVerifyGrounding */ });
 
             pipelineMetrics.record(pipeline, 'success');
             lap('DONE');

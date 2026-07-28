@@ -85,7 +85,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         await instagramService.sendTypingOff(page.platformAccountId, senderId, page.accessToken);
     }
 
-    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
+    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {
         if (!page.platformAccountId) {
             throw new Error('Page has no Instagram account ID');
         }
@@ -95,6 +95,8 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
             text,
             page.accessToken,
         );
+        // See facebookAdapter.sendReply — no Coexistence equivalent on Instagram.
+        return undefined;
     }
 
     async sendProductCards(page: PlatformPage, senderId: string, cards: ProductCard[]): Promise<void> {

@@ -37,6 +37,11 @@ GoogleService-Info.plist
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
+# Exclusive lock held by scripts/pre-deploy-check.sh while it runs (removed on exit).
+# Ignored so a crashed run can never make deploy-production.sh refuse with
+# "You have uncommitted changes".
+/.pre-deploy-check.lock/
+
 # CocoaPods (generated from Podfile)
 frontend/ios/App/Pods/
 

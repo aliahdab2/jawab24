@@ -1,6 +1,6 @@
 /**
  * GDPR end-customer data purge — shared by the Meta data-deletion callback
- * (real-time, per-user) and scripts/gdpr-batch-delete.ts (batch ID file).
+ * (real-time, per-user) and src/scripts/gdpr-batch-delete.ts (batch ID file).
  *
  * End customers (people who DM'd or commented on a merchant page) are keyed by
  * their Meta platform IDs: `sender_id` on DM tables, `from_id` on comment

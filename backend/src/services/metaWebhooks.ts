@@ -20,7 +20,14 @@ interface WebhookSubscription {
 const SUBSCRIPTIONS: WebhookSubscription[] = [
     { object: 'page', fields: 'feed,messages', label: 'Facebook Page' },
     { object: 'instagram', fields: 'messages,comments', label: 'Instagram' },
-    { object: 'whatsapp_business_account', fields: 'messages', label: 'WhatsApp' },
+    // Coexistence ("API Solutions for Business App Users") requires all three of
+    // history / smb_app_state_sync / smb_message_echoes on top of `messages` —
+    // Meta gates the WhatsApp-Business-app onboarding flow on them. Only
+    // `smb_message_echoes` is acted on today (a merchant's phone reply becomes a
+    // manual row so the AI stands down); `history` and `smb_app_state_sync` are
+    // accepted and discarded — see webhook.ts. Numbers onboarded the migration
+    // way simply never emit the extra three, so this is inert for them.
+    { object: 'whatsapp_business_account', fields: 'messages,smb_message_echoes,history,smb_app_state_sync', label: 'WhatsApp' },
 ];
 
 /**

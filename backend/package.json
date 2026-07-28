@@ -18,6 +18,8 @@
     "cache:warm-replies:dev": "tsx src/scripts/warm-reply-cache.ts",
     "seed:plans": "node dist/scripts/seed-plans.js",
     "seed:plans:dev": "npx tsx src/scripts/seed-plans.ts",
+    "gdpr:batch-delete": "node dist/scripts/gdpr-batch-delete.js",
+    "gdpr:batch-delete:dev": "npx tsx src/scripts/gdpr-batch-delete.ts",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check:pg",
     "db:validate": "ts-node scripts/validate-migrations.ts",
@@ -61,6 +63,7 @@
     "pdfjs-dist": "5.6.205",
     "postgres": "^3.4.3",
     "prom-client": "^15.1.3",
+    "sharp": "0.35.3",
     "stripe": "22.3.1",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.25.1"

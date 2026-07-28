@@ -88,15 +88,17 @@ vi.mock('../services/reply/adapters/instagramAdapter', () => ({
 
 // Image understanding: control the gate + describe so the branch is testable
 // (and so the real service's subscriptions→redis import chain stays out).
-const { mockGate, mockDescribeUrl, mockIncrement } = vi.hoisted(() => ({
+const { mockGate, mockDescribeUrl, mockIncrement, mockNotifyCap } = vi.hoisted(() => ({
     mockGate: vi.fn(),
     mockDescribeUrl: vi.fn(),
     mockIncrement: vi.fn(),
+    mockNotifyCap: vi.fn(),
 }));
 vi.mock('../services/imageUnderstanding', () => ({
     checkImageUnderstandingGate: mockGate,
     imageUnderstandingService: { describeFromUrl: mockDescribeUrl, describeFromBuffer: vi.fn() },
     incrementImageUnderstandingCounter: mockIncrement,
+    notifyImageCapReached: mockNotifyCap,
 }));
 
 import { handleNonTextMessage } from '../services/reply/nonTextHandler';
@@ -310,8 +312,8 @@ describe('handleNonTextMessage — image understanding (store-then-enrich)', () 
         expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
     });
 
-    it('finalizes FAILED + nudges (no vision) when the gate denies', async () => {
-        mockGate.mockResolvedValue({ allowed: false, reason: 'cap_reached' });
+    it('finalizes FAILED + nudges (no vision) when the gate denies for a technical reason', async () => {
+        mockGate.mockResolvedValue({ allowed: false, reason: 'env_disabled' });
 
         await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
 
@@ -319,6 +321,33 @@ describe('handleNonTextMessage — image understanding (store-then-enrich)', () 
         expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
         expect(enqueueMessage).not.toHaveBeenCalled();
         expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
+        expect(mockNotifyCap).not.toHaveBeenCalled();
+    });
+
+    // Regression: a merchant watched the text-only nudge ("we can only reply to
+    // text and voice") go to five of his customers after his daily quota ran
+    // out, and wrote a rule into his Business Info telling the assistant not to
+    // reply to images at all. The customer must never be told — and never be
+    // told something false: images WERE read for this page earlier the same day.
+    it('stays SILENT to the customer when the daily image cap is reached', async () => {
+        mockGate.mockResolvedValue({ allowed: false, reason: 'cap_reached', ownerId: 'page-owner-1', limit: 15 });
+
+        await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
+
+        expect(mockDescribeUrl).not.toHaveBeenCalled();
+        // No nudge, no AI job — the photo simply waits in the merchant's inbox.
+        expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+        expect(enqueueMessage).not.toHaveBeenCalled();
+        // Still finalized so a parked text job is never left waiting on it.
+        expect(messagesService.finalizeEnrichment).toHaveBeenCalledWith('msg-uuid', 'failed');
+    });
+
+    it('tells the MERCHANT (not the customer) which limit was hit', async () => {
+        mockGate.mockResolvedValue({ allowed: false, reason: 'cap_reached', ownerId: 'page-owner-1', limit: 15 });
+
+        await handleNonTextMessage('fb-page-id', imageEvent, 'facebook', mockLogger);
+
+        expect(mockNotifyCap).toHaveBeenCalledWith('page-owner-1', 15);
     });
 
     it('flips the stub FAILED when enrichment throws (no stuck pending row)', async () => {

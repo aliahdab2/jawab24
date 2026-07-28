@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { formatPromptPrice } from '../utils/price';
 import { catalogItems, pages } from '../db/schema';
 import { and, asc, count, eq, isNull, or, sql } from 'drizzle-orm';
 import {
@@ -355,7 +356,7 @@ export function renderCatalogPromptBlock(items: CatalogPromptItem[]): string | u
     const renderItem = (item: CatalogPromptItem, withDetails: boolean): string => {
         const tag = TYPE_TAGS[(item.type as CatalogItemType)] ?? '';
         const parts = [`${tag}${item.name}`];
-        parts.push(item.price !== null ? `${formatPrice(item.price)}${item.currency ? ` ${item.currency}` : ''}` : 'price on request');
+        parts.push(item.price !== null ? `${formatPromptPrice(item.price)}${item.currency ? ` ${item.currency}` : ''}` : 'price on request');
         parts.push(item.isAvailable ? 'in stock' : 'out of stock');
         // Dates survive every degradation tier — tiny, and semantically critical
         // (the model judges past/upcoming against its "Today's date" line).
@@ -393,10 +394,5 @@ export function renderCatalogPromptBlock(items: CatalogPromptItem[]): string | u
     return block;
 }
 
-/** "3500.00" → "3500", "49.99" → "49.99" — plain numerals for the price guard. */
-function formatPrice(price: string): string {
-    const num = Number(price);
-    return Number.isFinite(num) ? String(num) : price;
-}
 
 export const catalogService = new CatalogService();

@@ -1,15 +1,12 @@
 import React, { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { Clock, MapPin, Truck, CreditCard, Phone, Globe, ChevronLeft } from 'lucide-react';
+import { Clock, MapPin, Truck, CreditCard, Phone, Globe } from 'lucide-react';
 import { WhatsAppIcon } from '@/components/ui';
-import { unwrapBusinessProfile } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
 import type { LucideIcon } from 'lucide-react';
 import type { EditableFactKey } from './BusinessFactSheet';
+import { computeFactCoverage, isStorePolicyKey, type BusinessFactKey } from '@/utils/businessCoverage';
 import { parseWeek, summarizeWeek, type DayKey } from '@/utils/businessHours';
-
-/** Row keys = the editable facts plus `hours`, which has its own day/range sheet. */
-export type FactRowKey = EditableFactKey | 'hours';
 
 interface BusinessFactRowsProps {
   page: Page;
@@ -20,17 +17,23 @@ interface BusinessFactRowsProps {
 }
 
 interface FactRow {
-  key: FactRowKey;
+  /** The coverage key IS the row key — one union, not a second copy that has to
+   *  be kept in step. That every non-`hours` key is also an `EditableFactKey` is
+   *  proved by the `onEditFact(row.key)` call below, which will not compile if a
+   *  coverage key has no single-field editor. */
+  key: BusinessFactKey;
   /** Widened from LucideIcon: WhatsApp needs its own brand mark, and a generic
    *  phone glyph would read as "call", which is the wrong affordance. */
   icon: LucideIcon | React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
-  /** Display value; null = not set. Empty string = set but not renderable (hours). */
+  /** Display value; null = not set. */
   value: string | null;
   /** Richer rendering when plain text can't carry the meaning (the WhatsApp
    *  mark on a phone number). `value` still drives the is-set logic. */
   valueNode?: React.ReactNode;
-  /** A connected store already answers this fact when the merchant hasn't. */
-  storeAnswered?: boolean;
+  /** Jawab can answer about this — the merchant's value or the connected store. */
+  covered: boolean;
+  /** A connected store answers this fact and the merchant wrote nothing. */
+  storeAnswered: boolean;
 }
 
 /**
@@ -40,39 +43,46 @@ interface FactRow {
  * «حدّد» link — measured on a 390px viewport, roughly a sixth of the 44px
  * minimum tap target, and the owner mis-tapped it immediately. This replaces it
  * with the iOS-Settings row pattern merchants already know from their phone:
- * the WHOLE row is the target (56px), a chevron signals "this opens something",
- * and the prompt text sits where the value will appear — so one line does the
- * job of the old value + action pair.
+ * the WHOLE row is the target (56px), and the prompt text sits where the value
+ * will appear — so one line does the job of the old value + action pair.
  *
- * Values come from the CONFIRMED merchant half only — the same authority the
- * reply pipeline uses (suggestions never count as set).
+ * Coverage comes from `computeFactCoverage`, the same module (and the same
+ * per-field rules) the readiness ring scores from, so a row's badge can never
+ * contradict the percentage above it. Values come from that module too — from the
+ * CONFIRMED merchant half only, the same authority the reply pipeline uses
+ * (suggestions never count as set).
  */
 export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFactRowsProps) {
   const t = useTranslations('business');
 
   const rows: FactRow[] = useMemo(() => {
-    const { merchant = {} } = unwrapBusinessProfile(page.businessProfile);
-    const hasHours = !!merchant.hours && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0);
+    const { values, covered, storeAnswered } = computeFactCoverage(page);
+
     // Show the actual week, grouped — a merchant with different Friday hours
     // needs to SEE that from the row, not discover it by opening the sheet.
-    const hoursValue = hasHours
-      ? summarizeWeek(parseWeek(merchant.hours), {
+    const hoursValue = values.hours
+      ? summarizeWeek(parseWeek(values.hours), {
         closed: t('facts.hoursClosed'),
         allDay: t('facts.hoursAllDay'),
         day: (key: DayKey) => t(`facts.day_${key}`),
       })
       : null;
-    const phones = (merchant.phones ?? []).filter((p) => p?.trim());
-    const whatsapp = merchant.channels?.whatsapp?.trim();
-    const addressValue = [merchant.address, merchant.city].filter((v) => v?.trim()).join('، ');
+    const { phones, whatsapp } = values;
+
+    const row = (key: BusinessFactKey, extra: Omit<FactRow, 'key' | 'covered' | 'storeAnswered'>): FactRow => ({
+      key,
+      covered: covered[key],
+      storeAnswered: isStorePolicyKey(key) && storeAnswered[key],
+      ...extra,
+    });
+
     return [
-      { key: 'hours', icon: Clock, value: hoursValue },
-      { key: 'address', icon: MapPin, value: addressValue || null },
+      row('hours', { icon: Clock, value: hoursValue }),
+      row('address', { icon: MapPin, value: values.address }),
       // WhatsApp is a MARK on a number, not a row of its own: in this market it
       // is nearly always a SIM the merchant already listed, so a second row meant
       // the same digits typed twice and two copies to keep in sync.
-      {
-        key: 'phone',
+      row('phone', {
         icon: Phone,
         value: phones.length ? phones.join(' · ') : null,
         valueNode: phones.length ? (
@@ -81,40 +91,25 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
               <span key={i} className="inline-flex items-center gap-1">
                 {i > 0 && <span aria-hidden="true" className="text-subtle">·</span>}
                 <span>{p}</span>
-                {whatsapp && p.trim() === whatsapp && (
+                {whatsapp && p === whatsapp && (
                   <WhatsAppIcon size={12} className="text-brand-600 flex-shrink-0" aria-label={t('facts.whatsapp')} />
                 )}
               </span>
             ))}
           </span>
         ) : undefined,
-      },
+      }),
       // Delivery and payment sit above website on purpose: customers ask about
       // both constantly, while nobody messages a shop to ask whether it has a
       // website. Ordering by question volume, not by field type.
       // When the store genuinely answers these, an empty value is NOT a gap — so
-      // the row says so instead of nagging. It stays tappable: writing a value is
-      // a deliberate override.
-      // Keyed on `storeAnswersPolicies`, NOT on `ecommerceStoreId`: the id stays
-      // set after a platform-side uninstall and on a store that synced no policy
-      // text, and in both cases the model receives nothing. Claiming an answer
-      // there would talk the merchant out of writing the one fact their customers
-      // ask about most.
-      {
-        key: 'delivery',
-        icon: Truck,
-        value: merchant.policies?.shipping?.trim() || null,
-        storeAnswered: !!page.storeAnswersPolicies,
-      },
-      {
-        key: 'payment',
-        icon: CreditCard,
-        value: merchant.policies?.payment?.trim() || null,
-        storeAnswered: !!page.storeAnswersPolicies,
-      },
-      { key: 'website', icon: Globe, value: merchant.website?.trim() || null },
+      // the row says so instead of nagging, and the badge reads مكتمل. It stays
+      // tappable: writing a value is a deliberate override.
+      row('delivery', { icon: Truck, value: values.delivery }),
+      row('payment', { icon: CreditCard, value: values.payment }),
+      row('website', { icon: Globe, value: values.website }),
     ];
-  }, [page.businessProfile, page.storeAnswersPolicies, t]);
+  }, [page, t]);
 
   return (
     <section aria-label={t('facts.title')} className="rounded-2xl border border-theme-border bg-card p-4 sm:p-5">
@@ -125,22 +120,38 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
         {rows.map((row) => {
           const Icon = row.icon;
           const isSet = row.value !== null;
-          const storeAnswers = !isSet && !!row.storeAnswered;
           return (
             <li key={row.key}>
               <button
                 type="button"
                 onClick={() => (row.key === 'hours' ? onEditHours() : onEditFact(row.key))}
-                // 56px row: the whole thing is the tap target (was a 19×16px link).
+                // 56px row: the WHOLE thing is the tap target (was a 19×16px
+                // link). The mock draws the action as a ~70px button at the row
+                // end; that button is rendered below as a plain <span> — a real
+                // nested <button> is invalid HTML and would shrink a full-width
+                // target down to 70px on the viewport where it matters most.
                 className="w-full min-h-[56px] flex items-center gap-3 px-4 sm:px-5 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors"
               >
                 <Icon
-                  className={`w-5 h-5 flex-shrink-0 ${isSet || storeAnswers ? 'text-brand-600' : 'text-icon-muted'}`}
+                  className={`w-5 h-5 flex-shrink-0 ${row.covered ? 'text-brand-600' : 'text-icon-muted'}`}
                   aria-hidden="true"
                 />
                 <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-medium text-foreground">
-                    {t(`facts.${row.key}`)}
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-medium text-foreground truncate">
+                      {t(`facts.${row.key}`)}
+                    </span>
+                    {/* Not decoration. Without it, covered-vs-missing is carried
+                        by COLOUR alone (brand teal vs muted), which fails WCAG
+                        1.4.1 Use of Colour. The legend below names both dots. */}
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium flex-shrink-0 ${
+                        row.covered ? 'status-success' : 'status-warning'
+                      }`}
+                    >
+                      <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-current" />
+                      {row.covered ? t('state.covered') : t('state.missing')}
+                    </span>
                   </span>
                   {/* The prompt sits where the value will be — one line does the
                       job of the old "not set" + "set" pair. */}
@@ -150,23 +161,50 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
                       it inherit the page direction keeps every row aligned, while
                       bidi still renders the digit run itself left-to-right. */}
                   <span
-                    className={`block text-xs truncate ${isSet || storeAnswers ? 'text-muted-foreground' : 'text-brand-600'}`}
+                    className={`block text-xs truncate mt-0.5 ${row.covered ? 'text-muted-foreground' : 'text-brand-600'}`}
                   >
                     {isSet
                       ? (row.valueNode ?? (row.value || t('facts.isSet')))
-                      : storeAnswers
+                      : row.storeAnswered
                         ? t('facts.storeAnswered')
                         : t(`facts.add_${row.key}`)}
                   </span>
                 </span>
-                <ChevronLeft
-                  className="w-4 h-4 text-icon-muted flex-shrink-0 rtl:rotate-180"
-                  aria-hidden="true"
-                />
+                {/* Visual affordance only — see the row's className note. It is
+                    inside the button, so its text joins the row's accessible
+                    name: "Working hours, Complete, Sat–Thu 9–5, Edit".
+                    Styled by COVERAGE but labelled by whether a merchant value
+                    exists: a store-answered row is not a gap, so it must not wear
+                    the highlighted call-to-action, yet «إضافة» is still the honest
+                    label — there is no merchant text to edit, only one to add as
+                    a deliberate override. */}
+                <span
+                  className={`flex-shrink-0 inline-flex items-center justify-center min-w-[64px] rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+                    row.covered ? 'border-theme-border text-muted-foreground' : 'status-brand'
+                  }`}
+                >
+                  {isSet ? t('facts.edit') : t('facts.add')}
+                </span>
               </button>
             </li>
           );
         })}
+      </ul>
+
+      {/* What makes the badge colours legible rather than decorative.
+          The swatches are literal emerald/amber because `status-success` and
+          `status-warning` are 50/700 background+text pairs with no solid-fill
+          token to borrow — these two values must be kept in step with those
+          classes by hand. */}
+      <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-muted-foreground">
+        <li className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-emerald-500" />
+          {t('state.legendCovered')}
+        </li>
+        <li className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-amber-500" />
+          {t('state.legendMissing')}
+        </li>
       </ul>
     </section>
   );

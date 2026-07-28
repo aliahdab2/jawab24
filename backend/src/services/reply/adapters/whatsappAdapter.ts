@@ -1,6 +1,7 @@
 import { pagesService } from '../../pages';
 import { conversationsService } from '../../conversations';
-import { whatsappService } from '../../whatsapp';
+import { whatsappService, WhatsAppApiError, META_TOKEN_EXPIRED } from '../../whatsapp';
+import { markWhatsAppNeedsReconnect } from '../../whatsappTokenHealth';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
 
@@ -57,16 +58,58 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
         // this hook would fire, which is what perceived latency needs.
     }
 
-    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
+    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<string | undefined> {
         if (!page.platformAccountId) {
             throw new Error('Page has no WhatsApp phone number ID');
         }
-        await whatsappService.sendTextMessage(
-            page.platformAccountId,
-            senderId,
-            text,
-            page.accessToken,
-        );
+        // Never issue a send with an empty bearer. `safeDecryptToken` deliberately
+        // swallows decryption failures and returns '' (corrupt row, or a rotated /
+        // missing FACEBOOK_TOKEN_ENCRYPTION_KEY), and nothing upstream re-checks it.
+        // Sending anyway earns a 190 from Meta, which the catch below would read as
+        // "this merchant's token expired" — so one key misconfiguration would flag
+        // every WhatsApp page on its first inbound message. Fail loudly instead.
+        if (!page.accessToken) {
+            throw new Error('WhatsApp token unavailable for this page (decrypt failed or not connected)');
+        }
+        try {
+            // RETURN the wamid — the caller persists it as messages.platformMessageId
+            // so a Coexistence echo of this very message is recognised as ours rather
+            // than as the merchant answering from their phone. Dropping this `return`
+            // silently reverts every WhatsApp outgoing row to a synthetic id, with
+            // every test still green; the failure would only surface later as the bot
+            // muting itself after each reply. See MessagePlatformAdapter.sendReply.
+            return await whatsappService.sendTextMessage(
+                page.platformAccountId,
+                senderId,
+                text,
+                page.accessToken,
+            ) || undefined;
+        } catch (error) {
+            // Meta forces a 60-day expiry on WhatsApp business tokens, so 190 here is
+            // a terminal state, not a blip: no retry can fix it and every subsequent
+            // send will fail identically.
+            //
+            // Flag the number immediately so send #2 is never attempted. Previously an
+            // expired token was bucketed 'unknown' and burned PAUSE_THRESHOLD (10)
+            // customer messages into delivery_failed before the page auto-paused —
+            // with nothing telling the merchant why their WhatsApp went quiet.
+            //
+            // This lives in the adapter, not messageProcessor, so no
+            // `platform === 'whatsapp'` branch leaks into the shared pipeline (D-016).
+            if (error instanceof WhatsAppApiError && error.metaCode === META_TOKEN_EXPIRED) {
+                await markWhatsAppNeedsReconnect({
+                    id: page.id,
+                    name: page.name,
+                    userId: page.userId,
+                    // NOT platformAccountId — that is Meta's numeric phone-number ID,
+                    // so the merchant's notification read "your connection for
+                    // 1564356725245618 has expired". The sweep passes the real display
+                    // number; null here lets the notification fall back to the page name.
+                    whatsappDisplayPhoneNumber: null,
+                }, 'token_expired');
+            }
+            throw error;
+        }
     }
 
     async sendAwayMessage(page: PlatformPage, senderId: string, text: string): Promise<void> {

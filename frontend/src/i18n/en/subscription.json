@@ -23,6 +23,8 @@
     "reachedTitle": "You've used all Smart Replies for this period — Post Replies and greeting messages still work",
     "onTopupTitle": "You're now using your top-up balance",
     "onTopupUsage": "Smart Replies keep sending — {balance} top-up left",
+    "topupLowTitle": "Your top-up balance is almost gone — Smart Replies stop when it runs out",
+    "topupLowUsage": "Only {balance} top-up replies left",
     "usage": "{used} of {limit} Smart Replies used",
     "scopeTooltip": "Counts every message Jawab processed, including filtered spam.",
     "resetsOn": "resets on {date}",
