@@ -113,3 +113,49 @@ describe('adminUsersService.getUserDetail — usage flags vs top-up balance (int
         expect(detail!.health.find(f => f.key === 'usage_topup_nearly_drained')?.severity).toBe('yellow');
     });
 });
+
+/**
+ * The admin console's per-page "disconnected" badge.
+ *
+ * It was computed from the FACEBOOK access token alone. A WhatsApp-only card has
+ * no Facebook page and therefore no Facebook token by definition, so every
+ * healthy WhatsApp number rendered as disconnected — sending support to hunt a
+ * fault that was never there, on the channel we had just launched publicly.
+ */
+describe('adminUsersService.getUserDetail — per-page connection state', () => {
+    it('does not report a healthy WhatsApp-only card as disconnected', async () => {
+        const user = await createTestUser();
+        await testDb.insert(schema.pages).values({
+            userId: user.id,
+            name: 'WhatsApp Only',
+            facebookPageId: null,
+            accessToken: '',                 // NOT NULL column; a WhatsApp-only card stores empty
+            whatsappPhoneNumberId: `pn-${Date.now()}`,
+            whatsappAccessToken: 'wa-token', // the credential that actually matters here
+        });
+
+        const detail = await adminUsersService.getUserDetail(user.id);
+        const page = detail!.pages.find(p => p.name === 'WhatsApp Only');
+
+        expect(page).toBeDefined();
+        expect(page!.disconnected).toBe(false);
+        // And the WhatsApp identity must reach the admin payload at all — without
+        // it the console cannot tell a WhatsApp card from a broken Facebook one.
+        expect(page!.whatsappPhoneNumberId).toBeTruthy();
+    });
+
+    it('still reports a Facebook page with no token as disconnected', async () => {
+        const user = await createTestUser();
+        await testDb.insert(schema.pages).values({
+            userId: user.id,
+            name: 'Dead FB Page',
+            facebookPageId: `fb-${Date.now()}`,
+            accessToken: '',
+        });
+
+        const detail = await adminUsersService.getUserDetail(user.id);
+        const page = detail!.pages.find(p => p.name === 'Dead FB Page');
+
+        expect(page!.disconnected).toBe(true);
+    });
+});

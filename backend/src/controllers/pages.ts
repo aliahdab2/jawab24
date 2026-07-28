@@ -34,6 +34,13 @@ export function serializePage<T extends {
     const whatsappConnected = !!whatsappAccessToken && whatsappAccessToken !== '';
     return {
         ...rest,
+        // "Is the card's PRIMARY channel credential valid?" — Facebook token for a
+        // page-backed card, WABA token for a WhatsApp-only one.
+        // ⚠️ The admin console asks the same question of the same rows, but in SQL
+        // (`services/admin/users.ts`, the `disconnected` column) because it must not
+        // pull token values into memory. Two expressions of ONE rule: change this and
+        // change that, or the admin badge starts disagreeing with the merchant's own
+        // page card. Both are pinned by tests.
         isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : whatsappConnected,
         whatsappConnected,
         // "The token needs attention" — driven by the REASON, not by the absence of a

@@ -285,9 +285,22 @@ class AdminUsersService {
                 facebookPageId: pages.facebookPageId,
                 instagramUsername: pages.instagramUsername,
                 instagramAccountId: pages.instagramAccountId,
+                whatsappPhoneNumberId: pages.whatsappPhoneNumberId,
+                whatsappDisplayPhoneNumber: pages.whatsappDisplayPhoneNumber,
+                whatsappAutoReplyEnabled: pages.whatsappAutoReplyEnabled,
+                whatsappCoexistence: pages.whatsappCoexistence,
+                whatsappDisconnectReason: pages.whatsappDisconnectReason,
                 autoReplyEnabled: pages.autoReplyEnabled,
                 autoReplyDisabledReason: pages.autoReplyDisabledReason,
-                disconnected: sql<boolean>`(${pages.accessToken} IS NULL OR ${pages.accessToken} = '')`,
+                // "Is this card's PRIMARY credential valid?" — mirrors serializePage
+                // in controllers/pages.ts. Keying this on the Facebook token alone
+                // reported every healthy WhatsApp-only card (facebook_page_id NULL,
+                // access_token NULL by definition) as disconnected, which sent
+                // support hunting a fault that was never there.
+                disconnected: sql<boolean>`CASE WHEN ${pages.facebookPageId} IS NOT NULL
+                        THEN (${pages.accessToken} IS NULL OR ${pages.accessToken} = '')
+                        ELSE (${pages.whatsappAccessToken} IS NULL OR ${pages.whatsappAccessToken} = '')
+                    END`,
                 disconnectReason: pages.disconnectReason,
                 // KB summary lives under `kb` in the payload; select the raw
                 // inputs here (length only — never ship the KB text itself).

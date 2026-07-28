@@ -96,6 +96,12 @@ export interface CustomerDetail {
         facebookPageId: string | null;
         instagramUsername: string | null;
         instagramAccountId: string | null;
+        whatsappPhoneNumberId: string | null;
+        whatsappDisplayPhoneNumber: string | null;
+        whatsappAutoReplyEnabled: boolean | null;
+        /** True = number also live on the merchant's WhatsApp Business app (Coexistence) */
+        whatsappCoexistence: boolean | null;
+        whatsappDisconnectReason: string | null;
         autoReplyEnabled: boolean | null;
         /** 'user' | 'plan_limit' | 'trial_block' | null — why auto-reply is off */
         autoReplyDisabledReason: string | null;
