@@ -538,7 +538,13 @@ class AdminUsersService {
                 autoReplyDisabledReason: p.autoReplyDisabledReason,
                 kb: p.kb,
             })),
-            usage: { aiRepliesCount: currentUsage?.aiRepliesCount || 0, limit: usageLimit },
+            usage: {
+                aiRepliesCount: currentUsage?.aiRepliesCount || 0,
+                limit: usageLimit,
+                // Top-up balance decides whether the cap is a wall or just a
+                // billing boundary — see the usage block in computeHealthFlags.
+                topupBalance: user.topupBalance ?? 0,
+            },
             isTeamMemberOnly,
         });
 
