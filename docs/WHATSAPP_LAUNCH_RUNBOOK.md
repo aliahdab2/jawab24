@@ -15,13 +15,14 @@
 
 Defense in depth: the frontend flags control *visibility*; the backend allowlist controls *ability*. During canary, set **both**.
 
-## Phase 0 — Prerequisites (before approval day)
+## Phase 0 — Prerequisites (before approval day) — ✅ ALL DONE
 
-- [ ] PR `feat/whatsapp-launch-plumbing` merged + deployed — threads the two `NEXT_PUBLIC_WHATSAPP_*` vars through `frontend/Dockerfile` and all compose files' `build.args`. **Without this, setting the config ID does nothing.** (Inert while the env vars are unset.)
-- [ ] Pre-launch 9-persona review of the WhatsApp surface done; Critical/High fixes merged.
-- [ ] Meta App Review submission **submitted** (unlocks once the API-call gates register; then 3–5 business days).
+- [x] PR `feat/whatsapp-launch-plumbing` (#418) merged + deployed — threads the two `NEXT_PUBLIC_WHATSAPP_*` vars through `frontend/Dockerfile` and all compose files' `build.args`. **Without this, setting the config ID does nothing.** (Inert while the env vars are unset.) Verified deployed 2026-07-10.
+- [x] Pre-launch 9-persona review of the WhatsApp surface done 2026-07-08; both Highs fixed + merged (#420). **Do not re-run it.**
+- [x] Meta App Review submission `949305008122443` submitted 2026-07-08.
+- [x] Canary-leak fix (M3 — nav rename/badges used `isWhatsAppEnabled` instead of `isWhatsAppVisible`) merged; `Sidebar`, `dashboard`, `pages`, `WhatsAppNudgeBanner` all canary-aware.
 
-## Phase 1 — On Meta approval (Meta dashboard, ~10 min)
+## Phase 1 — On Meta approval (Meta dashboard, ~10 min) — ⬅️ **YOU ARE HERE (approved 2026-07-26)**
 
 1. [ ] App Dashboard ([app 774211662298446](https://developers.facebook.com/apps/774211662298446)) → confirm `whatsapp_business_messaging` + `whatsapp_business_management` show **Advanced Access**.
 2. [ ] Create the Embedded Signup **configuration**: Facebook Login for Business → **Configurations** → Create → type "WhatsApp Embedded Signup" (also reachable via WhatsApp → Embedded Signup).
@@ -79,31 +80,47 @@ Notes:
 
 ## Phase 5 — GA flip (after a clean pilot bake, e.g. 2–3 days)
 
-> ⛔ **Added gate (D-045, 2026-07-27): Coexistence must ship BEFORE GA.** Without it every merchant
-> must dedicate a fresh number, which is the #1 adoption blocker and guaranteed to be the top
-> support question on day one. Plan: `~/.claude/plans/moonlit-conjuring-moonbeam.md`. Phases 1–2
-> (connect path + echo ingestion), the connect-time path question (`WhatsAppPathModal`) and the
-> two-path copy are built — coexistence is now reachable by a merchant. **Human-first reply mode
-> (Phase 3) is deliberately NOT built**: the plan defers it until a real coexistence number has
-> been connected and we have seen real timing. Coexistence cannot be validated without a number
-> already on the WhatsApp Business app — line that merchant up early, it gates the release.
+> ✅ **D-045 Coexistence gate — SATISFIED (#530, 2026-07-28).** The connect path, echo ingestion,
+> the connect-time path question (`WhatsAppPathModal`) and the two-path copy are all on main, so a
+> merchant can keep their number on the WhatsApp Business app. Verified live in production
+> 2026-07-29: `featureType` reaches Meta correctly for BOTH paths (empty vs
+> `whatsapp_business_app_onboarding`), Meta honours it with a distinct 6-step flow containing a
+> "Select your setup" stage, and **Meta itself refuses a number that is not registered in the
+> Business app** rather than silently migrating it.
+>
+> ⚠️ **What is still UNPROVEN at GA** — know this before blaming a customer report on something else:
+> no Coexistence connect has ever completed, so the backend's skip-`registerPhoneNumber` branch and
+> **the whole of echo ingestion (`smb_message_echoes`) have never executed in production.** Their
+> failure modes are the AI muting itself after every reply, or double-replying alongside the
+> merchant. Contained: those branches only run for pages with `whatsapp_coexistence = true`, so
+> Facebook/Instagram/migration merchants cannot be affected. **Human-first reply mode (Phase 3) is
+> deliberately NOT built** — deferred until a real coexistence number exists and its timing is
+> observable. Also unverified: whether receive-and-discard satisfies Meta's 24h "synchronize or
+> offboard" warning on the `history` field.
 >
 > ⛔ **Sanctions:** Meta bars businesses AND recipients in Cuba, Iran, North Korea, **Syria** and
 > three sanctioned Ukrainian regions from the WhatsApp Business Platform. Launch copy must not
-> imply Syrian merchants or customers can use it. Libya is unrestricted.
+> imply Syrian merchants or customers can use it. Libya is unrestricted. **Not yet enforced in
+> code** — `utils/geoCheck.ts` is not called from the WhatsApp connect path.
 
-**Marketing + packaging land here, BEFORE the env flip** (plan: `.planning/WHATSAPP_MARKETING_LAUNCH.md`):
+**Marketing lands here, BEFORE the env flip** (plan: `.planning/WHATSAPP_MARKETING_LAUNCH.md`):
 
-- [ ] **Marketing branch:** rebase **`feat/whatsapp-ga-launch` (#504)** on main, resolve, CI green.
-      ⚠️ NOT `feat/whatsapp-ga-marketing` (#428) — that branch is SUPERSEDED and 136 commits behind.
-      Contains: `plans.ts` `whatsappEnabled` flip (business/pro/scale-20k/scale-30k),
-      `WHATSAPP_PLAN_REQUIRED` connect gate, landing/pricing/i18n sweep, teaser post → "now live".
+> **Packaging is already on main — do NOT repeat the old "ordering is load-bearing" warning.**
+> Re-verified against the production database 2026-07-29: `plans.whatsapp_enabled` is `true` for
+> business/pro/scale-20k/scale-30k and `false` for starter and the trial, and the
+> `WHATSAPP_PLAN_REQUIRED` connect gate is live in `controllers/whatsapp.ts`. Clearing the allowlist
+> therefore CANNOT expose WhatsApp to Starter. The old `feat/whatsapp-ga-marketing` (#428) branch is
+> superseded and 136 commits behind — do NOT rebase it.
+
+- [ ] **Marketing branch:** `feat/whatsapp-ga-launch` (#504) — landing WhatsApp presence (chip, orbit
+      bubble, hero/SEO/FAQ copy), i18n copy sweep (meta/about/blog/help/contact + `what-is-jawab24`
+      JSON-LD), pricing FAQ #9 (Meta conversation fees) + hero/SEO copy, blog teaser → "now live",
+      status docs → live. Merge main in first and re-run the local gates (GitHub CI is dead — the
+      real gate is `scripts/pre-deploy-check.sh`).
 - [ ] Merge-day-only commit on that branch: bump sitemap `<lastmod>` for `/`, `/pricing`,
       `/blog/whatsapp-auto-reply-jawab24` to today; `npm run sitemap:validate`.
-- [ ] Merge **`feat/whatsapp-ga-launch` (#504)** to main — the deploy below ships marketing + plan
-      flip + env flip in ONE rebuild (`seed-plans` reconciles `whatsapp_enabled` in the DB).
-      **Ordering is load-bearing:** clearing the allowlist without this merge opens WhatsApp
-      to Starter (no plan gate exists on main today).
+- [ ] Merge `feat/whatsapp-ga-launch` to main — the deploy below ships marketing + env flip in ONE
+      rebuild. (`seed-plans` reconciles `whatsapp_enabled` in the DB; already true in config.)
 
 ```bash
 ssh -i ~/.ssh/id_jawab24_deploy root@91.99.95.196
