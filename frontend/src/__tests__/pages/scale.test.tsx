@@ -2,6 +2,10 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Plan } from '@jawab24/shared';
+// Assert on the JSON value, never a hardcoded string — the copy is product
+// terminology and has been reworded once already ("Auto-Reply" → "Smart
+// Replies"), which silently broke these assertions.
+import enPricing from '@/i18n/en/pricing.json';
 
 // --- Router ---------------------------------------------------------------
 const mockPush = vi.fn();
@@ -148,14 +152,14 @@ describe('ScalePage (/pricing/scale)', () => {
             render(<ScalePage plans={[makeScalePlan()]} />);
 
             await screen.findByText('30,000');
-            expect(screen.getByText('WhatsApp Auto-Reply')).toBeInTheDocument();
+            expect(screen.getByText(enPricing.featureWhatsApp)).toBeInTheDocument();
         });
 
         it('absent while WhatsApp is dark (no env config)', async () => {
             render(<ScalePage plans={[makeScalePlan()]} />);
 
             await screen.findByText('30,000');
-            expect(screen.queryByText('WhatsApp Auto-Reply')).not.toBeInTheDocument();
+            expect(screen.queryByText(enPricing.featureWhatsApp)).not.toBeInTheDocument();
         });
 
         it('absent during the admin-only canary window', async () => {
@@ -165,7 +169,7 @@ describe('ScalePage (/pricing/scale)', () => {
             render(<ScalePage plans={[makeScalePlan()]} />);
 
             await screen.findByText('30,000');
-            expect(screen.queryByText('WhatsApp Auto-Reply')).not.toBeInTheDocument();
+            expect(screen.queryByText(enPricing.featureWhatsApp)).not.toBeInTheDocument();
         });
     });
 
