@@ -1,14 +1,14 @@
 ---
 seoTitle: "Jawab24 Setup Guide: How to Get Started with AI Auto-Reply in Minutes"
-seoDescription: "Complete Jawab24 tutorial — connect your Facebook/Instagram page, set up your Knowledge Base, configure auto-reply settings, and explore features like angry customer alerts and price verification."
+seoDescription: "Complete Jawab24 tutorial — connect Facebook, Instagram and WhatsApp, set up your Knowledge Base, configure auto-reply settings, and explore features like angry customer alerts and price verification."
 seoKeywords: "Jawab24 tutorial, how to use Jawab24, Jawab24 setup guide, Jawab24 getting started"
 title: "Jawab24 Setup Guide: How to Get Started with AI Auto-Reply in Minutes"
-excerpt: "A complete walkthrough of setting up Jawab24 — from connecting your Facebook page to going live with AI-powered auto-replies that understand your customers' language."
+excerpt: "A complete walkthrough of setting up Jawab24 — from connecting Facebook, Instagram or WhatsApp to going live with AI-powered auto-replies that understand your customers' language."
 ---
 
 ## What Jawab24 Does
 
-Jawab24 is an AI-powered auto-reply platform for Facebook and Instagram business pages. When a customer comments on your post or sends you a direct message, Jawab24 reads their question, checks your product catalog and business information, and sends an accurate reply — automatically, 24/7.
+Jawab24 is an AI-powered auto-reply platform for Facebook, Instagram, and WhatsApp. When a customer comments on your post or sends you a direct message, Jawab24 reads their question, checks your product catalog and business information, and sends an accurate reply — automatically, 24/7.
 
 Unlike traditional chatbot tools that require you to build decision trees and flowcharts, Jawab24 uses AI that works out of the box. **No flow building, no keyword mapping, no technical setup.** You add your business information to a Knowledge Base, and the AI figures out how to respond to customers naturally.
 
@@ -24,9 +24,13 @@ What makes it different from generic chatbot tools:
 
 Whether you're a solo merchant handling 20 comments a day or a growing brand with hundreds of daily interactions, Jawab24 keeps your customers engaged while you focus on your business.
 
-## Connecting Your Facebook and Instagram Page
+## Connecting Your Channels
 
-The first step is connecting your Facebook page to Jawab24. This also grants access to your linked Instagram business account.
+From **Channels** in your dashboard, **Connect channel** is the single starting point for everything. It asks which channel you want: a Facebook Page, or a WhatsApp number on its own.
+
+### Facebook and Instagram
+
+Connecting your Facebook page also grants access to the Instagram business account linked to it, so both channels arrive together.
 
 **What you need before starting:**
 
@@ -37,7 +41,7 @@ The first step is connecting your Facebook page to Jawab24. This also grants acc
 **How to connect:**
 
 1. **Sign up at jawab24.com** and log in to your dashboard
-2. **Click "Connect Page"** on the dashboard — this opens Facebook's authorization screen
+2. **Click "Connect channel"**, then choose **Facebook Page** — this opens Facebook's authorization screen
 3. **Select your page** from the list and grant the requested permissions
 4. **Confirm** — you'll be redirected back to Jawab24 with your page connected
 
@@ -50,6 +54,17 @@ The first step is connecting your Facebook page to Jawab24. This also grants acc
 All permissions follow Facebook's official API guidelines. Jawab24 never posts on your behalf, never modifies your page content, and never accesses your personal Facebook profile.
 
 **After connecting**, you'll see your page name and profile picture on the dashboard. Any new comments or messages will start appearing in real-time — but auto-reply won't activate until you complete the setup.
+
+### WhatsApp
+
+**You do not need a Facebook Page for this one.** If you sell through a store or purely through WhatsApp, choose **WhatsApp only** and the number gets its own card with its own business information. A quick Facebook sign-in is still used to verify you, but no Page is required.
+
+Jawab24 then asks one question before handing you to Meta: is this number already in use on the WhatsApp Business app, or is it a spare number dedicated to Jawab24?
+
+- **Already on the WhatsApp Business app** — keep using it on your phone exactly as before. Jawab24 answers alongside you, and your existing chats stay where they are.
+- **A dedicated number** — Jawab24 answers on it by itself, and it stops working in the WhatsApp app.
+
+Pick the first option if the number is your everyday business line. WhatsApp is available on the Business plan and above.
 
 ## Setting Up Your Knowledge Base
 
