@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     renderFactCollectionBlock,
     renderCoverageStatement,
+    indexKeyValues,
     FACT_BLOCK_MAX_CHARS,
     type FactCollectionForPrompt,
     type FactRowForPrompt,
@@ -125,11 +126,75 @@ describe('degradation — the coverage line survives what row detail does not', 
             }));
         }
         const block = must(renderFactCollectionBlock(outlets, many, TODAY));
-        expect(block.length).toBeLessThanOrEqual(FACT_BLOCK_MAX_CHARS + 200);
+        expect(block.length).toBeLessThanOrEqual(FACT_BLOCK_MAX_CHARS);
         // the boundary index survives in full: all 25 distinct districts present
         for (let d = 0; d < 25; d++) expect(block).toContain(`منطقة ${d}`);
         // and it never claims exhaustiveness it does not have
         expect(block).not.toContain('NOT exhaustive');
         expect(block).toContain('غير مسجّل لدينا');
+    });
+});
+
+describe('key indexing — the silent-drop class found in review (H2)', () => {
+    // Extraction and merchant typing produce label variants. Exact equality
+    // dropped such rows from the index, which made the boundary statement OMIT a
+    // district the merchant serves — the AI would then deny a covered area to a
+    // real customer. Compare on intent, not bytes.
+    it.each(['المدينة', ' المدينة ', 'المدينة  '])('matches the key label %s regardless of whitespace', (label) => {
+        const { keyValues, rowsMissingKey } = indexKeyValues('المدينة', [
+            row({ attributes: [{ label, value: 'حي الرمال' }] }),
+        ]);
+        expect(keyValues).toEqual(['حي الرمال']);
+        expect(rowsMissingKey).toBe(0);
+    });
+
+    it('counts rows that carry no key value at all', () => {
+        const { keyValues, rowsMissingKey } = indexKeyValues('المدينة', [
+            row(),
+            row({ name: 'بلا مدينة', attributes: [{ label: 'ملاحظة', value: 'شيء آخر' }] }),
+            row({ name: 'بلا خصائص', attributes: null }),
+        ]);
+        expect(keyValues).toEqual(['حي الرمال']);
+        expect(rowsMissingKey).toBe(2);
+    });
+
+    // The heart of the fix: an index that cannot see every row must NOT be
+    // presented as the list's boundary.
+    it('suppresses the enumerated boundary when any row lacks the key', () => {
+        const s = must(renderCoverageStatement(outlets, [
+            row(),
+            row({ name: 'صيدلية بلا مدينة', attributes: null }),
+        ]));
+        expect(s).not.toContain('حي الرمال');
+        expect(s).toContain('كما هي مسجّلة لدينا');
+        // the absence directive still applies — only the enumeration is withheld
+        expect(s).toContain('غير مسجّل لدينا');
+    });
+
+    it('enumerates only when every row carries the key', () => {
+        const s = must(renderCoverageStatement(outlets, [row(), row({ name: 'أخرى' })]));
+        expect(s).toContain('حي الرمال');
+        expect(s).toContain('تغطي');
+    });
+
+    // H3: phrasing is derived from keyAttr, so an unforeseen key works with no
+    // code change — the whole point of the engine being business-agnostic.
+    it.each(['المستوى', 'محافظة', 'Brand'])('builds the phrasing from any key (%s), with no word list', (key) => {
+        const s = must(renderCoverageStatement(
+            { label: 'قائمة', keyAttr: key, isComplete: null },
+            [row({ attributes: [{ label: key, value: 'قيمة' }] })],
+        ));
+        expect(s).toContain(`«${key}»`);
+        expect(s).toContain('قيمة');
+    });
+});
+
+describe('rows that are present but unavailable', () => {
+    it('renders an unavailable row with its state, not as absent', () => {
+        const block = must(renderFactCollectionBlock(outlets, [
+            row({ name: 'صيدلية مغلقة', isAvailable: false }),
+        ], TODAY));
+        expect(block).toContain('صيدلية مغلقة');
+        expect(block).toContain('غير متاح حالياً');
     });
 });

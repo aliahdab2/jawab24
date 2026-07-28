@@ -33,6 +33,8 @@
  */
 
 /** Mirror of the drizzle row shapes, decoupled so this module stays pure. */
+import { formatPromptPrice } from '../utils/price';
+
 export interface FactCollectionForPrompt {
     label: string;
     keyAttr: string | null;
@@ -79,7 +81,7 @@ export function renderFactCollectionBlock(
         // directory never shows "price on request".
         if (anyPrice) {
             parts.push(r.price !== null
-                ? `${formatPrice(r.price)}${r.currency ? ` ${r.currency}` : ''}`
+                ? `${formatPromptPrice(r.price)}${r.currency ? ` ${r.currency}` : ''}`
                 : 'price on request');
         }
         if (!r.isAvailable) parts.push('غير متاح حالياً');
@@ -136,32 +138,61 @@ export function renderCoverageStatement(
 ): string | undefined {
     if (liveRows.length === 0) return undefined;
 
-    const keyValues = collection.keyAttr
-        ? [...new Set(
-            liveRows
-                .map(r => r.attributes?.find(a => a.label === collection.keyAttr)?.value?.trim())
-                .filter((v): v is string => !!v),
-        )]
-        : [];
+    const { keyValues, rowsMissingKey } = indexKeyValues(collection.keyAttr, liveRows);
 
-    const scopeLine = collection.keyAttr && keyValues.length > 0
-        ? `${collection.keyAttr === 'المدينة' || collection.keyAttr === 'الحي' || collection.keyAttr === 'المنطقة'
-            ? 'المناطق المذكورة في هذه القائمة هي فقط'
-            : `قيم «${collection.keyAttr}» المذكورة في هذه القائمة هي فقط`}: ${keyValues.join('، ')}.`
-        : `هذه هي القائمة كما هي مسجّلة لدينا.`;
+    // The enumerated index may be claimed as the list's BOUNDARY only when every
+    // row carries the key. If any row lacks it, those rows are invisible to the
+    // index — asserting "the only values are X, Y, Z" would then omit something
+    // the merchant actually serves, and the model would deny a covered area to a
+    // real customer. That is the false-denial failure this design exists to
+    // avoid, so an incomplete index degrades to the un-keyed phrasing instead of
+    // making a claim it cannot support.
+    const canEnumerate = !!collection.keyAttr && keyValues.length > 0 && rowsMissingKey === 0;
+
+    // Phrasing is built FROM keyAttr, never from a table of known key names —
+    // a hand-maintained word list is the anti-pattern this module exists to
+    // avoid, and it would silently degrade for «محافظة» / «ولاية» / English keys.
+    const scopeLine = canEnumerate
+        ? `هذه القائمة تغطي «${collection.keyAttr}» التالية فقط: ${keyValues.join('، ')}.`
+        : 'هذه هي القائمة كما هي مسجّلة لدينا.';
 
     // The absence directive — the half that actually stops fabrication. The
     // strong form is EARNED by merchant confirmation, never assumed.
+    const subject = collection.keyAttr ? `«${collection.keyAttr}»` : 'عنصر';
     const absence = collection.isComplete === true
-        ? `هذه القائمة كاملة ونهائية: أي ${collection.keyAttr ? `«${collection.keyAttr}»` : 'عنصر'} غير مذكور فيها فهو غير متوفر لدينا — قلها للعميل بوضوح وثقة.`
-        : `أي ${collection.keyAttr ? `«${collection.keyAttr}»` : 'عنصر'} غير مذكور في هذه القائمة فهو غير مسجّل لدينا — قل للعميل إنه غير موجود في قائمتك واعرض عليه التواصل معنا مباشرة، ولا تفترض توفره ولا عدم توفره.`;
+        ? `هذه القائمة كاملة ونهائية: أي ${subject} غير مذكور فيها فهو غير متوفر لدينا — قلها للعميل بوضوح وثقة.`
+        : `أي ${subject} غير مذكور في هذه القائمة فهو غير مسجّل لدينا — قل للعميل إنه غير موجود في قائمتك واعرض عليه التواصل معنا مباشرة، ولا تفترض توفره ولا عدم توفره.`;
 
     return `${scopeLine} ${absence}`;
 }
 
-/** "3500.00" → "3500", "49.99" → "49.99" — plain numerals so Check 1's price
- *  guard grounds the rendered value (same rationale as the catalog block). */
-function formatPrice(price: string): string {
-    const num = Number(price);
-    return Number.isFinite(num) ? String(num) : price;
+/**
+ * Distinct key values across the rows, plus how many rows carry NO key value —
+ * the number that decides whether the index may be presented as a boundary.
+ *
+ * Labels are compared NORMALIZED (trimmed, inner whitespace collapsed) because
+ * they come from extraction and merchant typing, where «المدينة » and «المدينة»
+ * are the same intent. An exact-equality comparison silently dropped such rows
+ * from the index — a wrong boundary rather than a visible error.
+ */
+export function indexKeyValues(
+    keyAttr: string | null,
+    rows: FactRowForPrompt[],
+): { keyValues: string[]; rowsMissingKey: number } {
+    if (!keyAttr) return { keyValues: [], rowsMissingKey: 0 };
+    const wanted = normalizeLabel(keyAttr);
+    const seen = new Set<string>();
+    let rowsMissingKey = 0;
+    for (const r of rows) {
+        const hit = r.attributes?.find(a => normalizeLabel(a.label) === wanted)?.value?.trim();
+        if (hit) seen.add(hit);
+        else rowsMissingKey++;
+    }
+    return { keyValues: [...seen], rowsMissingKey };
 }
+
+/** Attribute labels are human-typed; compare on intent, not on bytes. */
+function normalizeLabel(label: string): string {
+    return label.trim().replace(/\s+/g, ' ');
+}
+

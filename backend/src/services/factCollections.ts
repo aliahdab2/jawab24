@@ -11,12 +11,14 @@
  * A new KIND of business fact is a row in fact_collections — never a code
  * change (owner ruling 2026-07-28).
  */
-import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { factCollections, factRows } from '../db/schema';
 import { pagesService } from './pages';
+import { Logger, noopLogger } from '../types';
 import {
     renderFactCollectionBlock,
+    indexKeyValues,
     type FactCollectionForPrompt,
     type FactRowForPrompt,
 } from './factCollectionsRenderer';
@@ -54,6 +56,12 @@ export interface CreateCollectionInput {
 }
 
 class FactCollectionsService {
+    private logger: Logger = noopLogger;
+
+    setLogger(logger: Logger): void {
+        this.logger = logger;
+    }
+
     /**
      * The prompt block for every live collection on a page, or undefined when
      * the page has none. Collections are rendered independently and joined —
@@ -75,28 +83,54 @@ class FactCollectionsService {
             .limit(MAX_COLLECTIONS_PER_PAGE);
         if (collections.length === 0) return undefined;
 
+        // ONE query for every collection's rows — this runs on every AI reply,
+        // so a per-collection query would add a round-trip per collection to the
+        // reply's latency budget, growing as merchants adopt the feature.
+        // Expired rows are filtered here to keep the payload small; the renderer
+        // filters again so it stays honest when handed unfiltered rows.
+        const allRows = await db
+            .select()
+            .from(factRows)
+            .where(and(
+                inArray(factRows.collectionId, collections.map(c => c.id)),
+                or(isNull(factRows.endsAt), sql`${factRows.endsAt} >= ${today}`),
+            ))
+            .orderBy(asc(factRows.sortOrder), asc(factRows.createdAt))
+            .limit(MAX_COLLECTIONS_PER_PAGE * MAX_ROWS_PER_COLLECTION);
+
+        const rowsByCollection = new Map<string, typeof allRows>();
+        for (const r of allRows) {
+            const bucket = rowsByCollection.get(r.collectionId);
+            if (bucket) bucket.push(r);
+            else rowsByCollection.set(r.collectionId, [r]);
+        }
+
         const blocks: string[] = [];
         for (const c of collections) {
-            // Expired rows are filtered in SQL as well as in the renderer: the
-            // DB filter keeps the payload small, the renderer filter keeps the
-            // function honest when called with unfiltered rows (e.g. tests, or
-            // a future caller that reads rows for the UI).
-            const rows = await db
-                .select()
-                .from(factRows)
-                .where(and(
-                    eq(factRows.collectionId, c.id),
-                    or(isNull(factRows.endsAt), sql`${factRows.endsAt} >= ${today}`),
-                ))
-                .orderBy(asc(factRows.sortOrder), asc(factRows.createdAt))
-                .limit(MAX_ROWS_PER_COLLECTION);
-            if (rows.length === 0) continue;
+            const rows = (rowsByCollection.get(c.id) ?? []).slice(0, MAX_ROWS_PER_COLLECTION);
+            if (rows.length === 0) {
+                // A collection that renders nothing is invisible to the merchant
+                // and to us — the likely cause is every row having expired.
+                this.logger.info('fact collection rendered no rows', {
+                    pageId, collectionId: c.id, label: c.label,
+                });
+                continue;
+            }
 
-            const block = renderFactCollectionBlock(
-                toPromptCollection(c),
-                rows.map(toPromptRow),
-                today,
-            );
+            const promptRows = rows.map(toPromptRow);
+            // Rows missing the key are why the renderer degrades to the un-keyed
+            // phrasing (an index that omits them cannot be called a boundary).
+            // Log it: the fix belongs in the merchant's data, and silence here is
+            // what turned this into a High finding in review.
+            const { rowsMissingKey } = indexKeyValues(c.keyAttr, promptRows);
+            if (rowsMissingKey > 0) {
+                this.logger.warn('fact collection has rows missing its key attribute — coverage index suppressed', {
+                    pageId, collectionId: c.id, label: c.label, keyAttr: c.keyAttr,
+                    rowsMissingKey, totalRows: promptRows.length,
+                });
+            }
+
+            const block = renderFactCollectionBlock(toPromptCollection(c), promptRows, today);
             if (block) blocks.push(block);
         }
 
@@ -111,14 +145,17 @@ class FactCollectionsService {
             .where(eq(factCollections.pageId, pageId))
             .orderBy(asc(factCollections.sortOrder), asc(factCollections.createdAt))
             .limit(MAX_COLLECTIONS_PER_PAGE);
+        if (collections.length === 0) return [];
 
-        return Promise.all(collections.map(async (c) => {
-            const [{ count }] = await db
-                .select({ count: sql<number>`count(*)::int` })
-                .from(factRows)
-                .where(eq(factRows.collectionId, c.id));
-            return { ...c, rowCount: count };
-        }));
+        // One grouped count, not one per collection.
+        const counts = await db
+            .select({ collectionId: factRows.collectionId, count: sql<number>`count(*)::int` })
+            .from(factRows)
+            .where(inArray(factRows.collectionId, collections.map(c => c.id)))
+            .groupBy(factRows.collectionId);
+        const countByCollection = new Map(counts.map(c => [c.collectionId, c.count]));
+
+        return collections.map(c => ({ ...c, rowCount: countByCollection.get(c.id) ?? 0 }));
     }
 
     async getRows(collectionId: string) {
@@ -185,6 +222,10 @@ class FactCollectionsService {
             return collection;
         });
 
+        this.logger.info('fact collection created', {
+            pageId, collectionId: created.id, label: created.label,
+            keyAttr: created.keyAttr, rows: input.rows.length, source: created.source,
+        });
         return created;
     }
 
@@ -211,6 +252,9 @@ class FactCollectionsService {
 
         // This changes what customers are told about absence — the reply caches
         // must not keep serving the previous wording.
+        this.logger.info('fact collection completeness set', {
+            pageId, collectionId, isComplete,
+        });
         await pagesService.invalidatePageCaches(pageId);
         return updated;
     }

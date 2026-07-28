@@ -1281,7 +1281,10 @@ export const factCollections = pgTable('fact_collections', {
     // Who authored the collection: 'editor' (merchant created it in the UI) |
     // 'kb_extract' (extracted from their own KB text, merchant-reviewed).
     // fb_sync is deliberately NOT a valid source here — Facebook has no
-    // structured lists worth trusting (D-046).
+    // structured lists worth trusting (D-046). ENFORCED by a CHECK constraint in
+    // migration 0142 (drizzle-kit 0.20 cannot express one), alongside a unique
+    // index on (page_id, label): two collections sharing a label would emit two
+    // contradictory coverage statements for the same list.
     source: varchar('source', { length: 20 }).notNull().default('kb_extract'),
     sortOrder: integer('sort_order').notNull().default(0),
     createdAt: timestamp('created_at').defaultNow(),

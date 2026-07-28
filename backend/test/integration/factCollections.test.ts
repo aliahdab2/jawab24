@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { testDb, createTestUser, createTestPage } from './setup';
-import { factCollectionsService } from '../../src/services/factCollections';
+import { factCollectionsService, MAX_COLLECTIONS_PER_PAGE } from '../../src/services/factCollections';
 import * as schema from '../../src/db/schema';
 
 /**
@@ -140,6 +140,38 @@ describe('fact collections — the engine end to end', () => {
         expect(block).toContain('غير مسجّل لدينا');
         // and the priced collection shows its price without decimals padding
         expect(block).toContain('10 دينار');
+    });
+
+    // M2: two collections sharing a label would emit two contradictory coverage
+    // statements for the same list; the DB now refuses it outright.
+    it('refuses a second collection with the same label on the same page', async () => {
+        await factCollectionsService.createCollection(pageId, {
+            label: 'الصيدليات', keyAttr: 'المدينة', rows: OUTLETS,
+        });
+        await expect(factCollectionsService.createCollection(pageId, {
+            label: 'الصيدليات', keyAttr: 'الحي', rows: OUTLETS,
+        })).rejects.toThrow();
+        expect(await factCollectionsService.listCollections(pageId)).toHaveLength(1);
+    });
+
+    // M1: 'source' is a trust label the wording depends on — only merchant
+    // authorship may create a collection (D-046 bars Facebook from asserting
+    // operational facts).
+    it('refuses a collection sourced from Facebook sync', async () => {
+        await expect(testDb.insert(schema.factCollections).values({
+            pageId, label: 'من فيسبوك', source: 'fb_sync',
+        })).rejects.toThrow();
+    });
+
+    it('enforces the per-page collection limit', async () => {
+        for (let i = 0; i < MAX_COLLECTIONS_PER_PAGE; i++) {
+            await factCollectionsService.createCollection(pageId, {
+                label: `قائمة ${i}`, keyAttr: null, rows: [{ name: `عنصر ${i}` }],
+            });
+        }
+        await expect(factCollectionsService.createCollection(pageId, {
+            label: 'واحدة أخرى', keyAttr: null, rows: [{ name: 'عنصر' }],
+        })).rejects.toThrow(/12 collections/);
     });
 
     it('a page with no collections contributes no block at all', async () => {
