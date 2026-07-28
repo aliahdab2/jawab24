@@ -28,7 +28,7 @@ When you connect your Shopify store to an auto-reply tool, your product catalog 
 
 **Price hallucination detection:** This is crucial for e-commerce. The AI checks every price it mentions against your actual Shopify catalog. If it generates a reply saying "The bag costs $39.99" but the real price is $49.99, the reply is flagged and held for review. This prevents costly pricing errors.
 
-**Knowledge Base enrichment:** Your Shopify products are combined with any other business information you add (shipping policy, return policy, FAQs) into a unified Knowledge Base. The AI searches this using RAG (Retrieval-Augmented Generation) to find relevant information for each customer question.
+**Business Info enrichment:** Your Shopify products are combined with any other business information you add (shipping policy, return policy, FAQs) into a unified Business Info. The AI searches this using RAG (Retrieval-Augmented Generation) to find relevant information for each customer question.
 
 ## Multilingual Replies — Including Arabic Dialect Awareness
 
@@ -56,16 +56,16 @@ Jawab24 handles conversations in English and Arabic — including **6 Arabic dia
 1. Sign up for Jawab24 and connect your Facebook page
 2. Go to Settings, then Integrations, then Connect Shopify
 3. Authorize on Shopify's page — your products sync automatically
-4. Add your shipping and return policies to the Knowledge Base
+4. Add your shipping and return policies to your Business Info
 5. Test with a comment from a personal account
 
 **Tips for best results:**
 
-**Add your policies, not just products.** Shopify product data covers pricing and availability, but customers also ask about shipping times, return windows, and payment methods. Add this to your Knowledge Base.
+**Add your policies, not just products.** Shopify product data covers pricing and availability, but customers also ask about shipping times, return windows, and payment methods. Add this to your Business Info.
 
 **Set your reply style to match your brand.** If your Instagram presence is casual and friendly, set the reply style to "casual." If you're a premium brand, use "professional."
 
-**Monitor the confidence dashboard weekly.** Low-confidence replies show where your Knowledge Base has gaps. Each question the AI can't answer well is a signal to add more information.
+**Monitor the confidence dashboard weekly.** Low-confidence replies show where your Business Info has gaps. Each question the AI can't answer well is a signal to add more information.
 
 **Don't forget about greeting messages.** Set up a greeting for first-time customers who message you on Facebook/Instagram. A warm welcome in their language sets the tone for the entire relationship.
 

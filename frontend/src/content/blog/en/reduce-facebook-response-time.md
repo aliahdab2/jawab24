@@ -38,7 +38,7 @@ The key is identifying your most common questions. Go through your last 100 mess
 
 Preset replies work great for exact matches, but customers don't always ask questions the same way. "How much is this?", "What's the price?", "Price?" — these are all the same question phrased differently. And if your customers speak multiple languages, the variations multiply.
 
-AI-powered auto-reply tools understand intent, not just keywords. You build a Knowledge Base with your business information — products, prices, policies, FAQs — and the AI generates natural responses based on what the customer is actually asking. No flow building or decision trees required — the AI figures out the right response from your business information.
+AI-powered auto-reply tools understand intent, not just keywords. You add your business information once — products, prices, policies, FAQs — and the AI generates natural responses based on what the customer is actually asking. No flow building or decision trees required — the AI figures out the right response from your business information.
 
 The best AI tools load **conversation context** — the last several messages in a conversation — so they handle follow-ups naturally. When a customer asks "and in blue?" after a pricing question, the AI knows they're asking about a blue variant of the same product. It checks your catalog and replies with the right price. A tool that treats each message independently would have no idea what "in blue" refers to.
 
@@ -72,7 +72,7 @@ The fastest path to reducing your Facebook response time:
 
 1. **Today**: Enable Facebook's built-in instant replies (5 minutes)
 2. **This week**: Identify your top 10 questions and create preset replies (30 minutes)
-3. **This week**: Set up an auto-reply tool with AI smart replies and your Knowledge Base (1 hour — no flow building needed)
+3. **This week**: Set up an auto-reply tool with AI smart replies and your Business Info (1 hour — no flow building needed)
 4. **Ongoing**: Configure business hours and away messages (10 minutes)
 5. **When ready**: Connect your e-commerce store for product-specific answers (15 minutes)
 
