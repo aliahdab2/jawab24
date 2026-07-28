@@ -26,6 +26,38 @@ NC='\033[0m' # No Color
 
 ERRORS=0
 
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# =============================================
+# Exclusive run lock — one gate run per working copy
+# =============================================
+# Two runs of this script in the SAME checkout share frontend/.next (and the
+# autoreply_test database). The frontend build script begins with `rm -rf .next`,
+# so run B wipes the build directory while run A sits between "Collecting page
+# data" and "Generating static pages" — A then dies with "Could not find a
+# production build in the '.next' directory" (next-export-no-build-id), an error
+# that says nothing about the real cause. Confirmed live 2026-07-28: two runs in
+# this checkout each failed the other's frontend build.
+#
+# distDir isolation (PR #310, see the note at the frontend build step) cured
+# dev-vs-build because those are different modes; it cannot help here — two
+# PRODUCTION builds share `.next` by definition. Refusing to start twice at once
+# is the only structural fix. mkdir is atomic on every POSIX filesystem, which
+# is why it is used instead of flock (macOS has none).
+LOCK_DIR="$REPO_ROOT/.pre-deploy-check.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    LOCK_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+        echo -e "${RED}❌ Another pre-deploy check is already running in this checkout (PID $LOCK_PID).${NC}"
+        echo -e "${RED}   Both runs would build into frontend/.next and fail each other's frontend build.${NC}"
+        echo -e "${YELLOW}   Wait for it to finish, or stop it:  kill $LOCK_PID${NC}"
+        exit 1
+    fi
+    echo -e "${YELLOW}⚠️  Reclaiming a stale lock (PID ${LOCK_PID:-unknown} is no longer running)${NC}"
+fi
+echo $$ > "$LOCK_DIR/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT INT TERM
+
 # Database URL: CI provides this via env; locally falls back to dev Docker on port 5433.
 export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:postgres@localhost:5433/autoreply_test}"
 PG_HOST=$(echo "$DATABASE_URL" | sed -E 's|.*@([^:/]+).*|\1|')
@@ -453,7 +485,6 @@ fi
 # bin-path / symlink / cwd / workspace-hoisting differences. We deliberately do
 # NOT block on a non-`next dev` listener (e.g. a stale `next start` from E2E) —
 # that doesn't regenerate .next and is auto-killed later in this script.
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEV_SERVER_PIDS=$(
     {
         pgrep -f "next dev" 2>/dev/null || true
@@ -490,17 +521,33 @@ build_frontend() {
     CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend "$@"
 }
 
-if build_frontend > /dev/null 2>&1; then
+# Each attempt's output is captured, so the log of the attempt that actually
+# failed survives. The old code sent both attempts to /dev/null and then ran the
+# build a THIRD time verbosely before an unconditional `exit 1`: when that third
+# run PASSED — which it does whenever the failure was environmental, e.g. the
+# concurrent-run race the lock at the top of this script now prevents — the gate
+# printed a fully green build log under a red "❌ Frontend build failed after
+# retry!" and still refused to deploy, with the real failures already discarded.
+# Observed 2026-07-28; the same misleading-log bug is documented for the Docker
+# step below. A retry that passes is still surfaced (tail of the first failure),
+# so a genuine flake never disappears into a green checkmark.
+_FE_LOG_1=$(mktemp)
+if build_frontend > "$_FE_LOG_1" 2>&1; then
     echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
+    rm -f "$_FE_LOG_1"
 else
     echo -e "${YELLOW}   ⚠️  Frontend build failed on first attempt — retrying with clean cache${NC}"
+    echo -e "${YELLOW}      First attempt ended with:${NC}"
+    tail -12 "$_FE_LOG_1" | sed 's/^/      /'
     rm -rf frontend/.next
-    if build_frontend > /dev/null 2>&1; then
-        echo -e "${GREEN}   ✅ Frontend builds successfully (on retry)${NC}"
+    _FE_LOG_2=$(mktemp)
+    if build_frontend > "$_FE_LOG_2" 2>&1; then
+        echo -e "${GREEN}   ✅ Frontend builds successfully (passed on retry — first attempt flaked, see above)${NC}"
+        rm -f "$_FE_LOG_1" "$_FE_LOG_2"
     else
-        echo -e "${RED}   ❌ Frontend build failed after retry!${NC}"
-        rm -rf frontend/.next
-        build_frontend
+        echo -e "${RED}   ❌ Frontend build failed on both attempts. Retry output:${NC}"
+        cat "$_FE_LOG_2"
+        rm -f "$_FE_LOG_1" "$_FE_LOG_2"
         exit 1
     fi
 fi
