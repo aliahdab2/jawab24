@@ -266,7 +266,7 @@
     "flag_usage_near_cap": "Usage at {percent}% of the monthly limit ({used}/{limit}).",
     "flag_usage_on_topup": "Monthly plan limit reached ({used}/{limit}) — replies keep sending from the top-up balance ({balance} left).",
     "flag_usage_topup_nearly_drained": "Monthly plan limit reached ({used}/{limit}) and only {balance} top-up replies are left — replies stop when the balance runs out.",
-    "flag_usage_near_cap_on_topup": "Usage at {percent}% of the monthly limit ({used}/{limit}) — replies won't stop at the cap; {balance} top-up replies cover the overflow.",
+    "flag_usage_near_cap_on_topup": "Usage at {percent}% of the monthly limit ({used}/{limit}) — once the limit is reached, the available top-up replies are used automatically.",
     "flag_limit_fallback_off": "Near the reply limit and the limit-reached message is off — replies will go silent at the cap.",
     "flag_trial_ending_soon": "{daysLeft, plural, one {Trial ends in # day} other {Trial ends in # days}}.",
     "flag_persona_placeholder": "Persona / brand voice is not set (still a placeholder).",

@@ -94,6 +94,9 @@ export type NotificationType =
     | 'ai_usage_warning_80'
     | 'ai_usage_limit_reached'
     | 'ai_usage_on_topup'
+    // Same 100% crossing as ai_usage_on_topup, but the balance behind the cap is
+    // too thin to be a runway — "no interruption" would be a false promise.
+    | 'ai_usage_topup_low'
     | 'auto_reply_paused_billing'
     | 'refund_processed'
     | 'topup_credited'
@@ -271,6 +274,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'You\'ve used all {limit} Smart Replies in your monthly plan — no interruption. Smart Replies keep running from your top-up balance ({balance} left).',
             ar: 'استهلكت كامل ردودك الذكية الـ{limit} في باقتك الشهرية، والخدمة مستمرة دون انقطاع — تتابع الردود الذكية العمل من رصيدك الإضافي (المتبقّي {balance} رد).',
+        },
+    },
+    ai_usage_topup_low: {
+        titles: { en: 'Your top-up balance is almost gone', ar: 'رصيدك الإضافي على وشك النفاد' },
+        bodies: {
+            en: 'You\'ve used all {limit} Smart Replies in your monthly plan and only {balance} top-up replies are left. Smart Replies stop once the balance runs out — upgrade or add a top-up to keep them running.',
+            ar: 'استهلكت كامل ردودك الذكية الـ{limit} في باقتك الشهرية، ولم يتبقَّ من رصيدك الإضافي سوى {balance} رد. تتوقف الردود الذكية عند نفاد الرصيد — قم بالترقية أو أضف رصيداً إضافياً لتستمر.',
         },
     },
     auto_reply_paused_billing: {
