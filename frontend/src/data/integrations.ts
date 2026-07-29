@@ -39,7 +39,8 @@ export const INTEGRATIONS: Record<string, Integration> = {
   zid: {
     slug: 'zid',
     name: 'Zid',
-    brandColor: '#E94F1C',
+    // Zid's brand purple (zid.sa). Was #E94F1C — an invented orange.
+    brandColor: '#AE72FF',
     stepCount: 3,
     featureCount: 5,
     faqCount: 4,

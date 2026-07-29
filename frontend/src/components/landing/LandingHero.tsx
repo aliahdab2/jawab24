@@ -9,7 +9,8 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { AnimatePresence, motion, type Variants } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import clsx from 'clsx';
 import { Button, WhatsAppIcon } from '@/components/ui';
 
 export function ShopifyIcon({ className }: { className?: string }) {
@@ -30,11 +31,39 @@ export function SallaIcon({ className }: { className?: string }) {
   );
 }
 
+/*
+ * Zid's real logomark: the four-petal pinwheel, traced from the header logo on
+ * zid.sa in its original 216×216 coordinate space. Brand colours from the same
+ * source — tile `ZID_PURPLE`, mark `ZID_INK`, which is exactly how Zid renders it
+ * on their own favicon.
+ *
+ * What was here before was invented: an orange (#E94F1C) rounded square with a
+ * stroked "Z". Wrong shape AND wrong colour — Zid's brand is purple. Verify against
+ * zid.sa (or brand.zid.sa) before changing any of this.
+ */
+const ZID_PURPLE = '#AE72FF';
+const ZID_INK = '#1F0433';
+const ZID_MARK_PATH = 'M107.97 19.31C102.42 19.31 97.96 23.77 97.96 29.32C97.96 40.57 101.51 51.47 107.97 60.51C114.43 51.47 117.98 40.56 117.98 29.32C117.98 23.77 113.52 19.31 107.97 19.31ZM121.31 74.88C131.6 62.01 137.29 45.95 137.29 29.32C137.29 12.69 124.19 0 107.97 0C91.75 0 78.65 13.11 78.65 29.32C78.65 45.53 84.35 62.02 94.63 74.88L74.88 94.63C62.01 84.34 45.95 78.65 29.32 78.65C12.69 78.65 0 91.76 0 107.97C0 124.18 13.11 137.29 29.32 137.29C45.53 137.29 62.02 131.59 74.88 121.31L94.63 141.06C84.34 153.93 78.65 169.99 78.65 186.62C78.65 203.25 91.76 215.94 107.97 215.94C124.18 215.94 137.29 202.83 137.29 186.62C137.29 170.41 131.59 153.92 121.31 141.06L141.06 121.31C153.93 131.6 169.99 137.29 186.62 137.29C203.25 137.29 215.94 124.18 215.94 107.97C215.94 91.76 202.83 78.65 186.62 78.65C170.41 78.65 153.92 84.35 141.06 94.63L121.31 74.88ZM107.97 88.86L88.85 107.98L107.97 127.1L127.09 107.98L107.97 88.86ZM155.43 107.97C164.47 114.43 175.38 117.98 186.62 117.98C192.17 117.98 196.63 113.52 196.63 107.97C196.63 102.42 192.17 97.96 186.62 97.96C175.37 97.96 164.47 101.51 155.43 107.97ZM107.97 155.43C101.51 164.47 97.96 175.38 97.96 186.62C97.96 192.17 102.42 196.63 107.97 196.63C113.52 196.63 117.98 192.17 117.98 186.62C117.98 175.37 114.43 164.47 107.97 155.43ZM60.51 107.97C51.47 101.51 40.56 97.96 29.32 97.96C23.77 97.96 19.31 102.42 19.31 107.97C19.31 113.52 23.77 117.98 29.32 117.98C40.57 117.98 51.47 114.43 60.51 107.97Z';
+
+/**
+ * The pinwheel alone, scaled from its native 216 units into the shared 24×24 icon
+ * box. `inset` is the padding in those 24 units — 4 leaves room for the rounded
+ * tile in ZidIcon, ~1 lets the orbit badge run the mark near full-bleed on its disc.
+ */
+function ZidMark({ fill, inset }: { fill: string; inset: number }) {
+  const scale = (24 - inset * 2) / 216;
+  return (
+    <g transform={`translate(${inset} ${inset}) scale(${scale})`}>
+      <path fillRule="evenodd" clipRule="evenodd" d={ZID_MARK_PATH} fill={fill} />
+    </g>
+  );
+}
+
 export function ZidIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
-      <rect width="24" height="24" rx="5" fill="#E94F1C" />
-      <path d="M6 7h8.5l-7 10H16" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <rect width="24" height="24" rx="5" fill={ZID_PURPLE} />
+      <ZidMark fill={ZID_INK} inset={4} />
     </svg>
   );
 }
@@ -46,6 +75,97 @@ export function MetaIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+/*
+ * ── Hero orbit badges ──
+ * The channel/store badges floating around the phone mockup.
+ *
+ * The ring is INTERLEAVED: walking down this list alternates sides, so no two
+ * badges ever sit at the same height on the same side. That constraint is not
+ * cosmetic — the float keyframes travel up to 25px (`float-rotate` /
+ * `float-orbit` in globals.css), which on the 140px-wide mobile phone is ~8% of
+ * its height, so two same-side anchors closer than ~25% overlap mid-animation.
+ *
+ * `top` also has a floor of ~12%, set by that same 25px lift: a badge anchored at
+ * X% of the phone's height H must satisfy X%·H >= 25px or it rises above the phone's
+ * top edge at the peak of its float. H is ~295px at the mobile `max-w-[140px]`
+ * (aspect 9/19), so the binding case is X >= 8.5%; 12% keeps a margin. July 2026 —
+ * WhatsApp was appended at `top-[6%]`, i.e. 17.7px on mobile against a 25px lift,
+ * AND as a third badge on the start side only 19% from Facebook. Both rules at once.
+ *
+ * The two columns do NOT have to be level. The end column is tucked 5% up from where
+ * even spacing would put it, so it trails the start column by 7% rather than 12%
+ * (owner request). Only the same-side spacing and the floor are real constraints —
+ * the stagger between the columns is taste, so don't "correct" it back to level.
+ *
+ * The ring mirrors the platform chip row above it — every platform we support
+ * appears in BOTH or the two disagree about what Jawab24 connects to (Zid was
+ * missing here while present as a chip).
+ *
+ * Adding a channel means inserting a slot and re-spacing BOTH columns, never
+ * appending to whichever side happens to have room. At six badges the columns are
+ * full at 28% spacing; a seventh needs a different layout, not a squeeze.
+ */
+const HERO_ORBIT: Array<{
+  key: string;
+  /** Full class string, not composed — Tailwind's scanner reads these literally. */
+  position: string;
+  anim: 'animate-float-rotate' | 'animate-float-orbit';
+  /** Brand fill of the inner disc. */
+  badge: string;
+  icon: ReactNode;
+}> = [
+  {
+    key: 'facebook',
+    position: '-start-4 sm:-start-8 top-[18%]',
+    anim: 'animate-float-rotate',
+    badge: 'bg-[#1877F2]',
+    icon: <Facebook className="w-5 h-5 sm:w-7 sm:h-7 text-white" />,
+  },
+  {
+    key: 'instagram',
+    position: '-end-4 sm:-end-8 top-[25%]',
+    anim: 'animate-float-orbit',
+    badge: 'bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400',
+    icon: <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />,
+  },
+  {
+    key: 'whatsapp',
+    position: '-start-4 sm:-start-8 top-[46%]',
+    anim: 'animate-float-orbit',
+    badge: 'bg-[#25D366]',
+    icon: <WhatsAppIcon className="w-5 h-5 sm:w-7 sm:h-7 text-white" aria-hidden="true" />,
+  },
+  {
+    key: 'salla',
+    position: '-end-4 sm:-end-8 top-[53%]',
+    anim: 'animate-float-rotate',
+    badge: 'bg-[#BAF3E6] dark:bg-[#004956]',
+    icon: <SallaIcon className="w-5 h-5 sm:w-7 sm:h-7 text-[#004956] dark:text-[#BAF3E6]" />,
+  },
+  {
+    key: 'shopify',
+    position: '-start-4 sm:-start-8 top-[74%]',
+    anim: 'animate-float-rotate',
+    badge: 'bg-[#96bf48]',
+    icon: <ShoppingBag className="w-5 h-5 sm:w-7 sm:h-7 text-white" />,
+  },
+  {
+    key: 'zid',
+    position: '-end-4 sm:-end-8 top-[81%]',
+    anim: 'animate-float-orbit',
+    // Purple disc + ink mark, matching how Zid renders its own favicon. The other
+    // badges use a white icon, but a white pinwheel on #AE72FF is far too faint.
+    // Literal, NOT `bg-[${ZID_PURPLE}]` — Tailwind's scanner only reads static
+    // class strings, so an interpolated one is never generated.
+    badge: 'bg-[#AE72FF]',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 sm:w-7 sm:h-7" aria-hidden="true">
+        <ZidMark fill={ZID_INK} inset={1} />
+      </svg>
+    ),
+  },
+];
 
 /* ── Hero phone animation ── */
 const heroSpring = { type: 'spring' as const, stiffness: 220, damping: 20 };
@@ -335,46 +455,24 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
                 <HeroPhoneChat t={t} />
               </motion.div>
 
-              {/* Floating Elements */}
-              <div className="absolute -start-4 sm:-start-8 top-1/4 animate-float-rotate">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
-                  <div className="w-full h-full rounded-full bg-[#1877F2] flex items-center justify-center">
-                    <Facebook className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
+              {/* Floating Elements — interleaved ring, see HERO_ORBIT */}
+              {HERO_ORBIT.map(badge => (
+                <div key={badge.key} className={clsx('absolute z-10', badge.position, badge.anim)}>
+                  {/*
+                    * `scale-90` is the 10% size reduction, applied here rather than by
+                    * shrinking the four w-/h- steps: it takes the shell, its padding,
+                    * the icon, the radius and the shadow down together, and 56px → 50.4px
+                    * has no Tailwind size step (it would need arbitrary values in every
+                    * badge). It sits on this inner div, NOT the animated parent — the
+                    * float keyframes set `transform` outright and would overwrite it.
+                    */}
+                  <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5 scale-90">
+                    <div className={clsx('w-full h-full rounded-full flex items-center justify-center', badge.badge)}>
+                      {badge.icon}
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="absolute -end-4 sm:-end-8 top-1/3 animate-float-orbit">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
-                  <div className="w-full h-full rounded-full bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center">
-                    <Instagram className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="absolute -start-4 sm:-start-8 top-[6%] animate-float-orbit z-10">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
-                  <div className="w-full h-full rounded-full bg-[#25D366] flex items-center justify-center">
-                    <WhatsAppIcon className="w-5 h-5 sm:w-7 sm:h-7 text-white" aria-hidden="true" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="absolute -start-4 sm:-start-8 top-2/3 animate-float-rotate z-10">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
-                  <div className="w-full h-full rounded-full bg-[#96bf48] flex items-center justify-center relative">
-                    <ShoppingBag className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="absolute -end-4 sm:-end-8 top-2/3 animate-float-orbit z-10">
-                <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full landing-icon-shell p-1.5">
-                  <div className="w-full h-full rounded-full bg-[#BAF3E6] dark:bg-[#004956] flex items-center justify-center relative">
-                    <SallaIcon className="w-5 h-5 sm:w-7 sm:h-7 text-[#004956] dark:text-[#BAF3E6]" />
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
