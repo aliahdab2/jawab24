@@ -25,11 +25,66 @@ const TYPING_DEDUP_TTL_SECONDS = 30;
 const dedupKey = (pageId: string, platformMessageId: string) =>
     `typing:${pageId}:${platformMessageId}`;
 
+/** Key value once the platform has ACCEPTED the indicator, vs '1' = attempt claimed. */
+const SENT = 'sent';
+
 /**
- * Show the typing indicator. Returns `true` if the indicator was actually
- * shown (caller must remember this and call `clear()` on abort paths).
- * Returns `false` if the adapter doesn't support typing, the dedup key was
- * already held (retry), or the upstream call failed.
+ * Claim the single "show typing" attempt for this message and run `send`.
+ *
+ * The dedup claim is what lets two DIFFERENT call sites share one indicator without
+ * double-arming Messenger's ~20s timer: whichever runs first wins and the other becomes
+ * a no-op. Messenger claims it at webhook receipt (controllers/webhook.ts) so the
+ * customer sees activity immediately; Instagram has no receipt hook, so its claim
+ * happens later in the reply pipeline. Neither needs to know about the other.
+ *
+ * Returns `true` only when the platform accepted the call. Errors are swallowed —
+ * typing is cosmetic and must never affect a reply.
+ */
+export async function showOnce(
+    pageId: string,
+    platformMessageId: string,
+    send: () => Promise<void>,
+): Promise<boolean> {
+    const key = dedupKey(pageId, platformMessageId);
+    const acquired = await redis
+        .set(key, '1', 'EX', TYPING_DEDUP_TTL_SECONDS, 'NX')
+        .catch(() => null);
+    if (!acquired) return false;
+
+    try {
+        await send();
+        // Upgrade the claim to "actually delivered" so an abort path can tell whether
+        // there is anything to clear, without holding an in-process boolean. See
+        // wasShown — the reply pipeline no longer awaits this call, so a returned
+        // boolean would not reach it.
+        await redis.set(key, SENT, 'EX', TYPING_DEDUP_TTL_SECONDS).catch(() => null);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Whether an indicator was actually delivered for this message.
+ *
+ * Redis, not a local flag, because the claim may have been made in a different process
+ * (the webhook) from the one that has to clean up (the reply worker).
+ */
+export async function wasShown(pageId: string, platformMessageId: string): Promise<boolean> {
+    // try/catch, not `.catch()` — this is called from the reply pipeline's `finally`, and a
+    // throw there REPLACES whatever error was propagating. A `.catch()` on the result also
+    // assumes redis.get returned a promise; when that assumption broke, transient-error
+    // paths silently stopped rethrowing and BullMQ lost its retries. Never throw from here.
+    try {
+        return (await redis.get(dedupKey(pageId, platformMessageId))) === SENT;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Adapter-driven form of {@link showOnce}. Used by the reply pipeline, which holds an
+ * adapter rather than raw platform credentials.
  */
 export async function show(
     adapter: MessagePlatformAdapter,
@@ -37,19 +92,9 @@ export async function show(
     senderId: string,
     platformMessageId: string,
 ): Promise<boolean> {
-    if (!adapter.sendTypingIndicator) return false;
-
-    const acquired = await redis
-        .set(dedupKey(page.id, platformMessageId), '1', 'EX', TYPING_DEDUP_TTL_SECONDS, 'NX')
-        .catch(() => null);
-    if (!acquired) return false;
-
-    try {
-        await adapter.sendTypingIndicator(page, senderId);
-        return true;
-    } catch {
-        return false;
-    }
+    const sendTyping = adapter.sendTypingIndicator;
+    if (!sendTyping) return false;
+    return showOnce(page.id, platformMessageId, () => sendTyping.call(adapter, page, senderId));
 }
 
 /**
