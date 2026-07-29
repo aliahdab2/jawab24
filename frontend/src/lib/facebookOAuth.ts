@@ -15,24 +15,30 @@
  */
 
 /**
- * Graph version for the OAuth DIALOG only — deliberately still v18.0, matching
- * what the three call sites emitted before this refactor.
+ * Graph version for the OAuth dialog, aligned with the rest of the system:
+ * `backend/src/config/index.ts` defaults to v23.0 (env-overridable via
+ * FACEBOOK_GRAPH_API_VERSION) and `lib/whatsappSignup.ts` pins v23.0 for the JS SDK.
+ * The backend exchanges the code this dialog returns, so having both on the same
+ * version is the point.
  *
- * It does NOT match the rest of the system: `backend/src/config/index.ts` defaults
- * to v23.0 (env-overridable via FACEBOOK_GRAPH_API_VERSION) and
- * `lib/whatsappSignup.ts` pins v23.0 for the JS SDK. That divergence is real and
- * predates this change; unifying it moves behaviour and belongs in its own commit,
- * so it is deliberately NOT bundled here — a refactor and a third-party API version
- * bump landing together would leave a login regression un-attributable to either.
+ * Raised from v18.0 on 2026-07-29. v18.0 was not merely old — per Meta's version
+ * changelog it EXPIRED on 2026-01-26, six months earlier. Meta silently auto-upgrades
+ * calls on an expired version to the oldest available one, so login and page
+ * reconnect were already running on a version nobody here chose or tested; pinning
+ * v18.0 bought no stability, it only hid which version was actually serving us.
+ *
+ * Not v25.0 (newest, released 2026-02-18): matching the backend matters more than
+ * being current, and one version for the whole system is easier to reason about than
+ * two. When this is next raised, raise the backend default with it.
  */
-export const FB_OAUTH_GRAPH_VERSION = 'v18.0';
+export const FB_OAUTH_GRAPH_VERSION = 'v23.0';
 
 /**
  * The permissions every Facebook OAuth entry point requests. One list, because
  * login and reconnect asking for different scopes is a silent capability loss.
  *
  * Order is preserved from the original literal — it has no semantic meaning to
- * Meta, but keeping it lets the byte-identical assertions in the tests hold.
+ * Meta, but keeping it lets the exact-string assertions in the tests hold.
  */
 export const FB_SCOPES = [
     'email',

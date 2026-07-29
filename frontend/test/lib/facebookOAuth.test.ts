@@ -7,8 +7,9 @@ import { buildFacebookOAuthUrl, FB_SCOPES, FB_OAUTH_GRAPH_VERSION } from '@/lib/
  * `buildFacebookOAuthUrl` consolidated three inline template literals — login.tsx
  * (mobile + web) and pages.tsx (page reconnect). The expected strings below started
  * life as those literals verbatim, which is what made the consolidation provable;
- * life as those literals verbatim. Parameter order, encoding and which params appear
- * must stay put. If any of it moves, these fail here rather than in production, where
+ * life as those literals verbatim; the only thing since changed on purpose is the
+ * Graph version (v18.0 → v23.0, 2026-07-29). Parameter order, encoding and which
+ * params appear must stay put. If any of it moves, these fail here rather than in production, where
  * the symptom is merchants unable to log in or reconnect a page and nothing to
  * reproduce locally.
  *
@@ -21,7 +22,7 @@ const SCOPE = 'email%2Cpages_show_list%2Cpages_read_engagement%2Cpages_read_user
     + '%2Cpages_manage_metadata%2Cpages_manage_engagement%2Cpages_messaging%2Cinstagram_basic'
     + '%2Cinstagram_manage_messages%2Cinstagram_manage_comments';
 
-describe('buildFacebookOAuthUrl — byte-identical to the literals it replaced', () => {
+describe('buildFacebookOAuthUrl — pinned wire format', () => {
     it('login.tsx mobile: server callback, display=page', () => {
         expect(buildFacebookOAuthUrl({
             appId: '774211662298446',
@@ -29,7 +30,7 @@ describe('buildFacebookOAuthUrl — byte-identical to the literals it replaced',
             state: '/dashboard|mobile|en',
             display: 'page',
         })).toBe(
-            'https://www.facebook.com/v18.0/dialog/oauth'
+            'https://www.facebook.com/v23.0/dialog/oauth'
             + '?client_id=774211662298446'
             + '&redirect_uri=https%3A%2F%2Fjawab24.com%2Fapi%2Fauth%2Ffacebook%2Fmobile-callback'
             + `&scope=${SCOPE}`
@@ -46,7 +47,7 @@ describe('buildFacebookOAuthUrl — byte-identical to the literals it replaced',
             state: '/dashboard|web|ar',
             display: 'touch',
         })).toBe(
-            'https://www.facebook.com/v18.0/dialog/oauth'
+            'https://www.facebook.com/v23.0/dialog/oauth'
             + '?client_id=774211662298446'
             + '&redirect_uri=https%3A%2F%2Fjawab24.com%2Far%2Fauth%2Fcallback'
             + `&scope=${SCOPE}`
@@ -64,7 +65,7 @@ describe('buildFacebookOAuthUrl — byte-identical to the literals it replaced',
             display: 'page',
             rerequest: true,
         })).toBe(
-            'https://www.facebook.com/v18.0/dialog/oauth'
+            'https://www.facebook.com/v23.0/dialog/oauth'
             + '?client_id=774211662298446'
             + '&redirect_uri=https%3A%2F%2Fjawab24.com%2Fen%2Fauth%2Fcallback'
             + `&scope=${SCOPE}`
@@ -90,9 +91,12 @@ describe('buildFacebookOAuthUrl — byte-identical to the literals it replaced',
         expect(FB_SCOPES[FB_SCOPES.length - 1]).toBe('instagram_manage_comments');
     });
 
-    it('pins the dialog Graph version — bumping it is a separate, deliberate change', () => {
-        // The backend defaults to v23.0 and whatsappSignup.ts pins v23.0. This
-        // divergence is known and intentionally not resolved in the refactor commit.
-        expect(FB_OAUTH_GRAPH_VERSION).toBe('v18.0');
+    it('pins the dialog Graph version to the one the rest of the system uses', () => {
+        // Must match backend config.graphApiVersion's default and whatsappSignup.ts —
+        // the backend exchanges the code this dialog returns. v18.0 sat here until
+        // 2026-07-29, six months AFTER Meta expired it (2026-01-26), during which
+        // Meta was silently serving some unknown newer version. Raise the backend
+        // default in the same change next time.
+        expect(FB_OAUTH_GRAPH_VERSION).toBe('v23.0');
     });
 });
