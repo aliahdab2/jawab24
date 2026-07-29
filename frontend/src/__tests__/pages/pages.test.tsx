@@ -512,7 +512,15 @@ describe('PagesPage - WhatsApp', () => {
         });
 
         await waitFor(() => {
-            expect(mockOpenExternalUrl).toHaveBeenCalledWith('https://jawab24.com/en/pages');
+            // Via /login, NOT straight to /pages. The app's JWT lives in the
+            // WebView's localStorage under a different origin, so it does not
+            // travel to the system browser — a bare /pages link dropped the
+            // merchant on a logged-out screen when they came to connect a
+            // number. /login forwards instantly when a browser session already
+            // exists, so this costs a signed-in merchant nothing.
+            expect(mockOpenExternalUrl).toHaveBeenCalledWith(
+                'https://jawab24.com/en/login?redirect=%2Fpages',
+            );
         });
         expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
         // And the path question is SKIPPED, not asked-then-abandoned: the merchant

@@ -492,8 +492,15 @@ const PagesPage: NextPageWithLayout = () => {
     if (Capacitor.isNativePlatform()) {
       toast.info(t('whatsappConnectWebOnly'));
       const { openExternalUrl } = await import('@/lib/openExternalUrl');
-      const { buildWebUrl } = await import('@/lib/webUrl');
-      await openExternalUrl(buildWebUrl('/pages', language));
+      const { buildWebAuthedUrl } = await import('@/lib/webUrl');
+      // Via /login, NOT straight to /pages: the app's JWT lives in the WebView's
+      // localStorage under a different origin, so it does not travel to the
+      // system browser. Linking /pages directly dropped the merchant on a
+      // logged-out screen with no idea why — they came to connect a number and
+      // got a sign-in wall with no destination. /login forwards immediately when
+      // a browser session already exists, so this costs an already-signed-in
+      // merchant nothing.
+      await openExternalUrl(buildWebAuthedUrl('/pages', language));
       return;
     }
     const existingPage = pageId ? pages.find(p => p.id === pageId) : null;
