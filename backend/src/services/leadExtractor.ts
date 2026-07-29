@@ -23,6 +23,24 @@ import { envNumberPerCall } from '../utils/envNumber';
 // Daily AI extraction limit per workspace (prevents runaway costs on high-traffic pages)
 const DAILY_EXTRACTION_LIMIT = 50;
 
+/**
+ * Output budget for the extraction JSON.
+ *
+ * Sized from the shape the prompt asks for, not guessed: every card field is a
+ * bilingual object (`{key,label_en,label_ar,value}`) whose Arabic label + value
+ * cost ~40-70 tokens, and the multi-person rule (`name`/`phone`, `name_2`/
+ * `phone_2`, …) plus an Arabic summary makes a dozen of them an ordinary
+ * result — ~900 tokens before any slack.
+ *
+ * 500 was too tight and failed silently-ish: prod 2026-07-29 cut a
+ * re-extraction mid-JSON (JAWAB24-BACKEND-1N). JSON mode offers no partial
+ * recovery — one missing byte makes the whole object unparseable, so the entire
+ * extraction is lost, not just its tail. Cost impact of the larger cap is nil:
+ * `max_tokens` is a ceiling, and a normal extraction still returns ~50-150
+ * tokens.
+ */
+const EXTRACTION_MAX_OUTPUT_TOKENS = 1500;
+
 // ─── Follow-up re-extraction (post-phone order details) ─────────────────────
 // Customers naturally send their phone first and the order details after
 // (final size, recipient name, address). Re-extraction keeps the card current
@@ -788,7 +806,7 @@ class LeadExtractorService {
                 model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0,
-                max_tokens: 500,
+                max_tokens: EXTRACTION_MAX_OUTPUT_TOKENS,
                 response_format: { type: 'json_object' },
             });
         } catch (err) {
@@ -812,14 +830,42 @@ class LeadExtractorService {
             }).catch(() => { /* logged via Sentry breadcrumb inside logAiUsage */ });
         }
 
-        const content = response.choices[0]?.message?.content;
+        // The content guards below run AFTER the cost log on purpose: a truncated
+        // or unparseable response was still generated and billed. They also do not
+        // emit recordAiFailedBeforeLog — logAiUsage was already reached, so the row
+        // lands and `logged` increments; emitting here too would double-book the
+        // call against the Phase 6.5 counters (see AI_INSTRUCTIONS §13c).
+        const choice = response.choices[0];
+
+        // Truncation is unrecoverable in JSON mode — the object is cut mid-token,
+        // so JSON.parse throws an opaque "Unexpected end of JSON input" that points
+        // at the parse site instead of the cause. Name the reason so a recurrence
+        // is diagnosable from the Sentry title alone, and so EXTRACTION_MAX_OUTPUT_TOKENS
+        // stays measurable rather than a guess.
+        if (choice?.finish_reason === 'length') {
+            throw new Error(
+                `Extraction JSON truncated at max_tokens (finish_reason=length, cap=${EXTRACTION_MAX_OUTPUT_TOKENS})`,
+            );
+        }
+
+        const content = choice?.message?.content;
         if (!content) throw new Error('Empty response from extraction AI');
 
-        const parsed = JSON.parse(content) as {
+        let parsed: {
             phone?: string;
             summary?: string;
             fields?: LeadExtractedData['fields'];
         };
+        try {
+            parsed = JSON.parse(content);
+        } catch (err) {
+            // Never attach `content` to the error — it is model output derived from a
+            // customer transcript (names, phone numbers) and this throw ends up in
+            // Sentry. The length distinguishes a cut-off object from outright garbage.
+            throw new Error(
+                `Extraction AI returned unparseable JSON (${content.length} chars): ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
 
         // Sanitize field elements at the boundary: JSON-mode models routinely emit
         // numeric-looking values as bare numbers ({"key":"size","value":38}) and
