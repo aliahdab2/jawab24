@@ -5,7 +5,7 @@
  * centralize three pieces of logic that were previously duplicated across
  * buildDynamicSystemSuffix, buildUserPrompt, and validateReply.
  */
-import { resolveInputLanguage } from '../language';
+import { resolveInputLanguage, resolveInputLanguageWithSource } from '../language';
 import type { GenerateRequest } from './types';
 
 /**
@@ -65,7 +65,27 @@ export function getKBText(request: GenerateRequest, opts?: { includeProductCatal
  * merchant's configured default before falling back to English.
  */
 export function resolveLanguage(request: GenerateRequest): string {
-    return resolveInputLanguage({
+    return resolveLanguageWithCertainty(request).language;
+}
+
+/**
+ * Resolve the reply language AND whether it is a positive reading of this message.
+ *
+ * `certain: false` means "this is the thread's / the merchant's language, not
+ * something we read off the customer's current words" — the prompt then keeps it as
+ * the default but lets the model mirror the customer instead of asserting a lie.
+ *
+ * Two independent signals, and the caller's explicit `false` WINS:
+ *  1. `request.languageCertain` — the backend's own detector confidence. It is the
+ *     only layer that can tell en@0.9 ("real English stopwords") from en@0.5
+ *     ("Latin script, recognized nothing"), because the ai-worker's chain has no
+ *     positive English rule at all.
+ *  2. structural provenance from the chain — used when the backend said nothing
+ *     (the comment path), where a non-'en' current-message read is positive and a
+ *     history/post/KB/default read is not.
+ */
+export function resolveLanguageWithCertainty(request: GenerateRequest): { language: string; certain: boolean } {
+    const resolved = resolveInputLanguageWithSource({
         comment: request.comment,
         language: request.language,
         conversationHistory: request.context?.conversationHistory,
@@ -73,4 +93,12 @@ export function resolveLanguage(request: GenerateRequest): string {
         kbText: getKBText(request),
         defaultReplyLanguage: request.context?.defaultReplyLanguage,
     });
+
+    // An explicit `false` from the backend downgrades even an 'explicit' source:
+    // the code it passed came from a floor read, so it is not a positive reading.
+    const certain = request.languageCertain === false
+        ? false
+        : resolved.fromCurrentMessage;
+
+    return { language: resolved.language, certain };
 }

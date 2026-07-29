@@ -11,7 +11,7 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta } from '@jawab24/shared';
-import { detectLanguage, detectLanguageCode, isLowSignalLatinToken } from '../../utils/language';
+import { detectLanguage, detectLanguageCode, isLowSignalLatinToken, isCertainDetection } from '../../utils/language';
 import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
 import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
 import { detectBusinessActionFlags } from './urgentFlags';
@@ -594,6 +594,11 @@ export class ReplyGenerator {
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
+                // Certainty is a property of the COMMENT, not of resolvedLang: the latter
+                // may have mirrored the post's/KB's language for a low-signal token
+                // ("ICDL" on an Arabic post), which is a sensible default but not a reading
+                // of the customer's words. Same predicate as the DM path.
+                languageCertain: isCertainDetection(detectLanguage(commentForAI)),
                 context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
             });
 
@@ -718,14 +723,25 @@ export class ReplyGenerator {
                 // than French, and losing its anchor is what once had the bot replying in
                 // Spanish (engine.test.ts). The information needed to separate Arabizi from
                 // accent-free French is not available at this layer.
-                const { language: msgLang, confidence: msgConfidence } = detectLanguage(text);
+                const detected = detectLanguage(text);
+                const { language: msgLang } = detected;
                 const hasPriorHistory = historyForAI.length > 0;
-                const isLowConfidenceLatin = msgLang === 'en' && msgConfidence < 0.6;
+                // Same fact, two decisions: whether to defer to history, and whether the
+                // prompt may assert this language as the customer's. MIN_CERTAIN_CONFIDENCE
+                // keeps the threshold in one place (packages/shared detector.ts).
+                const isLowConfidenceLatin = !isCertainDetection(detected) && msgLang !== 'unknown';
                 const deferToHistory = isLowConfidenceLatin && hasPriorHistory;
                 // Model is resolved inside aiService.generateReply via userId.
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
+                    // Tell the ai-worker whether that code is a real reading or a floor
+                    // default. The en@0.5 "Latin script, recognized nothing" bucket is
+                    // 68.77% of Latin-script inbound traffic and reaches the prompt whenever
+                    // there is no prior history to defer to. Without this the prompt asserts
+                    // "The customer wrote in English" over accent-free French. Arabic script
+                    // and named Latin languages are certain and keep the hard directive.
+                    languageCertain: isCertainDetection(detected),
                     context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };
 
@@ -929,6 +945,9 @@ export class ReplyGenerator {
         const aiRequest = {
             comment: questionForAI,
             language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
+            // Must match the two production paths or the playground (and the eval suite
+            // that runs through it) would exercise a different prompt than real traffic.
+            languageCertain: isCertainDetection(detectLanguage(questionForAI)),
             ...(model ? { model } : {}),
             context: {
                 pageId,

@@ -144,6 +144,55 @@ export function isAmbiguousLatinToken(text: string): boolean {
  * anchor that was right. See __tests__/resolveChain.test.ts.
  */
 export function resolveInputLanguage(input: ResolveLanguageInput): string {
+    return resolveInputLanguageWithSource(input).language;
+}
+
+/**
+ * Which link of the chain produced the resolved language. Exposed so the prompt
+ * layer can tell a POSITIVE reading of the current message apart from a sticky
+ * default — the distinction the reply directive was missing (2026-07-29).
+ */
+export type LanguageSource =
+    | 'explicit'                       // caller passed input.language
+    | 'current-message-script-certain' // named from a Unicode script property (no Latin at all)
+    | 'user-history'
+    | 'assistant-history'
+    | 'current-message'
+    | 'post'
+    | 'kb'
+    | 'current-message-ambiguous'      // bare acronym / product name, e.g. "ICDL"
+    | 'merchant-default'
+    | 'fallback';                      // terminal 'en'
+
+export interface ResolvedInputLanguage {
+    language: string;
+    source: LanguageSource;
+    /**
+     * True only when `language` came from a POSITIVE reading of the CURRENT message.
+     *
+     * False for the history anchor, post, KB, merchant default — and, critically, for
+     * a Latin-script 'en': this module has NO positive English rule (line 88 returns
+     * 'en' for any Latin script that nothing else claimed), so an 'en' from the
+     * current message is a DEFAULT, not a detection. Asserting it to the model as
+     * "the customer wrote in English" is what answered «Quels cours proposez-vous ?»
+     * in English on 2026-07-29.
+     */
+    fromCurrentMessage: boolean;
+}
+
+/** Structural provenance — see ResolvedInputLanguage.fromCurrentMessage. */
+function isPositiveRead(source: LanguageSource, language: string): boolean {
+    if (source === 'explicit' || source === 'current-message-script-certain') return true;
+    // Latin-default 'en' is never a positive read; any other named language is.
+    return source === 'current-message' && language !== 'en';
+}
+
+/**
+ * Provenance-carrying form of {@link resolveInputLanguage}. The walk order and the
+ * resolved language are IDENTICAL — this only reports which link won, so callers
+ * must never see a different language from the two functions.
+ */
+export function resolveInputLanguageWithSource(input: ResolveLanguageInput): ResolvedInputLanguage {
     const history = input.conversationHistory ?? [];
     const fromRole = (role: 'user' | 'assistant') =>
         history
@@ -178,14 +227,26 @@ export function resolveInputLanguage(input: ResolveLanguageInput): string {
             ? effectiveCommentLang
             : null;
 
-    return input.language
-        || scriptCertainCommentLang
-        || fromRole('user')
-        || fromRole('assistant')
-        || effectiveCommentLang
-        || detectLanguageOrNull(input.postMessage || '')
-        || detectLanguageOrNull(input.kbText || '')
-        || commentLang
-        || input.defaultReplyLanguage
-        || 'en';
+    // Same walk, evaluated in the same order, but tagged. Kept as an ordered list of
+    // [source, candidate] pairs so it stays visibly identical to the || chain above.
+    const walk: [LanguageSource, string | null | undefined][] = [
+        ['explicit', input.language],
+        ['current-message-script-certain', scriptCertainCommentLang],
+        ['user-history', fromRole('user')],
+        ['assistant-history', fromRole('assistant')],
+        ['current-message', effectiveCommentLang],
+        ['post', detectLanguageOrNull(input.postMessage || '')],
+        ['kb', detectLanguageOrNull(input.kbText || '')],
+        ['current-message-ambiguous', commentLang],
+        ['merchant-default', input.defaultReplyLanguage],
+        ['fallback', 'en'],
+    ];
+
+    for (const [source, candidate] of walk) {
+        if (candidate) {
+            return { language: candidate, source, fromCurrentMessage: isPositiveRead(source, candidate) };
+        }
+    }
+    // Unreachable — the 'fallback' row is a constant. Kept for exhaustiveness.
+    return { language: 'en', source: 'fallback', fromCurrentMessage: false };
 }

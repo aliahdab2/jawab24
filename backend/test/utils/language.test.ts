@@ -6,6 +6,8 @@ import {
     isLowSignalLatinToken,
     isRTL,
     getLanguageName,
+    isCertainDetection,
+    MIN_CERTAIN_CONFIDENCE,
     SupportedLanguage,
 } from '../../src/utils/language';
 
@@ -419,6 +421,50 @@ describe('Language Detection Utility', () => {
             expect(detectTemplateLanguage('كم السعر؟')).toBe('ar');
             expect(detectTemplateLanguage('how much is it?')).toBe('en');
             expect(detectTemplateLanguage('hello')).toBe('en');
+        });
+    });
+
+    /**
+     * The single source of truth for "did we actually identify this text?" — consumed by
+     * the DM deferToHistory gate AND by the reply-language directive's certainty signal,
+     * so the two can never drift. Rows are real shapes from the 30-day prod corpus.
+     */
+    describe('isCertainDetection', () => {
+        const certainty = (text: string) => isCertainDetection(detectLanguage(text));
+
+        it('is FALSE for the en@0.5 floor — "Latin script, recognized nothing"', () => {
+            // 68.77% of Latin-script inbound traffic looks like this. None of it may be
+            // asserted to the model as "the customer wrote in English".
+            expect(certainty('Quels cours proposez-vous ?')).toBe(false); // accent-free French
+            expect(certainty('13k lang po Yung marketing management')).toBe(false); // Tagalog
+            expect(certainty('160 dinar right')).toBe(false);
+            expect(certainty('kam el se3r')).toBe(false); // Arabizi
+            expect(certainty('ICDL')).toBe(false);
+        });
+
+        it('is FALSE for text with no language signal at all', () => {
+            expect(certainty('...')).toBe(false);
+            expect(certainty('👍')).toBe(false);
+            expect(certainty('')).toBe(false);
+        });
+
+        it('is TRUE for English with real English stopwords', () => {
+            expect(certainty('What is the price of the nursing course please?')).toBe(true);
+            expect(certainty('Hello, how are you doing today?')).toBe(true);
+        });
+
+        it('is TRUE for a named non-English language', () => {
+            expect(certainty('ما هي الدورات المتوفرة؟')).toBe(true);
+            expect(certainty('Hangi kurslarınız var?')).toBe(true);
+            expect(certainty('Merhaba, nasılsınız? Teşekkürler.')).toBe(true);
+        });
+
+        it('keys on the confidence threshold, not on the language code', () => {
+            expect(isCertainDetection({ language: 'en', confidence: MIN_CERTAIN_CONFIDENCE, script: 'Latin', isRTL: false })).toBe(true);
+            expect(isCertainDetection({ language: 'en', confidence: MIN_CERTAIN_CONFIDENCE - 0.1, script: 'Latin', isRTL: false })).toBe(false);
+            // A named language is certain regardless of how low its confidence reads.
+            expect(isCertainDetection({ language: 'fr', confidence: 0.5, script: 'Latin', isRTL: false })).toBe(true);
+            expect(isCertainDetection({ language: 'unknown', confidence: 1, script: 'unknown', isRTL: false })).toBe(false);
         });
     });
 });

@@ -23,6 +23,20 @@ export interface RetrievedChunkContext {
 export interface GenerateRequest {
     comment: string;
     language?: string;
+    /**
+     * Whether `language` is a POSITIVE reading of this message or just a fallback.
+     *
+     * The backend's detector returns en@0.5 for "Latin script, recognized nothing"
+     * — accent-free French, romanized Urdu/Tagalog, phone numbers, "12h" — which is
+     * 68.77% of Latin-script inbound traffic. Passing that as a bare `language: 'en'`
+     * made the prompt assert "The customer wrote in English. Do NOT switch", and the
+     * model obeyed on a French message (2026-07-29 WhatsApp report).
+     *
+     * `false` = treat `language` as a sticky default the model may correct by
+     * mirroring the customer. Absent = fall back to structural provenance from the
+     * resolution chain (see resolveInputLanguageWithSource).
+     */
+    languageCertain?: boolean;
     context?: {
         /** Backend-side tag used for Phase 6.5 diagnostic counters. Opaque here. */
         pipeline?: string;

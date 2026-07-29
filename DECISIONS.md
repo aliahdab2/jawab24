@@ -268,3 +268,38 @@ Also fix in the same work: the stale comment at
 **Decided:** 2026-07-29 · **Status:** Active
 The landing hero's platform chips flip to a saturated brand fill with white text on hover. That hover was measured against WCAG AA's 4.5:1 for its 14px bold label and fails on most chips: WhatsApp #25D366 **1.98:1**, Shopify #96BF47 **2.13:1**, Salla #2DC0C8 **2.21:1**, Instagram **2.77:1**, Zid **3.75:1**, Facebook **4.23:1**. Shopify (**2.00:1**) and Salla (**2.05:1**) also fail in the resting state, before any hover. Only the **WhatsApp** chip is changed — it deepens its tint on hover (`hover:bg-[#25D366]/25`) and keeps a dark `#075E54` label. The other five keep the fill hover as-is. A future pass must not "harmonise" WhatsApp back to the fill, and must not re-fix the other five without asking.
 **Why:** Owner reported the hover as unreadable on the newly-added WhatsApp chip, which is also where the numbers are worst (1.98:1) and where two adjacent greens — WhatsApp #25D366 and Shopify #96BF47 — became indistinguishable once both were saturated blobs with vanishing labels. A same-day change extended the fix to all six chips (darker brand labels, tint-deepening hover); owner reviewed it and declined, keeping WhatsApp only. Accepted trade-off, stated plainly: five chips stay below AA on hover and two stay below AA at rest, and WhatsApp now behaves differently from its row neighbours. Rule 9 (WCAG 2.1 AA) is knowingly not met here — this is a deliberate aesthetic call on decorative, non-interactive (`cursor-default`) chips, not an oversight. Note Lighthouse CI cannot flag any of it: it audits only the resting state, so the hover failures are invisible to the accessibility gate that runs on `/landing`.
+
+## D-048 · The reply prompt may only assert a language it positively detected; a floor read becomes a mirror-the-customer default, and accent-free French stays an accepted detection miss
+**Decided:** 2026-07-29 · **Status:** Active
+An Arabic-KB training institute on WhatsApp answered «Quels cours proposez-vous ?» in
+English, while the English and Turkish messages in the same thread were both handled
+correctly. Root cause was NOT detection: the detector returns **en@0.5** for accent-free
+French — its "Latin script, recognized nothing" floor — and the per-call prompt asserted
+that non-detection to the model as fact ("Reply language: English … **The customer wrote
+in English.** Do NOT switch to another language"). The model identified the French
+correctly and obeyed us anyway. Three rulings: (1) the hard directive is emitted ONLY for
+a positive reading of the customer's current message; for a floor read / history anchor /
+post / KB / merchant default the prompt keeps that language as the **default** but
+instructs the model to mirror the customer's own language, because the model is a far
+better short-text identifier than our heuristic. (2) The reply **validator** must agree
+with the directive it validated against — `language_mismatch` is suppressed (log-only
+`mirrored_lang_switch`) when the language was uncertain, or every correctly-mirrored reply
+would be marked `needs_attention` and barred from the reply cache. (3) **Accent-free
+French remains an accepted miss at the detector layer** and must not be "fixed" by letting
+a statistical LID name pure-ASCII text: that is where Arabizi lives, and Arabizi→Spanish
+is a far worse and far more frequent error than French→English. `MIN_CERTAIN_CONFIDENCE`
+(0.6) is the single threshold behind both the DM `deferToHistory` gate and the certainty
+signal, so they cannot drift.
+**Why:** Matches the industry standard (Intercom Fin, researched 2026-07-29): a
+below-threshold read is labelled *undetermined* and falls through — never asserted as a
+positive reading. Measured, not assumed: the floor bucket is **68.77% of Latin-script
+inbound traffic** (7,880 of 11,459 messages over 30 days) and is mostly phone numbers,
+`"12h"`, `"160 right"`, romanized Urdu and Tagalog — very little of it is English, so
+asserting English was wrong for most of the bucket. Prompt version bumped to **v64**.
+Related: the separate `LANG_ENGINE=tinyld` flag fixes *accented* French/Swedish/German and
+is bounded (a 30-day corpus diff put the flip at **0.87%** of Latin traffic after gating
+the override on zero English-stopword evidence — ungated it was 1.17% and included real
+regressions: broken English at en@0.9 flipping to Slovak, Tagalog to Vietnamese, and
+Tunisian Arabizi to French/Spanish through a single stray `é`/`où`). That flag must NOT be
+flipped in prod until the gate is deployed, or the ungated override ships those
+regressions.

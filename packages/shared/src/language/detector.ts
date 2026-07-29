@@ -59,6 +59,29 @@ export interface LanguageDetectionResult {
 }
 
 /**
+ * Below this, an 'en' result is the Latin-script DEFAULT ("recognized nothing"),
+ * not a reading. The floor is 0.5 and every matched English stopword adds 0.1, so
+ * 0.6 means "at least one real English word". Single source of truth for the
+ * threshold — the DM deferToHistory gate and the reply-language certainty signal
+ * are two decisions keyed on the same fact and must not drift apart.
+ */
+export const MIN_CERTAIN_CONFIDENCE = 0.6;
+
+/**
+ * Whether a detection is a POSITIVE reading of the text rather than a fallback.
+ *
+ * `false` means "we could not identify this text" — 'unknown', or the en@0.5 floor
+ * that swallows accent-free French, romanized Urdu/Tagalog, phone numbers and
+ * "12h" alike (68.77% of Latin-script inbound traffic, measured over 30 days).
+ * Callers must not present a `false` result to the model as the customer's
+ * language; see languageDirective in ai-worker's promptBuilder.
+ */
+export function isCertainDetection(result: LanguageDetectionResult): boolean {
+    if (result.language === 'unknown') return false;
+    return !(result.language === 'en' && result.confidence < MIN_CERTAIN_CONFIDENCE);
+}
+
+/**
  * Detect the language of a text string
  */
 export function detectLanguage(text: string): LanguageDetectionResult {
@@ -256,6 +279,15 @@ export function detectLanguage(text: string): LanguageDetectionResult {
         };
     }
 
+    // English evidence for the Latin default, computed BEFORE the tinyld override
+    // because the override is only allowed to overrule a NON-detection (see below).
+    // Strip edge punctuation so "please?" matches "please". Callers use confidence to
+    // decide whether to trust this detection (e.g. short Latin acronyms like "ICDL"
+    // stay at 0.5 and let conversation history override).
+    const normalizedWords = words.map(w => w.replace(/^[^a-z]+|[^a-z]+$/g, '')).filter(Boolean);
+    const englishMatches = normalizedWords.filter(w => ENGLISH_COMMON.includes(w)).length;
+    const confidence = Math.min(0.5 + (englishMatches * 0.1), 0.9);
+
     // Phase 1b (LANG_ENGINE=tinyld only; inert by default): this is the exact
     // fallthrough where every legacy branch above failed to name the language —
     // the class that produced the "Hur kan man anmäla sig" → English@0.5 →
@@ -264,24 +296,35 @@ export function detectLanguage(text: string): LanguageDetectionResult {
     // naive threshold design was rejected). ASCII input (English, Arabizi,
     // acronyms) can never be overridden, so the English default below — and
     // both confidence gates keyed on it — stay bit-identical in both modes.
-    const override = maybeLatinOverride(cleanText);
-    if (override) {
-        return {
-            language: override,
-            confidence: OVERRIDE_CONFIDENCE,
-            script: 'Latin',
-            isRTL: false,
-        };
+    //
+    // `englishMatches === 0` is load-bearing, not a tuning knob: the override may
+    // only overrule a NON-detection (the 0.5 floor = "Latin script, recognized
+    // nothing"), never a positive English reading. A 30-day prod corpus diff
+    // (11,459 Latin-script inbound messages) showed that WITHOUT this gate every
+    // regression came from text legacy had already scored ≥0.6 on real English
+    // stopwords, where a single stray accented character hijacked the whole
+    // message: "Hello Sir. AĹLHUMDULL Usually have been best too do ing this
+    // moment" (en@0.9) → Slovak, "How much po ang tuition ng business
+    // administration major ỉn marketing management?" (Tagalog/English) →
+    // Vietnamese, and Tunisian Arabizi "Ya Rab ya karim sotroque où afouek oua
+    // ridhak" → French/Spanish — i.e. the exact Arabizi-mislabel class the
+    // non-ASCII-letter gate exists to prevent, slipping in through one "é"/"où".
+    // Requiring zero English evidence removes that class by construction while
+    // keeping the genuine wins (Spanish, French, Romanian, Swedish, Portuguese,
+    // Czech), which all arrive at the 0.5 floor.
+    if (englishMatches === 0) {
+        const override = maybeLatinOverride(cleanText);
+        if (override) {
+            return {
+                language: override,
+                confidence: OVERRIDE_CONFIDENCE,
+                script: 'Latin',
+                isRTL: false,
+            };
+        }
     }
 
     // Default to English for Latin script.
-    // Strip edge punctuation so "please?" matches "please". Callers use confidence to
-    // decide whether to trust this detection (e.g. short Latin acronyms like "ICDL"
-    // stay at 0.5 and let conversation history override).
-    const normalizedWords = words.map(w => w.replace(/^[^a-z]+|[^a-z]+$/g, '')).filter(Boolean);
-    const englishMatches = normalizedWords.filter(w => ENGLISH_COMMON.includes(w)).length;
-    const confidence = Math.min(0.5 + (englishMatches * 0.1), 0.9);
-
     return {
         language: 'en',
         confidence,

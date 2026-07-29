@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { resolveInputLanguage } from '../resolveChain';
+import { resolveInputLanguage, resolveInputLanguageWithSource } from '../resolveChain';
 
 /**
  * First coverage for `resolveInputLanguage` — the function that decides the
@@ -206,5 +206,64 @@ describe('resolveInputLanguage — the rest of the chain', () => {
     it('defers a bare token past post and KB, but still uses it as a last resort', () => {
         expect(resolveInputLanguage({ comment: 'ICDL', postMessage: 'منشور بالعربية' })).toBe('ar');
         expect(resolveInputLanguage({ comment: 'ICDL' })).toBe('en');
+    });
+});
+
+/**
+ * Provenance (added 2026-07-29). The prompt may only assert "the customer wrote in X"
+ * when X is a POSITIVE reading of the current message; otherwise it must present X as
+ * the thread default and let the model mirror the customer. See languageDirective.
+ */
+describe('resolveInputLanguageWithSource — provenance', () => {
+    it('reports the same language as resolveInputLanguage for every input', () => {
+        const inputs: Parameters<typeof resolveInputLanguage>[0][] = [
+            { comment: 'Quels cours proposez-vous ?', conversationHistory: ARABIC_THREAD },
+            { comment: 'ما هي الدورات؟', conversationHistory: ARABIC_THREAD },
+            { comment: 'ICDL', postMessage: 'منشور بالعربية' },
+            { comment: '...', defaultReplyLanguage: 'fr' },
+            { comment: 'How much is the price', conversationHistory: ARABIC_THREAD },
+            { comment: 'anything', language: 'tr' },
+            { comment: '...' },
+        ];
+        for (const input of inputs) {
+            expect(resolveInputLanguageWithSource(input).language).toBe(resolveInputLanguage(input));
+        }
+    });
+
+    it('an explicit caller language is a positive read', () => {
+        expect(resolveInputLanguageWithSource({ comment: 'Hangi kurslarınız var?', language: 'tr' }))
+            .toMatchObject({ language: 'tr', source: 'explicit', fromCurrentMessage: true });
+    });
+
+    it('script-certain input is a positive read', () => {
+        expect(resolveInputLanguageWithSource({ comment: 'ما هي الدورات؟', conversationHistory: ENGLISH_THREAD }))
+            .toMatchObject({ language: 'ar', source: 'current-message-script-certain', fromCurrentMessage: true });
+    });
+
+    it('THE BUG: accent-free French on an English thread resolves en from the ANCHOR, not the message', () => {
+        expect(resolveInputLanguageWithSource({
+            comment: 'Quels cours proposez-vous ?',
+            conversationHistory: ENGLISH_THREAD,
+        })).toMatchObject({ language: 'en', source: 'user-history', fromCurrentMessage: false });
+    });
+
+    it('a Latin-script en read off the current message is NOT positive (no positive English rule exists here)', () => {
+        // Nothing else claimed it, so line 88 returned the generic Latin default.
+        expect(resolveInputLanguageWithSource({ comment: 'Quels cours proposez-vous ?' }))
+            .toMatchObject({ language: 'en', source: 'current-message', fromCurrentMessage: false });
+    });
+
+    it('post, KB and merchant default are never positive reads', () => {
+        expect(resolveInputLanguageWithSource({ comment: '...', postMessage: 'منشور بالعربية' }))
+            .toMatchObject({ source: 'post', fromCurrentMessage: false });
+        expect(resolveInputLanguageWithSource({ comment: '...', kbText: 'نص عربي' }))
+            .toMatchObject({ source: 'kb', fromCurrentMessage: false });
+        expect(resolveInputLanguageWithSource({ comment: '...', defaultReplyLanguage: 'fr' }))
+            .toMatchObject({ source: 'merchant-default', fromCurrentMessage: false });
+    });
+
+    it('a bare ambiguous token is not a positive read even as the last resort', () => {
+        expect(resolveInputLanguageWithSource({ comment: 'ICDL' }))
+            .toMatchObject({ language: 'en', source: 'current-message-ambiguous', fromCurrentMessage: false });
     });
 });
