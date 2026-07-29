@@ -22,6 +22,16 @@ export interface RetrievedChunkContext {
 
 export interface GenerateRequest {
     comment: string;
+    /**
+     * The caller's resolved language, if any. Treated as a DEFAULT, not as proof the
+     * customer wrote in it — the backend passes 'en' for the detector's en@0.5 "Latin
+     * script, recognized nothing" floor (accent-free French, romanized Urdu/Tagalog,
+     * "12h", phone numbers) and passes the post's language for low-signal comment
+     * tokens. Whether it is a positive reading is re-derived from `comment` in
+     * resolveInputLanguageWithSource; deliberately NOT a field on this interface,
+     * because every hop between the two services rebuilds the payload field-by-field
+     * and would drop it (see resolveChain.currentMessageIsIdentifiable).
+     */
     language?: string;
     context?: {
         /** Backend-side tag used for Phase 6.5 diagnostic counters. Opaque here. */

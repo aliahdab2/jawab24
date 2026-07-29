@@ -5,7 +5,7 @@
  * centralize three pieces of logic that were previously duplicated across
  * buildDynamicSystemSuffix, buildUserPrompt, and validateReply.
  */
-import { resolveInputLanguage } from '../language';
+import { resolveInputLanguageWithSource } from '../language';
 import type { GenerateRequest } from './types';
 
 /**
@@ -65,7 +65,23 @@ export function getKBText(request: GenerateRequest, opts?: { includeProductCatal
  * merchant's configured default before falling back to English.
  */
 export function resolveLanguage(request: GenerateRequest): string {
-    return resolveInputLanguage({
+    return resolveLanguageWithCertainty(request).language;
+}
+
+/**
+ * Resolve the reply language AND whether it is a positive reading of this message.
+ *
+ * `certain: false` means "this is the thread's / the merchant's language, not
+ * something we read off the customer's current words" — the prompt then keeps it as
+ * the default but lets the model mirror the customer instead of asserting a lie.
+ *
+ * Certainty is derived inside the shared chain from `request.comment`, NOT taken as
+ * a flag on the request: every hop between the backend and here rebuilds the payload
+ * field-by-field, so a dedicated boolean gets dropped in transit while unit tests
+ * that inject it stay green. `comment` is the one field that provably survives.
+ */
+export function resolveLanguageWithCertainty(request: GenerateRequest): { language: string; certain: boolean } {
+    const resolved = resolveInputLanguageWithSource({
         comment: request.comment,
         language: request.language,
         conversationHistory: request.context?.conversationHistory,
@@ -73,4 +89,6 @@ export function resolveLanguage(request: GenerateRequest): string {
         kbText: getKBText(request),
         defaultReplyLanguage: request.context?.defaultReplyLanguage,
     });
+
+    return { language: resolved.language, certain: resolved.fromCurrentMessage };
 }

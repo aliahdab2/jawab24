@@ -21,6 +21,8 @@ export {
     isLowSignalLatinToken,
     isRTL,
     getLanguageName,
+    isCertainDetection,
+    MIN_CERTAIN_CONFIDENCE,
     type SupportedLanguage,
     type LanguageDetectionResult,
 } from '@jawab24/shared/dist/language/detector';

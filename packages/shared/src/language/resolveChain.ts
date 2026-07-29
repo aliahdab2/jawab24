@@ -13,6 +13,12 @@
  * alphabets/predicates would change production behavior (see plan).
  */
 import { maybeLatinOverride } from './engine';
+// Certainty ONLY — never resolution. The sibling detector is the only module that
+// carries a confidence score, which is what separates en@0.9 ("real English
+// stopwords") from the en@0.5 "Latin script, recognized nothing" floor. The
+// resolved language still comes exclusively from this module's own detector, so
+// the two intentionally-unmerged alphabets stay unmerged (see the header note).
+import { detectLanguage as detectWithConfidence, isCertainDetection } from './detector';
 
 /**
  * Minimal conversation-turn shape this module needs. Kept local to avoid a
@@ -144,6 +150,74 @@ export function isAmbiguousLatinToken(text: string): boolean {
  * anchor that was right. See __tests__/resolveChain.test.ts.
  */
 export function resolveInputLanguage(input: ResolveLanguageInput): string {
+    return resolveInputLanguageWithSource(input).language;
+}
+
+/**
+ * Which link of the chain produced the resolved language. Exposed so the prompt
+ * layer can tell a POSITIVE reading of the current message apart from a sticky
+ * default — the distinction the reply directive was missing (2026-07-29).
+ */
+export type LanguageSource =
+    | 'explicit'                       // caller passed input.language
+    | 'current-message-script-certain' // named from a Unicode script property (no Latin at all)
+    | 'user-history'
+    | 'assistant-history'
+    | 'current-message'
+    | 'post'
+    | 'kb'
+    | 'current-message-ambiguous'      // bare acronym / product name, e.g. "ICDL"
+    | 'merchant-default'
+    | 'fallback';                      // terminal 'en'
+
+export interface ResolvedInputLanguage {
+    language: string;
+    source: LanguageSource;
+    /**
+     * True only when `language` is a POSITIVE reading of the CURRENT message.
+     *
+     * False for the history anchor, post, KB and merchant default — those are the
+     * thread's language, not the customer's current words. Also false when the
+     * current message carries no identifiable signal of its own: this module has NO
+     * positive English rule (`detectLanguageOrNull` returns 'en' for any Latin script
+     * nothing else claimed), so a Latin-script 'en' is a DEFAULT, not a detection.
+     * Asserting it to the model as "the customer wrote in English" is what answered
+     * «Quels cours proposez-vous ?» in English on 2026-07-29.
+     */
+    fromCurrentMessage: boolean;
+}
+
+/**
+ * Provenance + whether the current message carries a language signal of its OWN.
+ * See ResolvedInputLanguage.fromCurrentMessage.
+ *
+ * `messageIsIdentifiable` is derived from `input.comment` by the caller below, NOT
+ * accepted as a flag on the request. A caller-supplied boolean was tried first and was
+ * silently dropped by four separate hops (both axios bodies in backend `ai.ts`, both in
+ * `ecommerceToolLoop.ts`, and the ai-worker's own `/generate` route, each of which
+ * enumerates `{ comment, language, context, model }` and rebuilds the object). The unit
+ * tests injected the flag directly and stayed green while production never saw it.
+ * Deriving it from a field that already survives every hop makes that class of bug
+ * impossible rather than merely fixed (Rule 14: prevention over detection).
+ */
+function isPositiveRead(source: LanguageSource, messageIsIdentifiable: boolean): boolean {
+    // No Latin at all ⇒ named from a Unicode script property ⇒ cannot be a mis-guess.
+    // Kept unconditional because the sibling detector does not know every script this
+    // module does (Burmese, Devanagari), and would call those 'unknown'.
+    if (source === 'current-message-script-certain') return true;
+    // 'explicit' is the caller's own resolution, and it is a positive read only when the
+    // message itself is identifiable: the backend passes `language: 'en'` for the en@0.5
+    // floor (68.77% of Latin-script inbound traffic) and the post's language for
+    // low-signal comment tokens — neither is a reading of the customer's words.
+    return (source === 'explicit' || source === 'current-message') && messageIsIdentifiable;
+}
+
+/**
+ * Provenance-carrying form of {@link resolveInputLanguage}. The walk order and the
+ * resolved language are IDENTICAL — this only reports which link won, so callers
+ * must never see a different language from the two functions.
+ */
+export function resolveInputLanguageWithSource(input: ResolveLanguageInput): ResolvedInputLanguage {
     const history = input.conversationHistory ?? [];
     const fromRole = (role: 'user' | 'assistant') =>
         history
@@ -165,27 +239,51 @@ export function resolveInputLanguage(input: ResolveLanguageInput): string {
             .map(m => detectLanguage(m.content))
             .find(Boolean);
 
-    const commentLang = detectLanguageOrNull(input.comment || '');
-    const ambiguous = isAmbiguousLatinToken(input.comment || '');
+    const comment = input.comment || '';
+    const commentLang = detectLanguageOrNull(comment);
+    const ambiguous = isAmbiguousLatinToken(comment);
     const effectiveCommentLang = ambiguous ? null : commentLang;
+
+    // Does the message carry a language signal of its OWN? Reuses `ambiguous` — a bare
+    // acronym ("ICDL") names no language whatever the caller resolved it to — then asks
+    // the sibling detector, the only one with a confidence score: en@<0.6 is the "Latin
+    // script, recognized nothing" floor, and `evidence: 'characters-only'` is a diacritic
+    // guess. Both mean "do not assert this to the model as the customer's language".
+    const messageIsIdentifiable = !ambiguous && isCertainDetection(detectWithConfidence(comment));
 
     // The current message's language when it is SCRIPT-CERTAIN — i.e. the text
     // carries no Latin at all, so detectLanguageOrNull named it from a Unicode
     // script property rather than by guessing among Latin languages. Only these
     // may outrank the history anchor; see the asymmetry note in the doc comment.
     const scriptCertainCommentLang =
-        effectiveCommentLang && !/\p{Script=Latin}/u.test(input.comment || '')
+        effectiveCommentLang && !/\p{Script=Latin}/u.test(comment)
             ? effectiveCommentLang
             : null;
 
-    return input.language
-        || scriptCertainCommentLang
-        || fromRole('user')
-        || fromRole('assistant')
-        || effectiveCommentLang
-        || detectLanguageOrNull(input.postMessage || '')
-        || detectLanguageOrNull(input.kbText || '')
-        || commentLang
-        || input.defaultReplyLanguage
-        || 'en';
+    // Same walk, evaluated in the same order, but tagged. Kept as an ordered list of
+    // [source, candidate] pairs so it stays visibly identical to the || chain above.
+    const walk: [LanguageSource, string | null | undefined][] = [
+        ['explicit', input.language],
+        ['current-message-script-certain', scriptCertainCommentLang],
+        ['user-history', fromRole('user')],
+        ['assistant-history', fromRole('assistant')],
+        ['current-message', effectiveCommentLang],
+        ['post', detectLanguageOrNull(input.postMessage || '')],
+        ['kb', detectLanguageOrNull(input.kbText || '')],
+        ['current-message-ambiguous', commentLang],
+        ['merchant-default', input.defaultReplyLanguage],
+        ['fallback', 'en'],
+    ];
+
+    for (const [source, candidate] of walk) {
+        if (candidate) {
+            return {
+                language: candidate,
+                source,
+                fromCurrentMessage: isPositiveRead(source, messageIsIdentifiable),
+            };
+        }
+    }
+    // Unreachable — the 'fallback' row is a constant. Kept for exhaustiveness.
+    return { language: 'en', source: 'fallback', fromCurrentMessage: false };
 }

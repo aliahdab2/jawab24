@@ -268,3 +268,97 @@ Also fix in the same work: the stale comment at
 **Decided:** 2026-07-29 · **Status:** Active
 The landing hero's platform chips flip to a saturated brand fill with white text on hover. That hover was measured against WCAG AA's 4.5:1 for its 14px bold label and fails on most chips: WhatsApp #25D366 **1.98:1**, Shopify #96BF47 **2.13:1**, Salla #2DC0C8 **2.21:1**, Instagram **2.77:1**, Zid **3.75:1**, Facebook **4.23:1**. Shopify (**2.00:1**) and Salla (**2.05:1**) also fail in the resting state, before any hover. Only the **WhatsApp** chip is changed — it deepens its tint on hover (`hover:bg-[#25D366]/25`) and keeps a dark `#075E54` label. The other five keep the fill hover as-is. A future pass must not "harmonise" WhatsApp back to the fill, and must not re-fix the other five without asking.
 **Why:** Owner reported the hover as unreadable on the newly-added WhatsApp chip, which is also where the numbers are worst (1.98:1) and where two adjacent greens — WhatsApp #25D366 and Shopify #96BF47 — became indistinguishable once both were saturated blobs with vanishing labels. A same-day change extended the fix to all six chips (darker brand labels, tint-deepening hover); owner reviewed it and declined, keeping WhatsApp only. Accepted trade-off, stated plainly: five chips stay below AA on hover and two stay below AA at rest, and WhatsApp now behaves differently from its row neighbours. Rule 9 (WCAG 2.1 AA) is knowingly not met here — this is a deliberate aesthetic call on decorative, non-interactive (`cursor-default`) chips, not an oversight. Note Lighthouse CI cannot flag any of it: it audits only the resting state, so the hover failures are invisible to the accessibility gate that runs on `/landing`.
+
+## D-048 · The reply prompt may only assert a language it positively detected; a floor read becomes a mirror-the-customer default, and accent-free French stays an accepted detection miss
+**Decided:** 2026-07-29 · **Status:** Active
+An Arabic-KB training institute on WhatsApp answered «Quels cours proposez-vous ?» in
+English, while the English and Turkish messages in the same thread were both handled
+correctly. Root cause was NOT detection: the detector returns **en@0.5** for accent-free
+French — its "Latin script, recognized nothing" floor — and the per-call prompt asserted
+that non-detection to the model as fact ("Reply language: English … **The customer wrote
+in English.** Do NOT switch to another language"). The model identified the French
+correctly and obeyed us anyway. Four rulings: (1) the hard directive is emitted ONLY for
+a positive reading of the customer's current message; for a floor read / history anchor /
+post / KB / merchant default the prompt keeps that language as the **default** but
+instructs the model to mirror the customer's own language, because the model is a far
+better short-text identifier than our heuristic. (2) Certainty is **derived inside the
+shared resolve chain from `comment`**, never carried as a companion field. A
+`languageCertain` boolean was built first and was silently dropped by four hops that each
+rebuild the payload field-by-field (both axios bodies in backend `ai.ts`, both in
+`ecommerceToolLoop.ts`, and the ai-worker's own `/generate` route) — unit tests injected
+it and stayed green while production never saw it. Any future signal of this kind must ride
+a field that provably survives every hop, or be derived at the point of use. (3) A
+detector branch that names a language from **characters alone, with no word evidence**
+carries `evidence: 'characters-only'` on `LanguageDetectionResult` and is therefore a
+default, not an assertion. `ç` is shared by French, Portuguese, Catalan and Turkish, and
+the char-only Turkish fallback runs before the French check, so «Combien ça coûte ?» scored
+`tr@0.75` and was answered **in Turkish**. Turkish keeps Turkish as its default and the
+model corrects it. This MUST stay an explicit field rather than a confidence threshold or
+sentinel score: Arabic's `confidence` is a character RATIO (`دورة ICDL` reads `ar@0.545`,
+and real traffic produces `ar@0.35` / `ar@0.03`), so a blanket `confidence >=
+MIN_CERTAIN_CONFIDENCE` marks **441 rows of the 30-day corpus** uncertain and softens the
+hard directive on the money path, while a reserved sentinel value can be hit exactly by a
+ratio (11/20 = 0.55). The threshold therefore applies to `'en'` ONLY. (4) The reply
+**validator** must agree with the directive it validated
+against — `language_mismatch` is suppressed (log-only `mirrored_lang_switch`) when the
+language was uncertain, or every correctly-mirrored reply would be marked `needs_attention`
+and barred from the reply cache. **Accent-free French remains an accepted miss at the
+detector layer** and must not be "fixed" by letting a statistical LID name pure-ASCII text:
+that is where Arabizi lives, and Arabizi→Spanish is a far worse and far more frequent error
+than French→English.
+**Why:** Matches the industry standard (Intercom Fin, researched 2026-07-29): a
+below-threshold read is labelled *undetermined* and falls through — never asserted as a
+positive reading. Measured, not assumed: the floor bucket is **68.77% of Latin-script
+inbound traffic** (7,880 of 11,459 messages over 30 days) and is mostly phone numbers,
+`"12h"`, `"160 right"`, romanized Urdu and Tagalog — very little of it is English, so
+asserting English was wrong for most of the bucket. The char-only ruling (3) was measured
+the same way over a fresh 30-day corpus (**9,002 unique / 16,149 occurrences**): the
+detector's `language` and `confidence` output is **byte-identical to before (0 flips)** and
+only the certainty verdict moves, on **18 rows / 0.111% of traffic**.
+Every flip was hand-checked: wins on `Française`, «Oui ça va mien et la famill ??»,
+Portuguese `CONFIANÇA`, Tagalog, and an English shared-post that was being answered in
+Turkish; the 8 genuinely-Turkish rows keep Turkish as their default. An earlier attempt
+that **removed `ç`** from the branch was rejected by the same measurement — it regressed
+`Ben Arapça bilmiyorum lütfen Türkçe yaz` to a *certain* `en@0.6` because the stray token
+"on" matched an English stopword. Prompt version bumped to **v64**.
+Related: the separate `LANG_ENGINE=tinyld` flag fixes *accented* French/Swedish/German and
+is bounded (a 30-day corpus diff put the flip at **0.87%** of Latin traffic after gating
+the override on zero English-stopword evidence — ungated it was 1.17% and included real
+regressions: broken English at en@0.9 flipping to Slovak, Tagalog to Vietnamese, and
+Tunisian Arabizi to French/Spanish through a single stray `é`/`où`). That flag must NOT be
+flipped in prod until the gate is deployed, or the ungated override ships those
+regressions.
+
+## D-049 · Reply speed is the product: latency has a budget, and the budget is spent almost entirely on cache misses
+**Decided:** 2026-07-29 · **Status:** Active
+Jawab24's competitive lead is how fast it answers, so reply latency is now a governed
+budget rather than an afterthought — see **Rule 17** in `AI_INSTRUCTIONS.md` for the
+actionable rules (that file is the single copy; do not duplicate them here). The ruling
+itself: optimisation effort on the reply path MUST be spent in proportion to measured
+cost, and the measured hierarchy is brutally lopsided — a semantic reply-cache **hit**
+returns in **milliseconds**, a **miss** is a **2–4 second** OpenAI call, one extra
+sequential network hop is **1–50 ms**, and ALL local language detection / regex / string
+work is **~4 µs**. Concretely: across the entire 30-day corpus (9,002 unique / 16,149
+messages) the total added CPU of the D-048 certainty derivation is **64.6 ms** — about
+**3% of ONE reply**, spread over a month. Therefore (1) cache-hit preservation outranks
+every other latency concern, and `PROMPT_VERSION` must never be bumped "to be safe";
+(2) synchronous, in-process detection is a hard architectural constraint, pinned by
+`packages/shared/src/language/__tests__/languageLatency.test.ts`; (3) micro-optimising
+microsecond CPU on this path is REJECTED when it costs a duplicated code path.
+**Why:** Two rounds of pushback on a +4.26 µs/message regression prompted an actual
+profile instead of an argument. The profile redirected the effort: `ENGLISH_COMMON` and
+`SWEDISH_COMMON` were `Array.includes` scans (O(words × 58), ~870 string comparisons for a
+15-word message) on a function that runs for every inbound message, comment and
+template-language decision — converted to `Set.has`, worth **5%**, which also proved the
+word lists were NOT the bottleneck (the Arabic global `match()` + Unicode `replace()` and
+the ~10 script regexes are). That is the whole lesson: intuition picked the wrong target
+twice, and only measurement found the real one. The performance guardrails deliberately
+assert **structure** (not async, not network-backed, at most one detection pass per
+resolve, linear not quadratic) rather than microsecond thresholds — an absolute µs budget
+is machine-dependent, fails on a loaded CI box, and trains the team to ignore the suite.
+**OPEN GAP (blocks claiming any latency win):** `messageProcessor.ts` laps all 16 pipeline
+stages, but through `logger.debug` while production runs at `info` — `config.logLevel`
+defaults to `'info'` and the server `.env` sets no `LOG_LEVEL`. Every reply-latency
+timing is therefore **dark in prod**, so there is no p50/p95 for the metric the product
+competes on. Fix that before optimising the pipeline further; local benchmarks cannot
+tell you whether the lead is holding.

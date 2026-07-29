@@ -1147,7 +1147,21 @@ export {
 // around literal blocklists anyway — proven in this very prompt, where the
 // closing-phrase rule banned that shape and was ignored while an example
 // contradicted it.
-export const PROMPT_VERSION = 'v63';
+// v64 (2026-07-29) — the reply-language directive is now provenance-aware.
+// Reported bug: an Arabic-KB training institute on WhatsApp answered
+// «Quels cours proposez-vous ?» in English (the Turkish and English messages in
+// the same thread were both handled correctly). Cause was NOT detection: the
+// detector returns en@0.5 for accent-free French — its "Latin script, recognized
+// nothing" floor, 68.77% of Latin-script inbound traffic — and the per-call block
+// asserted that non-detection to the model as fact ("The customer wrote in
+// English. Do NOT switch to another language"). The model knew it was French and
+// obeyed us. Now the hard assertion is emitted ONLY for a positive reading of the
+// customer's current message; for a floor read / history anchor / post / KB /
+// merchant default the directive keeps that language as the DEFAULT but tells the
+// model to mirror the customer's own language, which it identifies far better than
+// our heuristic can. Both variants carry the same explicit ban on letting
+// <business_knowledge>'s language drive the reply.
+export const PROMPT_VERSION = 'v64';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

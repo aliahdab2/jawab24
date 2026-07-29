@@ -31,6 +31,8 @@ export {
     isLowSignalLatinToken,
     isRTL,
     getLanguageName,
+    isCertainDetection,
+    MIN_CERTAIN_CONFIDENCE,
     type SupportedLanguage,
     type LanguageDetectionResult,
 } from './detector';
@@ -39,7 +41,10 @@ export {
     detectLanguageOrNull,
     isAmbiguousLatinToken,
     resolveInputLanguage,
+    resolveInputLanguageWithSource,
     type ResolveLanguageInput,
+    type ResolvedInputLanguage,
+    type LanguageSource,
 } from './resolveChain';
 
 export {

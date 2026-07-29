@@ -132,3 +132,45 @@ describe('the Swedish bug — fixed in tinyld mode only', () => {
         expect(inTinyldMode(() => detectTemplateLanguage('icdl'))).toBe('unknown');
     });
 });
+
+/**
+ * The override may only overrule a NON-detection (the en@0.5 floor), never a
+ * positive English reading. Every row here is REAL prod traffic from the 30-day
+ * corpus diff (11,459 Latin-script inbound messages) that flipped to a wrong
+ * language before the `englishMatches === 0` gate: one stray accented character
+ * hijacked a message legacy had already scored ≥0.6 on genuine English stopwords.
+ *
+ * Without the gate these flipped to Slovak / Vietnamese / French / Spanish — for
+ * Arabizi rows that is the exact mislabel class the non-ASCII-letter gate exists
+ * to prevent, entering through a single "é"/"où" the legacy branches ignore.
+ */
+describe('English evidence outranks the override (prod-corpus regression)', () => {
+    const HAS_ENGLISH_EVIDENCE = [
+        // Broken English with a stray accented char — flipped to Slovak (was en@0.9).
+        'Hello Sir. AĹLHUMDULL Usually have been best too do ing this moment my self all are you miend me kinds me know',
+        'Yes sir Aĺlhumdull your self handily all loves blessing happy to your self all time okies thanks',
+        // Tagalog/English mix — flipped to Vietnamese on the "ỉ" typo.
+        'How much po ang tuition ng business administration major ỉn marketing management?',
+        'Thànks 200 % Expect only thanks UAE',
+        // Tunisian Arabizi carrying French orthography — flipped to fr/es.
+        'Ya Rab ya karim sotroque où afouek oua ridhak lncha Allah yasser in challah yass ir yia Allah yia karim',
+        'Ml lhlakom rabi isonkom où yahfadhkom ya Rab ya karim farrajha in challah yass ir yia Allah yia karim',
+        'Ma hmoud Ibrahim bén mohamed Kchaou mine tounes semouikom sabah ilkhairat oua llsaada oua ilhana in challah ya',
+    ];
+
+    it.each(HAS_ENGLISH_EVIDENCE.map(t => [t]))('keeps the English reading in BOTH modes: %j', (text) => {
+        const legacy = detectLanguage(text);
+        // Precondition: legacy found real English stopwords, so this is a positive
+        // reading — not the "recognized nothing" floor.
+        expect(legacy.language).toBe('en');
+        expect(legacy.confidence).toBeGreaterThan(0.5);
+        expect(inTinyldMode(() => detectLanguage(text))).toEqual(legacy);
+    });
+
+    it('still names languages that arrive at the floor with zero English evidence', () => {
+        // The genuine wins from the same corpus — all at en@0.5 before the flag.
+        expect(inTinyldMode(() => detectLanguageCode('Où vous trouvez-vous ?'))).toBe('fr');
+        expect(inTinyldMode(() => detectLanguageCode('Oh señor! Oh Dios todopoderoso'))).toBe('es');
+        expect(inTinyldMode(() => detectLanguageCode('Fie ca cel milostiv sa va ocrotească familia regală'))).toBe('ro');
+    });
+});

@@ -9,7 +9,7 @@
 import { MAX_BRAND_VOICE_LENGTH, safeTimezone, isAnyImageMessage } from '@jawab24/shared';
 import { langEngineMode, displayLanguageName } from '@jawab24/shared/dist/language/engine';
 import { STATIC_SYSTEM_PREFIX } from './systemPrompt';
-import { resolveLanguage, resolveChannel } from './replyContext';
+import { resolveLanguageWithCertainty, resolveChannel } from './replyContext';
 import type { GenerateRequest } from './types';
 
 // Token budget constants (configurable via env vars for production tuning)
@@ -175,6 +175,47 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
 }
 
 /**
+ * The one rule both directive variants need, stated once: the language of the
+ * merchant's own content must never drive the reply language.
+ *
+ * This is the counterweight to a known live failure mode — an all-Arabic KB plus an
+ * Arabic persona pulling replies to Arabic against an explicit English instruction
+ * (114 of 156 `language_mismatch` flags were expected:en → reply:ar). It also
+ * narrows STATIC_SYSTEM_PREFIX's broader "use the language of the customer's message
+ * AND the business knowledge as your guide", which invites exactly that drift.
+ */
+const KB_LANGUAGE_BAN =
+    'Never choose a reply language because <business_knowledge>, the business name, or your persona is written in it — translate that information into the customer\'s language when replying.';
+
+/**
+ * The reply-language directive.
+ *
+ * `certain` is the whole point. When the language is a POSITIVE reading of the
+ * customer's current message we assert it and forbid switching. When it is NOT — the
+ * history anchor, the post, the KB, the merchant default, or the detector's en@0.5
+ * "Latin script, recognized nothing" floor — asserting "the customer wrote in X"
+ * is a LIE, and on 2026-07-29 the model dutifully answered «Quels cours
+ * proposez-vous ?» in English because of it. Our detector cannot separate
+ * accent-free French / romanized Urdu / Tagalog from English at this length; the
+ * model can, so in the uncertain case it decides and X is only the default.
+ *
+ * The soft variant deliberately makes NO claim about where ${languageName} came from.
+ * It is reached from several different links of the chain (history, post, KB, merchant
+ * default, and a current-message read the confidence detector could not confirm), so
+ * any specific provenance sentence would be false in some of them — which is the exact
+ * class of bug this function exists to remove.
+ *
+ * Exported for direct testing — the two branches are a behavioural contract, not
+ * cosmetic wording.
+ */
+export function languageDirective(languageName: string, language: string, certain: boolean): string {
+    if (certain) {
+        return `You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic). ${KB_LANGUAGE_BAN}`;
+    }
+    return `Reply in the language of the customer's latest message — mirror the customer's language. We have NOT confirmed which language that message is in, so treat ${languageName} (language code: ${language}) only as the default: reply in ${languageName} when the message is in ${languageName} or is too short to tell, and reply in the customer's own language whenever it is clearly something else. ${KB_LANGUAGE_BAN}`;
+}
+
+/**
  * Build the per-call portion of the system prompt — trails the cached prefix.
  * Everything here either interpolates call-specific values, appears conditionally, or (RAG
  * chunks, post) varies per query/message.
@@ -187,7 +228,7 @@ function buildPerCallBlock(request: GenerateRequest): string {
     // conversation history → post content → KB language → merchant's configured default
     // before falling back to English.
     // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
-    const language = resolveLanguage(request);
+    const { language, certain: languageCertain } = resolveLanguageWithCertainty(request);
     // Language label for the reply directive. FLAG-GATED (Phase 1b): legacy mode
     // keeps the historical 7-entry map byte-identical — codes it doesn't know
     // (ru/ja/… from detectLanguageOrNull) render "English", matching the
@@ -266,7 +307,7 @@ STYLE: Be ${styleDirective}.
 ${isDM
 ? '- DM: give full answers with prices and specifics from <business_knowledge>. For catalog questions, mention categories and ask what interests them — don\'t dump everything.\n- You ARE the contact point — don\'t tell customers to "contact us" when they\'re already talking to you.\n- Don\'t repeat "I\'ll check" if you already said it earlier in the conversation.'
 : '- Comment: 1-3 sentences max. Include key facts (prices, hours) directly. Only suggest DM for private info or when the answer is not in KB.'}
-- CRITICAL: You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic).`;
+- CRITICAL: ${languageDirective(languageName, language, languageCertain)}`;
 
     if (language === 'ar') {
         // Per-call reinforcement of the dialect-mirroring rule in STATIC_SYSTEM_PREFIX.

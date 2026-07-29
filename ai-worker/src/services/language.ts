@@ -19,5 +19,8 @@ export {
     detectLanguage,
     isAmbiguousLatinToken,
     resolveInputLanguage,
+    resolveInputLanguageWithSource,
     type ResolveLanguageInput,
+    type ResolvedInputLanguage,
+    type LanguageSource,
 } from '@jawab24/shared/dist/language/resolveChain';

@@ -22,7 +22,10 @@ vi.mock('../../src/services/ecommerceToolLoop', () => ({
     generateReplyWithTools: vi.fn(),
 }));
 
-vi.mock('../../src/utils/language', () => ({
+// Spread the real module so pure helpers added later (e.g. isCertainDetection, which
+// derives from the mocked detectLanguage result) don't break this file.
+vi.mock('../../src/utils/language', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../src/utils/language')>()),
     detectLanguageCode: vi.fn().mockReturnValue('en'),
     detectCommentLanguage: vi.fn().mockReturnValue('en'),
     detectLanguage: vi.fn().mockReturnValue({ language: 'en', confidence: 0.9, script: 'Latin', isRTL: false }),
