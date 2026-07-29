@@ -15,3 +15,20 @@ export function buildWebUrl(path: string, locale: string | undefined): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${WEB_ORIGIN}${localePrefix}${normalizedPath}`;
 }
+
+/**
+ * Same, for a destination that only works when SIGNED IN — routed via `/login`
+ * so the browser can establish its own session first.
+ *
+ * The native app's session cannot travel with the link: auth is a JWT in
+ * `localStorage` and the Capacitor WebView's origin is not `jawab24.com`, so a
+ * bare deep link drops the merchant on a logged-out screen. `/login` is not an
+ * extra step for someone who already has a browser session — the login page
+ * forwards straight to `redirect` when it finds one — so this is strictly
+ * better than linking the destination directly.
+ *
+ * @param path in-app destination, e.g. `/pages`. Encoded into `?redirect=`.
+ */
+export function buildWebAuthedUrl(path: string, locale: string | undefined): string {
+  return buildWebUrl(`/login?redirect=${encodeURIComponent(path)}`, locale);
+}

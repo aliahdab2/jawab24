@@ -39,6 +39,14 @@ vi.mock('../../src/services/channelTrial', () => ({
     },
 }));
 
+// The readiness gate hits the DB (catalog probe) and the store service. These
+// suites are about the billing/trial gates, so default to "the page is grounded"
+// and let the dedicated tests below flip it.
+vi.mock('../../src/services/businessReadiness', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../src/services/businessReadiness')>()),
+    businessInfoGate: vi.fn().mockResolvedValue(null),
+}));
+
 // serializePage comes from controllers/pages — mock its heavy service imports
 vi.mock('../../src/services/facebook', () => ({
     facebookService: {},
@@ -53,6 +61,13 @@ import { pagesService } from '../../src/services/pages';
 import { whatsappService } from '../../src/services/whatsapp';
 import { subscriptionsService } from '../../src/services/subscriptions';
 import { channelTrialService } from '../../src/services/channelTrial';
+import { businessInfoGate } from '../../src/services/businessReadiness';
+
+// What businessInfoGate returns for a page with nothing to answer from.
+const BUSINESS_INFO_REFUSAL = {
+    status: 409,
+    body: { error: 'Add your Business Info', code: 'BUSINESS_INFO_REQUIRED' },
+} as const;
 
 const basePage = {
     id: 'page-1',
@@ -310,6 +325,9 @@ describe('WhatsAppController.toggleAutoReply', () => {
         vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(entitledSubscription as never);
         vi.mocked(channelTrialService.evaluate).mockResolvedValue({ blocked: false } as never);
         vi.mocked(channelTrialService.record).mockResolvedValue(undefined as never);
+        // Re-armed after clearAllMocks: a cleared mock resolves undefined, which
+        // the gate reads as "ungrounded" and would 409 every test in this block.
+        vi.mocked(businessInfoGate).mockResolvedValue(null);
     });
 
     function toggleRequest(enabled: boolean) {
@@ -351,6 +369,46 @@ describe('WhatsAppController.toggleAutoReply', () => {
         expect(subscriptionsService.canEnablePage).not.toHaveBeenCalled();
         expect(channelTrialService.evaluate).not.toHaveBeenCalled();
         expect(pagesService.toggleWhatsAppAutoReply).toHaveBeenCalledWith('ws-1', 'page-1', false);
+    });
+
+    // A WhatsApp-only card is created with no Business Info (no Facebook page to
+    // seed it), so without this gate the GA happy path put an AI with nothing to
+    // answer from in front of real customers.
+    it('409s BUSINESS_INFO_REQUIRED on enable when the page has nothing to answer from', async () => {
+        vi.mocked(businessInfoGate).mockResolvedValue(BUSINESS_INFO_REFUSAL);
+        const reply = buildReply();
+        await whatsappController.toggleAutoReply(toggleRequest(true) as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(409);
+        expect(reply.send).toHaveBeenCalledWith(
+            expect.objectContaining({ code: 'BUSINESS_INFO_REQUIRED' }),
+        );
+        expect(pagesService.toggleWhatsAppAutoReply).not.toHaveBeenCalled();
+    });
+
+    it('never blocks DISABLING an ungrounded page', async () => {
+        // Otherwise a merchant who emptied their Business Info could not switch
+        // the bot off — the gate would trap them with a live bot.
+        vi.mocked(businessInfoGate).mockResolvedValue(BUSINESS_INFO_REFUSAL);
+        const reply = buildReply();
+        await whatsappController.toggleAutoReply(toggleRequest(false) as never, reply);
+
+        expect(pagesService.toggleWhatsAppAutoReply).toHaveBeenCalledWith('ws-1', 'page-1', false);
+    });
+
+    it('reports the plan gate before the readiness gate', async () => {
+        // A Starter merchant must be told to upgrade: filling Business Info would
+        // not unlock WhatsApp for them, so "add your info" would be a wrong
+        // instruction that wastes their time.
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starterSubscription as never);
+        vi.mocked(businessInfoGate).mockResolvedValue(BUSINESS_INFO_REFUSAL);
+        const reply = buildReply();
+        await whatsappController.toggleAutoReply(toggleRequest(true) as never, reply);
+
+        expect(reply.status).toHaveBeenCalledWith(403);
+        expect(reply.send).toHaveBeenCalledWith(
+            expect.objectContaining({ code: 'WHATSAPP_PLAN_REQUIRED' }),
+        );
     });
 
     it('403s WHATSAPP_PLAN_REQUIRED on enable for a plan without WhatsApp, before slot/trial gates', async () => {

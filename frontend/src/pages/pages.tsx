@@ -392,6 +392,17 @@ const PagesPage: NextPageWithLayout = () => {
       const status = axiosErr.response?.status;
       if (code === cfg.disconnectedCode) {
         toast.error(cfg.disconnectedMsg);
+      } else if (status === 409 && code === 'BUSINESS_INFO_REQUIRED') {
+        // The server refused because the AI would have nothing to answer from.
+        // Reached two ways: a WhatsApp-only card (born with no Business Info —
+        // no Facebook page to seed it), or "Turn on anyway" clicked on the soft
+        // gate above for a page that is genuinely empty rather than merely
+        // thin. Deliberately NOT re-derived on the client: the server owns this
+        // verdict, and a second predicate here is how the two would drift.
+        // Open the editor rather than just complaining — the refusal names a
+        // fixable thing, so put the merchant in front of it.
+        toast.error(t('businessInfoRequiredToEnable'));
+        openKbEditorFor(pages.find(p => p.id === pageId));
       } else if (status === 402 && code === 'SUBSCRIPTION_INACTIVE') {
         toast.error(t('subscriptionInactive'));
       } else if (status === 403 && code === 'PAGE_LIMIT_REACHED') {
@@ -481,8 +492,15 @@ const PagesPage: NextPageWithLayout = () => {
     if (Capacitor.isNativePlatform()) {
       toast.info(t('whatsappConnectWebOnly'));
       const { openExternalUrl } = await import('@/lib/openExternalUrl');
-      const { buildWebUrl } = await import('@/lib/webUrl');
-      await openExternalUrl(buildWebUrl('/pages', language));
+      const { buildWebAuthedUrl } = await import('@/lib/webUrl');
+      // Via /login, NOT straight to /pages: the app's JWT lives in the WebView's
+      // localStorage under a different origin, so it does not travel to the
+      // system browser. Linking /pages directly dropped the merchant on a
+      // logged-out screen with no idea why — they came to connect a number and
+      // got a sign-in wall with no destination. /login forwards immediately when
+      // a browser session already exists, so this costs an already-signed-in
+      // merchant nothing.
+      await openExternalUrl(buildWebAuthedUrl('/pages', language));
       return;
     }
     const existingPage = pageId ? pages.find(p => p.id === pageId) : null;
@@ -521,18 +539,23 @@ const PagesPage: NextPageWithLayout = () => {
         // leaves their phone) and, later, the default reply mode.
         coexistence: result.coexistence,
       };
-      let connectedPageId: string;
+      // Track the page OBJECT, not just its id: a WhatsApp-only card is created
+      // in this very call, so the `pages` closure captured at render time does
+      // not contain it and a later `pages.find(...)` would silently miss.
+      let connectedPage: Page;
       if (pageId) {
         const response = await api.post(`/pages/${pageId}/connect-whatsapp`, body);
         const updated = response.data as Partial<Page>;
         setPages(prev => prev.map(p => (p.id === pageId ? { ...p, ...updated } : p)));
-        connectedPageId = pageId;
+        const existing = pages.find(p => p.id === pageId);
+        connectedPage = { ...(existing as Page), ...updated, id: pageId };
       } else {
         const response = await api.post('/pages/connect-whatsapp', body);
         const created = response.data as Page;
         setPages(prev => [...prev, created]);
-        connectedPageId = created.id;
+        connectedPage = created;
       }
+      const connectedPageId = connectedPage.id;
       toast.success(t('whatsappConnectSuccess'));
 
       // Parity with Facebook pages (which arrive enabled): try to switch
@@ -542,8 +565,21 @@ const PagesPage: NextPageWithLayout = () => {
       try {
         await api.patch(`/pages/${connectedPageId}/whatsapp-auto-reply`, { enabled: true });
         setPages(prev => prev.map(p => (p.id === connectedPageId ? { ...p, whatsappAutoReplyEnabled: true } : p)));
-      } catch {
-        // Gated (402/403) or transient — leave off; the toggle is right there.
+      } catch (enableError) {
+        // A WhatsApp-ONLY card always lands here: it is created with no Business
+        // Info (there is no Facebook page to seed it from), so the readiness gate
+        // refuses the enable by design. That is the correct outcome — an AI with
+        // nothing to answer from must not greet real customers — but it must not
+        // be SILENT, or the merchant is left with a connected number, a toggle
+        // that is mysteriously off, and no idea why. Send them to the editor.
+        const code = (enableError as { response?: { data?: { code?: string } } })
+          .response?.data?.code;
+        if (code === 'BUSINESS_INFO_REQUIRED') {
+          toast.info(t('whatsappConnectedAddBusinessInfo'));
+          openKbEditorFor(connectedPage);
+        }
+        // Any other gate (402/403) or a transient failure — leave off; the
+        // toggle is right there and the billing surfaces explain themselves.
       }
     } catch (error) {
       const err = error as { message?: string; response?: { data?: { code?: string } } };

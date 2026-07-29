@@ -8,6 +8,7 @@ import { whatsappService } from '../services/whatsapp';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
 import { recordAutoreplyEnabledIfEffective } from '../services/activation';
+import { businessInfoGate } from '../services/businessReadiness';
 import { pageGateError } from '../utils/pageGateResponse';
 import { serializePage } from './pages';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -362,6 +363,19 @@ export class WhatsAppController {
                 if (!(await hasWhatsAppPlanAccess(workspaceOwnerId))) {
                     return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
                 }
+
+                // A WhatsApp-only card is born with NO Business Info — there is no
+                // Facebook page to seed it from — so without this the GA happy path
+                // is "connect a number, AI starts answering customers with nothing
+                // to answer from".
+                //
+                // Ordered AFTER the plan gate and BEFORE the page-limit/trial gates:
+                // WhatsApp needs Business/Pro/Scale, so a Starter merchant must be
+                // told to upgrade (filling Business Info would not unlock it), but a
+                // merchant who IS entitled should hear about the thing they can
+                // actually fix rather than a seat count.
+                const infoGate = await businessInfoGate(existingPage);
+                if (infoGate) return reply.status(infoGate.status).send(infoGate.body);
 
                 const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {

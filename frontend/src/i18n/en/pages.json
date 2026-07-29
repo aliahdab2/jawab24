@@ -121,6 +121,8 @@
   "enableWithoutInfoTitle": "Turn on auto-reply without Business Info?",
   "enableWithoutInfoMessage": "Jawab will only greet customers and hand off — it can't answer questions until you add your Business Info.",
   "enableWithoutInfoConfirm": "Turn on anyway",
+  "businessInfoRequiredToEnable": "Add your Business Info first — Jawab has nothing to answer your customers from.",
+  "whatsappConnectedAddBusinessInfo": "Number connected. Add your Business Info to switch Smart Replies on.",
   "pageTakenWarning": "{count, plural, one {# page is} other {# pages are}} already connected to another Jawab24 account. Ask that account's owner to invite you as a team member.",
   "pageTakenInWorkspace": "{count, plural, one {# page is} other {# pages are}} already in workspace ‹{workspaceName}› where you're already a member. Switch to that workspace to manage them.",
   "switchWorkspaceCta": "Switch to {workspaceName}",

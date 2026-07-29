@@ -744,13 +744,35 @@
     @apply bg-[#2DC0C8]/10 text-[#2DC0C8] hover:bg-[#2DC0C8] hover:text-white;
   }
 
+  /*
+   * Zid's brand purple (zid.sa), replacing an invented orange #E94F1C. Keeps the
+   * fill-on-hover pattern of the chips above — only the hue changes — but the fill
+   * is Zid's DARK purple #3C1C54, not its #AE72FF accent. Two reasons the accent
+   * cannot be the fill: white on #AE72FF is 3.16:1 (below AA's 4.5:1), and the Zid
+   * icon's own tile IS #AE72FF, so the logo dissolved into the fill. On #3C1C54,
+   * white measures 14.13:1 and the light tile stands out against it.
+   *
+   * Both dark: variants are required. Resting, Zid's ink #3C1C54 on the dark chip
+   * tint is 1.24:1 — invisible — so dark mode uses the accent as the label (5.54:1),
+   * the same pattern as the Instagram and WhatsApp chips. `dark:hover:text-white`
+   * then has to restate white explicitly: against `.dark &` it is otherwise a
+   * specificity tie decided by stylesheet order.
+   */
   .landing-platform-chip-zid {
-    @apply bg-[#E94F1C]/10 text-[#E94F1C] hover:bg-[#E94F1C] hover:text-white;
+    @apply bg-[#AE72FF]/10 text-[#3C1C54] dark:text-[#AE72FF] hover:bg-[#3C1C54] hover:text-white dark:hover:text-white;
   }
 
-  /* WhatsApp: darker brand teal for light-mode text — #25D366 on its 10% tint fails WCAG contrast */
+  /*
+   * WhatsApp is INTENTIONALLY the odd one out: it deepens its brand tint on hover
+   * and keeps a dark brand label, where the five chips above flip to a saturated
+   * brand fill with white text. White on #25D366 measures 1.98:1 — against WCAG
+   * AA's 4.5:1 for this 14px bold text — so the label all but vanished, which is
+   * what was reported. Owner decision 2026-07-29: fix WhatsApp only, leave the
+   * others on the fill hover (see DECISIONS.md D-047). Do not "harmonise" this
+   * back to hover:bg-[#25D366] hover:text-white.
+   */
   .landing-platform-chip-whatsapp {
-    @apply bg-[#25D366]/10 text-[#128C7E] dark:text-[#25D366] hover:bg-[#25D366] hover:text-white;
+    @apply bg-[#25D366]/10 text-[#075E54] dark:text-[#25D366] hover:bg-[#25D366]/25;
   }
 
   /* Decorative radial glow orbs for landing sections */
