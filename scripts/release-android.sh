@@ -138,12 +138,20 @@ have_public_var() {  # $1 = var name
     [ -n "${!1:-}" ] && return 0
     grep -qE "^${1}=.+" "$MOBILE_ENV_FILE" 2>/dev/null
 }
-# Only NEXT_PUBLIC_WHATSAPP_CONFIG_ID is gated. NEXT_PUBLIC_FB_APP_ID is
-# deliberately NOT: Android gets its Facebook app id from the native config
-# (strings.xml / FacebookActivity), so requiring it in the web bundle would fail
-# every release for a value the app never reads there.
+# BOTH are gated, and both for the same reason: `isWhatsAppEnabled()` in
+# frontend/src/lib/featureFlags.ts is `!!NEXT_PUBLIC_FB_APP_ID &&
+# !!NEXT_PUBLIC_WHATSAPP_CONFIG_ID`, evaluated against values Next inlines at
+# BUILD time. Either one missing compiles the whole WhatsApp surface out —
+# no row, no channel picker entry, no connect flow, no crash, no error.
+#
+# An earlier version of this guard exempted NEXT_PUBLIC_FB_APP_ID, reasoning
+# that Android reads its Facebook app id from the native config (strings.xml /
+# FacebookActivity). That is true of the native SDK and irrelevant here: the
+# feature flag reads the value out of the JS bundle. The exemption left the
+# exact hole that shipped 2.0.6 with WhatsApp silently absent, just via the
+# other variable.
 MISSING_PUBLIC=()
-for v in NEXT_PUBLIC_WHATSAPP_CONFIG_ID; do
+for v in NEXT_PUBLIC_FB_APP_ID NEXT_PUBLIC_WHATSAPP_CONFIG_ID; do
     have_public_var "$v" || MISSING_PUBLIC+=("$v")
 done
 if [ ${#MISSING_PUBLIC[@]} -gt 0 ]; then
@@ -155,7 +163,7 @@ if [ ${#MISSING_PUBLIC[@]} -gt 0 ]; then
     echo -e "   in /var/www/jawab24/env/frontend.env (it also appears in the OAuth URL)."
     exit 1
 fi
-echo -e "${GREEN}✅ WhatsApp Configuration ID present for the build${NC}"
+echo -e "${GREEN}✅ WhatsApp public config present for the build (FB app id + config id)${NC}"
 
 # The canary flag must NOT leak into a store build: it hides WhatsApp from every
 # non-admin, which is every user of the shipped app.
@@ -221,13 +229,25 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 # bundle (wrong env file precedence, a typo in the name, a stale `out/`), and the
 # failure mode is silent — a shipped app quietly missing a channel. Grep the
 # emitted bundle for the value we expect to find in it.
-WA_CONFIG_ID="${NEXT_PUBLIC_WHATSAPP_CONFIG_ID:-$(grep -hE '^NEXT_PUBLIC_WHATSAPP_CONFIG_ID=' frontend/.env.local 2>/dev/null | head -1 | cut -d= -f2-)}"
-if [ -n "$WA_CONFIG_ID" ] && ! grep -rqF "$WA_CONFIG_ID" frontend/out 2>/dev/null; then
-    echo -e "${RED}❌ WhatsApp Configuration ID is NOT present in the built bundle (frontend/out).${NC}"
-    echo -e "   It was set going in, so the build did not inline it — the app would ship"
-    echo -e "   with the WhatsApp surface silently absent. Not uploading."
-    exit 1
-fi
+# Both values, because `isWhatsAppEnabled()` needs both — proving only the
+# config id landed would have passed a build whose FB app id never made it.
+resolve_public_var() {
+    local name="$1"
+    if [ -n "${!name:-}" ]; then
+        printf '%s' "${!name}"
+    else
+        grep -hE "^${name}=" frontend/.env.local 2>/dev/null | head -1 | cut -d= -f2-
+    fi
+}
+for v in NEXT_PUBLIC_FB_APP_ID NEXT_PUBLIC_WHATSAPP_CONFIG_ID; do
+    value="$(resolve_public_var "$v")"
+    if [ -n "$value" ] && ! grep -rqF "$value" frontend/out 2>/dev/null; then
+        echo -e "${RED}❌ ${v} is NOT present in the built bundle (frontend/out).${NC}"
+        echo -e "   It was set going in, so the build did not inline it — the app would ship"
+        echo -e "   with the WhatsApp surface silently absent. Not uploading."
+        exit 1
+    fi
+done
 echo -e "${GREEN}✅ WhatsApp config inlined into the bundle${NC}"
 
 # ─── Gradle: build (and upload unless dry-run) ───
