@@ -223,6 +223,58 @@ describe('resolveCommentLanguage', () => {
         expect(resolveCommentLanguage('iPhone', arabicPost, undefined)).toBe('ar');
     });
 
+    describe('Arabizi and punctuation on an Arabic post', () => {
+        // Arabic written in Latin letters. The detector floors it at English by
+        // construction (Latin is its default), so the ONLY correct signal is the post,
+        // exactly as for a bare token. Emoji-laden Arabizi is extremely common real
+        // traffic — engine.test.ts calls it out by name — and the ASCII cap inside
+        // isLowSignalLatinToken was disqualifying it, sending these to English.
+        const arabicPost = '#عروض على دورات #الكومبيوتر مع الأستاذ أنس الأشقر دورة icdl';
+
+        it('mirrors the Arabic post for plain Arabizi', () => {
+            expect(resolveCommentLanguage('kam el se3r', arabicPost, undefined)).toBe('ar');
+            expect(resolveCommentLanguage('sho hal as3ar', arabicPost, undefined)).toBe('ar');
+            expect(resolveCommentLanguage('bkam el course', arabicPost, undefined)).toBe('ar');
+        });
+
+        it('mirrors the Arabic post for Arabizi carrying an emoji', () => {
+            expect(resolveCommentLanguage('kam el se3r 😍', arabicPost, undefined)).toBe('ar');
+            expect(resolveCommentLanguage('sho hal as3ar 😀', arabicPost, undefined)).toBe('ar');
+        });
+
+        it('mirrors the Arabic post for a signal-less affirmative with an emoji', () => {
+            expect(resolveCommentLanguage('ok 👍', arabicPost, undefined)).toBe('ar');
+            expect(resolveCommentLanguage('DONE 🙏🌷', arabicPost, undefined)).toBe('ar');
+        });
+
+        it('mirrors the Arabic KB when the post is absent (RAG active)', () => {
+            expect(resolveCommentLanguage('kam el se3r 😍', undefined, 'دورات وأسعار')).toBe('ar');
+            expect(resolveCommentLanguage('ok 👍', undefined, 'دورات وأسعار')).toBe('ar');
+        });
+
+        it('KNOWN LIMITATION: ASCII punctuation still disqualifies a token', () => {
+            // Deliberate. Discounting ASCII punctuation as well flipped 58.5% of real
+            // prod traffic (vs 1.5% for emoji-only) and misread English contractions as
+            // tokens — see backend/test/utils/language.test.ts for the measurement.
+            expect(resolveCommentLanguage('Icdl?', arabicPost, undefined)).toBe('en');
+            expect(resolveCommentLanguage('kam el se3r?', arabicPost, undefined)).toBe('en');
+        });
+
+        it('KNOWN GAP: 4+ word Arabizi still goes to English (word-count cap)', () => {
+            // Out of scope for isLowSignalLatinToken by design — its <=3 word cap is a
+            // deliberate guard against catching real English sentences. Raising it needs
+            // its own decision and prod measurement, so this documents the boundary.
+            expect(resolveCommentLanguage('3ayez a3raf el se3r', arabicPost, undefined)).toBe('en');
+        });
+
+        it('does not drag a genuine English question to Arabic, punctuation or not', () => {
+            // The confidence floor still separates these from Arabizi.
+            for (const c of ['how much?', 'which course', 'what is the price?', 'hello!']) {
+                expect(resolveCommentLanguage(c, arabicPost, undefined)).toBe('en');
+            }
+        });
+    });
+
     it('keeps English for long English comments even when KB is Arabic', () => {
         expect(
             resolveCommentLanguage('can you send me the full price list please', undefined, 'دورات'),

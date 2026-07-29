@@ -306,11 +306,13 @@ export function detectLanguageCode(text: string): SupportedLanguage {
  * merchant's default language instead of forcing an English reply on an
  * otherwise-Arabic thread.
  *
- * Gate: English at confidence ≤ 0.5, ASCII alphanumerics only, ≤ 3 words. The
- * confidence floor is the real signal; the ASCII + word-count checks are a safety
- * cap so a longer English sentence that happens to dodge every function word can't
- * be misread as a token. A genuine short English question ("which course", "how
- * much") matches a function word → confidence > 0.5 → not low-signal.
+ * Gate: English at confidence ≤ 0.5, ASCII alphanumerics only, ≤ 3 words — the
+ * shape checks applied AFTER discounting emoji/punctuation, which carry no language
+ * signal (see the note in the body). The confidence floor is the real signal; the
+ * ASCII + word-count checks are a safety cap so a longer English sentence that
+ * happens to dodge every function word can't be misread as a token. A genuine short
+ * English question ("which course", "how much") matches a function word →
+ * confidence > 0.5 → not low-signal.
  *
  * Kept in sync with resolveCommentLanguage (commentPreprocess.ts), which applies
  * the identical gate for the AI comment-reply path.
@@ -319,10 +321,36 @@ export function isLowSignalLatinToken(text: string): boolean {
     const trimmed = text.trim();
     if (!trimmed) return false;
     const det = detectLanguage(trimmed);
-    return det.language === 'en'
-        && det.confidence <= 0.5
-        && /^[a-zA-Z0-9\s]+$/.test(trimmed)
-        && trimmed.split(/\s+/).length <= 3;
+    if (det.language !== 'en' || det.confidence > 0.5) return false;
+
+    // Discount NON-ASCII symbols (emoji, hearts, Unicode punctuation) before the
+    // shape checks — they carry no language signal, exactly as engine.ts's
+    // letter-gate reasons about the same codepoints. "ok" was a token but "ok 👍"
+    // was not, and emoji-laden Arabizi ("kam el se3r 😍" — extremely common real
+    // traffic) therefore resolved to English on an Arabic post through
+    // resolveCommentLanguage, and to the English away/quota/greeting template
+    // through detectTemplateLanguage. Fixed 2026-07-29.
+    //
+    // ASCII punctuation is deliberately KEPT. Stripping it too was measured against
+    // 7,500 real prod messages and flipped 58.5% of traffic, including genuine
+    // English prose — "I don't understand" and "I'm coming" became "tokens" once the
+    // apostrophe was removed, which would have sent them to the merchant's default
+    // language. The apostrophe/quote/bracket was doing real work as a proxy for
+    // "this is prose, not a product name", so the safety cap keeps it. Narrowing to
+    // non-ASCII symbols cuts the flip rate to a small, hand-checked set.
+    //
+    // The confidence floor above is untouched and remains the real discriminator, so
+    // genuine short English questions ("how much?", "which course?" — all 0.6+) are
+    // unaffected either way.
+    // \x00-\x7F is an ASCII-range bound, not a control-character match — same pattern
+    // and same suppression as engine.ts's letter-gate.
+    // eslint-disable-next-line no-control-regex
+    const signal = trimmed.replace(/[^\p{L}\p{N}\s\x00-\x7F]/gu, '').trim();
+    // A token must carry at least one letter: "123", "?!" and "..." are not tokens.
+    if (!/\p{L}/u.test(signal)) return false;
+
+    return /^[a-zA-Z0-9\s]+$/.test(signal)
+        && signal.split(/\s+/).length <= 3;
 }
 
 /**

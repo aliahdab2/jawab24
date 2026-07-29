@@ -707,6 +707,17 @@ export class ReplyGenerator {
                 // sent the first DM and the customer's first reply is a Latin token).
                 // High-confidence detection (Arabic script, or Latin with common English
                 // words) still takes effect — preserving legitimate language switches.
+                //
+                // The <0.6 confidence floor deliberately stays a BLUNT instrument: it also
+                // catches accent-free French/Spanish/Italian, which score en@0.5 (so those
+                // customers inherit the thread's language — a known limitation, see
+                // test/services/deferToHistory.test.ts). Narrowing it to
+                // `isLowSignalLatinToken` was tried on 2026-07-29 and REVERTED: that
+                // predicate requires ASCII-only and <=3 words, so "kam el se3r 😍" and
+                // "3ayez a3raf el se3r" stopped deferring — Arabizi is far more common here
+                // than French, and losing its anchor is what once had the bot replying in
+                // Spanish (engine.test.ts). The information needed to separate Arabizi from
+                // accent-free French is not available at this layer.
                 const { language: msgLang, confidence: msgConfidence } = detectLanguage(text);
                 const hasPriorHistory = historyForAI.length > 0;
                 const isLowConfidenceLatin = msgLang === 'en' && msgConfidence < 0.6;

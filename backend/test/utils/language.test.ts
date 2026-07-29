@@ -334,6 +334,81 @@ describe('Language Detection Utility', () => {
         });
     });
 
+    describe('isLowSignalLatinToken — letters WITH punctuation or emoji', () => {
+        /**
+         * The gate above tests punctuation and emoji in ISOLATION ('...', '👍'), which
+         * correctly return false: no letters means no language at all. Letters PLUS
+         * punctuation was never covered, and that is where it breaks — the ASCII test
+         * is /^[a-zA-Z0-9\s]+$/, so one '?' or one emoji disqualifies the whole string.
+         *
+         * This is the failure mode the authors already called "accidental" about the
+         * PREVIOUS gate (see commentPreprocess.ts: "flipped 'which course' to Arabic yet
+         * kept 'what course?' English purely because of the trailing '?'"). The
+         * confidence floor was added to fix it, but the ASCII cap carried it forward.
+         *
+         * Live blast radius: resolveCommentLanguage (comment replies) and
+         * resolveFallbackLanguage (away / quota templates) both key on this predicate.
+         */
+        it('treats a token the same with or without a trailing emoji', () => {
+            expect(isLowSignalLatinToken('ok')).toBe(true);
+            expect(isLowSignalLatinToken('ok 👍')).toBe(true);
+            expect(isLowSignalLatinToken('Excel 🙏')).toBe(true);
+            expect(isLowSignalLatinToken('DONE 🙏🌷')).toBe(true);
+        });
+
+        it('treats Arabizi the same with or without an emoji', () => {
+            // Extremely common real traffic. Losing the token classification here sent
+            // the reply to English on an Arabic post.
+            expect(isLowSignalLatinToken('kam el se3r')).toBe(true);
+            expect(isLowSignalLatinToken('kam el se3r 😍')).toBe(true);
+            expect(isLowSignalLatinToken('sho hal as3ar 😀')).toBe(true);
+            expect(isLowSignalLatinToken('Allah mma barik 💖💕❤️🌹')).toBe(true);
+        });
+
+        it('KEEPS ASCII punctuation significant — deliberate, and measured', () => {
+            // Stripping ASCII punctuation too was tried and rejected: measured against
+            // 7,500 real prod messages it flipped 58.5% of traffic (vs 1.5% for the
+            // emoji-only rule), and it broke genuine English prose — "I don't
+            // understand" and "I'm coming" became "tokens" once the apostrophe went,
+            // which would have answered them in the merchant's default language.
+            // The apostrophe/bracket is an effective proxy for "prose, not a product
+            // name", so the safety cap keeps it.
+            expect(isLowSignalLatinToken("I don't understand")).toBe(false);
+            expect(isLowSignalLatinToken("I'm coming")).toBe(false);
+            expect(isLowSignalLatinToken('[Sticker]')).toBe(false);
+            expect(isLowSignalLatinToken('[Image]')).toBe(false);
+
+            // Consequence, accepted: a trailing '?' still disqualifies a real token.
+            // Not worth widening the rule for — see the measurement above.
+            expect(isLowSignalLatinToken('ICDL?')).toBe(false);
+            expect(isLowSignalLatinToken('kam el se3r?')).toBe(false);
+        });
+
+        it('still keeps genuine English questions out, punctuation or not', () => {
+            // The confidence floor (<=0.5) is the real discriminator and is unaffected by
+            // stripping punctuation: every one of these sits at 0.6+.
+            for (const t of [
+                'how much', 'how much?',
+                'which course', 'which course?',
+                'what is the price?', 'do you deliver?', 'hello!',
+            ]) {
+                expect(isLowSignalLatinToken(t)).toBe(false);
+            }
+        });
+
+        it('still returns false when there are no letters at all', () => {
+            for (const t of ['...', '👍', '', '   ', '?!', '123', '?123?']) {
+                expect(isLowSignalLatinToken(t)).toBe(false);
+            }
+        });
+
+        it('still respects the word-count cap once punctuation is discounted', () => {
+            // 4+ real words remain out of scope for this predicate by design.
+            expect(isLowSignalLatinToken('3ayez a3raf el se3r')).toBe(false);
+            expect(isLowSignalLatinToken('please send me the price list now!')).toBe(false);
+        });
+    });
+
     describe('detectTemplateLanguage (away / greeting / fallback variant picker)', () => {
         it('returns "unknown" for a bare Latin token so callers use the merchant default', () => {
             expect(detectTemplateLanguage('icdl')).toBe('unknown');

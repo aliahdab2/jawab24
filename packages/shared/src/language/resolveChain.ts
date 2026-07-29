@@ -116,10 +116,10 @@ export function isAmbiguousLatinToken(text: string): boolean {
 /**
  * Resolve the effective input language.
  *
- * Walk order: explicit override → user history (preferred anchor) → assistant
- * history (fallback when only the bot has spoken, e.g. dual-DM opener) →
- * current message (skipped if ambiguous Latin token) → post → KB → ambiguous
- * Latin token as last resort → default → 'en'.
+ * Walk order: explicit override → current message IF script-certain → user
+ * history (preferred anchor) → assistant history (fallback when only the bot has
+ * spoken, e.g. dual-DM opener) → current message → post → KB → ambiguous Latin
+ * token as last resort → default → 'en'.
  *
  * User history takes priority over assistant history so that bot drift (e.g.
  * an accidental English reply mid-Arabic conversation) does not lock the
@@ -127,6 +127,21 @@ export function isAmbiguousLatinToken(text: string): boolean {
  *
  * Short single-word Latin input is deferred past post/KB so a customer who
  * types just "ICDL" on an Arabic post gets an Arabic reply.
+ *
+ * The current message outranks the history anchor ONLY when it is SCRIPT-CERTAIN
+ * — no Latin characters at all, so the language came from a Unicode script
+ * property and cannot be a mis-guess (added 2026-07-29). Rationale: the same
+ * "expressed preference" principle applies within the customer's own turns — the
+ * newest turn is their preference — and before this an Arabic question on an
+ * English thread was answered in English.
+ *
+ * Latin-script input is deliberately EXCLUDED from that promotion, and the
+ * asymmetry is load-bearing. 'en' is this module's default for any unnamed Latin
+ * script, so Arabizi ("kam el se3r 😍"), acronyms and short affirmatives all look
+ * like English and must keep deferring to history. Promoting *any* named Latin
+ * language was tried and reverted the same day: tinyld called
+ * «Oui ça va mien et la famill ??» Turkish, which would have outranked a history
+ * anchor that was right. See __tests__/resolveChain.test.ts.
  */
 export function resolveInputLanguage(input: ResolveLanguageInput): string {
     const history = input.conversationHistory ?? [];
@@ -154,7 +169,17 @@ export function resolveInputLanguage(input: ResolveLanguageInput): string {
     const ambiguous = isAmbiguousLatinToken(input.comment || '');
     const effectiveCommentLang = ambiguous ? null : commentLang;
 
+    // The current message's language when it is SCRIPT-CERTAIN — i.e. the text
+    // carries no Latin at all, so detectLanguageOrNull named it from a Unicode
+    // script property rather than by guessing among Latin languages. Only these
+    // may outrank the history anchor; see the asymmetry note in the doc comment.
+    const scriptCertainCommentLang =
+        effectiveCommentLang && !/\p{Script=Latin}/u.test(input.comment || '')
+            ? effectiveCommentLang
+            : null;
+
     return input.language
+        || scriptCertainCommentLang
         || fromRole('user')
         || fromRole('assistant')
         || effectiveCommentLang
