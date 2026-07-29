@@ -140,10 +140,12 @@ describe('resolveInputLanguage — a customer switching language mid-thread', ()
         // TURKISH, so the promotion would have replaced a correct anchor with a wrong
         // guess — and the same door is what lets Arabizi through as Spanish.
         //
-        // In production this specific string is not affected: the backend detects it
-        // 'fr' with high confidence and passes an explicit `language`, which wins below.
-        // The unresolved French class is the accent-free one (see
-        // backend/test/services/deferToHistory.test.ts).
+        // NOTE: an earlier version of this comment claimed production is unaffected
+        // because "the backend detects it 'fr' with high confidence". That is only true
+        // in tinyld mode, which this test enables. In the LEGACY mode that production
+        // actually runs, the backend reads «Où vous trouvez-vous ?» as en@0.5 — measured
+        // 2026-07-29 — so production IS affected, and the fix is at the prompt layer
+        // (the read is uncertain ⇒ soft directive ⇒ the model mirrors French), not here.
         expect(resolveInputLanguage({
             comment: 'Où vous trouvez-vous ?',
             conversationHistory: ARABIC_THREAD,
@@ -230,9 +232,32 @@ describe('resolveInputLanguageWithSource — provenance', () => {
         }
     });
 
-    it('an explicit caller language is a positive read', () => {
-        expect(resolveInputLanguageWithSource({ comment: 'Hangi kurslarınız var?', language: 'tr' }))
+    it('an explicit caller language is a positive read only when the MESSAGE is identifiable', () => {
+        // Evidenced Turkish (chars + the function word "için") → the caller's 'tr' is real.
+        expect(resolveInputLanguageWithSource({ comment: 'Bu kurs için fiyat ne kadar?', language: 'tr' }))
             .toMatchObject({ language: 'tr', source: 'explicit', fromCurrentMessage: true });
+
+        // Char-only Turkish (a bare `ı`, no Turkish word) is a characters-only guess. 'tr'
+        // stays the default but must not be asserted as what the customer wrote.
+        expect(resolveInputLanguageWithSource({ comment: 'Hangi kurslarınız var?', language: 'tr' }))
+            .toMatchObject({ language: 'tr', source: 'explicit', fromCurrentMessage: false });
+
+        // The backend passes 'en' for the en@0.5 floor — accent-free French included.
+        expect(resolveInputLanguageWithSource({ comment: 'Quels cours proposez-vous ?', language: 'en' }))
+            .toMatchObject({ language: 'en', source: 'explicit', fromCurrentMessage: false });
+
+        // …and the POST's language for a low-signal comment token, which is a sensible
+        // default but not a reading of the customer's words.
+        expect(resolveInputLanguageWithSource({ comment: 'ICDL', language: 'ar' }))
+            .toMatchObject({ language: 'ar', source: 'explicit', fromCurrentMessage: false });
+    });
+
+    it('a real English message IS a positive read (the Arabic-drift guard must stay hard)', () => {
+        // en@0.7 — "the", "is", "too" are real English stopwords. 114 of 156 historical
+        // language_mismatch flags were expected:en → reply:ar on exactly this shape, so
+        // this case must keep the hard "You MUST reply in English" directive.
+        expect(resolveInputLanguageWithSource({ comment: 'The price is too much', language: 'en' }))
+            .toMatchObject({ language: 'en', source: 'explicit', fromCurrentMessage: true });
     });
 
     it('script-certain input is a positive read', () => {

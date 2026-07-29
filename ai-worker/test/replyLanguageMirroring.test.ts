@@ -86,16 +86,47 @@ describe('the screenshot bug: French DM on an English-anchored Arabic thread', (
 });
 
 describe('a POSITIVE reading of the current message keeps the hard directive', () => {
-    it('Turkish (named from its own characters) still gets "You MUST reply in Turkish"', () => {
-        // The screenshot's Turkish message worked and must keep working: the backend
-        // detects 'tr' and passes it explicitly, which is a positive current-message read.
+    it('EVIDENCED Turkish (chars + a Turkish function word) gets "You MUST reply in Turkish"', () => {
+        // tr@0.85 from the evidenced branch — chars AND the function word "için".
         const req: GenerateRequest = {
-            ...institute('Hangi kurslarınız var?', PRIOR_ENGLISH_TURN),
+            ...institute('Bu kurs için fiyat ne kadar?', PRIOR_ENGLISH_TURN),
             language: 'tr',
         };
         const prompt = buildSystemPrompt(req);
         expect(prompt).toContain('You MUST reply in Turkish');
         expect(prompt).toContain('The customer wrote in Turkish');
+    });
+
+    it('CHAR-ONLY Turkish keeps Turkish as the default, but does not assert it', () => {
+        // The screenshot's Turkish message. Its only special character is `ı`, so it hits
+        // the detector's char-only fallback — tr@0.55, a guess, not a reading. The same
+        // fallback is what named «Combien ça coûte ?» Turkish off a single cedilla, so it
+        // must not be asserted. Turkish stays the DEFAULT and the model (which reads
+        // Turkish correctly) decides — the reply is still Turkish, we just stop claiming
+        // to have detected it.
+        const req: GenerateRequest = {
+            ...institute('Hangi kurslarınız var?', PRIOR_ENGLISH_TURN),
+            language: 'tr',
+        };
+        const prompt = buildSystemPrompt(req);
+        expect(prompt).toContain('Reply language: Turkish');
+        expect(prompt).not.toContain('The customer wrote in Turkish');
+        expect(prompt).toMatch(/mirror the customer's language/i);
+        // Turkish is still the stated default, so a message too short to tell stays Turkish.
+        expect(prompt).toContain('treat Turkish (language code: tr) only as the default');
+    });
+
+    it('French with a cedilla is no longer asserted as Turkish', () => {
+        // «Combien ça coûte ?» → tr@0.55 off the `ç` alone, which on main produced
+        // "You MUST reply in Turkish. The customer wrote in Turkish." on a French message.
+        const req: GenerateRequest = {
+            ...institute('Combien ça coûte ?', PRIOR_ENGLISH_TURN),
+            language: 'tr',
+        };
+        const prompt = buildSystemPrompt(req);
+        expect(prompt).not.toContain('You MUST reply in Turkish');
+        expect(prompt).not.toContain('The customer wrote in Turkish');
+        expect(prompt).toMatch(/mirror the customer's language/i);
     });
 
     it('Arabic (the money path) still gets the hard directive — unchanged', () => {
@@ -110,13 +141,12 @@ describe('a POSITIVE reading of the current message keeps the hard directive', (
 
     it('a clearly-English message keeps the hard directive (no drift to Arabic on an Arabic-KB page)', () => {
         // Production faithfulness matters here: the backend reads this as en@0.9 (real
-        // English stopwords), so it sends BOTH language:'en' and languageCertain:true —
-        // `language: deferToHistory ? undefined : msgLang` with deferToHistory false.
+        // English stopwords), so deferToHistory does not fire and it sends language:'en'.
+        // Certainty is re-derived from the comment, which scores well above the floor.
         // This must not be softened into an invitation to answer in the KB's Arabic.
         const req: GenerateRequest = {
             ...institute('What is the price of the nursing course please?', PRIOR_ENGLISH_TURN),
             language: 'en',
-            languageCertain: true,
         };
         const prompt = buildSystemPrompt(req);
         expect(prompt).toContain('You MUST reply in English');
@@ -145,7 +175,6 @@ describe('validator agrees with the directive it validated against', () => {
         const request: GenerateRequest = {
             comment: FRENCH_DM,
             language: 'en',
-            languageCertain: false,
             context: { channel: 'dm', pageName: 'معهد الدمشقي للتدريب', knowledgeBase: 'دورات ICDL واللغات.' },
         };
         const result = validateReply(frenchReply, request);
@@ -158,7 +187,6 @@ describe('validator agrees with the directive it validated against', () => {
         const request: GenerateRequest = {
             comment: 'ما هي الدورات المتوفرة؟',
             language: 'ar',
-            languageCertain: true,
             context: { channel: 'dm', pageName: 'معهد الدمشقي للتدريب', knowledgeBase: 'دورات ICDL واللغات.' },
         };
         const result = validateReply(frenchReply, request);
@@ -169,15 +197,19 @@ describe('validator agrees with the directive it validated against', () => {
 });
 
 describe('the floor read is soft even with no history to defer to', () => {
-    it('first-message accent-free French: backend passes en explicitly but flags it uncertain', () => {
-        // No prior history ⇒ the backend's deferToHistory gate does NOT fire, so it
-        // sends language:'en' for the en@0.5 floor read. languageCertain:false is the
-        // only thing separating this from a real English detection — without it this
-        // case keeps the hard "The customer wrote in English" and stays broken.
+    it('first-message accent-free French: backend passes en explicitly, and it is still soft', () => {
+        // No prior history ⇒ the backend's deferToHistory gate does NOT fire, so it sends
+        // an explicit language:'en' for the en@0.5 floor read. This is THE case that
+        // proves certainty must be derived from `comment` rather than carried alongside
+        // it: an earlier version of this fix passed a `languageCertain: false` flag, which
+        // this test set directly and which four separate hops stripped in production
+        // (both axios bodies in backend ai.ts, both in ecommerceToolLoop.ts, and the
+        // ai-worker's own /generate route). The test was green; production still replied
+        // in English. Nothing here is injected now — the request is byte-for-byte what
+        // the backend actually sends.
         const req: GenerateRequest = {
             comment: FRENCH_DM,
             language: 'en',
-            languageCertain: false,
             context: { channel: 'dm', pageName: 'معهد الدمشقي للتدريب', knowledgeBase: 'نقدم دورات في ICDL واللغة الإنجليزية.' },
         };
         const prompt = buildSystemPrompt(req);

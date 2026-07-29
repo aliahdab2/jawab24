@@ -5,7 +5,7 @@
  * centralize three pieces of logic that were previously duplicated across
  * buildDynamicSystemSuffix, buildUserPrompt, and validateReply.
  */
-import { resolveInputLanguage, resolveInputLanguageWithSource } from '../language';
+import { resolveInputLanguageWithSource } from '../language';
 import type { GenerateRequest } from './types';
 
 /**
@@ -75,14 +75,10 @@ export function resolveLanguage(request: GenerateRequest): string {
  * something we read off the customer's current words" — the prompt then keeps it as
  * the default but lets the model mirror the customer instead of asserting a lie.
  *
- * Two independent signals, and the caller's explicit `false` WINS:
- *  1. `request.languageCertain` — the backend's own detector confidence. It is the
- *     only layer that can tell en@0.9 ("real English stopwords") from en@0.5
- *     ("Latin script, recognized nothing"), because the ai-worker's chain has no
- *     positive English rule at all.
- *  2. structural provenance from the chain — used when the backend said nothing
- *     (the comment path), where a non-'en' current-message read is positive and a
- *     history/post/KB/default read is not.
+ * Certainty is derived inside the shared chain from `request.comment`, NOT taken as
+ * a flag on the request: every hop between the backend and here rebuilds the payload
+ * field-by-field, so a dedicated boolean gets dropped in transit while unit tests
+ * that inject it stay green. `comment` is the one field that provably survives.
  */
 export function resolveLanguageWithCertainty(request: GenerateRequest): { language: string; certain: boolean } {
     const resolved = resolveInputLanguageWithSource({
@@ -94,11 +90,5 @@ export function resolveLanguageWithCertainty(request: GenerateRequest): { langua
         defaultReplyLanguage: request.context?.defaultReplyLanguage,
     });
 
-    // An explicit `false` from the backend downgrades even an 'explicit' source:
-    // the code it passed came from a floor read, so it is not a positive reading.
-    const certain = request.languageCertain === false
-        ? false
-        : resolved.fromCurrentMessage;
-
-    return { language: resolved.language, certain };
+    return { language: resolved.language, certain: resolved.fromCurrentMessage };
 }

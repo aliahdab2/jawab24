@@ -246,6 +246,28 @@ When multiple valid approaches exist, choose the one that follows established **
 
 Pairs with Rule 14: the proper fix, done the proper (standard) way.
 
+### 17. Reply Speed Is The Product (LATENCY BUDGET)
+
+**Jawab24's competitive lead is how fast it answers.** Treat reply latency as a feature with a budget, not an afterthought. Ruling and evidence: **D-049**.
+
+Know the actual cost hierarchy before optimizing anything (measured 2026-07-29 over 30 days of real traffic — 9,002 unique / 16,149 messages):
+
+| What | Cost per reply | Notes |
+|------|----------------|-------|
+| Semantic reply-cache **HIT** | **milliseconds** | the thing that makes us fast |
+| Cache **MISS** → OpenAI call | **2,000–4,000 ms** | ~500,000× everything below |
+| One extra sequential network hop (ai-worker, DB, Redis) | 1–50 ms | |
+| ALL local language detection + regex + string work | **~0.004 ms** | 65 ms total for a whole MONTH of traffic |
+
+Rules, in order of how much they matter:
+
+1. **Anything that turns a cache HIT into a MISS is the most expensive change you can make.** Bumping `PROMPT_VERSION` retires *every* semantic reply-cache key. Bump it only when the prompt genuinely changed, and verify `scripts/deploy-on-server.sh` still runs `npm run cache:warm-replies` after the deploy (it does today, non-fatally, at the container step). Never bump it "to be safe."
+2. **Never put a network call, model call, or `await` on the per-message path to answer a question that can be answered locally.** Language detection is the standing example: it must stay synchronous and in-process. A hosted LID or a "just one more model call" classifier converts microseconds into tens/hundreds of milliseconds on **every** message and never warms up. Pinned by `packages/shared/src/language/__tests__/languageLatency.test.ts`.
+3. **Never add a *sequential* hop where a parallel one works.** Independent I/O in the reply path belongs in `Promise.all`.
+4. **Do not micro-optimize local CPU on this path without a profile.** Single-digit-microsecond work is not a latency problem, and hand-rolling a cheaper partial copy of a shared function to save it duplicates logic (Rule 10.8) for no user-visible gain.
+5. **Measure before and after against a real corpus, never intuition.** Same method as detector changes: pull real `messages.message` + `comments.message`, run old vs new in one process, best-of-N. Report the delta AND the total across a month's traffic — a per-message number alone is easy to misread.
+6. **Latency must be observable, or the lead is undefendable.** `messageProcessor.ts` already laps all 16 pipeline stages, but via `logger.debug` while prod runs at `info` (`config.logLevel` default, no `LOG_LEVEL` in the server `.env`) — so today those timings are **dark in production**. Don't claim a latency win from local numbers alone.
+
 ---
 
 ## Common Commands

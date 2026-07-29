@@ -147,10 +147,15 @@ describe('Language Detection Utility', () => {
         });
 
         it('should detect Turkish by unique chars without common words (fallback)', () => {
-            // İ is a unique Turkish char; no Turkish common words present
+            // İ is a unique Turkish char; no Turkish common words present. Turkish is still
+            // the answer at the same 0.75, but it is now marked as a GUESS — a place name is
+            // not proof of the sentence's language, and the same branch fires on French
+            // «Combien ça coûte ?» off a bare cedilla.
             const result = detectLanguage('İstanbul');
             expect(result.language).toBe('tr');
             expect(result.confidence).toBe(0.75);
+            expect(result.evidence).toBe('characters-only');
+            expect(isCertainDetection(result)).toBe(false);
         });
 
         it('should handle numbers and symbols', () => {
@@ -453,18 +458,35 @@ describe('Language Detection Utility', () => {
             expect(certainty('Hello, how are you doing today?')).toBe(true);
         });
 
-        it('is TRUE for a named non-English language', () => {
-            expect(certainty('ما هي الدورات المتوفرة؟')).toBe(true);
-            expect(certainty('Hangi kurslarınız var?')).toBe(true);
-            expect(certainty('Merhaba, nasılsınız? Teşekkürler.')).toBe(true);
+        it('is TRUE for a named non-English language with real evidence', () => {
+            expect(certainty('ما هي الدورات المتوفرة؟')).toBe(true); // Arabic script
+            expect(certainty('Bu kurs için fiyat ne kadar?')).toBe(true); // Turkish chars + "için"
         });
 
-        it('keys on the confidence threshold, not on the language code', () => {
+        it('is FALSE for a language named from CHARACTERS ALONE', () => {
+            // These still resolve to 'tr' — they just stop being asserted as the
+            // customer's language. The cedilla cases are why: the same branch called
+            // «Combien ça coûte ?» Turkish and the bot answered a French customer in
+            // Turkish (prod, 30-day corpus, 2026-07-29).
+            expect(certainty('Hangi kurslarınız var?')).toBe(false);
+            expect(certainty('Merhaba, nasılsınız? Teşekkürler.')).toBe(false);
+            expect(certainty('Combien ça coûte ?')).toBe(false);
+            expect(certainty('Française')).toBe(false);
+            expect(certainty('Ahmet Çelebi')).toBe(false);
+        });
+
+        it('applies the confidence threshold to en ONLY, and reads `evidence` for the rest', () => {
             expect(isCertainDetection({ language: 'en', confidence: MIN_CERTAIN_CONFIDENCE, script: 'Latin', isRTL: false })).toBe(true);
             expect(isCertainDetection({ language: 'en', confidence: MIN_CERTAIN_CONFIDENCE - 0.1, script: 'Latin', isRTL: false })).toBe(false);
-            // A named language is certain regardless of how low its confidence reads.
-            expect(isCertainDetection({ language: 'fr', confidence: 0.5, script: 'Latin', isRTL: false })).toBe(true);
             expect(isCertainDetection({ language: 'unknown', confidence: 1, script: 'unknown', isRTL: false })).toBe(false);
+            // `evidence` — not a numeric threshold — is what marks a guess. It has to be a
+            // separate field: Arabic's confidence is a character RATIO, so ANY blanket
+            // threshold would mark genuine Arabic uncertain and soften the hard directive
+            // on the money path (441 rows of a 30-day corpus, e.g. `دورة ICDL` → ar@0.545).
+            expect(isCertainDetection({ language: 'tr', confidence: 0.75, script: 'Latin', isRTL: false, evidence: 'characters-only' })).toBe(false);
+            expect(isCertainDetection({ language: 'ar', confidence: 0.545, script: 'Arabic', isRTL: true })).toBe(true);
+            expect(isCertainDetection({ language: 'ar', confidence: 0.03, script: 'Arabic', isRTL: true })).toBe(true);
+            expect(isCertainDetection({ language: 'fr', confidence: 0.5, script: 'Latin', isRTL: false })).toBe(true);
         });
     });
 });

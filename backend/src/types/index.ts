@@ -25,15 +25,13 @@ export interface RetrievedChunkContext {
 // AI Types
 export interface AiGenerateRequest {
     comment: string;
-    language?: string;
     /**
-     * Whether `language` is a POSITIVE reading of this message or only a fallback.
-     * en@0.5 is the detector's "Latin script, recognized nothing" floor (accent-free
-     * French, romanized Urdu/Tagalog, "12h", phone numbers) — sending it unqualified
-     * made the prompt assert "The customer wrote in English. Do NOT switch".
-     * See GenerateRequest.languageCertain in ai-worker for the full contract.
+     * Resolved reply-language hint. A DEFAULT, not an assertion that the customer
+     * wrote in it: 'en' here is often the detector's en@0.5 floor ("Latin script,
+     * recognized nothing"). The ai-worker re-derives certainty from `comment`, so no
+     * companion flag is sent — one was tried and every axios hop below dropped it.
      */
-    languageCertain?: boolean;
+    language?: string;
     /** When set, ai-worker routes through the provider abstraction instead of the default OpenAI path. */
     model?: string;
     context?: {

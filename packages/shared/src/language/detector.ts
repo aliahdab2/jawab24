@@ -30,16 +30,21 @@ const FRENCH_CHARS = /[àâæçéèêëïîôùûüÿœÀÂÆÇÉÈÊËÏÎÔÙ�
 const SPANISH_CHARS = /[áéíóúüñÁÉÍÓÚÜÑ¿¡]/;
 const TURKISH_CHARS = /[çğıöşüÇĞİÖŞÜ]/;
 
-// Common words for additional context
-const ENGLISH_COMMON = [
+// Common words for additional context.
+//
+// Sets, not arrays: membership is the hot path of this function — `detectLanguage` runs
+// on every inbound message, every comment, and every template-language decision, and as
+// arrays these were O(words x 58) string comparisons per call (~870 for a 15-word
+// message). Same contents, same results; only `.includes` → `.has`.
+const ENGLISH_COMMON = new Set([
     'the', 'is', 'are', 'and', 'or', 'but', 'with', 'for', 'from', 'have', 'has', 'been',
     'you', 'me', 'my', 'your', 'we', 'our', 'they', 'their', 'it', 'he', 'she',
     'can', 'could', 'will', 'would', 'should', 'do', 'does', 'did',
     'what', 'when', 'where', 'why', 'how', 'who', 'which',
     'this', 'that', 'these', 'those', 'in', 'on', 'at', 'to', 'of',
     'please', 'help', 'want', 'need', 'thanks', 'hi', 'hello', 'hey',
-];
-const SWEDISH_COMMON = ['och', 'det', 'att', 'som', 'på', 'är', 'av', 'för', 'med', 'har'];
+]);
+const SWEDISH_COMMON = new Set(['och', 'det', 'att', 'som', 'på', 'är', 'av', 'för', 'med', 'har']);
 
 /**
  * The 7 named legacy codes plus `unknown`, widened with `(string & {})` for
@@ -56,6 +61,14 @@ export interface LanguageDetectionResult {
     confidence: number; // 0-1
     script: string;
     isRTL: boolean;
+    /**
+     * Set when the language was named from CHARACTERS ALONE, with no word evidence —
+     * a guess, not a reading. `confidence` cannot express this: for Arabic it is a
+     * character RATIO (real traffic yields ar@0.545, ar@0.35, ar@0.03), so no numeric
+     * threshold or sentinel can separate "unevidenced" from "mostly-Latin Arabic"
+     * without making genuine Arabic uncertain. See isCertainDetection.
+     */
+    evidence?: 'characters-only';
 }
 
 /**
@@ -70,14 +83,19 @@ export const MIN_CERTAIN_CONFIDENCE = 0.6;
 /**
  * Whether a detection is a POSITIVE reading of the text rather than a fallback.
  *
- * `false` means "we could not identify this text" — 'unknown', or the en@0.5 floor
- * that swallows accent-free French, romanized Urdu/Tagalog, phone numbers and
- * "12h" alike (68.77% of Latin-script inbound traffic, measured over 30 days).
- * Callers must not present a `false` result to the model as the customer's
- * language; see languageDirective in ai-worker's promptBuilder.
+ * `false` = "we could not identify this text": 'unknown', the en@0.5 floor (accent-free
+ * French, romanized Urdu/Tagalog, phone numbers — 68.77% of Latin-script inbound
+ * traffic), or a characters-only guess. Callers must not present a `false` result to the
+ * model as the customer's language; see languageDirective in ai-worker's promptBuilder.
+ *
+ * The confidence threshold is applied to 'en' ONLY, deliberately. Arabic's confidence is
+ * a character ratio, so a blanket `confidence >= MIN_CERTAIN_CONFIDENCE` would mark 441
+ * rows of a 30-day corpus uncertain — mostly genuine Arabic with some Latin mixed in
+ * (`دورة ICDL` reads ar@0.545) — and soften the hard directive on the money path.
  */
 export function isCertainDetection(result: LanguageDetectionResult): boolean {
     if (result.language === 'unknown') return false;
+    if (result.evidence === 'characters-only') return false;
     return !(result.language === 'en' && result.confidence < MIN_CERTAIN_CONFIDENCE);
 }
 
@@ -216,7 +234,7 @@ export function detectLanguage(text: string): LanguageDetectionResult {
 
     // Check for Swedish using common words + Swedish chars without å
     if (SWEDISH_CHARS.test(cleanText)) {
-        const swedishMatches = words.filter(w => SWEDISH_COMMON.includes(w)).length;
+        const swedishMatches = words.filter(w => SWEDISH_COMMON.has(w)).length;
         if (swedishMatches >= 1) {
             return {
                 language: 'sv',
@@ -228,7 +246,7 @@ export function detectLanguage(text: string): LanguageDetectionResult {
     }
 
     // Check common words for Swedish (without special chars)
-    const swedishMatches = words.filter(w => SWEDISH_COMMON.includes(w)).length;
+    const swedishMatches = words.filter(w => SWEDISH_COMMON.has(w)).length;
     if (swedishMatches >= 2) {
         return {
             language: 'sv',
@@ -238,13 +256,18 @@ export function detectLanguage(text: string): LanguageDetectionResult {
         };
     }
 
-    // Turkish check (fallback without word check, just unique chars)
+    // Turkish fallback: characters only, no word check — so it stays a GUESS. `ç` is
+    // shared with French, and this branch runs before the French check, which is why
+    // «Combien ça coûte ?» was asserted as Turkish and answered in Turkish (2026-07-29).
+    // Turkish keeps the DEFAULT here; the soft reply directive lets the model correct it.
+    // Turkish with a function word still scores 0.85 on the evidenced branch above.
     if (/[ğıİşŞçÇ]/.test(cleanText)) {
         return {
             language: 'tr',
             confidence: 0.75,
             script: 'Latin',
             isRTL: false,
+            evidence: 'characters-only',
         };
     }
 
@@ -285,7 +308,7 @@ export function detectLanguage(text: string): LanguageDetectionResult {
     // decide whether to trust this detection (e.g. short Latin acronyms like "ICDL"
     // stay at 0.5 and let conversation history override).
     const normalizedWords = words.map(w => w.replace(/^[^a-z]+|[^a-z]+$/g, '')).filter(Boolean);
-    const englishMatches = normalizedWords.filter(w => ENGLISH_COMMON.includes(w)).length;
+    const englishMatches = normalizedWords.filter(w => ENGLISH_COMMON.has(w)).length;
     const confidence = Math.min(0.5 + (englishMatches * 0.1), 0.9);
 
     // Phase 1b (LANG_ENGINE=tinyld only; inert by default): this is the exact

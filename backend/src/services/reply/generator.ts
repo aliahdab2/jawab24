@@ -593,12 +593,11 @@ export class ReplyGenerator {
             // Model is resolved inside aiService.generateReply via userId.
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
+                // A DEFAULT, not an assertion: resolvedLang may have mirrored the post's/KB's
+                // language for a low-signal token ("ICDL" on an Arabic post). The ai-worker
+                // re-derives from `comment` whether this is a reading of the customer's own
+                // words (resolveChain.currentMessageIsIdentifiable) — nothing to pass here.
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
-                // Certainty is a property of the COMMENT, not of resolvedLang: the latter
-                // may have mirrored the post's/KB's language for a low-signal token
-                // ("ICDL" on an Arabic post), which is a sensible default but not a reading
-                // of the customer's words. Same predicate as the DM path.
-                languageCertain: isCertainDetection(detectLanguage(commentForAI)),
                 context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
             });
 
@@ -726,22 +725,21 @@ export class ReplyGenerator {
                 const detected = detectLanguage(text);
                 const { language: msgLang } = detected;
                 const hasPriorHistory = historyForAI.length > 0;
-                // Same fact, two decisions: whether to defer to history, and whether the
-                // prompt may assert this language as the customer's. MIN_CERTAIN_CONFIDENCE
-                // keeps the threshold in one place (packages/shared detector.ts).
-                const isLowConfidenceLatin = !isCertainDetection(detected) && msgLang !== 'unknown';
+                // Stays English-only, exactly as before: a NAMED-but-unevidenced language
+                // (tr@0.55 from a bare `ç`/`ı`) must keep its own language as the default
+                // rather than inherit the thread's — the prompt's soft directive already
+                // stops it being asserted as the customer's. MIN_CERTAIN_CONFIDENCE keeps
+                // the threshold in one place (packages/shared detector.ts).
+                const isLowConfidenceLatin = msgLang === 'en' && !isCertainDetection(detected);
                 const deferToHistory = isLowConfidenceLatin && hasPriorHistory;
                 // Model is resolved inside aiService.generateReply via userId.
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
+                    // With no prior history to defer to, the en@0.5 floor still travels as
+                    // `language: 'en'` — that is fine and deliberate (it remains the sensible
+                    // default). What must NOT happen is the prompt asserting "the customer
+                    // wrote in English" over it; the ai-worker re-derives that from `comment`.
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
-                    // Tell the ai-worker whether that code is a real reading or a floor
-                    // default. The en@0.5 "Latin script, recognized nothing" bucket is
-                    // 68.77% of Latin-script inbound traffic and reaches the prompt whenever
-                    // there is no prior history to defer to. Without this the prompt asserts
-                    // "The customer wrote in English" over accent-free French. Arabic script
-                    // and named Latin languages are certain and keep the hard directive.
-                    languageCertain: isCertainDetection(detected),
                     context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };
 
@@ -945,9 +943,6 @@ export class ReplyGenerator {
         const aiRequest = {
             comment: questionForAI,
             language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
-            // Must match the two production paths or the playground (and the eval suite
-            // that runs through it) would exercise a different prompt than real traffic.
-            languageCertain: isCertainDetection(detectLanguage(questionForAI)),
             ...(model ? { model } : {}),
             context: {
                 pageId,

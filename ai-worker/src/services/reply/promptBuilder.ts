@@ -199,6 +199,12 @@ const KB_LANGUAGE_BAN =
  * accent-free French / romanized Urdu / Tagalog from English at this length; the
  * model can, so in the uncertain case it decides and X is only the default.
  *
+ * The soft variant deliberately makes NO claim about where ${languageName} came from.
+ * It is reached from several different links of the chain (history, post, KB, merchant
+ * default, and a current-message read the confidence detector could not confirm), so
+ * any specific provenance sentence would be false in some of them — which is the exact
+ * class of bug this function exists to remove.
+ *
  * Exported for direct testing — the two branches are a behavioural contract, not
  * cosmetic wording.
  */
@@ -206,7 +212,7 @@ export function languageDirective(languageName: string, language: string, certai
     if (certain) {
         return `You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic). ${KB_LANGUAGE_BAN}`;
     }
-    return `Reply in the same language the customer used in their latest message — mirror the customer's language. ${languageName} is only the language this conversation has been in, NOT something detected from their latest message: use ${languageName} when that message is in ${languageName} or is too short to tell, and reply in the customer's own language when it is clearly something else. ${KB_LANGUAGE_BAN}`;
+    return `Reply in the language of the customer's latest message — mirror the customer's language. We have NOT confirmed which language that message is in, so treat ${languageName} (language code: ${language}) only as the default: reply in ${languageName} when the message is in ${languageName} or is too short to tell, and reply in the customer's own language whenever it is clearly something else. ${KB_LANGUAGE_BAN}`;
 }
 
 /**
