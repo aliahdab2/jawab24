@@ -123,6 +123,49 @@ if ! grep -q '^RELEASE_STORE_FILE=' "$LOCAL_PROPS" 2>/dev/null; then
 fi
 echo -e "${GREEN}✅ Signing config present${NC}"
 
+# ─── Public build-time config the app CANNOT ship without ───
+# NEXT_PUBLIC_* values are inlined by `next build`. The web image receives these
+# as Docker build args (frontend/Dockerfile + docker-compose build.args, wired in
+# #418); nothing ever did the same for the mobile build, so v2.0.6 shipped with
+# isWhatsAppEnabled() compiled to false — the entire WhatsApp surface stripped out
+# of the app while it was live on the web. Silence, not an error: the app simply
+# rendered one channel fewer, and only a screenshot caught it.
+#
+# Fail here rather than ship that again. Values may come from the environment or
+# frontend/.env.local (which `next build` loads on its own).
+MOBILE_ENV_FILE="frontend/.env.local"
+have_public_var() {  # $1 = var name
+    [ -n "${!1:-}" ] && return 0
+    grep -qE "^${1}=.+" "$MOBILE_ENV_FILE" 2>/dev/null
+}
+# Only NEXT_PUBLIC_WHATSAPP_CONFIG_ID is gated. NEXT_PUBLIC_FB_APP_ID is
+# deliberately NOT: Android gets its Facebook app id from the native config
+# (strings.xml / FacebookActivity), so requiring it in the web bundle would fail
+# every release for a value the app never reads there.
+MISSING_PUBLIC=()
+for v in NEXT_PUBLIC_WHATSAPP_CONFIG_ID; do
+    have_public_var "$v" || MISSING_PUBLIC+=("$v")
+done
+if [ ${#MISSING_PUBLIC[@]} -gt 0 ]; then
+    echo -e "${RED}❌ Missing build-time public config: ${MISSING_PUBLIC[*]}${NC}"
+    echo -e "   These are inlined at build time. Without them the app ships with those"
+    echo -e "   features silently absent — no crash, no error, just a missing channel."
+    echo -e "   Add them to $MOBILE_ENV_FILE or export them, then re-run."
+    echo -e "   The WhatsApp Configuration ID is the same public value the server uses"
+    echo -e "   in /var/www/jawab24/env/frontend.env (it also appears in the OAuth URL)."
+    exit 1
+fi
+echo -e "${GREEN}✅ WhatsApp Configuration ID present for the build${NC}"
+
+# The canary flag must NOT leak into a store build: it hides WhatsApp from every
+# non-admin, which is every user of the shipped app.
+if [ "${NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY:-}" = "true" ] \
+   || grep -qE '^NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY=true' "$MOBILE_ENV_FILE" 2>/dev/null; then
+    echo -e "${RED}❌ NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY=true is set.${NC}"
+    echo -e "   That hides WhatsApp from every non-admin — i.e. from everyone who installs this build."
+    exit 1
+fi
+
 if [ "$DRY_RUN" = false ]; then
     if [ -z "${ANDROID_PUBLISHER_CREDENTIALS:-}" ]; then
         if [ "$CI_MODE" = false ] && [ -f "$LOCAL_SA" ]; then
@@ -172,6 +215,20 @@ echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}📦 BUILD WEB ASSETS + SYNC ANDROID${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 ( cd frontend && npm run build:mobile && node scripts/strip-mobile-assets.js && npx cap sync android )
+
+# Prove the config was actually INLINED, not merely present in the environment.
+# The pre-flight check above can pass while the value still fails to reach the
+# bundle (wrong env file precedence, a typo in the name, a stale `out/`), and the
+# failure mode is silent — a shipped app quietly missing a channel. Grep the
+# emitted bundle for the value we expect to find in it.
+WA_CONFIG_ID="${NEXT_PUBLIC_WHATSAPP_CONFIG_ID:-$(grep -hE '^NEXT_PUBLIC_WHATSAPP_CONFIG_ID=' frontend/.env.local 2>/dev/null | head -1 | cut -d= -f2-)}"
+if [ -n "$WA_CONFIG_ID" ] && ! grep -rqF "$WA_CONFIG_ID" frontend/out 2>/dev/null; then
+    echo -e "${RED}❌ WhatsApp Configuration ID is NOT present in the built bundle (frontend/out).${NC}"
+    echo -e "   It was set going in, so the build did not inline it — the app would ship"
+    echo -e "   with the WhatsApp surface silently absent. Not uploading."
+    exit 1
+fi
+echo -e "${GREEN}✅ WhatsApp config inlined into the bundle${NC}"
 
 # ─── Gradle: build (and upload unless dry-run) ───
 echo ""
