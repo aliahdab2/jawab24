@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, type ReactEle
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
+import { buildFacebookOAuthUrl } from '@/lib/facebookOAuth';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon, UpgradeCTA, Badge } from '@/components/ui';
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
@@ -269,10 +270,13 @@ const PagesPage: NextPageWithLayout = () => {
       // Mobile: always use canonical origin (Capacitor serves from http://localhost)
       // Web dev: use window.location.origin for localhost
       const origin = isMobile ? normalizedOrigin : (window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin);
-      const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
-      const state = encodeURIComponent(`/pages|${isMobile ? 'mobile' : 'web'}|${language}|reconnect`);
-      const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page&auth_type=rerequest`;
+      const redirectUri = `${origin}${localePath}${FB_CALLBACK_PATH}`;
+      const state = `/pages|${isMobile ? 'mobile' : 'web'}|${language}|reconnect`;
+      // rerequest: reconnect exists to recover a permission the merchant declined
+      // or Meta dropped, so Meta must re-prompt rather than return the stale grant.
+      const oauthUrl = buildFacebookOAuthUrl({
+        appId: fbAppId, redirectUri, state, display: 'page', rerequest: true,
+      });
 
       if (isMobile) {
         const { Browser } = await import('@capacitor/browser');
@@ -491,7 +495,12 @@ const PagesPage: NextPageWithLayout = () => {
     // the browser would just make the merchant answer the same question twice.
     if (Capacitor.isNativePlatform()) {
       toast.info(t('whatsappConnectWebOnly'));
-      const { openExternalUrl } = await import('@/lib/openExternalUrl');
+      // openInSystemBrowser, NOT openExternalUrl: the latter opens an Android
+      // Custom Tab, which supports neither popups nor `window.opener` — so
+      // `fb.login`'s Embedded Signup popup never opened and the merchant hit a
+      // silent dead end after answering the path question (Android, 2026-07-29).
+      // This flow must land in a real browser; see openInSystemBrowser.
+      const { openInSystemBrowser } = await import('@/lib/openExternalUrl');
       const { buildWebAuthedUrl } = await import('@/lib/webUrl');
       // Via /login, NOT straight to /pages: the app's JWT lives in the WebView's
       // localStorage under a different origin, so it does not travel to the
@@ -500,7 +509,7 @@ const PagesPage: NextPageWithLayout = () => {
       // got a sign-in wall with no destination. /login forwards immediately when
       // a browser session already exists, so this costs an already-signed-in
       // merchant nothing.
-      await openExternalUrl(buildWebAuthedUrl('/pages', language));
+      await openInSystemBrowser(buildWebAuthedUrl('/pages', language));
       return;
     }
     const existingPage = pageId ? pages.find(p => p.id === pageId) : null;

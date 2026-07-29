@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { Capacitor } from '@capacitor/core';
+import { buildFacebookOAuthUrl } from '@/lib/facebookOAuth';
 import clsx from 'clsx';
 import {
   Zap,
@@ -169,8 +170,7 @@ export default function LoginPage() {
         // Server-side callback: backend exchanges the code and HTTP 302 redirects
         // to com.jawab24.app:// directly — no client-side code exchange needed.
         const apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api').replace(/\/$/, '');
-        const redirectUri = encodeURIComponent(`${apiUrl}/auth/facebook/mobile-callback`);
-        const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
+        const redirectUri = `${apiUrl}/auth/facebook/mobile-callback`;
 
         const returnUrl = router.query.redirect as string || '/dashboard';
         // Resume reconnect flow if /auth/callback bounced here after a 401 mid-link
@@ -178,9 +178,9 @@ export default function LoginPage() {
         // intent so the user lands linking to their existing account, not creating
         // a second FB-only one.
         const reconnectSuffix = router.query.reconnect === 'facebook' ? '|reconnect' : '';
-        const state = encodeURIComponent(`${returnUrl}|mobile|${locale}${reconnectSuffix}`);
+        const state = `${returnUrl}|mobile|${locale}${reconnectSuffix}`;
 
-        const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page`;
+        const oauthUrl = buildFacebookOAuthUrl({ appId: fbAppId, redirectUri, state, display: 'page' });
 
         // Reset button when user closes Chrome Custom Tab without completing login
         const browserFinishedListener = await Browser.addListener('browserFinished', () => {
@@ -200,18 +200,17 @@ export default function LoginPage() {
       const normalizedOrigin = BRAND_ASSETS.urls.base;
       const localePath = getLocalePath(locale);
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
-      const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
+      const redirectUri = `${origin}${localePath}${FB_CALLBACK_PATH}`;
 
       const webParams = new URLSearchParams(window.location.search);
       const returnUrl = webParams.get('redirect') || router.query.redirect as string || '/dashboard';
       const reconnectSuffix = (webParams.get('reconnect') || router.query.reconnect) === 'facebook' ? '|reconnect' : '';
-      const state = encodeURIComponent(`${returnUrl}|web|${locale}${reconnectSuffix}`);
+      const state = `${returnUrl}|web|${locale}${reconnectSuffix}`;
 
       const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const displayMode = isMobileWeb ? 'touch' : 'page';
 
-      window.location.href = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=${displayMode}`;
+      window.location.href = buildFacebookOAuthUrl({ appId: fbAppId, redirectUri, state, display: displayMode });
     }
   }
 
