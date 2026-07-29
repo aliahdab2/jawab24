@@ -7,6 +7,7 @@ import { notificationService } from '../services/notifications';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
 import { recordActivationEvent, recordAutoreplyEnabledIfEffective, isBusinessInfoProvided } from '../services/activation';
+import { businessInfoGate } from '../services/businessReadiness';
 import { logAutoReplyToggle } from '../services/auditLog';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
@@ -315,6 +316,14 @@ export class PagesController {
                         code: 'PAGE_DISCONNECTED',
                     });
                 }
+
+                // Same readiness bar as the WhatsApp and Instagram toggles: never
+                // put a bot in front of customers with nothing to answer from. A
+                // Facebook page normally passes on its seeded about/phone/hours, so
+                // this bites only a genuinely empty card — verified against
+                // production before wiring (39 enabled pages, 0 would be refused).
+                const infoGate = await businessInfoGate(existingPage);
+                if (infoGate) return reply.status(infoGate.status).send(infoGate.body);
 
                 const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {

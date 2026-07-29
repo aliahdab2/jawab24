@@ -159,6 +159,13 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         toast.error(t(iosOr('onboarding.pageLimitReachedIOS', 'onboarding.pageLimitReached'), { limit: pageLimit ?? 1 }));
       } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
         toast.error(t('pages.pageTrialUsedBlocked'));
+      } else if (axiosErr.response?.status === 409 && axiosErr.response?.data?.code === 'BUSINESS_INFO_REQUIRED') {
+        // Reachable when the Facebook page carried nothing to seed from (no
+        // about/phone/hours/category), so the card was created with a null
+        // knowledge base. Not a dead end: the optimistic `setSelectedPageId`
+        // above is deliberately NOT reverted, so this page's info editor is
+        // already open below — the merchant types their info and toggles again.
+        toast.error(t('pages.businessInfoRequiredToEnable'));
       } else {
         toast.error(t('errors.somethingWentWrong'));
       }

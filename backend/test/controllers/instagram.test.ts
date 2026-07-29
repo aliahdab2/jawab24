@@ -59,8 +59,23 @@ vi.mock('drizzle-orm', () => ({
     sql: Object.assign(vi.fn(), { raw: vi.fn() }),
 }));
 
+// The readiness gate hits the DB (catalog probe) and the store service. This
+// suite is about the toggle/sync behaviour, so default to "the page is grounded"
+// and let the dedicated test below flip it.
+vi.mock('../../src/services/businessReadiness', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../src/services/businessReadiness')>()),
+    businessInfoGate: vi.fn().mockResolvedValue(null),
+}));
+
 // Import controller AFTER mocks
 import { instagramController } from '../../src/controllers/instagram';
+import { businessInfoGate } from '../../src/services/businessReadiness';
+
+// What businessInfoGate returns for a page with nothing to answer from.
+const BUSINESS_INFO_REFUSAL = {
+    status: 409,
+    body: { error: 'Add your Business Info', code: 'BUSINESS_INFO_REQUIRED' },
+} as const;
 import { pagesService } from '../../src/services/pages';
 import { instagramService } from '../../src/services/instagram';
 import { db } from '../../src/db';
@@ -71,6 +86,9 @@ describe('InstagramController', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // Re-armed after clearAllMocks: a cleared mock resolves undefined, which
+        // the readiness gate reads as "ungrounded" and would 409 every enable.
+        vi.mocked(businessInfoGate).mockResolvedValue(null);
         mockReply = {
             status: vi.fn().mockReturnThis(),
             send: vi.fn().mockReturnThis(),
@@ -298,6 +316,32 @@ describe('InstagramController', () => {
             await instagramController.toggleAutoReply(mockRequest as any, mockReply as any);
 
             expect(mockReply.status).toHaveBeenCalledWith(404);
+        });
+
+        it('409s BUSINESS_INFO_REQUIRED on enable when the page has nothing to answer from', async () => {
+            vi.mocked(businessInfoGate).mockResolvedValue(BUSINESS_INFO_REFUSAL);
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1' } as any);
+            (mockRequest as any).params = { id: 'page-1' };
+            (mockRequest as any).body = { enabled: true };
+
+            await instagramController.toggleAutoReply(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(409);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'BUSINESS_INFO_REQUIRED' }));
+            expect(pagesService.toggleInstagramAutoReply).not.toHaveBeenCalled();
+        });
+
+        it('never blocks DISABLING an ungrounded page', async () => {
+            // A merchant who emptied their Business Info must still be able to
+            // switch the bot off — the gate must never trap them with a live bot.
+            vi.mocked(businessInfoGate).mockResolvedValue(BUSINESS_INFO_REFUSAL);
+            vi.mocked(pagesService.toggleInstagramAutoReply).mockResolvedValue({ id: 'page-1' } as any);
+            (mockRequest as any).params = { id: 'page-1' };
+            (mockRequest as any).body = { enabled: false };
+
+            await instagramController.toggleAutoReply(mockRequest as any, mockReply as any);
+
+            expect(pagesService.toggleInstagramAutoReply).toHaveBeenCalledWith('test_workspace_id', 'page-1', false);
         });
     });
 
