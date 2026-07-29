@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, type ReactEle
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
+import { useRouter } from 'next/router';
 import { buildFacebookOAuthUrl } from '@/lib/facebookOAuth';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon, UpgradeCTA, Badge } from '@/components/ui';
@@ -308,6 +309,10 @@ const PagesPage: NextPageWithLayout = () => {
   // would consume the param before pages ever load, swallowing the click.
   const pagesReady = pagesFetched;
 
+  // Read directly for ?waPage — useOpenOnQueryParam only tells us a param fired,
+  // not what rode along with it.
+  const router = useRouter();
+
   const openKbEditorFor = useCallback((target: Page | undefined) => {
     if (!target) return;
     setEditingPage(target);
@@ -345,6 +350,32 @@ const PagesPage: NextPageWithLayout = () => {
     setTestSmartReplyPage(target);
   }, [pages]);
   useOpenOnQueryParam('openTestReply', pagesReady, openTestReply);
+
+  /*
+   * ?connectWhatsApp=true → resume a WhatsApp connect that STARTED IN THE APP.
+   *
+   * The native app cannot host Embedded Signup, so it hands off to a real browser
+   * (see requestConnectWhatsApp). Without this the handoff merely delivered the
+   * merchant to this page and stopped: they had already tapped Connect, watched a
+   * redirect, and arrived somewhere that looked exactly like where they started,
+   * with no hint that the next step was to tap Connect AGAIN — this time in the
+   * browser. Reported 2026-07-29 as "it redirects then comes back to the same
+   * page", which is precisely what it did.
+   *
+   * Re-opens the onboarding-path question rather than calling fb.login directly:
+   * the popup requires transient user activation, so it must be launched from a
+   * real click. The merchant's answer to the path question supplies exactly that.
+   *
+   * `waPage` carries which card started it — omitted means the channel-picker path
+   * (a new WhatsApp-only card, no Facebook page). It matters: attaching to an
+   * existing page and creating a standalone card are different outcomes, so
+   * defaulting the wrong way would silently create the wrong kind of card.
+   */
+  const resumeWhatsAppConnect = useCallback(() => {
+    const target = typeof router.query.waPage === 'string' ? router.query.waPage : 'new';
+    setWhatsAppPathPageId(target);
+  }, [router.query.waPage]);
+  useOpenOnQueryParam('connectWhatsApp', pagesReady, resumeWhatsAppConnect);
 
   /**
    * Soft gate: enabling any channel's auto-reply on a page with no answer source
@@ -509,7 +540,13 @@ const PagesPage: NextPageWithLayout = () => {
       // got a sign-in wall with no destination. /login forwards immediately when
       // a browser session already exists, so this costs an already-signed-in
       // merchant nothing.
-      await openInSystemBrowser(buildWebAuthedUrl('/pages', language));
+      // Carry the intent across the handoff, so the browser reopens the path
+      // question instead of dropping the merchant on a page identical to the one
+      // they just left. `waPage` preserves which card they tapped Connect on.
+      const resumePath = pageId
+        ? `/pages?connectWhatsApp=true&waPage=${encodeURIComponent(pageId)}`
+        : '/pages?connectWhatsApp=true';
+      await openInSystemBrowser(buildWebAuthedUrl(resumePath, language));
       return;
     }
     const existingPage = pageId ? pages.find(p => p.id === pageId) : null;

@@ -524,7 +524,14 @@ describe('PagesPage - WhatsApp', () => {
             // number. /login forwards instantly when a browser session already
             // exists, so this costs a signed-in merchant nothing.
             expect(mockOpenInSystemBrowser).toHaveBeenCalledWith(
-                'https://jawab24.com/en/login?redirect=%2Fpages',
+                // ?connectWhatsApp=true is what makes the browser REOPEN the path
+                // question. Without it the handoff delivered the merchant to a page
+                // identical to the one they left, with no sign of what to do next —
+                // "it redirects then comes back to the same page" (2026-07-29).
+                // waPage preserves which card they tapped Connect on; attaching to
+                // an existing page and creating a standalone WhatsApp-only card are
+                // different outcomes.
+                'https://jawab24.com/en/login?redirect=%2Fpages%3FconnectWhatsApp%3Dtrue%26waPage%3Dpage_x',
             );
         });
         expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
