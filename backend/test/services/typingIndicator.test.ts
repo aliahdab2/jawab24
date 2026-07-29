@@ -6,8 +6,25 @@ import type { MessagePlatformAdapter, PlatformPage } from '../../src/interfaces'
 vi.mock('../../src/lib/redis', () => ({
     redis: {
         set: vi.fn(),
+        get: vi.fn(),
     },
 }));
+
+/**
+ * Stateful Redis fake for the cross-call-site contract below: the dedup claim is written
+ * by one caller and read by another, so a stub that only answers `set` cannot express it.
+ * Supports the NX flag; everything else is a plain key/value store.
+ */
+function statefulRedis(): Map<string, string> {
+    const store = new Map<string, string>();
+    vi.mocked(redis.set).mockImplementation((async (key: string, value: string, ...args: unknown[]) => {
+        if (args.includes('NX') && store.has(key)) return null;
+        store.set(key, value);
+        return 'OK';
+    }) as never);
+    vi.mocked(redis.get).mockImplementation((async (key: string) => store.get(key) ?? null) as never);
+    return store;
+}
 
 const mockPage: PlatformPage = {
     id: 'page-uuid',
@@ -133,5 +150,72 @@ describe('typingIndicator.clear', () => {
         await new Promise(r => setImmediate(r));
 
         expect(sendTypingOff).toHaveBeenCalled();
+    });
+});
+
+/**
+ * The Messenger fix (2026-07-29). The indicator used to be claimed deep in the reply
+ * pipeline, AFTER the merchant's reply delay (0-60s, default 3), so a Messenger customer
+ * saw dead air for the whole delay and "typing…" only in the final moment. WhatsApp never
+ * had the bug because it claims at webhook receipt.
+ *
+ * Messenger now claims at receipt too, which means TWO call sites share one indicator —
+ * the webhook and the reply pipeline, in different processes. These tests pin that
+ * contract: exactly one send, and a cleanup decision that survives the process boundary.
+ */
+describe('typingIndicator — one indicator, two call sites', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('claims once: a receipt-time claim makes the later pipeline call a no-op', async () => {
+        statefulRedis();
+        const atReceipt = vi.fn().mockResolvedValue(undefined);
+        const inPipeline = vi.fn().mockResolvedValue(undefined);
+
+        // Webhook process.
+        expect(await typingIndicator.showOnce('page-uuid', 'mid-1', atReceipt)).toBe(true);
+        // Reply worker, later — must NOT re-arm Messenger's ~20s timer.
+        expect(await typingIndicator.showOnce('page-uuid', 'mid-1', inPipeline)).toBe(false);
+
+        expect(atReceipt).toHaveBeenCalledTimes(1);
+        expect(inPipeline).not.toHaveBeenCalled();
+    });
+
+    it('reports delivery ACROSS the process boundary, so the reply worker can clean up', async () => {
+        statefulRedis();
+        // Claimed and delivered by the webhook; the worker holds no in-process flag.
+        await typingIndicator.showOnce('page-uuid', 'mid-1', vi.fn().mockResolvedValue(undefined));
+
+        expect(await typingIndicator.wasShown('page-uuid', 'mid-1')).toBe(true);
+        expect(await typingIndicator.wasShown('page-uuid', 'other-mid')).toBe(false);
+    });
+
+    it('does NOT report delivery when the platform rejected the call', async () => {
+        statefulRedis();
+        const failing = vi.fn().mockRejectedValue(new Error('Graph 400'));
+
+        expect(await typingIndicator.showOnce('page-uuid', 'mid-1', failing)).toBe(false);
+        // The claim was taken (so retries stay deduped) but nothing is showing, so an
+        // abort path must not waste a typing_off call.
+        expect(await typingIndicator.wasShown('page-uuid', 'mid-1')).toBe(false);
+    });
+
+    it('wasShown never throws — it runs inside the reply pipeline\'s finally block', async () => {
+        // A throw there would REPLACE the error being propagated and silently cost BullMQ
+        // its retries. This exact mistake shipped once during development.
+        vi.mocked(redis.get).mockRejectedValue(new Error('redis down'));
+        await expect(typingIndicator.wasShown('page-uuid', 'mid-1')).resolves.toBe(false);
+
+        vi.mocked(redis.get).mockReturnValue(undefined as never); // not even a promise
+        await expect(typingIndicator.wasShown('page-uuid', 'mid-1')).resolves.toBe(false);
+    });
+
+    it('the adapter form is a no-op when the platform has no typing support (WhatsApp)', async () => {
+        const store = statefulRedis();
+        const adapter = makeAdapter(); // no sendTypingIndicator
+        expect(await typingIndicator.show(adapter, mockPage, 'sender-1', 'mid-1')).toBe(false);
+        // Must not even claim, or it would block a real claim from elsewhere.
+        expect(store.size).toBe(0);
     });
 });
