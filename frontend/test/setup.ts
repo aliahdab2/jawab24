@@ -6,6 +6,17 @@ import { cloneElement, isValidElement, type ReactNode } from 'react';
 process.env.NEXT_PUBLIC_FB_APP_ID = 'test-fb-app-id-123456';
 process.env.NEXT_PUBLIC_API_URL = 'http://localhost:4000/api';
 process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
+// WhatsApp OFF is the suite-wide DEFAULT, pinned rather than inherited.
+// `isWhatsAppEnabled()` is `!!NEXT_PUBLIC_FB_APP_ID && !!NEXT_PUBLIC_WHATSAPP_CONFIG_ID`,
+// and the app id above is always set — so leaving the config id to the ambient
+// environment made the whole WhatsApp surface flip on whenever a shell happened to
+// export it. That is not hypothetical: `release-android.sh` REQUIRES both vars in the
+// environment it then runs `npm run test` in (its guard exists so v2.0.6's silently
+// WhatsApp-less build can't recur), so a release turned 4 "WhatsApp is dark" tests red
+// — the script's own guard and its test step contradicting each other.
+// Tests that want WhatsApp ON stub both vars explicitly via vi.stubEnv; this only sets
+// the default they override.
+process.env.NEXT_PUBLIC_WHATSAPP_CONFIG_ID = '';
 
 // ──────────────────────────────────────────────
 // Suppress expected jsdom network noise

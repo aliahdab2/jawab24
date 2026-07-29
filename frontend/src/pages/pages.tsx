@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, type ReactEle
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
+import { useRouter } from 'next/router';
+import { buildFacebookOAuthUrl } from '@/lib/facebookOAuth';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon, UpgradeCTA, Badge } from '@/components/ui';
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
@@ -269,10 +271,13 @@ const PagesPage: NextPageWithLayout = () => {
       // Mobile: always use canonical origin (Capacitor serves from http://localhost)
       // Web dev: use window.location.origin for localhost
       const origin = isMobile ? normalizedOrigin : (window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin);
-      const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
-      const state = encodeURIComponent(`/pages|${isMobile ? 'mobile' : 'web'}|${language}|reconnect`);
-      const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page&auth_type=rerequest`;
+      const redirectUri = `${origin}${localePath}${FB_CALLBACK_PATH}`;
+      const state = `/pages|${isMobile ? 'mobile' : 'web'}|${language}|reconnect`;
+      // rerequest: reconnect exists to recover a permission the merchant declined
+      // or Meta dropped, so Meta must re-prompt rather than return the stale grant.
+      const oauthUrl = buildFacebookOAuthUrl({
+        appId: fbAppId, redirectUri, state, display: 'page', rerequest: true,
+      });
 
       if (isMobile) {
         const { Browser } = await import('@capacitor/browser');
@@ -303,6 +308,10 @@ const PagesPage: NextPageWithLayout = () => {
   // a disabled query (pre-auth-hydration) reports isLoading=false, which
   // would consume the param before pages ever load, swallowing the click.
   const pagesReady = pagesFetched;
+
+  // Read directly for ?waPage — useOpenOnQueryParam only tells us a param fired,
+  // not what rode along with it.
+  const router = useRouter();
 
   const openKbEditorFor = useCallback((target: Page | undefined) => {
     if (!target) return;
@@ -341,6 +350,32 @@ const PagesPage: NextPageWithLayout = () => {
     setTestSmartReplyPage(target);
   }, [pages]);
   useOpenOnQueryParam('openTestReply', pagesReady, openTestReply);
+
+  /*
+   * ?connectWhatsApp=true → resume a WhatsApp connect that STARTED IN THE APP.
+   *
+   * The native app cannot host Embedded Signup, so it hands off to a real browser
+   * (see requestConnectWhatsApp). Without this the handoff merely delivered the
+   * merchant to this page and stopped: they had already tapped Connect, watched a
+   * redirect, and arrived somewhere that looked exactly like where they started,
+   * with no hint that the next step was to tap Connect AGAIN — this time in the
+   * browser. Reported 2026-07-29 as "it redirects then comes back to the same
+   * page", which is precisely what it did.
+   *
+   * Re-opens the onboarding-path question rather than calling fb.login directly:
+   * the popup requires transient user activation, so it must be launched from a
+   * real click. The merchant's answer to the path question supplies exactly that.
+   *
+   * `waPage` carries which card started it — omitted means the channel-picker path
+   * (a new WhatsApp-only card, no Facebook page). It matters: attaching to an
+   * existing page and creating a standalone card are different outcomes, so
+   * defaulting the wrong way would silently create the wrong kind of card.
+   */
+  const resumeWhatsAppConnect = useCallback(() => {
+    const target = typeof router.query.waPage === 'string' ? router.query.waPage : 'new';
+    setWhatsAppPathPageId(target);
+  }, [router.query.waPage]);
+  useOpenOnQueryParam('connectWhatsApp', pagesReady, resumeWhatsAppConnect);
 
   /**
    * Soft gate: enabling any channel's auto-reply on a page with no answer source
@@ -491,7 +526,12 @@ const PagesPage: NextPageWithLayout = () => {
     // the browser would just make the merchant answer the same question twice.
     if (Capacitor.isNativePlatform()) {
       toast.info(t('whatsappConnectWebOnly'));
-      const { openExternalUrl } = await import('@/lib/openExternalUrl');
+      // openInSystemBrowser, NOT openExternalUrl: the latter opens an Android
+      // Custom Tab, which supports neither popups nor `window.opener` — so
+      // `fb.login`'s Embedded Signup popup never opened and the merchant hit a
+      // silent dead end after answering the path question (Android, 2026-07-29).
+      // This flow must land in a real browser; see openInSystemBrowser.
+      const { openInSystemBrowser } = await import('@/lib/openExternalUrl');
       const { buildWebAuthedUrl } = await import('@/lib/webUrl');
       // Via /login, NOT straight to /pages: the app's JWT lives in the WebView's
       // localStorage under a different origin, so it does not travel to the
@@ -500,7 +540,13 @@ const PagesPage: NextPageWithLayout = () => {
       // got a sign-in wall with no destination. /login forwards immediately when
       // a browser session already exists, so this costs an already-signed-in
       // merchant nothing.
-      await openExternalUrl(buildWebAuthedUrl('/pages', language));
+      // Carry the intent across the handoff, so the browser reopens the path
+      // question instead of dropping the merchant on a page identical to the one
+      // they just left. `waPage` preserves which card they tapped Connect on.
+      const resumePath = pageId
+        ? `/pages?connectWhatsApp=true&waPage=${encodeURIComponent(pageId)}`
+        : '/pages?connectWhatsApp=true';
+      await openInSystemBrowser(buildWebAuthedUrl(resumePath, language));
       return;
     }
     const existingPage = pageId ? pages.find(p => p.id === pageId) : null;

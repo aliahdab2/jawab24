@@ -77,8 +77,13 @@ vi.mock('@/lib/api', () => ({
 }));
 
 const mockOpenExternalUrl = vi.fn();
+const mockOpenInSystemBrowser = vi.fn();
 vi.mock('@/lib/openExternalUrl', () => ({
     openExternalUrl: (...args: unknown[]) => mockOpenExternalUrl(...args),
+    // The WhatsApp handoff needs the REAL browser, not the in-app Custom Tab —
+    // Embedded Signup's popup cannot open in one. Mocked separately so a test
+    // asserting the handoff can tell the two apart; see openExternalUrl.ts.
+    openInSystemBrowser: (...args: unknown[]) => mockOpenInSystemBrowser(...args),
 }));
 
 const mockLaunchWhatsAppSignup = vi.fn();
@@ -518,11 +523,22 @@ describe('PagesPage - WhatsApp', () => {
             // merchant on a logged-out screen when they came to connect a
             // number. /login forwards instantly when a browser session already
             // exists, so this costs a signed-in merchant nothing.
-            expect(mockOpenExternalUrl).toHaveBeenCalledWith(
-                'https://jawab24.com/en/login?redirect=%2Fpages',
+            expect(mockOpenInSystemBrowser).toHaveBeenCalledWith(
+                // ?connectWhatsApp=true is what makes the browser REOPEN the path
+                // question. Without it the handoff delivered the merchant to a page
+                // identical to the one they left, with no sign of what to do next —
+                // "it redirects then comes back to the same page" (2026-07-29).
+                // waPage preserves which card they tapped Connect on; attaching to
+                // an existing page and creating a standalone WhatsApp-only card are
+                // different outcomes.
+                'https://jawab24.com/en/login?redirect=%2Fpages%3FconnectWhatsApp%3Dtrue%26waPage%3Dpage_x',
             );
         });
         expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+        // Must be the real browser, never the in-app Custom Tab: a Custom Tab
+        // supports neither popups nor `window.opener`, so Embedded Signup silently
+        // never opened and the merchant dead-ended (Android, 2026-07-29).
+        expect(mockOpenExternalUrl).not.toHaveBeenCalled();
         // And the path question is SKIPPED, not asked-then-abandoned: the merchant
         // answers it in the browser we just handed off to, so asking here would
         // make them answer the same question twice.
