@@ -73,6 +73,24 @@ export default defineConfig({
       NEXT_PUBLIC_API_URL: 'http://localhost:4999/api',
       // Stable test secret so /api/revalidate has a known shared key during E2E.
       REVALIDATE_SECRET: process.env.REVALIDATE_SECRET || 'e2e-revalidate-secret',
+      // WhatsApp OFF, pinned rather than inherited — same reason test/setup.ts pins
+      // it for the unit suite. `isWhatsAppEnabled()` is
+      // `!!NEXT_PUBLIC_FB_APP_ID && !!NEXT_PUBLIC_WHATSAPP_CONFIG_ID`, and when it
+      // flips true the nav/page title renames "My Pages" → "Channels", so six specs
+      // that assert the former label go red. That happened on 2026-07-29 the moment
+      // those vars were added to .env.local for an Android build: the suite had been
+      // green only because the ambient environment happened to lack them.
+      //
+      // KNOWN GAP, deliberately left: prod runs with WhatsApp ON, so these specs now
+      // assert a label real users may not see. Pinning makes the suite deterministic;
+      // deciding whether E2E should instead mirror prod (assert "Channels", flags on)
+      // depends on NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY and is a product call.
+      //
+      // Note this only bites when Playwright STARTS the server. Locally
+      // `reuseExistingServer` is true, so a dev server already on :3001 keeps its own
+      // env — check `lsof -iTCP:3001` before trusting a local run.
+      NEXT_PUBLIC_FB_APP_ID: '',
+      NEXT_PUBLIC_WHATSAPP_CONFIG_ID: '',
     },
   },
 });
