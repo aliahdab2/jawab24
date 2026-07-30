@@ -133,6 +133,11 @@ const CSRF_EXEMPT_ROUTES = new Set<string>([
     '/auth/phone/request',
     '/auth/phone/verify',
     '/auth/logout',
+    // Same one-time-credential rationale: the single-use handoff code IS the
+    // anti-forgery token. /auth/sync calls it with raw axios (no X-CSRF-Token),
+    // so a browser holding cookies from an EARLIER handoff was 403'd on every
+    // retry (observed live 2026-07-30, "فشل المزامنة" on the owner's device).
+    '/auth/browser-handoff/exchange',
 ]);
 
 /**

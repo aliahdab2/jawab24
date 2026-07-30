@@ -711,7 +711,7 @@ describe('PagesPage - WhatsApp', () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
     });
 
-    it('REDIRECT flag, native: Connect opens the in-app Custom Tab ALREADY SIGNED IN via a single-use handoff code', async () => {
+    it('REDIRECT flag, native: Connect opens the SYSTEM BROWSER already signed in via a single-use handoff code', async () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', 'true');
         const { Capacitor } = await import('@capacitor/core');
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
@@ -732,16 +732,17 @@ describe('PagesPage - WhatsApp', () => {
 
         expect(mockedApi.post).toHaveBeenCalledWith('/auth/browser-handoff');
 
-        // The whole redirect flow is plain navigations — a Custom Tab handles it
-        // (Facebook page connect proves it), so the merchant stays "in" the app.
+        // FULL system browser, NOT a Custom Tab: the Custom Tab silently
+        // swallowed the gesture-synchronous jump to Meta's dialog on a real
+        // device (2026-07-30), while full Chrome completed the flow end-to-end.
         // /auth/sync trades the code for a real login and forwards to the
         // connect intent — NOT /login: the wall is gone.
         await waitFor(() => {
-            expect(mockOpenExternalUrl).toHaveBeenCalledWith(
+            expect(mockOpenInSystemBrowser).toHaveBeenCalledWith(
                 'https://jawab24.com/en/auth/sync?code=handoff-code&redirect=%2Fpages%3FconnectWhatsApp%3Dtrue%26waPage%3Dpage_x',
             );
         });
-        expect(mockOpenInSystemBrowser).not.toHaveBeenCalled();
+        expect(mockOpenExternalUrl).not.toHaveBeenCalled();
         expect(screen.queryByText(enPages.whatsappDesktopNeededTitle)).not.toBeInTheDocument();
 
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
