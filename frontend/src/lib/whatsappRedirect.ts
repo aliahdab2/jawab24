@@ -24,5 +24,36 @@ export async function startWhatsAppConnect(options: {
     coexistence: options.coexistence,
     locale: options.locale,
   });
-  window.location.assign(data.url);
+  openWhatsAppSignupUrl(data.url);
+}
+
+export interface WhatsAppSignupUrls {
+  coexistence: string;
+  dedicated: string;
+}
+
+/**
+ * PRE-MINT both onboarding-variant dialog URLs while the path-question modal
+ * is opening, so the merchant's answer can navigate SYNCHRONOUSLY with the
+ * tap. Mobile Chrome silently dropped a location.assign issued after the
+ * start round-trip (observed live 2026-07-30: four minted URLs, zero
+ * navigations); a navigation inside the gesture is the only shape browsers
+ * never second-guess. Both URLs share one nonce cookie, so either is valid at
+ * the callback.
+ */
+export async function prepareWhatsAppConnect(options: {
+  pageId: string | null;
+  locale: string;
+}): Promise<WhatsAppSignupUrls> {
+  const { data } = await api.post<{ urls: WhatsAppSignupUrls }>('/auth/whatsapp/start', {
+    pageId: options.pageId,
+    coexistence: false,
+    locale: options.locale,
+  });
+  return data.urls;
+}
+
+/** The one-liner seam that tests mock: full-page navigation to Meta's wizard. */
+export function openWhatsAppSignupUrl(url: string): void {
+  window.location.assign(url);
 }

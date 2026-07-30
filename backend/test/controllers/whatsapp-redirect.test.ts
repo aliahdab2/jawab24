@@ -175,9 +175,33 @@ describe('WhatsAppRedirectController.start', () => {
         const reply = buildReply();
         // Client (buggy or malicious) asks for migration on a coexistence number:
         await whatsappRedirectController.start(buildStartRequest({ pageId: 'page-1', coexistence: false, locale: 'en' }), reply);
-        const { url } = (reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as { url: string };
+        const { url, urls } = (reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as { url: string; urls: { coexistence: string; dedicated: string } };
         const extras = JSON.parse(new URL(url).searchParams.get('extras') as string);
         expect(extras.featureType).toBe('whatsapp_business_app_onboarding');
+        // BOTH pre-minted variants collapse onto the stored path — whichever the
+        // client navigates to, a coexistence number stays on the merchant's phone.
+        for (const variant of [urls.coexistence, urls.dedicated]) {
+            const e = JSON.parse(new URL(variant).searchParams.get('extras') as string);
+            expect(e.featureType).toBe('whatsapp_business_app_onboarding');
+        }
+    });
+
+    it('pre-mints BOTH variants sharing ONE nonce — either state passes the callback nonce check', async () => {
+        const reply = buildReply();
+        await whatsappRedirectController.start(buildStartRequest({ pageId: null, coexistence: false, locale: 'en' }), reply);
+
+        const { urls } = (reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as { urls: { coexistence: string; dedicated: string } };
+        const cookieNonce = (reply.setCookie as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+        const stateOf = (u: string) => new URL(u).searchParams.get('state') as string;
+        const { verifyWhatsAppConnectState } = await import('../../src/utils/whatsappConnectState');
+
+        const coex = verifyWhatsAppConnectState(stateOf(urls.coexistence));
+        const dedicated = verifyWhatsAppConnectState(stateOf(urls.dedicated));
+        expect(coex).toMatchObject({ coexistence: true, nonce: cookieNonce });
+        expect(dedicated).toMatchObject({ coexistence: false, nonce: cookieNonce });
+        // And the extras match each state's variant.
+        expect(JSON.parse(new URL(urls.coexistence).searchParams.get('extras') as string).featureType).toBe('whatsapp_business_app_onboarding');
+        expect(JSON.parse(new URL(urls.dedicated).searchParams.get('extras') as string).featureType).toBe('');
     });
 
     it('plan gate fires before any URL is minted', async () => {

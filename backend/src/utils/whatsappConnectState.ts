@@ -30,7 +30,13 @@ export interface WhatsAppConnectState {
     exp: number;
 }
 
-export const WHATSAPP_STATE_TTL_MS = 10 * 60 * 1000;
+/**
+ * 30 minutes — the state is verified at CALLBACK time, i.e. AFTER the merchant
+ * walks Meta's whole wizard (business creation, number, OTP…). The popup flow's
+ * abandonment sweep learned this the hard way: 10 minutes is SHORTER than a
+ * real first-time signup, and expiring mid-wizard throws away completed work.
+ */
+export const WHATSAPP_STATE_TTL_MS = 30 * 60 * 1000;
 
 function sign(payload: string): Buffer {
     // Domain-separated so this HMAC can never be confused with other
@@ -38,10 +44,17 @@ function sign(payload: string): Buffer {
     return createHmac('sha256', config.jwt.secret).update(`wa-connect:${payload}`).digest();
 }
 
+/**
+ * @param sharedNonce Pass to mint SIBLING states bound to one nonce cookie —
+ * the path-question modal pre-mints both onboarding variants at open time so
+ * the chosen one can be navigated to synchronously with the tap, and a single
+ * cookie slot must validate whichever the merchant picks.
+ */
 export function mintWhatsAppConnectState(
     input: Pick<WhatsAppConnectState, 'userId' | 'workspaceId' | 'pageId' | 'coexistence' | 'locale'>,
+    sharedNonce?: string,
 ): { state: string; nonce: string } {
-    const nonce = randomBytes(16).toString('hex');
+    const nonce = sharedNonce ?? randomBytes(16).toString('hex');
     const full: WhatsAppConnectState = { ...input, nonce, exp: Date.now() + WHATSAPP_STATE_TTL_MS };
     const payload = Buffer.from(JSON.stringify(full)).toString('base64url');
     return { state: `${payload}.${sign(payload).toString('base64url')}`, nonce };

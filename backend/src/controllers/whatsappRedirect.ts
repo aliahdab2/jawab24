@@ -117,6 +117,9 @@ export class WhatsAppRedirectController {
 
         const pageId = typeof request.body?.pageId === 'string' && request.body.pageId ? request.body.pageId : null;
         let coexistence = request.body?.coexistence === true;
+        // Reconnect: the onboarding path is FIXED by the connected number —
+        // both minted variants must collapse onto the stored value.
+        let pathLocked = false;
         if (pageId) {
             const page = await pagesService.getPage(req.workspaceId, pageId);
             if (!page) {
@@ -128,39 +131,60 @@ export class WhatsAppRedirectController {
             // the merchant's phone, permanently and silently.
             if (page.whatsappPhoneNumberId) {
                 coexistence = page.whatsappCoexistence === true;
+                pathLocked = true;
             }
         }
         const locale: 'ar' | 'en' = request.body?.locale === 'en' ? 'en' : 'ar';
 
-        const { state, nonce } = mintWhatsAppConnectState({
+        // Mint BOTH onboarding variants up front, bound to ONE nonce cookie.
+        // The path-question modal calls start when it OPENS, so the chosen URL
+        // can be navigated to SYNCHRONOUSLY with the merchant's tap — mobile
+        // Chrome silently ignored a location.assign issued after the start
+        // round-trip (observed live 2026-07-30: four minted URLs, zero
+        // navigations), and a gesture-synchronous navigation is the only shape
+        // browsers never second-guess. On a reconnect both variants carry the
+        // STORED path (the override above), so whichever the client uses is
+        // safe. The dialog URL has no `scope` param — a Facebook Login for
+        // Business configuration defines its own permissions; `extras` mirrors
+        // the popup's fb.login extras.
+        const stateInput = {
             userId: req.user.userId,
             workspaceId: req.workspaceId,
             pageId,
-            coexistence,
             locale,
-        });
-        reply.setCookie(WHATSAPP_NONCE_COOKIE, nonce, WHATSAPP_NONCE_COOKIE_OPTIONS);
+        };
+        const buildUrl = (state: string, withCoexistence: boolean): string => {
+            const extras = JSON.stringify({
+                setup: {},
+                featureType: withCoexistence ? 'whatsapp_business_app_onboarding' : '',
+                sessionInfoVersion: '3',
+            });
+            const params = new URLSearchParams({
+                client_id: config.facebook.appId,
+                config_id: config.whatsappConfigId,
+                redirect_uri: whatsappCallbackUri(),
+                state,
+                response_type: 'code',
+                extras,
+            });
+            return `https://www.facebook.com/${config.facebook.graphApiVersion}/dialog/oauth?${params.toString()}`;
+        };
+        // Reconnect: both variants collapse onto the stored path (pathLocked).
+        const coexistenceVariant = pathLocked ? coexistence : true;
+        const dedicatedVariant = pathLocked ? coexistence : false;
+        const first = mintWhatsAppConnectState({ ...stateInput, coexistence: coexistenceVariant });
+        const second = mintWhatsAppConnectState({ ...stateInput, coexistence: dedicatedVariant }, first.nonce);
+        reply.setCookie(WHATSAPP_NONCE_COOKIE, first.nonce, WHATSAPP_NONCE_COOKIE_OPTIONS);
 
-        // The ES dialog URL. No `scope` param — a Facebook Login for Business
-        // configuration defines its own permissions; sending scope alongside
-        // config_id is rejected. `extras` mirrors the popup's fb.login extras.
-        const extras = JSON.stringify({
-            setup: {},
-            featureType: coexistence ? 'whatsapp_business_app_onboarding' : '',
-            sessionInfoVersion: '3',
-        });
-        const params = new URLSearchParams({
-            client_id: config.facebook.appId,
-            config_id: config.whatsappConfigId,
-            redirect_uri: whatsappCallbackUri(),
-            state,
-            response_type: 'code',
-            extras,
-        });
-        const url = `https://www.facebook.com/${config.facebook.graphApiVersion}/dialog/oauth?${params.toString()}`;
+        const urls = {
+            coexistence: buildUrl(first.state, coexistenceVariant),
+            dedicated: buildUrl(second.state, dedicatedVariant),
+        };
 
         request.log.info({ pageId, coexistence, locale }, '[WhatsApp redirect] start');
-        return reply.send({ url });
+        // `url` preserves the original single-URL contract (the requested
+        // variant) for clients built before the pre-mint change.
+        return reply.send({ url: coexistence ? urls.coexistence : urls.dedicated, urls });
     };
 
     /**

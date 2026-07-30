@@ -92,8 +92,12 @@ vi.mock('@/lib/whatsappSignup', () => ({
 }));
 
 const mockStartWhatsAppConnect = vi.fn();
+const mockPrepareWhatsAppConnect = vi.fn();
+const mockOpenWhatsAppSignupUrl = vi.fn();
 vi.mock('@/lib/whatsappRedirect', () => ({
     startWhatsAppConnect: (...args: unknown[]) => mockStartWhatsAppConnect(...args),
+    prepareWhatsAppConnect: (...args: unknown[]) => mockPrepareWhatsAppConnect(...args),
+    openWhatsAppSignupUrl: (...args: unknown[]) => mockOpenWhatsAppSignupUrl(...args),
 }));
 
 // Phone browsers get desktop guidance before Embedded Signup is attempted
@@ -656,8 +660,9 @@ describe('PagesPage - WhatsApp', () => {
 
     // ── Redirect connect flow (NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT) ──
 
-    it('REDIRECT flag: the path answer starts the full-page flow — the popup launcher is never touched', async () => {
+    it('REDIRECT flag: opening the path question PRE-MINTS both URLs; the answer navigates SYNCHRONOUSLY', async () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', 'true');
+        mockPrepareWhatsAppConnect.mockResolvedValue({ coexistence: 'https://fb/coex', dedicated: 'https://fb/dedicated' });
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
@@ -665,15 +670,44 @@ describe('PagesPage - WhatsApp', () => {
         renderPage(<PagesPage />);
         await waitFor(() => expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument());
 
-        fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
+        await act(async () => {
+            fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
+        });
         expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
+        // The modal OPENING triggered the pre-mint — before any answer.
+        expect(mockPrepareWhatsAppConnect).toHaveBeenCalledWith({ pageId: 'page_x', locale: 'en' });
 
         await act(async () => {
             fireEvent.click(screen.getByText(enPages.whatsappPathKeep));
         });
 
-        expect(mockStartWhatsAppConnect).toHaveBeenCalledWith({ pageId: 'page_x', coexistence: true, locale: 'en' });
+        // The tap navigates with the PRE-MINTED variant — no async start between
+        // gesture and navigation (mobile Chrome silently dropped that shape).
+        expect(mockOpenWhatsAppSignupUrl).toHaveBeenCalledWith('https://fb/coex');
+        expect(mockStartWhatsAppConnect).not.toHaveBeenCalled();
         expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
+    });
+
+    it('REDIRECT flag: pre-mint failed → the answer falls back to the async start (which owns error toasts)', async () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', 'true');
+        mockPrepareWhatsAppConnect.mockRejectedValue(new Error('network'));
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument());
+
+        await act(async () => {
+            fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.whatsappPathDedicated));
+        });
+
+        expect(mockOpenWhatsAppSignupUrl).not.toHaveBeenCalled();
+        expect(mockStartWhatsAppConnect).toHaveBeenCalledWith({ pageId: 'page_x', coexistence: false, locale: 'en' });
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
     });
 
