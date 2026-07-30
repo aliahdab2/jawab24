@@ -133,8 +133,20 @@ export default function LoginPage() {
     return () => window.removeEventListener('focus', resetRedirecting);
   }, []);
 
-  // Redirect authenticated users away from login page
+  // Redirect authenticated users away from login page.
+  //
+  // MUST wait for router.isReady: on a statically-exported page router.query is
+  // {} on first render and only fills in after hydration. The auth store hydrates
+  // from localStorage and can win that race, so without the guard this effect
+  // read `redirect === undefined` and forwarded to /dashboard — silently
+  // destroying the ?redirect intent. That is exactly how the WhatsApp connect
+  // browser handoff (?redirect=/pages?connectWhatsApp=true) dropped merchants on
+  // the dashboard with no dialog (Android, 2026-07-30, confirmed in nginx logs).
+  // Flaky by nature — whether the query was parsed in time depended on cache
+  // state and device speed, which is why earlier attempts bounced to /pages and
+  // this one to /dashboard.
   useEffect(() => {
+    if (!router.isReady) return;
     if (_hasHydrated && isAuthenticated) {
       const redirect = router.query.redirect as string;
       const target = redirect && redirect.startsWith('/') ? redirect : '/dashboard';
