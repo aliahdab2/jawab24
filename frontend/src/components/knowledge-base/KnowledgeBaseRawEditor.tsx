@@ -4,9 +4,24 @@ interface KnowledgeBaseRawEditorProps {
   onChange: (value: string) => void;
   maxLength: number;
   ariaLabel?: string;
+  /** Called when a paste would exceed maxLength. The textarea's native
+   *  maxLength truncates the paste BEFORE onChange fires, so the cut is
+   *  invisible to the value — this is the only place it can be detected. */
+  onPasteTruncated?: (info: { kept: number; total: number }) => void;
 }
 
-export function KnowledgeBaseRawEditor({ value, onChange, maxLength, ariaLabel }: KnowledgeBaseRawEditorProps) {
+export function KnowledgeBaseRawEditor({ value, onChange, maxLength, ariaLabel, onPasteTruncated }: KnowledgeBaseRawEditorProps) {
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!onPasteTruncated) return;
+    const pasted = e.clipboardData.getData('text');
+    if (!pasted) return;
+    const el = e.currentTarget;
+    const selectionLength = el.selectionEnd - el.selectionStart;
+    const resultingLength = value.length - selectionLength + pasted.length;
+    if (resultingLength > maxLength) {
+      onPasteTruncated({ kept: maxLength, total: resultingLength });
+    }
+  };
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -14,6 +29,7 @@ export function KnowledgeBaseRawEditor({ value, onChange, maxLength, ariaLabel }
         className="flex-1 w-full min-h-[200px] p-4 border-2 border-theme-border rounded-2xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none bg-background text-foreground text-sm leading-relaxed placeholder:text-muted-foreground"
         value={value}
         onChange={(e) => onChange(e.target.value.slice(0, maxLength))}
+        onPaste={handlePaste}
         maxLength={maxLength}
         dir="auto"
         aria-label={ariaLabel}
