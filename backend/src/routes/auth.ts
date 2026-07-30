@@ -78,18 +78,38 @@ export default async function authRoutes(fastify: FastifyInstance) {
         preHandler: [authenticate],
     }, authController.getMe);
 
-    // App→browser session bridge: mints a 10-minute token the native app opens
-    // /auth/sync with, so browser-side flows (WhatsApp connect, payments) start
-    // already signed in instead of on a login wall.
+    // App→browser session bridge: mints a single-use 60 s code the native app
+    // opens /auth/sync with, so browser-side flows (WhatsApp connect, payments)
+    // start already signed in instead of on a login wall.
     fastify.post('/auth/browser-handoff', {
         schema: {
             tags: ['Auth'],
-            summary: 'Mint a short-lived token that carries the app session into the browser',
+            summary: 'Mint a single-use code that carries the app session into the browser',
             security: auth,
         },
         preHandler: [authenticate],
         config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     }, authController.browserHandoff);
+
+    // Public — the browser has no session yet; the single-use code IS the
+    // credential (opaque, 60 s TTL, consumed atomically, minted seconds earlier
+    // by an authenticated app session). Brute force is not realistic against a
+    // 256-bit code, and the rate limit bounds it anyway.
+    fastify.post('/auth/browser-handoff/exchange', {
+        config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+        schema: {
+            tags: ['Auth'],
+            summary: 'Exchange a single-use handoff code for a browser session',
+            body: {
+                type: 'object',
+                required: ['code'],
+                properties: {
+                    code: { type: 'string', minLength: 20, maxLength: 128 },
+                },
+                additionalProperties: false,
+            },
+        },
+    }, authController.browserHandoffExchange);
 
     fastify.patch('/auth/profile', {
         schema: {
