@@ -185,7 +185,7 @@ async function resolvePageIds(): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // Test cases — 395 total (385 previous + 10 native-catalog tests, Cat 62),
-// plus Cat 69 (7 distributor / outlet-directory cases, BAMBO LIBYA prod replay)
+// plus Cat 69 (10 distributor / outlet-directory cases, BAMBO LIBYA prod replay)
 // ---------------------------------------------------------------------------
 
 /**
@@ -4491,6 +4491,51 @@ const TEST_CASES: TestCase[] = [
             ],
         },
         notes: 'PROD replay of the doubling-down turn (BAMBO LIBYA, 2026-07-27 10:20:23) — the prior assistant turn is deliberately the FABRICATED one, so the model is invited to defend a claim it should retract. OPEN GAP, expectedFail: measured 2026-07-28 at temp 0 it re-asserts العجيلات in ~2 of 4 runs. A self-reported place-claim guard was built and REJECTED on this evidence: across four full suites the flag fired exactly once and that once was a false positive, while on the runs where this case reproduced the fabrication the model reported no claim at all (fails open precisely when it matters). Closing this needs detection from the REPLY TEXT against the KB, not a model self-report. This is currently the only case in the suite that reproduces the defect — #728 passes even on wholly unfixed code.',
+    },
+
+    // 69.10 — SIZE-LIST AMBIGUITY / FALSE DENIAL (prod, BAMBO LIBYA 2026-07-30
+    // 04:50:34). The standard list ends at رقم 6; only the جامبو sub-block has
+    // رقم 7. Asked «هل متوفر بامبو رقم 7» bare, prod hedged «ما عنديش معلومة
+    // محددة عن رقم 7» although the ACTIVE KB listed jumbo رقم 7 — a false denial
+    // of an in-KB product (lost sale). Local replay on the REAL prod KB v13
+    // (scratchpad probe, 8 reps): bare ask = 0/8 correct (deny/deflect,
+    // info_not_in_kb fired); adding «جامبو» to the question = 8/8. The model
+    // anchors on the standard list instead of scanning the sub-heading.
+    // The grounding verifier passes this class BY DESIGN (denials are its
+    // no-flag shape), so this eval pin is the only detector.
+    // Fix route: G1a fact-list for sizes with L2 row matching (#528 extension).
+    {
+        id: 738, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'هل متوفر رواء رقم 7',
+        page: 'distributor',
+        expected: {
+            flagsAbsent: ['info_not_in_kb'],
+            replyContainsAny: ['82', '٨٢'],
+            replyNotContains: ['ما عندي', 'ما عنديش', 'غير متوفر', 'لا تتوفر'],
+        },
+        notes: 'Jumbo-only size: رقم 7 exists ONLY under «حجم الجامبو:» (82د), standard stops at 6 — mirrors the real KB shape that produced the prod false denial. Must find the jumbo row, not hedge.',
+    },
+
+    // 69.11 — The turn that shipped at 09:20:38: the hedge above is already in
+    // the history and the customer asks the LEADING «مش متوفر ؟». Prod flipped
+    // from hedge to CONFIDENT false denial («غير متوفر حالياً حسب معلوماتنا»)
+    // then invented a restock narrative. Same history-echo mechanism as #737,
+    // on availability instead of place attribution. Local replay on the real
+    // KB: 1/8 confirms unavailability — a rate defect, pinned here at the
+    // exact conversation state that produced it.
+    {
+        id: 739, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
+        message: 'رقم 7\nمش متوفر ؟',
+        page: 'distributor',
+        conversationHistory: [
+            { role: 'user', content: 'هل متوفر رواء رقم 7' },
+            { role: 'assistant', content: 'منتجاتنا تشمل حفاضات رواء بمقاسات مختلفة، لكن ما عنديش معلومة محددة عن رقم 7. ممكن ترسل لي صورة أو توضيح أكتر عن المنتج؟' },
+        ],
+        expected: {
+            replyContainsAny: ['82', '٨٢', 'جامبو'],
+            replyNotContains: ['غير متوفر حالياً', 'غير متوفرة حالياً', 'مش متوفر حالياً'],
+        },
+        notes: 'Must self-correct to the jumbo row instead of ratifying its own prior hedge under a leading question. The verifier is blind to this shape (denial = no-flag), and each uncorrected turn compounds (prod went on to invent a restock date).',
     },
 
     // ── Category 70: Purchase-Turn Price Grounding ───────────────────────────

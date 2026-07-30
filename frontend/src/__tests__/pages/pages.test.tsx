@@ -552,7 +552,10 @@ describe('PagesPage - WhatsApp', () => {
                 // different outcomes.
                 'https://jawab24.com/en/login?redirect=%2Fpages%3FconnectWhatsApp%3Dtrue%26waPage%3Dpage_x',
             );
-        });
+            // 3s, not the 1s default: this asserts the END of an async chain
+            // (guidance dialog → handoff), and under the full coverage run's
+            // parallel load the default timeout flaked (2026-07-30 pre-deploy).
+        }, { timeout: 3000 });
         expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
         // Must be the real browser, never the in-app Custom Tab: a Custom Tab
         // supports neither popups nor `window.opener`, so Embedded Signup silently
@@ -604,9 +607,11 @@ describe('PagesPage - WhatsApp', () => {
         renderPage(<PagesPage />);
 
         // No click needed — arriving with the param IS the resume.
+        // 3s timeout: the resume waits for the pages query + router readiness,
+        // and the 1s default flaked under the full coverage run (2026-07-30).
         await waitFor(() => {
             expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
-        });
+        }, { timeout: 3000 });
         // But fb.login must wait for the merchant's answer (transient user
         // activation) — auto-launching would be popup-blocked.
         expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
