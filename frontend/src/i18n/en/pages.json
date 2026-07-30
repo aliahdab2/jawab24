@@ -58,6 +58,7 @@
   "whatsappUpgradeButton": "Upgrade to connect",
   "whatsappPlanRequired": "WhatsApp smart replies are available on the Business plan and higher. Upgrade to connect your number.",
   "whatsappPlanRequiredIOS": "WhatsApp smart replies are not available on your current plan.",
+  "whatsappAmbiguousNumber": "We couldn't tell which number you just connected. Please try again and add a single number in Meta's window.",
   "whatsappDesktopNeededTitle": "Connect from a computer",
   "whatsappDesktopNeededBody": "Meta's WhatsApp connection window is built for desktop browsers and often fails to open on phones. For a reliable connection, open jawab24.com on a computer and connect from there. You can still try on this device.",
   "whatsappDesktopTryAnyway": "Try on this device",

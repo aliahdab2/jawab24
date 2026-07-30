@@ -310,6 +310,15 @@ export const config = {
         .map(e => e.trim().toLowerCase())
         .filter(Boolean),
 
+    // WhatsApp redirect connect flow (full-page Embedded Signup — no popup).
+    // whatsappConfigId: the SAME public Configuration ID the frontend inlines
+    // as NEXT_PUBLIC_WHATSAPP_CONFIG_ID; the backend needs it to build the
+    // OAuth dialog URL server-side. whatsappConnectRedirect: rollout flag —
+    // when false the /auth/whatsapp/* routes 404 and the popup flow remains
+    // the only path (instant rollback is flipping this off).
+    whatsappConfigId: process.env.WHATSAPP_CONFIG_ID || '',
+    whatsappConnectRedirect: process.env.WHATSAPP_CONNECT_REDIRECT === 'true',
+
     // Cleanup endpoint secret token
     cleanupSecretToken: process.env.CLEANUP_SECRET_TOKEN || '',
 

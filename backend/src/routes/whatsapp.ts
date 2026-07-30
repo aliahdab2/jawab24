@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { whatsappController } from '../controllers/whatsapp';
+import { whatsappRedirectController } from '../controllers/whatsappRedirect';
 import { authenticate } from '../middleware/auth';
 import { resolveWorkspace, requireRole } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
@@ -36,5 +37,23 @@ export default async function whatsappRoutes(fastify: FastifyInstance) {
         ownerRoutes.delete('/pages/:id/whatsapp', {
             schema: { tags: ['WhatsApp'], summary: 'Disconnect WhatsApp from a page (owner only)', security: auth },
         }, whatsappController.disconnect);
+
+        // Redirect connect flow, leg 1: mint signed state + dialog URL. Same owner
+        // scope as the popup connect. 404s while WHATSAPP_CONNECT_REDIRECT is off
+        // (checked in the handler so rollback is an env flip, not a deploy).
+        ownerRoutes.post('/auth/whatsapp/start', {
+            schema: { tags: ['WhatsApp'], summary: 'Start the redirect Embedded Signup flow (owner only)', security: auth },
+            config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+        }, whatsappRedirectController.start);
     });
+
+    // Redirect connect flow, leg 2: Meta 302s the merchant's browser here — a
+    // top-level navigation with no Authorization header, so it is PUBLIC by
+    // necessity. Authentication is the signed state + nonce cookie + a live
+    // ownership re-verify inside the handler. Rate-limited like the other
+    // public OAuth callback (auth/facebook/mobile-callback).
+    fastify.get('/auth/whatsapp/callback', {
+        schema: { tags: ['WhatsApp'], summary: 'OAuth return for the redirect Embedded Signup flow' },
+        config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+    }, whatsappRedirectController.callback);
 }

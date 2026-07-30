@@ -93,6 +93,18 @@ export const ZID_NONCE_COOKIE_OPTIONS = {
     maxAge: 10 * 60,  // 10 minutes
 };
 
+// WhatsApp connect OAuth nonce cookie (CSRF protection during the redirect
+// Embedded Signup round-trip; must survive the cross-site 302 from facebook.com
+// → sameSite lax). Lifetime matches WHATSAPP_STATE_TTL_MS.
+export const WHATSAPP_NONCE_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax' as const,
+    path: '/',
+    signed: true,
+    maxAge: 10 * 60,  // 10 minutes
+};
+
 export class CookiesService {
     /**
      * Set authentication cookies

@@ -151,7 +151,11 @@ have_public_var() {  # $1 = var name
 # exact hole that shipped 2.0.6 with WhatsApp silently absent, just via the
 # other variable.
 MISSING_PUBLIC=()
-for v in NEXT_PUBLIC_FB_APP_ID NEXT_PUBLIC_WHATSAPP_CONFIG_ID; do
+# NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT: while the redirect connect flow is the
+# live path (2026-07-30), a build without it silently falls back to the popup
+# flow — which cannot work on phones. Same silent-absence class as the other
+# two. Drop from this list when the popup flow is deleted and the flag retires.
+for v in NEXT_PUBLIC_FB_APP_ID NEXT_PUBLIC_WHATSAPP_CONFIG_ID NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT; do
     have_public_var "$v" || MISSING_PUBLIC+=("$v")
 done
 if [ ${#MISSING_PUBLIC[@]} -gt 0 ]; then

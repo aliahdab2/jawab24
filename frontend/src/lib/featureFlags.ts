@@ -36,6 +36,19 @@ export function isWhatsAppEnabled(): boolean {
 }
 
 /**
+ * Redirect-based WhatsApp connect (full-page Embedded Signup, no popup).
+ *
+ * ON: every platform starts the connect via POST /auth/whatsapp/start and a
+ * full-page navigation to Meta's dialog — works in phone browsers and the
+ * app's Custom Tab, where the fb.login popup never painted (2026-07-30).
+ * OFF: the legacy popup flow. Paired with the backend WHATSAPP_CONNECT_REDIRECT
+ * flag (which 404s the new routes); flip BOTH for rollout or rollback.
+ */
+export function isWhatsAppRedirectConnect(): boolean {
+  return process.env.NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT === 'true';
+}
+
+/**
  * Canary window: while NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY is 'true', the
  * WhatsApp surface is shown ONLY to platform admins (the founder), even though
  * the config is live. This lets us set the config in prod (so connect actually
