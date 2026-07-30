@@ -21,6 +21,7 @@ import { dismissTopModal } from '@/hooks/useModalBackHandler';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { PushDeniedBanner } from '@/components/ui/PushDeniedBanner';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { AUTH_BRIDGE_PATHS } from '@/constants/auth';
 import { useSSE, useTheme } from '@/hooks';
 import { getLocaleDirection, getOGLocale, getOGAlternateLocales, isDefaultLocale, isRTLLocale } from '@/utils/locale';
 
@@ -423,7 +424,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           return;
         }
 
-        if (slug.startsWith('/auth/sync') || slug.startsWith('/auth/app-sync')) {
+        if (AUTH_BRIDGE_PATHS.some((bridgePath) => slug.startsWith(bridgePath))) {
           const params = new URLSearchParams(slug.split('?')[1] || '');
           const token = params.get('token');
           const fbToken = params.get('fbToken') || '';

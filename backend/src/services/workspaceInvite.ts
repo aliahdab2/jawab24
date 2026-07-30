@@ -11,6 +11,7 @@ import type { WorkspaceRole } from '@jawab24/shared';
 import { config } from '../config';
 import { t } from '../utils/i18n';
 import { captureError } from '../utils/sentryHelpers';
+import { sha256Hex } from '../utils/hash';
 
 /** Invite expiry: 48 hours */
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
@@ -29,7 +30,7 @@ export class WorkspaceInviteService {
         createdBy: string,
     ) {
         const rawToken = crypto.randomBytes(32).toString('hex');
-        const tokenHash = this.hashToken(rawToken);
+        const tokenHash = sha256Hex(rawToken);
         const { email, phone } = detectContactType(contact);
 
         // Upsert: if an invite already exists for this contact+workspace, update it
@@ -127,7 +128,7 @@ export class WorkspaceInviteService {
      * Adds user as member, marks invite as accepted.
      */
     async acceptInvite(rawToken: string, userId: string) {
-        const tokenHash = this.hashToken(rawToken);
+        const tokenHash = sha256Hex(rawToken);
 
         const [invite] = await db
             .select()
@@ -226,9 +227,6 @@ export class WorkspaceInviteService {
             );
     }
 
-    private hashToken(rawToken: string): string {
-        return crypto.createHash('sha256').update(rawToken).digest('hex');
-    }
 }
 
 export const workspaceInviteService = new WorkspaceInviteService();

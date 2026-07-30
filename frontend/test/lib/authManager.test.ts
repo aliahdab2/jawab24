@@ -404,6 +404,84 @@ describe('AuthManager', () => {
             expect((mockAxiosInstance as any).post).toHaveBeenCalledWith('/auth/refresh');
         });
 
+        // Transient auth-bridge pages (/auth/app-sync, /auth/sync) navigate away
+        // within milliseconds; a refresh started there can lose its Set-Cookie
+        // mid-teardown and leave the jar holding a revoked token (prod 2026-07-30).
+        // A 401 there must neither refresh nor logout.
+        it.each(['/auth/app-sync', '/auth/sync', '/en/auth/sync'])(
+            'error handler should not refresh or logout for 401 on bridge page %s',
+            async (pathname) => {
+                const originalLocation = window.location;
+                Object.defineProperty(window, 'location', {
+                    value: { ...originalLocation, pathname, href: `https://jawab24.com${pathname}` },
+                    writable: true,
+                    configurable: true,
+                });
+
+                try {
+                    const mockUse = vi.fn();
+                    const mockPost = vi.fn();
+                    const mockAxiosInstance = {
+                        interceptors: { response: { use: mockUse } },
+                        post: mockPost,
+                    } as unknown as AxiosInstance;
+
+                    AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+                    const errorHandler = mockUse.mock.calls[0][1];
+                    const error = {
+                        config: { url: '/sse/events' },
+                        response: { status: 401 },
+                    } as unknown as AxiosError;
+
+                    // Rejects with the ORIGINAL error — no refresh attempt, no logout redirect
+                    await expect(errorHandler(error)).rejects.toBe(error);
+                    expect(mockPost).not.toHaveBeenCalled();
+                } finally {
+                    Object.defineProperty(window, 'location', {
+                        value: originalLocation,
+                        writable: true,
+                        configurable: true,
+                    });
+                }
+            },
+        );
+
+        it('error handler still refreshes on non-bridge pages (guard is scoped)', async () => {
+            const originalLocation = window.location;
+            Object.defineProperty(window, 'location', {
+                value: { ...originalLocation, pathname: '/dashboard' },
+                writable: true,
+                configurable: true,
+            });
+
+            try {
+                const mockUse = vi.fn();
+                const retryResponse = { status: 200, data: { ok: true } };
+                const mockAxiosInstance = vi.fn().mockResolvedValue(retryResponse);
+                (mockAxiosInstance as any).interceptors = { response: { use: mockUse } };
+                (mockAxiosInstance as any).post = vi.fn().mockResolvedValue({ data: { success: true } });
+
+                AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance as unknown as AxiosInstance);
+
+                const errorHandler = mockUse.mock.calls[0][1];
+                const error = {
+                    config: { url: '/sse/events' },
+                    response: { status: 401 },
+                } as unknown as AxiosError;
+
+                const result = await errorHandler(error);
+                expect(result).toBe(retryResponse);
+                expect((mockAxiosInstance as any).post).toHaveBeenCalledWith('/auth/refresh');
+            } finally {
+                Object.defineProperty(window, 'location', {
+                    value: originalLocation,
+                    writable: true,
+                    configurable: true,
+                });
+            }
+        });
+
         it('should logout when refresh fails', async () => {
             const mockUse = vi.fn();
             const mockAxiosInstance = {

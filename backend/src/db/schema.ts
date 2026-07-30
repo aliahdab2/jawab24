@@ -132,15 +132,26 @@ export const refreshTokens = pgTable('refresh_tokens', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
     tokenHash: varchar('token_hash', { length: 255 }).notNull(), // Store hash for security
+    // Rotation family: every token minted from one login shares this id, so a
+    // theft response / logout can revoke the whole lineage in ONE statement
+    // (RFC 9700 §4.14.2). Chain-walking replacedByTokenHash could not do that —
+    // grace-window mints branch off the chain and were unreachable. Nullable
+    // only for rows that predate the column; those adopt their own id as family
+    // on first rotation (see refreshToken.ts).
+    familyId: uuid('family_id'),
     expiresAt: timestamp('expires_at').notNull(),
     revokedAt: timestamp('revoked_at'), // Any non-null value means revoked
-    replacedByTokenHash: varchar('replaced_by_token_hash', { length: 255 }), // For rotation tracking
+    // Successor's token hash. Its PRESENCE is what distinguishes a
+    // rotation-revocation (grace-eligible) from a terminal one (logout / reuse
+    // detection), so never set it on a terminal revoke.
+    replacedByTokenHash: varchar('replaced_by_token_hash', { length: 255 }),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
     return {
         userIdIdx: index('idx_refresh_tokens_user_id').on(table.userId),
         tokenHashIdx: index('idx_refresh_tokens_token_hash').on(table.tokenHash),
+        familyIdIdx: index('idx_refresh_tokens_family_id').on(table.familyId),
     };
 });
 

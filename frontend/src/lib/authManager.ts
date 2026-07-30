@@ -16,6 +16,7 @@
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { captureError } from '@/lib/sentryHelpers';
 import { tError } from '@/lib/i18nErrors';
+import { AUTH_BRIDGE_PATHS } from '@/constants/auth';
 
 // Types
 interface AuthStateChangeCallback {
@@ -179,6 +180,21 @@ class AuthManager {
   }
 
   /**
+   * Transient auth-bridge pages exist only to hand the session to the native
+   * app and navigate away within milliseconds. A background 401 there must not
+   * start a token refresh: the rotation's Set-Cookie response can be lost when
+   * the page tears down mid-flight, leaving the cookie jar holding a revoked
+   * token — the "login wall on every visit" bug (nginx-verified 2026-07-30).
+   * It must not force a logout either; the session may be perfectly valid.
+   * Matched with includes() so locale prefixes (/en/auth/sync) are covered.
+   */
+  private isOnAuthBridgePage(): boolean {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname;
+    return AUTH_BRIDGE_PATHS.some((bridgePath) => path.includes(bridgePath));
+  }
+
+  /**
    * Attempt to refresh the access token
    * Returns true if refresh was successful, false otherwise
    */
@@ -249,6 +265,12 @@ class AuthManager {
 
         // Prevent retry loops
         if (originalRequest._retry) {
+          return Promise.reject(error);
+        }
+
+        // No refresh (and no logout) from transient auth-bridge pages —
+        // see isOnAuthBridgePage. The failed call is background noise there.
+        if (this.isOnAuthBridgePage()) {
           return Promise.reject(error);
         }
 
