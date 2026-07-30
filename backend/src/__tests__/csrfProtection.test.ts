@@ -72,6 +72,11 @@ describe('csrfProtection', () => {
             '/auth/phone/request',
             '/auth/phone/verify',
             '/auth/logout',
+            // The single-use handoff code is the credential; /auth/sync calls
+            // this with raw axios (no X-CSRF-Token). A browser holding cookies
+            // from an earlier handoff must not be 403'd on the next one
+            // (observed live 2026-07-30: every handoff retry failed the sync).
+            '/auth/browser-handoff/exchange',
         ];
 
         it.each(exemptRoutes)('allows POST %s with stale token cookie and no CSRF header', async (route) => {

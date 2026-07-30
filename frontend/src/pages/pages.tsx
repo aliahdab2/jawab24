@@ -680,9 +680,14 @@ const PagesPage: NextPageWithLayout = () => {
     const redirectFlow = isWhatsAppRedirectConnect();
     if (Capacitor.isNativePlatform()) {
       if (redirectFlow) {
-        // Redirect flow: the whole signup is plain navigations, which an
-        // in-app Custom Tab handles fine (Facebook page connect proves it) —
-        // the merchant never visibly leaves the app.
+        // Redirect flow, in the FULL system browser — not a Custom Tab. The
+        // Custom Tab on a real device silently swallowed even the
+        // gesture-synchronous location.assign to Meta's dialog (2026-07-30:
+        // path answer → nothing, zero requests; same pathology as its hung FB
+        // login), while the identical flow completed end-to-end in full
+        // Chrome on the same device. Connect is a one-time setup, so visibly
+        // leaving the app is an acceptable trade for a jump Chrome actually
+        // performs.
         //
         // Session bridge: the app's JWT lives under a different origin, so the
         // browser used to greet the merchant with a LOGIN WALL — which proved
@@ -692,8 +697,8 @@ const PagesPage: NextPageWithLayout = () => {
         // cookie) and forwards straight to the connect intent: no login UI
         // anywhere in the chain, and no session credential ever rides the
         // URL. Falls back to the /login wall only if the mint fails.
-        addErrorBreadcrumb('whatsapp-connect', 'opening custom tab handoff', { hasPage: !!pageId });
-        const { openExternalUrl } = await import('@/lib/openExternalUrl');
+        addErrorBreadcrumb('whatsapp-connect', 'opening system browser handoff', { hasPage: !!pageId });
+        const { openInSystemBrowser } = await import('@/lib/openExternalUrl');
         const { buildWebUrl, buildWebAuthedUrl } = await import('@/lib/webUrl');
         const resumePath = pageId
           ? `/pages?connectWhatsApp=true&waPage=${encodeURIComponent(pageId)}`
@@ -701,14 +706,14 @@ const PagesPage: NextPageWithLayout = () => {
         try {
           const { api } = await import('@/lib/api');
           const { data } = await api.post<{ code: string }>('/auth/browser-handoff');
-          await openExternalUrl(buildWebUrl(
+          await openInSystemBrowser(buildWebUrl(
             `/auth/sync?code=${encodeURIComponent(data.code)}&redirect=${encodeURIComponent(resumePath)}`,
             language,
           ));
         } catch (error) {
           addErrorBreadcrumb('whatsapp-connect', 'handoff mint failed; falling back to login wall', {});
           captureError(error, 'Browser handoff mint failed', { tags: { page: 'pages', action: 'whatsapp-connect' } });
-          await openExternalUrl(buildWebAuthedUrl(resumePath, language));
+          await openInSystemBrowser(buildWebAuthedUrl(resumePath, language));
         }
         return;
       }
