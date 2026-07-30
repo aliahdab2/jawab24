@@ -56,10 +56,18 @@ export async function openInSystemBrowser(url: string): Promise<void> {
   }
   try {
     const { AppLauncher } = await import('@capacitor/app-launcher');
-    await AppLauncher.openUrl({ url });
+    // The Android plugin NEVER rejects on a launch failure: startActivity is
+    // wrapped in its own try/catch and the call resolves { completed: false }
+    // (AppLauncherPlugin.java, canLaunchIntent). A catch-only fallback is dead
+    // code for that path — the merchant tapped Connect and nothing opened, with
+    // no signal anywhere. Check the result explicitly.
+    const { completed } = await AppLauncher.openUrl({ url });
+    if (completed) return;
   } catch {
-    // Degrade rather than dead-end: a Custom Tab still shows the page, even if
-    // Embedded Signup cannot complete in it.
-    await openInAppBrowser(url);
+    // Plugin missing/rejected (e.g. old binary without app-launcher) — fall
+    // through to the Custom Tab.
   }
+  // Degrade rather than dead-end: a Custom Tab still shows the page, even if
+  // Embedded Signup cannot complete in it.
+  await openInAppBrowser(url);
 }

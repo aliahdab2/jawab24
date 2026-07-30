@@ -372,6 +372,13 @@ const PagesPage: NextPageWithLayout = () => {
    * defaulting the wrong way would silently create the wrong kind of card.
    */
   const resumeWhatsAppConnect = useCallback(() => {
+    // This resume exists for the BROWSER side of the handoff. If it ever fires
+    // inside the native app (deep link, stale history entry), opening the path
+    // dialog here would dead-end: its answer calls fb.login in the WebView,
+    // where popups are disabled — the exact failure the handoff escapes. Do
+    // nothing; the in-app Connect buttons route through requestConnectWhatsApp,
+    // which hands off correctly.
+    if (Capacitor.isNativePlatform()) return;
     const target = typeof router.query.waPage === 'string' ? router.query.waPage : 'new';
     setWhatsAppPathPageId(target);
   }, [router.query.waPage]);

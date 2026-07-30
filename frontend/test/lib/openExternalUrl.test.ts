@@ -68,6 +68,7 @@ describe('openInSystemBrowser', () => {
     vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
     const { AppLauncher } = await import('@capacitor/app-launcher');
     const { Browser } = await import('@capacitor/browser');
+    vi.mocked(AppLauncher.openUrl).mockResolvedValueOnce({ completed: true });
 
     await openInSystemBrowser('https://jawab24.com/login');
 
@@ -85,6 +86,21 @@ describe('openInSystemBrowser', () => {
     await openInSystemBrowser('https://jawab24.com/login');
 
     // Degrade rather than dead-end — the merchant still reaches the page.
+    expect(Browser.open).toHaveBeenCalledWith({ url: 'https://jawab24.com/login' });
+  });
+
+  it('falls back when the launch fails via { completed: false } — Android never rejects', async () => {
+    // Regression: AppLauncherPlugin.java wraps startActivity in its own
+    // try/catch and RESOLVES { completed: false } on failure. A catch-only
+    // fallback is dead code for that path: the merchant tapped Connect and
+    // nothing opened, silently (Android, 2026-07-30).
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+    const { AppLauncher } = await import('@capacitor/app-launcher');
+    const { Browser } = await import('@capacitor/browser');
+    vi.mocked(AppLauncher.openUrl).mockResolvedValueOnce({ completed: false });
+
+    await openInSystemBrowser('https://jawab24.com/login');
+
     expect(Browser.open).toHaveBeenCalledWith({ url: 'https://jawab24.com/login' });
   });
 

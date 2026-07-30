@@ -546,6 +546,50 @@ describe('PagesPage - WhatsApp', () => {
 
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
     });
+
+    it('?connectWhatsApp=true (browser side of the handoff) reopens the path question for the carried card', async () => {
+        mockRouterQuery = { connectWhatsApp: 'true', waPage: 'page_x' };
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+
+        // No click needed — arriving with the param IS the resume.
+        await waitFor(() => {
+            expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
+        });
+        // But fb.login must wait for the merchant's answer (transient user
+        // activation) — auto-launching would be popup-blocked.
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+
+        mockRouterQuery = {};
+    });
+
+    it('?connectWhatsApp=true inside the NATIVE app must NOT open the dialog — it can only dead-end there', async () => {
+        // The dialog's answer runs fb.login in the WebView, where popups are
+        // disabled — the exact failure the browser handoff exists to escape. If
+        // the resume param ever fires natively (deep link, stale history), do
+        // nothing rather than ask a question whose answer goes nowhere.
+        const { Capacitor } = await import('@capacitor/core');
+        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+        mockRouterQuery = { connectWhatsApp: 'true', waPage: 'page_x' };
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => {
+            expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument();
+        });
+        await act(async () => { /* flush the resume effect */ });
+
+        expect(screen.queryByText(enPages.whatsappPathTitle)).not.toBeInTheDocument();
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+
+        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+        mockRouterQuery = {};
+    });
 });
 
 describe('PagesPage - WhatsApp-only cards', () => {
