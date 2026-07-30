@@ -58,6 +58,23 @@ export interface AiGenerateRequest {
          * narrative KB only.
          */
         businessInfoBlock?: string | null;
+        /**
+         * G1a fact-collections block: the merchant's enumerable LIST facts
+         * (outlets, coverage areas, delivery zones), each list followed by its
+         * DERIVED coverage/absence statement. Pre-rendered by
+         * `factCollectionsService.buildFactCollectionsContext`; ai-worker
+         * injects it verbatim as <business_lists>. Absent → no block in the
+         * prompt, which is the case for every page without collections.
+         */
+        factCollectionsBlock?: string;
+        /**
+         * True when the block's rows were filtered to this message (G1 stage L2).
+         * Disables the SEMANTIC cache for the reply — that cache matches by
+         * embedding similarity, and two "where can I find you in X" questions with
+         * different X are far inside the LOCATION threshold, so a hit would return
+         * one area's outlets for another. The exact-text cache is unaffected.
+         */
+        factCollectionsGated?: boolean;
         /** Customer's display name — used for personalization only, never affects cache keys. */
         senderName?: string;
         /** Substantive customer context (history, returning-customer summary, etc.) that changes the answer. */

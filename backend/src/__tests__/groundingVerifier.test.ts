@@ -129,11 +129,30 @@ describe('buildGroundingSource', () => {
             postMessage: 'POST TEXT',
             storePolicies: 'POLICY TEXT',
             productCatalog: 'CATALOG TEXT',
+            factCollectionsBlock: 'LISTS TEXT',
         });
         expect(out).toContain('KB TEXT');
         expect(out).toContain('POST TEXT');
         expect(out).toContain('POLICY TEXT');
         expect(out).toContain('CATALOG TEXT');
+        expect(out).toContain('LISTS TEXT');
+    });
+
+    // G1a: the <business_lists> block is exactly where the pages this verifier
+    // watches keep their outlets and coverage areas. Omitting it would flag every
+    // CORRECT outlet answer as invented — the fix producing the defect it measures.
+    it('includes the fact-collections block, so a correctly-quoted outlet is grounded', () => {
+        // A directory-shaped block: comfortably over MIN_KB_CHARS, as a real one is
+        // (BAMBO's is ~9.5k chars). Pins that a page whose business facts live
+        // ENTIRELY in collections — no KB prose at all, which is where the engine is
+        // heading — still passes the gate and still counts its outlets as sources.
+        const outlets = Array.from({ length: 12 }, (_, i) => `- صيدلية رقم ${i} — المنطقة: تلة الريح`).join('\n');
+        const listsOnly = buildGroundingSource({
+            factCollectionsBlock: `صيدليات المدينة:\n${outlets}\n- صيدلية الفيروز — المنطقة: تلة الريح`,
+        });
+        expect(listsOnly).toContain('صيدلية الفيروز');
+        expect(listsOnly.length).toBeGreaterThan(200);
+        expect(shouldVerifyGrounding(base({ kb: listsOnly }))).toBe(true);
     });
 
     it('drops absent and whitespace-only blocks instead of padding the source', () => {

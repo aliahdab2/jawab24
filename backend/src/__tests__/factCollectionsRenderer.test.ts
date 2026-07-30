@@ -106,6 +106,19 @@ describe('renderCoverageStatement — the 28%→0% mechanism', () => {
         expect(s).not.toContain('كاملة ونهائية');
     });
 
+    // Regression (2026-07-30 A/B): with row gating alone, a prior assistant turn
+    // asserting coverage for an unlisted key got RATIFIED («حسب قائمتنا…») 4/4
+    // at prod sampling — the boundary must explicitly outrank the transcript.
+    // The retraction clause dropped that to 1/4 with first-ask and controls
+    // unchanged. It must render on BOTH confirmation variants.
+    it('retraction clause renders on confirmed and unconfirmed lists alike', () => {
+        for (const isComplete of [true, null]) {
+            const s = must(renderCoverageStatement({ ...outlets, isComplete }, [row()]));
+            expect(s).toContain('فذلك الذكر خطأ');
+            expect(s).toContain('صحّحه للعميل');
+        }
+    });
+
     it('un-keyed collection still gets an absence directive', () => {
         const flat: FactCollectionForPrompt = { label: 'الماركات المعتمدة', keyAttr: null, isComplete: null };
         const s = must(renderCoverageStatement(flat, [row({ name: 'ماركة أ', attributes: null })]));
@@ -196,5 +209,58 @@ describe('rows that are present but unavailable', () => {
         ], TODAY));
         expect(block).toContain('صيدلية مغلقة');
         expect(block).toContain('غير متاح حالياً');
+    });
+});
+
+/**
+ * L2 row gating — the renderer half. The deterministic matcher decides WHICH rows
+ * the model sees; this pins that withholding rows never withholds the boundary.
+ *
+ * Why it matters: with every row visible, the model attributed pharmacies listed
+ * under «سوق الخميس» to «سوق الثلاثاء» in 5 of 6 measured runs. Rows it was never
+ * given cannot be misattributed — but only if the coverage statement survives,
+ * because that statement is the merchant's actual boundary.
+ */
+describe('displayRows gating', () => {
+    const rmal = row({ name: 'صيدلية النرجس', attributes: [{ label: 'المدينة', value: 'حي الرمال' }] });
+    const reeh = row({ name: 'صيدلية الفيروز', attributes: [{ label: 'المدينة', value: 'تلة الريح' }] });
+
+    it('prints only the matched rows', () => {
+        const block = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY, { displayRows: [reeh] }));
+        expect(block).toContain('صيدلية الفيروز');
+        expect(block).not.toContain('صيدلية النرجس');
+    });
+
+    it('keeps the coverage statement computed over ALL rows, not the printed subset', () => {
+        const block = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY, { displayRows: [reeh] }));
+        // «حي الرمال» is withheld as a ROW yet still named as a covered value —
+        // a boundary computed from what happens to be visible is not a boundary.
+        expect(block).toContain('حي الرمال');
+        expect(block).toContain('تغطي');
+    });
+
+    it('renders header + coverage with ZERO rows when nothing matched', () => {
+        const block = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY, { displayRows: [] }));
+        expect(block).not.toContain('صيدلية النرجس');
+        expect(block).not.toContain('صيدلية الفيروز');
+        // The model still holds every covered value, so it can name the areas it
+        // serves instead of inventing an outlet — the recoverable failure.
+        expect(block).toContain('حي الرمال');
+        expect(block).toContain('تلة الريح');
+        expect(block).toContain('غير مسجّل لدينا');
+    });
+
+    it('never prints an expired row even when the gate selects it', () => {
+        const expired = row({ name: 'صيدلية منتهية', endsAt: '2020-01-01' });
+        const block = must(renderFactCollectionBlock(outlets, [rmal, expired], TODAY, { displayRows: [expired] }));
+        expect(block).not.toContain('صيدلية منتهية');
+    });
+
+    it('is inert when the caller passes no gate (undefined = print everything)', () => {
+        const gatedOff = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY));
+        const explicit = must(renderFactCollectionBlock(outlets, [rmal, reeh], TODAY, { displayRows: undefined }));
+        expect(explicit).toBe(gatedOff);
+        expect(gatedOff).toContain('صيدلية النرجس');
+        expect(gatedOff).toContain('صيدلية الفيروز');
     });
 });

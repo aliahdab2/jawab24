@@ -186,8 +186,12 @@ export function buildGroundingSource(parts: {
     postMessage?: string | null;
     storePolicies?: string | null;
     productCatalog?: string | null;
+    /** G1a: the <business_lists> block. Omitting it would make every reply that
+     *  correctly quotes an outlet, zone, or coverage area read as invented —
+     *  turning the fix into a source of false flags on the very pages it serves. */
+    factCollectionsBlock?: string | null;
 }): string {
-    return [parts.knowledgeBase, parts.postMessage, parts.storePolicies, parts.productCatalog]
+    return [parts.knowledgeBase, parts.postMessage, parts.storePolicies, parts.productCatalog, parts.factCollectionsBlock]
         .filter((p): p is string => !!p && p.trim().length > 0)
         .join('\n\n');
 }

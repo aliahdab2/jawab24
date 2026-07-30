@@ -35,8 +35,16 @@ export function resolveChannel(request: GenerateRequest): 'comment' | 'dm' {
  * prices are legitimate grounding. It is NOT included by default because
  * resolveLanguage also consumes getKBText — folding the catalog in
  * unconditionally would perturb language inference for existing pages.
+ *
+ * `includeFactCollections` is the same opt-in for the <business_lists> block,
+ * for the same reason and with the same caveat. Fact rows can carry a price
+ * (متجر إجدابيا's per-city delivery table is the measured case), so without it
+ * the price guard would flag a correctly-quoted delivery fee as invented — and
+ * `price_not_in_kb` triggers a destructive reply swap in the backend.
+ * NOTE: `backend/src/services/groundingVerifier.ts:buildGroundingSource` mirrors
+ * this composition — a change here must be made there too.
  */
-export function getKBText(request: GenerateRequest, opts?: { includeProductCatalog?: boolean }): string | null {
+export function getKBText(request: GenerateRequest, opts?: { includeProductCatalog?: boolean; includeFactCollections?: boolean }): string | null {
     const parts: string[] = [];
     const chunks = request.context?.retrievedChunks;
     if (chunks && chunks.length > 0) {
@@ -52,6 +60,9 @@ export function getKBText(request: GenerateRequest, opts?: { includeProductCatal
     }
     if (opts?.includeProductCatalog && request.context?.productCatalog) {
         parts.push(request.context.productCatalog);
+    }
+    if (opts?.includeFactCollections && request.context?.factCollectionsBlock) {
+        parts.push(request.context.factCollectionsBlock);
     }
     return parts.length > 0 ? parts.join(' ') : null;
 }

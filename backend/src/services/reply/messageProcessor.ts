@@ -17,6 +17,7 @@ import { posts, instagramMedia, messages } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 import { enrichPageContext } from './contextEnricher';
+import { composeFactMatchText } from '../factCollectionsMatcher';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
@@ -659,15 +660,33 @@ export class MessageProcessor {
                 // are classified as SPAM_OR_IRRELEVANT because the AI sees them out of context.
                 this.resolveOriginPostMessage(page.id, senderId),
                 // 12. Enrich KB with e-commerce data if linked.
-                enrichPageContext(
-                    page as unknown as Record<string, unknown>,
-                    userSettings,
-                    messageText,
-                    page.knowledgeBase || undefined,
-                ),
+                (async () => {
+                    // The fact-list matcher reads the customer's recent USER turns plus
+                    // the consolidated burst — an area stated once, minutes before the
+                    // follow-up («شن أسامي الصيدليات؟»), must keep matching for the rest
+                    // of the conversation, and the burst window is seconds-scale. Same
+                    // window the model itself sees (the generator's limit-12 recipe), so
+                    // the gate is exactly as informed as the model's visible history.
+                    // Re-fetched here rather than threaded out of the generator for the
+                    // same reason the post-send verifier re-fetches: threading it through
+                    // generateForMessage's shared input would touch every caller for one
+                    // indexed read. A failed read degrades to burst-only matching — the
+                    // pre-H-1 behaviour — never to a failed reply.
+                    let matchHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+                    try {
+                        matchHistory = (await messagesService.getConversationHistory(page.id, senderId, 12)) ?? [];
+                    } catch { /* burst-only matching */ }
+                    return enrichPageContext(
+                        page as unknown as Record<string, unknown>,
+                        userSettings,
+                        messageText,
+                        page.knowledgeBase || undefined,
+                        composeFactMatchText(matchHistory, consolidatedText),
+                    );
+                })(),
             ]);
             lap('11b-12-preAiParallel');
-            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock } = enriched;
+            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated } = enriched;
 
             const generated =
                 await replyGenerator.generateForMessage(
@@ -688,6 +707,8 @@ export class MessageProcessor {
                         replyStyle: userSettings.replyStyle,
                         brandVoiceNotes,
                         businessInfoBlock,
+                        factCollectionsBlock,
+                        factCollectionsGated,
                         ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
                         defaultReplyLanguage: userSettings.defaultReplyLanguage,
                         timezone: userSettings.timezone,
@@ -961,6 +982,9 @@ export class MessageProcessor {
             //     which the AI is allowed to quote (#467). Omitting it made
             //     every legitimate post quote look invented on Post-Reply-heavy
             //     pages (found on الدمشقي).
+            //   • factCollectionsBlock = the rendered <business_lists> rows. The
+            //     model answers list questions FROM these; judging without them
+            //     would flag every correct list answer as invented.
             //   • history = the generator's own recipe (getConversationHistory
             //     limit 12, minus turns matching the current text), re-fetched
             //     here because verification runs after the send. The extra read
@@ -969,7 +993,7 @@ export class MessageProcessor {
             //     assistant-side filter also drops the just-stored outgoing
             //     reply, which did not exist when the generator read history.
             {
-                const groundingKb = buildGroundingSource({ knowledgeBase, postMessage: originPostMessage, storePolicies, productCatalog });
+                const groundingKb = buildGroundingSource({ knowledgeBase, postMessage: originPostMessage, storePolicies, productCatalog, factCollectionsBlock });
                 if (shouldVerifyGrounding({ pageId: page.id, replyMethod, intent: aiIntent, reply: replyText ?? '', kb: groundingKb })) {
                     const sentReply = replyText ?? '';
                     messagesService.getConversationHistory(page.id, senderId, 12)

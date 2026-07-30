@@ -87,7 +87,7 @@ import OpenAI from 'openai';
 import { readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { DEMO_PAGES } from '../backend/src/plugins/demo/seedData';
+import { DEMO_PAGES, renderDemoDistributorLists } from '../backend/src/plugins/demo/seedData';
 import { estimateCostUsd } from '../backend/src/config/aiPricing';
 import {
     GROUNDING_VERIFIER_PROMPT,
@@ -188,11 +188,20 @@ async function verifyGrounding(input: VerifyInput): Promise<VerifyResult> {
 // ---------------------------------------------------------------------------
 
 /** The distributor demo fixture — an anonymized replica of the real BAMBO LIBYA
- *  KB that produced the fabrication: ~240 outlet lines across many districts, a
+ *  KB that produced the fabrication: 236 outlet entries across many districts, a
  *  separate "west of the city" list, per-PACK prices only, and العجيلات
  *  deliberately absent from both lists. Imported rather than copied so the
- *  labeled set can never drift from the eval fixture (playground-eval `distributor`). */
-const DISTRIBUTOR_KB = DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_distributor')!.suggestedKnowledgeBase;
+ *  labeled set can never drift from the eval fixture (playground-eval `distributor`).
+ *
+ *  G1a (2026-07-28): the outlets now live in fact_collections, so the grounding
+ *  SOURCE is KB text + the rendered <business_lists> block — exactly what
+ *  `buildGroundingSource` hands the shipped verifier in production. Reading only
+ *  the KB text here would hide 236 facts the model saw and flag every correct
+ *  outlet answer as invented (N2/N3 are precisely those cases). */
+const DISTRIBUTOR_KB = [
+    DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_distributor')!.suggestedKnowledgeBase,
+    renderDemoDistributorLists(new Date().toISOString().slice(0, 10)),
+].filter(Boolean).join('\n\n');
 
 /** A 1+1 bundle offer — the shape behind the Nourva 640-instead-of-320 loss:
  *  160 buys TWO pieces, and reading it as a per-piece price passes the numeric

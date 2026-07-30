@@ -531,7 +531,37 @@ export class AiService {
         // reach it anyway (history/customerContext are skipped below), and it yields ~0 real hits —
         // gating here (not inside the block) also skips the throwaway embedding call for those DMs.
         // The exact cache still serves DMs, name-bucketed (see buildCacheKey).
-        if (config.ai.semanticCacheEnabled && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches && request.context?.channel !== 'dm') {
+        // G1 stage L2 (review finding C1): a reply whose <business_lists> rows were
+        // filtered to THIS message must not be served to a similar-but-different
+        // question. «وين نلقاكم في تلة الريح؟» and «… في عين الدالية؟» sit far inside
+        // the 0.91 LOCATION threshold, and a hit would hand back one area's real
+        // outlets under another area's name — precisely the fabrication the gating
+        // exists to make impossible. Skipped on BOTH sides: the write so we never
+        // poison the store, the read so entries written before this guard (or by a
+        // page whose collections arrived later) cannot be served either. The
+        // exact-text cache keeps working — identical text matches identical rows.
+        //
+        // Do NOT try to win the hit-rate back by scoping entries to the matched
+        // set (or a hash of the rendered block) instead of skipping: the no-match
+        // class defeats it. «وين نلقاكم في العجيلات؟» and «وين نلقاكم في زوارة؟»
+        // both match NOTHING — identical matched set, identical gated block — yet
+        // each needs a reply naming ITS city; serving one for the other puts the
+        // wrong city's name in the customer's thread. The distinguishing
+        // information is in the question text the embedding deliberately blurs,
+        // so any scoping finer than "skip" re-opens the defect for exactly the
+        // questions gating exists to protect. (D-051's cache rule, re-derived in
+        // the #528 review when matched-set scoping was proposed and rejected.)
+        const factListsGated = request.context?.factCollectionsGated === true;
+        if (factListsGated && config.ai.semanticCacheEnabled && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches && request.context?.channel !== 'dm') {
+            // Gating retires the semantic cache for most traffic on keyed-collection
+            // pages (any message that doesn't name a listed value is gated). Count the
+            // skips that would otherwise have been eligible reads, so a hit-rate drop
+            // on a collection page is attributable from the metrics instead of reading
+            // as a cache regression (the Nourva cache=0 diagnosis cost a day for want
+            // of exactly this attribution). Same fire-and-forget pattern as §13c.
+            redis.incr('metrics:cache:semantic_skip:fact_gated').catch(() => {});
+        }
+        if (config.ai.semanticCacheEnabled && !factListsGated && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches && request.context?.channel !== 'dm') {
             try {
                 // Use full fallback classifier (covers COMPLIMENT, SPAM, BUSINESS_INQUIRY etc.)
                 // instead of basic detectIntent() which only handles GREETING/PRICE/HOURS/etc.
@@ -835,7 +865,7 @@ export class AiService {
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
             // Model is stored in metadata so check-time can filter to same-model entries.
             // Eval pipeline never writes (see `bypassAllCaches` above).
-            if (config.ai.semanticCacheEnabled && !bypassAllCaches && !cacheReject && !hasConversationHistory && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
+            if (config.ai.semanticCacheEnabled && !factListsGated && !bypassAllCaches && !cacheReject && !hasConversationHistory && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined && request.context?.channel !== 'dm') {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,

@@ -1,6 +1,7 @@
 import { integrationRegistry } from '../../integrations';
 import { getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
+import { factCollectionsService } from '../factCollections';
 import { captureError } from '../../utils/sentryHelpers';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { detectLanguageCode } from '../../utils/language';
@@ -24,6 +25,31 @@ export interface EnrichedContext {
      * AI falls back to merged narrative KB via `formatBusinessProfile`).
      */
     businessInfoBlock: string | null;
+    /**
+     * G1a: the merchant's enumerable LIST facts (outlets, coverage areas,
+     * delivery zones) rendered as a prompt block, each list carrying its own
+     * DERIVED coverage/absence statement. Undefined when the page has no
+     * collections — which is every page until one is imported, so the prompt
+     * stays byte-identical for the rest of the fleet.
+     *
+     * Independent of `productCatalog`: catalog_items are things the business
+     * SELLS (money semantics); collections are enumerable lists that are not
+     * sold. A page can have both, either, or neither.
+     */
+    factCollectionsBlock: string | undefined;
+    /**
+     * True when the deterministic match withheld row detail for at least one
+     * collection, i.e. this reply's list content is specific to THIS message.
+     *
+     * It exists to disable the SEMANTIC cache for such replies (review finding
+     * C1): that cache matches by embedding similarity, and «وين نلقاكم في تلة
+     * الريح؟» vs «… في عين الدالية؟» sit far inside the 0.91 LOCATION threshold —
+     * two questions with different correct answers and nearly identical wording.
+     * Serving one for the other would hand back real outlets under the wrong area,
+     * which is the exact defect this whole path removes. The exact-text cache is
+     * unaffected: identical text matches identical rows.
+     */
+    factCollectionsGated: boolean;
 }
 
 /**
@@ -33,6 +59,7 @@ export interface EnrichedContext {
  * Steps:
  *  1. Integration KB enrichment (e.g. Shopify product summaries injected into KB)
  *  2. Store policies + product catalog (survive RAG which drops static KB)
+ *  2b. Enumerable list facts + their derived coverage statements (also survive RAG)
  *  3. Business profile (hours, location, phone) appended to KB
  *  4. Language-appropriate brand voice notes
  */
@@ -45,6 +72,15 @@ export async function enrichPageContext(
     },
     messageText: string,
     initialKnowledgeBase: string | undefined,
+    /**
+     * Text the fact-collections matcher should read, when it differs from
+     * `messageText`. The DM pipeline passes the CONSOLIDATED burst: a customer who
+     * writes «أنا ساكن في عين الدالية» and then «وين نلقاكم؟» seconds later would
+     * otherwise match nothing on the second message, and their own area's rows
+     * would be withheld from a page that covers them (review finding H2).
+     * `messageText` stays the brand-voice / language signal — unchanged.
+     */
+    matchText?: string,
 ): Promise<EnrichedContext> {
     let knowledgeBase = initialKnowledgeBase;
 
@@ -56,31 +92,66 @@ export async function enrichPageContext(
         } catch { /* non-critical — continue with original KB */ }
     }
 
-    // 2. Store policies + product catalog (survive RAG mode which drops static KB)
+    // 2 + 2b. Two INDEPENDENT reads, run concurrently (Rule 17: independent I/O in
+    // the reply path belongs in Promise.all) — the store/catalog block and the
+    // fact-collections block need nothing from each other. Each closure keeps its
+    // own catch, so one failing degrades exactly as it did when awaited serially.
     let storePolicies: string | undefined;
     let productCatalog: string | undefined;
+    let factCollectionsBlock: string | undefined;
+    let factCollectionsGated = false;
     const ecommerceStoreId = typeof page.ecommerceStoreId === 'string' ? page.ecommerceStoreId : undefined;
     const pageId = typeof page.id === 'string' ? page.id : undefined;
-    if (ecommerceStoreId) {
-        try {
-            const storeCtx = await getStoreContextForAI(ecommerceStoreId);
-            storePolicies = storeCtx.storePolicies;
-            productCatalog = storeCtx.productCatalog;
-        } catch { /* non-critical */ }
-    } else if (pageId) {
-        // Store-less pages: merchant-authored catalog_items fill the same
-        // <product_catalog> block (Stage 2 v2 — prompt content, never AI tools;
-        // D-004). undefined when the page has no items, so the prompt stays
-        // byte-identical for every page without a catalog.
-        try {
-            productCatalog = await catalogService.buildCatalogPromptBlock(pageId);
-        } catch (err) {
-            // Non-critical — the reply proceeds without the catalog block. But
-            // never silently: a persistent failure here means catalogs vanish
-            // from prompts fleet-wide ("the AI ignores my items") with no signal.
-            captureError(err, 'Catalog prompt block failed', { level: 'warning', tags: { service: 'catalog' }, extra: { pageId } });
-        }
-    }
+    await Promise.all([
+        // 2. Store policies + product catalog (survive RAG mode which drops static KB)
+        (async () => {
+            if (ecommerceStoreId) {
+                try {
+                    const storeCtx = await getStoreContextForAI(ecommerceStoreId);
+                    storePolicies = storeCtx.storePolicies;
+                    productCatalog = storeCtx.productCatalog;
+                } catch { /* non-critical */ }
+            } else if (pageId) {
+                // Store-less pages: merchant-authored catalog_items fill the same
+                // <product_catalog> block (Stage 2 v2 — prompt content, never AI tools;
+                // D-004). undefined when the page has no items, so the prompt stays
+                // byte-identical for every page without a catalog.
+                try {
+                    productCatalog = await catalogService.buildCatalogPromptBlock(pageId);
+                } catch (err) {
+                    // Non-critical — the reply proceeds without the catalog block. But
+                    // never silently: a persistent failure here means catalogs vanish
+                    // from prompts fleet-wide ("the AI ignores my items") with no signal.
+                    captureError(err, 'Catalog prompt block failed', { level: 'warning', tags: { service: 'catalog' }, extra: { pageId } });
+                }
+            }
+        })(),
+        // 2b. Enumerable LIST facts (G1a) — outlets, coverage areas, delivery zones.
+        //     NOT gated on the store branch: a list is orthogonal to whether the
+        //     page sells online, and BAMBO LIBYA (the measured worst page: 22/79 replies
+        //     fabricated, 17 of them availability-by-city) is store-less. The block
+        //     carries its own derived coverage statement — the measured 28%→0%
+        //     mechanism — so it must reach the model on every reply, RAG or not.
+        (async () => {
+            if (!pageId) return;
+            try {
+                // ONE pass builds both: the rendered list and the deterministic match of
+                // this message against its key values. The match is the L2 stage — the
+                // model is never asked whether «سوق الثلاثاء» is «سوق الخميس»; code
+                // answers that from the rows, and in the default 'gated' mode the answer
+                // decides which rows the model is shown at all.
+                const facts = await factCollectionsService.buildFactCollectionsContext(pageId, matchText ?? messageText);
+                factCollectionsBlock = facts.block;
+                factCollectionsGated = facts.gated;
+            } catch (err) {
+                // Non-critical for delivering a reply, but never silent: a persistent
+                // failure here silently removes the coverage statement, and the reply
+                // then answers absence questions from the bare list again — the exact
+                // fabrication this block exists to prevent, with no signal.
+                captureError(err, 'Fact collections prompt block failed', { level: 'warning', tags: { service: 'factCollections' }, extra: { pageId } });
+            }
+        })(),
+    ]);
 
     // 3a. Narrative business profile appended to KB. DESCRIPTIVE fields only
     //     (business type, about, website) — operational facts (hours/phone/
@@ -111,7 +182,7 @@ export async function enrichPageContext(
     // 4. Language-appropriate brand voice notes
     const brandVoiceNotes = resolveBrandVoiceNotes(userSettings, messageText);
 
-    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock };
+    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated };
 }
 
 /**

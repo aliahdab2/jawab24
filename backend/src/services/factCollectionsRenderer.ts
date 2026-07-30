@@ -64,13 +64,30 @@ export function renderFactCollectionBlock(
     collection: FactCollectionForPrompt,
     rows: FactRowForPrompt[],
     todayIso: string,
+    opts?: {
+        /**
+         * The subset of rows to PRINT. The coverage statement is still computed over
+         * every live row, so the boundary stays truthful while the visible detail
+         * shrinks — that asymmetry is the whole point (G1 stage L2 row gating):
+         * a model that was never given «صيدلية السنونو» cannot place it in a city.
+         *
+         * Undefined → print everything (the pre-gating behaviour).
+         */
+        displayRows?: FactRowForPrompt[];
+    },
 ): string | undefined {
     // Expired rows vanish from the prompt entirely (catalog endsAt precedent —
     // the v38 stale-date class is killed by dates, not by model judgement).
     const live = rows.filter(r => !r.endsAt || r.endsAt >= todayIso);
     if (live.length === 0) return undefined;
 
-    const anyPrice = live.some(r => r.price !== null);
+    // Gating may legitimately leave NOTHING to print. That is not an empty block:
+    // the coverage statement (which enumerates the key values) still renders, so the
+    // model can name the areas it covers even when it holds no row detail — the
+    // recoverable failure, chosen over the unrecoverable one.
+    const display = (opts?.displayRows ?? live).filter(r => !r.endsAt || r.endsAt >= todayIso);
+
+    const anyPrice = display.some(r => r.price !== null);
 
     const renderRow = (r: FactRowForPrompt, withDetails: boolean): string => {
         const parts = [r.name];
@@ -91,13 +108,15 @@ export function renderFactCollectionBlock(
     };
 
     const header = `${collection.label}:`;
+    // Coverage over ALL live rows, never over the printed subset — a boundary
+    // computed from what happens to be visible is not a boundary.
     const coverage = renderCoverageStatement(collection, live);
 
     const render = (withDetails: boolean, subset: FactRowForPrompt[]): string =>
         [header, ...subset.map(r => renderRow(r, withDetails)), ...(coverage ? [coverage] : [])].join('\n');
 
-    let block = render(true, live);
-    if (block.length > FACT_BLOCK_MAX_CHARS) block = render(false, live);
+    let block = render(true, display);
+    if (block.length > FACT_BLOCK_MAX_CHARS) block = render(false, display);
     if (block.length > FACT_BLOCK_MAX_CHARS) {
         // Drop rows from the tail but KEEP the coverage line — and because the
         // key index in the coverage line is computed over ALL live rows (not
@@ -105,13 +124,13 @@ export function renderFactCollectionBlock(
         // individual rows are omitted.
         const kept: FactRowForPrompt[] = [];
         let length = header.length + (coverage ? coverage.length + 1 : 0) + 80; // tail reserve
-        for (const r of live) {
+        for (const r of display) {
             const line = renderRow(r, false);
             if (length + line.length + 1 > FACT_BLOCK_MAX_CHARS) break;
             kept.push(r);
             length += line.length + 1;
         }
-        const omitted = live.length - kept.length;
+        const omitted = display.length - kept.length;
         block = [
             header,
             ...kept.map(r => renderRow(r, false)),
@@ -163,7 +182,16 @@ export function renderCoverageStatement(
         ? `هذه القائمة كاملة ونهائية: أي ${subject} غير مذكور فيها فهو غير متوفر لدينا — قلها للعميل بوضوح وثقة.`
         : `أي ${subject} غير مذكور في هذه القائمة فهو غير مسجّل لدينا — قل للعميل إنه غير موجود في قائمتك واعرض عليه التواصل معنا مباشرة، ولا تفترض توفره ولا عدم توفره.`;
 
-    return `${scopeLine} ${absence}`;
+    // Retraction clause — measured need (2026-07-30 A/B): with row gating alone,
+    // a PRIOR assistant turn asserting coverage for an unlisted key value gets
+    // RATIFIED, not corrected — the model reframes the transcript's claim as
+    // «حسب قائمتنا» (borrowed authority) 4/4 at prod sampling, worse than the
+    // ungated arm's 2/4. The boundary must outrank the transcript explicitly.
+    // Derived from keyAttr like everything above — not a hand list, not a
+    // global prompt rule.
+    const retraction = `وإذا ذُكر في هذه المحادثة سابقاً — من أي طرف — ${subject} ليس في هذه القائمة على أنه مغطى، فذلك الذكر خطأ: صحّحه للعميل صراحةً ولا تؤكده.`;
+
+    return `${scopeLine} ${absence} ${retraction}`;
 }
 
 /**
@@ -191,8 +219,11 @@ export function indexKeyValues(
     return { keyValues: [...seen], rowsMissingKey };
 }
 
-/** Attribute labels are human-typed; compare on intent, not on bytes. */
-function normalizeLabel(label: string): string {
+/** Attribute labels are human-typed; compare on intent, not on bytes. Exported
+ *  because the row-gating filter (factCollections.ts) must use the SAME notion of
+ *  "same label" as this index — two copies of this comparison diverging is how a
+ *  row ends up counted by the coverage index yet withheld by the gate. */
+export function normalizeLabel(label: string): string {
     return label.trim().replace(/\s+/g, ' ');
 }
 

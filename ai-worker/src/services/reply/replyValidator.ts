@@ -383,9 +383,10 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     const reply = parsed.reply || '';
 
     // Check 1: Hallucinated prices (currency-adjacent or price-cue + number).
-    // Grounding includes the <product_catalog> block: catalog prices (manual
-    // items or store summary) are merchant content the model legitimately
-    // quotes — without them here, every correct catalog price would flag.
+    // Grounding includes the <product_catalog> and <business_lists> blocks:
+    // catalog prices (manual items or store summary) and priced fact rows (a
+    // per-city delivery table) are merchant content the model legitimately
+    // quotes — without them here, every correct one of those prices would flag.
     // `skipPriceCheck` is set by the e-commerce tool loop's Phase-2 reply: the
     // prices there come from verified verify_and_get_* tool results (the ground
     // truth), and a computed total often isn't literally in the static KB — so
@@ -398,7 +399,7 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // while the same claim as a QUESTION was caught. An empty reply (OFFENSIVE)
     // short-circuits on `reply` below.
     if (reply && !opts?.skipPriceCheck) {
-        const kbText = getKBText(request, { includeProductCatalog: true });
+        const kbText = getKBText(request, { includeProductCatalog: true, includeFactCollections: true });
         if (kbText && flagHallucinatedPrice(reply, kbText, parsed.price_math) && !flags.includes('price_not_in_kb')) {
             flags.push('price_not_in_kb');
         }
