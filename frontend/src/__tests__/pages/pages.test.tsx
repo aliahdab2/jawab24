@@ -91,6 +91,11 @@ vi.mock('@/lib/whatsappSignup', () => ({
     launchWhatsAppSignup: (...args: unknown[]) => mockLaunchWhatsAppSignup(...args),
 }));
 
+const mockStartWhatsAppConnect = vi.fn();
+vi.mock('@/lib/whatsappRedirect', () => ({
+    startWhatsAppConnect: (...args: unknown[]) => mockStartWhatsAppConnect(...args),
+}));
+
 // Phone browsers get desktop guidance before Embedded Signup is attempted
 // (the fb.login popup opens unreliably there). Default false = desktop, so the
 // pre-existing web tests exercise the direct flow; the mobile-web test flips it.
@@ -641,6 +646,109 @@ describe('PagesPage - WhatsApp', () => {
         expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
 
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+        mockRouterQuery = {};
+    });
+
+    // ── Redirect connect flow (NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT) ──
+
+    it('REDIRECT flag: the path answer starts the full-page flow — the popup launcher is never touched', async () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', 'true');
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument());
+
+        fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
+        expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.whatsappPathKeep));
+        });
+
+        expect(mockStartWhatsAppConnect).toHaveBeenCalledWith({ pageId: 'page_x', coexistence: true, locale: 'en' });
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
+    });
+
+    it('REDIRECT flag, native: Connect opens the in-app Custom Tab — no system browser, no desktop guidance', async () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', 'true');
+        const { Capacitor } = await import('@capacitor/core');
+        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument());
+
+        await act(async () => {
+            fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
+        });
+
+        // The whole redirect flow is plain navigations — a Custom Tab handles it
+        // (Facebook page connect proves it), so the merchant stays "in" the app.
+        await waitFor(() => {
+            expect(mockOpenExternalUrl).toHaveBeenCalledWith(
+                'https://jawab24.com/en/login?redirect=%2Fpages%3FconnectWhatsApp%3Dtrue%26waPage%3Dpage_x',
+            );
+        });
+        expect(mockOpenInSystemBrowser).not.toHaveBeenCalled();
+        expect(screen.queryByText(enPages.whatsappDesktopNeededTitle)).not.toBeInTheDocument();
+
+        vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
+    });
+
+    it('REDIRECT flag, phone browser: no desktop guidance — the path question opens directly', async () => {
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', 'true');
+        mockIsMobileBrowser = true;
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument());
+
+        fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
+
+        expect(screen.queryByText(enPages.whatsappDesktopNeededTitle)).not.toBeInTheDocument();
+        expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
+
+        mockIsMobileBrowser = false;
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
+    });
+
+    it('return leg: ?whatsappConnected=1 → success toast, params stripped', async () => {
+        const { toast } = await import('sonner');
+        mockRouterQuery = { whatsappConnected: '1', waPageId: 'page_wa' };
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(vi.mocked(toast.success)).toHaveBeenCalledWith(enPages.whatsappConnectSuccess);
+        });
+        expect(mockRouterReplace).toHaveBeenCalled();
+        mockRouterQuery = {};
+    });
+
+    it('return leg: ?whatsappError=WHATSAPP_NUMBER_TAKEN → the SAME error copy as the popup flow', async () => {
+        mockRouterQuery = { whatsappError: 'WHATSAPP_NUMBER_TAKEN' };
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalledWith(enPages.whatsappNumberTaken);
+        });
+        mockRouterQuery = {};
+    });
+
+    it('return leg: ?whatsappError=WHATSAPP_AMBIGUOUS → the redirect-only ambiguity copy', async () => {
+        mockRouterQuery = { whatsappError: 'WHATSAPP_AMBIGUOUS' };
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalledWith(enPages.whatsappAmbiguousNumber);
+        });
         mockRouterQuery = {};
     });
 });
