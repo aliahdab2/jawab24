@@ -35,6 +35,7 @@
     "@capacitor-community/facebook-login": "^8.0.0",
     "@capacitor/android": "^8.0.0",
     "@capacitor/app": "^8.0.0",
+    "@capacitor/app-launcher": "^8.0.1",
     "@capacitor/browser": "^8.0.0",
     "@capacitor/core": "^8.0.0",
     "@capacitor/filesystem": "^8.1.2",

@@ -7,6 +7,7 @@ import { notificationService } from '../services/notifications';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
 import { recordActivationEvent, recordAutoreplyEnabledIfEffective, isBusinessInfoProvided } from '../services/activation';
+import { businessInfoGate } from '../services/businessReadiness';
 import { logAutoReplyToggle } from '../services/auditLog';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, createRequestLogger } from '../types';
 import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
@@ -34,6 +35,13 @@ export function serializePage<T extends {
     const whatsappConnected = !!whatsappAccessToken && whatsappAccessToken !== '';
     return {
         ...rest,
+        // "Is the card's PRIMARY channel credential valid?" — Facebook token for a
+        // page-backed card, WABA token for a WhatsApp-only one.
+        // ⚠️ The admin console asks the same question of the same rows, but in SQL
+        // (`services/admin/users.ts`, the `disconnected` column) because it must not
+        // pull token values into memory. Two expressions of ONE rule: change this and
+        // change that, or the admin badge starts disagreeing with the merchant's own
+        // page card. Both are pinned by tests.
         isConnected: page.facebookPageId ? (!!accessToken && accessToken !== '') : whatsappConnected,
         whatsappConnected,
         // "The token needs attention" — driven by the REASON, not by the absence of a
@@ -308,6 +316,14 @@ export class PagesController {
                         code: 'PAGE_DISCONNECTED',
                     });
                 }
+
+                // Same readiness bar as the WhatsApp and Instagram toggles: never
+                // put a bot in front of customers with nothing to answer from. A
+                // Facebook page normally passes on its seeded about/phone/hours, so
+                // this bites only a genuinely empty card — verified against
+                // production before wiring (39 enabled pages, 0 would be refused).
+                const infoGate = await businessInfoGate(existingPage);
+                if (infoGate) return reply.status(infoGate.status).send(infoGate.body);
 
                 const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { messageProcessor } from '../../src/services/reply/messageProcessor';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
@@ -9,6 +9,9 @@ import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { redis } from '../../src/lib/redis';
 import { db } from '../../src/db';
+// Identity of these tables is what the origin-post lookup is matched on — see
+// originContentRow in the 'origin post context inheritance' describe.
+import { posts, instagramMedia } from '../../src/db/schema';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../src/interfaces';
 import { DmSendError } from '../../src/utils/fbGraphErrors';
 
@@ -53,9 +56,27 @@ vi.mock('../../src/utils/language', () => ({
     detectTemplateLanguage: vi.fn().mockReturnValue('en'),
     isLowSignalLatinToken: vi.fn().mockReturnValue(false),
 }));
-vi.mock('../../src/lib/redis', () => ({
-    redis: { get: vi.fn(), set: vi.fn(), quit: vi.fn(), incr: vi.fn(), expire: vi.fn() },
-}));
+// Stateful fake, not per-test stubs. The typing indicator's contract spans get + set
+// (an NX claim, then an upgrade to 'sent', then a read from a DIFFERENT process), so
+// stubbing `set` alone let `wasShown` silently read undefined and hid a real bug.
+// Supports the NX flag; everything else is a plain key/value store.
+vi.mock('../../src/lib/redis', () => {
+    const store = new Map<string, string>();
+    return {
+        redis: {
+            __store: store,
+            get: vi.fn(async (key: string) => store.get(key) ?? null),
+            set: vi.fn(async (key: string, value: string, ...args: unknown[]) => {
+                if (args.includes('NX') && store.has(key)) return null;
+                store.set(key, value);
+                return 'OK';
+            }),
+            quit: vi.fn(),
+            incr: vi.fn(),
+            expire: vi.fn(),
+        },
+    };
+});
 vi.mock('../../src/lib/replyLock', () => ({
     acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
     releaseReplyLock: vi.fn().mockResolvedValue(undefined),
@@ -85,6 +106,25 @@ vi.mock('../../src/lib/eventBus', () => ({
 }));
 
 // --- Mock adapter factory ---
+// Root-level, so it runs before every describe's own beforeEach.
+//
+// Two jobs: (1) clear the fake store — platformMessageId 'msg-1' is reused throughout the
+// file, so a leftover typing-dedup claim would make every later show() a no-op; and
+// (2) RE-ESTABLISH the stateful implementations, so a per-test override (the away-message
+// cooldown tests deliberately force NX outcomes) cannot leak into the next test.
+// `vi.clearAllMocks()` keeps implementations, so without this a single `mockReset` or
+// `mockResolvedValue` would silently reshape Redis for the rest of the file.
+beforeEach(() => {
+    const store = (redis as unknown as { __store: Map<string, string> }).__store;
+    store.clear();
+    vi.mocked(redis.get).mockImplementation((async (key: string) => store.get(key) ?? null) as never);
+    vi.mocked(redis.set).mockImplementation((async (key: string, value: string, ...args: unknown[]) => {
+        if (args.includes('NX') && store.has(key)) return null;
+        store.set(key, value);
+        return 'OK';
+    }) as never);
+});
+
 function createMockAdapter(overrides: Partial<MessagePlatformAdapter> = {}): MessagePlatformAdapter {
     const mockPage: PlatformPage = {
         id: 'page-uuid',
@@ -737,25 +777,44 @@ describe('MessageProcessor — subscription inactive', () => {
 // like "تكلفة" or "اوقات الدوام" are classified as SPAM_OR_IRRELEVANT and silently
 // skipped. See commentProcessor for the producer side (sets origin_content_id).
 describe('MessageProcessor — origin post context inheritance', () => {
+    /**
+     * Row the origin-post lookup should return, consulted by the table-aware `db.select`
+     * mock in `beforeEach`.
+     *
+     * This used to be a one-shot `mockReturnValueOnce`, which silently assumed
+     * `resolveOriginPostMessage` issued the NEXT `db.select()` call. It no longer does:
+     * step 11b-12 runs `resolveOriginPostMessage` and `enrichPageContext` concurrently,
+     * and `resolveOriginPostMessage` awaits `findByPageAndSender` before its own
+     * `db.select()` — so that yield let `enrichPageContext` consume the one-shot stub and
+     * every assertion here read `undefined`. Keying on the TABLE tests the behaviour
+     * (which query returns what) instead of the call ordering, so it stays correct however
+     * the pipeline schedules these two reads.
+     */
+    let originContentRow: { message: string | null; createdAt: Date; triggerReply?: string | null } | null = null;
     function stubOriginContentRow(row: { message: string | null; createdAt: Date; triggerReply?: string | null } | null) {
-        vi.mocked(db.select).mockReturnValueOnce({
-            from: vi.fn(() => ({
-                where: vi.fn().mockResolvedValue(row ? [row] : []),
-            })),
-        } as any);
+        originContentRow = row;
     }
 
     beforeEach(async () => {
         vi.clearAllMocks();
         pipelineMetrics.reset();
+        originContentRow = null;
 
         // Re-establish the default db.select mock cleared by vi.clearAllMocks.
         // Without this, resolveOriginPostMessage calls db.select() → undefined.from() → throw.
-        vi.mocked(db.select).mockReturnValue({
-            from: vi.fn(() => ({
-                where: vi.fn().mockResolvedValue([]),
+        //
+        // Table-aware: only the origin-post lookup (posts / instagram_media) sees the
+        // stubbed row; every other concurrent read in the pipeline gets []. See
+        // originContentRow above for why call-order stubbing is not usable here.
+        vi.mocked(db.select).mockImplementation(() => ({
+            from: vi.fn((table: unknown) => ({
+                where: vi.fn().mockResolvedValue(
+                    originContentRow && (table === posts || table === instagramMedia)
+                        ? [originContentRow]
+                        : [],
+                ),
             })),
-        } as any);
+        }) as any);
 
         // Prior describe blocks set enforceAutoReplyGate={allowed:false}; restore the default.
         const { subscriptionsService } = await import('../../src/services/subscriptions');
@@ -1032,6 +1091,94 @@ describe('MessageProcessor — origin post context inheritance', () => {
 
         const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
         expect(contextArg.postMessage).toBe('Instagram reel caption');
+    });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Step 11b-12 runs the typing indicator and the two pre-AI reads concurrently.
+    //
+    // The typing indicator is a Meta Graph round-trip (prod Sentry: Meta calls average
+    // 295-1,088 ms) and it used to be awaited in front of two database reads that need
+    // nothing from it. Concurrency hides the SHORT branches behind the long one, so the
+    // saving is the DB time, not the Meta call — benchmarked at 320 ms → 303 ms with Meta
+    // stubbed at 300 ms and one DB read at 15 ms. Tens of milliseconds per DM, not a third
+    // of a second; see the comment at step 11b-12 for why, and for the separate change
+    // that would remove the Meta wait itself.
+    //
+    // These two tests pin the behaviour and the hazard the change had to avoid — losing
+    // the indicator-cleanup signal when a sibling rejects.
+    // ─────────────────────────────────────────────────────────────────────────
+    describe('pre-AI I/O runs concurrently', () => {
+        // The stateful Redis fake (root beforeEach) already grants the typing-dedup NX
+        // claim, so no `redis.set` stub is needed here.
+        //
+        // `vi.clearAllMocks()` in sibling describes clears CALLS but keeps implementations,
+        // so the rejection stubbed below would otherwise leak forward and fail every later
+        // test in this file. Restore the default from the `vi.mock('…/conversations')`
+        // factory.
+        afterEach(() => {
+            vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue(null);
+        });
+
+        it('starts the DB reads WITHOUT waiting for the Meta typing round-trip', async () => {
+            const order: string[] = [];
+            let releaseTyping!: () => void;
+            const typingGate = new Promise<void>((resolve) => { releaseTyping = resolve; });
+
+            const adapter = createMockAdapter({
+                sendTypingIndicator: vi.fn(async () => {
+                    order.push('typing:sent-to-meta');
+                    await typingGate; // stand in for Meta's latency
+                    order.push('typing:meta-acked');
+                }),
+                sendTypingOff: vi.fn().mockResolvedValue(undefined),
+            });
+
+            // resolveOriginPostMessage's first step, and a sibling of the typing call.
+            vi.mocked(conversationsService.findByPageAndSender).mockImplementation(async () => {
+                order.push('originPost:db-read');
+                return null; // no origin content — irrelevant to the ordering assertion
+            });
+
+            const processing = messageProcessor.processMessage(
+                adapter, 'page-1', 'sender-1', 'كم السعر', 'msg-1',
+            );
+
+            // Let the pipeline run up to the point where it is blocked on Meta only.
+            for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
+
+            // THE ASSERTION: the DB read already happened while Meta is still pending.
+            // Serial code could only produce sent-to-meta → meta-acked → db-read.
+            expect(order).toContain('typing:sent-to-meta');
+            expect(order).toContain('originPost:db-read');
+            expect(order).not.toContain('typing:meta-acked');
+
+            releaseTyping();
+            await processing;
+            expect(order.indexOf('originPost:db-read')).toBeLessThan(order.indexOf('typing:meta-acked'));
+        });
+
+        it('still clears the indicator when a sibling read rejects before Meta answers', async () => {
+            // The hazard of parallelising: assigning `typingShown` after `Promise.all`
+            // means a sibling rejection skips the assignment entirely, and the `finally`
+            // block then never clears the indicator — stranding "typing..." on the
+            // customer's screen for ~20s. The cleanup reads the PROMISE for this reason.
+            const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+            const adapter = createMockAdapter({
+                // Resolves on a later tick than the rejection below.
+                sendTypingIndicator: vi.fn(async () => { await new Promise((r) => setTimeout(r, 5)); }),
+                sendTypingOff,
+            });
+
+            vi.mocked(conversationsService.findByPageAndSender).mockRejectedValue(
+                new Error('DB connection lost mid-pipeline'),
+            );
+
+            await messageProcessor.processMessage(
+                adapter, 'page-1', 'sender-1', 'كم السعر', 'msg-1',
+            ).catch(() => { /* the rejection is the point; cleanup is what we assert */ });
+
+            expect(sendTypingOff).toHaveBeenCalled();
+        });
     });
 });
 
@@ -1999,9 +2146,10 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
 
-        // Default redis.set returns 'OK' so the typing-dedup NX guard lets typing
-        // fire once. Retry-dedup test overrides this with NX semantics.
-        vi.mocked(redis.set).mockResolvedValue('OK' as any);
+        // Redis is the stateful fake from the root beforeEach: it grants the typing-dedup
+        // NX claim on first use and rejects the second, and — critically for these tests —
+        // it also SERVES the read that typingIndicator.wasShown does when deciding whether
+        // to clear. A `set`-only stub left that read returning undefined.
     });
 
     it('fires typing_on before AI generation and does NOT call typing_off on the happy path', async () => {

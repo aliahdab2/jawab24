@@ -59,6 +59,7 @@
   "extracting": "Extracting text...",
   "extractSuccess": "Text extracted — review and edit before saving",
   "extractTruncated": "Text was trimmed to fit the character limit. Review before saving.",
+  "pasteTruncated": "Pasted text was longer than the limit — only the first {kept} characters were kept. Please shorten the text a little.",
   "extractError": "Could not extract text from this file",
   "unsupportedFormat": "Use PDF, Word, Excel, or image files",
   "fileTooLarge": "File too large (max 5 MB)",

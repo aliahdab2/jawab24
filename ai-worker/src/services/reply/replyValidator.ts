@@ -5,7 +5,7 @@
  * each guard is unit-testable in isolation — see replyValidator.test.ts.
  */
 import { detectLanguage } from '../language';
-import { getKBText, resolveLanguage, resolveChannel } from './replyContext';
+import { getKBText, resolveLanguageWithCertainty, resolveChannel } from './replyContext';
 import type { GenerateRequest, ParsedReply, PriceMathClaim, PriceMathTerm, ValidatedReply } from './types';
 
 /** Map Arabic-Indic (U+0660–U+0669) and Eastern Arabic-Indic (U+06F0–U+06F9)
@@ -416,13 +416,30 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // falls back to heuristic detection when absent (invalid_json fallback path).
     // Also logs `declared_lang_mismatch` (observability only) when GPT's JSON metadata diverges from what the reply looks like.
     if (reply) {
-        const inputLang = resolveLanguage(request);
+        const { language: inputLang, certain: inputLangCertain } = resolveLanguageWithCertainty(request);
         const detectedLang = detectLanguage(reply);
         const replyLang = parsed.language || detectedLang;
+        // The flag is only meaningful when `inputLang` is a POSITIVE reading of the
+        // customer's message. When it is not, the prompt DELIBERATELY told the model to
+        // mirror the customer instead of locking to `inputLang` (see languageDirective),
+        // so a different reply language is the fix working — not a defect. Flagging it
+        // would mark every successfully-mirrored reply `needs_attention` (QUESTION-like
+        // intents treat any flag as meaningful) and bar it from the reply cache
+        // (cacheQualityGate denies `language_mismatch`). Kept as log-only so the
+        // behaviour is still measurable — this is the same posture as
+        // `declared_lang_mismatch` below.
         if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
-            flags.push('language_mismatch');
-            flags.push(`expected_lang:${inputLang}`);
-            flags.push(`reply_lang:${replyLang}`);
+            if (inputLangCertain) {
+                flags.push('language_mismatch');
+                flags.push(`expected_lang:${inputLang}`);
+                flags.push(`reply_lang:${replyLang}`);
+            } else {
+                console.log(JSON.stringify({
+                    event: 'mirrored_lang_switch',
+                    default_lang: inputLang,
+                    reply_lang: replyLang,
+                }));
+            }
         }
         // Cross-check: GPT declared one language but reply text looks like another.
         // Log-only — this catches a metadata inconsistency in GPT's JSON output, not a

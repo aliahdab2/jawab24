@@ -114,7 +114,7 @@ Here's a step-by-step setup:
 
 4. **Set your business hours.** During off-hours, the tool sends your away message instead of trying to answer product questions.
 
-5. **Write your Knowledge Base.** Add your products, pricing, shipping zones, and policies. The AI references this data — nothing is invented. No flow building or decision trees needed — just describe your business information and the AI handles conversations naturally.
+5. **Write your Business Info.** Add your products, pricing, shipping zones, and policies. The AI references this data — nothing is invented. No flow building or decision trees needed — just describe your business information and the AI handles conversations naturally.
 
 ## When the AI Should Step Aside
 
@@ -132,7 +132,7 @@ Many businesses post in one language but receive comments in another — and som
 
 **Detect language per comment/message.** Each customer interaction should be analyzed independently. An English comment should get an English reply. An Arabic comment should get a reply in the customer's dialect.
 
-**Maintain your Knowledge Base in both languages.** Product names, descriptions, and policies should be available in all the languages your customers use. Some tools handle this automatically through translation.
+**Maintain your Business Info in both languages.** Product names, descriptions, and policies should be available in all the languages your customers use. Some tools handle this automatically through translation.
 
 **Understand dialects, not just formal language.** This is particularly important for Arabic, where a customer from Saudi Arabia writes very differently from one in Egypt or Morocco. A good AI recognizes these variations and responds naturally. Jawab24 handles 6 Arabic dialect families in addition to English, with more languages coming soon.
 

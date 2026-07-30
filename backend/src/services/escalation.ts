@@ -2,6 +2,7 @@ import { db } from '../db';
 import { comments, instagramComments, messages, pages, posts, settings } from '../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { notificationService, NotificationType } from './notifications';
+import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
@@ -88,6 +89,53 @@ async function sendItemNotificationsToWorkspace(
 function buildTitle(name: string | null, pageName: string | null): string {
     const displayName = name || 'Unknown';
     return pageName ? `${displayName} — ${pageName}` : displayName;
+}
+
+/**
+ * Was the reply pipeline even expected to answer this workspace's items on this
+ * channel? Delegates to the SAME canonical predicate the processors gate on
+ * (`isAutoReplyEnabledFromSettings`, used by messageProcessor.ts and
+ * commentProcessor.ts) so the SLA sweep can never drift from what the pipeline
+ * actually does.
+ *
+ * WHY (2026-07-29): the sweep only filtered on the per-PAGE
+ * `pages.auto_reply_enabled` master switch — a DIFFERENT flag from the
+ * per-channel `messagesAutoReply` / `commentsAutoReply` toggles the pipeline
+ * reads. Switching a channel off does NOT cascade to the page flag (settings.ts
+ * only clamps `aiEnabled`), so a merchant who turned DM auto-reply off still had
+ * `auto_reply_enabled=true` pages and got EVERY unanswered DM flagged
+ * `sla_no_reply` — 638 flags on one pharmacy page in prod. Those are ~100% false
+ * positives: on a manual-only page the merchant replies inside
+ * Facebook/Instagram, and we do not ingest `message_echoes`, so their reply is
+ * invisible here and the row never clears. A permanently-red Needs Attention
+ * counter is worse than no counter — merchants stop trusting it entirely.
+ *
+ * Business hours ride along in the same predicate and are evaluated at SWEEP
+ * time, which is the semantics we want: a message arriving 02:00 against
+ * 09:00–17:00 hours is not flagged overnight (nobody is working, and it already
+ * received an away message) but becomes flaggable once the workspace is open.
+ *
+ * Reversible: if `message_echoes` ingestion lands, manual-only workspaces can be
+ * escalated again — their human replies would then be observable, so the flags
+ * would clear instead of piling up.
+ */
+async function shouldEscalateWorkspace(
+    workspaceId: string,
+    channel: 'messages' | 'comments',
+): Promise<boolean> {
+    try {
+        const wsSettings = await workspaceSettingsService.getSettings(workspaceId);
+        return workspaceSettingsService.isAutoReplyEnabledFromSettings(wsSettings, channel);
+    } catch (error) {
+        // Fail CLOSED: a settings read failure must not resurrect the false
+        // positives above. The sweep re-runs every SWEEP_INTERVAL_MS, so a
+        // genuinely stale item is picked up on the next pass.
+        captureError(error, 'Escalation settings lookup failed', {
+            tags: { service: 'escalation', channel },
+            extra: { workspaceId },
+        });
+        return false;
+    }
 }
 
 /**
@@ -211,6 +259,8 @@ async function escalateComments(): Promise<void> {
     if (staleRows.length === 0) return;
 
     for (const [workspaceId, rows] of groupByWorkspace(staleRows)) {
+        if (!await shouldEscalateWorkspace(workspaceId, 'comments')) continue;
+
         const ids = rows.map(r => r.itemId);
         const threshold = Number(rows[0].thresholdMinutes);
 
@@ -283,6 +333,8 @@ async function escalateMessages(): Promise<void> {
     if (staleRows.length === 0) return;
 
     for (const [workspaceId, rows] of groupByWorkspace(staleRows)) {
+        if (!await shouldEscalateWorkspace(workspaceId, 'messages')) continue;
+
         const ids = rows.map(r => r.itemId);
         const threshold = Number(rows[0].thresholdMinutes);
 

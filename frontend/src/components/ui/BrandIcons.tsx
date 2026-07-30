@@ -81,10 +81,20 @@ interface PlatformIconProps {
   className?: string;
 }
 
+/** Theme-aware tint per channel (soft background + matching foreground).
+    Exported so any surface needing a channel-coloured container — the inbox
+    icons, an admin avatar — reads one palette instead of re-typing brand hex,
+    which is how the admin console ended up with a light-only Facebook blue. */
+export const PLATFORM_TINT = {
+  instagram: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400',
+  facebook: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',
+  whatsapp: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400',
+} as const;
+
 const PLATFORM_STYLES = {
-  instagram: { path: INSTAGRAM_PATH, classes: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400' },
-  facebook: { path: FACEBOOK_PATH, classes: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' },
-  whatsapp: { path: WHATSAPP_PATH, classes: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' },
+  instagram: { path: INSTAGRAM_PATH, classes: PLATFORM_TINT.instagram },
+  facebook: { path: FACEBOOK_PATH, classes: PLATFORM_TINT.facebook },
+  whatsapp: { path: WHATSAPP_PATH, classes: PLATFORM_TINT.whatsapp },
 } as const;
 
 // Official brand colors (theme-independent) — used by the channel ribbon on inbox rows.

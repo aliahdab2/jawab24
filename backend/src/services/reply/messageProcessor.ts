@@ -34,7 +34,7 @@ import {
     classifyDmError,
 } from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
-import { groundingVerifierService, buildGroundingSource } from '../groundingVerifier';
+import { groundingVerifierService, buildGroundingSource, shouldVerifyGrounding } from '../groundingVerifier';
 import { recordActivationEvent } from '../activation';
 import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
 import { extractPostId } from '../../utils/instagram';
@@ -294,10 +294,15 @@ export class MessageProcessor {
             // (early-return paths have no AI-generation race window).
             const handledPlatformMessageIds = new Set<string>();
             let didReachConsolidation = false;
-            // Track typing-indicator lifecycle so abort paths can clear it.
-            // Without this, Facebook keeps "typing..." visible for ~20s after
-            // we abandon a reply, surfacing as the "typing forever" UX bug.
-            let typingShown = false;
+            // The step-11b typing call, kept but NEVER awaited on the reply path.
+            //
+            // Delivery state lives in Redis (typingIndicator.wasShown) because on Messenger
+            // the indicator is claimed by the WEBHOOK process, so no in-process flag could
+            // know about it. This reference exists only so an ABORT path can let a
+            // still-in-flight call settle before reading that state — otherwise a reply that
+            // fails within the Meta round-trip would leave the indicator spinning. Null on
+            // early-return paths, which also spares them the Redis read.
+            let typingCall: Promise<boolean> | null = null;
             let replySent = false;
             /** Platform's own id for the sent reply (WhatsApp wamid); undefined on FB/IG. */
             let sentPlatformMessageId: string | undefined;
@@ -619,28 +624,52 @@ export class MessageProcessor {
                 return { success: true, messageId: platformMessageId };
             }
 
-            // 11b. Show "typing..." before AI generation so the customer sees activity
-            // during the 1-3s wait. See typingIndicator.ts for the full contract
-            // (retry dedup, abort-path cleanup).
-            typingShown = await typingIndicator.show(adapter, page, senderId, platformMessageId);
+            // 11b-12. Three INDEPENDENT I/O calls that used to be awaited one after another,
+            // putting a Meta Graph round-trip in front of two database reads that need
+            // nothing from it:
+            //
+            //   11b typingIndicator.show()     Redis SETNX + Meta Graph sender_action
+            //   11c resolveOriginPostMessage()  DB
+            //   12  enrichPageContext()         DB (+ e-commerce API when a store is linked)
+            //
+            // Now: 11b is fire-and-forget, and 11c/12 run concurrently.
+            //
+            // 11b. Typing indicator — FIRE-AND-FORGET, never awaited.
+            //
+            // Messenger already claimed it at webhook receipt, so the dedup claim makes
+            // this a no-op there (see typingIndicator.showOnce). Instagram has no receipt
+            // hook, so this is where its indicator fires. Either way a cosmetic Meta Graph
+            // round-trip — prod Sentry puts Meta calls at 295-1,088 ms average — must not
+            // sit on the reply's critical path. Cleanup reads Redis instead of a return
+            // value; see the `finally` block.
+            typingCall = typingIndicator.show(adapter, page, senderId, platformMessageId);
 
-            // 11c. If this DM thread originated from a comment on a post, carry the
-            // post text into the generator context (same field the comment pipeline
-            // uses). Without this, short follow-ups like "تكلفة" or "اوقات الدوام"
-            // are classified as SPAM_OR_IRRELEVANT because the AI sees them out of context.
-            const originPostMessage = await this.resolveOriginPostMessage(page.id, senderId);
-            lap('11c-originPost');
-
-            // 12. Generate reply (enrich KB with e-commerce data if linked)
-            const enriched = await enrichPageContext(
-                page as unknown as Record<string, unknown>,
-                userSettings,
-                messageText,
-                page.knowledgeBase || undefined,
-                // Match the fact lists against the whole consolidated burst, not just
-                // the last line of it — see enrichPageContext's `matchText`.
-                consolidatedText,
-            );
+            // 11c-12. Two INDEPENDENT database reads, run concurrently rather than in
+            // sequence. Measured through processMessage with one read stubbed at 15 ms:
+            // 320 ms serial → 303 ms concurrent. Tens of milliseconds, scaling with real DB
+            // and e-commerce latency — the large win in this area was removing the awaited
+            // Meta call above, not this.
+            //
+            // A rejection from either read still propagates out of `Promise.all` exactly as
+            // it did when each was awaited on its own line.
+            const [originPostMessage, enriched] = await Promise.all([
+                // 11c. If this DM thread originated from a comment on a post, carry the
+                // post text into the generator context (same field the comment pipeline
+                // uses). Without this, short follow-ups like "تكلفة" or "اوقات الدوام"
+                // are classified as SPAM_OR_IRRELEVANT because the AI sees them out of context.
+                this.resolveOriginPostMessage(page.id, senderId),
+                // 12. Enrich KB with e-commerce data if linked.
+                enrichPageContext(
+                    page as unknown as Record<string, unknown>,
+                    userSettings,
+                    messageText,
+                    page.knowledgeBase || undefined,
+                    // Match the fact lists against the whole consolidated burst, not just
+                    // the last line of it — see enrichPageContext's `matchText`.
+                    consolidatedText,
+                ),
+            ]);
+            lap('11b-12-preAiParallel');
             const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated } = enriched;
 
             const generated =
@@ -928,19 +957,48 @@ export class MessageProcessor {
 
             // Fire-and-forget grounding verification (SYSTEM_ANALYSIS gap 13).
             // Detection only: it flags the stored row, never the sent reply.
-            // Gated internally (shouldVerifyGrounding) and off unless
-            // GROUNDING_VERIFY_ENABLED=true, so this is inert until switched on.
-            groundingVerifierService.maybeVerifyGrounding({
-                userId,
-                pageId: page.id,
-                sourceId: storedMessage.id,
-                sourceType: 'message',
-                kb: buildGroundingSource({ knowledgeBase, storePolicies, productCatalog, factCollectionsBlock }),
-                question: consolidatedText,
-                reply: replyText ?? '',
-                intent: aiIntent,
-                replyMethod,
-            }).catch(() => { /* errors captured inside maybeVerifyGrounding */ });
+            // Off unless GROUNDING_VERIFY_ENABLED=true, so this is inert until
+            // switched on.
+            //
+            // The verifier must judge against EXACTLY what the generator saw —
+            // no more, no less (owner ruling 2026-07-30):
+            //   • originPostMessage = origin post + its Post Reply trigger,
+            //     which the AI is allowed to quote (#467). Omitting it made
+            //     every legitimate post quote look invented on Post-Reply-heavy
+            //     pages (found on الدمشقي).
+            //   • factCollectionsBlock = the rendered <business_lists> rows. The
+            //     model answers list questions FROM these; judging without them
+            //     would flag every correct list answer as invented.
+            //   • history = the generator's own recipe (getConversationHistory
+            //     limit 12, minus turns matching the current text), re-fetched
+            //     here because verification runs after the send. The extra read
+            //     is gated first so the fleet-wide path pays nothing, and it is
+            //     off the reply latency path entirely (reply already sent). The
+            //     assistant-side filter also drops the just-stored outgoing
+            //     reply, which did not exist when the generator read history.
+            {
+                const groundingKb = buildGroundingSource({ knowledgeBase, postMessage: originPostMessage, storePolicies, productCatalog, factCollectionsBlock });
+                if (shouldVerifyGrounding({ pageId: page.id, replyMethod, intent: aiIntent, reply: replyText ?? '', kb: groundingKb })) {
+                    const sentReply = replyText ?? '';
+                    messagesService.getConversationHistory(page.id, senderId, 12)
+                        .then(hist => groundingVerifierService.maybeVerifyGrounding({
+                            userId,
+                            pageId: page.id,
+                            sourceId: storedMessage.id,
+                            sourceType: 'message',
+                            kb: groundingKb,
+                            question: consolidatedText,
+                            reply: sentReply,
+                            intent: aiIntent,
+                            replyMethod,
+                            history: hist
+                                .filter(m => !(m.role === 'user' && m.content === consolidatedText))
+                                .filter(m => !(m.role === 'assistant' && m.content === sentReply))
+                                .map(m => (m.role === 'user' ? { q: m.content, a: null } : { q: null, a: m.content })),
+                        }))
+                        .catch(() => { /* errors captured inside maybeVerifyGrounding */ });
+                }
+            }
 
             pipelineMetrics.record(pipeline, 'success');
             lap('DONE');
@@ -972,8 +1030,20 @@ export class MessageProcessor {
                 // (spam-skip, hold, empty AI output, non-transient delivery failure,
                 // transient error rethrow). The happy path's outgoing message
                 // dismisses the indicator automatically.
-                if (typingShown && !replySent) {
-                    typingIndicator.clear(adapter, page, senderId);
+                //
+                // ABORT PATH ONLY — the `!replySent` short-circuit runs first, so a
+                // delivered reply pays neither the settle nor the Redis read.
+                //
+                // Awaiting `typingCall` here is what keeps the fire-and-forget send exact:
+                // a reply that aborts DURING the Meta round-trip would otherwise read Redis
+                // while the claim still says "attempted", conclude nothing was shown, and
+                // strand the indicator for ~20s. On Messenger this resolves instantly (the
+                // webhook already claimed it, so step 11b was a dedup no-op).
+                if (!replySent && typingCall) {
+                    await typingCall.catch(() => false);
+                    if (await typingIndicator.wasShown(page.id, platformMessageId)) {
+                        typingIndicator.clear(adapter, page, senderId);
+                    }
                 }
 
                 // Post-release safety net: catch messages that arrived AFTER step 11

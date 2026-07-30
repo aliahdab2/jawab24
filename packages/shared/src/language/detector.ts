@@ -30,16 +30,21 @@ const FRENCH_CHARS = /[àâæçéèêëïîôùûüÿœÀÂÆÇÉÈÊËÏÎÔÙ�
 const SPANISH_CHARS = /[áéíóúüñÁÉÍÓÚÜÑ¿¡]/;
 const TURKISH_CHARS = /[çğıöşüÇĞİÖŞÜ]/;
 
-// Common words for additional context
-const ENGLISH_COMMON = [
+// Common words for additional context.
+//
+// Sets, not arrays: membership is the hot path of this function — `detectLanguage` runs
+// on every inbound message, every comment, and every template-language decision, and as
+// arrays these were O(words x 58) string comparisons per call (~870 for a 15-word
+// message). Same contents, same results; only `.includes` → `.has`.
+const ENGLISH_COMMON = new Set([
     'the', 'is', 'are', 'and', 'or', 'but', 'with', 'for', 'from', 'have', 'has', 'been',
     'you', 'me', 'my', 'your', 'we', 'our', 'they', 'their', 'it', 'he', 'she',
     'can', 'could', 'will', 'would', 'should', 'do', 'does', 'did',
     'what', 'when', 'where', 'why', 'how', 'who', 'which',
     'this', 'that', 'these', 'those', 'in', 'on', 'at', 'to', 'of',
     'please', 'help', 'want', 'need', 'thanks', 'hi', 'hello', 'hey',
-];
-const SWEDISH_COMMON = ['och', 'det', 'att', 'som', 'på', 'är', 'av', 'för', 'med', 'har'];
+]);
+const SWEDISH_COMMON = new Set(['och', 'det', 'att', 'som', 'på', 'är', 'av', 'för', 'med', 'har']);
 
 /**
  * The 7 named legacy codes plus `unknown`, widened with `(string & {})` for
@@ -56,6 +61,42 @@ export interface LanguageDetectionResult {
     confidence: number; // 0-1
     script: string;
     isRTL: boolean;
+    /**
+     * Set when the language was named from CHARACTERS ALONE, with no word evidence —
+     * a guess, not a reading. `confidence` cannot express this: for Arabic it is a
+     * character RATIO (real traffic yields ar@0.545, ar@0.35, ar@0.03), so no numeric
+     * threshold or sentinel can separate "unevidenced" from "mostly-Latin Arabic"
+     * without making genuine Arabic uncertain. See isCertainDetection.
+     */
+    evidence?: 'characters-only';
+}
+
+/**
+ * Below this, an 'en' result is the Latin-script DEFAULT ("recognized nothing"),
+ * not a reading. The floor is 0.5 and every matched English stopword adds 0.1, so
+ * 0.6 means "at least one real English word". Single source of truth for the
+ * threshold — the DM deferToHistory gate and the reply-language certainty signal
+ * are two decisions keyed on the same fact and must not drift apart.
+ */
+export const MIN_CERTAIN_CONFIDENCE = 0.6;
+
+/**
+ * Whether a detection is a POSITIVE reading of the text rather than a fallback.
+ *
+ * `false` = "we could not identify this text": 'unknown', the en@0.5 floor (accent-free
+ * French, romanized Urdu/Tagalog, phone numbers — 68.77% of Latin-script inbound
+ * traffic), or a characters-only guess. Callers must not present a `false` result to the
+ * model as the customer's language; see languageDirective in ai-worker's promptBuilder.
+ *
+ * The confidence threshold is applied to 'en' ONLY, deliberately. Arabic's confidence is
+ * a character ratio, so a blanket `confidence >= MIN_CERTAIN_CONFIDENCE` would mark 441
+ * rows of a 30-day corpus uncertain — mostly genuine Arabic with some Latin mixed in
+ * (`دورة ICDL` reads ar@0.545) — and soften the hard directive on the money path.
+ */
+export function isCertainDetection(result: LanguageDetectionResult): boolean {
+    if (result.language === 'unknown') return false;
+    if (result.evidence === 'characters-only') return false;
+    return !(result.language === 'en' && result.confidence < MIN_CERTAIN_CONFIDENCE);
 }
 
 /**
@@ -193,7 +234,7 @@ export function detectLanguage(text: string): LanguageDetectionResult {
 
     // Check for Swedish using common words + Swedish chars without å
     if (SWEDISH_CHARS.test(cleanText)) {
-        const swedishMatches = words.filter(w => SWEDISH_COMMON.includes(w)).length;
+        const swedishMatches = words.filter(w => SWEDISH_COMMON.has(w)).length;
         if (swedishMatches >= 1) {
             return {
                 language: 'sv',
@@ -205,7 +246,7 @@ export function detectLanguage(text: string): LanguageDetectionResult {
     }
 
     // Check common words for Swedish (without special chars)
-    const swedishMatches = words.filter(w => SWEDISH_COMMON.includes(w)).length;
+    const swedishMatches = words.filter(w => SWEDISH_COMMON.has(w)).length;
     if (swedishMatches >= 2) {
         return {
             language: 'sv',
@@ -215,13 +256,18 @@ export function detectLanguage(text: string): LanguageDetectionResult {
         };
     }
 
-    // Turkish check (fallback without word check, just unique chars)
+    // Turkish fallback: characters only, no word check — so it stays a GUESS. `ç` is
+    // shared with French, and this branch runs before the French check, which is why
+    // «Combien ça coûte ?» was asserted as Turkish and answered in Turkish (2026-07-29).
+    // Turkish keeps the DEFAULT here; the soft reply directive lets the model correct it.
+    // Turkish with a function word still scores 0.85 on the evidenced branch above.
     if (/[ğıİşŞçÇ]/.test(cleanText)) {
         return {
             language: 'tr',
             confidence: 0.75,
             script: 'Latin',
             isRTL: false,
+            evidence: 'characters-only',
         };
     }
 
@@ -256,6 +302,15 @@ export function detectLanguage(text: string): LanguageDetectionResult {
         };
     }
 
+    // English evidence for the Latin default, computed BEFORE the tinyld override
+    // because the override is only allowed to overrule a NON-detection (see below).
+    // Strip edge punctuation so "please?" matches "please". Callers use confidence to
+    // decide whether to trust this detection (e.g. short Latin acronyms like "ICDL"
+    // stay at 0.5 and let conversation history override).
+    const normalizedWords = words.map(w => w.replace(/^[^a-z]+|[^a-z]+$/g, '')).filter(Boolean);
+    const englishMatches = normalizedWords.filter(w => ENGLISH_COMMON.has(w)).length;
+    const confidence = Math.min(0.5 + (englishMatches * 0.1), 0.9);
+
     // Phase 1b (LANG_ENGINE=tinyld only; inert by default): this is the exact
     // fallthrough where every legacy branch above failed to name the language —
     // the class that produced the "Hur kan man anmäla sig" → English@0.5 →
@@ -264,24 +319,35 @@ export function detectLanguage(text: string): LanguageDetectionResult {
     // naive threshold design was rejected). ASCII input (English, Arabizi,
     // acronyms) can never be overridden, so the English default below — and
     // both confidence gates keyed on it — stay bit-identical in both modes.
-    const override = maybeLatinOverride(cleanText);
-    if (override) {
-        return {
-            language: override,
-            confidence: OVERRIDE_CONFIDENCE,
-            script: 'Latin',
-            isRTL: false,
-        };
+    //
+    // `englishMatches === 0` is load-bearing, not a tuning knob: the override may
+    // only overrule a NON-detection (the 0.5 floor = "Latin script, recognized
+    // nothing"), never a positive English reading. A 30-day prod corpus diff
+    // (11,459 Latin-script inbound messages) showed that WITHOUT this gate every
+    // regression came from text legacy had already scored ≥0.6 on real English
+    // stopwords, where a single stray accented character hijacked the whole
+    // message: "Hello Sir. AĹLHUMDULL Usually have been best too do ing this
+    // moment" (en@0.9) → Slovak, "How much po ang tuition ng business
+    // administration major ỉn marketing management?" (Tagalog/English) →
+    // Vietnamese, and Tunisian Arabizi "Ya Rab ya karim sotroque où afouek oua
+    // ridhak" → French/Spanish — i.e. the exact Arabizi-mislabel class the
+    // non-ASCII-letter gate exists to prevent, slipping in through one "é"/"où".
+    // Requiring zero English evidence removes that class by construction while
+    // keeping the genuine wins (Spanish, French, Romanian, Swedish, Portuguese,
+    // Czech), which all arrive at the 0.5 floor.
+    if (englishMatches === 0) {
+        const override = maybeLatinOverride(cleanText);
+        if (override) {
+            return {
+                language: override,
+                confidence: OVERRIDE_CONFIDENCE,
+                script: 'Latin',
+                isRTL: false,
+            };
+        }
     }
 
     // Default to English for Latin script.
-    // Strip edge punctuation so "please?" matches "please". Callers use confidence to
-    // decide whether to trust this detection (e.g. short Latin acronyms like "ICDL"
-    // stay at 0.5 and let conversation history override).
-    const normalizedWords = words.map(w => w.replace(/^[^a-z]+|[^a-z]+$/g, '')).filter(Boolean);
-    const englishMatches = normalizedWords.filter(w => ENGLISH_COMMON.includes(w)).length;
-    const confidence = Math.min(0.5 + (englishMatches * 0.1), 0.9);
-
     return {
         language: 'en',
         confidence,
@@ -306,11 +372,13 @@ export function detectLanguageCode(text: string): SupportedLanguage {
  * merchant's default language instead of forcing an English reply on an
  * otherwise-Arabic thread.
  *
- * Gate: English at confidence ≤ 0.5, ASCII alphanumerics only, ≤ 3 words. The
- * confidence floor is the real signal; the ASCII + word-count checks are a safety
- * cap so a longer English sentence that happens to dodge every function word can't
- * be misread as a token. A genuine short English question ("which course", "how
- * much") matches a function word → confidence > 0.5 → not low-signal.
+ * Gate: English at confidence ≤ 0.5, ASCII alphanumerics only, ≤ 3 words — the
+ * shape checks applied AFTER discounting emoji/punctuation, which carry no language
+ * signal (see the note in the body). The confidence floor is the real signal; the
+ * ASCII + word-count checks are a safety cap so a longer English sentence that
+ * happens to dodge every function word can't be misread as a token. A genuine short
+ * English question ("which course", "how much") matches a function word →
+ * confidence > 0.5 → not low-signal.
  *
  * Kept in sync with resolveCommentLanguage (commentPreprocess.ts), which applies
  * the identical gate for the AI comment-reply path.
@@ -319,10 +387,36 @@ export function isLowSignalLatinToken(text: string): boolean {
     const trimmed = text.trim();
     if (!trimmed) return false;
     const det = detectLanguage(trimmed);
-    return det.language === 'en'
-        && det.confidence <= 0.5
-        && /^[a-zA-Z0-9\s]+$/.test(trimmed)
-        && trimmed.split(/\s+/).length <= 3;
+    if (det.language !== 'en' || det.confidence > 0.5) return false;
+
+    // Discount NON-ASCII symbols (emoji, hearts, Unicode punctuation) before the
+    // shape checks — they carry no language signal, exactly as engine.ts's
+    // letter-gate reasons about the same codepoints. "ok" was a token but "ok 👍"
+    // was not, and emoji-laden Arabizi ("kam el se3r 😍" — extremely common real
+    // traffic) therefore resolved to English on an Arabic post through
+    // resolveCommentLanguage, and to the English away/quota/greeting template
+    // through detectTemplateLanguage. Fixed 2026-07-29.
+    //
+    // ASCII punctuation is deliberately KEPT. Stripping it too was measured against
+    // 7,500 real prod messages and flipped 58.5% of traffic, including genuine
+    // English prose — "I don't understand" and "I'm coming" became "tokens" once the
+    // apostrophe was removed, which would have sent them to the merchant's default
+    // language. The apostrophe/quote/bracket was doing real work as a proxy for
+    // "this is prose, not a product name", so the safety cap keeps it. Narrowing to
+    // non-ASCII symbols cuts the flip rate to a small, hand-checked set.
+    //
+    // The confidence floor above is untouched and remains the real discriminator, so
+    // genuine short English questions ("how much?", "which course?" — all 0.6+) are
+    // unaffected either way.
+    // \x00-\x7F is an ASCII-range bound, not a control-character match — same pattern
+    // and same suppression as engine.ts's letter-gate.
+    // eslint-disable-next-line no-control-regex
+    const signal = trimmed.replace(/[^\p{L}\p{N}\s\x00-\x7F]/gu, '').trim();
+    // A token must carry at least one letter: "123", "?!" and "..." are not tokens.
+    if (!/\p{L}/u.test(signal)) return false;
+
+    return /^[a-zA-Z0-9\s]+$/.test(signal)
+        && signal.split(/\s+/).length <= 3;
 }
 
 /**

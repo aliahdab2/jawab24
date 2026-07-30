@@ -40,7 +40,7 @@ AI-powered auto-reply tools go beyond simple templates. And unlike flow-based ch
 **Step 1: Connect your Facebook Page**
 Authorize the tool to access your Facebook page. This typically takes one click through Facebook's OAuth flow.
 
-**Step 2: Configure your Knowledge Base**
+**Step 2: Configure your Business Info**
 Add your business information: product details, pricing, shipping policy, return policy, and FAQs. This becomes the AI's reference material — it won't make up answers. No flowcharts or decision trees needed. Just describe your business the way you'd explain it to a new employee.
 
 **Step 3: Set business hours**
@@ -88,9 +88,9 @@ Good auto-reply tools have safety nets:
 
 **Don't use generic one-size-fits-all replies.** Customers can tell when they're getting a canned response. AI-powered tools generate unique, contextual replies for each question.
 
-**Do add your return and shipping policies to your Knowledge Base.** These are the most commonly asked questions after pricing. If the AI doesn't have this information, it'll either say "I don't know" or risk making something up.
+**Do add your return and shipping policies to your Business Info.** These are the most commonly asked questions after pricing. If the AI doesn't have this information, it'll either say "I don't know" or risk making something up.
 
-**Don't ignore the confidence dashboard.** Good auto-reply tools flag uncertain replies for your review. Check these daily — they're opportunities to improve your Knowledge Base. Some tools even show you exactly what customers are asking about that's missing from your Knowledge Base, making updates easy.
+**Don't ignore the confidence dashboard.** Good auto-reply tools flag uncertain replies for your review. Check these daily — they're opportunities to improve your Business Info. Some tools even show you exactly what customers are asking about that's missing from your Business Info, making updates easy.
 
 **Do test your setup before going live.** Send test comments and messages from a personal account. Verify the AI handles your common question types correctly. Test follow-up questions to make sure conversation context is working.
 

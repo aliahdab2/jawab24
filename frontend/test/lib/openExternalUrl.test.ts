@@ -14,7 +14,13 @@ vi.mock('@capacitor/browser', () => ({
   },
 }));
 
-import { openExternalUrl } from '@/lib/openExternalUrl';
+vi.mock('@capacitor/app-launcher', () => ({
+  AppLauncher: {
+    openUrl: vi.fn(),
+  },
+}));
+
+import { openExternalUrl, openInSystemBrowser } from '@/lib/openExternalUrl';
 import { Capacitor } from '@capacitor/core';
 
 describe('openExternalUrl', () => {
@@ -42,5 +48,74 @@ describe('openExternalUrl', () => {
     await openExternalUrl('https://example.com');
 
     expect(Browser.open).toHaveBeenCalledWith({ url: 'https://example.com' });
+  });
+});
+
+/**
+ * Regression: Android, 2026-07-29. The WhatsApp connect handoff used
+ * `openExternalUrl`, which opens a Custom Tab — no popups, no `window.opener` —
+ * so `fb.login`'s Embedded Signup popup never opened and the merchant hit a
+ * silent dead end after the path question. The distinction these tests defend is
+ * "real browser app" vs "in-app browser"; collapsing the two reintroduces it.
+ */
+describe('openInSystemBrowser', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it('launches the real browser app on native — NOT the in-app Custom Tab', async () => {
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+    const { AppLauncher } = await import('@capacitor/app-launcher');
+    const { Browser } = await import('@capacitor/browser');
+    vi.mocked(AppLauncher.openUrl).mockResolvedValueOnce({ completed: true });
+
+    await openInSystemBrowser('https://jawab24.com/login');
+
+    expect(AppLauncher.openUrl).toHaveBeenCalledWith({ url: 'https://jawab24.com/login' });
+    // The whole point: a Custom Tab cannot host Embedded Signup.
+    expect(Browser.open).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the in-app browser when no external handler can be launched', async () => {
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+    const { AppLauncher } = await import('@capacitor/app-launcher');
+    const { Browser } = await import('@capacitor/browser');
+    vi.mocked(AppLauncher.openUrl).mockRejectedValueOnce(new Error('no activity found'));
+
+    await openInSystemBrowser('https://jawab24.com/login');
+
+    // Degrade rather than dead-end — the merchant still reaches the page.
+    expect(Browser.open).toHaveBeenCalledWith({ url: 'https://jawab24.com/login' });
+  });
+
+  it('falls back when the launch fails via { completed: false } — Android never rejects', async () => {
+    // Regression: AppLauncherPlugin.java wraps startActivity in its own
+    // try/catch and RESOLVES { completed: false } on failure. A catch-only
+    // fallback is dead code for that path: the merchant tapped Connect and
+    // nothing opened, silently (Android, 2026-07-30).
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+    const { AppLauncher } = await import('@capacitor/app-launcher');
+    const { Browser } = await import('@capacitor/browser');
+    vi.mocked(AppLauncher.openUrl).mockResolvedValueOnce({ completed: false });
+
+    await openInSystemBrowser('https://jawab24.com/login');
+
+    expect(Browser.open).toHaveBeenCalledWith({ url: 'https://jawab24.com/login' });
+  });
+
+  it('opens a new tab on web, where popups already work', async () => {
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+    const windowOpen = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const { AppLauncher } = await import('@capacitor/app-launcher');
+
+    await openInSystemBrowser('https://jawab24.com/login');
+
+    expect(windowOpen).toHaveBeenCalledWith(
+      'https://jawab24.com/login',
+      '_blank',
+      'noopener,noreferrer'
+    );
+    expect(AppLauncher.openUrl).not.toHaveBeenCalled();
   });
 });

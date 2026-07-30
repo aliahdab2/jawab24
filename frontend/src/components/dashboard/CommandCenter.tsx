@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/Badge';
 import { useTranslations, useLocale } from 'next-intl';
 import { formatDuration } from '@/lib/formatDuration';
 import { formatQuotaResetDate } from '@/lib/formatDate';
+import { resolveAiQuotaStatus } from '@jawab24/shared';
 
 interface CommandCenterProps {
   smartReplies: number;
@@ -99,8 +100,15 @@ export function CommandCenter({
   const quotaPercent = quota?.limit ? quota.percentUsed : 0;
   const isOverLimit = quotaPercent >= 100;
   // Past the plan wall but covered by top-up balance — Smart Replies still send,
-  // so treat it as a calm "on top-up" state, not a red "over limit" error.
-  const onTopup = isOverLimit && (quota?.topupBalance ?? 0) > 0;
+  // so treat it as a calm "on top-up" state, not a red "over limit" error. The
+  // balance has to be a real runway, though: `nearWall` (shared plan+top-up
+  // policy) keeps a nearly-drained balance red instead of calling it covered.
+  const quotaStatus = resolveAiQuotaStatus({
+    used: quota?.used ?? 0,
+    limit: quota?.limit ?? null,
+    topupBalance: quota?.topupBalance ?? 0,
+  });
+  const onTopup = quotaStatus.state === 'on_topup' && !quotaStatus.nearWall;
   const showOverLimit = isOverLimit && !onTopup;
   const isWarning = quotaPercent > 75 && !isOverLimit;
 

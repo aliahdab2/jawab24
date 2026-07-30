@@ -11,7 +11,7 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent, KB_GAP_FLAGS, hasAnyFlag, type ProductCard, type FlagMeta } from '@jawab24/shared';
-import { detectLanguage, detectLanguageCode, isLowSignalLatinToken } from '../../utils/language';
+import { detectLanguage, detectLanguageCode, isLowSignalLatinToken, isCertainDetection } from '../../utils/language';
 import { isContentFree, type FacebookMessageTag } from '../../utils/commentText';
 import { buildCommentRagQuery, preprocessCommentText, resolveCommentLanguage, rewriteContentFreeCta } from './commentPreprocess';
 import { detectBusinessActionFlags } from './urgentFlags';
@@ -607,6 +607,10 @@ export class ReplyGenerator {
             // Model is resolved inside aiService.generateReply via userId.
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
+                // A DEFAULT, not an assertion: resolvedLang may have mirrored the post's/KB's
+                // language for a low-signal token ("ICDL" on an Arabic post). The ai-worker
+                // re-derives from `comment` whether this is a reading of the customer's own
+                // words (resolveChain.currentMessageIsIdentifiable) — nothing to pass here.
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
                 context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, pipeline: 'comment_reply' }
             });
@@ -721,13 +725,34 @@ export class ReplyGenerator {
                 // sent the first DM and the customer's first reply is a Latin token).
                 // High-confidence detection (Arabic script, or Latin with common English
                 // words) still takes effect — preserving legitimate language switches.
-                const { language: msgLang, confidence: msgConfidence } = detectLanguage(text);
+                //
+                // The <0.6 confidence floor deliberately stays a BLUNT instrument: it also
+                // catches accent-free French/Spanish/Italian, which score en@0.5 (so those
+                // customers inherit the thread's language — a known limitation, see
+                // test/services/deferToHistory.test.ts). Narrowing it to
+                // `isLowSignalLatinToken` was tried on 2026-07-29 and REVERTED: that
+                // predicate requires ASCII-only and <=3 words, so "kam el se3r 😍" and
+                // "3ayez a3raf el se3r" stopped deferring — Arabizi is far more common here
+                // than French, and losing its anchor is what once had the bot replying in
+                // Spanish (engine.test.ts). The information needed to separate Arabizi from
+                // accent-free French is not available at this layer.
+                const detected = detectLanguage(text);
+                const { language: msgLang } = detected;
                 const hasPriorHistory = historyForAI.length > 0;
-                const isLowConfidenceLatin = msgLang === 'en' && msgConfidence < 0.6;
+                // Stays English-only, exactly as before: a NAMED-but-unevidenced language
+                // (tr@0.55 from a bare `ç`/`ı`) must keep its own language as the default
+                // rather than inherit the thread's — the prompt's soft directive already
+                // stops it being asserted as the customer's. MIN_CERTAIN_CONFIDENCE keeps
+                // the threshold in one place (packages/shared detector.ts).
+                const isLowConfidenceLatin = msgLang === 'en' && !isCertainDetection(detected);
                 const deferToHistory = isLowConfidenceLatin && hasPriorHistory;
                 // Model is resolved inside aiService.generateReply via userId.
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
+                    // With no prior history to defer to, the en@0.5 floor still travels as
+                    // `language: 'en'` — that is fine and deliberate (it remains the sensible
+                    // default). What must NOT happen is the prompt asserting "the customer
+                    // wrote in English" over it; the ai-worker re-derives that from `comment`.
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
                     context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, factCollectionsBlock: context.factCollectionsBlock, factCollectionsGated: context.factCollectionsGated, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, timezone: context.timezone, suppressGreeting: context.suppressGreeting, minutesSinceLastMessage, ...(context.postMessage ? { postMessage: context.postMessage } : {}), pipeline: 'dm_reply' },
                 };

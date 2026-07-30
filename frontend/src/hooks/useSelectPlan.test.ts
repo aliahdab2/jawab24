@@ -43,7 +43,10 @@ vi.mock('@/lib/capacitor', () => ({ isNativePlatform: () => nativeState.native }
 
 const mockOpenExternalUrl = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/lib/openExternalUrl', () => ({ openExternalUrl: (...a: unknown[]) => mockOpenExternalUrl(...a) }));
-vi.mock('@/lib/webUrl', () => ({ buildWebUrl: (p: string) => `https://jawab24.com${p}` }));
+vi.mock('@/lib/webUrl', () => ({
+  buildWebUrl: (p: string) => `https://jawab24.com${p}`,
+  buildWebAuthedUrl: (p: string) => `https://jawab24.com/login?redirect=${encodeURIComponent(p)}`,
+}));
 vi.mock('@/lib/sentryHelpers', () => ({ captureError: vi.fn() }));
 
 import { useSelectPlan } from './useSelectPlan';

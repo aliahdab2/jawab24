@@ -8,6 +8,7 @@ import { whatsappService } from '../services/whatsapp';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
 import { recordAutoreplyEnabledIfEffective } from '../services/activation';
+import { businessInfoGate } from '../services/businessReadiness';
 import { pageGateError } from '../utils/pageGateResponse';
 import { serializePage } from './pages';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -34,7 +35,7 @@ const NUMBER_TAKEN_RESPONSE = {
  * the DB, like the admin check) so it holds regardless of the client. Returns
  * true when the acting user is allowed to connect.
  */
-async function isWhatsAppConnectAllowed(userId: string): Promise<boolean> {
+export async function isWhatsAppConnectAllowed(userId: string): Promise<boolean> {
     if (config.whatsappAllowlist.length === 0) return true;
     const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
     const email = user?.email?.trim().toLowerCase();
@@ -62,7 +63,7 @@ const PLAN_REQUIRED_RESPONSE = {
  * already-enabled number keeps working after a downgrade (matches the
  * maxPages model: enforcement-on-enable, no retroactive disable).
  */
-async function hasWhatsAppPlanAccess(workspaceOwnerId: string): Promise<boolean> {
+export async function hasWhatsAppPlanAccess(workspaceOwnerId: string): Promise<boolean> {
     const sub = await subscriptionsService.getUserSubscription(workspaceOwnerId);
     return !!sub?.plan.whatsappEnabled;
 }
@@ -77,6 +78,39 @@ function metaErrorCode(error: unknown): number | undefined {
     // fall back to the raw axios shape for safety (and mocked tests).
     const e = error as { metaCode?: number; response?: { data?: { error?: { code?: number } } } };
     return e.metaCode ?? e.response?.data?.error?.code;
+}
+
+/**
+ * The post-exchange half of the Embedded Signup sequence, shared by the popup
+ * flow (WhatsAppController.runEmbeddedSignup) and the redirect flow
+ * (whatsappRedirectController): WABA webhook subscribe → Cloud API registration
+ * (migration path only; re-registration with the same derived PIN is idempotent
+ * at Meta, and a foreign two-step PIN is the one actionable failure) → phone
+ * display info. Coexistence numbers are NEVER registered — Meta onboarded them
+ * during ES and registering would take the number off the merchant's phone.
+ */
+export async function completeWhatsAppSignup(
+    accessToken: string,
+    phoneNumberId: string,
+    wabaId: string,
+    coexistence: boolean,
+): Promise<
+    | { ok: true; info: { displayPhoneNumber: string; verifiedName: string } }
+    | { ok: false }
+> {
+    await whatsappService.subscribeAppToWaba(wabaId, accessToken);
+    if (!coexistence) {
+        try {
+            await whatsappService.registerPhoneNumber(phoneNumberId, accessToken);
+        } catch (error) {
+            if (metaErrorCode(error) === META_PIN_MISMATCH) {
+                return { ok: false };
+            }
+            throw error;
+        }
+    }
+    const info = await whatsappService.getPhoneNumberInfo(phoneNumberId, accessToken);
+    return { ok: true, info };
 }
 
 export class WhatsAppController {
@@ -272,27 +306,9 @@ export class WhatsAppController {
         // expiry, which the health sweep reads as "no deadline to warn about".
         const tokenExpiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
 
-        // Deliver this WABA's message webhooks to our /webhook endpoint.
-        await whatsappService.subscribeAppToWaba(wabaId, accessToken);
-
-        // Cloud API registration belongs to the MIGRATION path only. A Coexistence
-        // number stays live in the merchant's WhatsApp Business app — Meta onboards
-        // it during Embedded Signup — so registering it here would either fail or
-        // take the number off their phone, which is the exact thing Coexistence
-        // exists to avoid.
-        if (!coexistence) {
-            try {
-                await whatsappService.registerPhoneNumber(phoneNumberId, accessToken);
-            } catch (error) {
-                if (metaErrorCode(error) === META_PIN_MISMATCH) {
-                    return { ok: false };
-                }
-                throw error;
-            }
-        }
-
-        const info = await whatsappService.getPhoneNumberInfo(phoneNumberId, accessToken);
-        return { ok: true, accessToken, tokenExpiresAt, info };
+        const completed = await completeWhatsAppSignup(accessToken, phoneNumberId, wabaId, coexistence);
+        if (!completed.ok) return { ok: false };
+        return { ok: true, accessToken, tokenExpiresAt, info: completed.info };
     }
 
     /**
@@ -362,6 +378,19 @@ export class WhatsAppController {
                 if (!(await hasWhatsAppPlanAccess(workspaceOwnerId))) {
                     return reply.status(403).send(PLAN_REQUIRED_RESPONSE);
                 }
+
+                // A WhatsApp-only card is born with NO Business Info — there is no
+                // Facebook page to seed it from — so without this the GA happy path
+                // is "connect a number, AI starts answering customers with nothing
+                // to answer from".
+                //
+                // Ordered AFTER the plan gate and BEFORE the page-limit/trial gates:
+                // WhatsApp needs Business/Pro/Scale, so a Starter merchant must be
+                // told to upgrade (filling Business Info would not unlock it), but a
+                // merchant who IS entitled should hear about the thing they can
+                // actually fix rather than a seat count.
+                const infoGate = await businessInfoGate(existingPage);
+                if (infoGate) return reply.status(infoGate.status).send(infoGate.body);
 
                 const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {

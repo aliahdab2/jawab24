@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, type ReactEle
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
+import { useRouter } from 'next/router';
+import { buildFacebookOAuthUrl } from '@/lib/facebookOAuth';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover, WhatsAppIcon, UpgradeCTA, Badge } from '@/components/ui';
 import { RepliesBreakdownTooltip } from '@/components/pages/RepliesBreakdownTooltip';
@@ -35,8 +37,14 @@ import dynamic from 'next/dynamic';
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
-import { isWhatsAppVisible } from '@/lib/featureFlags';
-import { captureError } from '@/lib/sentryHelpers';
+import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
+import { isWhatsAppVisible, isWhatsAppRedirectConnect } from '@/lib/featureFlags';
+import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
+import { isMobileBrowser } from '@/lib/browserEnv';
+// Static import (not dynamic) so the tap handler can navigate synchronously —
+// an await between the gesture and location.assign is what mobile Chrome
+// silently ignored (2026-07-30).
+import { openWhatsAppSignupUrl } from '@/lib/whatsappRedirect';
 import { useWorkspaceRole, useSaveKnowledgeBase, useSubscriptionUsage, useOpenOnQueryParam } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
 import { authManager } from '@/lib/authManager';
@@ -77,6 +85,36 @@ const PagesPage: NextPageWithLayout = () => {
   const [testSmartReplyPage, setTestSmartReplyPage] = useState<Page | null>(null);
   // Page ID currently running the WhatsApp Embedded Signup popup (null = none)
   const [connectingWhatsApp, setConnectingWhatsApp] = useState<string | null>(null);
+  // Target of the pending onboarding-path question — a page ID, or 'new' for a
+  // WhatsApp-only card. Same shape as connectingWhatsApp; null = not asking.
+  const [whatsAppPathPageId, setWhatsAppPathPageId] = useState<string | null>(null);
+  // Both onboarding-variant dialog URLs, pre-minted while the path question is
+  // open so the answer can navigate synchronously with the tap (see
+  // prepareWhatsAppConnect). null = not ready → the async fallback handles it.
+  const [waPreparedUrls, setWaPreparedUrls] = useState<import('@/lib/whatsappRedirect').WhatsAppSignupUrls | null>(null);
+  useEffect(() => {
+    setWaPreparedUrls(null);
+    if (whatsAppPathPageId === null || !isWhatsAppRedirectConnect()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { prepareWhatsAppConnect } = await import('@/lib/whatsappRedirect');
+        const urls = await prepareWhatsAppConnect({
+          pageId: whatsAppPathPageId === 'new' ? null : whatsAppPathPageId,
+          locale: language,
+        });
+        if (!cancelled) setWaPreparedUrls(urls);
+      } catch {
+        // Pre-mint is an optimization; the choice-time fallback (launchConnect)
+        // surfaces real errors with the proper toasts.
+      }
+    })();
+    return () => { cancelled = true; };
+     
+  }, [whatsAppPathPageId, language]);
+  // Desktop guidance before a phone attempts Embedded Signup; holds the
+  // continuation to run if the merchant chooses "try on this device".
+  const [whatsAppDesktopNotice, setWhatsAppDesktopNotice] = useState<(() => void) | null>(null);
   // Page whose WhatsApp disconnect confirmation is open (null = none)
   const [disconnectWhatsAppPage, setDisconnectWhatsAppPage] = useState<Page | null>(null);
   // WhatsApp-only card whose remove confirmation is open (removal deletes the page row)
@@ -265,10 +303,13 @@ const PagesPage: NextPageWithLayout = () => {
       // Mobile: always use canonical origin (Capacitor serves from http://localhost)
       // Web dev: use window.location.origin for localhost
       const origin = isMobile ? normalizedOrigin : (window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin);
-      const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
-      const state = encodeURIComponent(`/pages|${isMobile ? 'mobile' : 'web'}|${language}|reconnect`);
-      const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page&auth_type=rerequest`;
+      const redirectUri = `${origin}${localePath}${FB_CALLBACK_PATH}`;
+      const state = `/pages|${isMobile ? 'mobile' : 'web'}|${language}|reconnect`;
+      // rerequest: reconnect exists to recover a permission the merchant declined
+      // or Meta dropped, so Meta must re-prompt rather than return the stale grant.
+      const oauthUrl = buildFacebookOAuthUrl({
+        appId: fbAppId, redirectUri, state, display: 'page', rerequest: true,
+      });
 
       if (isMobile) {
         const { Browser } = await import('@capacitor/browser');
@@ -299,6 +340,10 @@ const PagesPage: NextPageWithLayout = () => {
   // a disabled query (pre-auth-hydration) reports isLoading=false, which
   // would consume the param before pages ever load, swallowing the click.
   const pagesReady = pagesFetched;
+
+  // Read directly for ?waPage — useOpenOnQueryParam only tells us a param fired,
+  // not what rode along with it.
+  const router = useRouter();
 
   const openKbEditorFor = useCallback((target: Page | undefined) => {
     if (!target) return;
@@ -337,6 +382,98 @@ const PagesPage: NextPageWithLayout = () => {
     setTestSmartReplyPage(target);
   }, [pages]);
   useOpenOnQueryParam('openTestReply', pagesReady, openTestReply);
+
+  /*
+   * ?connectWhatsApp=true → resume a WhatsApp connect that STARTED IN THE APP.
+   *
+   * The native app cannot host Embedded Signup, so it hands off to a real browser
+   * (see requestConnectWhatsApp). Without this the handoff merely delivered the
+   * merchant to this page and stopped: they had already tapped Connect, watched a
+   * redirect, and arrived somewhere that looked exactly like where they started,
+   * with no hint that the next step was to tap Connect AGAIN — this time in the
+   * browser. Reported 2026-07-29 as "it redirects then comes back to the same
+   * page", which is precisely what it did.
+   *
+   * Re-opens the onboarding-path question rather than calling fb.login directly:
+   * the popup requires transient user activation, so it must be launched from a
+   * real click. The merchant's answer to the path question supplies exactly that.
+   *
+   * `waPage` carries which card started it — omitted means the channel-picker path
+   * (a new WhatsApp-only card, no Facebook page). It matters: attaching to an
+   * existing page and creating a standalone card are different outcomes, so
+   * defaulting the wrong way would silently create the wrong kind of card.
+   */
+  const resumeWhatsAppConnect = useCallback(() => {
+    // This resume exists for the BROWSER side of the handoff. If it ever fires
+    // inside the native app (deep link, stale history entry), opening the path
+    // dialog here would dead-end: its answer calls fb.login in the WebView,
+    // where popups are disabled — the exact failure the handoff escapes. Do
+    // nothing; the in-app Connect buttons route through requestConnectWhatsApp,
+    // which hands off correctly.
+    if (Capacitor.isNativePlatform()) return;
+    const target = typeof router.query.waPage === 'string' ? router.query.waPage : 'new';
+    addErrorBreadcrumb('whatsapp-connect', 'resuming from handoff param', { target });
+    setWhatsAppPathPageId(target);
+  }, [router.query.waPage]);
+  useOpenOnQueryParam('connectWhatsApp', pagesReady, resumeWhatsAppConnect);
+
+  /*
+   * ?whatsappConnected=1&waPageId=… / ?whatsappError=<code> → the RETURN leg of
+   * the redirect connect flow (the backend callback 302s here; a navigation
+   * cannot carry a JSON body). Handled once per arrival then stripped —
+   * mirrors useOpenOnQueryParam's conventions, but these params carry VALUES,
+   * so the shared `=== 'true'` hook doesn't fit.
+   */
+  const waReturnHandledRef = useRef(false);
+  const [pendingKbNudgePageId, setPendingKbNudgePageId] = useState<string | null>(null);
+  useEffect(() => {
+    if (waReturnHandledRef.current || !router.isReady) return;
+    const connected = router.query.whatsappConnected === '1';
+    const errorCode = typeof router.query.whatsappError === 'string' ? router.query.whatsappError : null;
+    if (!connected && !errorCode) return;
+    waReturnHandledRef.current = true;
+    addErrorBreadcrumb('whatsapp-connect', 'redirect return', { connected, errorCode });
+    if (connected) {
+      toast.success(t('whatsappConnectSuccess'));
+      void fetchPages();
+      const waPageId = typeof router.query.waPageId === 'string' ? router.query.waPageId : null;
+      if (waPageId) setPendingKbNudgePageId(waPageId);
+    } else if (errorCode) {
+      // Same error surface as the popup flow's catch block — one merchant-facing
+      // contract regardless of transport.
+      const keyByCode: Record<string, string> = {
+        WHATSAPP_NUMBER_TAKEN: 'whatsappNumberTaken',
+        WHATSAPP_PIN_MISMATCH: 'whatsappPinMismatch',
+        WHATSAPP_NO_NUMBER: 'whatsappNoNumberSelected',
+        WHATSAPP_AMBIGUOUS: 'whatsappAmbiguousNumber',
+        WHATSAPP_PLAN_REQUIRED: iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired'),
+      };
+      toast.error(t(keyByCode[errorCode] ?? 'whatsappConnectFailed'));
+    }
+    const remaining = { ...router.query };
+    delete remaining.whatsappConnected;
+    delete remaining.waPageId;
+    delete remaining.whatsappError;
+    void router.replace({ pathname: router.pathname, query: remaining }, undefined, { shallow: true });
+  }, [router, t, fetchPages]);
+
+  /*
+   * Post-connect Business-Info nudge, redirect-flow edition: the popup flow
+   * nudges inline because it holds the fresh page object; here the page row
+   * arrives with the refetch, so the nudge waits for it. A WhatsApp-only card
+   * is born with an empty KB by design — connected-but-mute is the one state
+   * the merchant must not be left in silently.
+   */
+  useEffect(() => {
+    if (!pendingKbNudgePageId) return;
+    const page = pages.find(p => p.id === pendingKbNudgePageId);
+    if (!page) return; // refetch still in flight
+    setPendingKbNudgePageId(null);
+    if (needsBusinessInfo(page)) {
+      toast.info(t('whatsappConnectedAddBusinessInfo'));
+      openKbEditorFor(page);
+    }
+  }, [pendingKbNudgePageId, pages, t, openKbEditorFor]);
 
   /**
    * Soft gate: enabling any channel's auto-reply on a page with no answer source
@@ -388,6 +525,17 @@ const PagesPage: NextPageWithLayout = () => {
       const status = axiosErr.response?.status;
       if (code === cfg.disconnectedCode) {
         toast.error(cfg.disconnectedMsg);
+      } else if (status === 409 && code === 'BUSINESS_INFO_REQUIRED') {
+        // The server refused because the AI would have nothing to answer from.
+        // Reached two ways: a WhatsApp-only card (born with no Business Info —
+        // no Facebook page to seed it), or "Turn on anyway" clicked on the soft
+        // gate above for a page that is genuinely empty rather than merely
+        // thin. Deliberately NOT re-derived on the client: the server owns this
+        // verdict, and a second predicate here is how the two would drift.
+        // Open the editor rather than just complaining — the refusal names a
+        // fixable thing, so put the merchant in front of it.
+        toast.error(t('businessInfoRequiredToEnable'));
+        openKbEditorFor(pages.find(p => p.id === pageId));
       } else if (status === 402 && code === 'SUBSCRIPTION_INACTIVE') {
         toast.error(t('subscriptionInactive'));
       } else if (status === 403 && code === 'PAGE_LIMIT_REACHED') {
@@ -459,34 +607,158 @@ const PagesPage: NextPageWithLayout = () => {
   };
 
   /**
-   * Run the Embedded Signup popup and connect the resulting number.
-   * pageId set → attach to that Facebook-backed page card.
-   * pageId null → create a new WhatsApp-only card (no Facebook page).
+   * Entry point for every WhatsApp connect button on this screen.
+   *
+   * A FIRST connect has to ask which Meta onboarding path to take — the answer
+   * decides whether the number keeps working on the merchant's phone — but a
+   * RECONNECT must never ask: the path is already fixed for that number, and a
+   * different answer would migrate a live coexistence number off their phone.
+   * `whatsappConnected` is the discriminator (the card's Connect button only
+   * renders when it is false; the reconnect banner only when it is true).
    */
-  const handleConnectWhatsApp = async (pageId: string | null) => {
-    // Embedded Signup runs in a Facebook JS SDK popup — a real browser context.
-    // The Capacitor WebView can't host it, but Meta's wizard works in mobile
-    // browsers, so hand off to the web dashboard instead of dead-ending.
-    if (Capacitor.isNativePlatform()) {
-      toast.info(t('whatsappConnectWebOnly'));
-      const { openExternalUrl } = await import('@/lib/openExternalUrl');
-      const { buildWebUrl } = await import('@/lib/webUrl');
-      await openExternalUrl(buildWebUrl('/pages', language));
+  /**
+   * The browser handoff for a connect that started in the native app.
+   *
+   * openInSystemBrowser, NOT openExternalUrl: the latter opens an Android
+   * Custom Tab, which supports neither popups nor `window.opener` — so
+   * `fb.login`'s Embedded Signup popup never opened and the merchant hit a
+   * silent dead end after answering the path question (Android, 2026-07-29).
+   *
+   * Via /login, NOT straight to /pages: the app's JWT lives in the WebView's
+   * localStorage under a different origin, so it does not travel to the system
+   * browser. /login forwards immediately when a browser session already exists.
+   * `?connectWhatsApp=true` carries the intent so the browser reopens the path
+   * question; `waPage` preserves which card the merchant tapped Connect on.
+   */
+  const handOffConnectToBrowser = async (pageId: string | null) => {
+    addErrorBreadcrumb('whatsapp-connect', 'handing off to system browser', { hasPage: !!pageId });
+    const { openInSystemBrowser } = await import('@/lib/openExternalUrl');
+    const { buildWebAuthedUrl } = await import('@/lib/webUrl');
+    const resumePath = pageId
+      ? `/pages?connectWhatsApp=true&waPage=${encodeURIComponent(pageId)}`
+      : '/pages?connectWhatsApp=true';
+    await openInSystemBrowser(buildWebAuthedUrl(resumePath, language));
+  };
+
+  /**
+   * Launch the signup for an ANSWERED path question (or a reconnect, whose
+   * path is already fixed). Redirect flag ON → full-page navigation to Meta's
+   * dialog via the backend-minted URL (works everywhere — no popup involved);
+   * OFF → the legacy fb.login popup.
+   */
+  const launchConnect = async (pageId: string | null, coexistence: boolean) => {
+    if (!isWhatsAppRedirectConnect()) {
+      void handleConnectWhatsApp(pageId, coexistence);
       return;
     }
     setConnectingWhatsApp(pageId ?? 'new');
     try {
-      const { launchWhatsAppSignup } = await import('@/lib/whatsappSignup');
-      // RECONNECT MUST PRESERVE THE ONBOARDING PATH. This same handler backs the
-      // "reconnect required" banner, so a Coexistence number whose 60-day token
-      // expired comes back through here. Re-running Embedded Signup WITHOUT
-      // requesting coexistence puts Meta on the migration path, the backend then
-      // registers the number against the Cloud API, and it is taken off the
-      // merchant's WhatsApp Business app — permanently, silently, and it is the
-      // exact outcome Coexistence exists to prevent.
+      addErrorBreadcrumb('whatsapp-connect', 'starting redirect signup', { coexistence, hasPage: !!pageId });
+      const { startWhatsAppConnect } = await import('@/lib/whatsappRedirect');
+      await startWhatsAppConnect({ pageId, coexistence, locale: language });
+      // The page navigates away; the connecting state is only visible if the
+      // navigation is slow, and is reset by the failure path below otherwise.
+    } catch (error) {
+      setConnectingWhatsApp(null);
+      const code = (error as { response?: { data?: { code?: string } } }).response?.data?.code;
+      if (code === 'WHATSAPP_PLAN_REQUIRED') {
+        toast.error(t(iosOr('whatsappPlanRequiredIOS', 'whatsappPlanRequired')));
+      } else {
+        captureError(error, 'Failed to start WhatsApp redirect connect', { tags: { page: 'pages', action: 'whatsapp-connect' } });
+        toast.error(t('whatsappConnectFailed'));
+      }
+    }
+  };
+
+  const requestConnectWhatsApp = async (pageId: string | null) => {
+    addErrorBreadcrumb('whatsapp-connect', 'connect requested', {
+      native: Capacitor.isNativePlatform(),
+      mobileBrowser: isMobileBrowser(),
+      redirectFlow: isWhatsAppRedirectConnect(),
+      hasPage: !!pageId,
+    });
+    const redirectFlow = isWhatsAppRedirectConnect();
+    if (Capacitor.isNativePlatform()) {
+      if (redirectFlow) {
+        // Redirect flow: the whole signup is plain navigations, which an
+        // in-app Custom Tab handles fine (Facebook page connect proves it) —
+        // the merchant never visibly leaves the app.
+        //
+        // Session bridge: the app's JWT lives under a different origin, so the
+        // browser used to greet the merchant with a LOGIN WALL — which proved
+        // fragile on-device (Custom-Tab FB login hung, 2026-07-30). Exchange
+        // the app session for a 10-minute handoff token and open /auth/sync,
+        // which signs the browser in and forwards straight to the connect
+        // intent: no login UI anywhere in the chain. Falls back to the /login
+        // wall only if the handoff mint fails.
+        addErrorBreadcrumb('whatsapp-connect', 'opening custom tab handoff', { hasPage: !!pageId });
+        const { openExternalUrl } = await import('@/lib/openExternalUrl');
+        const { buildWebUrl, buildWebAuthedUrl } = await import('@/lib/webUrl');
+        const resumePath = pageId
+          ? `/pages?connectWhatsApp=true&waPage=${encodeURIComponent(pageId)}`
+          : '/pages?connectWhatsApp=true';
+        try {
+          const { api } = await import('@/lib/api');
+          const { data } = await api.post<{ token: string }>('/auth/browser-handoff');
+          await openExternalUrl(buildWebUrl(
+            `/auth/sync?token=${encodeURIComponent(data.token)}&redirect=${encodeURIComponent(resumePath)}`,
+            language,
+          ));
+        } catch (error) {
+          addErrorBreadcrumb('whatsapp-connect', 'handoff mint failed; falling back to login wall', {});
+          captureError(error, 'Browser handoff mint failed', { tags: { page: 'pages', action: 'whatsapp-connect' } });
+          await openExternalUrl(buildWebAuthedUrl(resumePath, language));
+        }
+        return;
+      }
+      // Legacy popup flow: Embedded Signup needs a REAL browser (popups), and
+      // even there phone browsers open the popup unreliably — say so up front,
+      // with "try on this device" as the explicit escape hatch.
+      setWhatsAppDesktopNotice(() => () => { void handOffConnectToBrowser(pageId); });
+      return;
+    }
+    const proceed = () => {
       const existingPage = pageId ? pages.find(p => p.id === pageId) : null;
-      const result = await launchWhatsAppSignup({
-        coexistence: existingPage?.whatsappCoexistence === true,
+      if (existingPage?.whatsappConnected) {
+        // RECONNECT MUST PRESERVE THE ONBOARDING PATH. Re-running Embedded Signup
+        // WITHOUT requesting coexistence puts Meta on the migration path, the
+        // backend then registers the number against the Cloud API, and it is taken
+        // off the merchant's WhatsApp Business app — permanently, silently, and it
+        // is the exact outcome Coexistence exists to prevent. (The redirect
+        // backend re-derives the stored path itself; passing it here keeps the
+        // two flows contract-identical.)
+        void launchConnect(pageId, existingPage.whatsappCoexistence === true);
+        return;
+      }
+      setWhatsAppPathPageId(pageId ?? 'new');
+    };
+    // The desktop-guidance dialog is a POPUP-flow artifact: with the redirect
+    // flow there is nothing a phone browser does worse than a desktop one.
+    if (!redirectFlow && isMobileBrowser()) {
+      setWhatsAppDesktopNotice(() => proceed);
+      return;
+    }
+    proceed();
+  };
+
+  /**
+   * Run the Embedded Signup popup and connect the resulting number.
+   * pageId set → attach to that Facebook-backed page card.
+   * pageId null → create a new WhatsApp-only card (no Facebook page).
+   * coexistence → which onboarding path to ask Meta for.
+   */
+  const handleConnectWhatsApp = async (pageId: string | null, coexistence: boolean) => {
+    setConnectingWhatsApp(pageId ?? 'new');
+    try {
+      const { launchWhatsAppSignup } = await import('@/lib/whatsappSignup');
+      addErrorBreadcrumb('whatsapp-connect', 'launching embedded signup', {
+        coexistence, mobileBrowser: isMobileBrowser(),
+      });
+      // Requested path: the merchant's answer on a first connect, the number's
+      // stored path on a reconnect. Both are decided by requestConnectWhatsApp.
+      const result = await launchWhatsAppSignup({ coexistence });
+      addErrorBreadcrumb('whatsapp-connect', 'embedded signup finished', {
+        coexistence: result.coexistence,
       });
       const body = {
         code: result.code,
@@ -498,18 +770,23 @@ const PagesPage: NextPageWithLayout = () => {
         // leaves their phone) and, later, the default reply mode.
         coexistence: result.coexistence,
       };
-      let connectedPageId: string;
+      // Track the page OBJECT, not just its id: a WhatsApp-only card is created
+      // in this very call, so the `pages` closure captured at render time does
+      // not contain it and a later `pages.find(...)` would silently miss.
+      let connectedPage: Page;
       if (pageId) {
         const response = await api.post(`/pages/${pageId}/connect-whatsapp`, body);
         const updated = response.data as Partial<Page>;
         setPages(prev => prev.map(p => (p.id === pageId ? { ...p, ...updated } : p)));
-        connectedPageId = pageId;
+        const existing = pages.find(p => p.id === pageId);
+        connectedPage = { ...(existing as Page), ...updated, id: pageId };
       } else {
         const response = await api.post('/pages/connect-whatsapp', body);
         const created = response.data as Page;
         setPages(prev => [...prev, created]);
-        connectedPageId = created.id;
+        connectedPage = created;
       }
+      const connectedPageId = connectedPage.id;
       toast.success(t('whatsappConnectSuccess'));
 
       // Parity with Facebook pages (which arrive enabled): try to switch
@@ -519,8 +796,21 @@ const PagesPage: NextPageWithLayout = () => {
       try {
         await api.patch(`/pages/${connectedPageId}/whatsapp-auto-reply`, { enabled: true });
         setPages(prev => prev.map(p => (p.id === connectedPageId ? { ...p, whatsappAutoReplyEnabled: true } : p)));
-      } catch {
-        // Gated (402/403) or transient — leave off; the toggle is right there.
+      } catch (enableError) {
+        // A WhatsApp-ONLY card always lands here: it is created with no Business
+        // Info (there is no Facebook page to seed it from), so the readiness gate
+        // refuses the enable by design. That is the correct outcome — an AI with
+        // nothing to answer from must not greet real customers — but it must not
+        // be SILENT, or the merchant is left with a connected number, a toggle
+        // that is mysteriously off, and no idea why. Send them to the editor.
+        const code = (enableError as { response?: { data?: { code?: string } } })
+          .response?.data?.code;
+        if (code === 'BUSINESS_INFO_REQUIRED') {
+          toast.info(t('whatsappConnectedAddBusinessInfo'));
+          openKbEditorFor(connectedPage);
+        }
+        // Any other gate (402/403) or a transient failure — leave off; the
+        // toggle is right there and the billing surfaces explain themselves.
       }
     } catch (error) {
       const err = error as { message?: string; response?: { data?: { code?: string } } };
@@ -758,7 +1048,7 @@ const PagesPage: NextPageWithLayout = () => {
                   {isOwner && (
                     <Button
                       size="sm"
-                      onClick={() => handleConnectWhatsApp(page.id)}
+                      onClick={() => requestConnectWhatsApp(page.id)}
                       disabled={connectingWhatsApp === page.id}
                       className="w-full"
                       icon={<LinkIcon className="w-3.5 h-3.5" />}
@@ -938,7 +1228,7 @@ const PagesPage: NextPageWithLayout = () => {
                         <Button
                           size="sm"
                           variant="secondary"
-                          onClick={() => handleConnectWhatsApp(page.id)}
+                          onClick={() => requestConnectWhatsApp(page.id)}
                           disabled={connectingWhatsApp === page.id}
                         >
                           {connectingWhatsApp === page.id ? t('whatsappConnecting') : t('whatsappConnectButton')}
@@ -1128,10 +1418,54 @@ const PagesPage: NextPageWithLayout = () => {
         }}
         onPickWhatsApp={() => {
           setShowChannelPicker(false);
-          handleConnectWhatsApp(null);
+          void requestConnectWhatsApp(null);
         }}
         whatsappAvailable={whatsappVisible && whatsappEntitled === true}
         whatsappConnecting={connectingWhatsApp === 'new'}
+      />
+
+      {/* Desktop guidance before a phone attempts Embedded Signup. Meta's wizard
+          is a fb.login popup; phone browsers open it unreliably (mobile Chrome
+          never painted it, 2026-07-30), so the deterministic path — and the
+          industry standard among WhatsApp providers — is a desktop browser.
+          "Try on this device" runs the stored continuation for browsers that do
+          allow the popup. */}
+      <ConfirmationModal
+        isOpen={whatsAppDesktopNotice !== null}
+        onClose={() => setWhatsAppDesktopNotice(null)}
+        onConfirm={() => {
+          const proceed = whatsAppDesktopNotice;
+          setWhatsAppDesktopNotice(null);
+          proceed?.();
+        }}
+        title={t('whatsappDesktopNeededTitle')}
+        message={t('whatsappDesktopNeededBody')}
+        confirmText={t('whatsappDesktopTryAnyway')}
+        variant="info"
+      />
+
+      {/* Onboarding-path question — first connect only (see requestConnectWhatsApp) */}
+      <WhatsAppPathModal
+        isOpen={whatsAppPathPageId !== null}
+        onClose={() => setWhatsAppPathPageId(null)}
+        onChoose={(coexistence) => {
+          // Read before clearing — the modal only renders while this is set, so
+          // by the time onChoose can fire it is never null.
+          const target = whatsAppPathPageId;
+          const prepared = waPreparedUrls;
+          setWhatsAppPathPageId(null);
+          // Navigate SYNCHRONOUSLY with the tap when the URLs were pre-minted:
+          // mobile Chrome silently dropped a location.assign issued after an
+          // async round-trip (2026-07-30). Fall back to the async start when the
+          // pre-mint hasn't landed (slow network / failed) — it also owns the
+          // error toasts.
+          if (prepared && isWhatsAppRedirectConnect()) {
+            addErrorBreadcrumb('whatsapp-connect', 'navigating with pre-minted url', { coexistence });
+            openWhatsAppSignupUrl(prepared[coexistence ? 'coexistence' : 'dedicated']);
+            return;
+          }
+          void launchConnect(target === 'new' ? null : target, coexistence);
+        }}
       />
 
       {/* Connect Page confirmation dialog */}

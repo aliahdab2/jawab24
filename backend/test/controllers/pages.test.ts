@@ -49,11 +49,26 @@ vi.mock('../../src/services/auditLog', () => ({
     logAutoReplyToggle: vi.fn(),
 }));
 
+// The readiness gate hits the DB (catalog probe) and the store service. This
+// suite is about the billing/trial/disconnect gates, so default to "the page is
+// grounded" and let the dedicated tests below flip it.
+vi.mock('../../src/services/businessReadiness', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../src/services/businessReadiness')>()),
+    businessInfoGate: vi.fn().mockResolvedValue(null),
+}));
+
 // Import after mocks
 import { pagesController } from '../../src/controllers/pages';
 import { pagesService } from '../../src/services/pages';
 import { subscriptionsService } from '../../src/services/subscriptions';
 import { logAutoReplyToggle } from '../../src/services/auditLog';
+import { businessInfoGate } from '../../src/services/businessReadiness';
+
+// What businessInfoGate returns for a page with nothing to answer from.
+const BUSINESS_INFO_REFUSAL = {
+    status: 409,
+    body: { error: 'Add your Business Info', code: 'BUSINESS_INFO_REQUIRED' },
+} as const;
 
 describe('Pages Controller', () => {
     let mockRequest: Partial<WorkspaceRequest>;
@@ -61,6 +76,9 @@ describe('Pages Controller', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // Re-armed after clearAllMocks: a cleared mock resolves undefined, which
+        // the readiness gate reads as "ungrounded" and would 409 every enable.
+        vi.mocked(businessInfoGate).mockResolvedValue(null);
         mockReply = {
             status: vi.fn().mockReturnThis(),
             send: vi.fn().mockReturnThis(),
@@ -277,6 +295,33 @@ describe('Pages Controller', () => {
             await pagesController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
 
             expect(logAutoReplyToggle).not.toHaveBeenCalled();
+        });
+
+        it('409s BUSINESS_INFO_REQUIRED on enable when the page has nothing to answer from', async () => {
+            vi.mocked(businessInfoGate).mockResolvedValue(BUSINESS_INFO_REFUSAL);
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok' } as any);
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { enabled: true };
+
+            await pagesController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(409);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'BUSINESS_INFO_REQUIRED' }));
+            expect(pagesService.toggleAutoReply).not.toHaveBeenCalled();
+        });
+
+        it('never blocks DISABLING an ungrounded page', async () => {
+            // A merchant who emptied their Business Info must still be able to
+            // switch the bot off — the gate must never trap them with a live bot.
+            vi.mocked(businessInfoGate).mockResolvedValue(BUSINESS_INFO_REFUSAL);
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok', autoReplyEnabled: true } as any);
+            vi.mocked(pagesService.toggleAutoReply).mockResolvedValue({ id: 'page-1', autoReplyEnabled: false, facebookPageId: 'fb-1', accessToken: 'tok' } as any);
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { enabled: false };
+
+            await pagesController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
+
+            expect(pagesService.toggleAutoReply).toHaveBeenCalledWith('test_workspace_id', 'page-1', false);
         });
     });
 

@@ -15,6 +15,7 @@ vi.mock('next/router', () => ({
         push: vi.fn(),
         replace: vi.fn(),
         pathname: '/login',
+        isReady: true,
     })),
 }));
 
@@ -101,6 +102,7 @@ describe('LoginPage', () => {
             pathname: '/login',
             asPath: '/login',
             events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+                isReady: true,
         });
 
         // Spy on toast
@@ -163,6 +165,7 @@ describe('LoginPage', () => {
                 pathname: '/login',
                 asPath: '/login?reconnect=facebook&redirect=/pages',
                 events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+                isReady: true,
             });
             window.location.search = '?reconnect=facebook&redirect=/pages';
 
@@ -332,6 +335,7 @@ describe('LoginPage', () => {
                 pathname: '/login',
                 asPath: '/login',
                 events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+                isReady: true,
             });
 
             await act(async () => {
@@ -351,6 +355,7 @@ describe('LoginPage', () => {
                 pathname: '/login',
                 asPath: '/login?redirect=/settings',
                 events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+                isReady: true,
             });
 
             await act(async () => {
@@ -371,6 +376,7 @@ describe('LoginPage', () => {
                 pathname: '/login',
                 asPath: '/login',
                 events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+                isReady: true,
             });
 
             await act(async () => {
@@ -390,6 +396,7 @@ describe('LoginPage', () => {
                 pathname: '/login',
                 asPath: '/login',
                 events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+                isReady: true,
             });
 
             await act(async () => {
@@ -397,6 +404,46 @@ describe('LoginPage', () => {
             });
 
             expect(mockReplace).not.toHaveBeenCalled();
+        });
+
+        it('waits for router.isReady — must NOT forward to /dashboard while ?redirect is still unparsed', async () => {
+            // Regression: the WhatsApp connect handoff opens the browser at
+            // /login?redirect=%2Fpages%3FconnectWhatsApp%3Dtrue. On a static
+            // export router.query is {} until hydration finishes; the auth store
+            // can hydrate first. Without the isReady gate the guard read
+            // redirect === undefined and forwarded to /dashboard, destroying the
+            // connect intent (Android, 2026-07-30 — confirmed via nginx logs).
+            mockAuthState.isAuthenticated = true;
+            const mockReplace = vi.fn();
+            const routerNotReady = {
+                query: {}, // ?redirect exists in the URL but is not parsed yet
+                push: vi.fn(),
+                replace: mockReplace,
+                pathname: '/login',
+                asPath: '/login?redirect=%2Fpages%3FconnectWhatsApp%3Dtrue',
+                events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+                isReady: false,
+            };
+            (useRouter as ReturnType<typeof vi.fn>).mockReturnValue(routerNotReady);
+
+            let rerender: (ui: Parameters<typeof render>[0]) => void;
+            await act(async () => {
+                ({ rerender } = render(<LoginPage />));
+            });
+            // The race window: store hydrated + authenticated, query not parsed.
+            expect(mockReplace).not.toHaveBeenCalled();
+
+            // Router finishes parsing the URL → NOW the guard may forward, and
+            // it must forward to the carried intent, not the /dashboard default.
+            (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+                ...routerNotReady,
+                query: { redirect: '/pages?connectWhatsApp=true' },
+                isReady: true,
+            });
+            await act(async () => {
+                rerender!(<LoginPage />);
+            });
+            expect(mockReplace).toHaveBeenCalledWith('/pages?connectWhatsApp=true');
         });
 
         it('should ignore non-relative redirect paths (open redirect protection)', async () => {
@@ -409,6 +456,7 @@ describe('LoginPage', () => {
                 pathname: '/login',
                 asPath: '/login?redirect=https://evil.com',
                 events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+                isReady: true,
             });
 
             await act(async () => {

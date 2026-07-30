@@ -18,6 +18,15 @@ vi.mock('../../src/services/notifications', () => ({
     },
 }));
 
+// Mock workspace settings — escalation gates each workspace on the SAME canonical
+// predicate the reply processors use, so the SLA sweep can't drift from the pipeline.
+vi.mock('../../src/services/workspaceSettings', () => ({
+    workspaceSettingsService: {
+        getSettings: vi.fn(),
+        isAutoReplyEnabledFromSettings: vi.fn(),
+    },
+}));
+
 // Mock schema exports (drizzle needs these for query building)
 vi.mock('../../src/db/schema', () => ({
     comments: { id: 'id', postId: 'post_id', replied: 'replied', resolved: 'resolved', needsAttention: 'needs_attention', createdTime: 'created_time', createdAt: 'created_at', flagReason: 'flag_reason', updatedAt: 'updated_at', fromName: 'from_name', message: 'message' },
@@ -41,7 +50,24 @@ import { runEscalationSweep, startEscalationCron, stopEscalationCron } from '../
 import { db } from '../../src/db';
 import * as schema from '../../src/db/schema';
 import { notificationService } from '../../src/services/notifications';
+import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { eq, sql } from 'drizzle-orm';
+
+/** Settings object shape the escalation gate forwards to the canonical predicate. */
+const ENABLED_SETTINGS = {
+    messagesAutoReply: true,
+    commentsAutoReply: true,
+    businessHoursOnly: false,
+    businessHoursStart: '09:00',
+    businessHoursEnd: '17:00',
+    timezone: 'Africa/Tripoli',
+};
+
+/** Notification types actually sent, for asserting which channel escalated. */
+function sentTypes(): string[] {
+    return (notificationService.sendNotificationToWorkspace as any).mock.calls
+        .map((c: any[]) => c[1].type);
+}
 
 /**
  * Helper: mock the batch-query pattern used by escalateComments / escalateMessages.
@@ -91,6 +117,11 @@ describe('Escalation Service', () => {
         vi.useFakeTimers();
         (notificationService.sendNotification as any).mockResolvedValue('notif-123');
         (notificationService.sendNotificationToWorkspace as any).mockResolvedValue(undefined);
+        // afterEach does resetAllMocks (drops implementations), so re-arm per test.
+        // Default: both channels on and inside hours — the pre-existing assumption
+        // every other case in this file was written against.
+        (workspaceSettingsService.getSettings as any).mockResolvedValue(ENABLED_SETTINGS);
+        (workspaceSettingsService.isAutoReplyEnabledFromSettings as any).mockReturnValue(true);
     });
 
     afterEach(() => {
@@ -172,6 +203,85 @@ describe('Escalation Service', () => {
                 ([field, value]) => field === schema.messages.resolved && value === false,
             );
             expect(filtersOnResolvedFalse).toBe(true);
+        });
+
+        /**
+         * REGRESSION (2026-07-29): `sla_no_reply` fired on channels the merchant had
+         * switched OFF. The sweep filtered only on the per-PAGE
+         * `pages.auto_reply_enabled` master switch, which is a different flag from the
+         * per-channel `messagesAutoReply` / `commentsAutoReply` toggles the pipeline
+         * reads — and turning a channel off does not cascade to the page flag. Result
+         * in prod: 638 false `sla_no_reply` flags on a pharmacy page configured never
+         * to auto-reply. Unfixable from the data side, because we don't ingest
+         * `message_echoes`, so the merchant's own replies are invisible and the flags
+         * never clear.
+         */
+        describe('per-channel auto-reply gate', () => {
+            it('does NOT escalate messages when the messages channel is off (still escalates comments)', async () => {
+                mockBatchSelect(
+                    [{ workspaceId: 'ws-1', itemId: 'c-1', pageName: 'Pharmacy', pageId: 'p1', fromName: 'Ahmad', messageText: 'عندكم بنادول؟', thresholdMinutes: 60 }],
+                    [{ workspaceId: 'ws-1', itemId: 'm-1', pageName: 'Pharmacy', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: 'مرحبا', thresholdMinutes: 30 }],
+                );
+                mockDbUpdate();
+                (workspaceSettingsService.isAutoReplyEnabledFromSettings as any).mockImplementation(
+                    (_s: unknown, channel: string) => channel === 'comments',
+                );
+
+                await runEscalationSweep();
+
+                expect(sentTypes()).toEqual(['stale_comment']);
+                expect(sentTypes()).not.toContain('stale_message');
+            });
+
+            it('does NOT escalate comments when the comments channel is off (still escalates messages)', async () => {
+                mockBatchSelect(
+                    [{ workspaceId: 'ws-1', itemId: 'c-1', pageName: 'Pharmacy', pageId: 'p1', fromName: 'Ahmad', messageText: 'عندكم بنادول؟', thresholdMinutes: 60 }],
+                    [{ workspaceId: 'ws-1', itemId: 'm-1', pageName: 'Pharmacy', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: 'مرحبا', thresholdMinutes: 30 }],
+                );
+                mockDbUpdate();
+                (workspaceSettingsService.isAutoReplyEnabledFromSettings as any).mockImplementation(
+                    (_s: unknown, channel: string) => channel === 'messages',
+                );
+
+                await runEscalationSweep();
+
+                expect(sentTypes()).toEqual(['stale_message']);
+                expect(sentTypes()).not.toContain('stale_comment');
+            });
+
+            /**
+             * Drift guard. Business hours must be honored by DELEGATING to the same
+             * predicate the processors call — never re-implemented here (that would be
+             * a second source of truth for timezone + midnight-wrap arithmetic). This
+             * asserts the sweep forwards the workspace's real settings object, which
+             * carries businessHoursOnly/start/end/timezone, rather than reading the
+             * channel booleans itself.
+             */
+            it('delegates to the canonical predicate with the workspace settings (business hours not reimplemented)', async () => {
+                mockBatchSelect(
+                    [],
+                    [{ workspaceId: 'ws-9', itemId: 'm-1', pageName: 'Shop', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: 'مرحبا', thresholdMinutes: 30 }],
+                );
+                mockDbUpdate();
+
+                await runEscalationSweep();
+
+                expect(workspaceSettingsService.getSettings).toHaveBeenCalledWith('ws-9');
+                expect(workspaceSettingsService.isAutoReplyEnabledFromSettings)
+                    .toHaveBeenCalledWith(ENABLED_SETTINGS, 'messages');
+            });
+
+            it('fails CLOSED when the settings lookup throws (no flag rather than a false one)', async () => {
+                mockBatchSelect(
+                    [],
+                    [{ workspaceId: 'ws-1', itemId: 'm-1', pageName: 'Shop', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: 'مرحبا', thresholdMinutes: 30 }],
+                );
+                mockDbUpdate();
+                (workspaceSettingsService.getSettings as any).mockRejectedValue(new Error('redis down'));
+
+                await expect(runEscalationSweep()).resolves.not.toThrow();
+                expect(notificationService.sendNotificationToWorkspace).not.toHaveBeenCalled();
+            });
         });
 
         it('should send individual notification per stale comment with customer context', async () => {

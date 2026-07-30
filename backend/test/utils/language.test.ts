@@ -6,6 +6,8 @@ import {
     isLowSignalLatinToken,
     isRTL,
     getLanguageName,
+    isCertainDetection,
+    MIN_CERTAIN_CONFIDENCE,
     SupportedLanguage,
 } from '../../src/utils/language';
 
@@ -145,10 +147,15 @@ describe('Language Detection Utility', () => {
         });
 
         it('should detect Turkish by unique chars without common words (fallback)', () => {
-            // İ is a unique Turkish char; no Turkish common words present
+            // İ is a unique Turkish char; no Turkish common words present. Turkish is still
+            // the answer at the same 0.75, but it is now marked as a GUESS — a place name is
+            // not proof of the sentence's language, and the same branch fires on French
+            // «Combien ça coûte ?» off a bare cedilla.
             const result = detectLanguage('İstanbul');
             expect(result.language).toBe('tr');
             expect(result.confidence).toBe(0.75);
+            expect(result.evidence).toBe('characters-only');
+            expect(isCertainDetection(result)).toBe(false);
         });
 
         it('should handle numbers and symbols', () => {
@@ -334,6 +341,81 @@ describe('Language Detection Utility', () => {
         });
     });
 
+    describe('isLowSignalLatinToken — letters WITH punctuation or emoji', () => {
+        /**
+         * The gate above tests punctuation and emoji in ISOLATION ('...', '👍'), which
+         * correctly return false: no letters means no language at all. Letters PLUS
+         * punctuation was never covered, and that is where it breaks — the ASCII test
+         * is /^[a-zA-Z0-9\s]+$/, so one '?' or one emoji disqualifies the whole string.
+         *
+         * This is the failure mode the authors already called "accidental" about the
+         * PREVIOUS gate (see commentPreprocess.ts: "flipped 'which course' to Arabic yet
+         * kept 'what course?' English purely because of the trailing '?'"). The
+         * confidence floor was added to fix it, but the ASCII cap carried it forward.
+         *
+         * Live blast radius: resolveCommentLanguage (comment replies) and
+         * resolveFallbackLanguage (away / quota templates) both key on this predicate.
+         */
+        it('treats a token the same with or without a trailing emoji', () => {
+            expect(isLowSignalLatinToken('ok')).toBe(true);
+            expect(isLowSignalLatinToken('ok 👍')).toBe(true);
+            expect(isLowSignalLatinToken('Excel 🙏')).toBe(true);
+            expect(isLowSignalLatinToken('DONE 🙏🌷')).toBe(true);
+        });
+
+        it('treats Arabizi the same with or without an emoji', () => {
+            // Extremely common real traffic. Losing the token classification here sent
+            // the reply to English on an Arabic post.
+            expect(isLowSignalLatinToken('kam el se3r')).toBe(true);
+            expect(isLowSignalLatinToken('kam el se3r 😍')).toBe(true);
+            expect(isLowSignalLatinToken('sho hal as3ar 😀')).toBe(true);
+            expect(isLowSignalLatinToken('Allah mma barik 💖💕❤️🌹')).toBe(true);
+        });
+
+        it('KEEPS ASCII punctuation significant — deliberate, and measured', () => {
+            // Stripping ASCII punctuation too was tried and rejected: measured against
+            // 7,500 real prod messages it flipped 58.5% of traffic (vs 1.5% for the
+            // emoji-only rule), and it broke genuine English prose — "I don't
+            // understand" and "I'm coming" became "tokens" once the apostrophe went,
+            // which would have answered them in the merchant's default language.
+            // The apostrophe/bracket is an effective proxy for "prose, not a product
+            // name", so the safety cap keeps it.
+            expect(isLowSignalLatinToken("I don't understand")).toBe(false);
+            expect(isLowSignalLatinToken("I'm coming")).toBe(false);
+            expect(isLowSignalLatinToken('[Sticker]')).toBe(false);
+            expect(isLowSignalLatinToken('[Image]')).toBe(false);
+
+            // Consequence, accepted: a trailing '?' still disqualifies a real token.
+            // Not worth widening the rule for — see the measurement above.
+            expect(isLowSignalLatinToken('ICDL?')).toBe(false);
+            expect(isLowSignalLatinToken('kam el se3r?')).toBe(false);
+        });
+
+        it('still keeps genuine English questions out, punctuation or not', () => {
+            // The confidence floor (<=0.5) is the real discriminator and is unaffected by
+            // stripping punctuation: every one of these sits at 0.6+.
+            for (const t of [
+                'how much', 'how much?',
+                'which course', 'which course?',
+                'what is the price?', 'do you deliver?', 'hello!',
+            ]) {
+                expect(isLowSignalLatinToken(t)).toBe(false);
+            }
+        });
+
+        it('still returns false when there are no letters at all', () => {
+            for (const t of ['...', '👍', '', '   ', '?!', '123', '?123?']) {
+                expect(isLowSignalLatinToken(t)).toBe(false);
+            }
+        });
+
+        it('still respects the word-count cap once punctuation is discounted', () => {
+            // 4+ real words remain out of scope for this predicate by design.
+            expect(isLowSignalLatinToken('3ayez a3raf el se3r')).toBe(false);
+            expect(isLowSignalLatinToken('please send me the price list now!')).toBe(false);
+        });
+    });
+
     describe('detectTemplateLanguage (away / greeting / fallback variant picker)', () => {
         it('returns "unknown" for a bare Latin token so callers use the merchant default', () => {
             expect(detectTemplateLanguage('icdl')).toBe('unknown');
@@ -344,6 +426,67 @@ describe('Language Detection Utility', () => {
             expect(detectTemplateLanguage('كم السعر؟')).toBe('ar');
             expect(detectTemplateLanguage('how much is it?')).toBe('en');
             expect(detectTemplateLanguage('hello')).toBe('en');
+        });
+    });
+
+    /**
+     * The single source of truth for "did we actually identify this text?" — consumed by
+     * the DM deferToHistory gate AND by the reply-language directive's certainty signal,
+     * so the two can never drift. Rows are real shapes from the 30-day prod corpus.
+     */
+    describe('isCertainDetection', () => {
+        const certainty = (text: string) => isCertainDetection(detectLanguage(text));
+
+        it('is FALSE for the en@0.5 floor — "Latin script, recognized nothing"', () => {
+            // 68.77% of Latin-script inbound traffic looks like this. None of it may be
+            // asserted to the model as "the customer wrote in English".
+            expect(certainty('Quels cours proposez-vous ?')).toBe(false); // accent-free French
+            expect(certainty('13k lang po Yung marketing management')).toBe(false); // Tagalog
+            expect(certainty('160 dinar right')).toBe(false);
+            expect(certainty('kam el se3r')).toBe(false); // Arabizi
+            expect(certainty('ICDL')).toBe(false);
+        });
+
+        it('is FALSE for text with no language signal at all', () => {
+            expect(certainty('...')).toBe(false);
+            expect(certainty('👍')).toBe(false);
+            expect(certainty('')).toBe(false);
+        });
+
+        it('is TRUE for English with real English stopwords', () => {
+            expect(certainty('What is the price of the nursing course please?')).toBe(true);
+            expect(certainty('Hello, how are you doing today?')).toBe(true);
+        });
+
+        it('is TRUE for a named non-English language with real evidence', () => {
+            expect(certainty('ما هي الدورات المتوفرة؟')).toBe(true); // Arabic script
+            expect(certainty('Bu kurs için fiyat ne kadar?')).toBe(true); // Turkish chars + "için"
+        });
+
+        it('is FALSE for a language named from CHARACTERS ALONE', () => {
+            // These still resolve to 'tr' — they just stop being asserted as the
+            // customer's language. The cedilla cases are why: the same branch called
+            // «Combien ça coûte ?» Turkish and the bot answered a French customer in
+            // Turkish (prod, 30-day corpus, 2026-07-29).
+            expect(certainty('Hangi kurslarınız var?')).toBe(false);
+            expect(certainty('Merhaba, nasılsınız? Teşekkürler.')).toBe(false);
+            expect(certainty('Combien ça coûte ?')).toBe(false);
+            expect(certainty('Française')).toBe(false);
+            expect(certainty('Ahmet Çelebi')).toBe(false);
+        });
+
+        it('applies the confidence threshold to en ONLY, and reads `evidence` for the rest', () => {
+            expect(isCertainDetection({ language: 'en', confidence: MIN_CERTAIN_CONFIDENCE, script: 'Latin', isRTL: false })).toBe(true);
+            expect(isCertainDetection({ language: 'en', confidence: MIN_CERTAIN_CONFIDENCE - 0.1, script: 'Latin', isRTL: false })).toBe(false);
+            expect(isCertainDetection({ language: 'unknown', confidence: 1, script: 'unknown', isRTL: false })).toBe(false);
+            // `evidence` — not a numeric threshold — is what marks a guess. It has to be a
+            // separate field: Arabic's confidence is a character RATIO, so ANY blanket
+            // threshold would mark genuine Arabic uncertain and soften the hard directive
+            // on the money path (441 rows of a 30-day corpus, e.g. `دورة ICDL` → ar@0.545).
+            expect(isCertainDetection({ language: 'tr', confidence: 0.75, script: 'Latin', isRTL: false, evidence: 'characters-only' })).toBe(false);
+            expect(isCertainDetection({ language: 'ar', confidence: 0.545, script: 'Arabic', isRTL: true })).toBe(true);
+            expect(isCertainDetection({ language: 'ar', confidence: 0.03, script: 'Arabic', isRTL: true })).toBe(true);
+            expect(isCertainDetection({ language: 'fr', confidence: 0.5, script: 'Latin', isRTL: false })).toBe(true);
         });
     });
 });

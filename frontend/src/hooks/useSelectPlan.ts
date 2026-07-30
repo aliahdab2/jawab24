@@ -8,7 +8,7 @@ import { api, subscriptionApi } from '@/lib/api';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
-import { buildWebUrl } from '@/lib/webUrl';
+import { buildWebAuthedUrl } from '@/lib/webUrl';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 
@@ -74,7 +74,7 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
       if (!isAuthenticated) {
         // Can't create a session without auth — fall back to the old web flow.
         const checkoutPath = `/checkout?planId=${planId}&interval=${billingInterval}`;
-        await openExternalUrl(buildWebUrl(`/login?redirect=${encodeURIComponent(checkoutPath)}`, router.locale));
+        await openExternalUrl(buildWebAuthedUrl(checkoutPath, router.locale));
         return;
       }
       setChangingPlan(planId);

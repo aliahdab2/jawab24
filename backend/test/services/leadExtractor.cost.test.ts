@@ -121,6 +121,70 @@ describe('leadExtractor cost logging', () => {
         expect(logAiUsageMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4.1-mini' }));
     });
 
+    // Regression: JAWAB24-BACKEND-1N (prod 2026-07-29). max_tokens was 500, a
+    // re-extraction hit the cap, and the cut JSON surfaced as a bare
+    // "SyntaxError: Unexpected end of JSON input" at the JSON.parse line — no
+    // signal that the cap was the cause. Two invariants below: the cap is large
+    // enough for a real multi-person card, and truncation names itself.
+    it('requests enough output tokens for a full bilingual card', async () => {
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ phone: '+1234', fields: [] }) } }],
+            usage: undefined,
+        });
+
+        const callExtractionAI = (leadExtractorService as unknown as {
+            callExtractionAI: (c: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
+        }).callExtractionAI.bind(leadExtractorService);
+
+        await callExtractionAI('Customer: hi', { userId: 'user-1', pageId: 'page-1' });
+
+        const { max_tokens: maxTokens } = openaiCreateMock.mock.calls[0][0];
+        expect(maxTokens).toBeGreaterThanOrEqual(1500);
+    });
+
+    it('throws a truncation-specific error when the model hits max_tokens', async () => {
+        // finish_reason='length' → the JSON-mode object is cut mid-token. Half an
+        // object is what prod actually returned; the guard must fire before parse.
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ finish_reason: 'length', message: { content: '{"phone":"+1234","fields":[{"key":"na' } }],
+            usage: { prompt_tokens: 900, completion_tokens: 1500, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        const callExtractionAI = (leadExtractorService as unknown as {
+            callExtractionAI: (c: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
+        }).callExtractionAI.bind(leadExtractorService);
+
+        await expect(callExtractionAI('Customer: hi', { userId: 'user-1', pageId: 'page-1' }))
+            .rejects.toThrow(/truncated at max_tokens/);
+
+        // The call was billed even though the content is unusable — cost must still
+        // be attributed, so the guard sits after logAiUsage.
+        expect(logAiUsageMock).toHaveBeenCalledWith(expect.objectContaining({
+            pipeline: 'lead_extraction',
+            tokensOut: 1500,
+        }));
+    });
+
+    it('reports unparseable JSON without leaking the transcript-derived content', async () => {
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ finish_reason: 'stop', message: { content: 'not json — 0912345678 Majd' } }],
+            usage: undefined,
+        });
+
+        const callExtractionAI = (leadExtractorService as unknown as {
+            callExtractionAI: (c: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
+        }).callExtractionAI.bind(leadExtractorService);
+
+        await expect(callExtractionAI('Customer: hi', { userId: 'user-1', pageId: 'page-1' }))
+            .rejects.toThrow(/unparseable JSON \(26 chars\)/);
+
+        // The error message reaches Sentry — it must not carry the phone/name.
+        await callExtractionAI('Customer: hi', { userId: 'user-1', pageId: 'page-1' }).catch((err: Error) => {
+            expect(err.message).not.toContain('0912345678');
+            expect(err.message).not.toContain('Majd');
+        });
+    });
+
     it('skips logging when OpenAI returns no usage (defensive)', async () => {
         openaiCreateMock.mockResolvedValue({
             choices: [{ message: { content: JSON.stringify({ phone: '', fields: [] }) } }],

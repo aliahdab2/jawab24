@@ -55,9 +55,11 @@ Consequences the code must uphold:
 messageProcessor / commentProcessor  (after reply — fire-and-forget, NEVER awaited)
     └─ maybeCaptureLead()
          1. region hint      workspace timezone → defaultCountry (Redis-cached settings)
-         2. gate text        stripForwardedPostBlocks(messageText)
+         2. gate text        customerAuthoredGateText(messageText) — strips [Shared post: …] blocks;
+                             an image-message body ([Image: …]/[صورة: …]) contributes NO gate text
          3. cheap pre-gate   extractPhones(gateText) empty? → maybeReextractLead() and stop
-         4. exclusion set    KB business phones + prior merchant turns (+ post text for comments)
+         4. exclusion set    KB business phones + prior merchant turns + image-message turns
+                             (+ post text for comments)
          5. real gate        extractCustomerPhones(gateText, businessTexts)[0] — empty → re-extract path
          6. daily budget     leads:extraction:{ws}:{date} (Redis, fail-open)
          7. AI extraction    EXTRACTION_PROMPT over the 20-turn transcript
@@ -92,6 +94,7 @@ matched cross-format (E.164 + last-9-digit tail). The exclusion set:
 | KB business phones (`getBusinessPhones`, Redis 1 h) | customer pastes/types the merchant's published line | June 2026 — 8 bogus leads dialing the merchant |
 | **Prior** merchant turns of this conversation (`priorBusinessTurns`) | customer pastes our earlier reply back (e.g. to translate it) | June 2026 — ICDL paste-back |
 | Forwarded `[Shared post: "…"]` blocks — stripped from gate text AND fed to the exclusion | customer forwards the merchant's own ad whose body ends with the merchant's number | June 2026 — Nourva ad forwards |
+| Image-message turns (`imageTurnTexts`) — the whole body is dropped from gate text AND every image turn in the history joins the exclusion | numbers OCR'd from a photo the customer shared (a doctor's prescription stamp, another clinic's flyer footer) — third-party contact lines, never the customer's | July 2026 — Port Said hospital, 3/3 leads |
 | Comment path: the post text | merchant's number in their own post | — |
 
 **The temporal cutoff is the subtle part.** `priorBusinessTurns` keeps only
@@ -109,9 +112,12 @@ reason the comment path excludes the post but **not** `replyText`.
 
 gpt-4.1-mini over the last 20 turns (`Customer:` / `Agent:` labels), returns
 `{phone, summary, fields[]}`. Rules baked into the prompt: extract **only from
-Customer turns**; quoted/pasted Agent text is not customer data; multi-person
-conversations emit one `name_N`/`phone_N` field pair per person; summary in the
-customer's language.
+Customer turns**; quoted/pasted Agent text is not customer data; `[Image: …]` /
+`[صورة: …]` turns are machine OCR of a shared photo whose contact details belong
+to the photographed document's author, never the Customer (belt-and-braces — the
+code-level gate/exclusion is the real defense, the prompt rule alone failed 3/3
+in prod); multi-person conversations emit one `name_N`/`phone_N` field pair per
+person; summary in the customer's language.
 
 **Never trust the AI phone blindly.** It is re-validated through
 `extractCustomerPhones` before it may replace the gate phone — the model has
@@ -196,6 +202,7 @@ call (~$0.0004; daily caps bound the damage).
 | 2026-07-14 | **Echo-drop**: 17 real leads never written | our confirmation reply echoed the customer's number → exclusion ate it → `rawPhone=null` → NOT NULL → no row | `priorBusinessTurns` temporal cutoff (`f2d4ba7e`); backfill + enrichment via `reextractLeadNow` |
 | 2026-07-02 | "Leads not caught" (Nourva) — cards missing post-phone details; search couldn't find lead #78 | one-shot extraction; client-side-only search | follow-up re-extraction + merge; server-side search (#390) |
 | 2026-07-25 | **Two-person lead mispaired** (الدمشقي): parent registered two daughters; card showed daughter A's name with daughter B's number on the buttons, daughter B's name lost entirely | `phone` column silently overwritten on conflict (the one destructive field in an otherwise non-destructive upsert); prompt had no multi-person convention, so `name` collapsed per-key | preserve displaced number as card field; prompt emits `name_N`/`phone_N` pairs per person; regression test from the real conversation |
+| 2026-07-29 | **Image-OCR numbers as lead phones** (Port Said hospital): all 3 leads captured that day had an external doctor's/clinic's number from a customer's prescription/flyer photo as `phone` — call buttons dialed a psychiatrist's personal mobile | vision stores the photo as `[صورة: <OCR>]` message text; the gate treated it as customer-typed, and the prompt's sender-ownership rule alone didn't hold (3/3) | `customerAuthoredGateText` drops image bodies from the gate; `imageTurnTexts` joins the exclusion set so the AI can't lift an image number from the transcript; explicit image-marker prompt rule; regression test from the real payloads |
 
 ## Known gaps (open)
 

@@ -7,7 +7,7 @@ import { Card, Button, UpgradeCTA, InfoPopover } from '@/components/ui';
 import { BuyTopUpCTA } from '@/components/billing/BuyTopUpCTA';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { formatQuotaResetDate } from '@/lib/formatDate';
-import type { UsageSummary } from '@jawab24/shared';
+import { resolveAiQuotaStatus, type UsageSummary } from '@jawab24/shared';
 
 interface AiUsageWarningBannerProps {
     aiReplies: UsageSummary['aiReplies'];
@@ -29,11 +29,18 @@ interface AiUsageWarningBannerProps {
  * Proactive banner that warns users as they approach or hit their monthly
  * AI-reply limit. Shown on the dashboard above the plan card.
  *
- * - Hidden below 80% or for unlimited plans (limit === null).
- * - Violet warning at 80–99% — swipe to dismiss for 24h.
- * - Info banner at >=100% WITH a top-up balance — Smart Replies still send
+ * States are derived from the shared plan+top-up runway policy
+ * (`resolveAiQuotaStatus`), never from percent-of-plan-cap — the cap is a billing
+ * boundary, and top-up carries replies past it.
+ *
+ * - Hidden for unlimited plans, below the near-wall threshold, AND for a near-cap
+ *   merchant whose top-up balance comfortably absorbs the overflow (nothing stops).
+ * - Violet warning approaching the real wall — swipe to dismiss for 24h.
+ * - Info banner past the cap with a healthy balance — Smart Replies still send
  *   from top-up, so this is reassuring, not alarming, and swipe-dismissible for 24h.
- * - Red critical banner at >=100% with NO top-up balance — not dismissible
+ * - Violet warning past the cap with a nearly-drained balance — replies are about
+ *   to stop, so it must NOT wear the calm styling.
+ * - Red critical banner once plan and balance are both spent — not dismissible
  *   (Smart Replies are genuinely paused).
  *
  * The warning/top-up states can be swipe-dismissed (drag horizontally past
@@ -43,28 +50,44 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
     const tSub = useTranslations('subscription');
     const locale = useLocale();
 
-    const { used, limit, percentUsed } = aiReplies;
-    const limitReached = limit !== null && percentUsed >= 100;
-    // Top-up balance keeps Smart Replies running past the plan wall — a positive
-    // balance turns the "limit reached" state into a calm informational one.
-    const onTopup = limitReached && (topupBalance ?? 0) > 0;
-    const isCritical = limitReached && !onTopup;
-    const isWarning = limit !== null && percentUsed >= 80 && percentUsed < 100;
+    const { used, limit } = aiReplies;
+    // The plan cap is a billing boundary, not the wall: canUseAiReplies falls
+    // through to the top-up balance, so every state here is derived from the
+    // shared runway policy (plan + top-up) instead of percent-of-cap. Without it
+    // this banner alarmed a merchant at 87% of a 10,000 plan who had 9,417 top-up
+    // replies banked — nothing was going to stop.
+    const quota = resolveAiQuotaStatus({ used, limit, topupBalance: topupBalance ?? 0 });
+    // Plan quota AND balance both spent — Smart Replies really have paused.
+    const isCritical = quota.state === 'exhausted';
+    // Past the cap with a real runway behind it: reassuring, not alarming.
+    const onTopup = quota.state === 'on_topup' && !quota.nearWall;
+    // Past the cap but the balance is nearly gone. NOT the calm notice — promising
+    // "no interruption" to a merchant with a handful of replies left is a lie.
+    const isTopupLow = quota.state === 'on_topup' && quota.nearWall;
+    // Approaching the wall. A near-cap merchant whose balance covers the overflow
+    // is deliberately NOT warned; one whose balance is too thin to change the
+    // outcome (`nearWall`) still is.
+    const isWarning = quota.state === 'near_cap'
+        || (quota.state === 'near_cap_on_topup' && quota.nearWall);
     // Pro is the top public tier, and Scale plans sit above it — both should be
     // pointed at the hidden high-volume plans rather than the public /pricing grid.
     const atTopPublicTier = planSlug === 'pro' || (planSlug?.startsWith('scale-') ?? false);
 
     // Separate dismiss keys per state so each re-shows independently: hitting the
-    // limit re-shows even if the 80% warning was dismissed, and the top-up notice
-    // (no action needed) can be dismissed without affecting the warning.
+    // limit re-shows even if the 80% warning was dismissed, the top-up notice
+    // (no action needed) can be dismissed without affecting the warning, and the
+    // balance running low re-shows even if the calm notice was dismissed earlier.
     const warning = useTimedDismiss({ key: 'aiUsageWarning80DismissedAt', durationMs: 24 * 60 * 60 * 1000 });
     const topupNotice = useTimedDismiss({ key: 'aiUsageOnTopupDismissedAt', durationMs: 24 * 60 * 60 * 1000 });
+    const topupLowNotice = useTimedDismiss({ key: 'aiUsageTopupLowDismissedAt', durationMs: 24 * 60 * 60 * 1000 });
 
     // Swipe-to-dismiss replaces the old dismiss button. Only the non-critical
     // states are dismissible — the critical banner stays pinned because Smart
     // Replies are genuinely paused and the merchant must see it.
-    const swipeable = isWarning || onTopup;
-    const dismiss = isWarning ? warning.dismiss : topupNotice.dismiss;
+    const swipeable = isWarning || onTopup || isTopupLow;
+    const dismiss = isWarning
+        ? warning.dismiss
+        : isTopupLow ? topupLowNotice.dismiss : topupNotice.dismiss;
 
     const startXRef = useRef(0);
     const [dragX, setDragX] = useState(0);
@@ -97,9 +120,10 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
         };
     }, [isDragging, dismiss]);
 
-    if (limit === null || (!isWarning && !limitReached)) return null;
+    if (limit === null || (!isWarning && !isTopupLow && !onTopup && !isCritical)) return null;
     if (isWarning && warning.dismissed) return null;
     if (onTopup && topupNotice.dismissed) return null;
+    if (isTopupLow && topupLowNotice.dismissed) return null;
 
     // With time: a merchant staring at a paused-replies banner needs to know
     // WHEN today/tomorrow it un-pauses, not just the calendar date.
@@ -129,8 +153,10 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
         }
         : undefined;
 
-    // Warning (80–99%) is amber in light / soft violet in dark — see the
+    // Both warning states (approaching the wall, and running on a nearly-drained
+    // balance) fall through to amber in light / soft violet in dark — see the
     // `.alert-usage-warning` / `.icon-bg-usage-warning` classes in globals.css.
+    // Only `onTopup` earns the calm sky palette.
     const palette = isCritical
         ? 'bg-rose-50 text-rose-900 border-rose-200 border-s-rose-500 dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60'
         : onTopup
@@ -154,7 +180,7 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
             style={cardStyle}
             padding="none"
             data-testid="ai-usage-warning-banner"
-            data-severity={isCritical ? 'critical' : onTopup ? 'topup' : 'warning'}
+            data-severity={isCritical ? 'critical' : onTopup ? 'topup' : isTopupLow ? 'topup-low' : 'warning'}
             onPointerDown={swipeable ? handlePointerDown : undefined}
         >
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 sm:p-5">
@@ -166,19 +192,23 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
                     <p className="font-bold text-sm sm:text-base leading-tight">
                         {onTopup
                             ? tSub('limitBanner.onTopupTitle')
-                            : isCritical
-                                ? tSub('limitBanner.reachedTitle')
-                                : tSub('limitBanner.warningTitle')}
+                            : isTopupLow
+                                ? tSub('limitBanner.topupLowTitle')
+                                : isCritical
+                                    ? tSub('limitBanner.reachedTitle')
+                                    : tSub('limitBanner.warningTitle')}
                     </p>
                     <p className="text-xs sm:text-sm opacity-80 mt-1">
                         <span className="inline-flex items-center gap-1 flex-wrap">
                             <span>
                                 {onTopup
                                     ? tSub('limitBanner.onTopupUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
-                                    : tSub('limitBanner.usage', {
-                                        used: used.toLocaleString(locale),
-                                        limit: limit.toLocaleString(locale),
-                                    })}
+                                    : isTopupLow
+                                        ? tSub('limitBanner.topupLowUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
+                                        : tSub('limitBanner.usage', {
+                                            used: used.toLocaleString(locale),
+                                            limit: limit.toLocaleString(locale),
+                                        })}
                             </span>
                             <InfoPopover
                                 label={tSub('limitBanner.scopeTooltip')}

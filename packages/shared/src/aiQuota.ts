@@ -9,11 +9,26 @@
 // (a merchant past the cap with balance behind it) or stay calm while replies
 // are about to stop (a merchant past the cap with a nearly-drained balance).
 //
-// That rule had been copy-pasted across the runtime gate, the usage-threshold
-// notifications, the dashboard banner and the admin console — and the admin copy
-// was missing, which is how a merchant with 9,417 top-up replies was told
-// "replies will go silent at the cap". Keep the policy here; consumers map the
-// returned state to their own copy/severity.
+// That rule had been copy-pasted across every surface that talks about the cap,
+// and the admin console was missing it altogether — which is how a merchant with
+// 9,417 top-up replies was told "replies will go silent at the cap". Keep the
+// policy here; consumers map the returned state to their own copy/severity.
+//
+// Consumers:
+//   - `computeHealthFlags` (backend/src/services/admin/health.ts) — support console
+//   - `resolveAiUsageNotificationType` (backend/src/services/subscriptions.ts) —
+//     the merchant's 80%/100% threshold notification
+//   - `AiUsageWarningBanner` (frontend/src/components/dashboard) — dashboard banner
+//   - `CommandCenter` (frontend/src/components/dashboard) — Smart Replies tile severity
+//
+// NOT a consumer, deliberately: `computeCrossedAiThresholds`. It answers "which
+// PLAN-CAP boundary did this increment just cross", which is a billing event and
+// has to stay measured against the plan cap. `incrementAiReplies` charges overflow
+// to the balance and never pushes `ai_replies_count` past the cap, so an
+// 80%-of-CAPACITY boundary would sit beyond anything that counter can ever reach —
+// re-pointing it at capacity would silently delete the 80% notification for every
+// top-up holder. Detection stays on the cap; only the wording and the severity
+// key off the wall.
 
 /**
  * Fraction of TOTAL capacity (plan + top-up) at which a merchant counts as

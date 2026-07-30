@@ -5,6 +5,7 @@ import { instagramService } from '../services/instagram';
 import { subscriptionsService } from '../services/subscriptions';
 import { channelTrialService } from '../services/channelTrial';
 import { recordAutoreplyEnabledIfEffective } from '../services/activation';
+import { businessInfoGate } from '../services/businessReadiness';
 import { pageGateError } from '../utils/pageGateResponse';
 import { db } from '../db';
 import { instagramMedia, instagramComments } from '../db/schema';
@@ -218,6 +219,18 @@ export class InstagramController {
         try {
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
+                // Hoisted out of the trial block below: the readiness gate needs it
+                // too, and fetching the page twice in one request would be the
+                // cheaper-looking mistake.
+                const existingPage = await pagesService.getPage(workspaceId, id);
+
+                // Same readiness bar as the Facebook and WhatsApp toggles — never
+                // put a bot in front of customers with nothing to answer from.
+                // Checked before the billing gates because it is the one blocker the
+                // merchant can clear for free.
+                const infoGate = await businessInfoGate(existingPage);
+                if (infoGate) return reply.status(infoGate.status).send(infoGate.body);
+
                 const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {
                     const { status, body } = pageGateError(limitCheck);
@@ -228,7 +241,6 @@ export class InstagramController {
                 // platform. If this channel already used it under another account
                 // and this account isn't paying, keep auto-reply off until they
                 // subscribe (paying unlocks it instantly).
-                const existingPage = await pagesService.getPage(workspaceId, id);
                 if (existingPage) {
                     const trialCheck = await channelTrialService.evaluate(
                         workspaceOwnerId,

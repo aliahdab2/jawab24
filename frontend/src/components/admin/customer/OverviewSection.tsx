@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslations } from 'next-intl';
 import { Calendar, FileText, Zap, Globe, Mail, Facebook, Instagram, ExternalLink, Users } from 'lucide-react';
 import clsx from 'clsx';
-import { Card } from '@/components/ui';
+import { Card, WhatsAppIcon, PLATFORM_TINT } from '@/components/ui';
 import {
     type CustomerDetail,
     type FormatDate,
@@ -70,14 +70,23 @@ export function OverviewSection({ customer, formatDate, intlLocale }: Props) {
                         {customer.pages.map((p) => {
                             const fbHref = p.facebookPageId ? `https://www.facebook.com/${p.facebookPageId}` : null;
                             const igHref = p.instagramUsername ? `https://www.instagram.com/${p.instagramUsername}` : null;
-                            const primaryHref = fbHref || igHref;
+                            // wa.me needs bare digits; the stored display number is formatted.
+                            const waDigits = p.whatsappDisplayPhoneNumber?.replace(/\D/g, '') || null;
+                            const waHref = waDigits ? `https://wa.me/${waDigits}` : null;
+                            // A card with no Facebook page is a WhatsApp-only card — showing it
+                            // behind a Facebook avatar misreads the whole row at a glance.
+                            const isWhatsAppOnly = !p.facebookPageId && !!p.whatsappPhoneNumberId;
+                            const primaryHref = fbHref || igHref || waHref;
                             return (
                                 <li
                                     key={p.id}
                                     className="group flex items-center gap-3 p-3 border border-theme-border rounded-lg hover:bg-muted/50 hover:border-brand-300 transition-colors"
                                 >
-                                    <div className="w-10 h-10 rounded-full bg-[#1877F2]/10 text-[#1877F2] flex items-center justify-center shrink-0">
-                                        <Facebook className="w-5 h-5" />
+                                    <div className={clsx(
+                                        'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
+                                        isWhatsAppOnly ? PLATFORM_TINT.whatsapp : PLATFORM_TINT.facebook,
+                                    )}>
+                                        {isWhatsAppOnly ? <WhatsAppIcon className="w-5 h-5" /> : <Facebook className="w-5 h-5" />}
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         {primaryHref ? (
@@ -101,6 +110,17 @@ export function OverviewSection({ customer, formatDate, intlLocale }: Props) {
                                                 <span className="inline-flex items-center gap-1 truncate">
                                                     <Instagram className="w-3 h-3" />
                                                     @{p.instagramUsername}
+                                                </span>
+                                            )}
+                                            {(p.facebookPageId || p.instagramUsername) && p.whatsappPhoneNumberId && <span aria-hidden>·</span>}
+                                            {p.whatsappPhoneNumberId && (
+                                                <span className="inline-flex items-center gap-1 truncate" title={p.whatsappCoexistence ? t('customer.whatsappCoexistence') : undefined}>
+                                                    <WhatsAppIcon className="w-3 h-3" />
+                                                    {p.whatsappDisplayPhoneNumber || p.whatsappPhoneNumberId}
+                                                    {/* Coexistence changes what support can tell a merchant: the number
+                                                        is ALSO live on their phone, so "we stopped replying" may mean
+                                                        they answered it themselves. Worth seeing at a glance. */}
+                                                    {p.whatsappCoexistence && <span aria-hidden>↔</span>}
                                                 </span>
                                             )}
                                         </div>
@@ -147,6 +167,18 @@ export function OverviewSection({ customer, formatDate, intlLocale }: Props) {
                                                 className="p-2 rounded-md text-muted-foreground hover:text-[#E4405F] hover:bg-background transition-colors"
                                             >
                                                 <Instagram className="w-4 h-4" />
+                                            </a>
+                                        )}
+                                        {waHref && (
+                                            <a
+                                                href={waHref}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                aria-label={t('customer.openWhatsApp')}
+                                                title={t('customer.openWhatsApp')}
+                                                className="p-2 rounded-md text-muted-foreground hover:text-[#128C7E] hover:bg-background transition-colors"
+                                            >
+                                                <WhatsAppIcon className="w-4 h-4" />
                                             </a>
                                         )}
                                         {primaryHref && (

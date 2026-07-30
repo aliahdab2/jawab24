@@ -7,6 +7,7 @@ import { pagesService, isPageDisconnected, invalidateWorkspaceStatsCache } from 
 import { publishSSEEvent } from '../lib/eventBus';
 import { postsService } from '../services/posts';
 import { facebookService } from '../services/facebook';
+import * as typingIndicator from '../services/reply/typingIndicator';
 import { acquireMutex } from '../lib/redisMutex';
 import { parseReadMorePayload } from '@jawab24/shared';
 import { authService } from '../services/auth';
@@ -395,6 +396,27 @@ export class WebhookController {
             // than a sibling event (see services/messages.ts setCreatedTime).
             if (isNew && typeof event.timestamp === 'number') {
                 await messagesService.setCreatedTime(stored.id, new Date(event.timestamp));
+            }
+
+            // "typing…" the instant the message lands, mirroring WhatsApp (see the
+            // markAsRead({ typing: true }) call in the WhatsApp branch).
+            //
+            // This used to fire deep in the reply pipeline instead, AFTER the merchant's
+            // reply delay (settings.replyDelay, 0-60s, default 3) — so on Messenger the
+            // customer stared at dead air for the whole delay and only saw "typing…" in
+            // the last moment before the reply. That is the bug this fixes; WhatsApp never
+            // had it because it claims the indicator here, at receipt.
+            //
+            // Gated on autoReplyEnabled: showing "typing…" when no reply will follow is a
+            // lie. Fire-and-forget — a cosmetic Graph call must never delay the enqueue,
+            // and the reply pipeline reads Redis (typingIndicator.wasShown) rather than a
+            // return value. Known limitation: Messenger auto-clears after ~20s, so a
+            // replyDelay above that still ends in some silence — strictly better than
+            // today's silence for the entire delay.
+            if (page.autoReplyEnabled && page.accessToken) {
+                void typingIndicator.showOnce(page.id, messageId, () =>
+                    facebookService.sendTypingIndicator(page.accessToken, senderId),
+                );
             }
 
             // Enqueue reply job immediately — debounce is handled by hasNewerUnrepliedMessage

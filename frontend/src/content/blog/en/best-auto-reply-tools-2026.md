@@ -68,7 +68,7 @@ Free tier with usage limits. [See our full Jawab24 vs Botpress comparison →](/
 
 ### Jawab24
 
-AI auto-reply platform built for Facebook and Instagram business pages, with deep multilingual support. The key difference from the tools above: **no flow building required**. You add your business information to a Knowledge Base, and the AI handles customer conversations from there. No decision trees, no keyword mapping, no flowcharts.
+AI auto-reply platform for Facebook, Instagram, and WhatsApp, with deep multilingual support. The key difference from the tools above: **no flow building required**. You add your business information, and the AI handles customer conversations from there. No decision trees, no keyword mapping, no flowcharts.
 
 The AI loads the **last 12 messages** in each conversation, so it understands context. When a customer says "and the black one?" after asking about a product, the AI knows exactly what they're referring to. This contextual understanding is tested across **125 real-world scenarios with 99.6% accuracy** — a published, measurable benchmark, not a vague "powered by AI" claim.
 

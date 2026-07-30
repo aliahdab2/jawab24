@@ -116,9 +116,9 @@ Example preset reply for late delivery: "We sincerely apologize for the delay in
 
 One important detail: if a preset reply was already sent earlier in the conversation, good tools won't repeat it robotically. Instead, the AI takes over and generates a fresh, contextual reply — so the customer doesn't feel like they're stuck in a loop.
 
-### Train Your Knowledge Base on Escalation
+### Train Your Business Info on Escalation
 
-In your Knowledge Base, include clear instructions for the AI about when to escalate. For example: "If a customer expresses strong frustration, anger, or threatens to report the page, acknowledge their feelings, apologize, and let them know a team member will follow up personally. Do not provide standard product information in these cases."
+In your Business Info, include clear instructions for the AI about when to escalate. For example: "If a customer expresses strong frustration, anger, or threatens to report the page, acknowledge their feelings, apologize, and let them know a team member will follow up personally. Do not provide standard product information in these cases."
 
 ### Set Up Push Notifications
 
@@ -130,7 +130,7 @@ The difference between "notification in a dashboard" and "push notification on y
 
 Review escalated conversations regularly. Look for patterns: are customers angry about the same issues repeatedly? That's a business problem, not a customer service problem. Use the data to fix the root cause.
 
-Some tools track what customers ask about that isn't in your Knowledge Base — a **KB gap detection** feature. If multiple angry customers are asking about your exchange policy and your Knowledge Base doesn't cover it, the system flags this gap. Adding that information prevents future frustration before it happens.
+Some tools track what customers ask about that isn't in your Business Info — a **KB gap detection** feature. If multiple angry customers are asking about your exchange policy and your Business Info doesn't cover it, the system flags this gap. Adding that information prevents future frustration before it happens.
 
 ## The Numbers Don't Lie
 

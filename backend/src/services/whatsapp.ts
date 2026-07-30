@@ -176,10 +176,16 @@ class WhatsAppService {
 
     /**
      * Exchange the Embedded Signup auth code for a business integration
-     * system-user access token. Unlike the login OAuth flow, ES codes are
-     * exchanged without a redirect_uri.
+     * system-user access token.
+     *
+     * Two grant shapes share this method and differ ONLY in redirect_uri:
+     * - popup flow (JS SDK `fb.login`): the code is minted without a redirect —
+     *   redirect_uri MUST be omitted or Meta rejects the exchange;
+     * - redirect flow (full-page dialog/oauth): the code is bound to the
+     *   authorization request's redirect_uri — the exchange MUST repeat it
+     *   byte-for-byte.
      */
-    async exchangeCodeForToken(code: string): Promise<{ token: string; expiresIn?: number }> {
+    async exchangeCodeForToken(code: string, redirectUri?: string): Promise<{ token: string; expiresIn?: number }> {
         // NOTE: `client_secret` travels as a query param because that is the shape
         // Meta documents for this grant — it is not an access token, so it cannot be
         // moved to an Authorization header. The consequence is that the app secret
@@ -194,6 +200,7 @@ class WhatsAppService {
                 client_id: config.facebook.appId,
                 client_secret: config.facebook.appSecret,
                 code,
+                ...(redirectUri ? { redirect_uri: redirectUri } : {}),
             },
             timeout: WHATSAPP_TIMEOUT_MS,
         }));
@@ -265,6 +272,44 @@ class WhatsAppService {
                 : [],
             errorMessage: typeof data.error?.message === 'string' ? data.error.message : undefined,
         };
+    }
+
+    /**
+     * List the phone numbers on a WABA.
+     *
+     * Exists for the REDIRECT connect flow: a full-page OAuth return carries
+     * only a `code` — no `postMessage` session info — so the phone number(s)
+     * must be discovered from the token's own assets (debugToken().wabaIds →
+     * this call). `platform_type` is the coexistence signal: `SMB_APP` means
+     * the number still lives on the merchant's WhatsApp Business app and must
+     * NEVER be Cloud-API-registered; `CLOUD_API` means Meta migrated it.
+     * `last_onboarded_time` orders candidates when a WABA holds several.
+     */
+    async listWabaPhoneNumbers(
+        wabaId: string,
+        accessToken: string,
+    ): Promise<Array<{
+        id: string;
+        displayPhoneNumber: string;
+        verifiedName: string;
+        platformType?: string;
+        lastOnboardedTime?: string;
+    }>> {
+        const res = await this.request(() => axios.get(`${WHATSAPP_API}/${wabaId}/phone_numbers`, {
+            params: { fields: 'id,display_phone_number,verified_name,platform_type,last_onboarded_time' },
+            headers: { Authorization: `Bearer ${accessToken}` },
+            timeout: WHATSAPP_TIMEOUT_MS,
+        }));
+        const rows = Array.isArray(res.data?.data) ? res.data.data : [];
+        return rows
+            .filter((r: { id?: unknown }): r is { id: string } & Record<string, unknown> => typeof r.id === 'string' && r.id.length > 0)
+            .map((r: Record<string, unknown>) => ({
+                id: r.id as string,
+                displayPhoneNumber: typeof r.display_phone_number === 'string' ? r.display_phone_number : '',
+                verifiedName: typeof r.verified_name === 'string' ? r.verified_name : '',
+                platformType: typeof r.platform_type === 'string' ? r.platform_type : undefined,
+                lastOnboardedTime: typeof r.last_onboarded_time === 'string' ? r.last_onboarded_time : undefined,
+            }));
     }
 
     /**
