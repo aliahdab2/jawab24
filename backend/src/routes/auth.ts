@@ -78,6 +78,19 @@ export default async function authRoutes(fastify: FastifyInstance) {
         preHandler: [authenticate],
     }, authController.getMe);
 
+    // App→browser session bridge: mints a 10-minute token the native app opens
+    // /auth/sync with, so browser-side flows (WhatsApp connect, payments) start
+    // already signed in instead of on a login wall.
+    fastify.post('/auth/browser-handoff', {
+        schema: {
+            tags: ['Auth'],
+            summary: 'Mint a short-lived token that carries the app session into the browser',
+            security: auth,
+        },
+        preHandler: [authenticate],
+        config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    }, authController.browserHandoff);
+
     fastify.patch('/auth/profile', {
         schema: {
             tags: ['Auth'],

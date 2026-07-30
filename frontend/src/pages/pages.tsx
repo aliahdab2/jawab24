@@ -682,15 +682,33 @@ const PagesPage: NextPageWithLayout = () => {
       if (redirectFlow) {
         // Redirect flow: the whole signup is plain navigations, which an
         // in-app Custom Tab handles fine (Facebook page connect proves it) —
-        // the merchant never visibly leaves the app. The old system-browser
-        // handoff + desktop-guidance dialog existed only because of the popup.
+        // the merchant never visibly leaves the app.
+        //
+        // Session bridge: the app's JWT lives under a different origin, so the
+        // browser used to greet the merchant with a LOGIN WALL — which proved
+        // fragile on-device (Custom-Tab FB login hung, 2026-07-30). Exchange
+        // the app session for a 10-minute handoff token and open /auth/sync,
+        // which signs the browser in and forwards straight to the connect
+        // intent: no login UI anywhere in the chain. Falls back to the /login
+        // wall only if the handoff mint fails.
         addErrorBreadcrumb('whatsapp-connect', 'opening custom tab handoff', { hasPage: !!pageId });
         const { openExternalUrl } = await import('@/lib/openExternalUrl');
-        const { buildWebAuthedUrl } = await import('@/lib/webUrl');
+        const { buildWebUrl, buildWebAuthedUrl } = await import('@/lib/webUrl');
         const resumePath = pageId
           ? `/pages?connectWhatsApp=true&waPage=${encodeURIComponent(pageId)}`
           : '/pages?connectWhatsApp=true';
-        await openExternalUrl(buildWebAuthedUrl(resumePath, language));
+        try {
+          const { api } = await import('@/lib/api');
+          const { data } = await api.post<{ token: string }>('/auth/browser-handoff');
+          await openExternalUrl(buildWebUrl(
+            `/auth/sync?token=${encodeURIComponent(data.token)}&redirect=${encodeURIComponent(resumePath)}`,
+            language,
+          ));
+        } catch (error) {
+          addErrorBreadcrumb('whatsapp-connect', 'handoff mint failed; falling back to login wall', {});
+          captureError(error, 'Browser handoff mint failed', { tags: { page: 'pages', action: 'whatsapp-connect' } });
+          await openExternalUrl(buildWebAuthedUrl(resumePath, language));
+        }
         return;
       }
       // Legacy popup flow: Embedded Signup needs a REAL browser (popups), and
