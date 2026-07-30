@@ -959,7 +959,12 @@ export class MessageProcessor {
                 pageId: page.id,
                 sourceId: storedMessage.id,
                 sourceType: 'message',
-                kb: buildGroundingSource({ knowledgeBase, storePolicies, productCatalog }),
+                // The grounding source must be EXACTLY what the generator saw.
+                // originPostMessage carries the origin post + its Post Reply
+                // (trigger), which the AI is allowed to quote (#467) — omitting
+                // it here made every legitimate post quote look invented on
+                // Post-Reply-heavy pages (found on الدمشقي, 2026-07-30).
+                kb: buildGroundingSource({ knowledgeBase, postMessage: originPostMessage, storePolicies, productCatalog }),
                 question: consolidatedText,
                 reply: replyText ?? '',
                 intent: aiIntent,
