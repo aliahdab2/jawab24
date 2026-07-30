@@ -91,6 +91,14 @@ vi.mock('@/lib/whatsappSignup', () => ({
     launchWhatsAppSignup: (...args: unknown[]) => mockLaunchWhatsAppSignup(...args),
 }));
 
+// Phone browsers get desktop guidance before Embedded Signup is attempted
+// (the fb.login popup opens unreliably there). Default false = desktop, so the
+// pre-existing web tests exercise the direct flow; the mobile-web test flips it.
+let mockIsMobileBrowser = false;
+vi.mock('@/lib/browserEnv', () => ({
+    isMobileBrowser: () => mockIsMobileBrowser,
+}));
+
 vi.mock('@/components/layout/DashboardLayout', () => ({
     DashboardLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
@@ -516,6 +524,17 @@ describe('PagesPage - WhatsApp', () => {
             fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
         });
 
+        // Desktop guidance comes FIRST: Meta's wizard popup opens unreliably on
+        // phones, so the merchant is told a computer is the reliable path before
+        // anything is attempted. Nothing has launched yet.
+        expect(screen.getByText(enPages.whatsappDesktopNeededTitle)).toBeInTheDocument();
+        expect(mockOpenInSystemBrowser).not.toHaveBeenCalled();
+
+        // "Try on this device" = the explicit escape hatch → browser handoff.
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.whatsappDesktopTryAnyway));
+        });
+
         await waitFor(() => {
             // Via /login, NOT straight to /pages. The app's JWT lives in the
             // WebView's localStorage under a different origin, so it does not
@@ -545,6 +564,35 @@ describe('PagesPage - WhatsApp', () => {
         expect(screen.queryByText(enPages.whatsappPathTitle)).not.toBeInTheDocument();
 
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+    });
+
+    it('mobile BROWSER: desktop guidance first, "try on this device" continues to the path question', async () => {
+        mockIsMobileBrowser = true;
+        mockedPagesApi.getAll.mockResolvedValue({
+            data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
+
+        renderPage(<PagesPage />);
+        await waitFor(() => expect(screen.getAllByText('WA Page')[0]).toBeInTheDocument());
+
+        fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
+
+        // Guidance precedes the path question — answering a question whose
+        // fb.login popup then fails to open is the dead end this prevents.
+        expect(screen.getByText(enPages.whatsappDesktopNeededTitle)).toBeInTheDocument();
+        expect(screen.queryByText(enPages.whatsappPathTitle)).not.toBeInTheDocument();
+
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.whatsappDesktopTryAnyway));
+        });
+
+        // The escape hatch reaches the normal web flow: path question, no launch
+        // until the merchant answers it.
+        expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
+        expect(mockLaunchWhatsAppSignup).not.toHaveBeenCalled();
+        expect(mockOpenInSystemBrowser).not.toHaveBeenCalled();
+
+        mockIsMobileBrowser = false;
     });
 
     it('?connectWhatsApp=true (browser side of the handoff) reopens the path question for the carried card', async () => {
