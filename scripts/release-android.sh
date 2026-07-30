@@ -123,6 +123,32 @@ if ! grep -q '^RELEASE_STORE_FILE=' "$LOCAL_PROPS" 2>/dev/null; then
 fi
 echo -e "${GREEN}✅ Signing config present${NC}"
 
+# ─── Firebase config the app CANNOT LAUNCH without ───
+# frontend/android/app/google-services.json is UNTRACKED. app/build.gradle
+# applies the google-services plugin inside a try/catch that SWALLOWS the
+# missing-file exception (logger.info only), so a build without it succeeds,
+# signs, and uploads — then FirebaseApp is never initialized and
+# PushNotificationsPlugin.register() throws IllegalStateException as an
+# UNCAUGHT exception ~1 second after launch. The app is unusable: it dies
+# before the login screen.
+#
+# v2.0.14 (20014) shipped exactly this way, from a worktree that had every
+# other untracked file copied except this one (JAWAB24-ANDROID-4, 3 fatal
+# crashes on the owner's device). Same silent-absence class as the v2.0.6
+# WhatsApp-compiled-out incident, but total rather than partial — so this is
+# a hard gate, not a warning.
+GOOGLE_SERVICES_FILE="frontend/android/app/google-services.json"
+if [ ! -s "$GOOGLE_SERVICES_FILE" ]; then
+    echo -e "${RED}❌ Missing $GOOGLE_SERVICES_FILE${NC}"
+    echo -e "   build.gradle silently skips the google-services plugin without it,"
+    echo -e "   Firebase never initializes, and the app CRASHES ON LAUNCH"
+    echo -e "   (PushNotificationsPlugin.register → IllegalStateException, uncaught)."
+    echo -e "   Copy it from the main checkout — it is untracked, like local.properties:"
+    echo -e "     cp <main-checkout>/$GOOGLE_SERVICES_FILE $GOOGLE_SERVICES_FILE"
+    exit 1
+fi
+echo -e "${GREEN}✅ Firebase config present (app will initialize)${NC}"
+
 # ─── Public build-time config the app CANNOT ship without ───
 # NEXT_PUBLIC_* values are inlined by `next build`. The web image receives these
 # as Docker build args (frontend/Dockerfile + docker-compose build.args, wired in
