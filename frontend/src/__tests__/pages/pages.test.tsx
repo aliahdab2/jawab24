@@ -427,6 +427,11 @@ describe('PagesPage - WhatsApp', () => {
         mockToastError.mockClear();
         vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        // Pin the redirect-flow flag OFF for the legacy-flow suites — the release
+        // script exports it in the shell, and inheriting it flips these tests'
+        // entire code path (the aeb8c0a5 lesson, third flag edition). The
+        // redirect-flow tests stub it 'true' explicitly per test.
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
         mockUsagePlan(true);
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [WA_PAGE] },
@@ -773,6 +778,11 @@ describe('PagesPage - WhatsApp-only cards', () => {
         mockToastError.mockClear();
         vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        // Pin the redirect-flow flag OFF for the legacy-flow suites — the release
+        // script exports it in the shell, and inheriting it flips these tests'
+        // entire code path (the aeb8c0a5 lesson, third flag edition). The
+        // redirect-flow tests stub it 'true' explicitly per test.
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
         mockUsagePlan(true);
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [WA_ONLY_PAGE] },
@@ -988,6 +998,11 @@ describe('PagesPage - WhatsApp-only cards', () => {
 
     it('without Embedded Signup config the header button skips the picker (FB dialog directly)', async () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        // Pin the redirect-flow flag OFF for the legacy-flow suites — the release
+        // script exports it in the shell, and inheriting it flips these tests'
+        // entire code path (the aeb8c0a5 lesson, third flag edition). The
+        // redirect-flow tests stub it 'true' explicitly per test.
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
         renderPage(<PagesPage />);
 
         await waitFor(() => {
@@ -1020,6 +1035,11 @@ describe('PagesPage - WhatsApp plan gate (Business+ entitlement)', () => {
         mockToastError.mockClear();
         vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '123');
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', 'cfg-1');
+        // Pin the redirect-flow flag OFF for the legacy-flow suites — the release
+        // script exports it in the shell, and inheriting it flips these tests'
+        // entire code path (the aeb8c0a5 lesson, third flag edition). The
+        // redirect-flow tests stub it 'true' explicitly per test.
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [UNCONNECTED_WA_PAGE] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
@@ -1143,6 +1163,11 @@ describe('PagesPage - WhatsApp master switch OFF (dark deploy)', () => {
         mockToastError.mockClear();
         vi.stubEnv('NEXT_PUBLIC_FB_APP_ID', '');
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONFIG_ID', '');
+        // Pin the redirect-flow flag OFF for the legacy-flow suites — the release
+        // script exports it in the shell, and inheriting it flips these tests'
+        // entire code path (the aeb8c0a5 lesson, third flag edition). The
+        // redirect-flow tests stub it 'true' explicitly per test.
+        vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [FB_PAGE] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
