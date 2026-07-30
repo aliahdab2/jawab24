@@ -414,6 +414,34 @@ export class AuthController {
     }
 
     /**
+     * Mint a short-lived token that carries the APP's session into the BROWSER.
+     *
+     * The Capacitor WebView's JWT lives under a different origin, so any
+     * app→web bridge (WhatsApp connect, payments) used to land the merchant on
+     * a browser login wall — a wall that proved fragile in practice (Custom-Tab
+     * FB login observed hanging on-device, 2026-07-30). This endpoint removes
+     * the wall structurally: the app exchanges its session for a 10-minute
+     * token and opens the browser at /auth/sync?token=…&redirect=…, which
+     * establishes the web session and forwards — no login UI anywhere.
+     *
+     * The token rides in a URL (Custom Tab history), so it is deliberately
+     * SHORT-lived — same pattern as the mobile-login deep link, tighter expiry
+     * (it is consumed within seconds of minting).
+     */
+    async browserHandoff(request: AuthenticatedRequest, reply: FastifyReply) {
+        const userId = request.user?.userId;
+        if (!userId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const user = await authService.getUserById(userId);
+        if (!user) {
+            return reply.status(404).send({ error: 'User not found' });
+        }
+        const BROWSER_HANDOFF_TOKEN_EXPIRY = 10 * 60 * 1000;
+        return reply.send({ token: authService.generateToken(user, BROWSER_HANDOFF_TOKEN_EXPIRY) });
+    }
+
+    /**
      * Get current user
      * GET /auth/me
      */
