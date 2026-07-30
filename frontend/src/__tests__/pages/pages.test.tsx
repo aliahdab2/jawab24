@@ -711,13 +711,14 @@ describe('PagesPage - WhatsApp', () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
     });
 
-    it('REDIRECT flag, native: Connect opens the in-app Custom Tab ALREADY SIGNED IN via the handoff token', async () => {
+    it('REDIRECT flag, native: Connect opens the in-app Custom Tab ALREADY SIGNED IN via a single-use handoff code', async () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', 'true');
         const { Capacitor } = await import('@capacitor/core');
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
-        // The app exchanges its session for a short-lived browser token — this
-        // is what deletes the login wall (which hung on-device, 2026-07-30).
-        mockedApi.post.mockResolvedValueOnce({ data: { token: 'handoff-tok' } } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+        // The app exchanges its session for a single-use 60s code — this is
+        // what deletes the login wall (which hung on-device, 2026-07-30). Only
+        // the opaque code may ride the URL, never a session token.
+        mockedApi.post.mockResolvedValueOnce({ data: { code: 'handoff-code' } } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
@@ -733,11 +734,11 @@ describe('PagesPage - WhatsApp', () => {
 
         // The whole redirect flow is plain navigations — a Custom Tab handles it
         // (Facebook page connect proves it), so the merchant stays "in" the app.
-        // /auth/sync signs the browser in from the token and forwards to the
+        // /auth/sync trades the code for a real login and forwards to the
         // connect intent — NOT /login: the wall is gone.
         await waitFor(() => {
             expect(mockOpenExternalUrl).toHaveBeenCalledWith(
-                'https://jawab24.com/en/auth/sync?token=handoff-tok&redirect=%2Fpages%3FconnectWhatsApp%3Dtrue%26waPage%3Dpage_x',
+                'https://jawab24.com/en/auth/sync?code=handoff-code&redirect=%2Fpages%3FconnectWhatsApp%3Dtrue%26waPage%3Dpage_x',
             );
         });
         expect(mockOpenInSystemBrowser).not.toHaveBeenCalled();

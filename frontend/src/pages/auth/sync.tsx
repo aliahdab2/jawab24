@@ -20,21 +20,38 @@ export default function AuthSync() {
       try {
         setStatus(t('syncSyncing'));
 
-        // 1. Get tokens from URL — backend appends defaultWorkspaceId here so
-        //    the active workspace is correct before the dashboard loads, even
-        //    on cold-launch installs where the WebView has zero persisted state.
-        const { token, fbToken, redirect, defaultWorkspaceId } = router.query;
+        // 1. Get credentials from URL — two shapes:
+        //    - token=…  (mobile-login deep link): a ready session token; backend
+        //      appends defaultWorkspaceId so the active workspace is correct
+        //      before the dashboard loads, even on cold-launch installs.
+        //    - code=…   (app→browser handoff, e.g. WhatsApp connect): an opaque
+        //      single-use 60s code. Only the code rides the URL — it is traded
+        //      below for a real login (token + refresh cookie), so the session
+        //      outlives long flows like Meta's wizard.
+        const { token, code, fbToken, redirect, defaultWorkspaceId } = router.query;
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
-        if (!token || typeof token !== 'string') {
+        let sessionToken = typeof token === 'string' ? token : '';
+        let workspaceHint = typeof defaultWorkspaceId === 'string' ? defaultWorkspaceId : null;
+        if (!sessionToken && typeof code === 'string') {
+          const exchangeRes = await axios.post<{ token: string; defaultWorkspaceId: string | null }>(
+            `${apiUrl}/auth/browser-handoff/exchange`,
+            { code },
+            { withCredentials: true },
+          );
+          sessionToken = exchangeRes.data.token;
+          workspaceHint = exchangeRes.data.defaultWorkspaceId ?? workspaceHint;
+        }
+
+        if (!sessionToken) {
             throw new Error('No token provided');
         }
 
         // 2. Fetch fresh user profile using the token
         setStatus(t('syncVerifying'));
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
         const userRes = await axios.get(`${apiUrl}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${sessionToken}` }
         });
 
         const user = userRes.data;
@@ -48,17 +65,17 @@ export default function AuthSync() {
         //    state with the system browser where callback.tsx ran setWorkspaces.
         try {
           const wsRes = await axios.get<WorkspaceSummary[]>(`${apiUrl}/workspaces`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${sessionToken}` }
           });
           if (wsRes.data?.length) setWorkspaces(wsRes.data, {
-            defaultWorkspaceId: typeof defaultWorkspaceId === 'string' ? defaultWorkspaceId : null,
+            defaultWorkspaceId: workspaceHint,
           });
         } catch {
           // Non-fatal — workspace middleware will auto-select if user has exactly 1 workspace
         }
 
         // 4. Hydrate the store
-        setAuth(user, token, fbToken as string || '');
+        setAuth(user, sessionToken, fbToken as string || '');
 
         setStatus(t('syncRedirecting'));
         

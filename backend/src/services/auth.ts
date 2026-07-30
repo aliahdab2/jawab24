@@ -15,8 +15,21 @@ import { subscriptionsService } from './subscriptions';
 import { recordActivationEvent } from './activation';
 import { NEW_SIGNUP_SETTINGS_SEED } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
+import { redis } from '../lib/redis';
 // Secure JWT-like implementation using HMAC
 const ALGORITHM = 'sha256';
+
+// ─── App→browser session handoff (single-use code) ───
+// The native app cannot share its session with the system browser / Custom Tab
+// (different origin), so app→web bridges (WhatsApp connect) exchange the app
+// session for a code the browser turns into a REAL login at /auth/sync.
+// OAuth-authorization-code shape on purpose (RFC 6749 §4.1.2): the code is
+// opaque (no claims), single-use (consumed atomically server-side), and
+// short-lived — it rides a URL (Custom Tab history, nginx access logs), so a
+// logged code must already be worthless. The session credentials themselves
+// never appear in a URL.
+const BROWSER_HANDOFF_CODE_TTL_SECONDS = 60;
+const browserHandoffKey = (code: string) => `handoff:browser:${code}`;
 
 export const ACCESS_TOKEN_EXPIRY = 15 * 60 * 1000; // 15 minutes
 // Long-lived expiry used only by the web-redirect mobile callback, which delivers the
@@ -333,6 +346,24 @@ export class AuthService {
         const signature = this.sign(payloadStr);
 
         return `${payloadStr}.${signature}`;
+    }
+
+    /** Mint a single-use app→browser handoff code (60 s TTL, opaque). */
+    async mintBrowserHandoffCode(userId: string): Promise<string> {
+        const code = crypto.randomBytes(32).toString('base64url');
+        await redis.set(browserHandoffKey(code), userId, 'EX', BROWSER_HANDOFF_CODE_TTL_SECONDS);
+        return code;
+    }
+
+    /**
+     * Atomically consume a handoff code — a second consume returns null.
+     * MULTI GET+DEL rather than GETDEL so no Redis ≥6.2 requirement sneaks in.
+     */
+    async consumeBrowserHandoffCode(code: string): Promise<string | null> {
+        const key = browserHandoffKey(code);
+        const results = await redis.multi().get(key).del(key).exec();
+        const userId = results?.[0]?.[1];
+        return typeof userId === 'string' && userId.length > 0 ? userId : null;
     }
 
     /**

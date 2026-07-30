@@ -687,10 +687,11 @@ const PagesPage: NextPageWithLayout = () => {
         // Session bridge: the app's JWT lives under a different origin, so the
         // browser used to greet the merchant with a LOGIN WALL — which proved
         // fragile on-device (Custom-Tab FB login hung, 2026-07-30). Exchange
-        // the app session for a 10-minute handoff token and open /auth/sync,
-        // which signs the browser in and forwards straight to the connect
-        // intent: no login UI anywhere in the chain. Falls back to the /login
-        // wall only if the handoff mint fails.
+        // the app session for a single-use 60s handoff CODE and open
+        // /auth/sync, which trades it for a real login (token + refresh
+        // cookie) and forwards straight to the connect intent: no login UI
+        // anywhere in the chain, and no session credential ever rides the
+        // URL. Falls back to the /login wall only if the mint fails.
         addErrorBreadcrumb('whatsapp-connect', 'opening custom tab handoff', { hasPage: !!pageId });
         const { openExternalUrl } = await import('@/lib/openExternalUrl');
         const { buildWebUrl, buildWebAuthedUrl } = await import('@/lib/webUrl');
@@ -699,9 +700,9 @@ const PagesPage: NextPageWithLayout = () => {
           : '/pages?connectWhatsApp=true';
         try {
           const { api } = await import('@/lib/api');
-          const { data } = await api.post<{ token: string }>('/auth/browser-handoff');
+          const { data } = await api.post<{ code: string }>('/auth/browser-handoff');
           await openExternalUrl(buildWebUrl(
-            `/auth/sync?token=${encodeURIComponent(data.token)}&redirect=${encodeURIComponent(resumePath)}`,
+            `/auth/sync?code=${encodeURIComponent(data.code)}&redirect=${encodeURIComponent(resumePath)}`,
             language,
           ));
         } catch (error) {

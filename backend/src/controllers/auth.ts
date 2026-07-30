@@ -414,19 +414,19 @@ export class AuthController {
     }
 
     /**
-     * Mint a short-lived token that carries the APP's session into the BROWSER.
+     * Mint a single-use code that carries the APP's session into the BROWSER.
      *
      * The Capacitor WebView's JWT lives under a different origin, so any
      * app→web bridge (WhatsApp connect, payments) used to land the merchant on
      * a browser login wall — a wall that proved fragile in practice (Custom-Tab
      * FB login observed hanging on-device, 2026-07-30). This endpoint removes
-     * the wall structurally: the app exchanges its session for a 10-minute
-     * token and opens the browser at /auth/sync?token=…&redirect=…, which
-     * establishes the web session and forwards — no login UI anywhere.
+     * the wall structurally: the app exchanges its session for an opaque
+     * single-use code (60 s TTL) and opens the browser at
+     * /auth/sync?code=…&redirect=…, which trades the code for a real login
+     * (browserHandoffExchange) and forwards — no login UI anywhere.
      *
-     * The token rides in a URL (Custom Tab history), so it is deliberately
-     * SHORT-lived — same pattern as the mobile-login deep link, tighter expiry
-     * (it is consumed within seconds of minting).
+     * Only the CODE rides the URL (Custom Tab history, nginx access logs); it
+     * is consumed atomically on first use, so a logged code is worthless.
      */
     async browserHandoff(request: AuthenticatedRequest, reply: FastifyReply) {
         const userId = request.user?.userId;
@@ -437,8 +437,32 @@ export class AuthController {
         if (!user) {
             return reply.status(404).send({ error: 'User not found' });
         }
-        const BROWSER_HANDOFF_TOKEN_EXPIRY = 10 * 60 * 1000;
-        return reply.send({ token: authService.generateToken(user, BROWSER_HANDOFF_TOKEN_EXPIRY) });
+        return reply.send({ code: await authService.mintBrowserHandoffCode(user.id) });
+    }
+
+    /**
+     * Trade a single-use handoff code for a first-class browser session.
+     *
+     * Public — the browser has no session yet; the code IS the credential
+     * (minted by an authenticated app session seconds earlier). Mirrors the
+     * real login exit: access token + refresh cookie + auth cookies, so the
+     * browser session outlives Meta's wizard instead of expiring mid-flow.
+     */
+    async browserHandoffExchange(request: FastifyRequest<{ Body: { code: string } }>, reply: FastifyReply) {
+        const userId = await authService.consumeBrowserHandoffCode(request.body.code);
+        if (!userId) {
+            return reply.status(401).send({ error: 'Invalid or expired code' });
+        }
+        const user = await authService.getUserById(userId);
+        if (!user) {
+            return reply.status(404).send({ error: 'User not found' });
+        }
+        const token = authService.generateToken(user);
+        const refreshToken = await refreshTokenService.createRefreshToken(user.id);
+        cookiesService.setAuthCookies(reply, token);
+        cookiesService.setRefreshTokenCookie(reply, refreshToken);
+        const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
+        return reply.send({ token, defaultWorkspaceId });
     }
 
     /**
