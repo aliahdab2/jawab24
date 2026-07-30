@@ -12,7 +12,7 @@ import { logAiUsage } from './aiUsageLog';
 import { getModelForUser } from './aiModelResolver';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { noopLogger } from '../types/logger';
-import { extractPhones, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { extractPhones, extractCustomerPhones, samePhoneNumber, phoneDigitsTail, isAnyImageMessage, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { LeadExtractedData, LeadField, LeadStatus } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
 import { workspaceSettingsService } from './workspaceSettings';
@@ -80,6 +80,7 @@ Return ONLY valid JSON in this exact shape — no markdown, no explanation:
 Rules:
 - The conversation is labelled "Customer:" (the lead) and "Agent:" (the business's own replies). Extract the phone and EVERY field ONLY from what the Customer said. The Agent turns are the merchant's own messages — their catalogue, prices, schedules, and the business's OWN contact number — they are context to understand the Customer, NEVER a source of lead data.
 - If the Customer merely quotes, forwards, or pastes the Agent's message back (e.g. asking to translate or confirm it), that quoted text is NOT the Customer's own data — do not extract a phone or fields from it. Set "phone" to empty string when the only number present is the business's own (a number the Agent already wrote).
+- Customer turns of the form "[Image: <description>]" / "[صورة: <وصف>]" are machine-generated descriptions of a photo the Customer shared (often a prescription, flyer, or screenshot). Any name or phone number inside such a description belongs to whoever authored the photographed document (a doctor, another business) — NEVER to the Customer. Do not use it as "phone" or any phone/name field; the photo's other details may inform the summary and intent fields only.
 - Include ONLY fields you can confidently extract from the Customer's own words
 - Examples by business type:
   - School/institute: course_of_interest, preferred_start_date, level
@@ -160,6 +161,41 @@ function stripForwardedPostBlocks(text: string): string {
         .replace(SHARED_POST_BLOCK_RE, ' ')
         .replace(/\[Customer shared a post\]/g, ' ')
         .trim();
+}
+
+/**
+ * The customer-AUTHORED portion of a message body, for the lead phone gate.
+ * Two machine-written shapes are removed:
+ * - forwarded `[Shared post: "…"]` blocks — the merchant's own ad text (see
+ *   stripForwardedPostBlocks);
+ * - described image messages (`[Image: …]` / `[صورة: …]`) — the vision model's
+ *   OCR of a photo the customer shared. Prescriptions, flyers and screenshots
+ *   carry contact lines of whoever authored the photographed document (a
+ *   doctor's stamp, another clinic's footer), never the customer's own number.
+ *   The marker protocol is whole-body (shared/imageMessage.ts), so an image
+ *   message contributes NO gate text at all. (2026-07-29 prod, Port Said
+ *   hospital: all three leads captured that day had an external doctor's or
+ *   clinic's number OCR'd from a prescription photo stored as the customer's
+ *   phone.)
+ * Gate-only, like the shared-post strip: the AI extraction still sees the full
+ * message in the conversation transcript as intent context.
+ */
+export function customerAuthoredGateText(messageText: string): string {
+    if (isAnyImageMessage(messageText)) return '';
+    return stripForwardedPostBlocks(messageText);
+}
+
+/**
+ * The image-message turns the customer sent in this conversation — vision OCR
+ * text, not customer-typed words. Fed into the phone-EXCLUSION set (alongside
+ * the business's own numbers) so the AI extractor can't lift a photographed
+ * document's contact line back out of the transcript as the lead's phone even
+ * when the gate fired on a different, genuinely typed message.
+ */
+export function imageTurnTexts(history: Array<{ role: string; content: string }>): string[] {
+    return history
+        .filter(m => m.role === 'user' && isAnyImageMessage(m.content))
+        .map(m => m.content);
 }
 
 /**
@@ -346,15 +382,14 @@ class LeadExtractorService {
 
         const phoneOpts = defaultCountry ? { defaultCountry } : undefined;
 
-        // Strip forwarded `[Shared post: "…"]` blocks before the phone gate: their
-        // body is the merchant's OWN ad text that WE inject from the Graph API
-        // (nonTextHandler.ts / messageProcessor.ts), so a number inside it is the
-        // merchant's published line, never the customer's contact. A customer who
-        // forwards our ad must not become a lead until they share THEIR own number —
-        // text they typed OUTSIDE the block is kept. Gate-only: the AI extraction
-        // below still sees the full `messageText`. (June 2026 prod: Nourva customers
-        // forwarded the ad whose body ends with the merchant line 0929453011.)
-        const gateText = stripForwardedPostBlocks(messageText);
+        // Only customer-AUTHORED text may open the phone gate. Machine-written
+        // segments are removed first: forwarded `[Shared post: "…"]` blocks (the
+        // merchant's own ad — June 2026 prod: Nourva customers forwarded the ad
+        // whose body ends with the merchant line 0929453011) and described image
+        // messages (vision OCR of a shared photo — July 2026 prod: prescription
+        // photos turned doctors' numbers into lead phones). Gate-only: the AI
+        // extraction below still sees the full `messageText`.
+        const gateText = customerAuthoredGateText(messageText);
 
         // Cheap pre-gate: the common no-phone message creates no lead — but it may
         // CONTINUE one. Customers naturally send their phone first and the order
@@ -404,7 +439,10 @@ class LeadExtractorService {
                 // Our outgoing replies publish the business's own contact number(s) — but
                 // NOT the reply we just sent for THIS message, which echoes the customer's
                 // own number back to them. priorBusinessTurns drops that trailing echo.
-                businessTexts = [...priorBusinessTurns(history), ...businessPhones];
+                // Image-message turns join the exclusion set too: their numbers belong to
+                // the photographed document's author (a doctor's stamp, another clinic's
+                // flyer), so the AI's phone must never validate against one.
+                businessTexts = [...priorBusinessTurns(history), ...businessPhones, ...imageTurnTexts(history)];
             }
 
             // A forwarded post is the merchant's own ad — its numbers are the
