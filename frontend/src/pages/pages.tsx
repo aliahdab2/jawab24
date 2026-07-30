@@ -41,6 +41,10 @@ import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
 import { isWhatsAppVisible, isWhatsAppRedirectConnect } from '@/lib/featureFlags';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { isMobileBrowser } from '@/lib/browserEnv';
+// Static import (not dynamic) so the tap handler can navigate synchronously —
+// an await between the gesture and location.assign is what mobile Chrome
+// silently ignored (2026-07-30).
+import { openWhatsAppSignupUrl } from '@/lib/whatsappRedirect';
 import { useWorkspaceRole, useSaveKnowledgeBase, useSubscriptionUsage, useOpenOnQueryParam } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
 import { authManager } from '@/lib/authManager';
@@ -84,6 +88,30 @@ const PagesPage: NextPageWithLayout = () => {
   // Target of the pending onboarding-path question — a page ID, or 'new' for a
   // WhatsApp-only card. Same shape as connectingWhatsApp; null = not asking.
   const [whatsAppPathPageId, setWhatsAppPathPageId] = useState<string | null>(null);
+  // Both onboarding-variant dialog URLs, pre-minted while the path question is
+  // open so the answer can navigate synchronously with the tap (see
+  // prepareWhatsAppConnect). null = not ready → the async fallback handles it.
+  const [waPreparedUrls, setWaPreparedUrls] = useState<import('@/lib/whatsappRedirect').WhatsAppSignupUrls | null>(null);
+  useEffect(() => {
+    setWaPreparedUrls(null);
+    if (whatsAppPathPageId === null || !isWhatsAppRedirectConnect()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { prepareWhatsAppConnect } = await import('@/lib/whatsappRedirect');
+        const urls = await prepareWhatsAppConnect({
+          pageId: whatsAppPathPageId === 'new' ? null : whatsAppPathPageId,
+          locale: language,
+        });
+        if (!cancelled) setWaPreparedUrls(urls);
+      } catch {
+        // Pre-mint is an optimization; the choice-time fallback (launchConnect)
+        // surfaces real errors with the proper toasts.
+      }
+    })();
+    return () => { cancelled = true; };
+     
+  }, [whatsAppPathPageId, language]);
   // Desktop guidance before a phone attempts Embedded Signup; holds the
   // continuation to run if the merchant chooses "try on this device".
   const [whatsAppDesktopNotice, setWhatsAppDesktopNotice] = useState<(() => void) | null>(null);
@@ -1406,7 +1434,18 @@ const PagesPage: NextPageWithLayout = () => {
           // Read before clearing — the modal only renders while this is set, so
           // by the time onChoose can fire it is never null.
           const target = whatsAppPathPageId;
+          const prepared = waPreparedUrls;
           setWhatsAppPathPageId(null);
+          // Navigate SYNCHRONOUSLY with the tap when the URLs were pre-minted:
+          // mobile Chrome silently dropped a location.assign issued after an
+          // async round-trip (2026-07-30). Fall back to the async start when the
+          // pre-mint hasn't landed (slow network / failed) — it also owns the
+          // error toasts.
+          if (prepared && isWhatsAppRedirectConnect()) {
+            addErrorBreadcrumb('whatsapp-connect', 'navigating with pre-minted url', { coexistence });
+            openWhatsAppSignupUrl(prepared[coexistence ? 'coexistence' : 'dedicated']);
+            return;
+          }
           void launchConnect(target === 'new' ? null : target, coexistence);
         }}
       />

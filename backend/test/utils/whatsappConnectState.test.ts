@@ -36,6 +36,16 @@ describe('whatsappConnectState', () => {
         expect(verifyWhatsAppConnectState(state)!.pageId).toBeNull();
     });
 
+    it('sibling states can share a caller-supplied nonce (one cookie, two variants)', () => {
+        const first = mintWhatsAppConnectState({ ...INPUT, coexistence: true });
+        const second = mintWhatsAppConnectState({ ...INPUT, coexistence: false }, first.nonce);
+        expect(second.nonce).toBe(first.nonce);
+        expect(verifyWhatsAppConnectState(second.state)).toMatchObject({ coexistence: false, nonce: first.nonce });
+        // Distinct payloads → distinct signatures; both verify independently.
+        expect(second.state).not.toBe(first.state);
+        expect(verifyWhatsAppConnectState(first.state)).toMatchObject({ coexistence: true });
+    });
+
     it('rejects a tampered payload — flipping coexistence invalidates the signature', () => {
         const { state } = mintWhatsAppConnectState(INPUT);
         const [payload, sig] = state.split('.');
