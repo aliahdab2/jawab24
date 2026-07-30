@@ -412,26 +412,6 @@ export const DEMO_PAGES = [
 لا تؤكد توفر أي منتج إلا إذا كانت المعلومة مؤكدة.
 لا تقدم نصائح أو تشخيصات طبية.
 
-هادي قائمة اسعار حفاضات رواء لو اي شخص طلب منك السعر
-
-رقم 1 - 22 قطعة بسعر 45د الوزن (2-4 كيلو).
-رقم 2 - 30 قطعة بسعر 45د الوزن (3-6 كيلو).
-رقم 3 - 26 قطعة بسعر 45د الوزن (4-8 كيلو).
-رقم 4 - 24 قطعة بسعر 45د الوزن (7-14 كيلو).
-رقم 5 - 22 قطعة بسعر 45د الوزن (12-18 كيلو).
-رقم 6 - 20 قطعة بسعر 45د الوزن (16+ كيلو).
-حجم الجامبو:
-رقم 3 - 52 قطعة بسعر 82د الوزن (4-8 كيلو).
-رقم 4 - 48 قطعة بسعر 82د الوزن (7-14 كيلو).
-رقم 5 - 44 قطعة بسعر 82د الوزن (12-18 كيلو).
-رقم 6 - 40 قطعة بسعر 82د الوزن (16+ كيلو).
-رقم 7 - 36 قطعة بسعر 82د الوزن (18+ كيلو).
-
-وهذا سعر حفاضات السباحة
-حفاضات رواء للسباحة
-متوفرة بمقاسين M , S
-السعر 54 دينار
-
 🏷️ نوع النشاط: مستلزمات أطفال
 
 📍 العنوان: سوق الثلاثاء، المدينة
@@ -787,6 +767,49 @@ export const DEMO_DISTRIBUTOR_COLLECTIONS: {
 ];
 
 /**
+ * The second collection KIND on the engine — sizes/prices — and deliberately
+ * UN-KEYED, which is the design finding this slice exists to prove:
+ *
+ * Row GATING solves attribution at scale (236 outlets ⇒ withhold what didn't
+ * match). A 13-row price table needs the OPPOSITE: a customer asking «قديش
+ * أسعار الحفاضات؟» names no size, so a keyed collection would match nothing and
+ * withhold every row — the model could never quote a price (the H-1 dead-end
+ * shape, permanently). keyAttr: null ⇒ the matcher skips it, every row always
+ * renders (~500 chars), and the coverage statement keeps its absence directive:
+ * a size that is not a row (رقم 8) is «غير مسجّل», said honestly.
+ *
+ * What this fixes is the size-list AMBIGUITY that produced the prod false
+ * denial (BAMBO, 2026-07-30, eval #738/#739): in prose, the standard list ends
+ * at رقم 6 and only a جامبو sub-heading carries رقم 7 — the model anchored on
+ * the standard list and denied a product the KB held. As rows, every size
+ * carries its سلسلة attribute inline; there is no sub-heading to lose.
+ *
+ * Same mirror-the-real-KB rule as the outlets: sizes/counts/prices match BAMBO's
+ * actual shape (standard 1–6 at one price, jumbo 3–7 at another, swim M/S).
+ */
+export const DEMO_DISTRIBUTOR_SIZE_LIST: {
+    label: string;
+    rows: { name: string; attributes: { label: string; value: string }[]; price: string }[];
+} = {
+    label: 'مقاسات وأسعار حفاضات رواء',
+    rows: [
+        { name: 'رواء رقم 1', attributes: [{ label: 'السلسلة', value: 'عادي' }, { label: 'القطع', value: '22' }, { label: 'الوزن', value: '2-4 كيلو' }], price: '45' },
+        { name: 'رواء رقم 2', attributes: [{ label: 'السلسلة', value: 'عادي' }, { label: 'القطع', value: '30' }, { label: 'الوزن', value: '3-6 كيلو' }], price: '45' },
+        { name: 'رواء رقم 3', attributes: [{ label: 'السلسلة', value: 'عادي' }, { label: 'القطع', value: '26' }, { label: 'الوزن', value: '4-8 كيلو' }], price: '45' },
+        { name: 'رواء رقم 4', attributes: [{ label: 'السلسلة', value: 'عادي' }, { label: 'القطع', value: '24' }, { label: 'الوزن', value: '7-14 كيلو' }], price: '45' },
+        { name: 'رواء رقم 5', attributes: [{ label: 'السلسلة', value: 'عادي' }, { label: 'القطع', value: '22' }, { label: 'الوزن', value: '12-18 كيلو' }], price: '45' },
+        { name: 'رواء رقم 6', attributes: [{ label: 'السلسلة', value: 'عادي' }, { label: 'القطع', value: '20' }, { label: 'الوزن', value: '16+ كيلو' }], price: '45' },
+        { name: 'رواء رقم 3', attributes: [{ label: 'السلسلة', value: 'جامبو' }, { label: 'القطع', value: '52' }, { label: 'الوزن', value: '4-8 كيلو' }], price: '82' },
+        { name: 'رواء رقم 4', attributes: [{ label: 'السلسلة', value: 'جامبو' }, { label: 'القطع', value: '48' }, { label: 'الوزن', value: '7-14 كيلو' }], price: '82' },
+        { name: 'رواء رقم 5', attributes: [{ label: 'السلسلة', value: 'جامبو' }, { label: 'القطع', value: '44' }, { label: 'الوزن', value: '12-18 كيلو' }], price: '82' },
+        { name: 'رواء رقم 6', attributes: [{ label: 'السلسلة', value: 'جامبو' }, { label: 'القطع', value: '40' }, { label: 'الوزن', value: '16+ كيلو' }], price: '82' },
+        { name: 'رواء رقم 7', attributes: [{ label: 'السلسلة', value: 'جامبو' }, { label: 'القطع', value: '36' }, { label: 'الوزن', value: '18+ كيلو' }], price: '82' },
+        { name: 'حفاضات رواء للسباحة مقاس S', attributes: [{ label: 'السلسلة', value: 'سباحة' }], price: '54' },
+        { name: 'حفاضات رواء للسباحة مقاس M', attributes: [{ label: 'السلسلة', value: 'سباحة' }], price: '54' },
+    ],
+};
+
+/**
  * Seed the distributor fixture's collections. Idempotent: wipes the page's
  * collections first (fact_rows cascade), then writes through
  * `factCollectionsService.createCollection` — the SAME writer an import uses, so
@@ -809,6 +832,14 @@ async function seedDistributorFactCollections(pageId: string): Promise<void> {
             }),
         });
     }
+    // The un-keyed price table — always fully rendered, never gated (see the
+    // DEMO_DISTRIBUTOR_SIZE_LIST note for why keyed would be a dead end here).
+    await factCollectionsService.createCollection(pageId, {
+        label: DEMO_DISTRIBUTOR_SIZE_LIST.label,
+        keyAttr: null,
+        source: 'kb_extract',
+        rows: DEMO_DISTRIBUTOR_SIZE_LIST.rows.map(r => ({ name: r.name, attributes: r.attributes, price: r.price, currency: 'د' })),
+    });
 }
 
 /**
@@ -824,7 +855,7 @@ async function seedDistributorFactCollections(pageId: string): Promise<void> {
  * assembles (`buildGroundingSource`).
  */
 export function renderDemoDistributorLists(todayIso: string): string {
-    return DEMO_DISTRIBUTOR_COLLECTIONS
+    const outletBlocks = DEMO_DISTRIBUTOR_COLLECTIONS
         .map(c => renderFactCollectionBlock(
             // isComplete stays null — the fixture never claims completeness (D-038).
             { label: c.label, keyAttr: c.keyAttr, isComplete: null },
@@ -837,7 +868,17 @@ export function renderDemoDistributorLists(todayIso: string): string {
                 };
             }),
             todayIso,
-        ))
+        ));
+    const sizeBlock = renderFactCollectionBlock(
+        { label: DEMO_DISTRIBUTOR_SIZE_LIST.label, keyAttr: null, isComplete: null },
+        DEMO_DISTRIBUTOR_SIZE_LIST.rows.map(r => ({
+            name: r.name,
+            attributes: r.attributes,
+            price: r.price, currency: 'د', startsAt: null, endsAt: null, isAvailable: true,
+        })),
+        todayIso,
+    );
+    return [...outletBlocks, sizeBlock]
         .filter((block): block is string => !!block)
         .join('\n\n');
 }

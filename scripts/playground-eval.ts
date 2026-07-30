@@ -4503,7 +4503,21 @@ const TEST_CASES: TestCase[] = [
     // anchors on the standard list instead of scanning the sub-heading.
     // The grounding verifier passes this class BY DESIGN (denials are its
     // no-flag shape), so this eval pin is the only detector.
-    // Fix route: G1a fact-list for sizes with L2 row matching (#528 extension).
+    // ⚠️ CAUSE CHANGED, still expectedFail (sizes slice, 2026-07-30). The
+    // AMBIGUITY half is fixed: the sizes list is an UN-KEYED collection (always
+    // fully rendered — gating a 13-row price table would dead-end every price
+    // question that names no size), each row carries its سلسلة inline, and a
+    // bare «قديش أسعار الحفاضات؟» now quotes the table exactly, jumbo and swim
+    // included. Measured on this question: 0/8 with the old prose → 4/8 with the
+    // rows. What blocks the remaining half is a DIFFERENT defect: the fixture
+    // keeps the merchant's own unconditional script «إذا سأل عن توفر منتج قل:
+    // يرجى إرسال اسم المنتج أو صورة» — written before he had structured data —
+    // and the model obeys it about half the time. That is the #720 class (prose
+    // instruction vs structure), whose product fix is the KB-cleanup surface
+    // with merchant confirmation, NOT a prompt rule: an authority line telling
+    // the list to outrank general instructions was written and MEASURED HARMFUL
+    // (0/8 vs 4/8 without) and reverted — the same result the «match exactly»
+    // rule got in the L1 experiment.
     {
         id: 738, category: 69, expectedFail: true, categoryName: 'Distributor Outlet KB', channel: 'dm',
         message: 'هل متوفر رواء رقم 7',
