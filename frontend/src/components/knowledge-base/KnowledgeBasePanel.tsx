@@ -314,6 +314,7 @@ export function KnowledgeBasePanel({
             onChange={setRawText}
             maxLength={MAX_LENGTH}
             ariaLabel={tKb('title')}
+            onPasteTruncated={({ kept }) => toast.warning(tKb('pasteTruncated', { kept }))}
           />
         ) : (
           <KnowledgeBaseSections
