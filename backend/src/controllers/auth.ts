@@ -618,7 +618,9 @@ export class AuthController {
         if (signedRefreshToken) {
              const unsigned = request.unsignCookie(signedRefreshToken);
              if (unsigned.valid && unsigned.value) {
-                 await refreshTokenService.revokeRefreshToken(unsigned.value);
+                 // Revokes the whole rotation family, so a grace-window
+                 // successor cannot outlive the logout.
+                 await refreshTokenService.revokeRefreshToken(unsigned.value, createRequestLogger(request.log));
              }
         }
 
@@ -646,8 +648,9 @@ export class AuthController {
         const refreshToken = unsigned.value;
 
         try {
-            // 1. Verify and rotate (get new token, revoke old one)
-            const result = await refreshTokenService.rotateRefreshToken(refreshToken);
+            // 1. Verify and rotate (get new token, revoke old one).
+            // Logger surfaces grace-reuse and reuse-detection security events.
+            const result = await refreshTokenService.rotateRefreshToken(refreshToken, createRequestLogger(request.log));
 
             if (!result) {
                 // Token invalid or revoked - Clear everything to force login

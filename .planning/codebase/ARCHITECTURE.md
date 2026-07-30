@@ -531,6 +531,35 @@ Each service is independently deployable but shares:
    - X-Workspace-Id header scopes all DB queries
 ```
 
+**Refresh-token rotation (POST /auth/refresh)** — `backend/src/services/refreshToken.ts`.
+Single-use rotation with a 60s reuse-grace window (Auth0 "reuse interval" model),
+organised around a **rotation family**: every token descended from one login
+shares a `family_id`, so the whole lineage is revocable in one statement.
+
+- **Grace reuse.** A token already rotated away (`replacedByTokenHash` set) is
+  accepted within 60s of its revocation and minted a fresh successor *in the same
+  family*. This is what stops multi-tab / Custom-Tab sessions from force-logging
+  out when two contexts race a refresh with the same cookie jar (the prod
+  incident this exists for: repeated mobile login walls, 2026-07-30).
+- **Family termination is the kill switch.** A revocation that records *no*
+  successor hash marks the family terminated — only logout and reuse detection do
+  that. Grace is refused once a family is terminated, so the window can never
+  resurrect an explicitly ended session.
+- **Reuse detection** (RFC 9700 §4.14.2). Replaying a rotated token *beyond* the
+  window revokes every live member of its family. Family-scoped (not a
+  `replacedByTokenHash` chain walk) precisely because grace mints branch off the
+  chain and a walk could not reach them.
+- **Logout** revokes the presented token *and* its family, so a grace-minted
+  successor cannot outlive it. Other devices have their own families.
+- Rows predating `family_id` adopt their own `id` as the family root on first
+  rotation and are backfilled in the same write.
+
+The frontend never starts a refresh (or logout) from the transient bridge pages
+listed in `AUTH_BRIDGE_PATHS` (`frontend/src/constants/auth.ts`) — they navigate
+away in milliseconds and can lose the rotation's Set-Cookie mid-teardown
+(`authManager.isOnAuthBridgePage`). Token hashing uses the shared `sha256Hex`
+(`backend/src/utils/hash.ts`).
+
 **Facebook OAuth (secondary):**
 ```
 1. User clicks "Login with Facebook" → Facebook OAuth redirect

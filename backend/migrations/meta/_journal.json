@@ -995,6 +995,13 @@
       "when": 1785235786515,
       "tag": "0142_fact_collections_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "5",
+      "when": 1785427733181,
+      "tag": "0143_rich_scorpion",
+      "breakpoints": true
     }
   ]
 }

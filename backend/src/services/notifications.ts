@@ -4,7 +4,7 @@ import { eq, and, desc, count, inArray, lt, ne } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { flagReasonEn, flagReasonAr } from '@jawab24/shared';
 import { redis } from '../lib/redis';
-import { createHash } from 'crypto';
+import { sha256Hex } from '../utils/hash';
 
 /**
  * Android notification channel IDs. Must match the channels registered in
@@ -73,7 +73,7 @@ export function classifyFcmResult(success: boolean, errorCode: string | undefine
 }
 
 export function hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
+    return sha256Hex(token);
 }
 
 // Notification types
