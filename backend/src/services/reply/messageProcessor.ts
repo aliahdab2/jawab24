@@ -34,7 +34,7 @@ import {
     classifyDmError,
 } from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
-import { groundingVerifierService, buildGroundingSource } from '../groundingVerifier';
+import { groundingVerifierService, buildGroundingSource, shouldVerifyGrounding } from '../groundingVerifier';
 import { recordActivationEvent } from '../activation';
 import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
 import { extractPostId } from '../../utils/instagram';
@@ -952,19 +952,45 @@ export class MessageProcessor {
 
             // Fire-and-forget grounding verification (SYSTEM_ANALYSIS gap 13).
             // Detection only: it flags the stored row, never the sent reply.
-            // Gated internally (shouldVerifyGrounding) and off unless
-            // GROUNDING_VERIFY_ENABLED=true, so this is inert until switched on.
-            groundingVerifierService.maybeVerifyGrounding({
-                userId,
-                pageId: page.id,
-                sourceId: storedMessage.id,
-                sourceType: 'message',
-                kb: buildGroundingSource({ knowledgeBase, storePolicies, productCatalog }),
-                question: consolidatedText,
-                reply: replyText ?? '',
-                intent: aiIntent,
-                replyMethod,
-            }).catch(() => { /* errors captured inside maybeVerifyGrounding */ });
+            // Off unless GROUNDING_VERIFY_ENABLED=true, so this is inert until
+            // switched on.
+            //
+            // The verifier must judge against EXACTLY what the generator saw —
+            // no more, no less (owner ruling 2026-07-30):
+            //   • originPostMessage = origin post + its Post Reply trigger,
+            //     which the AI is allowed to quote (#467). Omitting it made
+            //     every legitimate post quote look invented on Post-Reply-heavy
+            //     pages (found on الدمشقي).
+            //   • history = the generator's own recipe (getConversationHistory
+            //     limit 12, minus turns matching the current text), re-fetched
+            //     here because verification runs after the send. The extra read
+            //     is gated first so the fleet-wide path pays nothing, and it is
+            //     off the reply latency path entirely (reply already sent). The
+            //     assistant-side filter also drops the just-stored outgoing
+            //     reply, which did not exist when the generator read history.
+            {
+                const groundingKb = buildGroundingSource({ knowledgeBase, postMessage: originPostMessage, storePolicies, productCatalog });
+                if (shouldVerifyGrounding({ pageId: page.id, replyMethod, intent: aiIntent, reply: replyText ?? '', kb: groundingKb })) {
+                    const sentReply = replyText ?? '';
+                    messagesService.getConversationHistory(page.id, senderId, 12)
+                        .then(hist => groundingVerifierService.maybeVerifyGrounding({
+                            userId,
+                            pageId: page.id,
+                            sourceId: storedMessage.id,
+                            sourceType: 'message',
+                            kb: groundingKb,
+                            question: consolidatedText,
+                            reply: sentReply,
+                            intent: aiIntent,
+                            replyMethod,
+                            history: hist
+                                .filter(m => !(m.role === 'user' && m.content === consolidatedText))
+                                .filter(m => !(m.role === 'assistant' && m.content === sentReply))
+                                .map(m => (m.role === 'user' ? { q: m.content, a: null } : { q: null, a: m.content })),
+                        }))
+                        .catch(() => { /* errors captured inside maybeVerifyGrounding */ });
+                }
+            }
 
             pipelineMetrics.record(pipeline, 'success');
             lap('DONE');
