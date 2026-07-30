@@ -362,3 +362,12 @@ defaults to `'info'` and the server `.env` sets no `LOG_LEVEL`. Every reply-late
 timing is therefore **dark in prod**, so there is no p50/p95 for the metric the product
 competes on. Fix that before optimising the pipeline further; local benchmarks cannot
 tell you whether the lead is holding.
+
+## D-050 · Long-tail knowledge reaches the model by FULL-KB injection on non-ecommerce pages (plus always-injected structured blocks) — supersedes the retrieval half of D-007; kb_facts Tier-2 RAG is retired unmerged
+**Decided:** 2026-07-30 (recording a reversal that shipped incrementally; code-verified against main) · **Status:** Active
+`resolveKnowledge` (backend `generator.ts`) gives non-ecommerce pages the **full KB text, always** — no retrieval, embedding, or chunk call runs on that path; RAG survives only for e-commerce pages whose product data lives in chunks. `KB_RAG_THRESHOLD_CHARS` is an emergency rollback lever, unset by default. Why the June ruling reversed: chunking a single-document KB can only DROP answer-bearing text (a short lexical query like «وين موقعكم» retrieves the wrong chunks and the address never reaches the model) — the false-denial cost outweighed the token cost, which the 16k `KB_MAX_CHARS` cap and KB prompt-caching bound. Consequences, all still in force:
+- The `feat/kb-structured-facts` branch (kb_facts, Tier-2 retrieval lane) was **never merged and is retired**; its validated lessons (extractor consolidation, deterministic price-grounding) carry forward into the catalog/fact-collections extractors, not into a retrieval lane.
+- Structured facts ship as **always-injected blocks**: the catalog block, the BUSINESS_INFO operational-fields block (D-007's Lane 1, unchanged), and fact collections with L2 deterministic row gating (D-047) — which makes prompt size independent of list size.
+- D-009's core survives: no prices in the authoritative BUSINESS_INFO block; the price guard grounds against the KB text the model actually saw.
+- The 16,000-char free-text cap is **not to be raised** (it is a per-reply cost forever, and engaged merchants already sit at 15.9k) — capacity pressure is relieved by moving enumerable data into fact rows, never by a bigger prompt.
+- Older notes citing this ruling as «D-012» (a numbering slip in `.planning/` docs and session memory — repo D-012 is the Salla Easy-Mode decision) are corrected to D-050 as they are touched.
