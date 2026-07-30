@@ -182,7 +182,16 @@ export function renderCoverageStatement(
         ? `هذه القائمة كاملة ونهائية: أي ${subject} غير مذكور فيها فهو غير متوفر لدينا — قلها للعميل بوضوح وثقة.`
         : `أي ${subject} غير مذكور في هذه القائمة فهو غير مسجّل لدينا — قل للعميل إنه غير موجود في قائمتك واعرض عليه التواصل معنا مباشرة، ولا تفترض توفره ولا عدم توفره.`;
 
-    return `${scopeLine} ${absence}`;
+    // Retraction clause — measured need (2026-07-30 A/B): with row gating alone,
+    // a PRIOR assistant turn asserting coverage for an unlisted key value gets
+    // RATIFIED, not corrected — the model reframes the transcript's claim as
+    // «حسب قائمتنا» (borrowed authority) 4/4 at prod sampling, worse than the
+    // ungated arm's 2/4. The boundary must outrank the transcript explicitly.
+    // Derived from keyAttr like everything above — not a hand list, not a
+    // global prompt rule.
+    const retraction = `وإذا ذُكر في هذه المحادثة سابقاً — من أي طرف — ${subject} ليس في هذه القائمة على أنه مغطى، فذلك الذكر خطأ: صحّحه للعميل صراحةً ولا تؤكده.`;
+
+    return `${scopeLine} ${absence} ${retraction}`;
 }
 
 /**

@@ -106,6 +106,19 @@ describe('renderCoverageStatement — the 28%→0% mechanism', () => {
         expect(s).not.toContain('كاملة ونهائية');
     });
 
+    // Regression (2026-07-30 A/B): with row gating alone, a prior assistant turn
+    // asserting coverage for an unlisted key got RATIFIED («حسب قائمتنا…») 4/4
+    // at prod sampling — the boundary must explicitly outrank the transcript.
+    // The retraction clause dropped that to 1/4 with first-ask and controls
+    // unchanged. It must render on BOTH confirmation variants.
+    it('retraction clause renders on confirmed and unconfirmed lists alike', () => {
+        for (const isComplete of [true, null]) {
+            const s = must(renderCoverageStatement({ ...outlets, isComplete }, [row()]));
+            expect(s).toContain('فذلك الذكر خطأ');
+            expect(s).toContain('صحّحه للعميل');
+        }
+    });
+
     it('un-keyed collection still gets an absence directive', () => {
         const flat: FactCollectionForPrompt = { label: 'الماركات المعتمدة', keyAttr: null, isComplete: null };
         const s = must(renderCoverageStatement(flat, [row({ name: 'ماركة أ', attributes: null })]));
