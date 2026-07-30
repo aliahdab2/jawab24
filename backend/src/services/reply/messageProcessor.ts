@@ -17,6 +17,7 @@ import { posts, instagramMedia, messages } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 import { enrichPageContext } from './contextEnricher';
+import { composeFactMatchText } from '../factCollectionsMatcher';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
@@ -659,15 +660,30 @@ export class MessageProcessor {
                 // are classified as SPAM_OR_IRRELEVANT because the AI sees them out of context.
                 this.resolveOriginPostMessage(page.id, senderId),
                 // 12. Enrich KB with e-commerce data if linked.
-                enrichPageContext(
-                    page as unknown as Record<string, unknown>,
-                    userSettings,
-                    messageText,
-                    page.knowledgeBase || undefined,
-                    // Match the fact lists against the whole consolidated burst, not just
-                    // the last line of it — see enrichPageContext's `matchText`.
-                    consolidatedText,
-                ),
+                (async () => {
+                    // The fact-list matcher reads the customer's recent USER turns plus
+                    // the consolidated burst — an area stated once, minutes before the
+                    // follow-up («شن أسامي الصيدليات؟»), must keep matching for the rest
+                    // of the conversation, and the burst window is seconds-scale. Same
+                    // window the model itself sees (the generator's limit-12 recipe), so
+                    // the gate is exactly as informed as the model's visible history.
+                    // Re-fetched here rather than threaded out of the generator for the
+                    // same reason the post-send verifier re-fetches: threading it through
+                    // generateForMessage's shared input would touch every caller for one
+                    // indexed read. A failed read degrades to burst-only matching — the
+                    // pre-H-1 behaviour — never to a failed reply.
+                    let matchHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+                    try {
+                        matchHistory = (await messagesService.getConversationHistory(page.id, senderId, 12)) ?? [];
+                    } catch { /* burst-only matching */ }
+                    return enrichPageContext(
+                        page as unknown as Record<string, unknown>,
+                        userSettings,
+                        messageText,
+                        page.knowledgeBase || undefined,
+                        composeFactMatchText(matchHistory, consolidatedText),
+                    );
+                })(),
             ]);
             lap('11b-12-preAiParallel');
             const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated } = enriched;

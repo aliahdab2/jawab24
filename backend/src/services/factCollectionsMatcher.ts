@@ -90,6 +90,36 @@ export function matchCollections(messageText: string, collections: MatcherCollec
     return out;
 }
 
+/**
+ * Compose the text the matcher reads for a DM: the customer's recent USER turns
+ * plus the current consolidated burst.
+ *
+ * Why history at all: a customer states their area once («أنا ساكن في عين
+ * الدالية»), gets a reply, and asks for outlet names minutes later — outside the
+ * seconds-scale consolidation window. Matching only the burst would withhold
+ * their own area's rows for the rest of the conversation, and every follow-up
+ * («أعطني الأسماء») matches nothing either, so the model could name the area but
+ * never an outlet — a dead end the customer cannot escape without re-typing the
+ * area name.
+ *
+ * Why USER turns only, never assistant turns: the planted-history probe (eval
+ * #737) is an assistant turn asserting outlets in a city that is in no list.
+ * If assistant turns fed the matcher, a fabricated reply naming a REAL listed
+ * area for the WRONG city would re-open that area's rows and hand the model
+ * material to keep defending the lie — the matcher would be trusting the very
+ * output it exists to constrain. The customer's own words are the only
+ * authoritative statement of where they are.
+ */
+export function composeFactMatchText(
+    history: { role: 'user' | 'assistant'; content: string }[] | undefined,
+    currentText: string,
+): string {
+    const userTurns = (history ?? [])
+        .filter(t => t.role === 'user' && t.content && t.content.trim().length > 0)
+        .map(t => t.content);
+    return userTurns.length > 0 ? [...userTurns, currentText].join('\n') : currentText;
+}
+
 /** Shared normalization for both sides of the comparison. */
 function normalizeForMatch(text: string): string {
     // taa marbuta folded here (unlike the default): «الدالية» vs «الداليه» is a

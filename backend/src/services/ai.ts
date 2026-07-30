@@ -540,7 +540,27 @@ export class AiService {
         // poison the store, the read so entries written before this guard (or by a
         // page whose collections arrived later) cannot be served either. The
         // exact-text cache keeps working — identical text matches identical rows.
+        //
+        // Do NOT try to win the hit-rate back by scoping entries to the matched
+        // set (or a hash of the rendered block) instead of skipping: the no-match
+        // class defeats it. «وين نلقاكم في العجيلات؟» and «وين نلقاكم في زوارة؟»
+        // both match NOTHING — identical matched set, identical gated block — yet
+        // each needs a reply naming ITS city; serving one for the other puts the
+        // wrong city's name in the customer's thread. The distinguishing
+        // information is in the question text the embedding deliberately blurs,
+        // so any scoping finer than "skip" re-opens the defect for exactly the
+        // questions gating exists to protect. (D-051's cache rule, re-derived in
+        // the #528 review when matched-set scoping was proposed and rejected.)
         const factListsGated = request.context?.factCollectionsGated === true;
+        if (factListsGated && config.ai.semanticCacheEnabled && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches && request.context?.channel !== 'dm') {
+            // Gating retires the semantic cache for most traffic on keyed-collection
+            // pages (any message that doesn't name a listed value is gated). Count the
+            // skips that would otherwise have been eligible reads, so a hit-rate drop
+            // on a collection page is attributable from the metrics instead of reading
+            // as a cache regression (the Nourva cache=0 diagnosis cost a day for want
+            // of exactly this attribution). Same fire-and-forget pattern as §13c.
+            redis.incr('metrics:cache:semantic_skip:fact_gated').catch(() => {});
+        }
         if (config.ai.semanticCacheEnabled && !factListsGated && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches && request.context?.channel !== 'dm') {
             try {
                 // Use full fallback classifier (covers COMPLIMENT, SPAM, BUSINESS_INQUIRY etc.)

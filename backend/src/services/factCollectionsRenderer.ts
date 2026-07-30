@@ -219,8 +219,11 @@ export function indexKeyValues(
     return { keyValues: [...seen], rowsMissingKey };
 }
 
-/** Attribute labels are human-typed; compare on intent, not on bytes. */
-function normalizeLabel(label: string): string {
+/** Attribute labels are human-typed; compare on intent, not on bytes. Exported
+ *  because the row-gating filter (factCollections.ts) must use the SAME notion of
+ *  "same label" as this index — two copies of this comparison diverging is how a
+ *  row ends up counted by the coverage index yet withheld by the gate. */
+export function normalizeLabel(label: string): string {
     return label.trim().replace(/\s+/g, ' ');
 }
 

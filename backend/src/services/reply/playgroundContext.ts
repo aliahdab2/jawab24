@@ -3,6 +3,7 @@ import { workspaceSettingsService } from '../workspaceSettings';
 import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
 import { factCollectionsService } from '../factCollections';
+import { composeFactMatchText } from '../factCollectionsMatcher';
 import { captureError } from '../../utils/sentryHelpers';
 import { pickNudgeVariation } from './nudge';
 import { detectLanguageCode } from '../../utils/language';
@@ -131,7 +132,15 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     let factCollectionsBlock: string | undefined;
     let factCollectionsGated = false;
     try {
-        const facts = await factCollectionsService.buildFactCollectionsContext(page.id, question);
+        // DMs match against the caller-supplied history's USER turns + the current
+        // question, mirroring the production pipeline (messageProcessor composes the
+        // same via composeFactMatchText) — an eval probe that states the area in a
+        // prior turn must exercise the same gate production applies. Comments have
+        // no history, same as production.
+        const matchText = channel === 'dm'
+            ? composeFactMatchText(conversationHistory, question)
+            : question;
+        const facts = await factCollectionsService.buildFactCollectionsContext(page.id, matchText);
         factCollectionsBlock = facts.block;
         factCollectionsGated = facts.gated;
     } catch (err) {

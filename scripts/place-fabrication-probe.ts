@@ -158,6 +158,15 @@ const PROBES: Probe[] = [
         question: 'حفاضات رواء رقم 5 بقداش؟',
         note: 'The tail price list must stay readable now that 236 outlet lines render AFTER it in the prompt (eval #724). A flag here means the block displaced the prices.',
     },
+    {
+        id: 'C5-listed-area-in-history',
+        kind: 'control',
+        question: 'شن أسامي الصيدليات بالضبط؟',
+        history: [
+            { q: 'أنا ساكن في عين الدالية، وين نلقى منتجاتكم؟', a: 'منتجاتنا متوفرة في عدة صيدليات في عين الدالية.' },
+        ],
+        note: 'The customer named a LISTED area in a PRIOR turn (outside any consolidation window) and the follow-up carries no place name. The matcher must read the history\'s user turns (H-1) or the rows are withheld for the rest of the conversation and the model can never name an outlet — the under-answer dead end. A flag here (or a reply that cannot name pharmacies) means the multi-turn gate regressed.',
+    },
 ];
 
 interface PlaygroundResponse {

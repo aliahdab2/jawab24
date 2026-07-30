@@ -19,6 +19,7 @@ import { Logger, noopLogger } from '../types';
 import {
     renderFactCollectionBlock,
     indexKeyValues,
+    normalizeLabel,
     type FactCollectionForPrompt,
     type FactRowForPrompt,
 } from './factCollectionsRenderer';
@@ -218,8 +219,12 @@ class FactCollectionsService {
                 // normalization for the same reason indexKeyValues does it: they come
                 // from extraction and merchant typing, where «المنطقة » and «المنطقة»
                 // are one intent (review finding H1, same class as the earlier H2).
+                // Same normalizeLabel as indexKeyValues — the gate and the coverage
+                // index must share one notion of "same label", or a row gets counted
+                // by the index yet withheld by the gate.
+                const wantedLabel = normalizeLabel(keyAttr);
                 const carriesMatchedKey = (r: FactRowForPrompt): boolean =>
-                    !!r.attributes?.some(a => sameLabel(a.label, keyAttr) && wanted.has(a.value.trim()));
+                    !!r.attributes?.some(a => normalizeLabel(a.label) === wantedLabel && wanted.has(a.value.trim()));
                 // No match → NO rows. The coverage statement still renders (it is
                 // computed over every live row), so the model keeps the list's
                 // boundary and can still name the areas it covers — the
@@ -378,14 +383,6 @@ class FactCollectionsService {
         await pagesService.invalidatePageCaches(pageId);
         return deleted;
     }
-}
-
-/** Same label normalization the renderer's key index uses (trim + collapse inner
- *  whitespace). Kept here rather than importing a private helper so the two cannot
- *  silently diverge in only one direction — if this ever needs more than whitespace
- *  folding, both must change together. */
-function sameLabel(a: string, b: string): boolean {
-    return a.trim().replace(/\s+/g, ' ') === b.trim().replace(/\s+/g, ' ');
 }
 
 /** Row/collection shapes are decoupled from drizzle in the renderer, so map at
