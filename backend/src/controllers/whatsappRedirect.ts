@@ -88,6 +88,7 @@ function handoffPage(dialogUrl: string, locale: 'ar' | 'en'): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="${config.frontendUrl}/brand/favicon-32x32.png">
 <title>${escapeHtml(t('waHandoffTitle', locale))}</title>
 <style>
   :root { color-scheme: light dark; }
@@ -96,6 +97,9 @@ function handoffPage(dialogUrl: string, locale: 'ar' | 'en'): string {
          font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
   .card { max-width:420px; width:100%; text-align:center; background:#fff; border-radius:16px;
           padding:32px 24px; box-shadow:0 4px 24px rgba(15,23,42,.08); }
+  /* Square box reserved up front — the mark loads over mobile data and must
+     not shove the CTA down under the merchant's thumb mid-tap. */
+  .mark { width:64px; height:64px; margin:0 auto 16px; display:block; }
   h1 { font-size:20px; margin:0 0 12px; }
   p { font-size:15px; line-height:1.6; margin:0 0 24px; color:#475569; }
   a.cta { display:block; background:#0f9d76; color:#fff; text-decoration:none; font-size:17px;
@@ -109,6 +113,7 @@ function handoffPage(dialogUrl: string, locale: 'ar' | 'en'): string {
 </head>
 <body>
   <main class="card">
+    <img class="mark" width="64" height="64" src="${config.frontendUrl}/brand/icon-vector.svg" alt="Jawab24">
     <h1>${escapeHtml(t('waHandoffTitle', locale))}</h1>
     <p>${escapeHtml(t('waHandoffBody', locale))}</p>
     <a class="cta" href="${escapeHtml(dialogUrl)}">${escapeHtml(t('waHandoffCta', locale))}</a>

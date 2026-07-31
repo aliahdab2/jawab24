@@ -306,6 +306,11 @@ describe('WhatsAppRedirectController.appStart', () => {
         expect(html).not.toContain('<script');
         expect(html).not.toContain('http-equiv="refresh"');
         expect(reply.redirect).not.toHaveBeenCalled();
+        // Branded: tab icon + the mark, so the merchant can see whose page is
+        // asking before they hand themselves to Facebook.
+        expect(html).toContain('rel="icon"');
+        expect(html).toContain('/brand/icon-vector.svg');
+        expect(html).toContain('alt="Jawab24"');
         // Nonce cookie set alongside the session cookies.
         expect(vi.mocked(reply.setCookie).mock.calls.some(c => c[0] === WHATSAPP_NONCE_COOKIE)).toBe(true);
     });
