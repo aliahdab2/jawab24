@@ -127,3 +127,25 @@ export function formatPlainDate(
         ...(withYear ? { year: 'numeric' } : {}),
     }).format(date);
 }
+
+/** The two pieces a calendar-agenda date chip needs («4» / «أغسطس»), from the
+ *  same safe parsing as formatPlainDate. Null when the input isn't a plain
+ *  calendar date. */
+export function formatPlainDateParts(
+    iso: string | null | undefined,
+    intlLocale: string,
+): { day: string; month: string } | null {
+    if (!iso) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return null;
+    const [, y, mo, d] = m;
+    const date = new Date(Number(y), Number(mo) - 1, Number(d));
+    if (
+        date.getFullYear() !== Number(y) ||
+        date.getMonth() !== Number(mo) - 1 ||
+        date.getDate() !== Number(d)
+    ) return null;
+    const fmt = (opts: Intl.DateTimeFormatOptions) =>
+        new Intl.DateTimeFormat(intlLocale, { calendar: 'gregory', ...opts }).format(date);
+    return { day: fmt({ day: 'numeric' }), month: fmt({ month: 'short' }) };
+}

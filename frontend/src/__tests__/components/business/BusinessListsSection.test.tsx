@@ -99,8 +99,8 @@ describe('BusinessListsSection', () => {
     expect(await screen.findAllByText('دورة ICDL')).toHaveLength(1);
     // The session row is NESTED under the price row inside the same card:
     // it lives in the indented (border-inline-start) list, in the same card div.
-    const sessionRow = screen.getByText('الأحد والثلاثاء').closest('ul');
-    expect(sessionRow?.className).toContain('border-s-2');
+    const sessionZone = screen.getByText('الأحد والثلاثاء').closest('div.rounded-xl.bg-muted\\/40');
+    expect(sessionZone).not.toBeNull();
     const card = screen.getByText('دورة ICDL').closest('div.rounded-xl');
     expect(card?.contains(screen.getByText(/8 جلسات/))).toBe(true);
     expect(card?.contains(screen.getByText('الأحد والثلاثاء'))).toBe(true);
@@ -115,8 +115,8 @@ describe('BusinessListsSection', () => {
     expect(screen.getByText(/8 جلسات/)).toBeInTheDocument();
     expect(screen.getByText('الأيام:')).toBeInTheDocument();
     expect(screen.getByText('الأحد والثلاثاء')).toBeInTheDocument();
-    // price formatted, never "35000.00"
-    expect(screen.getAllByText(/35000/).length).toBeGreaterThan(0);
+    // price formatted with digit grouping, never the raw column form
+    expect(screen.getAllByText(/35,000/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/35000\.00/)).toBeNull();
     // the live slot's date renders formatted — the raw ISO string must not appear
     expect(document.body.textContent).not.toContain(future);

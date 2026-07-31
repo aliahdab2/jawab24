@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { formatCatalogPrice } from '@/utils/priceFormat';
-import { todayISODate, formatPlainDate } from '@/utils/dateUtils';
+import { todayISODate, formatPlainDateParts } from '@/utils/dateUtils';
 import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/factListGrouping';
 import {
   sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
@@ -181,49 +181,162 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   const isExpired = (row: FactRowDto) =>
     row.startsAt ? row.startsAt < today : !!row.endsAt && row.endsAt < today;
 
-  /** One row line inside its section: labelled pairs · price · readable date,
-   *  wrapping (never truncating), the whole line one edit button. */
-  const rowButton = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, showName = false, dropFaceLabel?: string | null) => {
-    const pairs = rowDisplayAttributes(section, row, { keepKey: showName, dropLabels: dropFaceLabel ? [dropFaceLabel] : undefined });
-    const date = row.startsAt ? formatPlainDate(row.startsAt, intlLocale) : null;
-    const hasContent = pairs.length > 0 || row.price || date;
+  /** Display price with digit grouping («35,000») — display only; forms keep
+   *  plain digits. Falls back to the raw string for non-numeric prices. */
+  const displayPrice = (price: string): string => {
+    const n = Number(price);
+    return Number.isFinite(n) ? n.toLocaleString(intlLocale) : formatCatalogPrice(price);
+  };
+
+  const priceTag = (row: FactRowDto) =>
+    row.price ? (
+      <span className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums" dir="auto">
+        {displayPrice(row.price)}
+        {row.currency && (
+          <span className="text-xs font-medium text-muted-foreground ms-1">{row.currency}</span>
+        )}
+      </span>
+    ) : null;
+
+  const expiredBadge = (
+    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground whitespace-nowrap">
+      {t('lists.expired')}
+    </span>
+  );
+
+  const editGlyph = (
+    <>
+      <Pencil className="w-4 h-4 flex-shrink-0 text-icon-muted" aria-hidden="true" />
+      <span className="sr-only">{t('lists.edit')}</span>
+    </>
+  );
+
+  /** A TIER line (Shopify-variant / ticket-type pattern): bold title — the
+   *  tier value when one exists, else the row name — price anchored to the
+   *  end edge, everything else on a muted second line. */
+  const tierRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean) => {
+    const facePair = faceLabel
+      ? row.attributes?.find((a) => a.label === faceLabel)
+      : undefined;
+    const pairs = rowDisplayAttributes(section, row, {
+      dropLabels: faceLabel ? [faceLabel] : undefined,
+    });
+    // The bold line is the TIER value when one exists. Without one, the row's
+    // other fields carry the line — never the entity name again (the card
+    // header already says it; repeating it was the original complaint).
+    const title = facePair?.value ?? null;
     return (
-      <li key={row.id}>
+      <li key={row.id} className="list-none">
         <button
           type="button"
           onClick={() => openEntity(group, { collection: section.collection, row })}
-          className={`w-full min-h-[48px] grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-4 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
+          className={`w-full min-h-[52px] flex items-center gap-3 px-4 py-3 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
         >
-          <span className="min-w-0 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            {(showName || !hasContent) && (
-              <span className="text-sm font-medium text-foreground break-words" dir="auto">{row.name}</span>
-            )}
-            {pairs.map((a) => (
-              <span key={a.label} className="text-sm text-foreground break-words" dir="auto">
-                <span className="text-muted-foreground">{a.label}: </span>
-                {a.value}
-              </span>
-            ))}
-            {row.price && (
-              <span className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums">
-                {formatCatalogPrice(row.price)}
-                {row.currency && (
-                  <span className="text-xs font-medium text-muted-foreground ms-1">{row.currency}</span>
-                )}
-              </span>
-            )}
-            {date && (
-              <span className="text-sm text-foreground whitespace-nowrap">
-                <span className="text-muted-foreground">{t('lists.startsLabel')} </span>
-                {date}
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2 flex-wrap">
+              {title ? (
+                <span className="text-sm font-semibold text-foreground break-words" dir="auto">{title}</span>
+              ) : pairs.length > 0 ? (
+                <span className="text-sm text-foreground break-words" dir="auto">
+                  {pairs.map((a, i) => (
+                    <span key={a.label}>
+                      <span className="text-muted-foreground">{a.label}: </span>
+                      {a.value}
+                      {i < pairs.length - 1 && ' · '}
+                    </span>
+                  ))}
+                </span>
+              ) : row.price ? (
+                priceTag(row)
+              ) : (
+                <span className="text-sm font-semibold text-foreground break-words" dir="auto">{row.name}</span>
+              )}
+              {expired && expiredBadge}
+            </span>
+            {title && pairs.length > 0 && (
+              <span className="block text-xs text-muted-foreground mt-0.5 break-words" dir="auto">
+                {pairs.map((a) => `${a.label}: ${a.value}`).join(' · ')}
               </span>
             )}
           </span>
-          <span className="flex-shrink-0 flex items-center gap-1.5 pt-0.5">
-            {expired && <span className="text-xs text-muted-foreground">{t('lists.expired')}</span>}
-            <Pencil className="w-4 h-4 text-icon-muted" aria-hidden="true" />
-            <span className="sr-only">{t('lists.edit')}</span>
+          {(title || pairs.length > 0) && priceTag(row)}
+          {editGlyph}
+        </button>
+      </li>
+    );
+  };
+
+  /** A SESSION line (calendar-agenda pattern): a date chip leads, the
+   *  session's values follow as one readable line. Field names stay available
+   *  to assistive tech and on hover. */
+  const sessionRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean) => {
+    const pairs = rowDisplayAttributes(section, row, {
+      dropLabels: faceLabel ? [faceLabel] : undefined,
+    });
+    const parts = formatPlainDateParts(row.startsAt, intlLocale);
+    return (
+      <li key={row.id} className="list-none">
+        <button
+          type="button"
+          onClick={() => openEntity(group, { collection: section.collection, row })}
+          className={`w-full min-h-[52px] flex items-center gap-3 px-3 py-2 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
+        >
+          {parts ? (
+            <span
+              className="flex-shrink-0 w-11 rounded-lg bg-card border border-theme-border text-center py-1 leading-tight"
+              title={t('lists.startsLabel')}
+            >
+              <span className="block text-sm font-bold text-foreground tabular-nums">{parts.day}</span>
+              <span className="block text-[10px] text-muted-foreground">{parts.month}</span>
+            </span>
+          ) : (
+            <span className="flex-shrink-0 w-11 flex items-center justify-center text-icon-muted">
+              <CalendarClock className="w-4 h-4" aria-hidden="true" />
+            </span>
+          )}
+          <span className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-foreground break-words">
+              {pairs.map((a, i) => (
+                <span key={a.label} title={a.label} dir="auto">
+                  <span className="sr-only">{a.label}: </span>
+                  {a.value}
+                  {i < pairs.length - 1 && <span className="text-muted-foreground"> · </span>}
+                </span>
+              ))}
+              {pairs.length === 0 && <span dir="auto">{row.name}</span>}
+            </span>
+            {expired && expiredBadge}
           </span>
+          {editGlyph}
+        </button>
+      </li>
+    );
+  };
+
+  /** A DIRECTORY line (contact-list pattern): bold name, muted labelled
+   *  detail beneath, price at the end when the list prices things. */
+  const directoryRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean) => {
+    const pairs = rowDisplayAttributes(section, row, { keepKey: true });
+    return (
+      <li key={row.id} className="list-none">
+        <button
+          type="button"
+          onClick={() => openEntity(group, { collection: section.collection, row })}
+          className={`w-full min-h-[52px] flex items-center gap-3 px-4 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
+        >
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-foreground break-words" dir="auto">{row.name}</span>
+              {expired && expiredBadge}
+            </span>
+            {pairs.length > 0 && (
+              <span className="block text-xs text-muted-foreground mt-0.5 break-words" dir="auto">
+                {pairs.map((a) => `${a.label}: ${a.value}`).join(' · ')}
+              </span>
+            )}
+          </span>
+          {priceTag(row)}
+          {editGlyph}
         </button>
       </li>
     );
@@ -242,9 +355,9 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
       {/* Per-list controls: the completeness word (D-038, tri-state) belongs to
           the LIST, not to any one card — it changes what customers are TOLD
           about absence, so the question names that consequence. */}
-      <div className="mt-3 space-y-2">
+      <div className="mt-3 rounded-xl border border-theme-border bg-muted/40 divide-y divide-theme-border/60">
         {collections.map((collection) => (
-          <div key={collection.id} className="rounded-xl bg-muted border border-theme-border px-3 py-2">
+          <div key={collection.id} className="px-3 py-2.5">
             {collection.isComplete === null ? (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <span className="min-w-0">
@@ -305,17 +418,12 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           const expanded = !!showExpired[collection.id];
           return (
             <div key={collection.id} className="rounded-xl border border-theme-border overflow-hidden">
-              <div className="flex items-baseline gap-2 flex-wrap px-4 pt-3 pb-1">
-                <h3 className="text-sm font-semibold text-foreground" dir="auto">{collection.label}</h3>
-                {section.shared.map((sh) => (
-                  <span key={sh.label} dir="auto" className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {t('lists.attrPair', { label: sh.label, value: sh.value })}
-                  </span>
-                ))}
+              <div className="px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30">
+                <h3 className="text-[15px] font-bold text-foreground" dir="auto">{collection.label}</h3>
               </div>
-              <ul className="divide-y divide-theme-border">
-                {live.map((entry) => rowButton(syntheticGroup, section, entry.row, false, true))}
-                {expanded && expiredRows.map((entry) => rowButton(syntheticGroup, section, entry.row, true, true))}
+              <ul className="divide-y divide-theme-border/60">
+                {live.map((entry) => directoryRow(syntheticGroup, section, entry.row, false))}
+                {expanded && expiredRows.map((entry) => directoryRow(syntheticGroup, section, entry.row, true))}
               </ul>
               <div className="flex items-center gap-1.5 flex-wrap px-4 py-2 border-t border-theme-border">
                 <button
@@ -347,7 +455,9 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           const expanded = !!showExpired[group.key];
           return (
             <div key={group.key} className="rounded-xl border border-theme-border overflow-hidden">
-              <h3 className="px-4 pt-3 pb-1 text-sm font-semibold text-foreground" dir="auto">{group.title}</h3>
+              <div className="px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30">
+                <h3 className="text-[15px] font-bold text-foreground" dir="auto">{group.title}</h3>
+              </div>
 
               {/* Tier blocks — each price line with ITS dates directly under
                   it (owner: «كل دورة ومعها كل معلوماتها»). Same matching as
@@ -357,17 +467,19 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                   sections.find((sec) => sec.collection.id === collectionId);
                 const { blocks, orphans } = buildTierBlocks(group, collections, faceLabel);
                 const datedCollection = collections.find(isDatedCollection);
-                const sessionUl = (rows: typeof group.rows, keepFace: boolean) => (
-                  <ul className="ms-5 border-s-2 border-theme-border divide-y divide-theme-border">
-                    {rows.filter((r) => !isExpired(r.row)).map((entry) => {
-                      const sec = sectionOf(entry.collection.id);
-                      return sec && rowButton(group, sec, entry.row, false, false, keepFace ? undefined : faceLabel);
-                    })}
-                    {expanded && rows.filter((r) => isExpired(r.row)).map((entry) => {
-                      const sec = sectionOf(entry.collection.id);
-                      return sec && rowButton(group, sec, entry.row, true, false, keepFace ? undefined : faceLabel);
-                    })}
-                  </ul>
+                const sessionZone = (rows: typeof group.rows) => (
+                  <div className="mx-3 mb-3 rounded-xl bg-muted/40 overflow-hidden">
+                    <ul className="divide-y divide-theme-border/50">
+                      {rows.filter((r) => !isExpired(r.row)).map((entry) => {
+                        const sec = sectionOf(entry.collection.id);
+                        return sec && sessionRow(group, sec, entry.row, false);
+                      })}
+                      {expanded && rows.filter((r) => isExpired(r.row)).map((entry) => {
+                        const sec = sectionOf(entry.collection.id);
+                        return sec && sessionRow(group, sec, entry.row, true);
+                      })}
+                    </ul>
+                  </div>
                 );
                 return (
                   <>
@@ -376,13 +488,13 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                       const liveSessions = block.sessions.filter((r) => !isExpired(r.row));
                       const showSessions = liveSessions.length > 0 || (expanded && block.sessions.length > 0);
                       return (
-                        <div key={block.base?.row.id ?? `tier-${bi}`} className="border-t border-theme-border">
+                        <div key={block.base?.row.id ?? `tier-${bi}`} className={bi > 0 ? 'border-t border-theme-border' : ''}>
                           {block.base && baseSection && (
-                            <ul>{rowButton(group, baseSection, block.base.row, isExpired(block.base.row))}</ul>
+                            <ul>{tierRow(group, baseSection, block.base.row, isExpired(block.base.row))}</ul>
                           )}
-                          {showSessions && sessionUl(block.sessions, !block.base)}
+                          {showSessions && sessionZone(block.sessions)}
                           {block.base && datedCollection && liveSessions.length === 0 && (
-                            <p className="ms-9 pb-2 -mt-1 text-xs text-muted-foreground" dir="auto">
+                            <p className="mx-3 mb-3 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground" dir="auto">
                               {t('lists.tierGap', { list: datedCollection.label })}
                             </p>
                           )}
@@ -390,13 +502,13 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                       );
                     })}
                     {orphans.length > 0 && (
-                      <div className="border-t border-theme-border">
+                      <div className="border-t border-theme-border pt-1">
                         {datedCollection && (
-                          <p className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" dir="auto">
+                          <p className="px-4 pt-1 pb-1 text-[11px] font-semibold text-muted-foreground" dir="auto">
                             {datedCollection.label}
                           </p>
                         )}
-                        {sessionUl(orphans, true)}
+                        {sessionZone(orphans)}
                       </div>
                     )}
                   </>
