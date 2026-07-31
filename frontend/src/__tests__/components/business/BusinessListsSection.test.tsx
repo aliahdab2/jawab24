@@ -15,6 +15,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
       updateRow: vi.fn(),
       deleteRow: vi.fn(),
       setCompleteness: vi.fn(),
+      saveEntity: vi.fn(),
     },
   };
 });
@@ -158,19 +159,49 @@ describe('BusinessListsSection', () => {
     expect(factCollectionsApi.setCompleteness).toHaveBeenCalledWith(PAGE, 'coll-slots', true);
   });
 
-  it('opens the row sheet from a card row and PATCHes through the API on save', async () => {
+  it('tapping a row opens the ITEM as one form — price and its sessions together — and saves atomically', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
-    vi.mocked(factCollectionsApi.updateRow).mockResolvedValue({ data: { data: {} } } as any);
+    vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
     renderSection();
 
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
-    const nameInput = screen.getByLabelText('Name');
-    fireEvent.change(nameInput, { target: { value: 'دورة ICDL مسائية' } });
+
+    // One screen: the name once, the price, AND the session's fields.
+    expect(screen.getByLabelText('Name')).toHaveValue('دورة ICDL');
+    expect(screen.getByLabelText('Price')).toHaveValue('35000');
+    expect(screen.getByLabelText('الأيام')).toHaveValue('الأحد والثلاثاء');
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'دورة ICDL مسائية' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(factCollectionsApi.updateRow).toHaveBeenCalledWith(
-      PAGE, 'coll-prices', 'price-icdl',
-      expect.objectContaining({ name: 'دورة ICDL مسائية' }),
+    await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenCalledWith(
+      PAGE,
+      expect.objectContaining({
+        upserts: expect.arrayContaining([
+          expect.objectContaining({ collectionId: 'coll-prices', rowId: 'price-icdl', name: 'دورة ICDL مسائية' }),
+          expect.objectContaining({ collectionId: 'coll-slots', rowId: 'slot-live', name: 'دورة ICDL مسائية' }),
+        ]),
+      }),
+    ));
+  });
+
+  it('the entity save strips the legacy endsAt=startsAt artifact — sessions go out with endsAt null', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+    vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
+    renderSection();
+
+    fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
+    expect(screen.getByLabelText('End date (optional)')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'دورة ICDL م' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenCalledWith(
+      PAGE,
+      expect.objectContaining({
+        upserts: expect.arrayContaining([
+          expect.objectContaining({ collectionId: 'coll-slots', startsAt: future, endsAt: null }),
+        ]),
+      }),
     ));
   });
 
@@ -196,31 +227,42 @@ describe('BusinessListsSection', () => {
     ));
   });
 
-  it('saving a dated row does NOT silently write endsAt = startsAt anymore', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
-    vi.mocked(factCollectionsApi.updateRow).mockResolvedValue({ data: { data: {} } } as any);
+  it('a directory-shaped page (no entity aggregates) renders ONE compact section per list, not one card per row', async () => {
+    const outlets: FactCollectionWithRows = {
+      id: 'coll-outlets',
+      label: 'الصيدليات التي تتوفر فيها منتجاتنا',
+      keyAttr: 'المنطقة',
+      isComplete: true,
+      rowCount: 3,
+      rows: [
+        { id: 'o1', name: 'صيدلية النرجس', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'o2', name: 'صيدلية الياقوتة', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'o3', name: 'صيدلية الفيروز', attributes: [{ label: 'المنطقة', value: 'تلة الريح' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    };
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outlets] } } as any);
     renderSection();
 
-    // Open the live ICDL slot (endsAt === startsAt — the one-field artifact).
-    fireEvent.click((await screen.findByText('الأحد والثلاثاء')).closest('button') as HTMLElement);
-    // The artifact renders as an EMPTY end field.
-    expect(screen.getByLabelText('End date (optional)')).toHaveValue('');
-    const nameInput = screen.getByLabelText('Name');
-    fireEvent.change(nameInput, { target: { value: 'دورة ICDL صباحية' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    await waitFor(() => expect(factCollectionsApi.updateRow).toHaveBeenCalledWith(
-      PAGE, 'coll-slots', 'slot-live',
-      expect.objectContaining({ startsAt: future, endsAt: null }),
-    ));
+    await screen.findByText('صيدلية النرجس');
+    // ONE h3 (the list), not one per pharmacy…
+    const headings = document.querySelectorAll('h3');
+    expect(headings).toHaveLength(1);
+    // …rows show their own names WITH their labelled area…
+    const rowBtn = screen.getByText('صيدلية الفيروز').closest('button');
+    expect(rowBtn?.textContent).toContain('المنطقة');
+    expect(rowBtn?.textContent).toContain('تلة الريح');
+    // …and no dates block leaks into an undated business.
+    expect(screen.queryByText(/يبدأ|starts/)).toBeNull();
   });
 
   it('the merchant can author a NEW field, and a label colliding with the list key is refused', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
-    vi.mocked(factCollectionsApi.updateRow).mockResolvedValue({ data: { data: {} } } as any);
+    vi.mocked(factCollectionsApi.addRow).mockResolvedValue({ data: { data: {} } } as any);
     renderSection();
 
-    fireEvent.click((await screen.findByText('الأحد والثلاثاء')).closest('button') as HTMLElement);
+    await screen.findByText('دورة ICDL');
+    fireEvent.click(screen.getAllByText('Add')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /مواعيد الدورات المعلنة/ }));
     fireEvent.click(screen.getByText('Add a field'));
 
     const labelInput = screen.getByLabelText('Field name');
@@ -234,8 +276,8 @@ describe('BusinessListsSection', () => {
     fireEvent.change(screen.getByLabelText('Value'), { target: { value: 'محاسبة عملية' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(factCollectionsApi.updateRow).toHaveBeenCalledWith(
-      PAGE, 'coll-slots', 'slot-live',
+    await waitFor(() => expect(factCollectionsApi.addRow).toHaveBeenCalledWith(
+      PAGE, 'coll-slots',
       expect.objectContaining({
         attributes: expect.arrayContaining([{ label: 'الوصف', value: 'محاسبة عملية' }]),
       }),

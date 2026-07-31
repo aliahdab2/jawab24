@@ -126,6 +126,12 @@
     "fieldLabel": "اسم الحقل",
     "fieldLabelTaken": "اسم الحقل مستخدم من قبل",
     "fieldValue": "القيمة",
-    "dateRangeInvalid": "تاريخ النهاية يجب ألا يسبق تاريخ البداية"
+    "dateRangeInvalid": "تاريخ النهاية يجب ألا يسبق تاريخ البداية",
+    "editItem": "تعديل العنصر",
+    "sessions": "المواعيد",
+    "addSession": "إضافة موعد آخر",
+    "removeSession": "إزالة هذا الموعد",
+    "deleteEntity": "حذف هذا العنصر ومواعيده",
+    "deleteEntityConfirm": "تأكيد الحذف الكامل"
   }
 }

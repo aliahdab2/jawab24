@@ -323,6 +323,115 @@ describe('fact collections — the engine end to end', () => {
     });
 });
 
+describe('fact collections — atomic entity save (single-form editor)', () => {
+    let pageId: string;
+    let pricesId: string;
+    let slotsId: string;
+
+    beforeEach(async () => {
+        const user = await createTestUser();
+        const page = await createTestPage(user.id, { name: 'Institute', knowledgeBase: 'معهد' });
+        pageId = page.id;
+        const prices = await factCollectionsService.createCollection(pageId, {
+            label: 'أسعار الدورات', keyAttr: null,
+            rows: [
+                { name: 'دورة الأمين', attributes: [{ label: 'المستوى', value: 'مبتدئ' }], price: '35000.00' },
+                { name: 'دورة الريزن', price: '100000.00' },
+            ],
+        });
+        const slots = await factCollectionsService.createCollection(pageId, {
+            label: 'مواعيد الدورات', keyAttr: 'الدورة',
+            rows: [
+                { name: 'دورة الأمين', attributes: [{ label: 'الدورة', value: 'الأمين' }, { label: 'الأيام', value: 'السبت' }], startsAt: '2027-08-04', endsAt: null },
+            ],
+        });
+        pricesId = prices.id;
+        slotsId = slots.id;
+    });
+
+    const rowsOf = async (collectionId: string) => factCollectionsService.getRows(collectionId);
+
+    it('applies upserts across TWO collections and a delete in one call, bumping the caches once', async () => {
+        const [priceRow] = await rowsOf(pricesId);
+        const [slotRow] = await rowsOf(slotsId);
+        const before = await readKbVersion(pageId);
+
+        const result = await factCollectionsService.saveEntityRows(pageId, {
+            upserts: [
+                { collectionId: pricesId, rowId: priceRow.id, name: 'دورة الأمين', attributes: priceRow.attributes, price: '40000.00', currency: 'ل.س قديمة', startsAt: null, endsAt: null },
+                { collectionId: slotsId, name: 'دورة الأمين', attributes: [{ label: 'الدورة', value: 'الأمين' }, { label: 'الأيام', value: 'الخميس' }], price: null, currency: null, startsAt: '2027-09-01', endsAt: null },
+            ],
+            deletes: [{ collectionId: slotsId, rowId: slotRow.id }],
+        });
+
+        expect(result).not.toBeNull();
+        expect(result?.upserted).toHaveLength(2);
+        expect(result?.deletedIds).toEqual([slotRow.id]);
+
+        const prices = await rowsOf(pricesId);
+        expect(prices.find(r => r.id === priceRow.id)?.price).toBe('40000.00');
+        const slots = await rowsOf(slotsId);
+        expect(slots).toHaveLength(1);
+        expect(slots[0].startsAt).toBe('2027-09-01');
+        expect(await readKbVersion(pageId)).toBeGreaterThan(before);
+    });
+
+    it('is ATOMIC — one stale row id aborts everything, nothing half-saves', async () => {
+        const [priceRow] = await rowsOf(pricesId);
+        await expect(factCollectionsService.saveEntityRows(pageId, {
+            upserts: [
+                { collectionId: pricesId, rowId: priceRow.id, name: 'دورة الأمين', attributes: null, price: '99999.00', currency: null, startsAt: null, endsAt: null },
+                { collectionId: slotsId, rowId: '00000000-0000-4000-8000-000000000000', name: 'شبح', attributes: null, price: null, currency: null, startsAt: null, endsAt: null },
+            ],
+            deletes: [],
+        })).rejects.toThrow('Row not found');
+
+        const prices = await rowsOf(pricesId);
+        expect(prices.find(r => r.id === priceRow.id)?.price).toBe('35000.00');
+    });
+
+    it('refuses to EMPTY a collection through the batch (boundary guard) and rolls back', async () => {
+        const [slotRow] = await rowsOf(slotsId);
+        const before = await readKbVersion(pageId);
+        await expect(factCollectionsService.saveEntityRows(pageId, {
+            upserts: [],
+            deletes: [{ collectionId: slotsId, rowId: slotRow.id }],
+        })).rejects.toThrow('Cannot delete the last row');
+        expect(await rowsOf(slotsId)).toHaveLength(1);
+        expect(await readKbVersion(pageId)).toBe(before);
+    });
+
+    it('a delete offset by an insert in the SAME call passes the boundary guard', async () => {
+        const [slotRow] = await rowsOf(slotsId);
+        const result = await factCollectionsService.saveEntityRows(pageId, {
+            upserts: [
+                { collectionId: slotsId, name: 'دورة الأمين', attributes: [{ label: 'الدورة', value: 'الأمين' }], price: null, currency: null, startsAt: '2027-10-01', endsAt: null },
+            ],
+            deletes: [{ collectionId: slotsId, rowId: slotRow.id }],
+        });
+        expect(result?.upserted).toHaveLength(1);
+        expect(await rowsOf(slotsId)).toHaveLength(1);
+    });
+
+    it('bounces the whole save when ANY referenced collection belongs to another page', async () => {
+        const other = await createTestPage((await createTestUser()).id, { name: 'Other' });
+        const foreign = await factCollectionsService.createCollection(other.id, {
+            label: 'قائمة أجنبية', keyAttr: null, rows: [{ name: 'صف' }],
+        });
+        const [priceRow] = await rowsOf(pricesId);
+        const result = await factCollectionsService.saveEntityRows(pageId, {
+            upserts: [
+                { collectionId: pricesId, rowId: priceRow.id, name: 'دورة الأمين', attributes: null, price: '1.00', currency: null, startsAt: null, endsAt: null },
+                { collectionId: foreign.id, name: 'تسلل', attributes: null, price: null, currency: null, startsAt: null, endsAt: null },
+            ],
+            deletes: [],
+        });
+        expect(result).toBeNull();
+        const prices = await rowsOf(pricesId);
+        expect(prices.find(r => r.id === priceRow.id)?.price).toBe('35000.00');
+    });
+});
+
 async function readKbVersion(pageId: string): Promise<number> {
     const [row] = await testDb
         .select({ v: schema.pages.kbActiveVersion })

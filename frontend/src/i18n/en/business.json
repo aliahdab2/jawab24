@@ -126,6 +126,12 @@
     "fieldLabel": "Field name",
     "fieldLabelTaken": "This field name is already used",
     "fieldValue": "Value",
-    "dateRangeInvalid": "The end date must not be before the start date"
+    "dateRangeInvalid": "The end date must not be before the start date",
+    "editItem": "Edit item",
+    "sessions": "Dates",
+    "addSession": "Add another date",
+    "removeSession": "Remove this date",
+    "deleteEntity": "Delete this item and its dates",
+    "deleteEntityConfirm": "Confirm full deletion"
   }
 }

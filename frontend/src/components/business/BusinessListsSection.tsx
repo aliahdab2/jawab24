@@ -3,14 +3,19 @@ import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ListChecks, CalendarClock, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
-import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto } from '@/lib/api';
+import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import { todayISODate, formatPlainDate } from '@/utils/dateUtils';
 import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/factListGrouping';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, type FactListSection } from '@/utils/factListLayout';
+import {
+  sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
+  discoverFaceLabel, buildEntityUnit, isDatedCollection,
+  type FactListSection, type FactEntityUnit,
+} from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
+import { FactEntitySheet } from './FactEntitySheet';
 
 interface BusinessListsSectionProps {
   pageId: string;
@@ -58,12 +63,24 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   });
 
   const [editing, setEditing] = useState<EditingState | null>(null);
+  const [entityEditing, setEntityEditing] = useState<{ unit: FactEntityUnit; baseCollection: FactCollectionWithRows | null } | null>(null);
   const [showExpired, setShowExpired] = useState<Record<string, boolean>>({});
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const collections = useMemo(() => data ?? [], [data]);
   const groups = useMemo(() => groupFactCollections(collections), [collections]);
+  const faceLabel = useMemo(() => discoverFaceLabel(collections), [collections]);
+  // Entity cards earn their chrome only when entities aggregate ACROSS lists
+  // (a course whose price sits in one list and dates in another) — the join
+  // the cards exist to show. A directory-shaped page (hundreds of outlets,
+  // one row each, plus a size list whose only duplicates are same-list series
+  // variants) reads far better as one compact section per list, so the layout
+  // self-selects from the merchant's own data.
+  const aggregates = useMemo(
+    () => groups.some((g) => new Set(g.rows.map((r) => r.collection.id)).size > 1),
+    [groups],
+  );
 
   if (collections.length === 0) return null;
 
@@ -116,6 +133,30 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     }
   };
 
+  /** Tapping ANY row opens the whole item as ONE form — price, fields and
+   *  dates together (the merchant's mental model). Saved atomically. */
+  const openEntity = (group: FactListGroup, tapped: { collection: FactCollectionWithRows; row: FactRowDto }) => {
+    const unit = buildEntityUnit(group, collections, faceLabel, tapped);
+    const baseCollection =
+      unit.base?.collection ?? collections.find((c) => !isDatedCollection(c)) ?? null;
+    setEntityEditing({ unit, baseCollection });
+  };
+
+  const saveEntity = async (body: FactEntitySaveBody) => {
+    setSaving(true);
+    try {
+      await factCollectionsApi.saveEntity(pageId, body);
+      await refresh();
+      setEntityEditing(null);
+      toast.success(t('lists.saved'));
+    } catch (error) {
+      captureError(error, 'Failed to save fact entity', { tags: { action: 'save-fact-entity' } });
+      toast.error(t('lists.saveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   /** Prefill for adding a row to `collection` from an entity card. */
   const addFromGroup = (group: FactListGroup, collection: FactCollectionWithRows) => {
     const sibling = group.rows.find((r) => r.collection.id === collection.id);
@@ -142,20 +183,20 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
 
   /** One row line inside its section: labelled pairs · price · readable date,
    *  wrapping (never truncating), the whole line one edit button. */
-  const rowButton = (section: FactListSection, row: FactRowDto, expired: boolean) => {
-    const pairs = rowDisplayAttributes(section, row);
+  const rowButton = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, showName = false) => {
+    const pairs = rowDisplayAttributes(section, row, { keepKey: showName });
     const date = row.startsAt ? formatPlainDate(row.startsAt, intlLocale) : null;
     const hasContent = pairs.length > 0 || row.price || date;
     return (
       <li key={row.id}>
         <button
           type="button"
-          onClick={() => setEditing({ collection: section.collection, row })}
+          onClick={() => openEntity(group, { collection: section.collection, row })}
           className={`w-full min-h-[48px] grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-4 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
         >
           <span className="min-w-0 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            {!hasContent && (
-              <span className="text-sm text-foreground break-words" dir="auto">{row.name}</span>
+            {(showName || !hasContent) && (
+              <span className="text-sm font-medium text-foreground break-words" dir="auto">{row.name}</span>
             )}
             {pairs.map((a) => (
               <span key={a.label} className="text-sm text-foreground break-words" dir="auto">
@@ -251,7 +292,56 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           labelled section per list so a price and a session can't be
           confused. Section titles are the merchant's own list labels. */}
       <div className="mt-4 space-y-3">
-        {groups.map((group) => {
+        {!aggregates && collections.map((collection) => {
+          const syntheticGroup: FactListGroup = {
+            key: collection.id,
+            title: collection.label,
+            rows: collection.rows.map((row) => ({ collection, row })),
+          };
+          const [section] = sectionizeGroup(syntheticGroup, [collection]);
+          if (!section) return null;
+          const live = section.rows.filter((r) => !isExpired(r.row));
+          const expiredRows = section.rows.filter((r) => isExpired(r.row));
+          const expanded = !!showExpired[collection.id];
+          return (
+            <div key={collection.id} className="rounded-xl border border-theme-border overflow-hidden">
+              <div className="flex items-baseline gap-2 flex-wrap px-4 pt-3 pb-1">
+                <h3 className="text-sm font-semibold text-foreground" dir="auto">{collection.label}</h3>
+                {section.shared.map((sh) => (
+                  <span key={sh.label} dir="auto" className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                    {t('lists.attrPair', { label: sh.label, value: sh.value })}
+                  </span>
+                ))}
+              </div>
+              <ul className="divide-y divide-theme-border">
+                {live.map((entry) => rowButton(syntheticGroup, section, entry.row, false, true))}
+                {expanded && expiredRows.map((entry) => rowButton(syntheticGroup, section, entry.row, true, true))}
+              </ul>
+              <div className="flex items-center gap-1.5 flex-wrap px-4 py-2 border-t border-theme-border">
+                <button
+                  type="button"
+                  onClick={() => setEditing({ collection, row: null })}
+                  className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-2.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                >
+                  <Plus className="w-3 h-3" aria-hidden="true" />
+                  {t('lists.add')}
+                </button>
+                {expiredRows.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowExpired((prev) => ({ ...prev, [collection.id]: !expanded }))}
+                    aria-expanded={expanded}
+                    className="ms-auto min-h-[32px] inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <CalendarClock className="w-3.5 h-3.5" aria-hidden="true" />
+                    {t('lists.expiredToggle', { count: expiredRows.length })}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {aggregates && groups.map((group) => {
           const sections = sectionizeGroup(group, collections);
           const expiredCount = group.rows.filter((r) => isExpired(r.row)).length;
           const expanded = !!showExpired[group.key];
@@ -282,8 +372,8 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                       </div>
                     )}
                     <ul className="divide-y divide-theme-border">
-                      {live.map((entry) => rowButton(section, entry.row, false))}
-                      {expanded && expiredRows.map((entry) => rowButton(section, entry.row, true))}
+                      {live.map((entry) => rowButton(group, section, entry.row, false))}
+                      {expanded && expiredRows.map((entry) => rowButton(group, section, entry.row, true))}
                     </ul>
                   </div>
                 );
@@ -338,6 +428,16 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           );
         })}
       </div>
+
+      {entityEditing && (
+        <FactEntitySheet
+          unit={entityEditing.unit}
+          baseCollection={entityEditing.baseCollection}
+          saving={saving}
+          onSave={saveEntity}
+          onClose={() => setEntityEditing(null)}
+        />
+      )}
 
       {editing && (
         <ListRowSheet

@@ -2,7 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { factCollectionsService, FactCollectionLimitError } from '../services/factCollections';
 import { pagesService } from '../services/pages';
 import {
-    FactRowSchema, FactRowUpdateSchema, FactCompletenessSchema, formatValidationErrors,
+    FactRowSchema, FactRowUpdateSchema, FactCompletenessSchema, FactEntitySaveSchema, formatValidationErrors,
 } from '../utils/validation';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
@@ -137,6 +137,35 @@ class FactCollectionsController {
         );
         if (!updated) return reply.status(404).send({ error: 'Collection not found' });
         return reply.send({ data: updated });
+    }
+
+    /** PUT /fact-entity — one atomic save for the single-form editor:
+     *  upserts + deletes across the page's collections, all-or-nothing. */
+    async saveEntity(
+        request: FastifyRequest<{ Params: { pageId: string }; Body: unknown }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        const page = await pagesService.getPage(req.workspaceId, request.params.pageId);
+        if (!page) return reply.status(404).send({ error: 'Page not found' });
+
+        const parsed = FactEntitySaveSchema.safeParse(request.body);
+        if (!parsed.success) {
+            return reply.status(400).send({ error: formatValidationErrors(parsed.error) });
+        }
+        try {
+            const result = await factCollectionsService.saveEntityRows(request.params.pageId, {
+                upserts: parsed.data.upserts.map(u => ({ ...u, price: toPrice(u.price) })),
+                deletes: parsed.data.deletes,
+            });
+            if (!result) return reply.status(404).send({ error: 'Collection not found' });
+            return reply.send({ data: result });
+        } catch (err) {
+            if (err instanceof FactCollectionLimitError) {
+                return reply.status(409).send({ error: err.message, code: 'LIMIT' });
+            }
+            throw err;
+        }
     }
 }
 

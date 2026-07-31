@@ -249,9 +249,19 @@ export interface FactRowBody {
 // exactly (course schedules, price tables, outlet directories). Read-only for
 // members; writes need workspace admin. There is deliberately no create-
 // collection call: collections are born from reviewed extraction (D-038).
+/** One atomic entity save: row upserts and deletes that may span several
+ *  collections (the price row in one list, its sessions in another) — the
+ *  backend applies them in a single transaction. */
+export interface FactEntitySaveBody {
+  upserts: (FactRowBody & { collectionId: string; rowId?: string; name: string })[];
+  deletes: { collectionId: string; rowId: string }[];
+}
+
 export const factCollectionsApi = {
   list: (pageId: string) =>
     api.get<{ data: FactCollectionWithRows[] }>(`/pages/${pageId}/fact-collections`),
+  saveEntity: (pageId: string, body: FactEntitySaveBody) =>
+    api.put<{ data: { upserted: FactRowDto[]; deletedIds: string[] } }>(`/pages/${pageId}/fact-entity`, body),
   addRow: (pageId: string, collectionId: string, data: FactRowBody & { name: string }) =>
     api.post<{ data: FactRowDto }>(`/pages/${pageId}/fact-collections/${collectionId}/rows`, data),
   updateRow: (pageId: string, collectionId: string, rowId: string, data: FactRowBody) =>

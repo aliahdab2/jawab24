@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels } from './factListLayout';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit } from './factListLayout';
 import { groupFactCollections } from './factListGrouping';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -135,5 +135,103 @@ describe('collectionAttributeLabels', () => {
       row('ICDL', { attributes: [{ label: 'ملاحظة', value: '8 جلسات' }], price: '35000.00' }),
     ]);
     expect(collectionAttributeLabels(prices)).toEqual(['المستوى', 'ملاحظة']);
+  });
+});
+
+describe('discoverFaceLabel', () => {
+  const prices = () => coll('أسعار الدورات', null, [
+    row('دورة الأمين للمحاسبة', { attributes: [{ label: 'المستوى', value: 'مبتدئ' }], price: '35000.00' }),
+    row('دورة الأمين للمحاسبة', { attributes: [{ label: 'المستوى', value: 'متقدم' }], price: '50000.00' }),
+    row('دورة ICDL', { attributes: [{ label: 'ملاحظة', value: '8 جلسات لمدة شهر' }], price: '35000.00' }),
+  ]);
+  const slots = () => coll('مواعيد الدورات المعلنة', 'الدورة', [
+    row('دورة الأمين للمحاسبة', {
+      attributes: [{ label: 'الدورة', value: 'الأمين' }, { label: 'المستوى', value: 'مبتدئ' }, { label: 'الأيام', value: 'السبت' }],
+      startsAt: '2026-08-04', endsAt: null,
+    }),
+    row('دورة ICDL', {
+      attributes: [{ label: 'الدورة', value: 'ICDL' }, { label: 'الأيام', value: 'الاثنين' }, { label: 'ملاحظة', value: 'تبدأ عند اكتمال العدد' }],
+      startsAt: '2026-08-10', endsAt: null,
+    }),
+  ]);
+
+  it('elects the label whose values intersect across collections («المستوى») and rejects free text («ملاحظة»)', () => {
+    expect(discoverFaceLabel([prices(), slots()])).toBe('المستوى');
+  });
+
+  it('excludes every collection key attribute even when it spans two collections', () => {
+    const online = coll('الدورات الأونلاين', 'الدورة', [
+      row('دورة ICDL أونلاين', { attributes: [{ label: 'الدورة', value: 'ICDL' }], price: '10.00' }),
+    ]);
+    // «الدورة» is keyed in BOTH dated collections — must never win.
+    expect(discoverFaceLabel([slots(), online])).toBeNull();
+  });
+
+  it('returns null for a single-collection page and when the only shared label has one value', () => {
+    expect(discoverFaceLabel([prices()])).toBeNull();
+    const a = coll('أ', null, [row('x', { attributes: [{ label: 'الفئة', value: 'عام' }], price: '1.00' })]);
+    const b = coll('ب', 'المنطقة', [row('y', { attributes: [{ label: 'المنطقة', value: 'الرمال' }, { label: 'الفئة', value: 'عام' }] })]);
+    expect(discoverFaceLabel([a, b])).toBeNull();
+  });
+});
+
+describe('buildEntityUnit', () => {
+  const makeFixture = () => {
+    const prices = coll('أسعار الدورات', null, [
+      row('دورة الأمين للمحاسبة', { attributes: [{ label: 'المستوى', value: 'مبتدئ' }], price: '35000.00' }),
+      row('دورة الأمين للمحاسبة', { attributes: [{ label: 'المستوى', value: 'متقدم' }], price: '50000.00' }),
+    ]);
+    const slots = coll('مواعيد الدورات المعلنة', 'الدورة', [
+      row('دورة الأمين للمحاسبة', {
+        attributes: [{ label: 'الدورة', value: 'الأمين' }, { label: 'المستوى', value: 'مبتدئ' }, { label: 'الأيام', value: 'السبت' }],
+        startsAt: '2026-08-04', endsAt: null,
+      }),
+      row('دورة الأمين للمحاسبة', {
+        attributes: [{ label: 'الدورة', value: 'الأمين' }, { label: 'المستوى', value: 'مبتدئ' }, { label: 'الأيام', value: 'الأحد' }],
+        startsAt: '2026-08-09', endsAt: null,
+      }),
+      row('دورة الأمين للمحاسبة', {
+        // session with NO face value — must not be claimed by any tier
+        attributes: [{ label: 'الدورة', value: 'الأمين' }, { label: 'الأيام', value: 'الخميس' }],
+        startsAt: '2026-08-14', endsAt: null,
+      }),
+    ]);
+    return [prices, slots] as const;
+  };
+
+  it('a multi-tier card splits sessions by normalized face value, unclaimed sessions attach to nothing', () => {
+    const [prices, slots] = makeFixture();
+    const [group] = groupFactCollections([prices, slots]);
+    const opened = group.rows.find((r) => r.row.price === '35000.00');
+    const unit = buildEntityUnit(group, [prices, slots], 'المستوى', opened as never);
+    expect(unit.faceValue).toBe('مبتدئ');
+    expect(unit.base?.row.price).toBe('35000.00');
+    expect(unit.sessions.map((s) => s.row.attributes?.find((a) => a.label === 'الأيام')?.value)).toEqual(['السبت', 'الأحد']);
+  });
+
+  it('a single-base card owns ALL sessions regardless of face values (the الأظافر case)', () => {
+    const prices = coll('أسعار الدورات', null, [
+      row('دورة الأظافر', { price: '100000.00' }), // attributes: null
+    ]);
+    const slots = coll('مواعيد الدورات المعلنة', 'الدورة', [
+      row('دورة الأظافر', {
+        attributes: [{ label: 'الدورة', value: 'اظافر' }, { label: 'المستوى', value: 'مبتدئ' }],
+        startsAt: '2026-08-05', endsAt: null,
+      }),
+    ]);
+    const [group] = groupFactCollections([prices, slots]);
+    const opened = group.rows.find((r) => r.row.price !== null);
+    const unit = buildEntityUnit(group, [prices, slots], 'المستوى', opened as never);
+    expect(unit.base?.row.name).toBe('دورة الأظافر');
+    expect(unit.sessions).toHaveLength(1);
+  });
+
+  it('opening a SESSION row resolves its tier base, and the session collection is the first dated one', () => {
+    const [prices, slots] = makeFixture();
+    const [group] = groupFactCollections([prices, slots]);
+    const opened = group.rows.find((r) => r.row.attributes?.some((a) => a.value === 'الأحد'));
+    const unit = buildEntityUnit(group, [prices, slots], 'المستوى', opened as never);
+    expect(unit.base?.row.price).toBe('35000.00');
+    expect(unit.sessionCollection?.id).toBe(slots.id);
   });
 });

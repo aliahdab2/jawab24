@@ -260,7 +260,7 @@ export type CatalogItemUpdateInput = z.infer<typeof CatalogItemUpdateSchema>;
  * hygiene — so a value that is valid in one structured store is valid in the
  * other and vice versa.
  */
-export const FactRowSchema = z.object({
+const FactRowFields = {
     name: z.string().trim().min(1, 'Name is required').max(200),
     attributes: CatalogAttributesInput.optional().transform(v => v ?? null),
     price: PriceInput.optional().transform(v => v ?? null),
@@ -268,9 +268,39 @@ export const FactRowSchema = z.object({
     startsAt: CatalogDateInput.optional().transform(v => v ?? null),
     endsAt: CatalogDateInput.optional().transform(v => v ?? null),
     isAvailable: z.boolean().default(true),
+};
+const factRowDateOrder = {
+    check: (row: { startsAt: string | null; endsAt: string | null }) =>
+        !row.startsAt || !row.endsAt || row.endsAt >= row.startsAt,
+    opts: { message: 'End date must not be before the start date', path: ['endsAt'] as (string | number)[] },
+};
+
+export const FactRowSchema = z.object(FactRowFields)
+    .refine(factRowDateOrder.check, factRowDateOrder.opts);
+
+/**
+ * One atomic save for a whole ENTITY (the single-form editor): row upserts and
+ * deletes across a page's collections, applied in one transaction so a failed
+ * session write can never strand a half-saved course. Caps sized to the form
+ * (an entity is one base row + a handful of sessions), far below the
+ * per-collection row cap the service enforces on top.
+ */
+export const FactEntitySaveSchema = z.object({
+    upserts: z.array(
+        z.object({
+            collectionId: z.string().uuid(),
+            /** present = update that row; absent = insert a new one. */
+            rowId: z.string().uuid().optional(),
+            ...FactRowFields,
+        }).refine(factRowDateOrder.check, factRowDateOrder.opts),
+    ).max(40).default([]),
+    deletes: z.array(z.object({
+        collectionId: z.string().uuid(),
+        rowId: z.string().uuid(),
+    })).max(40).default([]),
 }).refine(
-    (row) => !row.startsAt || !row.endsAt || row.endsAt >= row.startsAt,
-    { message: 'End date must not be before the start date', path: ['endsAt'] },
+    (body) => body.upserts.length + body.deletes.length > 0,
+    { message: 'At least one operation is required' },
 );
 
 /** PATCH body: any subset; explicit null clears a nullable field. */
@@ -292,6 +322,7 @@ export const FactCompletenessSchema = z.object({
 });
 
 export type FactRowBodyInput = z.infer<typeof FactRowSchema>;
+export type FactEntitySaveBodyInput = z.infer<typeof FactEntitySaveSchema>;
 export type FactRowUpdateBodyInput = z.infer<typeof FactRowUpdateSchema>;
 
 /** POST /pages/:pageId/catalog/extract body. Min 10 keeps accidental fragments
