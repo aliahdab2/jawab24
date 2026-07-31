@@ -183,14 +183,20 @@ describe('distributor fact-collections fixture (G1a)', () => {
     // #720: the same facts in prose AND rows is the contradiction factory. Prose
     // also carries no boundary, so a restored copy brings the fabrication straight
     // back while the rows make it look fixed.
-    it('leaves no outlet directory behind in the fixture KB text', () => {
+    it('leaves neither an outlet directory NOR a prose price table in the fixture KB text', () => {
         const distributor = DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_distributor');
         expect(distributor).toBeDefined();
         const kb = distributor?.suggestedKnowledgeBase ?? '';
         expect(kb).not.toContain('صيدلية');
         expect(kb).not.toContain('حي الرمال');
-        // …while the traps that DO belong in the KB text stay: the tail price list.
-        expect(kb).toContain('45د');
-        expect(kb).toContain('54 دينار');
+        // The prose price tail used to be asserted PRESENT here. `eaa9c0d4`
+        // ("sizes/prices as the second list KIND — un-keyed, and the prose
+        // table retires") deliberately moved it to fact rows but did not
+        // update this test, leaving main red and blocking every deploy
+        // (2026-07-31). Prices now belong to the same #720 rule as the outlet
+        // directory — prose alongside rows is the contradiction factory — so
+        // the assertion flips from present to absent rather than being dropped.
+        expect(kb).not.toContain('45د');
+        expect(kb).not.toContain('54 دينار');
     });
 });
