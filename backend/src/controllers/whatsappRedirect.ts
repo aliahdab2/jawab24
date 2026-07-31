@@ -9,8 +9,10 @@ import { WHATSAPP_NONCE_COOKIE_OPTIONS } from '../services/cookies';
 import {
     mintWhatsAppConnectState,
     verifyWhatsAppConnectState,
+    WHATSAPP_STATE_TTL_MS,
     type WhatsAppConnectState,
 } from '../utils/whatsappConnectState';
+import { issueSingleUse, consumeSingleUse } from '../lib/singleUseKey';
 import {
     completeWhatsAppSignup,
     hasWhatsAppPlanAccess,
@@ -21,6 +23,8 @@ import { authService } from '../services/auth';
 import { refreshTokenService } from '../services/refreshToken';
 import { cookiesService } from '../services/cookies';
 import { workspaceService } from '../services/workspace';
+import { escapeHtml } from '../utils/htmlUtils';
+import { t } from '../utils/i18n';
 
 /**
  * WhatsApp connect via FULL-PAGE redirect Embedded Signup.
@@ -55,6 +59,153 @@ function pagesRedirect(locale: 'ar' | 'en', params?: Record<string, string>): st
         ? `?${new URLSearchParams(params).toString()}`
         : '';
     return `${config.frontendUrl}${localePath(locale)}/pages${qs}`;
+}
+
+/**
+ * The handoff page the NATIVE app lands the system browser on.
+ *
+ * Why a page and not a 302 straight to Meta: on the owner's device, a
+ * navigation to facebook.com issued by anything other than the merchant's own
+ * tap — a page-side `location.assign` (Custom Tab 2026-07-30, intent-opened
+ * Chrome 2026-07-31) or a server 302 (2026-07-31) — never rendered Meta's
+ * dialog; the browser flashed and returned to the app, with no request
+ * reaching us afterwards. A REAL anchor click is the most privileged
+ * navigation a browser has, and it is the one shape not yet tried.
+ *
+ * There is deliberately NO automatic redirect on this page: an auto-attempt
+ * that gets intercepted bounces the merchant away before they ever see the
+ * button, which is exactly the dead end we are escaping — and it would also
+ * destroy the diagnostic value of "did the page render and stay?".
+ *
+ * Self-contained markup (no bundle, no fonts, no JS) so it paints instantly
+ * over mobile data and cannot fail on a blocked asset.
+ */
+function handoffPage(dialogUrl: string, locale: 'ar' | 'en'): string {
+    const rtl = locale === 'ar';
+    return `<!DOCTYPE html>
+<html lang="${locale}" dir="${rtl ? 'rtl' : 'ltr'}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="${config.frontendUrl}/brand/favicon-32x32.png">
+<title>${escapeHtml(t('waHandoffTitle', locale))}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         padding:24px; box-sizing:border-box; background:#f8fafc; color:#0f172a;
+         font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .card { max-width:420px; width:100%; text-align:center; background:#fff; border-radius:16px;
+          padding:32px 24px; box-shadow:0 4px 24px rgba(15,23,42,.08); }
+  /* Square box reserved up front — the mark loads over mobile data and must
+     not shove the CTA down under the merchant's thumb mid-tap. */
+  .mark { width:64px; height:64px; margin:0 auto 16px; display:block; }
+  h1 { font-size:20px; margin:0 0 12px; }
+  p { font-size:15px; line-height:1.6; margin:0 0 24px; color:#475569; }
+  a.cta { display:block; background:#0f9d76; color:#fff; text-decoration:none; font-size:17px;
+          font-weight:600; padding:16px 24px; border-radius:12px; }
+  @media (prefers-color-scheme: dark) {
+    body { background:#0f172a; color:#f1f5f9; }
+    .card { background:#1e293b; box-shadow:none; }
+    p { color:#94a3b8; }
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <img class="mark" width="64" height="64" src="${config.frontendUrl}/brand/icon-vector.svg" alt="Jawab24">
+    <h1>${escapeHtml(t('waHandoffTitle', locale))}</h1>
+    <p>${escapeHtml(t('waHandoffBody', locale))}</p>
+    <a class="cta" href="${escapeHtml(dialogUrl)}">${escapeHtml(t('waHandoffCta', locale))}</a>
+  </main>
+</body>
+</html>`;
+}
+
+/**
+ * Single-use registry for APP-minted states.
+ *
+ * The web flow binds a state to one browser with the nonce cookie; the app
+ * flow cannot (the cookie lands in the WebView's jar, the callback arrives in
+ * the browser's), so without a replacement an app state would be replayable
+ * for its whole 30-minute TTL by anyone who obtained it — from browser history
+ * or the URL it travels in — and a replay attaches the REPLAYER's WhatsApp
+ * number to the victim's workspace, since the callback's ownership re-verify
+ * checks the state's user, not the caller's.
+ *
+ * So app states are consumed exactly once instead. Single-use is a strictly
+ * stronger property than the same-browser binding it replaces, and it reuses
+ * the pattern already proven by the browser-handoff code.
+ */
+const appStateKey = (nonce: string) => `wa:appstate:${nonce}`;
+
+const registerAppState = (nonce: string) => issueSingleUse(appStateKey(nonce), '1', WHATSAPP_STATE_TTL_MS);
+
+/** True exactly once per minted state; false for replays, expiry, or unknown. */
+const consumeAppState = async (nonce: string) => (await consumeSingleUse(appStateKey(nonce))) === '1';
+
+/**
+ * Where an APP-initiated connect returns to.
+ *
+ * The /auth/app-sync App Link is Android-verified (assetlinks.json), so it
+ * reopens Jawab24 and closes the browser tab — the same return leg the shipped
+ * Facebook page-connect flow uses. No token rides it: the app never lost its
+ * session (it only lent the browser one), so `_app.tsx` just navigates to the
+ * intent. `redirect` is locale-less, matching the Facebook flow's contract.
+ */
+function appReturn(params: Record<string, string>): string {
+    const qs = Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : '';
+    return `${config.frontendUrl}/auth/app-sync?redirect=${encodeURIComponent(`/pages${qs}`)}`;
+}
+
+/**
+ * …delivered as a PAGE that navigates, not as a 302.
+ *
+ * Android App Links intercept a navigation a PAGE starts; a redirect the
+ * browser follows inside its own request chain is not one. Sending the
+ * App Link as a `Location:` header therefore just renders our web fallback in
+ * the tab (observed 2026-07-31: `/auth/app-sync?redirect=/pages?whatsappConnected=1`
+ * fetched with 200, merchant left in the browser). The shipped Facebook flow
+ * gets this right — `auth/callback.tsx` finishes its work and then does
+ * `window.location.href = <app-sync>` — so this mirrors it: a document whose
+ * script performs the navigation.
+ *
+ * The anchor is not decoration: if the script is blocked or the App Link
+ * verification has lapsed, the merchant still has a way back instead of a
+ * blank tab.
+ */
+function appReturnPage(appSyncUrl: string, locale: 'ar' | 'en'): string {
+    const href = escapeHtml(appSyncUrl);
+    return `<!DOCTYPE html>
+<html lang="${locale}" dir="${locale === 'ar' ? 'rtl' : 'ltr'}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="${config.frontendUrl}/brand/favicon-32x32.png">
+<title>${escapeHtml(t('waReturnTitle', locale))}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         padding:24px; box-sizing:border-box; background:#f8fafc; color:#0f172a;
+         font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; text-align:center; }
+  img { width:64px; height:64px; margin:0 auto 16px; display:block; }
+  p { font-size:15px; color:#475569; margin:0 0 16px; }
+  a { color:#0f9d76; font-weight:600; }
+  @media (prefers-color-scheme: dark) {
+    body { background:#0f172a; color:#f1f5f9; } p { color:#94a3b8; }
+  }
+</style>
+</head>
+<body>
+  <main>
+    <img src="${config.frontendUrl}/brand/icon-vector.svg" width="64" height="64" alt="Jawab24">
+    <p>${escapeHtml(t('waReturnBody', locale))}</p>
+    <a href="${href}">${escapeHtml(t('waReturnCta', locale))}</a>
+  </main>
+  <script>location.replace(${JSON.stringify(appSyncUrl)});</script>
+</body>
+</html>`;
 }
 
 /** The redirect_uri registered at Meta. Must match byte-for-byte on both legs. */
@@ -97,7 +248,7 @@ export class WhatsAppRedirectController {
      * nonce cookie and returns the dialog URL for a full-page navigation.
      */
     start = async (
-        request: FastifyRequest<{ Body: { pageId?: string | null; coexistence?: boolean; locale?: string } }>,
+        request: FastifyRequest<{ Body: { pageId?: string | null; coexistence?: boolean; locale?: string; nativeApp?: boolean } }>,
         reply: FastifyReply,
     ) => {
         if (!config.whatsappConnectRedirect) {
@@ -119,6 +270,10 @@ export class WhatsAppRedirectController {
             pageId: typeof request.body?.pageId === 'string' && request.body.pageId ? request.body.pageId : null,
             coexistence: request.body?.coexistence === true,
             locale: request.body?.locale === 'en' ? 'en' : 'ar',
+            // The native app opens the dialog in its own browser tab, so the
+            // nonce cookie set on THIS response never reaches the callback —
+            // the state records that, and the callback returns via App Link.
+            app: request.body?.nativeApp === true,
             reply,
         });
         if (!prep.ok) {
@@ -144,6 +299,8 @@ export class WhatsAppRedirectController {
         pageId: string | null;
         coexistence: boolean;
         locale: 'ar' | 'en';
+        /** Minted for the native app: no nonce pairing, App-Link return. */
+        app?: boolean;
         reply: FastifyReply;
     }): Promise<
         | { ok: true; url: string; urls: { coexistence: string; dedicated: string }; coexistence: boolean; pageId: string | null; locale: 'ar' | 'en' }
@@ -195,6 +352,7 @@ export class WhatsAppRedirectController {
             workspaceId: args.workspaceId,
             pageId,
             locale,
+            ...(args.app ? { app: true as const } : {}),
         };
         const buildUrl = (state: string, withCoexistence: boolean): string => {
             const extras = JSON.stringify({
@@ -217,7 +375,14 @@ export class WhatsAppRedirectController {
         const dedicatedVariant = pathLocked ? coexistence : false;
         const first = mintWhatsAppConnectState({ ...stateInput, coexistence: coexistenceVariant });
         const second = mintWhatsAppConnectState({ ...stateInput, coexistence: dedicatedVariant }, first.nonce);
-        args.reply.setCookie(WHATSAPP_NONCE_COOKIE, first.nonce, WHATSAPP_NONCE_COOKIE_OPTIONS);
+        if (args.app) {
+            // No cookie can bind an app state to its browser — bind it to ONE
+            // use instead (see registerAppState). Siblings share the nonce, so
+            // whichever variant the merchant took, the pair is spent together.
+            await registerAppState(first.nonce);
+        } else {
+            args.reply.setCookie(WHATSAPP_NONCE_COOKIE, first.nonce, WHATSAPP_NONCE_COOKIE_OPTIONS);
+        }
 
         const urls = {
             coexistence: buildUrl(first.state, coexistenceVariant),
@@ -233,13 +398,13 @@ export class WhatsAppRedirectController {
      * The app asks the onboarding-path question IN-APP, then opens the system
      * browser here with a single-use handoff code. This handler consumes the
      * code, signs the browser in (cookies — so the callback's return page
-     * renders logged-in), mints the state + nonce cookie, and 302s STRAIGHT to
-     * Meta's dialog. The browser's first document is facebook.com — there is
-     * no JS navigation anywhere for a WebView-adjacent surface to swallow,
-     * which is exactly what killed every earlier shape of the in-app flow on a
-     * real device (Custom Tab AND intent-opened Chrome tab both dropped the
-     * page-side location.assign; a server 302 is followed by the network
-     * stack, not the renderer).
+     * renders logged-in), mints the state + nonce cookie, and serves the
+     * handoff page whose single anchor carries the merchant to Meta.
+     *
+     * The last hop is a real TAP for a reason: on the owner's device every
+     * non-tap navigation to facebook.com from an app-launched browser died
+     * silently (page-side location.assign in a Custom Tab and in an
+     * intent-opened Chrome tab, and a server 302) — see handoffPage.
      *
      * Owner-only, like POST /start: the ES business token is workspace-level
      * credential material. Enforced here via the membership role, since a
@@ -308,7 +473,8 @@ export class WhatsAppRedirectController {
         }
 
         request.log.info({ pageId: prep.pageId, coexistence: prep.coexistence, locale }, '[WhatsApp redirect] app-start');
-        return reply.redirect(prep.url);
+        // Render the handoff page rather than 302ing to Meta — see handoffPage.
+        return reply.type('text/html; charset=utf-8').send(handoffPage(prep.url, locale));
     };
 
     /**
@@ -342,20 +508,38 @@ export class WhatsAppRedirectController {
             return reply.redirect(pagesRedirect('ar', { whatsappError: 'WHATSAPP_CONNECT_FAILED' }));
         }
 
-        const fail = (errorCode: string) => reply.redirect(pagesRedirect(state.locale, { whatsappError: errorCode }));
+        // App flow goes home through the App Link — served as a PAGE that
+        // navigates, because a 302 to it is not intercepted (see
+        // appReturnPage). Web flow keeps the plain redirect.
+        const home = (params: Record<string, string> = {}) => (state.app
+            ? reply.type('text/html; charset=utf-8').send(appReturnPage(appReturn(params), state.locale))
+            : reply.redirect(pagesRedirect(state.locale, params)));
+        const fail = (errorCode: string) => home({ whatsappError: errorCode });
 
-        // Nonce double-submit: the state must have been minted for THIS browser.
+        // Replay defence, one per flow. `state.app` is inside the HMAC, so a
+        // web-minted state can never take the app branch.
+        //   web — nonce double-submit: the state was minted for THIS browser.
+        //   app — single use: the cookie pair cannot exist across the WebView /
+        //         browser jar boundary, so the state is spent instead
+        //         (registerAppState). Strictly stronger than same-browser
+        //         binding, and it closes the replay window that simply dropping
+        //         the nonce would have left open for the state's full TTL.
         const rawCookie = request.cookies?.[WHATSAPP_NONCE_COOKIE];
         const unsigned = rawCookie ? request.unsignCookie(rawCookie) : null;
         reply.clearCookie(WHATSAPP_NONCE_COOKIE, { path: '/' });
-        if (!unsigned?.valid || unsigned.value !== state.nonce) {
+        if (state.app) {
+            if (!(await consumeAppState(state.nonce))) {
+                request.log.warn('[WhatsApp redirect] app state already used or expired');
+                return fail('WHATSAPP_CONNECT_FAILED');
+            }
+        } else if (!unsigned?.valid || unsigned.value !== state.nonce) {
             request.log.warn('[WhatsApp redirect] nonce mismatch on callback');
             return fail('WHATSAPP_CONNECT_FAILED');
         }
 
         // Merchant backed out inside the wizard — not an error, just go home.
         if (oauthError || !code || typeof code !== 'string') {
-            return reply.redirect(pagesRedirect(state.locale));
+            return home();
         }
 
         try {
@@ -426,7 +610,7 @@ export class WhatsAppRedirectController {
                 { pageId, phoneNumberId: candidate.id, wabaId: candidate.wabaId, coexistence, tokenExpiresAt },
                 '[WhatsApp redirect] Number connected',
             );
-            return reply.redirect(pagesRedirect(state.locale, { whatsappConnected: '1', waPageId: pageId }));
+            return home({ whatsappConnected: '1', waPageId: pageId });
         } catch (error) {
             if ((error as { code?: string })?.code === '23505') {
                 return fail('WHATSAPP_NUMBER_TAKEN');
