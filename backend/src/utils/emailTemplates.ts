@@ -1,12 +1,6 @@
 import { config } from '../config';
 import { t } from './i18n';
-
-function escapeHtml(text: string): string {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
+import { escapeHtml } from './htmlUtils';
 
 /**
  * Detect if text is primarily Arabic/RTL script.

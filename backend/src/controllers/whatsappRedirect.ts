@@ -21,6 +21,8 @@ import { authService } from '../services/auth';
 import { refreshTokenService } from '../services/refreshToken';
 import { cookiesService } from '../services/cookies';
 import { workspaceService } from '../services/workspace';
+import { escapeHtml } from '../utils/htmlUtils';
+import { t } from '../utils/i18n';
 
 /**
  * WhatsApp connect via FULL-PAGE redirect Embedded Signup.
@@ -55,6 +57,62 @@ function pagesRedirect(locale: 'ar' | 'en', params?: Record<string, string>): st
         ? `?${new URLSearchParams(params).toString()}`
         : '';
     return `${config.frontendUrl}${localePath(locale)}/pages${qs}`;
+}
+
+/**
+ * The handoff page the NATIVE app lands the system browser on.
+ *
+ * Why a page and not a 302 straight to Meta: on the owner's device, a
+ * navigation to facebook.com issued by anything other than the merchant's own
+ * tap — a page-side `location.assign` (Custom Tab 2026-07-30, intent-opened
+ * Chrome 2026-07-31) or a server 302 (2026-07-31) — never rendered Meta's
+ * dialog; the browser flashed and returned to the app, with no request
+ * reaching us afterwards. A REAL anchor click is the most privileged
+ * navigation a browser has, and it is the one shape not yet tried.
+ *
+ * There is deliberately NO automatic redirect on this page: an auto-attempt
+ * that gets intercepted bounces the merchant away before they ever see the
+ * button, which is exactly the dead end we are escaping — and it would also
+ * destroy the diagnostic value of "did the page render and stay?".
+ *
+ * Self-contained markup (no bundle, no fonts, no JS) so it paints instantly
+ * over mobile data and cannot fail on a blocked asset.
+ */
+function handoffPage(dialogUrl: string, locale: 'ar' | 'en'): string {
+    const rtl = locale === 'ar';
+    return `<!DOCTYPE html>
+<html lang="${locale}" dir="${rtl ? 'rtl' : 'ltr'}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>${escapeHtml(t('waHandoffTitle', locale))}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         padding:24px; box-sizing:border-box; background:#f8fafc; color:#0f172a;
+         font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .card { max-width:420px; width:100%; text-align:center; background:#fff; border-radius:16px;
+          padding:32px 24px; box-shadow:0 4px 24px rgba(15,23,42,.08); }
+  h1 { font-size:20px; margin:0 0 12px; }
+  p { font-size:15px; line-height:1.6; margin:0 0 24px; color:#475569; }
+  a.cta { display:block; background:#0f9d76; color:#fff; text-decoration:none; font-size:17px;
+          font-weight:600; padding:16px 24px; border-radius:12px; }
+  @media (prefers-color-scheme: dark) {
+    body { background:#0f172a; color:#f1f5f9; }
+    .card { background:#1e293b; box-shadow:none; }
+    p { color:#94a3b8; }
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>${escapeHtml(t('waHandoffTitle', locale))}</h1>
+    <p>${escapeHtml(t('waHandoffBody', locale))}</p>
+    <a class="cta" href="${escapeHtml(dialogUrl)}">${escapeHtml(t('waHandoffCta', locale))}</a>
+  </main>
+</body>
+</html>`;
 }
 
 /** The redirect_uri registered at Meta. Must match byte-for-byte on both legs. */
@@ -233,13 +291,13 @@ export class WhatsAppRedirectController {
      * The app asks the onboarding-path question IN-APP, then opens the system
      * browser here with a single-use handoff code. This handler consumes the
      * code, signs the browser in (cookies — so the callback's return page
-     * renders logged-in), mints the state + nonce cookie, and 302s STRAIGHT to
-     * Meta's dialog. The browser's first document is facebook.com — there is
-     * no JS navigation anywhere for a WebView-adjacent surface to swallow,
-     * which is exactly what killed every earlier shape of the in-app flow on a
-     * real device (Custom Tab AND intent-opened Chrome tab both dropped the
-     * page-side location.assign; a server 302 is followed by the network
-     * stack, not the renderer).
+     * renders logged-in), mints the state + nonce cookie, and serves the
+     * handoff page whose single anchor carries the merchant to Meta.
+     *
+     * The last hop is a real TAP for a reason: on the owner's device every
+     * non-tap navigation to facebook.com from an app-launched browser died
+     * silently (page-side location.assign in a Custom Tab and in an
+     * intent-opened Chrome tab, and a server 302) — see handoffPage.
      *
      * Owner-only, like POST /start: the ES business token is workspace-level
      * credential material. Enforced here via the membership role, since a
@@ -308,7 +366,8 @@ export class WhatsAppRedirectController {
         }
 
         request.log.info({ pageId: prep.pageId, coexistence: prep.coexistence, locale }, '[WhatsApp redirect] app-start');
-        return reply.redirect(prep.url);
+        // Render the handoff page rather than 302ing to Meta — see handoffPage.
+        return reply.type('text/html; charset=utf-8').send(handoffPage(prep.url, locale));
     };
 
     /**
