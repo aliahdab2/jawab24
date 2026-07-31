@@ -123,12 +123,42 @@ CREATE TABLE notification_preferences (
 ### Phase 1: Critical Alerts (Current)
 **Goal:** Notify users of events that require immediate action.
 
-| Notification Type | Trigger | Channels |
-|-------------------|---------|----------|
-| Payment Failed | Stripe webhook `invoice.payment_failed` | Push + In-App |
-| Subscription Expiring | 3 days before expiry (cron) | Push + In-App |
-| Page Disconnected | Facebook API error (token expired) | Push + In-App |
-| New Lead | Lead captured (customer shared a phone) — first time per sender only | Push (gated by per-user `newLeadAlertsEnabled`) + In-App |
+| Notification Type | Trigger | Channels | Status |
+|-------------------|---------|----------|--------|
+| Payment Failed | Stripe webhook `invoice.payment_failed` | Push + In-App | ✅ live |
+| Page Disconnected | Facebook API error (token expired) | Push + In-App | ✅ live — but **not** fired on the Facebook-revoked path (see below) |
+| New Lead | Lead captured (customer shared a phone) — first time per sender only | Push (gated by per-user `newLeadAlertsEnabled`) + In-App | ✅ live |
+| Subscription Expiring | 3 days before expiry (cron) | Push + In-App | ❌ **NOT IMPLEMENTED** |
+| Trial Ending | N days before `trial_ends_at` (cron) | Push + In-App | ❌ **NOT IMPLEMENTED** |
+
+> ⚠️ **Lifecycle notifications do not exist.** `subscription_expiring` and `trial_ending`
+> are declared in `services/notifications.ts` **with finished bilingual templates**, and the
+> frontend already renders and deep-links both — but the only caller anywhere in the repo is
+> the demo seeder (`plugins/demo/seedData.ts`). **No cron queries `subscriptions.trial_ends_at`.**
+> Trial expiry itself is lazy, evaluated on read (`services/subscriptions.ts` flips
+> `trialing → past_due` when someone fetches the subscription), and the sole merchant-facing
+> signal is `auto_reply_paused_billing` — fired *reactively* on the next inbound message
+> **after** expiry, i.e. only once a real customer has already gone unanswered. A merchant
+> whose customers happen not to write is never told at all.
+>
+> Measured impact (prod, 2026-07-31): **30 of 52 `trialing` subscriptions were already past
+> `trial_ends_at`, and all 30 had sent zero replies in the preceding 14 days** — silent churn.
+>
+> Everything needed already exists; only the scheduled job is missing. `daysLeft` is computed
+> in `services/admin/health.ts`, and `services/whatsappTokenHealth.ts` is the cron shape to
+> copy (periodic sweep warning N days ahead of a clock-based expiry). Dedup per milestone with
+> the house Redis `SET NX` pattern used in `services/subscriptions.ts`.
+>
+> ⚠️ Do **not** conflate this with `auto_reply_disabled_reason = 'trial_block'`, which is the
+> per-channel anti-abuse ledger applied at *connect* time and has nothing to do with a
+> subscription trial ending.
+
+> ⚠️ **`page_disconnected` has a blind spot.** It fires on Graph API token errors, but *not*
+> when Facebook simply stops returning a page from `/me/accounts` (the merchant deselected it
+> in Meta's permission dialog). That path — in `services/pages.ts` — clears the access token
+> and deliberately nulls `auto_reply_disabled_reason`, so the page goes silent with no
+> notification and no recorded reason. See "Why a Page Went Quiet" in `SYSTEM_ANALYSIS.md`
+> for the full discriminator table.
 
 **Deliverables:**
 - [x] Database schema (device_tokens, notifications)

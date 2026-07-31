@@ -233,8 +233,27 @@ After any feature addition, integration, or architectural change, update these d
 
 Rules:
 - Never leave a doc saying "Planned" or "Not implemented" after shipping the feature
+- **Never leave a doc claiming a feature exists when it does not.** This is the same defect
+  in reverse, and it is the more dangerous direction: a doc that under-claims wastes a grep,
+  a doc that over-claims sends the reader down a wrong path with full confidence. Mark
+  anything declared-but-unwired as ❌ NOT IMPLEMENTED. A type, a template, or a UI component
+  existing is **not** the feature existing — check for a real caller.
 - Never leave a gap table entry un-struck after fixing the gap
 - Doc update belongs in the **same commit** as the code — not a follow-up
+
+**Docs must also be fixed when found wrong, with no code change involved.** The rules above
+are triggered by shipping; documentation also rots on its own, while nothing is being
+shipped. So whenever an investigation shows a doc to be inaccurate — even if the task at
+hand touches no code — correct it there and then. A standalone docs-only commit is the
+right outcome, not scope creep.
+
+**When a doc and the source disagree, the source wins — and the doc is the bug.** Verify a
+doc's claim by grepping for a real caller/writer before you rely on it. Precedent
+(2026-07-31, PR #577): `SYSTEM_ANALYSIS.md` said `pages.auto_reply_disabled_reason` records
+`plan_limit`, while `db/schema.ts` had said `RESERVED — no current writer` for over a month
+and the same doc contradicted itself further down. `docs/notifications-roadmap.md` listed a
+trial-expiry cron as shipped; its only caller was the demo seeder. Both cost real
+investigation time on a live merchant issue.
 
 ### 16. Best Practice & Industry Standards Always
 
