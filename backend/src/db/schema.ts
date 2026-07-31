@@ -1218,7 +1218,7 @@ export const catalogItems = pgTable('catalog_items', {
     description: text('description'),
     // Nullable price = "price on request" — a real state, not missing data.
     price: numeric('price', { precision: 12, scale: 2 }),
-    currency: varchar('currency', { length: 10 }),
+    currency: varchar('currency', { length: 30 }), // widened 0144: CurrencyInput truncates at 30, and «ل.س بالعملة القديمة» must fit
     // Written in Release 2 (photo upload + DM photo-card); nullable from day one
     // so the photo rollout needs no second migration.
     imageUrl: text('image_url'),
@@ -1319,7 +1319,7 @@ export const factRows = pgTable('fact_rows', {
     // prices it (no "price on request" stamped on pharmacies — the defect
     // that disqualified catalog_items as the home for lists).
     price: numeric('price', { precision: 12, scale: 2 }),
-    currency: varchar('currency', { length: 10 }),
+    currency: varchar('currency', { length: 30 }), // widened 0144: CurrencyInput truncates at 30, and «ل.س بالعملة القديمة» must fit
     // Optional validity window — same self-expiry semantics as catalog_items:
     // a passed endsAt EXCLUDES the row from the prompt while the merchant UI
     // keeps it (the v38 stale-date class, killed by dates not by memory).

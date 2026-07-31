@@ -91,5 +91,32 @@
     "hint": "For anything the fields above don't cover: FAQs, special details, whatever else Jawab should know."
   },
   "noPage": "Connect a page to set up your business information.",
-  "loading": "Loading your business…"
+  "loading": "Loading your business…",
+  "lists": {
+    "title": "Business lists",
+    "hint": "Exact lists Jawab quotes from — prices, schedules, coverage. A dated row hides itself automatically once its date passes.",
+    "addRow": "Add row",
+    "editRow": "Edit row",
+    "edit": "Edit",
+    "rowName": "Name",
+    "rowPrice": "Price",
+    "rowPriceOptional": "Optional",
+    "rowCurrency": "Currency",
+    "rowCurrencyPlaceholder": "e.g. SYP",
+    "rowDate": "Start date",
+    "rowDateHint": "After this date passes, the row is hidden from the assistant automatically — no stale dates reach customers.",
+    "startsOn": "starts {date}",
+    "expired": "Expired",
+    "expiredToggle": "{count, plural, one {# expired row} other {# expired rows}}",
+    "completenessAsk": "Is this list complete — nothing else exists?",
+    "completenessYes": "Yes, complete",
+    "completenessNo": "No, partial",
+    "completenessConfirmed": "Marked complete: the assistant answers a confident “not available” for anything not listed.",
+    "completenessPartial": "Marked partial: the assistant says “not registered in my list” and offers direct contact.",
+    "completenessReset": "Change",
+    "deleteConfirm": "Confirm delete",
+    "saved": "Saved",
+    "deleted": "Row deleted",
+    "saveFailed": "Could not save — try again"
+  }
 }
