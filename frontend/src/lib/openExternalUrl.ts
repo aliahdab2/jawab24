@@ -16,6 +16,21 @@ async function openInAppBrowser(url: string): Promise<void> {
   await Browser.open({ url });
 }
 
+/**
+ * A real-browser launch fell back to the in-app browser. Worth reporting on its
+ * own: flows that ask for the system browser need it (Embedded Signup dies in a
+ * Custom Tab), and the degradation is invisible from the outside — the Custom
+ * Tab carries the same cookies AND the same user-agent, so it looks like a win
+ * in every log we keep.
+ */
+function reportDegradedLaunch(cause: unknown): void {
+  void import('@/lib/sentryHelpers').then(({ captureError }) => {
+    captureError(cause instanceof Error ? cause : new Error(String(cause)),
+      'System-browser launch degraded to in-app browser',
+      { tags: { area: 'open-external-url', platform: Capacitor.getPlatform() } });
+  }).catch(() => { /* reporting must never break the launch */ });
+}
+
 export async function openExternalUrl(url: string): Promise<void> {
   if (!Capacitor.isNativePlatform()) {
     openWebTab(url);
@@ -63,9 +78,17 @@ export async function openInSystemBrowser(url: string): Promise<void> {
     // no signal anywhere. Check the result explicitly.
     const { completed } = await AppLauncher.openUrl({ url });
     if (completed) return;
-  } catch {
+    // completed:false means no VISIBLE activity handles the URL. On Android 11+
+    // that is almost always a missing <queries> declaration rather than a device
+    // without a browser — it cost a whole debug cycle on 2026-07-31, because the
+    // Custom Tab we fall back to sends Chrome's user-agent and server logs
+    // therefore look identical to a successful launch. Report it: from the
+    // outside, the two are indistinguishable.
+    reportDegradedLaunch('AppLauncher reported completed:false');
+  } catch (error) {
     // Plugin missing/rejected (e.g. old binary without app-launcher) — fall
-    // through to the Custom Tab.
+    // through to the Custom Tab, but never silently.
+    reportDegradedLaunch(error);
   }
   // Degrade rather than dead-end: a Custom Tab still shows the page, even if
   // Embedded Signup cannot complete in it.
