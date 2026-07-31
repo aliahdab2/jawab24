@@ -865,7 +865,7 @@ All webhooks use HMAC-SHA256 signature verification:
 ---
 
 ### Resend Email Service
-- **Purpose**: Transactional emails — waitlist notifications, subscription welcome, lead digests, and **team invites**. Email kinds are the `EmailType` union in `email.ts`: `lead_digest | waitlist | transactional | subscription_welcome | invite`.
+- **Purpose**: Transactional emails — waitlist notifications, subscription welcome, **trial-ending reminders**, lead digests, account notices, and **team invites**. Email kinds are the `EmailType` union in `email.ts`: `lead_digest | waitlist | transactional | subscription_welcome | trial_ending | invite | account_notice`.
 - **Team invites**: `workspaceInviteService.createInvite()` sends the invite via email (for email contacts) or SMS (for phone contacts). The invite email is **bilingual** (Arabic + English in one message, since the recipient's language is unknown) and links to `/invites/accept?token=…`. If the email send fails, the API returns the raw token so the UI can fall back to a copy-and-share link. Template: `inviteEmailTemplate()` in `emailTemplates.ts`.
 - **API**: Resend REST API (`https://api.resend.com/emails`) via native `fetch` (no SDK)
 - **From**: `info@jawab24.com` (configurable via `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME`)

@@ -821,6 +821,11 @@ export const subscriptions = pgTable('subscriptions', {
 
     // Trial info
     trialEndsAt: timestamp('trial_ends_at'),
+    // Stamped by the trial-ending reminder cron (services/trialReminders.ts) once
+    // the merchant has been warned, so the daily run never warns twice for the
+    // same trial. NULL = not yet warned. Written only after the in-app
+    // notification lands; see the service for the retry semantics.
+    trialEndingNotifiedAt: timestamp('trial_ending_notified_at'),
 
     // Billing period
     currentPeriodStart: timestamp('current_period_start').defaultNow(),

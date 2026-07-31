@@ -60,6 +60,7 @@ import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { startWhatsAppTokenHealthCron, stopWhatsAppTokenHealthCron, setWhatsAppTokenHealthLogger } from "./services/whatsappTokenHealth";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
+import { setTrialRemindersLogger, runTrialEndingReminders } from "./services/trialReminders";
 import { captureError } from "./utils/sentryHelpers";
 import { smsService } from "./services/sms";
 import { emailService } from "./services/email";
@@ -379,6 +380,25 @@ const start = async () => {
         captureError(err, '[LeadDigest] Initial run failed', { tags: { cron: 'lead_digest' }, level: 'error' });
       });
     }, 5 * 60 * 1000);
+
+    // Trial-ending reminder cron — once per day, warns merchants 3 days before
+    // their trial expires. Stamping in the service guarantees one warning per
+    // trial no matter how often this runs.
+    setTrialRemindersLogger(workerLogger);
+    const TRIAL_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+    setInterval(() => {
+      runTrialEndingReminders().catch(err => {
+        server.log.error(err, '[TrialReminders] Scheduled run failed');
+        captureError(err, '[TrialReminders] Scheduled run failed', { tags: { cron: 'trial_reminders' }, level: 'error' });
+      });
+    }, TRIAL_REMINDER_INTERVAL_MS);
+    // Staggered 2 min behind the lead digest so the two daily jobs don't share a tick
+    setTimeout(() => {
+      runTrialEndingReminders().catch(err => {
+        server.log.error(err, '[TrialReminders] Initial run failed');
+        captureError(err, '[TrialReminders] Initial run failed', { tags: { cron: 'trial_reminders' }, level: 'error' });
+      });
+    }, 7 * 60 * 1000);
 
     // Database cleanup scheduler — runs every 6 hours to enforce data retention
     // AI cache: 30 days, logs: 90 days, usage logs: 180 days
