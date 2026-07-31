@@ -14,7 +14,17 @@ vi.mock('../../src/db', () => ({
 }));
 
 import { db } from '../../src/db';
-import { seedDemoData, DEMO_PAGES, DEMO_DISTRIBUTOR_COLLECTIONS } from '../../src/plugins/demo/seedData';
+import { seedDemoData, DEMO_PAGES, DEMO_DISTRIBUTOR_COLLECTIONS, renderDemoDamascusLists } from '../../src/plugins/demo/seedData';
+import {
+    DAMASCUS_COURSE_PRICES,
+    DAMASCUS_ONLINE_COURSES,
+    DAMASCUS_SCHEDULES_LABEL,
+    DAMASCUS_SCHEDULES_KEY,
+    DAMASCUS_SCHEDULE_SLOTS,
+    damascusPriceRowInputs,
+    damascusScheduleRowInputs,
+    resolveSlotDates,
+} from '../../src/plugins/demo/damascusLists';
 
 // Helper to build a chainable select mock
 function mockSelectChain(result: any[]) {
@@ -198,5 +208,131 @@ describe('distributor fact-collections fixture (G1a)', () => {
         // the assertion flips from present to absent rather than being dropped.
         expect(kb).not.toContain('45د');
         expect(kb).not.toContain('54 دينار');
+    });
+});
+
+/**
+ * Schedules-slice fixture integrity (D-052). The damascus institute's enumerable
+ * facts moved out of KB prose into THREE collections whose split is load-bearing
+ * (see damascusLists.ts): un-keyed undated prices (existence never expires),
+ * keyed self-expiring cohort slots (the stale-date class killed by data), and
+ * the closed online list (#503/#511 family). These assertions machine-check the
+ * traps that design documents — a silent fixture edit would otherwise flip the
+ * Cat 51 cases without proving anything.
+ */
+describe('damascus fact-collections fixture (schedules slice, D-052)', () => {
+    const TODAY = '2026-07-31';
+
+    it('splits into un-keyed prices, keyed schedules, keyed online list', () => {
+        expect(DAMASCUS_SCHEDULES_KEY).toBe('الدورة');
+        // The main price list is seeded with keyAttr: null (un-keyed): gating a
+        // price table withholds every row from «قديش أسعار الدورات؟», which
+        // names no course — the sizes-slice dead end (#551). The ONLINE list is
+        // KEYED: measured 2026-07-31, the un-keyed generic absence line let
+        // #503 affirm «الإنجليزية أونلاين»; the enumerated boundary stops it.
+        const rendered = renderDemoDamascusLists(TODAY);
+        expect(rendered).toContain(DAMASCUS_COURSE_PRICES.label);
+        expect(rendered).toContain(DAMASCUS_SCHEDULES_LABEL);
+        expect(rendered).toContain(DAMASCUS_ONLINE_COURSES.label);
+        // Every online row carries the key so the coverage index stays a boundary.
+        for (const r of DAMASCUS_ONLINE_COURSES.rows) {
+            expect(r.course.trim().length, `online row missing key: ${r.name}`).toBeGreaterThan(0);
+        }
+    });
+
+    // H2 guard: a slot without the key attribute is invisible to the coverage
+    // index, and the renderer then refuses to present the index as a boundary.
+    it('gives EVERY schedule slot a «الدورة» key value', () => {
+        for (const row of damascusScheduleRowInputs(TODAY)) {
+            const key = row.attributes.find(a => a.label === DAMASCUS_SCHEDULES_KEY);
+            expect(key?.value.trim().length, `slot missing key: ${row.name}`).toBeGreaterThan(0);
+        }
+    });
+
+    it('resolves slot dates: fixed stay fixed, relative land in the future, null never expires', () => {
+        expect(resolveSlotDates('2026-06-25', TODAY)).toEqual({ startsAt: '2026-06-25', endsAt: '2026-06-25' });
+        expect(resolveSlotDates({ inDays: 3 }, TODAY)).toEqual({ startsAt: '2026-08-03', endsAt: '2026-08-03' });
+        expect(resolveSlotDates(null, TODAY)).toEqual({ startsAt: null, endsAt: null });
+    });
+
+    // The merchant's real cohort dates are kept AS-IS precisely because they are
+    // past: they exercise suppression. A "real" date accidentally in the future
+    // would silently stop testing the stale-date class.
+    it('keeps every fixed-date slot in the past and every relative slot upcoming', () => {
+        let fixed = 0, relative = 0, undated = 0;
+        for (const s of DAMASCUS_SCHEDULE_SLOTS) {
+            if (s.start === null) { undated++; continue; }
+            if (typeof s.start === 'string') {
+                fixed++;
+                expect(s.start < TODAY, `fixed date must be past: ${s.name} ${s.start}`).toBe(true);
+            } else {
+                relative++;
+                expect(s.start.inDays).toBeGreaterThan(0);
+            }
+        }
+        // All three temporal shapes must stay represented — each proves a
+        // different behaviour (suppression / upcoming quote / honest no-date).
+        expect(fixed).toBeGreaterThan(0);
+        expect(relative).toBeGreaterThan(0);
+        expect(undated).toBeGreaterThan(0);
+    });
+
+    it('never renders an expired cohort — المكياج (all slots past) drops out of rows AND coverage', () => {
+        const rendered = renderDemoDamascusLists(TODAY);
+        // No stale date string survives into the prompt…
+        expect(rendered).not.toContain('2026-06-25');
+        expect(rendered).not.toContain('2026-07-04');
+        // …and المكياج has no live slot, so the schedules coverage index must not
+        // claim it. Its EXISTENCE stays grounded by the price list (which never
+        // expires) — that separation is why prices and schedules are two
+        // collections, not one.
+        const scheduleBlock = rendered.slice(rendered.indexOf(DAMASCUS_SCHEDULES_LABEL));
+        expect(scheduleBlock).not.toContain('المكياج');
+        const priceBlock = rendered.slice(rendered.indexOf(DAMASCUS_COURSE_PRICES.label), rendered.indexOf(DAMASCUS_SCHEDULES_LABEL));
+        expect(priceBlock).toContain('دورة المكياج او التجميل');
+        // Upcoming cohorts DO render with their resolved dates.
+        expect(scheduleBlock).toContain('دورة ICDL');
+        expect(scheduleBlock).toContain('starts 2026-08-03');
+    });
+
+    // #503/#511 anchor: the closed online list is exactly the merchant's three,
+    // so «دورة X أونلاين؟» for anything else hits the absence directive.
+    it('keeps the online list closed: ICDL / الإكسل / محاسبة الأمين only', () => {
+        const names = DAMASCUS_ONLINE_COURSES.rows.map(r => r.name).join('|');
+        expect(DAMASCUS_ONLINE_COURSES.rows).toHaveLength(3);
+        expect(names).toContain('ICDL');
+        expect(names).toContain('الإكسل');
+        expect(names).toContain('محاسبة الأمين');
+        expect(names).not.toContain('الإنكليزية');
+        expect(names).not.toContain('المكياج');
+    });
+
+    // fact_rows.currency is varchar(10) — the full «بالعملة القديمة» phrasing
+    // does not fit and belongs to prose. A longer value would fail at INSERT
+    // time in prod but silently pass the pure renderer.
+    it('keeps every currency within the varchar(10) column', () => {
+        for (const r of [...damascusPriceRowInputs(DAMASCUS_COURSE_PRICES), ...damascusPriceRowInputs(DAMASCUS_ONLINE_COURSES)]) {
+            expect(r.currency.length).toBeLessThanOrEqual(10);
+        }
+    });
+
+    // #720 discipline: the same fact in prose AND rows is the contradiction
+    // factory. The KB keeps behaviour (Q&A, address, hours, certificates) and
+    // loses every enumerable price/date the rows now own.
+    it('leaves no course prices or cohort dates behind in the fixture KB text', () => {
+        const damascus = DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_damascus');
+        expect(damascus).toBeDefined();
+        const kb = damascus?.suggestedKnowledgeBase ?? '';
+        expect(kb).not.toContain('/2026');            // every cohort date is gone
+        expect(kb).not.toContain('المواعيد المتوفرة');
+        expect(kb).not.toContain('35000');            // the price ladders are gone
+        expect(kb).not.toMatch(/تبدأ \d/);
+        expect(kb).not.toContain('10 دولار');         // online list moved to rows
+        // …while what belongs in prose stays:
+        expect(kb).toContain('لا يوجد لدينا دورة ادارة أعمال');   // #501 anchor
+        expect(kb).toContain('هل يوجد دورة خياطة');               // #506 anchor
+        expect(kb).toContain('برامكة سانا');                       // address
+        expect(kb).toContain('شهادة دولية 250');                   // certificate fees stay prose
+        expect(kb).toContain('كل 100 ليرة قديمة تساوي 1 ليرة جديدة'); // currency note
     });
 });
