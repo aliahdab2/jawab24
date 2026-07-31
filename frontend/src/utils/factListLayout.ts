@@ -1,5 +1,6 @@
 import { normalizeArabic } from '@jawab24/shared';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
+import { SUPPORTED_LOCALES } from './locale';
 import type { FactListGroup, GroupedRow } from './factListGrouping';
 
 /**
@@ -301,4 +302,57 @@ export function buildTierBlocks(
     else orphans.push(s);
   }
   return { blocks, orphans };
+}
+
+// ---------------------------------------------------------------------------
+// Session chip adornment (UX round 5, point 3) — days and times get an icon
+// ---------------------------------------------------------------------------
+
+/** Weekday names GENERATED from the platform's own locale data (Intl) for
+ *  every supported app locale — never a hand-maintained word list. Folded
+ *  through the shared normalizer so merchant spelling variants (الإثنين vs
+ *  الاثنين, stray tashkeel) still match. */
+const WEEKDAY_NAMES: Set<string> = (() => {
+  const names = new Set<string>();
+  for (const locale of SUPPORTED_LOCALES) {
+    for (const width of ['long', 'short'] as const) {
+      const fmt = new Intl.DateTimeFormat(locale, { weekday: width, timeZone: 'UTC' });
+      for (let d = 0; d < 7; d++) {
+        // 2024-01-07 was a Sunday; +d walks one full week.
+        names.add(norm(fmt.format(new Date(Date.UTC(2024, 0, 7 + d)))));
+      }
+    }
+  }
+  return names;
+})();
+
+const HAS_ARABIC_RE = /[؀-ۿ]/;
+/** Digits (post-normalization) plus bare separators — a value made ONLY of
+ *  these is time-shaped («1-3», «10:00», «٤–٦»). Any word drops to 'other'. */
+const TIME_SHAPE_RE = /^(?=.*\d)[\d\s:.\-–—~/]+$/;
+
+export type SessionValueKind = 'weekday' | 'time' | 'other';
+
+/**
+ * Best-effort adornment classifier for session values: 'weekday' when the
+ * value carries a platform-known day name (Arabic tokens also match with a
+ * fused prefix — «والثلاثاء»), 'time' when the value is purely digits and
+ * separators. Everything uncertain is 'other' and renders unadorned — the
+ * classifier only ever ADDS an icon, so a miss is cosmetic, never wrong.
+ */
+export function sessionValueKind(value: string): SessionValueKind {
+  const n = norm(value);
+  if (!n) return 'other';
+  const tokens = n.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  for (const token of tokens) {
+    if (WEEKDAY_NAMES.has(token)) return 'weekday';
+    // Arabic proclitics (و، ب، ف، ال…) fuse onto the word — endsWith catches
+    // them; restricted to Arabic tokens so English substrings can't false-hit.
+    if (HAS_ARABIC_RE.test(token)) {
+      for (const name of WEEKDAY_NAMES) {
+        if (name.length >= 4 && token.endsWith(name)) return 'weekday';
+      }
+    }
+  }
+  return TIME_SHAPE_RE.test(n) ? 'time' : 'other';
 }

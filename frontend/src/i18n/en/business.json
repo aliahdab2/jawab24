@@ -136,6 +136,8 @@
     "sectionGeneral": "General",
     "sectionPricing": "Pricing",
     "sessionN": "Date {n}",
+    "sessionSingle": "Date",
+    "saveChanges": "Save changes",
     "upcomingCount": "{count, plural, one {# upcoming date} other {# upcoming dates}}",
     "noSessions": "No dates",
     "addFirstSession": "Add the first date",

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ListChecks, CalendarClock, Pencil } from 'lucide-react';
+import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -11,7 +11,7 @@ import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/f
 import {
   sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
   discoverFaceLabel, buildEntityUnit, buildTierBlocks, isDatedCollection,
-  type FactListSection, type FactEntityUnit,
+  sessionValueKind, type FactListSection, type FactEntityUnit,
 } from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
@@ -65,6 +65,10 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [entityEditing, setEntityEditing] = useState<{ unit: FactEntityUnit; baseCollection: FactCollectionWithRows | null } | null>(null);
   const [showExpired, setShowExpired] = useState<Record<string, boolean>>({});
+  // Session groups are collapsible but start EXPANDED — the owner's ruling
+  // («كل دورة ومعها كل معلوماتها») outranks the expert's collapsed default;
+  // the toggle only adds the scan-across-levels affordance he asked for.
+  const [collapsedSessions, setCollapsedSessions] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
 
   const collections = useMemo(() => data ?? [], [data]);
@@ -187,9 +191,12 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     return Number.isFinite(n) ? n.toLocaleString(intlLocale) : formatCatalogPrice(price);
   };
 
-  const priceTag = (row: FactRowDto) =>
+  const priceTag = (row: FactRowDto, opts?: { prominent?: boolean }) =>
     row.price ? (
-      <span className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums" dir="auto">
+      <span
+        className={`${opts?.prominent ? 'text-base font-bold' : 'text-sm font-semibold'} text-foreground whitespace-nowrap tabular-nums`}
+        dir="auto"
+      >
         {displayPrice(row.price)}
         {row.currency && (
           <span className="text-xs font-medium text-muted-foreground ms-1">{row.currency}</span>
@@ -203,16 +210,19 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     </span>
   );
 
-  const editGlyph = (
-    <>
-      <Pencil className="w-4 h-4 flex-shrink-0 text-icon-muted" aria-hidden="true" />
-      <span className="sr-only">{t('lists.edit')}</span>
-    </>
+  /** «تعديل» as a visible chip — helper-text-weight edit affordances were the
+   *  expert's point 4; the chip reads as the row's action, not as a caption. */
+  const editChip = (
+    <span className="inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-2 py-1 text-[11px] font-semibold text-brand-700 dark:text-brand-300 whitespace-nowrap">
+      <Pencil className="w-3 h-3" aria-hidden="true" />
+      {t('lists.edit')}
+    </span>
   );
 
-  /** A TIER line (Shopify-variant / ticket-type pattern): bold title — the
-   *  tier value when one exists, else the row name — price anchored to the
-   *  end edge, everything else on a muted second line. */
+  /** A TIER line (Shopify-variant / ticket-type pattern): a PROMINENT title —
+   *  the tier value when one exists, else the row name — with the price and
+   *  its «تعديل» chip anchored together at the end edge (expert points 1–2:
+   *  the eye lands on the price first, and the action belongs to it). */
   const tierRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean) => {
     const facePair = faceLabel
       ? row.attributes?.find((a) => a.label === faceLabel)
@@ -224,6 +234,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     // other fields carry the line — never the entity name again (the card
     // header already says it; repeating it was the original complaint).
     const title = facePair?.value ?? null;
+    const priceInLine = !title && pairs.length === 0 && !!row.price;
     return (
       <li key={row.id} className="list-none">
         <button
@@ -234,7 +245,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-2 flex-wrap">
               {title ? (
-                <span className="text-sm font-semibold text-foreground break-words" dir="auto">{title}</span>
+                <span className="text-[15px] font-bold text-foreground break-words" dir="auto">{title}</span>
               ) : pairs.length > 0 ? (
                 <span className="text-sm text-foreground break-words" dir="auto">
                   {pairs.map((a, i) => (
@@ -245,10 +256,10 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                     </span>
                   ))}
                 </span>
-              ) : row.price ? (
-                priceTag(row)
+              ) : priceInLine ? (
+                priceTag(row, { prominent: true })
               ) : (
-                <span className="text-sm font-semibold text-foreground break-words" dir="auto">{row.name}</span>
+                <span className="text-[15px] font-bold text-foreground break-words" dir="auto">{row.name}</span>
               )}
               {expired && expiredBadge}
             </span>
@@ -258,16 +269,22 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
               </span>
             )}
           </span>
-          {(title || pairs.length > 0) && priceTag(row)}
-          <span className="flex-shrink-0 text-xs font-semibold text-brand-600">{t('lists.edit')}</span>
+          <span className="flex-shrink-0 flex flex-col items-end gap-1">
+            {!priceInLine && priceTag(row, { prominent: true })}
+            {editChip}
+          </span>
         </button>
       </li>
     );
   };
 
   /** A SESSION line (calendar-agenda pattern): a date chip leads, the
-   *  session's values follow as one readable line. Field names stay available
-   *  to assistive tech and on hover. */
+   *  session's values follow as visually grouped fragments — tighter than a
+   *  dot-separated sentence, lighter than a card (expert point 3). Field
+   *  names stay available to assistive tech and on hover; which field means
+   *  «days» vs «time» is never guessed — the values speak for themselves.
+   *  Desktop-only height trim (expert point 5): rows shorten ~25% on lg,
+   *  mobile keeps its breathing room («don't densify» ruling). */
   const sessionRow = (section: FactListSection, row: FactRowDto, expired: boolean) => {
     const pairs = rowDisplayAttributes(section, row, {
       dropLabels: faceLabel ? [faceLabel] : undefined,
@@ -276,7 +293,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     return (
       <li
         key={row.id}
-        className={`min-h-[48px] flex items-center gap-3 px-3 py-2 ${expired ? 'opacity-60' : ''}`}
+        className={`min-h-[48px] lg:min-h-[36px] flex items-center gap-3 px-3 py-2 lg:py-1 ${expired ? 'opacity-60' : ''}`}
       >
         {parts ? (
           <span
@@ -291,17 +308,26 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
             <CalendarClock className="w-4 h-4" aria-hidden="true" />
           </span>
         )}
-        <span className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-foreground break-words">
-            {pairs.map((a, i) => (
-              <span key={a.label} title={a.label} dir="auto">
+        <span className="min-w-0 flex-1 flex items-center gap-x-1.5 gap-y-1 flex-wrap">
+          {pairs.map((a) => {
+            const kind = sessionValueKind(a.value);
+            return (
+              <span
+                key={a.label}
+                title={a.label}
+                dir="auto"
+                className={`inline-flex items-center gap-1 rounded-md bg-card/80 px-1.5 py-0.5 text-[13px] text-foreground break-words ${kind === 'time' ? 'tabular-nums' : ''}`}
+              >
+                {kind === 'weekday' && <CalendarDays className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />}
+                {kind === 'time' && <Clock className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />}
                 <span className="sr-only">{a.label}: </span>
                 {a.value}
-                {i < pairs.length - 1 && <span className="text-muted-foreground"> · </span>}
               </span>
-            ))}
-            {pairs.length === 0 && <span dir="auto">{row.name}</span>}
-          </span>
+            );
+          })}
+          {pairs.length === 0 && (
+            <span className="text-sm text-foreground break-words" dir="auto">{row.name}</span>
+          )}
           {expired && expiredBadge}
         </span>
       </li>
@@ -331,7 +357,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
             )}
           </span>
           {priceTag(row)}
-          {editGlyph}
+          {editChip}
         </button>
       </li>
     );
@@ -476,20 +502,41 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                   sections.find((sec) => sec.collection.id === collectionId);
                 const { blocks, orphans } = buildTierBlocks(group, collections, faceLabel);
                 const datedCollection = collections.find(isDatedCollection);
-                const sessionZone = (rows: typeof group.rows) => (
-                  <div className="mx-3 mb-3 rounded-xl bg-muted/40 overflow-hidden">
-                    <ul className="divide-y divide-theme-border/50">
-                      {rows.filter((r) => !isExpired(r.row)).map((entry) => {
-                        const sec = sectionOf(entry.collection.id);
-                        return sec && sessionRow(sec, entry.row, false);
-                      })}
-                      {expanded && rows.filter((r) => isExpired(r.row)).map((entry) => {
-                        const sec = sectionOf(entry.collection.id);
-                        return sec && sessionRow(sec, entry.row, true);
-                      })}
-                    </ul>
-                  </div>
-                );
+                // Collapsible per tier (expert's one architectural ask): the
+                // count line doubles as the toggle, open by default (owner
+                // ruling — see collapsedSessions above).
+                const sessionZone = (rows: typeof group.rows, zoneKey: string) => {
+                  const collapsed = !!collapsedSessions[zoneKey];
+                  const liveCount = rows.filter((r) => !isExpired(r.row)).length;
+                  return (
+                    <div className="mx-3 mb-3 rounded-xl bg-muted/40 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setCollapsedSessions((prev) => ({ ...prev, [zoneKey]: !collapsed }))}
+                        aria-expanded={!collapsed}
+                        className="w-full min-h-[32px] flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                      >
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${collapsed ? 'ltr:-rotate-90 rtl:rotate-90' : ''}`}
+                          aria-hidden="true"
+                        />
+                        {t('lists.upcomingCount', { count: liveCount })}
+                      </button>
+                      {!collapsed && (
+                        <ul className="divide-y divide-theme-border/50">
+                          {rows.filter((r) => !isExpired(r.row)).map((entry) => {
+                            const sec = sectionOf(entry.collection.id);
+                            return sec && sessionRow(sec, entry.row, false);
+                          })}
+                          {expanded && rows.filter((r) => isExpired(r.row)).map((entry) => {
+                            const sec = sectionOf(entry.collection.id);
+                            return sec && sessionRow(sec, entry.row, true);
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                };
                 return (
                   <>
                     {blocks.map((block, bi) => {
@@ -501,7 +548,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                           {block.base && baseSection && (
                             <ul>{tierRow(group, baseSection, block.base.row, isExpired(block.base.row))}</ul>
                           )}
-                          {showSessions && sessionZone(block.sessions)}
+                          {showSessions && sessionZone(block.sessions, `${group.key}:${block.base?.row.id ?? `tier-${bi}`}`)}
                           {block.base && datedCollection && liveSessions.length === 0 && (
                             <div className="mx-3 mb-3 rounded-xl bg-muted/40 px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
                               <span className="text-xs text-muted-foreground" dir="auto">
@@ -527,7 +574,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                             {datedCollection.label}
                           </p>
                         )}
-                        {sessionZone(orphans)}
+                        {sessionZone(orphans, `${group.key}:orphans`)}
                       </div>
                     )}
                   </>

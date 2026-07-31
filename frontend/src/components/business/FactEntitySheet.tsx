@@ -175,11 +175,14 @@ export function FactEntitySheet({
     onSave(body);
   };
 
+  // Inputs keep their border (the affordance); everything else sheds one —
+  // section titles are type-only and session cards are background-only, so
+  // the form stops reading as a grid of competing boxes (expert point 6).
   const inputClass =
     'w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500';
   const labelClass = 'block text-sm text-muted-foreground mb-1.5';
   const sectionTitleClass =
-    'text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-theme-border pb-1.5 mb-4';
+    'text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-3';
 
   return (
     <SidePanel isOpen onClose={onClose} title={t('lists.editItem')} subtitle={unit.title}>
@@ -282,9 +285,13 @@ export function FactEntitySheet({
             ) : (
               <div className="space-y-3">
                 {sessions.map((s, i) => (
-                  <div key={s.rowId ?? `new-${i}`} className="rounded-xl bg-muted/40 border border-theme-border/60 p-3 space-y-3">
+                  <div key={s.rowId ?? `new-${i}`} className="rounded-xl bg-muted/40 p-3 space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-foreground">{t('lists.sessionN', { n: i + 1 })}</span>
+                      {/* Users don't care that it's number 1 (expert point 7) —
+                          the ordinal appears only once there are peers to tell apart. */}
+                      <span className="text-xs font-bold text-foreground">
+                        {sessions.length === 1 ? t('lists.sessionSingle') : t('lists.sessionN', { n: i + 1 })}
+                      </span>
                       <button
                         type="button"
                         onClick={() => {
@@ -374,19 +381,20 @@ export function FactEntitySheet({
             </button>
           )
         )}
-        <span className="flex-1" />
         <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
           {tc('cancel')}
         </Button>
+        {/* The primary action owns the footer (expert point 8): full remaining
+            width and a verb that says what it saves, on every viewport. */}
         <Button
           size="sm"
           onClick={submit}
           loading={saving && !confirmingDelete}
           disabled={!name.trim() || anyDateInvalid}
           icon={<Check className="w-4 h-4" />}
-          className="max-sm:h-11 max-sm:px-6 max-sm:flex-1"
+          className="flex-1 h-11"
         >
-          {tc('save')}
+          {t('lists.saveChanges')}
         </Button>
       </div>
     </SidePanel>

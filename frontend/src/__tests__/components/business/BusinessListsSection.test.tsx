@@ -176,7 +176,7 @@ describe('BusinessListsSection', () => {
     expect(screen.getAllByLabelText('الأيام')[0]).toHaveValue('الأحد والثلاثاء');
 
     fireEvent.change(screen.getAllByLabelText('Name')[0], { target: { value: 'دورة ICDL مسائية' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
 
     await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenCalledWith(
       PAGE,
@@ -189,6 +189,36 @@ describe('BusinessListsSection', () => {
     ));
   });
 
+  it('session groups collapse behind their count line and start EXPANDED (owner ruling over expert default)', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+    renderSection();
+
+    // Expanded by default — the session values are visible without a click.
+    expect(await screen.findByText('الأحد والثلاثاء')).toBeInTheDocument();
+
+    const toggle = screen.getByRole('button', { name: '1 upcoming date' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(toggle);
+    expect(screen.queryByText('الأحد والثلاثاء')).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByText('الأحد والثلاثاء')).toBeInTheDocument();
+  });
+
+  it('a lone session in the entity form carries no number — «الموعد 1» only appears with peers', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+    renderSection();
+
+    fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
+    // (SidePanel double-renders — assert on presence/absence, not counts.)
+    expect(screen.getAllByText('Date').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Date 1')).toBeNull();
+
+    fireEvent.click(screen.getAllByText('Add another date')[0]);
+    expect(screen.queryByText('Date')).toBeNull();
+    expect(screen.getAllByText('Date 1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Date 2').length).toBeGreaterThan(0);
+  });
+
   it('the entity save strips the legacy endsAt=startsAt artifact — sessions go out with endsAt null', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
@@ -197,7 +227,7 @@ describe('BusinessListsSection', () => {
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
     expect(screen.getAllByLabelText('End date (optional)')[0]).toHaveValue('');
     fireEvent.change(screen.getAllByLabelText('Name')[0], { target: { value: 'دورة ICDL م' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
 
     await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenCalledWith(
       PAGE,

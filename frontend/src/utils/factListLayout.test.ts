@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit } from './factListLayout';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind } from './factListLayout';
 import { groupFactCollections } from './factListGrouping';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -233,5 +233,33 @@ describe('buildEntityUnit', () => {
     const unit = buildEntityUnit(group, [prices, slots], 'المستوى', opened as never);
     expect(unit.base?.row.price).toBe('35000.00');
     expect(unit.sessionCollection?.id).toBe(slots.id);
+  });
+});
+
+describe('sessionValueKind', () => {
+  it('recognizes weekday values in both app locales, via Intl data not word lists', () => {
+    expect(sessionValueKind('السبت')).toBe('weekday');
+    expect(sessionValueKind('الأحد والثلاثاء')).toBe('weekday');
+    expect(sessionValueKind('Saturday')).toBe('weekday');
+    expect(sessionValueKind('Sat')).toBe('weekday');
+  });
+
+  it('matches merchant spelling variants through the shared normalizer', () => {
+    // Hamza-seated alef and tashkeel both fold away.
+    expect(sessionValueKind('الإثنين')).toBe('weekday');
+    expect(sessionValueKind('الجُمعة')).toBe('weekday');
+  });
+
+  it('classifies digit-and-separator values as time, including Arabic-Indic digits', () => {
+    expect(sessionValueKind('1-3')).toBe('time');
+    expect(sessionValueKind('10:00')).toBe('time');
+    expect(sessionValueKind('٤-٦')).toBe('time');
+  });
+
+  it('leaves anything uncertain unadorned — words with digits, free text, English substrings', () => {
+    expect(sessionValueKind('من 1 إلى 3 العصر')).toBe('other');
+    expect(sessionValueKind('8 جلسات')).toBe('other');
+    expect(sessionValueKind('salmon sundae')).toBe('other');
+    expect(sessionValueKind('')).toBe('other');
   });
 });
