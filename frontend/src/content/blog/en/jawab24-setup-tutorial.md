@@ -8,7 +8,9 @@ excerpt: "A complete walkthrough of setting up Jawab24 — from connecting Faceb
 
 ## What Jawab24 Does
 
-Jawab24 is an AI-powered auto-reply platform for Facebook, Instagram, and WhatsApp. When a customer comments on your post or sends you a direct message, Jawab24 reads their question, checks your product catalog and business information, and sends an accurate reply — automatically, 24/7.
+Jawab24 is an AI agent that answers your customers on Facebook, Instagram, and WhatsApp. When a customer comments on your post or sends you a direct message, Jawab24 reads their question, checks your product catalog and business information, and sends an accurate reply — automatically, 24/7.
+
+![Jawab24 dashboard: smart replies, reply rate, and recent comments and messages](/images/blog/setup/en/dashboard.webp)
 
 Unlike traditional chatbot tools that require you to build decision trees and flowcharts, Jawab24 uses AI that works out of the box. **No flow building, no keyword mapping, no technical setup.** You add your business information, and the AI figures out how to respond to customers naturally.
 
@@ -26,7 +28,13 @@ Whether you're a solo merchant handling 20 comments a day or a growing brand wit
 
 ## Connecting Your Channels
 
-From **Channels** in your dashboard, **Connect channel** is the single starting point for everything. It asks which channel you want: a Facebook Page, or a WhatsApp number on its own.
+From **Channels** in your dashboard, **Connect channel** is the single starting point for everything.
+
+![The Channels page in Jawab24 with the Connect channel button and an active page card](/images/blog/setup/en/channels.webp)
+
+It asks which channel you want: a Facebook Page, or a WhatsApp number on its own.
+
+![The channel picker dialog: Facebook Page or WhatsApp only](/images/blog/setup/en/connect-channel.webp)
 
 ### Facebook and Instagram
 
@@ -61,6 +69,8 @@ All permissions follow Facebook's official API guidelines. Jawab24 never posts o
 
 Jawab24 then asks one question before handing you to Meta: is this number already in use on the WhatsApp Business app, or is it a spare number dedicated to Jawab24?
 
+![The WhatsApp connect dialog: keep the number on your phone with Jawab replying alongside you, or dedicate it to Jawab24](/images/blog/setup/en/whatsapp-connect.webp)
+
 - **Already on the WhatsApp Business app** — keep using it on your phone exactly as before. Jawab24 answers alongside you, and your existing chats stay where they are.
 - **A dedicated number** — Jawab24 answers on it by itself, and it stops working in the WhatsApp app.
 
@@ -69,6 +79,10 @@ Pick the first option if the number is your everyday business line. WhatsApp is 
 ## Setting Up Your Business Info
 
 Your Business Info is the foundation of accurate auto-replies. Think of it as the AI's brain — it will *only* use information you provide here. It never invents answers.
+
+![The Your Business page in Jawab24: readiness meter, products, and business facts](/images/blog/setup/en/business-info.webp)
+
+The **Your Business** page shows a readiness meter that tells you exactly what's complete and what's missing — working hours, address, delivery, payment, and products.
 
 This is the key difference from flow-based chatbot tools: instead of building conversation trees and mapping every possible customer question to a response, you simply describe your business. The AI handles the conversation logic on its own.
 
@@ -90,7 +104,9 @@ This is the key difference from flow-based chatbot tools: instead of building co
 
 ## Configuring Auto-Reply Settings
 
-With your Business Info ready, configure how and when Jawab24 replies to customers.
+With your Business Info ready, configure how and when Jawab24 replies to customers from the **Settings** page.
+
+![Auto-reply settings in Jawab24: comment and message toggles and the comment reply mode](/images/blog/setup/en/reply-settings.webp)
 
 ### Business Hours
 
