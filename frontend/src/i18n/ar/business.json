@@ -138,6 +138,8 @@
     "sessionN": "الموعد {n}",
     "sessionSingle": "الموعد",
     "saveChanges": "حفظ التغييرات",
+    "basePrice": "السعر الأساسي",
+    "deleteRowAction": "حذف هذا الصف",
     "upcomingCount": "{count, plural, zero {لا مواعيد قادمة} one {موعد واحد قادم} two {موعدان قادمان} few {# مواعيد قادمة} many {# موعدًا قادمًا} other {# موعد قادم}}",
     "noSessions": "لا مواعيد",
     "addFirstSession": "أضف أول موعد",

@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, Trash2, Plus, CalendarClock } from 'lucide-react';
+import { Check, Trash2, Plus, CalendarClock, ChevronDown } from 'lucide-react';
 import { SidePanel, Button } from '@/components/ui';
 import { formatCatalogPrice } from '@/utils/priceFormat';
+import { formatPlainDate } from '@/utils/dateUtils';
+import { useLanguage } from '@/i18n/hooks';
 import type { FactCollectionWithRows, FactEntitySaveBody } from '@/lib/api';
 import { collectionAttributeLabels, type FactEntityUnit } from '@/utils/factListLayout';
 
 interface SessionDraft {
   /** undefined = a new session authored in this sheet. */
   rowId?: string;
+  /** Stable identity for React keys and open/closed state — survives removals. */
+  draftKey: string;
   values: Record<string, string>;
   startsAt: string;
   endsAt: string;
@@ -44,6 +48,7 @@ export function FactEntitySheet({
 }: FactEntitySheetProps) {
   const t = useTranslations('business');
   const tc = useTranslations('common');
+  const { intlLocale } = useLanguage();
 
   const sessionCollection = unit.sessionCollection;
   const baseRow = unit.base?.row ?? null;
@@ -77,6 +82,7 @@ export function FactEntitySheet({
   const [sessions, setSessions] = useState<SessionDraft[]>(() =>
     unit.sessions.map((s) => ({
       rowId: s.row.id,
+      draftKey: s.row.id,
       values: Object.fromEntries(
         sessionLabels.map((l) => [l, s.row.attributes?.find((a) => a.label === l)?.value ?? '']),
       ),
@@ -87,6 +93,30 @@ export function FactEntitySheet({
   );
   const [removedSessionIds, setRemovedSessionIds] = useState<string[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Sessions render as summary lines and expand on demand (round-6 expert
+  // point 4) — EXCEPT a lone session (nothing to scan past, keep it editable
+  // in one tap) and sessions authored in this sheet (they're being typed).
+  const [openSessions, setOpenSessions] = useState<Record<string, boolean>>(() =>
+    unit.sessions.length === 1 && unit.sessions[0]
+      ? { [unit.sessions[0].row.id]: true }
+      : {},
+  );
+  const newDraftSeq = useRef(0);
+
+  const addSession = () => {
+    const draftKey = `new-${++newDraftSeq.current}`;
+    setSessions((prev) => [...prev, { draftKey, values: {}, startsAt: '', endsAt: '' }]);
+    setOpenSessions((prev) => ({ ...prev, [draftKey]: true }));
+  };
+
+  /** Collapsed summary: the session's own values and start date — what the
+   *  expert's sketch shows («الأحد والثلاثاء · 12–1 · يبدأ 3 أغسطس»). */
+  const sessionSummary = (s: SessionDraft): string => {
+    const parts = sessionLabels.map((l) => (s.values[l] ?? '').trim()).filter(Boolean);
+    const date = formatPlainDate(s.startsAt || null, intlLocale);
+    if (date) parts.push(t('lists.startsOn', { date }));
+    return parts.join(' · ');
+  };
 
   const anyDateInvalid = sessions.some(
     (s) => s.startsAt && s.endsAt && s.endsAt < s.startsAt,
@@ -275,7 +305,7 @@ export function FactEntitySheet({
                 <p className="mt-2 text-sm text-muted-foreground">{t('lists.noSessions')}</p>
                 <button
                   type="button"
-                  onClick={() => setSessions([{ values: {}, startsAt: '', endsAt: '' }])}
+                  onClick={addSession}
                   className="mt-3 min-h-[36px] inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-3 text-xs font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-500/20"
                 >
                   <Plus className="w-3.5 h-3.5" aria-hidden="true" />
@@ -284,14 +314,35 @@ export function FactEntitySheet({
               </div>
             ) : (
               <div className="space-y-3">
-                {sessions.map((s, i) => (
-                  <div key={s.rowId ?? `new-${i}`} className="rounded-xl bg-muted/40 p-3 space-y-3">
+                {sessions.map((s, i) => {
+                  const open = !!openSessions[s.draftKey];
+                  const summary = sessionSummary(s);
+                  return (
+                  <div key={s.draftKey} className={`rounded-xl bg-muted/40 ${open ? 'p-3 space-y-3' : ''}`}>
                     <div className="flex items-center justify-between gap-2">
-                      {/* Users don't care that it's number 1 (expert point 7) —
-                          the ordinal appears only once there are peers to tell apart. */}
-                      <span className="text-xs font-bold text-foreground">
-                        {sessions.length === 1 ? t('lists.sessionSingle') : t('lists.sessionN', { n: i + 1 })}
-                      </span>
+                      {/* The header is the collapse toggle: a summary line when
+                          closed, the plain label when open. Users don't care
+                          that it's number 1 — the ordinal appears only once
+                          there are peers to tell apart. */}
+                      <button
+                        type="button"
+                        onClick={() => setOpenSessions((prev) => ({ ...prev, [s.draftKey]: !open }))}
+                        aria-expanded={open}
+                        className={`min-w-0 flex-1 min-h-[40px] flex items-center gap-2 text-start ${open ? '' : 'px-3'}`}
+                      >
+                        <ChevronDown
+                          className={`w-3.5 h-3.5 flex-shrink-0 text-icon-muted transition-transform ${open ? '' : 'ltr:-rotate-90 rtl:rotate-90'}`}
+                          aria-hidden="true"
+                        />
+                        {open || !summary ? (
+                          <span className="text-xs font-bold text-foreground">
+                            {sessions.length === 1 ? t('lists.sessionSingle') : t('lists.sessionN', { n: i + 1 })}
+                          </span>
+                        ) : (
+                          <span className="min-w-0 text-sm text-foreground truncate" dir="auto">{summary}</span>
+                        )}
+                      </button>
+                      {open && (
                       <button
                         type="button"
                         onClick={() => {
@@ -303,8 +354,9 @@ export function FactEntitySheet({
                       >
                         <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </button>
+                      )}
                     </div>
-                    {sessionLabels.map((label) => (
+                    {open && sessionLabels.map((label) => (
                       <div key={label}>
                         <label htmlFor={`entity-session-${i}-${label}`} className={labelClass} dir="auto">{label}</label>
                         <input
@@ -319,6 +371,7 @@ export function FactEntitySheet({
                         />
                       </div>
                     ))}
+                    {open && (
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label htmlFor={`entity-session-${i}-start`} className={labelClass}>{t('lists.rowDate')}</label>
@@ -343,11 +396,13 @@ export function FactEntitySheet({
                         />
                       </div>
                     </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
                 <button
                   type="button"
-                  onClick={() => setSessions((prev) => [...prev, { values: {}, startsAt: '', endsAt: '' }])}
+                  onClick={addSession}
                   className="min-h-[40px] w-full inline-flex items-center justify-center gap-1 rounded-xl border border-dashed border-theme-border text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
                 >
                   <Plus className="w-3.5 h-3.5" aria-hidden="true" />
@@ -361,26 +416,33 @@ export function FactEntitySheet({
             )}
           </section>
         )}
+
+        {/* Destructive action lives at the END of the form, spatially far from
+            Save (round-6 expert point 5: delete beside the primary action is
+            dangerous). Two-step confirm as before. */}
+        {(baseRow || unit.sessions.length > 0) && (
+          <section aria-label={t('lists.deleteEntity')} className="danger-zone rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-sm danger-zone-text">{t('lists.deleteEntity')}</span>
+            {confirmingDelete ? (
+              <Button variant="danger" size="sm" onClick={deleteEntity} loading={saving}>
+                {t('lists.deleteEntityConfirm')}
+              </Button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border danger-zone-btn px-3 text-sm font-semibold"
+              >
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
+                {tc('delete')}
+              </button>
+            )}
+          </section>
+        )}
       </div>
 
       {/* Sticky footer inside the panel's scroll area */}
       <div className="sticky bottom-0 inset-x-0 flex items-center gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
-        {(baseRow || unit.sessions.length > 0) && (
-          confirmingDelete ? (
-            <Button variant="danger" size="sm" onClick={deleteEntity} loading={saving} className="max-sm:h-11">
-              {t('lists.deleteEntityConfirm')}
-            </Button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(true)}
-              aria-label={t('lists.deleteEntity')}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
-            >
-              <Trash2 className="w-5 h-5" aria-hidden="true" />
-            </button>
-          )
-        )}
         <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
           {tc('cancel')}
         </Button>

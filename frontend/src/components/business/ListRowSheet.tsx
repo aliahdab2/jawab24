@@ -347,32 +347,32 @@ export function ListRowSheet({
         {dateRangeInvalid && (
           <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t('lists.dateRangeInvalid')}</p>
         )}
+
+        {/* Destructive action at the END of the form, spatially far from Save
+            (round-6 expert point 5). Two-step confirm as before. */}
+        {row && canDelete && (
+          <section aria-label={t('lists.deleteRowAction')} className="danger-zone rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-sm danger-zone-text">{t('lists.deleteRowAction')}</span>
+            {confirmingDelete ? (
+              <Button variant="danger" size="sm" onClick={onDelete} loading={saving}>
+                {t('lists.deleteConfirm')}
+              </Button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border danger-zone-btn px-3 text-sm font-semibold"
+              >
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
+                {tc('delete')}
+              </button>
+            )}
+          </section>
+        )}
       </div>
 
       {/* Footer */}
       <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
-        {row && canDelete && (
-          confirmingDelete ? (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={onDelete}
-              loading={saving}
-              className="max-sm:h-11"
-            >
-              {t('lists.deleteConfirm')}
-            </Button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(true)}
-              aria-label={tc('delete')}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
-            >
-              <Trash2 className="w-5 h-5" aria-hidden="true" />
-            </button>
-          )
-        )}
         <span className="flex-1" />
         <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
           {tc('cancel')}

@@ -223,7 +223,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
    *  the tier value when one exists, else the row name — with the price and
    *  its «تعديل» chip anchored together at the end edge (expert points 1–2:
    *  the eye lands on the price first, and the action belongs to it). */
-  const tierRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean) => {
+  const tierRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, opts?: { soleBase?: boolean }) => {
     const facePair = faceLabel
       ? row.attributes?.find((a) => a.label === faceLabel)
       : undefined;
@@ -233,7 +233,12 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     // The bold line is the TIER value when one exists. Without one, the row's
     // other fields carry the line — never the entity name again (the card
     // header already says it; repeating it was the original complaint).
-    const title = facePair?.value ?? null;
+    // A card's ONLY price row with no tier value and no fields earns the
+    // generic «السعر الأساسي» (round-6 expert point 7) — with several
+    // unlabelled rows we can't know which is "base", so we never guess.
+    const title =
+      facePair?.value ??
+      (opts?.soleBase && pairs.length === 0 && row.price ? t('lists.basePrice') : null);
     const priceInLine = !title && pairs.length === 0 && !!row.price;
     return (
       <li key={row.id} className="list-none">
@@ -316,7 +321,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                 key={a.label}
                 title={a.label}
                 dir="auto"
-                className={`inline-flex items-center gap-1 rounded-md bg-card/80 px-1.5 py-0.5 text-[13px] text-foreground break-words ${kind === 'time' ? 'tabular-nums' : ''}`}
+                className={`inline-flex items-center gap-1 rounded-md bg-card border border-theme-border/60 px-1.5 py-0.5 text-[13px] font-medium text-foreground break-words ${kind === 'time' ? 'tabular-nums' : ''}`}
               >
                 {kind === 'weekday' && <CalendarDays className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />}
                 {kind === 'time' && <Clock className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />}
@@ -537,23 +542,32 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                     </div>
                   );
                 };
+                const soleBase = blocks.filter((b) => b.base).length === 1;
+                // The explanatory sentence appears once per card — three empty
+                // tiers repeating «لا مواعيد معلنة بعد» was round-6 point 6;
+                // later tiers keep only the compact add action.
+                let gapHintShown = false;
                 return (
                   <>
                     {blocks.map((block, bi) => {
                       const baseSection = block.base ? sectionOf(block.base.collection.id) : null;
                       const liveSessions = block.sessions.filter((r) => !isExpired(r.row));
                       const showSessions = liveSessions.length > 0 || (expanded && block.sessions.length > 0);
+                      const showGapHint = !gapHintShown && block.base && datedCollection && liveSessions.length === 0;
+                      if (showGapHint) gapHintShown = true;
                       return (
                         <div key={block.base?.row.id ?? `tier-${bi}`} className={bi > 0 ? 'border-t border-theme-border' : ''}>
                           {block.base && baseSection && (
-                            <ul>{tierRow(group, baseSection, block.base.row, isExpired(block.base.row))}</ul>
+                            <ul>{tierRow(group, baseSection, block.base.row, isExpired(block.base.row), { soleBase })}</ul>
                           )}
                           {showSessions && sessionZone(block.sessions, `${group.key}:${block.base?.row.id ?? `tier-${bi}`}`)}
                           {block.base && datedCollection && liveSessions.length === 0 && (
-                            <div className="mx-3 mb-3 rounded-xl bg-muted/40 px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-xs text-muted-foreground" dir="auto">
-                                {t('lists.tierGap', { list: datedCollection.label })}
-                              </span>
+                            <div className={`mx-3 mb-3 flex items-center gap-2 flex-wrap ${showGapHint ? 'rounded-xl bg-muted/40 px-3 py-2 justify-between' : ''}`}>
+                              {showGapHint && (
+                                <span className="text-xs text-muted-foreground" dir="auto">
+                                  {t('lists.tierGap', { list: datedCollection.label })}
+                                </span>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => openEntity(group, block.base as { collection: FactCollectionWithRows; row: FactRowDto })}

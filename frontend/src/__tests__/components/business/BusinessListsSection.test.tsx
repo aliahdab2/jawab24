@@ -219,6 +219,82 @@ describe('BusinessListsSection', () => {
     expect(screen.getAllByText('Date 2').length).toBeGreaterThan(0);
   });
 
+  it('multiple sessions in the form render as collapsed summaries; tapping one expands its fields', async () => {
+    const slots = slotCollection();
+    const secondFuture = new Date(Date.now() + 14 * 86400_000).toISOString().slice(0, 10);
+    slots.rows = [
+      slots.rows[0],
+      { id: 'slot-live-2', name: 'دورة ICDL', price: null, currency: null,
+        attributes: [{ label: 'الدورة', value: 'ICDL' }, { label: 'الأيام', value: 'السبت فقط' }],
+        startsAt: secondFuture, endsAt: null, isAvailable: true },
+    ];
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [priceCollection(), slots] } } as any);
+    renderSection();
+
+    fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
+
+    // Both sessions collapsed: no editable fields, summaries carry the values.
+    expect(screen.queryAllByLabelText('الأيام')).toHaveLength(0);
+    const summary = screen.getAllByRole('button', { name: /الأحد والثلاثاء/ })[0];
+    expect(summary).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(summary);
+    expect(screen.getAllByLabelText('الأيام')[0]).toHaveValue('الأحد والثلاثاء');
+  });
+
+  it('entity delete lives in a danger zone at the form end, two-step, and deletes all the item rows', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+    vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
+    renderSection();
+
+    fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Confirm full deletion' })[0]);
+
+    await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenCalledWith(
+      PAGE,
+      expect.objectContaining({
+        upserts: [],
+        deletes: expect.arrayContaining([
+          expect.objectContaining({ rowId: 'price-icdl' }),
+          expect.objectContaining({ rowId: 'slot-live' }),
+        ]),
+      }),
+    ));
+  });
+
+  it('a card\'s ONLY unlabelled price row reads «Base price» — never a bare number as a title', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+    renderSection();
+    await screen.findByText('دورة المكياج');
+    // price-makeup has no attributes and is its card's sole price row.
+    expect(screen.getByText('Base price')).toBeInTheDocument();
+  });
+
+  it('the empty-sessions hint appears ONCE per card; later empty tiers keep only the add action', async () => {
+    const prices: FactCollectionWithRows = {
+      id: 'coll-p', label: 'أسعار الدورات', keyAttr: null, isComplete: true, rowCount: 2,
+      rows: [
+        { id: 'p1', name: 'دورة برمجة', price: '10000', currency: null,
+          attributes: [{ label: 'المستوى', value: 'مبتدئ' }], startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'p2', name: 'دورة برمجة', price: '20000', currency: null,
+          attributes: [{ label: 'المستوى', value: 'متقدم' }], startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    };
+    const slots = slotCollection({
+      rows: [{ id: 's1', name: 'دورة برمجة', price: null, currency: null,
+        attributes: [{ label: 'الدورة', value: 'برمجة' }], startsAt: past, endsAt: past, isAvailable: true }],
+      rowCount: 1,
+    });
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [prices, slots] } } as any);
+    renderSection();
+
+    await screen.findByText('مبتدئ');
+    expect(screen.getAllByText(/No announced dates yet/)).toHaveLength(1);
+    expect(screen.getAllByText('Add the first date')).toHaveLength(2);
+  });
+
   it('the entity save strips the legacy endsAt=startsAt artifact — sessions go out with endsAt null', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);

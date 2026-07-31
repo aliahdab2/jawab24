@@ -138,6 +138,8 @@
     "sessionN": "Date {n}",
     "sessionSingle": "Date",
     "saveChanges": "Save changes",
+    "basePrice": "Base price",
+    "deleteRowAction": "Delete this row",
     "upcomingCount": "{count, plural, one {# upcoming date} other {# upcoming dates}}",
     "noSessions": "No dates",
     "addFirstSession": "Add the first date",
