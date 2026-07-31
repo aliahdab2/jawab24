@@ -268,6 +268,53 @@ Rules, in order of how much they matter:
 5. **Measure before and after against a real corpus, never intuition.** Same method as detector changes: pull real `messages.message` + `comments.message`, run old vs new in one process, best-of-N. Report the delta AND the total across a month's traffic — a per-message number alone is easy to misread.
 6. **Latency must be observable, or the lead is undefendable.** `messageProcessor.ts` already laps all 16 pipeline stages, but via `logger.debug` while prod runs at `info` (`config.logLevel` default, no `LOG_LEVEL` in the server `.env`) — so today those timings are **dark in production**. Don't claim a latency win from local numbers alone.
 
+### 18. One Session, One Worktree — Never Edit Code in the Main Checkout
+
+**Every session that will change code starts by creating a git worktree.** The main
+checkout at `~/Documents/AutoReply` is for reading, running, and reviewing — never for
+edits. Do this BEFORE the first edit, not after the diff has grown.
+
+```
+EnterWorktree(name: "<descriptive-name>")     # → .claude/worktrees/<name>, new branch off origin/main
+git branch -m feat/<conventional-name>        # the auto name `worktree-<name>` is not a PR branch name
+```
+
+The `/worktree` skill is the full procedure; `/cleanup-worktrees` prunes merged ones.
+
+**Why:** sessions overlap. Work is routinely in flight on several branches at once
+(WhatsApp fixes landing while a facts slice is being measured), and a shared checkout
+makes them collide — one session's `git checkout` silently changes the code another
+session is measuring, and a dirty tree sweeps unrelated files into the wrong commit.
+Isolation makes the conflict impossible rather than merely detectable (Rule 14,
+prevention over detection).
+
+Rules that follow from it:
+
+1. **Never `git checkout`, `git stash`, or `npm install` in the main checkout.** A branch
+   switch there has produced a false E2E red and a failed pre-deploy. If pre-deploy says
+   «package-lock.json is out of sync», that message is **misleading** — it means
+   `node_modules`, and the fix is a plain `npm install` on main, never regenerating the lock.
+2. **Verify the base ref before writing code.** `worktree.baseRef` may be `head`, which
+   silently inherits someone's uncommitted work:
+   `git merge-base --is-ancestor HEAD origin/main && echo ok`. Fix with
+   `git reset --hard origin/main` while the worktree is still empty.
+3. **After creating the worktree: `npm install`, then `cd packages/shared && npm run build`.**
+   A fresh worktree has no `node_modules`, and a stale `dist/` silently breaks the backend
+   while your changes appear to do nothing. Skip only for docs-only changes.
+4. **One worktree, one purpose.** Check `git status --short` before committing and leave
+   out anything that was already there; say so explicitly in the summary.
+5. **Dev servers: give each worktree its own ports** — two checkouts on one port silently
+   measure each other's code. The defaults above (backend 3000, frontend 3001, ai-worker
+   3002) belong to whichever checkout binds them first, and on this machine 3000/3001 are
+   frequently taken by an unrelated dev server, so check
+   `lsof -iTCP:<port> -sTCP:LISTEN` before binding and never kill what you find. A worktree
+   runs on its own: `PORT=3100` for the backend, 3005 for the ai-worker, and the frontend
+   must be pointed at it with `NEXT_PUBLIC_API_URL=http://localhost:3100`.
+6. **A fresh worktree can fail suites you never touched** — an independent install can
+   hoist a second copy of a framework (React → `Cannot read properties of null (reading
+   'useEffect')`). Check `git diff --stat` first; if your change doesn't touch that
+   workspace, it's an install artifact — say so rather than claiming a false green.
+
 ---
 
 ## Common Commands
@@ -333,6 +380,8 @@ Local-first — no CI required:
 | Hardcoded colors without `dark:` | Semantic classes from `globals.css` |
 | `"{count} item(s)"` | ICU plural: `"{count, plural, one {# item} other {# items}}"` |
 | Hydration guard in `_app.tsx` | Never — guards belong in `DashboardLayout` |
+| Editing code in `~/Documents/AutoReply` | `EnterWorktree` first — one session, one worktree (Rule 18) |
+| `git checkout` / `npm install` in the main checkout | Never — it breaks whatever another session is measuring |
 
 ---
 
