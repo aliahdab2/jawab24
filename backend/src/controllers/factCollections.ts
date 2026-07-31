@@ -34,11 +34,7 @@ class FactCollectionsController {
         const page = await pagesService.getPage(req.workspaceId, request.params.pageId);
         if (!page) return reply.status(404).send({ error: 'Page not found' });
 
-        const collections = await factCollectionsService.listCollections(request.params.pageId);
-        const withRows = await Promise.all(collections.map(async (c) => ({
-            ...c,
-            rows: await factCollectionsService.getRows(c.id),
-        })));
+        const withRows = await factCollectionsService.listCollectionsWithRows(request.params.pageId);
         return reply.send({ data: withRows });
     }
 

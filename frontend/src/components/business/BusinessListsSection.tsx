@@ -5,15 +5,13 @@ import { Plus, ListChecks, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { formatCatalogPrice } from '@/utils/priceFormat';
+import { todayISODate } from '@/utils/dateUtils';
 import { ListRowSheet } from './ListRowSheet';
 
 interface BusinessListsSectionProps {
   pageId: string;
 }
-
-/** Today in the page's local sense — good enough for DISPLAY grouping (the
- *  authoritative exclusion happens server-side at prompt-build time). */
-const todayIso = () => new Date().toISOString().slice(0, 10);
 
 /**
  * «قوائم النشاط» — the fact-list editor (G1b slice 1).
@@ -100,13 +98,15 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     const parts: string[] = [];
     for (const a of row.attributes ?? []) parts.push(a.value);
     if (row.price) {
-      parts.push(`${row.price.replace(/\.00$/, '')}${row.currency ? ` ${row.currency}` : ''}`);
+      parts.push(`${formatCatalogPrice(row.price)}${row.currency ? ` ${row.currency}` : ''}`);
     }
     if (row.startsAt) parts.push(t('lists.startsOn', { date: row.startsAt }));
     return parts.join(' · ');
   };
 
-  const today = todayIso();
+  // Local-timezone today for DISPLAY grouping only — the authoritative
+  // exclusion happens server-side at prompt-build time.
+  const today = todayISODate();
   const isExpired = (row: FactRowDto) => !!row.endsAt && row.endsAt < today;
 
   return (

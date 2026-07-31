@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 import { X, Check, Trash2 } from 'lucide-react';
 import { DetailSheet, Button } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { formatCatalogPrice } from '@/utils/priceFormat';
 import type { FactRowDto } from '@/lib/api';
 
 interface ListRowSheetProps {
@@ -66,7 +67,7 @@ export function ListRowSheet({
   const [name, setName] = useState(row?.name ?? '');
   // "35000.00" → "35000": the merchant edits what they'd write, not the
   // numeric column's storage form.
-  const [price, setPrice] = useState(row?.price ? row.price.replace(/\.00$/, '') : '');
+  const [price, setPrice] = useState(row?.price ? formatCatalogPrice(row.price) : '');
   const [currency, setCurrency] = useState(row?.currency ?? '');
   const [date, setDate] = useState(row?.startsAt ?? '');
   const [attrs, setAttrs] = useState<{ label: string; value: string }[]>(
@@ -80,7 +81,7 @@ export function ListRowSheet({
 
   const dirty =
     name.trim() !== (row?.name ?? '') ||
-    price.trim() !== (row?.price ? row.price.replace(/\.00$/, '') : '') ||
+    price.trim() !== (row?.price ? formatCatalogPrice(row.price) : '') ||
     currency.trim() !== (row?.currency ?? '') ||
     date !== (row?.startsAt ?? '') ||
     JSON.stringify(attrs.map((a) => a.value.trim())) !==
@@ -96,9 +97,13 @@ export function ListRowSheet({
       attributes: keptAttrs.length ? keptAttrs : null,
       price: price.trim() || null,
       currency: currency.trim() || null,
-      // One date drives both columns — see the sheet doc comment.
+      // One date drives BOTH columns, unconditionally — see the sheet doc
+      // comment. An earlier version preserved a differing endsAt, which let a
+      // date edit produce endsAt < startsAt (an instantly-expired row that
+      // silently vanishes from the prompt). The service guards the invariant
+      // too; the sheet just never constructs the case.
       startsAt: date || null,
-      endsAt: date ? (row && row.endsAt !== row.startsAt ? row.endsAt : date) : null,
+      endsAt: date || null,
     });
   };
 

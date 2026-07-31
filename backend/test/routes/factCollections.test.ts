@@ -15,8 +15,7 @@ vi.mock('../../src/services/factCollections', async (importOriginal) => {
     return {
         FactCollectionLimitError: actual.FactCollectionLimitError,
         factCollectionsService: {
-            listCollections: vi.fn(),
-            getRows: vi.fn(),
+            listCollectionsWithRows: vi.fn(),
             addRow: vi.fn(),
             updateRow: vi.fn(),
             deleteRow: vi.fn(),
@@ -83,7 +82,7 @@ describe('Fact-collections routes — security + contract wiring', () => {
 
     it('lets a plain member READ but not write', async () => {
         state.role = 'member';
-        vi.mocked(factCollectionsService.listCollections).mockResolvedValue([]);
+        vi.mocked(factCollectionsService.listCollectionsWithRows).mockResolvedValue([]);
 
         const read = await app.inject({ method: 'GET', url: `/pages/${PAGE}/fact-collections` });
         expect(read.statusCode).toBe(200);
@@ -107,11 +106,11 @@ describe('Fact-collections routes — security + contract wiring', () => {
     });
 
     it('GET returns collections with their rows nested', async () => {
-        vi.mocked(factCollectionsService.listCollections).mockResolvedValue([
-            { id: COLL, label: 'أسعار الدورات', keyAttr: null, isComplete: null, rowCount: 1 } as any,
-        ]);
-        vi.mocked(factCollectionsService.getRows).mockResolvedValue([
-            { id: ROW, name: 'دورة ICDL', price: '35000.00' } as any,
+        vi.mocked(factCollectionsService.listCollectionsWithRows).mockResolvedValue([
+            {
+                id: COLL, label: 'أسعار الدورات', keyAttr: null, isComplete: null, rowCount: 1,
+                rows: [{ id: ROW, name: 'دورة ICDL', price: '35000.00' }],
+            } as any,
         ]);
         const res = await app.inject({ method: 'GET', url: `/pages/${PAGE}/fact-collections` });
         expect(res.statusCode).toBe(200);

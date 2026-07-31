@@ -3,7 +3,8 @@ import { useTranslations } from 'next-intl';
 import { Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { Toggle } from '@/components/ui';
 import type { CatalogItem } from '@jawab24/shared';
-import { formatCatalogPrice as formatPrice, todayISODate } from './CatalogItemFields';
+import { formatCatalogPrice as formatPrice } from '@/utils/priceFormat';
+import { todayISODate } from '@/utils/dateUtils';
 
 interface CatalogItemRowProps {
   item: CatalogItem;

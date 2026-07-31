@@ -283,6 +283,29 @@ class FactCollectionsService {
     }
 
     /**
+     * All collections of a page WITH their rows — one query for the
+     * collections, ONE for every row (not one per collection; the same
+     * no-N+1 posture as listCollections' grouped count). The editor's read.
+     */
+    async listCollectionsWithRows(pageId: string) {
+        const collections = await this.listCollections(pageId);
+        if (collections.length === 0) return [];
+
+        const rows = await db
+            .select()
+            .from(factRows)
+            .where(inArray(factRows.collectionId, collections.map(c => c.id)))
+            .orderBy(asc(factRows.sortOrder), asc(factRows.createdAt));
+        const byCollection = new Map<string, typeof rows>();
+        for (const row of rows) {
+            const bucket = byCollection.get(row.collectionId) ?? [];
+            bucket.push(row);
+            byCollection.set(row.collectionId, bucket);
+        }
+        return collections.map(c => ({ ...c, rows: byCollection.get(c.id) ?? [] }));
+    }
+
+    /**
      * Create a collection and its rows in ONE transaction, then invalidate the
      * page's caches. Atomic on purpose: a half-written collection would render
      * a coverage statement over a partial list — i.e. it would assert a boundary
@@ -405,16 +428,19 @@ class FactCollectionsService {
     async addRow(pageId: string, collectionId: string, input: FactRowInput) {
         const collection = await this.ownedCollection(pageId, collectionId);
         if (!collection) return null;
-
-        const rows = await db
-            .select({ count: sql<number>`count(*)::int`, maxSort: sql<number>`coalesce(max(${factRows.sortOrder}), -1)::int` })
-            .from(factRows)
-            .where(eq(factRows.collectionId, collectionId));
-        if ((rows[0]?.count ?? 0) >= MAX_ROWS_PER_COLLECTION) {
-            throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`);
-        }
+        assertRowDateRange(input.startsAt ?? null, input.endsAt ?? null);
 
         const created = await db.transaction(async (tx) => {
+            // Count INSIDE the transaction — outside it, two concurrent adds
+            // could both pass the cap check (deleteRow's guard sits inside its
+            // tx for the same reason).
+            const rows = await tx
+                .select({ count: sql<number>`count(*)::int`, maxSort: sql<number>`coalesce(max(${factRows.sortOrder}), -1)::int` })
+                .from(factRows)
+                .where(eq(factRows.collectionId, collectionId));
+            if ((rows[0]?.count ?? 0) >= MAX_ROWS_PER_COLLECTION) {
+                throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`);
+            }
             const [row] = await tx.insert(factRows).values({
                 collectionId,
                 name: input.name,
@@ -452,6 +478,23 @@ class FactCollectionsService {
         if (patch.isAvailable !== undefined) set.isAvailable = patch.isAvailable;
 
         const updated = await db.transaction(async (tx) => {
+            // The per-field Zod schema cannot see the OTHER date on a partial
+            // patch, so an update touching one side could leave endsAt <
+            // startsAt — a row that is expired the moment it saves and silently
+            // vanishes from the prompt. Validate the MERGED row, inside the tx
+            // so the read can't race a concurrent patch.
+            if (patch.startsAt !== undefined || patch.endsAt !== undefined) {
+                const [existing] = await tx
+                    .select({ startsAt: factRows.startsAt, endsAt: factRows.endsAt })
+                    .from(factRows)
+                    .where(and(eq(factRows.id, rowId), eq(factRows.collectionId, collectionId)))
+                    .limit(1);
+                if (!existing) return null;
+                assertRowDateRange(
+                    patch.startsAt !== undefined ? patch.startsAt : existing.startsAt,
+                    patch.endsAt !== undefined ? patch.endsAt : existing.endsAt,
+                );
+            }
             const [row] = await tx
                 .update(factRows)
                 .set(set)
@@ -495,6 +538,15 @@ class FactCollectionsService {
         if (!deleted) return null;
         this.logger.info('fact row deleted', { pageId, collectionId, rowId });
         return deleted;
+    }
+}
+
+/** The invariant every dated row must hold — endsAt < startsAt is a row that is
+ *  born expired and silently absent from the prompt. Thrown as the service's
+ *  limit error so both write paths surface it through one channel. */
+function assertRowDateRange(startsAt: string | null | undefined, endsAt: string | null | undefined): void {
+    if (startsAt && endsAt && endsAt < startsAt) {
+        throw new FactCollectionLimitError('End date must not be before the start date');
     }
 }
 
