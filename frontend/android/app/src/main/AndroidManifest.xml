@@ -4,23 +4,29 @@
     <!-- Android 11+ package visibility requirements for Facebook SDK -->
     <!-- Prevents "cannot call Facebook native apps unless the package visibility needs are declared" -->
     <queries>
-        <!-- Web browsers. REQUIRED on Android 11+ (API 30 package visibility):
-             without it the app cannot SEE any activity that handles https, so
-             AppLauncher.openUrl() resolves { completed: false } (its
-             canLaunchIntent runs queryIntentActivities, which is filtered) and
-             openInSystemBrowser() silently degrades to a Custom Tab — the exact
-             surface that swallows Meta's Embedded Signup navigation. Observed
-             2026-07-31: the handoff chain completed into what looked like Chrome
-             (a Custom Tab sends Chrome's user-agent, so server logs cannot tell
-             them apart) and the path answer still went nowhere. -->
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="http" />
-        </intent>
+        <!-- ⚠️ VIEW+https/http intents are ABSENT here on purpose — for now.
+             Without them, Android 11+ package visibility hides every browser
+             from AppLauncher.openUrl (queryIntentActivities is filtered), so
+             openInSystemBrowser() resolves { completed:false } and degrades to
+             a Custom Tab — which swallows Meta's Embedded Signup navigation
+             (the WhatsApp connect dead-tap). Declaring https IS the documented
+             fix, and v2.0.16 shipped it — but the owner then hit a login loop
+             (approve at Facebook → bounced back to /login) and it was reverted
+             in v2.0.17 pending a controlled retest.
+
+             Two facts for whoever picks this up (established 2026-07-31):
+             - App login does NOT use the Facebook SDK. It is a plain web OAuth
+               in a Capacitor Browser tab (login.tsx → dialog/oauth → backend
+               /auth/facebook/mobile-callback → 302 to the /auth/app-sync App
+               Link below). So an SDK-side login explanation for the loop is
+               ruled out.
+             - Do NOT hand-add an fbconnect://cct.<applicationId> filter to
+               CustomTabActivity: the Facebook SDK (≥5.15) auto-merges exactly
+               that filter from its library manifest — it is already in the
+               merged manifest.
+
+             Re-adding https must ship as the ONLY change against this baseline
+             so a login regression, if it reappears, is attributable. -->
 
         <!-- Facebook apps (native login / fallback) -->
         <package android:name="com.facebook.katana" />
