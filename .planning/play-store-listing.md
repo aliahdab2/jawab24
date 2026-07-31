@@ -164,8 +164,10 @@ WhatsApp, from inside the app 🟢
 
 ## Open decisions before publishing
 
-1. **Zid** is claimed alongside Salla and Shopify. Salla and Shopify are live;
-   confirm Zid is merchant-ready, or drop it from both locales.
+1. **E-commerce platforms — OWNER RULING 2026-07-31: keep them.** Salla, Shopify
+   and Zid are not merchant-ready yet, and the owner knows: he is rolling them out
+   gradually and wants the copy to stay as-is. Do not "fix" this by deleting the
+   section — it was removed once and put straight back on his instruction.
 2. **No "beta" label** in the store copy, even though the in-app WhatsApp row shows
    a تجريبي chip. Hedged store copy converts worse and the in-app chip already sets
    expectations — say the word if you want it added.
