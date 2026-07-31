@@ -93,9 +93,9 @@ vi.mock('../config', () => ({
 import {
     runTrialEndingReminders,
     REMINDER_LEAD_DAYS,
-    formatTrialEndDate,
     buildTrialEndingBodies,
 } from '../services/trialReminders';
+import { formatDateLong } from '../utils/formatDate';
 import { NOTIFICATION_TEMPLATES } from '../services/notifications';
 import { subscriptions } from '../db/schema';
 
@@ -250,12 +250,12 @@ describe('buildTrialEndingBodies', () => {
     });
 });
 
-describe('formatTrialEndDate', () => {
+describe('formatDateLong', () => {
     it('renders a date without a time component in both languages', () => {
         const d = new Date('2026-08-11T09:30:00Z');
-        expect(formatTrialEndDate(d, 'en')).toMatch(/August/);
+        expect(formatDateLong(d, 'en')).toMatch(/August/);
         // No ":" — a "three days left" reminder should not imply an exact hour.
-        expect(formatTrialEndDate(d, 'en')).not.toContain(':');
-        expect(formatTrialEndDate(d, 'ar')).not.toContain(':');
+        expect(formatDateLong(d, 'en')).not.toContain(':');
+        expect(formatDateLong(d, 'ar')).not.toContain(':');
     });
 });

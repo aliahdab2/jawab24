@@ -13,6 +13,7 @@ import { subscriptionWelcomeEmailTemplate } from '../utils/emailTemplates';
 import { captureError } from '../utils/sentryHelpers';
 import { stripeTsToDate } from '../utils/stripeTime';
 import { getInvoiceSubscriptionId, getSubscriptionPeriod } from '../utils/stripeCompat';
+import { resolveLocale } from '../utils/i18n';
 import type { FastifyRequest } from 'fastify';
 import type Stripe from 'stripe';
 
@@ -230,7 +231,7 @@ async function sendSubscriptionWelcomeEmail(
             .from(settings)
             .where(eq(settings.userId, userId));
 
-        const lang: 'ar' | 'en' = userSettings?.dashboardLanguage === 'en' ? 'en' : 'ar';
+        const lang = resolveLocale(userSettings?.dashboardLanguage);
         const planName = plan?.name || 'Jawab24';
         const trialEndsAt = stripeTsToDate(stripeSubscription.trial_end);
 

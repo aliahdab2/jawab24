@@ -17,7 +17,7 @@
 import en from '../i18n/en.json';
 import ar from '../i18n/ar.json';
 
-type Locale = 'ar' | 'en';
+export type Locale = 'ar' | 'en';
 export type MessageKey = keyof typeof en;
 
 // Asserting `typeof en` ensures every locale has the exact same key set.
@@ -51,4 +51,26 @@ export function t(key: MessageKey, lang: string, vars?: Record<string, string>):
         }
     }
     return text;
+}
+
+/**
+ * Default locale for merchant-facing surfaces when no preference is stored —
+ * matches the `settings.dashboard_language` column default.
+ */
+export const DEFAULT_LOCALE: Locale = 'ar';
+
+/**
+ * Narrow a stored `settings.dashboard_language` value to a supported locale.
+ *
+ * Resolved against the `messages` table for the same reason `t()` is (see the
+ * comment there): the hand-written form this replaces — `lang === 'en' ? 'en'
+ * : 'ar'` — silently collapses every *other* locale to Arabic, so adding a
+ * third language to the `Locale` union would type-check and still ship Arabic
+ * to those merchants. Call sites that need an email/template locale should use
+ * this instead of re-deriving it.
+ */
+export function resolveLocale(value: string | null | undefined): Locale {
+    return value && Object.prototype.hasOwnProperty.call(messages, value)
+        ? (value as Locale)
+        : DEFAULT_LOCALE;
 }

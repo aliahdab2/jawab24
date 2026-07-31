@@ -32,6 +32,8 @@ import { notificationService, NOTIFICATION_TEMPLATES } from './notifications';
 import { trialEndingEmailTemplate } from '../utils/emailTemplates';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
+import { resolveLocale } from '../utils/i18n';
+import { formatDateLong } from '../utils/formatDate';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
 
@@ -54,19 +56,6 @@ export interface TrialReminderResult {
 }
 
 /**
- * Human-readable trial end date, in the given locale.
- * Date only — the exact hour is noise for a "three days left" reminder.
- * Shared by both channels so the email and the bell row can never disagree.
- */
-export function formatTrialEndDate(d: Date, lang: string): string {
-    try {
-        return new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'long' }).format(d);
-    } catch {
-        return d.toISOString().slice(0, 10);
-    }
-}
-
-/**
  * Build the in-app notification body for every locale the template carries,
  * formatting the date separately in each.
  *
@@ -82,7 +71,7 @@ export function buildTrialEndingBodies(trialEndsAt: Date): Record<string, string
     return Object.fromEntries(
         Object.entries(NOTIFICATION_TEMPLATES.trial_ending.bodies).map(([locale, text]) => [
             locale,
-            text.replace('{trialEnd}', formatTrialEndDate(trialEndsAt, locale)),
+            text.replace('{trialEnd}', formatDateLong(trialEndsAt, locale)),
         ]),
     );
 }
@@ -127,8 +116,8 @@ export async function runTrialEndingReminders(): Promise<TrialReminderResult> {
         // Narrowed by the query, but the column is nullable in the schema.
         if (!row.trialEndsAt) continue;
 
-        const lang: 'ar' | 'en' = row.dashboardLanguage === 'en' ? 'en' : 'ar';
-        const trialEndLabel = formatTrialEndDate(row.trialEndsAt, lang);
+        const lang = resolveLocale(row.dashboardLanguage);
+        const trialEndLabel = formatDateLong(row.trialEndsAt, lang);
 
         try {
             await notificationService.sendNotification(row.userId, {

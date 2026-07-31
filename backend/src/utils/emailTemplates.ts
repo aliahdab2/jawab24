@@ -1,6 +1,7 @@
 import { config } from '../config';
 import { t } from './i18n';
 import { escapeHtml } from './htmlUtils';
+import { formatDateTimeShort } from './formatDate';
 
 /**
  * Detect if text is primarily Arabic/RTL script.
@@ -220,7 +221,7 @@ export function subscriptionWelcomeEmailTemplate(params: {
     const signoff = t('subscriptionWelcomeSignoff', lang);
 
     const trialBlock = trialEndsAt
-        ? `<p style="margin:0 0 16px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${t('subscriptionWelcomeTrialNote', lang).replace(/\{trialEnd\}/g, escapeHtml(formatDigestDate(trialEndsAt, lang)))}</p>`
+        ? `<p style="margin:0 0 16px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${t('subscriptionWelcomeTrialNote', lang).replace(/\{trialEnd\}/g, escapeHtml(formatDateTimeShort(trialEndsAt, lang)))}</p>`
         : '';
 
     const html = emailShell({
@@ -370,16 +371,6 @@ export interface LeadDigestRow {
 
 const DIGEST_MAX_ROWS = 20;
 
-function formatDigestDate(d: Date, lang: 'ar' | 'en'): string {
-    try {
-        return new Intl.DateTimeFormat(lang === 'ar' ? 'ar' : 'en', {
-            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-        }).format(d);
-    } catch {
-        return d.toISOString().slice(0, 16).replace('T', ' ');
-    }
-}
-
 export function leadDigestEmailTemplate(params: {
     lang: 'ar' | 'en';
     leadCount: number;
@@ -424,7 +415,7 @@ export function leadDigestEmailTemplate(params: {
         const phone = escapeHtml(lead.phone);
         const reason = escapeHtml(lead.summary?.trim() || noSummary);
         const source = escapeHtml(lead.sourceType === 'comment' ? srcCmt : srcMsg);
-        const date = escapeHtml(formatDigestDate(lead.createdAt, lang));
+        const date = escapeHtml(formatDateTimeShort(lead.createdAt, lang));
         return `<tr class="ld-row">
           <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;word-break:break-word;">${mobileLabel(lblName)}${name}</td>
           <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;" dir="ltr">${mobileLabel(lblPhone)}${phone}</td>
