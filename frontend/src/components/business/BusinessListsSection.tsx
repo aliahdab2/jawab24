@@ -1,13 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ListChecks, CalendarClock } from 'lucide-react';
+import { Plus, ListChecks, CalendarClock, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { formatCatalogPrice } from '@/utils/priceFormat';
-import { todayISODate } from '@/utils/dateUtils';
+import { todayISODate, formatPlainDate } from '@/utils/dateUtils';
 import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/factListGrouping';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, type FactListSection } from '@/utils/factListLayout';
+import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
 
 interface BusinessListsSectionProps {
@@ -23,29 +25,30 @@ interface EditingState {
 }
 
 /**
- * «قوائم النشاط» — the fact-list editor (G1b slice 1; grouped view slice 2).
+ * «قوائم النشاط» — the fact-list editor (G1b slices 1–3).
  *
  * Renders ONLY when the page has fact collections, which is the rollout gate:
  * collections are born from reviewed extraction (D-038), so a page that was
  * never through that process simply doesn't show the section — no feature
  * flag, no canary widening. Today that is the pilot merchant.
  *
- * The rows are presented as ONE CARD PER ENTITY (a course's prices AND its
- * cohort dates together), joined by `groupFactCollections` — a presentation
- * join only. The collections stay separate in the data because they carry
- * opposite answering semantics (keyed/gated schedules vs un-keyed complete
- * price list) and opposite expiry (slots self-expire, prices never do); the
- * merchant confusion of seeing one course name in two flat lists is a UI
- * problem, solved here in the UI.
+ * Presentation is ONE CARD PER ENTITY (a course's prices AND its cohort dates
+ * together, joined by `groupFactCollections`), and inside a card the rows are
+ * bucketed into LABELLED SECTIONS per collection (`sectionizeGroup`) — the
+ * owner's complaint was that price rows and session rows sat in one flat list
+ * with bare values and repeated tier names. The collections themselves stay
+ * separate in the data: they carry opposite answering semantics (keyed/gated
+ * schedules vs un-keyed complete price list) and opposite expiry, all
+ * measured. Nothing here is business-specific — section titles, hoisted
+ * pairs, and field labels all come from the merchant's own collections.
  *
- * Expired rows are SHOWN here (grouped under a collapsed «منتهية» divider per
- * card), unlike the prompt where they are excluded: the merchant re-announcing
- * a cohort edits last month's row and changes one date — deleting expired rows
- * would force retyping the whole slot. The AI never sees them; the editor is
- * exactly where they should remain visible.
+ * Expired rows are SHOWN here (behind a per-card «منتهية» toggle), unlike the
+ * prompt where they are excluded: the merchant re-announcing a cohort edits
+ * last month's row and changes one date. The AI never sees them.
  */
 export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   const t = useTranslations('business');
+  const { intlLocale } = useLanguage();
   const queryClient = useQueryClient();
 
   const { data } = useQuery<FactCollectionWithRows[]>({
@@ -113,22 +116,6 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     }
   };
 
-  /** Compact one-line meta for a row inside its card. The card title already
-   *  names the entity, so the key value (how customers find it) is dropped —
-   *  what remains is what distinguishes the row: level/days/time · price · date. */
-  const rowMeta = (collection: FactCollectionWithRows, row: FactRowDto): string => {
-    const parts: string[] = [];
-    for (const a of row.attributes ?? []) {
-      if (collection.keyAttr && a.label === collection.keyAttr) continue;
-      parts.push(a.value);
-    }
-    if (row.price) {
-      parts.push(`${formatCatalogPrice(row.price)}${row.currency ? ` ${row.currency}` : ''}`);
-    }
-    if (row.startsAt) parts.push(t('lists.startsOn', { date: row.startsAt }));
-    return parts.join(' · ');
-  };
-
   /** Prefill for adding a row to `collection` from an entity card. */
   const addFromGroup = (group: FactListGroup, collection: FactCollectionWithRows) => {
     const sibling = group.rows.find((r) => r.collection.id === collection.id);
@@ -146,29 +133,55 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   };
 
   // Local-timezone today for DISPLAY grouping only — the authoritative
-  // exclusion happens server-side at prompt-build time.
+  // exclusion happens server-side at prompt-build time. Mirrors the engine's
+  // isRowLive rule: the START date decides; endsAt is a fallback for undated
+  // rows only (owner ruling 2026-07-31 — the end date is never load-bearing).
   const today = todayISODate();
-  const isExpired = (row: FactRowDto) => !!row.endsAt && row.endsAt < today;
+  const isExpired = (row: FactRowDto) =>
+    row.startsAt ? row.startsAt < today : !!row.endsAt && row.endsAt < today;
 
-  const rowButton = (entry: FactListGroup['rows'][number], expired: boolean) => {
-    const meta = rowMeta(entry.collection, entry.row);
+  /** One row line inside its section: labelled pairs · price · readable date,
+   *  wrapping (never truncating), the whole line one edit button. */
+  const rowButton = (section: FactListSection, row: FactRowDto, expired: boolean) => {
+    const pairs = rowDisplayAttributes(section, row);
+    const date = row.startsAt ? formatPlainDate(row.startsAt, intlLocale) : null;
+    const hasContent = pairs.length > 0 || row.price || date;
     return (
-      <li key={entry.row.id}>
+      <li key={row.id}>
         <button
           type="button"
-          onClick={() => setEditing({ collection: entry.collection, row: entry.row })}
-          className={`w-full min-h-[48px] flex items-center gap-3 px-4 py-2 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
+          onClick={() => setEditing({ collection: section.collection, row })}
+          className={`w-full min-h-[48px] grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-4 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
         >
-          {entry.row.startsAt ? (
-            <CalendarClock className="w-4 h-4 flex-shrink-0 text-icon-muted" aria-hidden="true" />
-          ) : (
-            <span className="w-4 flex-shrink-0" aria-hidden="true" />
-          )}
-          <span className="flex-1 min-w-0">
-            <span className="block text-sm text-foreground truncate">{meta || entry.row.name}</span>
+          <span className="min-w-0 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            {!hasContent && (
+              <span className="text-sm text-foreground break-words" dir="auto">{row.name}</span>
+            )}
+            {pairs.map((a) => (
+              <span key={a.label} className="text-sm text-foreground break-words" dir="auto">
+                <span className="text-muted-foreground">{a.label}: </span>
+                {a.value}
+              </span>
+            ))}
+            {row.price && (
+              <span className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums">
+                {formatCatalogPrice(row.price)}
+                {row.currency && (
+                  <span className="text-xs font-medium text-muted-foreground ms-1">{row.currency}</span>
+                )}
+              </span>
+            )}
+            {date && (
+              <span className="text-sm text-foreground whitespace-nowrap">
+                <span className="text-muted-foreground">{t('lists.startsLabel')} </span>
+                {date}
+              </span>
+            )}
           </span>
-          <span className="flex-shrink-0 text-xs font-medium text-muted-foreground">
-            {expired ? t('lists.expired') : t('lists.edit')}
+          <span className="flex-shrink-0 flex items-center gap-1.5 pt-0.5">
+            {expired && <span className="text-xs text-muted-foreground">{t('lists.expired')}</span>}
+            <Pencil className="w-4 h-4 text-icon-muted" aria-hidden="true" />
+            <span className="sr-only">{t('lists.edit')}</span>
           </span>
         </button>
       </li>
@@ -234,19 +247,47 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
         ))}
       </div>
 
-      {/* One card per entity — the course name appears exactly once. */}
+      {/* One card per entity — the name appears exactly once; inside, one
+          labelled section per list so a price and a session can't be
+          confused. Section titles are the merchant's own list labels. */}
       <div className="mt-4 space-y-3">
         {groups.map((group) => {
-          const live = group.rows.filter((r) => !isExpired(r.row));
-          const expired = group.rows.filter((r) => isExpired(r.row));
+          const sections = sectionizeGroup(group, collections);
+          const expiredCount = group.rows.filter((r) => isExpired(r.row)).length;
           const expanded = !!showExpired[group.key];
           return (
             <div key={group.key} className="rounded-xl border border-theme-border overflow-hidden">
-              <h3 className="px-4 pt-3 pb-1 text-sm font-semibold text-foreground">{group.title}</h3>
+              <h3 className="px-4 pt-3 pb-1 text-sm font-semibold text-foreground" dir="auto">{group.title}</h3>
 
-              <ul className="divide-y divide-theme-border">
-                {live.map((entry) => rowButton(entry, false))}
-              </ul>
+              {sections.map((section) => {
+                const live = section.rows.filter((r) => !isExpired(r.row));
+                const expiredRows = section.rows.filter((r) => isExpired(r.row));
+                if (live.length === 0 && !(expanded && expiredRows.length > 0)) return null;
+                return (
+                  <div key={section.collection.id}>
+                    {collections.length > 1 && (
+                      <div className="flex items-baseline gap-2 flex-wrap px-4 pt-2 pb-1 border-t border-theme-border">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" dir="auto">
+                          {section.collection.label}
+                        </span>
+                        {section.shared.map((s) => (
+                          <span
+                            key={s.label}
+                            dir="auto"
+                            className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                          >
+                            {t('lists.attrPair', { label: s.label, value: s.value })}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <ul className="divide-y divide-theme-border">
+                      {live.map((entry) => rowButton(section, entry.row, false))}
+                      {expanded && expiredRows.map((entry) => rowButton(section, entry.row, true))}
+                    </ul>
+                  </div>
+                );
+              })}
 
               <div className="flex items-center gap-1.5 flex-wrap px-4 py-2 border-t border-theme-border">
                 {/* Progressive disclosure: one quiet «+» per card; the
@@ -281,7 +322,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                     </button>
                   ))
                 )}
-                {expired.length > 0 && (
+                {expiredCount > 0 && (
                   <button
                     type="button"
                     onClick={() => setShowExpired((prev) => ({ ...prev, [group.key]: !expanded }))}
@@ -289,16 +330,10 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                     className="ms-auto min-h-[32px] inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                   >
                     <CalendarClock className="w-3.5 h-3.5" aria-hidden="true" />
-                    {t('lists.expiredToggle', { count: expired.length })}
+                    {t('lists.expiredToggle', { count: expiredCount })}
                   </button>
                 )}
               </div>
-
-              {expanded && expired.length > 0 && (
-                <ul className="divide-y divide-theme-border border-t border-theme-border">
-                  {expired.map((entry) => rowButton(entry, true))}
-                </ul>
-              )}
             </div>
           );
         })}
@@ -309,7 +344,8 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           row={editing.row}
           initial={editing.initial}
           collectionLabel={editing.collection.label}
-          attributeLabels={(editing.collection.rows[0]?.attributes ?? []).map((a) => a.label)}
+          keyAttr={editing.collection.keyAttr}
+          attributeLabels={collectionAttributeLabels(editing.collection)}
           canDelete={editing.collection.rows.length > 1}
           saving={saving}
           onSave={save}

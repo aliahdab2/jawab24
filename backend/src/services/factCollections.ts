@@ -156,7 +156,18 @@ class FactCollectionsService {
             .from(factRows)
             .where(and(
                 inArray(factRows.collectionId, collections.map(c => c.id)),
-                or(isNull(factRows.endsAt), sql`${factRows.endsAt} >= ${today}`),
+                // Visibility keys on the START date (owner ruling 2026-07-31:
+                // endsAt is optional/descriptive, never load-bearing). Mirrors
+                // isRowLive in factCollectionsRenderer — keep in lockstep.
+                // NULL startsAt falls through to the endsAt branch because
+                // `starts_at >= today` is NULL (not true) for NULL.
+                or(
+                    sql`${factRows.startsAt} >= ${today}`,
+                    and(
+                        isNull(factRows.startsAt),
+                        or(isNull(factRows.endsAt), sql`${factRows.endsAt} >= ${today}`),
+                    ),
+                ),
             ))
             .orderBy(asc(factRows.sortOrder), asc(factRows.createdAt))
             .limit(MAX_COLLECTIONS_PER_PAGE * MAX_ROWS_PER_COLLECTION);

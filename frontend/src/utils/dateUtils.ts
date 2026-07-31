@@ -88,3 +88,42 @@ export function formatConnectedDate(
     if (days < 1) return tPages('connectedToday');
     return tPages('connectedAgo', { count: days });
 }
+
+/**
+ * Display a bare calendar date ("2026-08-04") the way a person writes it.
+ *
+ * Two traps this exists to avoid — do not "simplify" them away:
+ * - `new Date('2026-08-04')` is UTC midnight, which renders as the PREVIOUS
+ *   day in any timezone west of Greenwich. The components are parsed by hand
+ *   and fed to the local-time Date constructor instead.
+ * - `ar-SA` resolves to the Islamic calendar in some engines; catalog and
+ *   fact-list dates are authored Gregorian, so the calendar is forced.
+ *
+ * The year renders only when it differs from the current year — «٤ أغسطس»
+ * this year, «4 أغسطس 2027» next. Anything that is not YYYY-MM-DD is returned
+ * unchanged: malformed data should be visible, not swallowed.
+ */
+export function formatPlainDate(
+    iso: string | null | undefined,
+    intlLocale: string,
+): string | null {
+    if (!iso) return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return iso;
+    const [, y, mo, d] = m;
+    const date = new Date(Number(y), Number(mo) - 1, Number(d));
+    // Date() rolls out-of-range components over (month 99 → some later year)
+    // instead of failing — only a round-trip proves the input was a real day.
+    if (
+        date.getFullYear() !== Number(y) ||
+        date.getMonth() !== Number(mo) - 1 ||
+        date.getDate() !== Number(d)
+    ) return iso;
+    const withYear = y !== todayISODate().slice(0, 4);
+    return new Intl.DateTimeFormat(intlLocale, {
+        calendar: 'gregory',
+        day: 'numeric',
+        month: 'long',
+        ...(withYear ? { year: 'numeric' } : {}),
+    }).format(date);
+}

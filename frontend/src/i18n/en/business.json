@@ -103,7 +103,7 @@
     "rowCurrency": "Currency",
     "rowCurrencyPlaceholder": "e.g. SYP",
     "rowDate": "Start date",
-    "rowDateHint": "After this date passes, the row is hidden from the assistant automatically — no stale dates reach customers.",
+    "rowDateHint": "Jawab stops mentioning a dated row the day after its start date. The end date is for display only.",
     "startsOn": "starts {date}",
     "expired": "Expired",
     "expiredToggle": "{count, plural, one {# expired row} other {# expired rows}}",
@@ -118,6 +118,14 @@
     "deleted": "Row deleted",
     "saveFailed": "Could not save — try again",
     "groupedHint": "Everything about one item in one card — its prices and its dates together. Jawab quotes these exactly; a dated row hides itself automatically once its date passes.",
-    "add": "Add"
+    "add": "Add",
+    "attrPair": "{label}: {value}",
+    "startsLabel": "starts",
+    "rowEndDate": "End date (optional)",
+    "addField": "Add a field",
+    "fieldLabel": "Field name",
+    "fieldLabelTaken": "This field name is already used",
+    "fieldValue": "Value",
+    "dateRangeInvalid": "The end date must not be before the start date"
   }
 }

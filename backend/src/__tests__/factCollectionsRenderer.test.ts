@@ -3,6 +3,7 @@ import {
     renderFactCollectionBlock,
     renderCoverageStatement,
     indexKeyValues,
+    isRowLive,
     FACT_BLOCK_MAX_CHARS,
     type FactCollectionForPrompt,
     type FactRowForPrompt,
@@ -262,5 +263,36 @@ describe('displayRows gating', () => {
         expect(explicit).toBe(gatedOff);
         expect(gatedOff).toContain('صيدلية النرجس');
         expect(gatedOff).toContain('صيدلية الفيروز');
+    });
+});
+
+describe('isRowLive — the start date decides (owner ruling 2026-07-31)', () => {
+    it('a dated row disappears the day after it starts, whatever endsAt says', () => {
+        // Past start + FUTURE end: under the old endsAt rule this row would
+        // stay; under the ruling it must hide — a started cohort is not
+        // announceable as upcoming.
+        expect(isRowLive({ startsAt: '2026-07-20', endsAt: '2026-09-01' }, TODAY)).toBe(false);
+        // Past start + blank end: must hide (the optional-end trap — keying on
+        // endsAt would keep this row alive forever).
+        expect(isRowLive({ startsAt: '2026-07-20', endsAt: null }, TODAY)).toBe(false);
+    });
+
+    it('a row is live through its start day inclusive', () => {
+        expect(isRowLive({ startsAt: TODAY, endsAt: null }, TODAY)).toBe(true);
+        expect(isRowLive({ startsAt: '2026-08-04', endsAt: null }, TODAY)).toBe(true);
+    });
+
+    it('undated rows fall back to endsAt ("valid until"), and no dates = permanent', () => {
+        expect(isRowLive({ startsAt: null, endsAt: '2026-07-01' }, TODAY)).toBe(false);
+        expect(isRowLive({ startsAt: null, endsAt: TODAY }, TODAY)).toBe(true);
+        expect(isRowLive({ startsAt: null, endsAt: null }, TODAY)).toBe(true);
+    });
+
+    it('matches the legacy rule exactly on startsAt===endsAt rows (the entire prod population)', () => {
+        const legacy = (r: { endsAt: string | null }) => !r.endsAt || r.endsAt >= TODAY;
+        for (const d of ['2026-07-01', '2026-07-27', TODAY, '2026-07-29', '2026-08-14']) {
+            const r = { startsAt: d, endsAt: d };
+            expect(isRowLive(r, TODAY)).toBe(legacy(r));
+        }
     });
 });

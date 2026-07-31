@@ -58,6 +58,26 @@ export interface FactRowForPrompt {
  *  fabrication; the reverse does not). */
 export const FACT_BLOCK_MAX_CHARS = 12_000;
 
+/**
+ * Whether a row is still shown to the model. The START date decides: a dated
+ * row disappears the day after it starts, whatever its end date says — owner
+ * ruling 2026-07-31 («تاريخ النهاية لا يجب أن نعتمد عليه»). endsAt is optional
+ * and descriptive; if visibility keyed on it, a row whose end was left blank
+ * would never expire and the 26/7 stale-date incident class would return the
+ * first time a merchant skips the field. Undated rows fall back to endsAt
+ * ("valid until" offers), and rows with neither date are permanent.
+ *
+ * The SQL predicate in factCollectionsService.buildFactCollectionsContext
+ * mirrors this rule — keep the two in lockstep.
+ */
+export function isRowLive(
+    row: Pick<FactRowForPrompt, 'startsAt' | 'endsAt'>,
+    todayIso: string,
+): boolean {
+    if (row.startsAt) return row.startsAt >= todayIso;
+    return !row.endsAt || row.endsAt >= todayIso;
+}
+
 /** ISO date string for "today" injected by the caller so rendering stays pure
  *  and testable (no Date.now() — same reason the workflow runtime bans it). */
 export function renderFactCollectionBlock(
@@ -76,16 +96,16 @@ export function renderFactCollectionBlock(
         displayRows?: FactRowForPrompt[];
     },
 ): string | undefined {
-    // Expired rows vanish from the prompt entirely (catalog endsAt precedent —
-    // the v38 stale-date class is killed by dates, not by model judgement).
-    const live = rows.filter(r => !r.endsAt || r.endsAt >= todayIso);
+    // Expired rows vanish from the prompt entirely (the v38 stale-date class is
+    // killed by dates, not by model judgement). See isRowLive for the rule.
+    const live = rows.filter(r => isRowLive(r, todayIso));
     if (live.length === 0) return undefined;
 
     // Gating may legitimately leave NOTHING to print. That is not an empty block:
     // the coverage statement (which enumerates the key values) still renders, so the
     // model can name the areas it covers even when it holds no row detail — the
     // recoverable failure, chosen over the unrecoverable one.
-    const display = (opts?.displayRows ?? live).filter(r => !r.endsAt || r.endsAt >= todayIso);
+    const display = (opts?.displayRows ?? live).filter(r => isRowLive(r, todayIso));
 
     const anyPrice = display.some(r => r.price !== null);
 
