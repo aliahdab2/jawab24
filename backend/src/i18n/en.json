@@ -47,5 +47,8 @@
     "inviteEmailIgnore": "If you weren't expecting this invitation, you can safely ignore this email.",
     "waHandoffTitle": "Connect WhatsApp",
     "waHandoffBody": "You'll continue on Facebook to choose your WhatsApp number. You're already signed in — we'll bring you back here when you're done.",
-    "waHandoffCta": "Continue to Facebook"
+    "waHandoffCta": "Continue to Facebook",
+    "waReturnTitle": "Returning to Jawab24",
+    "waReturnBody": "Finishing up — taking you back to the app.",
+    "waReturnCta": "Open Jawab24"
 }
