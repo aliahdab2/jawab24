@@ -94,7 +94,6 @@
   "loading": "Loading your business…",
   "lists": {
     "title": "Business lists",
-    "hint": "Exact lists Jawab quotes from — prices, schedules, coverage. A dated row hides itself automatically once its date passes.",
     "addRow": "Add row",
     "editRow": "Edit row",
     "edit": "Edit",
@@ -117,6 +116,8 @@
     "deleteConfirm": "Confirm delete",
     "saved": "Saved",
     "deleted": "Row deleted",
-    "saveFailed": "Could not save — try again"
+    "saveFailed": "Could not save — try again",
+    "groupedHint": "Everything about one item in one card — its prices and its dates together. Jawab quotes these exactly; a dated row hides itself automatically once its date passes.",
+    "add": "Add"
   }
 }

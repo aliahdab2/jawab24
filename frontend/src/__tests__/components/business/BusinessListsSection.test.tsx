@@ -26,26 +26,51 @@ const PAGE = 'page-1';
 const future = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10);
 const past = new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10);
 
-const collection = (over: Partial<FactCollectionWithRows> = {}): FactCollectionWithRows => ({
-  id: 'coll-1',
+/** Two collections shaped like the real pilot page: an un-keyed price list and
+ *  a keyed schedule list that both talk about the same course. */
+const priceCollection = (over: Partial<FactCollectionWithRows> = {}): FactCollectionWithRows => ({
+  id: 'coll-prices',
+  label: 'أسعار الدورات',
+  keyAttr: null,
+  isComplete: true,
+  rowCount: 2,
+  rows: [
+    {
+      id: 'price-icdl', name: 'دورة ICDL', price: '35000.00', currency: 'ل.س قديمة',
+      attributes: [{ label: 'ملاحظة', value: '8 جلسات' }],
+      startsAt: null, endsAt: null, isAvailable: true,
+    },
+    {
+      id: 'price-makeup', name: 'دورة المكياج', price: '35000.00', currency: 'ل.س قديمة',
+      attributes: null,
+      startsAt: null, endsAt: null, isAvailable: true,
+    },
+  ],
+  ...over,
+});
+
+const slotCollection = (over: Partial<FactCollectionWithRows> = {}): FactCollectionWithRows => ({
+  id: 'coll-slots',
   label: 'مواعيد الدورات المعلنة',
   keyAttr: 'الدورة',
   isComplete: null,
   rowCount: 2,
   rows: [
     {
-      id: 'row-live', name: 'دورة ICDL', price: null, currency: null,
+      id: 'slot-live', name: 'دورة ICDL', price: null, currency: null,
       attributes: [{ label: 'الدورة', value: 'ICDL' }, { label: 'الأيام', value: 'الأحد والثلاثاء' }],
       startsAt: future, endsAt: future, isAvailable: true,
     },
     {
-      id: 'row-expired', name: 'دورة المكياج', price: '35000.00', currency: 'ل.س قديمة',
-      attributes: [{ label: 'الدورة', value: 'مكياج' }],
+      id: 'slot-expired', name: 'دورة المكياج', price: null, currency: null,
+      attributes: [{ label: 'الدورة', value: 'مكياج' }, { label: 'الأيام', value: 'السبت' }],
       startsAt: past, endsAt: past, isAvailable: true,
     },
   ],
   ...over,
 });
+
+const bothCollections = () => [priceCollection(), slotCollection()];
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -66,41 +91,52 @@ describe('BusinessListsSection', () => {
     expect(container.querySelector('section')).toBeNull();
   });
 
-  it('shows live rows directly and expired rows only behind the toggle', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [collection()] } } as any);
+  it('shows ONE card per entity — the course name appears once even when it has a price row AND a slot row', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     renderSection();
 
-    expect(await screen.findByText('دورة ICDL')).toBeInTheDocument();
-    // Expired row is not visible until the divider is expanded…
-    expect(screen.queryByText('دورة المكياج')).toBeNull();
-
-    fireEvent.click(screen.getByText('1 expired row'));
-    expect(screen.getByText('دورة المكياج')).toBeInTheDocument();
+    expect(await screen.findAllByText('دورة ICDL')).toHaveLength(1);
+    // Its price and its schedule render INSIDE that one card as row meta.
+    expect(screen.getByText(/8 جلسات · 35000 ل\.س قديمة/)).toBeInTheDocument();
+    expect(screen.getByText(/الأحد والثلاثاء/)).toBeInTheDocument();
   });
 
-  it('renders the row meta from attributes + price, never raw column form', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [collection()] } } as any);
+  it('drops the key value from row meta — the card title already names the entity', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     renderSection();
     await screen.findByText('دورة ICDL');
-    fireEvent.click(screen.getByText('1 expired row'));
-    // "35000.00" must display as "35000 ل.س قديمة" — the merchant's own form.
-    expect(screen.getByText(/35000 ل\.س قديمة/)).toBeInTheDocument();
-    expect(screen.queryByText(/35000\.00/)).toBeNull();
+    // The slot row's meta must not repeat «ICDL» (its الدورة key value).
+    const slotMeta = screen.getByText(/الأحد والثلاثاء/);
+    expect(slotMeta.textContent).not.toContain('ICDL');
   });
 
-  it('asks the completeness question ONLY while un-asked, and sends the tri-state answer', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [collection()] } } as any);
+  it('hides an expired slot behind the card toggle without hiding the entity card', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+    renderSection();
+
+    // المكياج card is visible (it has a live price row)…
+    expect(await screen.findAllByText('دورة المكياج')).toHaveLength(1);
+    // …but its expired slot's meta is not, until the toggle is expanded.
+    expect(screen.queryByText(/السبت/)).toBeNull();
+
+    fireEvent.click(screen.getByText('1 expired row'));
+    expect(screen.getByText(/السبت/)).toBeInTheDocument();
+  });
+
+  it('asks the completeness question per LIST (not per card) while un-asked, and sends the tri-state answer', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     vi.mocked(factCollectionsApi.setCompleteness).mockResolvedValue({} as any);
     renderSection();
 
     await screen.findByText('دورة ICDL');
+    // Only the slot collection is un-asked → exactly one question row.
     fireEvent.click(screen.getByText('Yes, complete'));
-    expect(factCollectionsApi.setCompleteness).toHaveBeenCalledWith(PAGE, 'coll-1', true);
+    expect(factCollectionsApi.setCompleteness).toHaveBeenCalledWith(PAGE, 'coll-slots', true);
   });
 
   it('shows the confirmed state (not the question) once answered', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({
-      data: { data: [collection({ isComplete: true })] },
+      data: { data: [priceCollection()] },
     } as any);
     renderSection();
     await screen.findByText('دورة ICDL');
@@ -108,30 +144,44 @@ describe('BusinessListsSection', () => {
     expect(screen.getByText(/confident/)).toBeInTheDocument();
   });
 
-  it('opens the row sheet on tap and PATCHes through the API on save', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [collection()] } } as any);
+  it('opens the row sheet from a card row and PATCHes through the API on save', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     vi.mocked(factCollectionsApi.updateRow).mockResolvedValue({ data: { data: {} } } as any);
     renderSection();
 
-    fireEvent.click(await screen.findByText('دورة ICDL'));
+    fireEvent.click(await screen.findByText(/8 جلسات · 35000/));
     const nameInput = screen.getByLabelText('Name');
     fireEvent.change(nameInput, { target: { value: 'دورة ICDL مسائية' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(factCollectionsApi.updateRow).toHaveBeenCalledWith(
-      PAGE, 'coll-1', 'row-live',
+      PAGE, 'coll-prices', 'price-icdl',
       expect.objectContaining({ name: 'دورة ICDL مسائية' }),
     ));
   });
 
-  it('a NEW row inherits the collection attribute labels with empty values', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [collection()] } } as any);
+  it('adding from a card PREFILLS the entity name and key value, and POSTs to the right collection', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+    vi.mocked(factCollectionsApi.addRow).mockResolvedValue({ data: { data: {} } } as any);
     renderSection();
 
     await screen.findByText('دورة ICDL');
-    fireEvent.click(screen.getByText('Add row'));
-    // The schema labels from the first row appear as empty labelled inputs.
-    expect(screen.getByLabelText('الدورة')).toHaveValue('');
-    expect(screen.getByLabelText('الأيام')).toHaveValue('');
+    // Two-step add: the quiet «+» expands to per-list choices (there are two
+    // lists on this page), then the schedule list is picked.
+    fireEvent.click(screen.getAllByText('Add')[0]);
+    fireEvent.click(screen.getByRole('button', { name: /مواعيد الدورات المعلنة/ }));
+
+    // Name and the key attribute arrive prefilled from the card.
+    expect(screen.getByLabelText('Name')).toHaveValue('دورة ICDL');
+    expect(screen.getByLabelText('الدورة')).toHaveValue('ICDL');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(factCollectionsApi.addRow).toHaveBeenCalledWith(
+      PAGE, 'coll-slots',
+      expect.objectContaining({
+        name: 'دورة ICDL',
+        attributes: expect.arrayContaining([{ label: 'الدورة', value: 'ICDL' }]),
+      }),
+    ));
   });
 });

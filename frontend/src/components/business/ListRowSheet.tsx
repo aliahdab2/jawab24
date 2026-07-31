@@ -9,6 +9,10 @@ import type { FactRowDto } from '@/lib/api';
 interface ListRowSheetProps {
   /** null = adding a new row to the collection. */
   row: FactRowDto | null;
+  /** Prefill for a NEW row (ignored when editing): adding from an entity card
+   *  carries the card's name and its known key value, so the merchant only
+   *  types what is actually new (the date, the price). */
+  initial?: { name?: string; attributes?: { label: string; value: string }[] };
   /** Collection label — the sheet subtitle, so the merchant knows which list
    *  they are editing («مواعيد الدورات المعلنة»). */
   collectionLabel: string;
@@ -53,6 +57,7 @@ interface ListRowSheetProps {
  */
 export function ListRowSheet({
   row,
+  initial,
   collectionLabel,
   attributeLabels,
   canDelete,
@@ -64,7 +69,7 @@ export function ListRowSheet({
   const t = useTranslations('business');
   const tc = useTranslations('common');
 
-  const [name, setName] = useState(row?.name ?? '');
+  const [name, setName] = useState(row?.name ?? initial?.name ?? '');
   // "35000.00" → "35000": the merchant edits what they'd write, not the
   // numeric column's storage form.
   const [price, setPrice] = useState(row?.price ? formatCatalogPrice(row.price) : '');
@@ -73,7 +78,10 @@ export function ListRowSheet({
   const [attrs, setAttrs] = useState<{ label: string; value: string }[]>(
     () => row
       ? (row.attributes ?? []).map((a) => ({ ...a }))
-      : attributeLabels.map((label) => ({ label, value: '' })),
+      : attributeLabels.map((label) => ({
+          label,
+          value: initial?.attributes?.find((a) => a.label === label)?.value ?? '',
+        })),
   );
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
