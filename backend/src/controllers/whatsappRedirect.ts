@@ -17,6 +17,10 @@ import {
     isWhatsAppConnectAllowed,
 } from './whatsapp';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
+import { authService } from '../services/auth';
+import { refreshTokenService } from '../services/refreshToken';
+import { cookiesService } from '../services/cookies';
+import { workspaceService } from '../services/workspace';
 
 /**
  * WhatsApp connect via FULL-PAGE redirect Embedded Signup.
@@ -108,22 +112,62 @@ export class WhatsAppRedirectController {
             return reply.status(500).send({ error: 'WhatsApp connect is not configured', code: 'WHATSAPP_CONNECT_FAILED' });
         }
 
-        if (!(await isWhatsAppConnectAllowed(req.user.userId))) {
-            return reply.status(403).send({ error: 'WhatsApp isn\'t available on your account yet.', code: 'WHATSAPP_NOT_ALLOWLISTED' });
-        }
-        if (!(await hasWhatsAppPlanAccess(req.workspaceOwnerId))) {
-            return reply.status(403).send({ error: 'WhatsApp requires the Business plan or higher.', code: 'WHATSAPP_PLAN_REQUIRED', requiredPlan: 'business' });
+        const prep = await this.prepareStartUrls({
+            userId: req.user.userId,
+            workspaceId: req.workspaceId,
+            workspaceOwnerId: req.workspaceOwnerId,
+            pageId: typeof request.body?.pageId === 'string' && request.body.pageId ? request.body.pageId : null,
+            coexistence: request.body?.coexistence === true,
+            locale: request.body?.locale === 'en' ? 'en' : 'ar',
+            reply,
+        });
+        if (!prep.ok) {
+            return reply.status(prep.status).send(prep.payload);
         }
 
-        const pageId = typeof request.body?.pageId === 'string' && request.body.pageId ? request.body.pageId : null;
-        let coexistence = request.body?.coexistence === true;
+        request.log.info({ pageId: prep.pageId, coexistence: prep.coexistence, locale: prep.locale }, '[WhatsApp redirect] start');
+        // `url` preserves the original single-URL contract (the requested
+        // variant) for clients built before the pre-mint change.
+        return reply.send({ url: prep.url, urls: prep.urls });
+    };
+
+    /**
+     * Shared core of the two start legs: gates → reconnect path-lock → mint
+     * both state variants bound to ONE nonce cookie → dialog URLs. The POST
+     * /start leg wraps failures in the JSON error contract; the GET /app-start
+     * leg turns them into `?whatsappError=` redirects (it is a navigation).
+     */
+    private async prepareStartUrls(args: {
+        userId: string;
+        workspaceId: string;
+        workspaceOwnerId: string;
+        pageId: string | null;
+        coexistence: boolean;
+        locale: 'ar' | 'en';
+        reply: FastifyReply;
+    }): Promise<
+        | { ok: true; url: string; urls: { coexistence: string; dedicated: string }; coexistence: boolean; pageId: string | null; locale: 'ar' | 'en' }
+        | { ok: false; status: number; code: string; payload: Record<string, unknown> }
+    > {
+        if (!config.whatsappConfigId) {
+            return { ok: false, status: 500, code: 'WHATSAPP_CONNECT_FAILED', payload: { error: 'WhatsApp connect is not configured', code: 'WHATSAPP_CONNECT_FAILED' } };
+        }
+        if (!(await isWhatsAppConnectAllowed(args.userId))) {
+            return { ok: false, status: 403, code: 'WHATSAPP_NOT_ALLOWLISTED', payload: { error: 'WhatsApp isn\'t available on your account yet.', code: 'WHATSAPP_NOT_ALLOWLISTED' } };
+        }
+        if (!(await hasWhatsAppPlanAccess(args.workspaceOwnerId))) {
+            return { ok: false, status: 403, code: 'WHATSAPP_PLAN_REQUIRED', payload: { error: 'WhatsApp requires the Business plan or higher.', code: 'WHATSAPP_PLAN_REQUIRED', requiredPlan: 'business' } };
+        }
+
+        const { pageId, locale } = args;
+        let coexistence = args.coexistence;
         // Reconnect: the onboarding path is FIXED by the connected number —
         // both minted variants must collapse onto the stored value.
         let pathLocked = false;
         if (pageId) {
-            const page = await pagesService.getPage(req.workspaceId, pageId);
+            const page = await pagesService.getPage(args.workspaceId, pageId);
             if (!page) {
-                return reply.status(404).send({ error: 'Page not found' });
+                return { ok: false, status: 404, code: 'WHATSAPP_CONNECT_FAILED', payload: { error: 'Page not found' } };
             }
             // RECONNECT MUST PRESERVE THE ONBOARDING PATH — enforced server-side,
             // not trusted from the client: re-running ES without coexistence puts
@@ -134,7 +178,6 @@ export class WhatsAppRedirectController {
                 pathLocked = true;
             }
         }
-        const locale: 'ar' | 'en' = request.body?.locale === 'en' ? 'en' : 'ar';
 
         // Mint BOTH onboarding variants up front, bound to ONE nonce cookie.
         // The path-question modal calls start when it OPENS, so the chosen URL
@@ -148,8 +191,8 @@ export class WhatsAppRedirectController {
         // Business configuration defines its own permissions; `extras` mirrors
         // the popup's fb.login extras.
         const stateInput = {
-            userId: req.user.userId,
-            workspaceId: req.workspaceId,
+            userId: args.userId,
+            workspaceId: args.workspaceId,
             pageId,
             locale,
         };
@@ -174,17 +217,98 @@ export class WhatsAppRedirectController {
         const dedicatedVariant = pathLocked ? coexistence : false;
         const first = mintWhatsAppConnectState({ ...stateInput, coexistence: coexistenceVariant });
         const second = mintWhatsAppConnectState({ ...stateInput, coexistence: dedicatedVariant }, first.nonce);
-        reply.setCookie(WHATSAPP_NONCE_COOKIE, first.nonce, WHATSAPP_NONCE_COOKIE_OPTIONS);
+        args.reply.setCookie(WHATSAPP_NONCE_COOKIE, first.nonce, WHATSAPP_NONCE_COOKIE_OPTIONS);
 
         const urls = {
             coexistence: buildUrl(first.state, coexistenceVariant),
             dedicated: buildUrl(second.state, dedicatedVariant),
         };
 
-        request.log.info({ pageId, coexistence, locale }, '[WhatsApp redirect] start');
-        // `url` preserves the original single-URL contract (the requested
-        // variant) for clients built before the pre-mint change.
-        return reply.send({ url: coexistence ? urls.coexistence : urls.dedicated, urls });
+        return { ok: true, url: coexistence ? urls.coexistence : urls.dedicated, urls, coexistence, pageId, locale };
+    }
+
+    /**
+     * GET /auth/whatsapp/app-start — PUBLIC: the native app's connect leg.
+     *
+     * The app asks the onboarding-path question IN-APP, then opens the system
+     * browser here with a single-use handoff code. This handler consumes the
+     * code, signs the browser in (cookies — so the callback's return page
+     * renders logged-in), mints the state + nonce cookie, and 302s STRAIGHT to
+     * Meta's dialog. The browser's first document is facebook.com — there is
+     * no JS navigation anywhere for a WebView-adjacent surface to swallow,
+     * which is exactly what killed every earlier shape of the in-app flow on a
+     * real device (Custom Tab AND intent-opened Chrome tab both dropped the
+     * page-side location.assign; a server 302 is followed by the network
+     * stack, not the renderer).
+     *
+     * Owner-only, like POST /start: the ES business token is workspace-level
+     * credential material. Enforced here via the membership role, since a
+     * top-level navigation carries no session for the middleware chain.
+     */
+    appStart = async (
+        request: FastifyRequest<{ Querystring: { code?: string; pageId?: string; coexistence?: string; locale?: string; workspaceId?: string } }>,
+        reply: FastifyReply,
+    ) => {
+        if (!config.whatsappConnectRedirect) {
+            return reply.status(404).send({ error: 'Not found' });
+        }
+        const q = request.query;
+        const locale: 'ar' | 'en' = q.locale === 'en' ? 'en' : 'ar';
+        const fail = (code: string) => reply.redirect(pagesRedirect(locale, { whatsappError: code }));
+
+        const userId = await authService.consumeBrowserHandoffCode(typeof q.code === 'string' ? q.code : '');
+        if (!userId) {
+            // Expired/used code: the browser has no session to show an error
+            // toast with — land on login, where a signed-in user bounces to
+            // the dashboard anyway.
+            return reply.redirect(`${config.frontendUrl}${localePath(locale)}/login`);
+        }
+        const user = await authService.getUserById(userId);
+        if (!user) {
+            return reply.redirect(`${config.frontendUrl}${localePath(locale)}/login`);
+        }
+
+        // Sign the browser in FIRST (same artifacts as the login exit): even a
+        // gate failure below then lands on /pages authenticated, where the
+        // whatsappError toast can render — and after the wizard, Meta's 302
+        // back to /pages finds a live session.
+        const token = authService.generateToken(user);
+        const refreshToken = await refreshTokenService.createRefreshToken(user.id);
+        cookiesService.setAuthCookies(reply, token);
+        cookiesService.setRefreshTokenCookie(reply, refreshToken);
+
+        let workspaceId = typeof q.workspaceId === 'string' && q.workspaceId ? q.workspaceId : null;
+        if (!workspaceId) {
+            workspaceId = await workspaceService.resolveDefaultWorkspaceId(userId);
+        }
+        if (!workspaceId) {
+            return fail('WHATSAPP_CONNECT_FAILED');
+        }
+        const member = await workspaceService.getMemberRole(workspaceId, userId);
+        if (!member || member.role !== 'owner') {
+            // Same owner scope as POST /start — the ES token is credential material.
+            return fail('WHATSAPP_CONNECT_FAILED');
+        }
+        const workspace = await workspaceService.getWorkspace(workspaceId);
+        if (!workspace) {
+            return fail('WHATSAPP_CONNECT_FAILED');
+        }
+
+        const prep = await this.prepareStartUrls({
+            userId,
+            workspaceId,
+            workspaceOwnerId: workspace.ownerId,
+            pageId: typeof q.pageId === 'string' && q.pageId ? q.pageId : null,
+            coexistence: q.coexistence === 'true' || q.coexistence === '1',
+            locale,
+            reply,
+        });
+        if (!prep.ok) {
+            return fail(prep.code);
+        }
+
+        request.log.info({ pageId: prep.pageId, coexistence: prep.coexistence, locale }, '[WhatsApp redirect] app-start');
+        return reply.redirect(prep.url);
     };
 
     /**
