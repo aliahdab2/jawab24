@@ -44,7 +44,10 @@ export const WHATSAPP_LAUNCH_AR_HTML = `<!DOCTYPE html>
     <img src="https://s3.eu-central-003.backblazeb2.com/jawab24-media/announcements/whatsapp-2026-07/rows-ar.png" alt="صف واتساب في بطاقة القناة مع زر ربط" width="520" style="max-width:520px;width:100%;height:auto;border:1px solid #e2e8f0;border-radius:14px" />
   </div>
   <p style="margin:0 0 4px"><strong>٣)</strong> أجب عن سؤال واحد: اختر <strong>«أستخدم هذا الرقم في تطبيق واتساب للأعمال»</strong> ليبقى الرقم على هاتفك.</p>
-  <p style="margin:0 0 22px"><strong>٤)</strong> أكمل خطوات التحقق التي يعرضها واتساب، ثم تأكد من أن معلومات نشاطك التجاري مكتملة.</p>
+  <p style="margin:0 0 14px"><strong>٤)</strong> أكمل خطوات التحقق التي يعرضها واتساب، ثم تأكد من أن معلومات نشاطك التجاري مكتملة.</p>
+  <div style="text-align:center;margin:0 0 22px">
+    <a href="https://jawab24.com/blog/jawab24-setup-tutorial" style="display:inline-block;background:#f0fdfa;border:2px solid #14b8a6;color:#0f766e;text-decoration:none;font-weight:800;font-size:15px;padding:12px 28px;border-radius:12px">&#128214; الدليل المصوّر: شرح الإعداد خطوة بخطوة</a>
+  </div>
 
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;margin:0 0 18px">
     <tr><td style="padding:18px 20px">

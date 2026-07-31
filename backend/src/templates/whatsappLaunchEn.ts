@@ -43,7 +43,10 @@ export const WHATSAPP_LAUNCH_EN_HTML = `<!DOCTYPE html>
     <img src="https://s3.eu-central-003.backblazeb2.com/jawab24-media/announcements/whatsapp-2026-07/rows-en.png" alt="The WhatsApp row on a channel card with the Connect button" width="520" style="max-width:520px;width:100%;height:auto;border:1px solid #e2e8f0;border-radius:14px" />
   </div>
   <p style="margin:0 0 4px"><strong>3.</strong> Answer one question: choose <strong>"I already use this number on WhatsApp Business"</strong> to keep it on your phone.</p>
-  <p style="margin:0 0 22px"><strong>4.</strong> Finish the verification steps WhatsApp shows you, then make sure your Business Info is complete.</p>
+  <p style="margin:0 0 14px"><strong>4.</strong> Finish the verification steps WhatsApp shows you, then make sure your Business Info is complete.</p>
+  <div style="text-align:center;margin:0 0 22px">
+    <a href="https://jawab24.com/en/blog/jawab24-setup-tutorial" style="display:inline-block;background:#f0fdfa;border:2px solid #14b8a6;color:#0f766e;text-decoration:none;font-weight:800;font-size:15px;padding:12px 28px;border-radius:12px">&#128214; Illustrated guide: step-by-step setup</a>
+  </div>
 
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;margin:0 0 18px">
     <tr><td style="padding:18px 20px">
