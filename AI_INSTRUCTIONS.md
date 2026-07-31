@@ -276,27 +276,41 @@ Facebook login, Facebook page connect, and page reconnect. They are the referenc
 implementation for "the native app must send the merchant to Meta and get them
 back" — not a starting point to improve on.
 
-This rule exists because ignoring it cost a full night and **six Android releases**
-(2026-07-31). WhatsApp connect kept failing on a real device while Facebook page
-connect worked the whole time, and the difference was one property nobody checked:
+This rule exists because ignoring it cost a full night and **seven Android
+releases** (2026-07-31). WhatsApp connect kept failing on a real device while
+Facebook page connect worked the whole time, and the difference was one property
+nobody checked:
 
-| | Facebook page connect (works) | the three WhatsApp attempts (all failed) |
+| | Facebook page connect (works) | the WhatsApp attempts (all failed) |
 |---|---|---|
 | Tab's FIRST document | **facebook.com** | a jawab24.com page |
 | Reaching Meta | it *is* the destination | page-side `location.assign`, or a server 302 |
-| Return | `/auth/app-sync` App Link → reopens app, closes tab | web page |
+| Return to the app | a PAGE assigns `window.location` → App Link fires | a server 302 → App Link ignored |
 
-**The invariant: a browser tab the app opens must START at the third party.** All
-three failing shapes — `location.assign` in a Custom Tab, the same in an
-intent-opened Chrome tab, and a server 302 — died silently on the device. The tab
-type, Android 11 package visibility, and JS were all red herrings chased in turn.
+**Two invariants, and BOTH were learned the hard way — the second one only after
+the first was fixed and the flow still misbehaved:**
+
+1. **A browser tab the app opens must START at the third party.** All three
+   failing outbound shapes — `location.assign` in a Custom Tab, the same in an
+   intent-opened Chrome tab, and a server 302 — died silently on the device. The
+   tab type, Android 11 package visibility, and JS were all red herrings chased
+   in turn.
+2. **An App Link must be navigated to by a PAGE, never sent as a `Location:`
+   header.** Android intercepts a navigation a page starts; a redirect the
+   browser follows inside its own request chain is not one — it just renders the
+   web fallback. Symptom: `GET /auth/app-sync?redirect=… → 200` in the access
+   log and the merchant left in the browser after a *successful* connect.
+   `auth/callback.tsx` does it right for Facebook; copy that.
 
 Concretely, for any new app→browser handoff:
 - Mint whatever state you need from the **authenticated app session**, then
   `Browser.open()` the third-party URL directly.
-- Return through the **`/auth/app-sync` App Link** (Android-verified: it reopens
-  the app and closes the tab). Pass only an intent — no session token — when the
-  app never lost its session.
+- Return by SERVING A PAGE whose script assigns `window.location` to the
+  **`/auth/app-sync` App Link** (Android-verified: it reopens the app and closes
+  the tab), with a manual anchor for when the script or the verification does not
+  fire. Pass only an intent — no session token — when the app never lost its
+  session; and remember a token-less bridge URL is a RETURN, not a sign-in, so
+  never bounce it to `/login`.
 - **Cookie jars do not cross.** The app WebView and the browser have separate
   jars, so any cookie-paired defence (CSRF double-submit, nonce) is unavailable
   on this path. Replace it with an equally strong property — single-use state via
@@ -421,7 +435,7 @@ Local-first — no CI required:
 | `"{count} item(s)"` | ICU plural: `"{count, plural, one {# item} other {# items}}"` |
 | Hydration guard in `_app.tsx` | Never — guards belong in `DashboardLayout` |
 | Editing code in `~/Documents/AutoReply` | `EnterWorktree` first — one session, one worktree (Rule 18) |
-| Designing a new app→browser→Meta bridge | Read the working Facebook page-connect flow first (Rule 17b) — the tab must START at facebook.com |
+| Designing a new app→browser→Meta bridge | Read the working Facebook page-connect flow first (Rule 17b) — the tab must START at facebook.com, and the App Link return must be navigated by a PAGE, not a 302 |
 | "a Chrome user-agent in the logs means Chrome opened" | A Custom Tab is identical in logs — mark degradation in-band (Rule 17b) |
 | `git checkout` / `npm install` in the main checkout | Never — it breaks whatever another session is measuring |
 
