@@ -204,6 +204,107 @@ describe('fact collections — the engine end to end', () => {
         expect(await readKbVersion(pageId)).toBeGreaterThan(beforeDelete);
     });
 
+    // ── Row-level CRUD (G1b list editor) ─────────────────────────────────
+
+    it('addRow appends after existing rows and bumps the reply caches', async () => {
+        const c = await factCollectionsService.createCollection(pageId, {
+            label: 'الصيدليات', keyAttr: 'المدينة', rows: OUTLETS,
+        });
+        const before = await readKbVersion(pageId);
+
+        const row = await factCollectionsService.addRow(pageId, c.id, {
+            name: 'صيدلية الجديدة', attributes: [{ label: 'المدينة', value: 'حي الورود' }],
+        });
+        expect(row?.sortOrder).toBe(OUTLETS.length);
+        expect(await readKbVersion(pageId)).toBeGreaterThan(before);
+
+        const rows = await factCollectionsService.getRows(c.id);
+        expect(rows.map(r => r.name)).toContain('صيدلية الجديدة');
+    });
+
+    it('updateRow patches only the provided keys and bumps the caches', async () => {
+        const c = await factCollectionsService.createCollection(pageId, {
+            label: 'المواعيد', keyAttr: null, rows: [
+                { name: 'دورة ICDL', attributes: [{ label: 'الساعة', value: '12-1' }], startsAt: '2026-08-03', endsAt: '2026-08-03' },
+            ],
+        });
+        const [target] = await factCollectionsService.getRows(c.id);
+        const before = await readKbVersion(pageId);
+
+        const updated = await factCollectionsService.updateRow(pageId, c.id, target.id, {
+            attributes: [{ label: 'الساعة', value: '12-1:30' }],
+        });
+        expect(updated?.attributes).toEqual([{ label: 'الساعة', value: '12-1:30' }]);
+        // untouched fields survive a partial patch
+        expect(updated?.startsAt).toBe('2026-08-03');
+        expect(updated?.name).toBe('دورة ICDL');
+        expect(await readKbVersion(pageId)).toBeGreaterThan(before);
+    });
+
+    // The per-field schema cannot see the OTHER date on a partial patch — the
+    // service must validate the MERGED row, or a date edit births an
+    // instantly-expired row that silently vanishes from the prompt.
+    it('updateRow refuses a patch whose merged result has endsAt before startsAt', async () => {
+        const c = await factCollectionsService.createCollection(pageId, {
+            label: 'المواعيد', keyAttr: null, rows: [
+                { name: 'دورة ICDL', startsAt: '2026-08-03', endsAt: '2026-08-03' },
+            ],
+        });
+        const [target] = await factCollectionsService.getRows(c.id);
+
+        await expect(
+            factCollectionsService.updateRow(pageId, c.id, target.id, { startsAt: '2026-09-01' }),
+        ).rejects.toThrow(/End date/);
+
+        // the row is untouched after the refusal
+        const [still] = await factCollectionsService.getRows(c.id);
+        expect(still.startsAt).toBe('2026-08-03');
+    });
+
+    it('deleteRow removes a row but refuses the LAST one — an empty collection would silently drop its boundary', async () => {
+        const c = await factCollectionsService.createCollection(pageId, {
+            label: 'العروض', keyAttr: null, rows: [{ name: 'عرض أ' }, { name: 'عرض ب' }],
+        });
+        const rows = await factCollectionsService.getRows(c.id);
+
+        expect(await factCollectionsService.deleteRow(pageId, c.id, rows[0].id)).toBeTruthy();
+        await expect(
+            factCollectionsService.deleteRow(pageId, c.id, rows[1].id),
+        ).rejects.toThrow(/last row/);
+        expect((await factCollectionsService.getRows(c.id)).length).toBe(1);
+    });
+
+    it('row writes from another page bounce off the collection ownership check', async () => {
+        const other = await createTestPage((await createTestUser()).id, { name: 'Other' });
+        const c = await factCollectionsService.createCollection(pageId, {
+            label: 'الصيدليات', keyAttr: 'المدينة', rows: OUTLETS,
+        });
+        const [target] = await factCollectionsService.getRows(c.id);
+
+        expect(await factCollectionsService.addRow(other.id, c.id, { name: 'دخيل' })).toBeNull();
+        expect(await factCollectionsService.updateRow(other.id, c.id, target.id, { name: 'مخترق' })).toBeNull();
+        expect(await factCollectionsService.deleteRow(other.id, c.id, target.id)).toBeNull();
+
+        const rows = await factCollectionsService.getRows(c.id);
+        expect(rows.length).toBe(OUTLETS.length);
+        expect(rows[0].name).toBe(OUTLETS[0].name);
+    });
+
+    it('listCollectionsWithRows returns every collection with its rows in one shape', async () => {
+        await factCollectionsService.createCollection(pageId, {
+            label: 'الصيدليات', keyAttr: 'المدينة', rows: OUTLETS,
+        });
+        await factCollectionsService.createCollection(pageId, {
+            label: 'العروض', keyAttr: null, rows: [{ name: 'عرض أ' }],
+        });
+
+        const all = await factCollectionsService.listCollectionsWithRows(pageId);
+        expect(all.map(c => [c.label, c.rows.length])).toEqual([
+            ['الصيدليات', OUTLETS.length],
+            ['العروض', 1],
+        ]);
+    });
+
     // Cross-tenant safety: collection ids are opaque, so the page scope is the
     // only thing standing between two merchants' data.
     it('another page cannot confirm or delete this page\'s collection', async () => {

@@ -8,6 +8,14 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Locale } from 'date-fns';
 
+/** Today as YYYY-MM-DD in the USER'S timezone (en-CA formats ISO-style).
+ *  Deliberately NOT `toISOString().slice(0,10)`: that is UTC, which flips to
+ *  the wrong day near midnight — the exact boundary an expiring-row UI groups
+ *  by. Shared by the catalog UI and the fact-list editor. */
+export function todayISODate(): string {
+    return new Date().toLocaleDateString('en-CA');
+}
+
 /** Format a date as absolute time (PPp). Used for title/tooltip. */
 export function formatFullTime(
     dateValue: string | Date | null | undefined,

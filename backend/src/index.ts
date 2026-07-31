@@ -43,6 +43,7 @@ import customerNotificationRoutes from "./routes/customerNotifications";
 import ecommerceAnalyticsRoutes from "./routes/ecommerceAnalytics";
 import leadsRoutes from "./routes/leads";
 import catalogRoutes from "./routes/catalog";
+import factCollectionsRoutes from "./routes/factCollections";
 import { sseManager } from "./lib/sseManager";
 import { shutdownEventBus } from "./lib/eventBus";
 import { integrationRegistry } from "./integrations";
@@ -266,6 +267,7 @@ const start = async () => {
     await server.register(aiRoutes);
     await server.register(pagesRoutes);
     await server.register(catalogRoutes);
+    await server.register(factCollectionsRoutes);
     await server.register(postsRoutes);
     // Public: stable tap-through for Post Reply image cards already sitting in customer threads.
     await server.register(postReplyImageRoutes);

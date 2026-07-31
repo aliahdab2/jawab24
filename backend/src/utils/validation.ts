@@ -253,6 +253,47 @@ export const CatalogItemUpdateSchema = z.object({
 export type CatalogItemInput = z.infer<typeof CatalogItemSchema>;
 export type CatalogItemUpdateInput = z.infer<typeof CatalogItemUpdateSchema>;
 
+/**
+ * Fact-collection row bodies (G1b list editor). Reuses the catalog primitives
+ * on purpose — same money normalization (Arabic-Indic digits), same varchar(10)
+ * currency clamp, same YYYY-MM-DD calendar-checked dates, same attribute-pair
+ * hygiene — so a value that is valid in one structured store is valid in the
+ * other and vice versa.
+ */
+export const FactRowSchema = z.object({
+    name: z.string().trim().min(1, 'Name is required').max(200),
+    attributes: CatalogAttributesInput.optional().transform(v => v ?? null),
+    price: PriceInput.optional().transform(v => v ?? null),
+    currency: CurrencyInput.optional().transform(v => v ?? null),
+    startsAt: CatalogDateInput.optional().transform(v => v ?? null),
+    endsAt: CatalogDateInput.optional().transform(v => v ?? null),
+    isAvailable: z.boolean().default(true),
+}).refine(
+    (row) => !row.startsAt || !row.endsAt || row.endsAt >= row.startsAt,
+    { message: 'End date must not be before the start date', path: ['endsAt'] },
+);
+
+/** PATCH body: any subset; explicit null clears a nullable field. */
+export const FactRowUpdateSchema = z.object({
+    name: z.string().trim().min(1).max(200).optional(),
+    attributes: CatalogAttributesInput.optional(),
+    price: PriceInput.optional(),
+    currency: CurrencyInput.optional(),
+    startsAt: CatalogDateInput.optional(),
+    endsAt: CatalogDateInput.optional(),
+    isAvailable: z.boolean().optional(),
+}).refine(body => Object.keys(body).length > 0, { message: 'At least one field is required' });
+
+/** PATCH completeness body — the merchant's word, tri-state (D-038):
+ *  true = exhaustive (confident absence), false = declared partial,
+ *  null = back to un-asked. */
+export const FactCompletenessSchema = z.object({
+    isComplete: z.boolean().nullable(),
+});
+
+export type FactRowBodyInput = z.infer<typeof FactRowSchema>;
+export type FactRowUpdateBodyInput = z.infer<typeof FactRowUpdateSchema>;
+
 /** POST /pages/:pageId/catalog/extract body. Min 10 keeps accidental fragments
  *  from burning an LLM call; the max is the shared frontend/backend contract. */
 export const CatalogExtractSchema = z.object({

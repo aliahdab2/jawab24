@@ -10,6 +10,7 @@ import { PageHeader, EmptyState, Select, Skeleton } from '@/components/ui';
 import { CatalogManager } from '@/components/catalog/CatalogManager';
 import { BusinessReadinessCard, type FixableChipKey } from '@/components/business/BusinessReadinessCard';
 import { BusinessFactRows } from '@/components/business/BusinessFactRows';
+import { BusinessListsSection } from '@/components/business/BusinessListsSection';
 import { BusinessFactSheet, type EditableFactKey } from '@/components/business/BusinessFactSheet';
 import { BusinessHoursSheet } from '@/components/business/BusinessHoursSheet';
 import { KnowledgeBasePanel } from '@/components/knowledge-base/KnowledgeBasePanel';
@@ -301,6 +302,14 @@ function BusinessPageInner() {
               onEditFact={setEditingFact}
               onEditHours={() => setEditingHours(true)}
             />
+          </div>
+
+          {/* 3b — Fact lists (G1b): renders ONLY when the page has collections
+              (born from reviewed extraction) — that absence IS the rollout
+              gate, so most pages see nothing here. Mobile keeps it beside the
+              other structured data, above the big catalog block. */}
+          <div className="order-2 md:order-3">
+            <BusinessListsSection pageId={selectedPage.id} />
           </div>
 
           {/* 4 — Free-text Business Info (collapsed once structured data exists) */}

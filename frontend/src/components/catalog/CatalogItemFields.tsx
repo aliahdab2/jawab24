@@ -28,16 +28,8 @@ export interface CatalogItemDraft {
   attributes: Array<{ label: string; value: string }>;
 }
 
-/** Today as local 'YYYY-MM-DD' — for the "Ended" badge comparisons. */
-export function todayISODate(): string {
-  return new Date().toLocaleDateString('en-CA');
-}
-
-/** DB numeric strings arrive as "3500.00" — show "3500". Non-numeric passes through. */
-export function formatCatalogPrice(price: string): string {
-  const n = Number(price);
-  return Number.isFinite(n) ? String(n) : price;
-}
+// todayISODate and formatCatalogPrice moved to @/utils/dateUtils and
+// @/utils/priceFormat — they are shared with the fact-list editor now.
 
 /** Both dates set and inverted — callers block submit and show the inline error. */
 export function draftDatesInvalid(draft: CatalogItemDraft): boolean {

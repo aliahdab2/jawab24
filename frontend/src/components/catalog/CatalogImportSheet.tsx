@@ -13,8 +13,10 @@ import {
   type CatalogVertical, type ReconcileExistingItem, type ReconcileKind,
 } from '@jawab24/shared';
 import {
-  CatalogItemFields, draftDatesInvalid, draftFromInput, draftToInput, formatCatalogPrice, todayISODate, type CatalogItemDraft,
+  CatalogItemFields, draftDatesInvalid, draftFromInput, draftToInput, type CatalogItemDraft,
 } from './CatalogItemFields';
+import { formatCatalogPrice } from '@/utils/priceFormat';
+import { todayISODate } from '@/utils/dateUtils';
 
 /** Below this the extract button stays disabled — mirrors the backend Zod min,
  *  so the merchant never burns a click on a request that would 400. */

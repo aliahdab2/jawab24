@@ -211,6 +211,57 @@ export const catalogApi = {
     api.post<{ data: CatalogItem[] }>(`/pages/${pageId}/catalog/batch`, { items }),
 };
 
+/** One row of a fact collection, as the API serves it. `price` is the numeric
+ *  column's string form ("35000.00"); dates are YYYY-MM-DD. */
+export interface FactRowDto {
+  id: string;
+  name: string;
+  attributes: { label: string; value: string }[] | null;
+  price: string | null;
+  currency: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  isAvailable: boolean;
+}
+
+export interface FactCollectionWithRows {
+  id: string;
+  label: string;
+  keyAttr: string | null;
+  /** null = un-asked · true = merchant declared exhaustive · false = declared partial. */
+  isComplete: boolean | null;
+  rowCount: number;
+  rows: FactRowDto[];
+}
+
+/** Body for creating/patching a row. Price accepts what the merchant types
+ *  (Arabic-Indic digits included) — the backend normalizes. */
+export interface FactRowBody {
+  name?: string;
+  attributes?: { label: string; value: string }[] | null;
+  price?: string | number | null;
+  currency?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+}
+
+// Fact-collections list editor (G1b) — the enumerable lists the AI quotes
+// exactly (course schedules, price tables, outlet directories). Read-only for
+// members; writes need workspace admin. There is deliberately no create-
+// collection call: collections are born from reviewed extraction (D-038).
+export const factCollectionsApi = {
+  list: (pageId: string) =>
+    api.get<{ data: FactCollectionWithRows[] }>(`/pages/${pageId}/fact-collections`),
+  addRow: (pageId: string, collectionId: string, data: FactRowBody & { name: string }) =>
+    api.post<{ data: FactRowDto }>(`/pages/${pageId}/fact-collections/${collectionId}/rows`, data),
+  updateRow: (pageId: string, collectionId: string, rowId: string, data: FactRowBody) =>
+    api.patch<{ data: FactRowDto }>(`/pages/${pageId}/fact-collections/${collectionId}/rows/${rowId}`, data),
+  deleteRow: (pageId: string, collectionId: string, rowId: string) =>
+    api.delete(`/pages/${pageId}/fact-collections/${collectionId}/rows/${rowId}`),
+  setCompleteness: (pageId: string, collectionId: string, isComplete: boolean | null) =>
+    api.patch(`/pages/${pageId}/fact-collections/${collectionId}/completeness`, { isComplete }),
+};
+
 /** Effective business vertical for a page's catalog + where it came from
  *  ('merchant' override, mapped 'facebook' page category, or 'default'). */
 export interface CatalogVerticalInfo {
