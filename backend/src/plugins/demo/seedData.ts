@@ -11,6 +11,19 @@ import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 // below is pure, so it stays a normal import.
 import { renderFactCollectionBlock } from '../../services/factCollectionsRenderer';
 import { DAMASCUS_DEMO_KB } from './damascusKb';
+import {
+    DAMASCUS_COURSE_PRICES,
+    DAMASCUS_ONLINE_COURSES,
+    DAMASCUS_ONLINE_KEY,
+    DAMASCUS_SCHEDULES_LABEL,
+    DAMASCUS_SCHEDULES_KEY,
+    damascusPriceRowInputs,
+    damascusScheduleRowInputs,
+} from './damascusLists';
+
+// Re-export so offline harnesses (grounding-audit / probe scripts) keep one
+// import surface for demo fixtures, matching renderDemoDistributorLists.
+export { renderDemoDamascusLists } from './damascusLists';
 
 /**
  * Demo settings configuration
@@ -191,11 +204,15 @@ export const DEMO_PAGES = [
         instagramUsername: 'gulf_fashion_sa',
     },
     {
-        // Large-KB fixture — the real Damascus training institute KB (~12.8k chars,
-        // 40+ courses). Sits in the 5k–16k band, so it exercises the whole-KB-in-context
-        // path under the raised threshold. Named without "تدريب"/"النور"/"institute" so it
-        // does NOT collide with the `training` page's name pattern in playground-eval.ts.
-        // No businessProfile → pure-KB path (closed-world facts must come from the KB text).
+        // The real Damascus training institute — since the schedules slice (D-052)
+        // the enumerable facts (course prices, cohort slots with self-expiring start
+        // dates, the closed online list) live in fact_collections rows
+        // (damascusLists.ts via seedDamascusFactCollections below); the KB is the
+        // post-cleanup prose (~5.5k chars: address/hours/Q&A/descriptions). Closed-world
+        // answers now come from KB prose + <business_lists> together (Cat 51).
+        // Named without "تدريب"/"النور"/"institute" so it does NOT collide with the
+        // `training` page's name pattern in playground-eval.ts.
+        // No businessProfile → the structured facts are rows, not profile fields.
         facebookPageId: 'demo_page_damascus',
         name: 'معهد الفريق الدمشقي للتأهيل',
         suggestedKnowledgeBase: DAMASCUS_DEMO_KB,
@@ -839,6 +856,36 @@ async function seedDistributorFactCollections(pageId: string): Promise<void> {
         keyAttr: null,
         source: 'kb_extract',
         rows: DEMO_DISTRIBUTOR_SIZE_LIST.rows.map(r => ({ name: r.name, attributes: r.attributes, price: r.price, currency: 'د' })),
+    });
+}
+
+/**
+ * Seed the damascus fixture's course lists (G1 schedules slice, D-052) — the
+ * three-collection split whose rationale lives in damascusLists.ts: un-keyed
+ * undated prices, keyed self-expiring cohort slots, and the closed online list.
+ * Same writer, same idempotency contract as the distributor seeder above.
+ */
+async function seedDamascusFactCollections(pageId: string): Promise<void> {
+    const { factCollectionsService } = await import('../../services/factCollections');
+    const todayIso = new Date().toISOString().slice(0, 10);
+    await db.delete(factCollections).where(eq(factCollections.pageId, pageId));
+    await factCollectionsService.createCollection(pageId, {
+        label: DAMASCUS_COURSE_PRICES.label,
+        keyAttr: null,
+        source: 'kb_extract',
+        rows: damascusPriceRowInputs(DAMASCUS_COURSE_PRICES),
+    });
+    await factCollectionsService.createCollection(pageId, {
+        label: DAMASCUS_SCHEDULES_LABEL,
+        keyAttr: DAMASCUS_SCHEDULES_KEY,
+        source: 'kb_extract',
+        rows: damascusScheduleRowInputs(todayIso),
+    });
+    await factCollectionsService.createCollection(pageId, {
+        label: DAMASCUS_ONLINE_COURSES.label,
+        keyAttr: DAMASCUS_ONLINE_KEY,
+        source: 'kb_extract',
+        rows: damascusPriceRowInputs(DAMASCUS_ONLINE_COURSES),
     });
 }
 
@@ -1964,6 +2011,20 @@ export async function seedDemoData(
             }
         }
 
+        // Refresh the damascus course lists (schedules slice, Cat 51) — re-seeding
+        // also re-resolves the relative `inDays` cohort dates against today, so a
+        // long-lived demo account keeps genuinely upcoming slots.
+        const damascusRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_damascus');
+        if (damascusRefresh) {
+            // Same containment as the distributor path above.
+            try {
+                await seedDamascusFactCollections(damascusRefresh.id);
+                logger.debug('[DemoData] Refreshed damascus fact collections');
+            } catch (err) {
+                logger.error('[DemoData] Damascus fact collections failed — demo continues without them', { err });
+            }
+        }
+
         // Refresh messages: delete old → re-seed with fresh timestamps
         await db.delete(messages).where(inArray(messages.pageId, existingPageIds));
         for (const msgData of DEMO_MESSAGES) {
@@ -2128,6 +2189,19 @@ export async function seedDemoData(
             logger.debug('[DemoData] Seeded distributor fact collections', { collections: DEMO_DISTRIBUTOR_COLLECTIONS.length });
         } catch (err) {
             logger.error('[DemoData] Distributor fact collections failed — demo continues without them', { err });
+        }
+    }
+
+    // Seed the damascus course lists (schedules slice, Cat 51) — prices,
+    // self-expiring cohort slots, and the closed online list. The Cat 51
+    // closed-world cases only exercise the row path if these exist.
+    const damascusPage = createdPages.find(p => p.facebookPageId === 'demo_page_damascus');
+    if (damascusPage) {
+        try {
+            await seedDamascusFactCollections(damascusPage.id);
+            logger.debug('[DemoData] Seeded damascus fact collections');
+        } catch (err) {
+            logger.error('[DemoData] Damascus fact collections failed — demo continues without them', { err });
         }
     }
 

@@ -470,3 +470,42 @@ full suite AND the place battery with BOTH changes loaded, and settle the versio
 (v62 was taken for G1a, v63 for the wording change).
 
 > **Numbering note (2026-07-30):** this ruling was authored as D-047 on the `feat/g1a-business-lists-wiring` branch while `main` independently appended a different D-047 (landing chip hover). Renumbered to D-051 on merge — the ruling itself is unchanged. Older references to "D-047 row gating" in `.planning/` and PR text mean this entry.
+
+## D-052 · The catalog is for transactable inventory; fact_collections is for published reference lists — priced or not. Courses/schedules go to fact rows, superseding the G3 "catalog items with dates" path
+
+Owner ruling, 2026-07-31 («تمام فينا نكمل معناتا بالخطة», approving the 07-31 rethink in
+`.planning/BUSINESS_SURFACE_PLAN.md` §«2026-07-31 RETHINK»).
+
+**The boundary, restated.** The original two-store wording ("catalog = sale items,
+fact_collections = every enumerable list that is not sold", schema.ts comment above
+`factCollections`) stopped matching reality when the sizes slice (#551) put BAMBO's
+PRICED size/price table into fact rows — a measured win. The discriminator is not
+"is money involved":
+
+- **`catalog_items` = per-item transactable INVENTORY** — things a customer orders,
+  with an availability lifecycle, images/cards, e-commerce store sync, and the B0
+  reconcile/import machinery. Its renderer semantics fit shop shelves: per-item
+  emphasis, truncation tolerated (drop descriptions, "+N more").
+- **`fact_collections` = published REFERENCE TABLES the model must quote exactly and
+  exhaustively** — outlet directories, size/price tables, course schedules, delivery
+  zones. Completeness semantics are the point: the derived coverage/absence statement
+  (D-051), no "NOT exhaustive" tail, expired rows excluded in code.
+
+**One entity, one home** (D-039 extended to lists): a course's price, schedule, and
+modality live together in ONE fact row — never price in the catalog and schedule in a
+row. A migration must never leave the same fact in both stores.
+
+**What this supersedes.** The plan's G3 note ("courses + schedules as catalog items
+with dates/attributes — the #691 path") and B0.5's catalog-import script for الفريق
+الدمشقي. Evidence that path was wrong for lists, all pre-existing: the catalog renderer
+was REJECTED as a list home when the engine was designed (stamps "price on request — in
+stock" on non-sale rows; overflow appends "this list is NOT exhaustive" — the opposite
+of list semantics); its degradation drops DESCRIPTIONS first, which is exactly where
+schedules would live; and 51 courses sit at the block's truncation boundary. The
+engine's date machinery (`startsAt`/`endsAt`, query-time expiry exclusion,
+`factCollections.ts:159`) shipped in #528 — schedules need data, not new code.
+
+**What this does NOT change.** The B0 reconcile/import machinery and the catalog remain
+fully valid for product merchants (posts-scan, post-reply mining, store sync); B0.5's
+question ("0 → confirmed on a phone in <5 min") is answered on the fact-row review
+surface instead, and the catalog flow gets its pilot with a PRODUCT merchant later.
