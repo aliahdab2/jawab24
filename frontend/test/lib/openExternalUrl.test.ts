@@ -78,23 +78,29 @@ describe('openInSystemBrowser', () => {
     await openInSystemBrowser('https://jawab24.com/login');
 
     expect(AppLauncher.openUrl).toHaveBeenCalledWith({ url: 'https://jawab24.com/login' });
-    // The whole point: a Custom Tab cannot host Embedded Signup.
+    // The whole point: a Custom Tab cannot host Embedded Signup. And the URL
+    // must ride CLEAN — the launchDegraded marker belongs to fallbacks only.
     expect(Browser.open).not.toHaveBeenCalled();
   });
 
-  it('falls back to the in-app browser when no external handler can be launched', async () => {
+  it('falls back to the in-app browser when no external handler can be launched — WITH the marker', async () => {
     vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
     const { AppLauncher } = await import('@capacitor/app-launcher');
     const { Browser } = await import('@capacitor/browser');
     vi.mocked(AppLauncher.openUrl).mockRejectedValueOnce(new Error('no activity found'));
 
-    await openInSystemBrowser('https://jawab24.com/login');
+    await openInSystemBrowser('https://jawab24.com/login?redirect=%2Fpages');
 
-    // Degrade rather than dead-end — the merchant still reaches the page.
-    expect(Browser.open).toHaveBeenCalledWith({ url: 'https://jawab24.com/login' });
+    // Degrade rather than dead-end — the merchant still reaches the page, and
+    // the URL carries launchDegraded=1 so server logs can tell this Custom Tab
+    // apart from real Chrome (identical UA + cookies otherwise). Existing
+    // query params must survive the stamping.
+    expect(Browser.open).toHaveBeenCalledWith({
+      url: 'https://jawab24.com/login?redirect=%2Fpages&launchDegraded=1',
+    });
   });
 
-  it('falls back when the launch fails via { completed: false } — Android never rejects', async () => {
+  it('falls back when the launch fails via { completed: false } — Android never rejects — WITH the marker', async () => {
     // Regression: AppLauncherPlugin.java wraps startActivity in its own
     // try/catch and RESOLVES { completed: false } on failure. A catch-only
     // fallback is dead code for that path: the merchant tapped Connect and
@@ -106,7 +112,7 @@ describe('openInSystemBrowser', () => {
 
     await openInSystemBrowser('https://jawab24.com/login');
 
-    expect(Browser.open).toHaveBeenCalledWith({ url: 'https://jawab24.com/login' });
+    expect(Browser.open).toHaveBeenCalledWith({ url: 'https://jawab24.com/login?launchDegraded=1' });
   });
 
   it('REPORTS the degradation — a Custom Tab is indistinguishable from a real browser in logs', async () => {

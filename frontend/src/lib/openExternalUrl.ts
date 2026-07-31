@@ -17,6 +17,25 @@ async function openInAppBrowser(url: string): Promise<void> {
 }
 
 /**
+ * Stamp a fallback URL so the DEGRADATION itself is server-visible. A Custom
+ * Tab sends Chrome's user-agent and shares Chrome's cookies, so nginx/backend
+ * logs cannot distinguish it from the real browser — that ambiguity hid the
+ * v2.0.14–15 dead-tap for two release cycles. The Sentry report below can be
+ * lost too (the app is backgrounded immediately after, before the event
+ * flushes), so the marker in the URL is the one signal that cannot vanish:
+ * a request line containing launchDegraded=1 IS a Custom Tab, full stop.
+ */
+function markDegraded(url: string): string {
+  try {
+    const marked = new URL(url);
+    marked.searchParams.set('launchDegraded', '1');
+    return marked.toString();
+  } catch {
+    return url; // relative/invalid input — launch it untouched rather than break it
+  }
+}
+
+/**
  * A real-browser launch fell back to the in-app browser. Worth reporting on its
  * own: flows that ask for the system browser need it (Embedded Signup dies in a
  * Custom Tab), and the degradation is invisible from the outside — the Custom
@@ -91,6 +110,7 @@ export async function openInSystemBrowser(url: string): Promise<void> {
     reportDegradedLaunch(error);
   }
   // Degrade rather than dead-end: a Custom Tab still shows the page, even if
-  // Embedded Signup cannot complete in it.
-  await openInAppBrowser(url);
+  // Embedded Signup cannot complete in it. The marker makes the degradation
+  // visible in server logs, where the surfaces are otherwise identical.
+  await openInAppBrowser(markDegraded(url));
 }
