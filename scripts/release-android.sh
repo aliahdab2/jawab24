@@ -280,6 +280,33 @@ for v in NEXT_PUBLIC_FB_APP_ID NEXT_PUBLIC_WHATSAPP_CONFIG_ID; do
 done
 echo -e "${GREEN}✅ WhatsApp config inlined into the bundle${NC}"
 
+# ─── Merged-manifest gate: browser visibility must survive into the ARTIFACT ───
+# The app opens the WhatsApp connect handoff in the real system browser
+# (openInSystemBrowser). On Android 11+ that only works if the MERGED manifest
+# carries a VIEW+https intent inside <queries> — without it,
+# AppLauncher.openUrl resolves { completed:false } and the launch silently
+# degrades to a Custom Tab, which swallows Meta's Embedded Signup navigation.
+# That exact hole shipped in v2.0.14/2.0.15 and was undetectable in server
+# logs (a Custom Tab sends Chrome's UA and cookies). Earlier "verified in the
+# shipped artifact" claims were MANUAL — this codifies the check, and it runs
+# BEFORE publishReleaseBundle so a bad manifest never reaches Play.
+# processReleaseMainManifest alone is cheap (seconds, cached).
+echo -e "${BLUE}🔎 Verifying merged release manifest (browser visibility)...${NC}"
+( cd frontend/android && ./gradlew :app:processReleaseMainManifest \
+    -PappVersionName="$VERSION_NAME" -PappVersionCode="$VERSION_CODE" \
+    --no-daemon -q )
+MERGED_MANIFEST="frontend/android/app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml"
+if ! awk '/<queries>/,/<\/queries>/' "$MERGED_MANIFEST" 2>/dev/null | grep -q 'android:scheme="https"'; then
+    echo -e "${RED}❌ Merged manifest has NO https intent inside <queries>${NC}"
+    echo -e "   ($MERGED_MANIFEST)"
+    echo -e "   Every openInSystemBrowser() call in this build would silently degrade to"
+    echo -e "   a Custom Tab and the in-app WhatsApp connect would dead-tap again"
+    echo -e "   (v2.0.14–v2.0.17 regression). Restore the <queries> https intent in"
+    echo -e "   frontend/android/app/src/main/AndroidManifest.xml. Not building."
+    exit 1
+fi
+echo -e "${GREEN}✅ Merged manifest carries the https <queries> intent${NC}"
+
 # ─── Gradle: build (and upload unless dry-run) ───
 echo ""
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
