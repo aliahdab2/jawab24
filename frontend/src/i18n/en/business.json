@@ -118,7 +118,6 @@
     "deleted": "Row deleted",
     "saveFailed": "Could not save — try again",
     "groupedHint": "Everything about one item in one card — its prices and its dates together. Jawab quotes these exactly; a dated row hides itself automatically once its date passes.",
-    "add": "Add",
     "attrPair": "{label}: {value}",
     "startsLabel": "starts",
     "rowEndDate": "End date (optional)",
@@ -133,6 +132,15 @@
     "removeSession": "Remove this date",
     "deleteEntity": "Delete this item and its dates",
     "deleteEntityConfirm": "Confirm full deletion",
-    "tierGap": "No announced dates yet in “{list}”"
+    "tierGap": "No announced dates yet in “{list}”",
+    "sectionGeneral": "General",
+    "sectionPricing": "Pricing",
+    "sessionN": "Date {n}",
+    "upcomingCount": "{count, plural, one {# upcoming date} other {# upcoming dates}}",
+    "noSessions": "No dates",
+    "addFirstSession": "Add the first date",
+    "addNamed": "Add {thing}",
+    "addItem": "Add item",
+    "completenessHint": "This controls how Jawab answers when a customer asks about something that is not in this list."
   }
 }

@@ -65,7 +65,6 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [entityEditing, setEntityEditing] = useState<{ unit: FactEntityUnit; baseCollection: FactCollectionWithRows | null } | null>(null);
   const [showExpired, setShowExpired] = useState<Record<string, boolean>>({});
-  const [addingTo, setAddingTo] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const collections = useMemo(() => data ?? [], [data]);
@@ -260,7 +259,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
             )}
           </span>
           {(title || pairs.length > 0) && priceTag(row)}
-          {editGlyph}
+          <span className="flex-shrink-0 text-xs font-semibold text-brand-600">{t('lists.edit')}</span>
         </button>
       </li>
     );
@@ -269,46 +268,42 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   /** A SESSION line (calendar-agenda pattern): a date chip leads, the
    *  session's values follow as one readable line. Field names stay available
    *  to assistive tech and on hover. */
-  const sessionRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean) => {
+  const sessionRow = (section: FactListSection, row: FactRowDto, expired: boolean) => {
     const pairs = rowDisplayAttributes(section, row, {
       dropLabels: faceLabel ? [faceLabel] : undefined,
     });
     const parts = formatPlainDateParts(row.startsAt, intlLocale);
     return (
-      <li key={row.id} className="list-none">
-        <button
-          type="button"
-          onClick={() => openEntity(group, { collection: section.collection, row })}
-          className={`w-full min-h-[52px] flex items-center gap-3 px-3 py-2 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
-        >
-          {parts ? (
-            <span
-              className="flex-shrink-0 w-11 rounded-lg bg-card border border-theme-border text-center py-1 leading-tight"
-              title={t('lists.startsLabel')}
-            >
-              <span className="block text-sm font-bold text-foreground tabular-nums">{parts.day}</span>
-              <span className="block text-[10px] text-muted-foreground">{parts.month}</span>
-            </span>
-          ) : (
-            <span className="flex-shrink-0 w-11 flex items-center justify-center text-icon-muted">
-              <CalendarClock className="w-4 h-4" aria-hidden="true" />
-            </span>
-          )}
-          <span className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
-            <span className="text-sm text-foreground break-words">
-              {pairs.map((a, i) => (
-                <span key={a.label} title={a.label} dir="auto">
-                  <span className="sr-only">{a.label}: </span>
-                  {a.value}
-                  {i < pairs.length - 1 && <span className="text-muted-foreground"> · </span>}
-                </span>
-              ))}
-              {pairs.length === 0 && <span dir="auto">{row.name}</span>}
-            </span>
-            {expired && expiredBadge}
+      <li
+        key={row.id}
+        className={`min-h-[48px] flex items-center gap-3 px-3 py-2 ${expired ? 'opacity-60' : ''}`}
+      >
+        {parts ? (
+          <span
+            className="flex-shrink-0 w-11 rounded-lg bg-card border border-theme-border text-center py-1 leading-tight"
+            title={t('lists.startsLabel')}
+          >
+            <span className="block text-sm font-bold text-foreground tabular-nums">{parts.day}</span>
+            <span className="block text-[10px] text-muted-foreground">{parts.month}</span>
           </span>
-          {editGlyph}
-        </button>
+        ) : (
+          <span className="flex-shrink-0 w-11 flex items-center justify-center text-icon-muted">
+            <CalendarClock className="w-4 h-4" aria-hidden="true" />
+          </span>
+        )}
+        <span className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-foreground break-words">
+            {pairs.map((a, i) => (
+              <span key={a.label} title={a.label} dir="auto">
+                <span className="sr-only">{a.label}: </span>
+                {a.value}
+                {i < pairs.length - 1 && <span className="text-muted-foreground"> · </span>}
+              </span>
+            ))}
+            {pairs.length === 0 && <span dir="auto">{row.name}</span>}
+          </span>
+          {expired && expiredBadge}
+        </span>
       </li>
     );
   };
@@ -363,6 +358,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-foreground">{collection.label}</span>
                   <span className="block text-xs text-muted-foreground mt-0.5">{t('lists.completenessAsk')}</span>
+                  <span className="block text-[11px] text-muted-foreground/80 mt-0.5">{t('lists.completenessHint')}</span>
                 </span>
                 <span className="flex items-center gap-2 flex-shrink-0">
                   <button
@@ -429,10 +425,10 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                 <button
                   type="button"
                   onClick={() => setEditing({ collection, row: null })}
-                  className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-2.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                  className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-2.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
                 >
                   <Plus className="w-3 h-3" aria-hidden="true" />
-                  {t('lists.add')}
+                  {t('lists.addItem')}
                 </button>
                 {expiredRows.length > 0 && (
                   <button
@@ -455,8 +451,21 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           const expanded = !!showExpired[group.key];
           return (
             <div key={group.key} className="rounded-xl border border-theme-border overflow-hidden">
-              <div className="px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30">
+              <div className="flex items-center justify-between gap-2 flex-wrap px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30">
                 <h3 className="text-[15px] font-bold text-foreground" dir="auto">{group.title}</h3>
+                {collections.some(isDatedCollection) && (() => {
+                  const upcoming = group.rows.filter((r) =>
+                    isDatedCollection(r.collection) && !isExpired(r.row)).length;
+                  return upcoming > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400">
+                      {t('lists.upcomingCount', { count: upcoming })}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                      {t('lists.noSessions')}
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Tier blocks — each price line with ITS dates directly under
@@ -472,11 +481,11 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                     <ul className="divide-y divide-theme-border/50">
                       {rows.filter((r) => !isExpired(r.row)).map((entry) => {
                         const sec = sectionOf(entry.collection.id);
-                        return sec && sessionRow(group, sec, entry.row, false);
+                        return sec && sessionRow(sec, entry.row, false);
                       })}
                       {expanded && rows.filter((r) => isExpired(r.row)).map((entry) => {
                         const sec = sectionOf(entry.collection.id);
-                        return sec && sessionRow(group, sec, entry.row, true);
+                        return sec && sessionRow(sec, entry.row, true);
                       })}
                     </ul>
                   </div>
@@ -494,9 +503,19 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                           )}
                           {showSessions && sessionZone(block.sessions)}
                           {block.base && datedCollection && liveSessions.length === 0 && (
-                            <p className="mx-3 mb-3 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground" dir="auto">
-                              {t('lists.tierGap', { list: datedCollection.label })}
-                            </p>
+                            <div className="mx-3 mb-3 rounded-xl bg-muted/40 px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-xs text-muted-foreground" dir="auto">
+                                {t('lists.tierGap', { list: datedCollection.label })}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => openEntity(group, block.base as { collection: FactCollectionWithRows; row: FactRowDto })}
+                                className="min-h-[30px] inline-flex items-center gap-1 rounded-full bg-brand-500/10 px-2.5 text-[11px] font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-500/20"
+                              >
+                                <Plus className="w-3 h-3" aria-hidden="true" />
+                                {t('lists.addFirstSession')}
+                              </button>
+                            </div>
                           )}
                         </div>
                       );
@@ -519,35 +538,22 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                 {/* Progressive disclosure: one quiet «+» per card; the
                     per-list choices appear only while adding. With a single
                     list there is nothing to choose — go straight to the sheet. */}
-                {addingTo !== group.key ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      collections.length === 1
-                        ? addFromGroup(group, collections[0])
-                        : setAddingTo(group.key)
-                    }
-                    className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-2.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-surface-100"
-                  >
-                    <Plus className="w-3 h-3" aria-hidden="true" />
-                    {t('lists.add')}
-                  </button>
-                ) : (
-                  collections.map((collection) => (
+                {(() => {
+                  const base = collections.find((c) => !isDatedCollection(c)) ?? collections[0];
+                  const label = faceLabel
+                    ? t('lists.addNamed', { thing: faceLabel })
+                    : t('lists.addItem');
+                  return (
                     <button
-                      key={collection.id}
                       type="button"
-                      onClick={() => {
-                        setAddingTo(null);
-                        addFromGroup(group, collection);
-                      }}
-                      className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-brand-500/50 px-2.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                      onClick={() => addFromGroup(group, base)}
+                      className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-2.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
                     >
                       <Plus className="w-3 h-3" aria-hidden="true" />
-                      {collection.label}
+                      {label}
                     </button>
-                  ))
-                )}
+                  );
+                })()}
                 {expiredCount > 0 && (
                   <button
                     type="button"

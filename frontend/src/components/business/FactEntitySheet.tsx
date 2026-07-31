@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { X, Check, Trash2, Plus } from 'lucide-react';
-import { DetailSheet, Button } from '@/components/ui';
-import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { Check, Trash2, Plus, CalendarClock } from 'lucide-react';
+import { SidePanel, Button } from '@/components/ui';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import type { FactCollectionWithRows, FactEntitySaveBody } from '@/lib/api';
 import { collectionAttributeLabels, type FactEntityUnit } from '@/utils/factListLayout';
@@ -25,17 +24,16 @@ interface FactEntitySheetProps {
 }
 
 /**
- * The single-form editor: ONE item on ONE screen — name once, its price and
- * descriptive fields once, its dates as a repeating block — exactly the record
- * the merchant thinks in («اسم الدورة، سعرها، أوقاتها، بدايتها، وصفها»).
- * Storage stays two collections (measured gating/expiry semantics); the save
- * is distributed atomically by PUT /fact-entity.
+ * The single-form editor, laid out the way the UX review asked (2026-07-31):
+ * a SIDE PANEL on desktop (the cards stay visible — no context switch, expert
+ * point 6), full sheet on mobile; the form split into labelled sections —
+ * General / Pricing / Dates — so pricing is never visually entangled with
+ * scheduling (points 2, 7, 11); each date is its own numbered card with its
+ * own delete (point 3).
  *
- * Everything here is derived from the merchant's own lists: the base fields
- * are the base collection's label union, the session fields the dated
- * collection's, the face field the discovered cross-list tier. No hardcoded
- * vocabulary — an outlet directory gets name+area, a size list gets its own
- * columns, and pages with no dated list never see a dates block.
+ * Storage stays two collections (measured gating/expiry semantics); saving
+ * distributes atomically via PUT /fact-entity. Everything is derived from the
+ * merchant's own lists — no hardcoded vocabulary.
  */
 export function FactEntitySheet({
   unit,
@@ -89,8 +87,6 @@ export function FactEntitySheet({
   );
   const [removedSessionIds, setRemovedSessionIds] = useState<string[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  useEscapeKey(onClose, true);
 
   const anyDateInvalid = sessions.some(
     (s) => s.startsAt && s.endsAt && s.endsAt < s.startsAt,
@@ -179,64 +175,64 @@ export function FactEntitySheet({
     onSave(body);
   };
 
-  const titleId = 'fact-entity-sheet-title';
   const inputClass =
     'w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500';
   const labelClass = 'block text-sm text-muted-foreground mb-1.5';
+  const sectionTitleClass =
+    'text-[11px] font-bold uppercase tracking-wide text-muted-foreground border-b border-theme-border pb-1.5 mb-4';
 
   return (
-    <DetailSheet
-      panelClassName="sm:max-h-[85vh]"
-      dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 sm:p-5 border-b border-theme-border flex-shrink-0">
-        <div className="min-w-0">
-          <h2 id={titleId} className="text-base sm:text-lg font-semibold text-foreground truncate">
-            {t('lists.editItem')}
-          </h2>
-          <p className="text-xs text-muted-foreground truncate" dir="auto">{unit.title}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={tc('close')}
-          className="min-h-[44px] min-w-[44px] -me-2 flex items-center justify-center rounded-lg hover:bg-surface-100 text-surface-500"
-        >
-          <X className="w-5 h-5" aria-hidden="true" />
-        </button>
-      </div>
-
-      {/* Body */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
-        <div>
-          <label htmlFor="entity-name" className={labelClass}>{t('lists.rowName')}</label>
-          <input
-            id="entity-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            dir={name ? 'auto' : undefined}
-            className={inputClass}
-          />
-        </div>
-
-        {unit.faceLabel && (
-          <div>
-            <label htmlFor="entity-face" className={labelClass} dir="auto">{unit.faceLabel}</label>
-            <input
-              id="entity-face"
-              type="text"
-              value={faceValue}
-              onChange={(e) => setFaceValue(e.target.value)}
-              dir={faceValue ? 'auto' : undefined}
-              className={inputClass}
-            />
+    <SidePanel isOpen onClose={onClose} title={t('lists.editItem')} subtitle={unit.title}>
+      <div className="p-4 sm:p-5 space-y-8 pb-28">
+        {/* ————— General ————— */}
+        <section aria-label={t('lists.sectionGeneral')}>
+          <h3 className={sectionTitleClass}>{t('lists.sectionGeneral')}</h3>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="entity-name" className={labelClass}>{t('lists.rowName')}</label>
+              <input
+                id="entity-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                dir={name ? 'auto' : undefined}
+                className={inputClass}
+              />
+            </div>
+            {unit.faceLabel && (
+              <div>
+                <label htmlFor="entity-face" className={labelClass} dir="auto">{unit.faceLabel}</label>
+                <input
+                  id="entity-face"
+                  type="text"
+                  value={faceValue}
+                  onChange={(e) => setFaceValue(e.target.value)}
+                  dir={faceValue ? 'auto' : undefined}
+                  className={inputClass}
+                />
+              </div>
+            )}
+            {baseCollection && baseLabels.map((label) => (
+              <div key={label}>
+                <label htmlFor={`entity-base-${label}`} className={labelClass} dir="auto">{label}</label>
+                <input
+                  id={`entity-base-${label}`}
+                  type="text"
+                  value={baseValues[label] ?? ''}
+                  onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
+                  dir={baseValues[label] ? 'auto' : undefined}
+                  className={inputClass}
+                />
+              </div>
+            ))}
           </div>
-        )}
+        </section>
 
+        {/* ————— Pricing — deliberately its own section, never mixed with
+                dates (UX review point 2) ————— */}
         {baseCollection && (
-          <>
+          <section aria-label={t('lists.sectionPricing')}>
+            <h3 className={sectionTitleClass}>{t('lists.sectionPricing')}</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label htmlFor="entity-price" className={labelClass}>{t('lists.rowPrice')}</label>
@@ -263,101 +259,105 @@ export function FactEntitySheet({
                 />
               </div>
             </div>
-            {baseLabels.map((label) => (
-              <div key={label}>
-                <label htmlFor={`entity-base-${label}`} className={labelClass} dir="auto">{label}</label>
-                <input
-                  id={`entity-base-${label}`}
-                  type="text"
-                  value={baseValues[label] ?? ''}
-                  onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
-                  dir={baseValues[label] ? 'auto' : undefined}
-                  className={inputClass}
-                />
-              </div>
-            ))}
-          </>
+          </section>
         )}
 
+        {/* ————— Dates — each one its own numbered card (point 3) ————— */}
         {sessionCollection && (
-          <div>
-            <p className="text-sm font-semibold text-foreground mb-2">{t('lists.sessions')}</p>
-            <div className="space-y-3">
-              {sessions.map((s, i) => (
-                <div key={s.rowId ?? `new-${i}`} className="rounded-xl border border-theme-border p-3 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">{i + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (s.rowId) setRemovedSessionIds((prev) => [...prev, s.rowId as string]);
-                        setSessions((prev) => prev.filter((_, j) => j !== i));
-                      }}
-                      aria-label={t('lists.removeSession')}
-                      className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
-                    >
-                      <Trash2 className="w-4 h-4" aria-hidden="true" />
-                    </button>
+          <section aria-label={t('lists.sessions')}>
+            <h3 className={sectionTitleClass}>{t('lists.sessions')}</h3>
+            {sessions.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-theme-border px-4 py-6 text-center">
+                <CalendarClock className="w-6 h-6 mx-auto text-icon-muted" aria-hidden="true" />
+                <p className="mt-2 text-sm text-muted-foreground">{t('lists.noSessions')}</p>
+                <button
+                  type="button"
+                  onClick={() => setSessions([{ values: {}, startsAt: '', endsAt: '' }])}
+                  className="mt-3 min-h-[36px] inline-flex items-center gap-1 rounded-lg bg-brand-500/10 px-3 text-xs font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-500/20"
+                >
+                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  {t('lists.addFirstSession')}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sessions.map((s, i) => (
+                  <div key={s.rowId ?? `new-${i}`} className="rounded-xl bg-muted/40 border border-theme-border/60 p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-foreground">{t('lists.sessionN', { n: i + 1 })}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (s.rowId) setRemovedSessionIds((prev) => [...prev, s.rowId as string]);
+                          setSessions((prev) => prev.filter((_, j) => j !== i));
+                        }}
+                        aria-label={t('lists.removeSession')}
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                    {sessionLabels.map((label) => (
+                      <div key={label}>
+                        <label htmlFor={`entity-session-${i}-${label}`} className={labelClass} dir="auto">{label}</label>
+                        <input
+                          id={`entity-session-${i}-${label}`}
+                          type="text"
+                          value={s.values[label] ?? ''}
+                          onChange={(e) =>
+                            setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
+                          }
+                          dir={s.values[label] ? 'auto' : undefined}
+                          className={inputClass}
+                        />
+                      </div>
+                    ))}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label htmlFor={`entity-session-${i}-start`} className={labelClass}>{t('lists.rowDate')}</label>
+                        <input
+                          id={`entity-session-${i}-start`}
+                          type="date"
+                          value={s.startsAt}
+                          onChange={(e) => setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, startsAt: e.target.value } : p)))}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor={`entity-session-${i}-end`} className={labelClass}>{t('lists.rowEndDate')}</label>
+                        <input
+                          id={`entity-session-${i}-end`}
+                          type="date"
+                          value={s.endsAt}
+                          min={s.startsAt || undefined}
+                          onChange={(e) => setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, endsAt: e.target.value } : p)))}
+                          aria-invalid={(s.startsAt && s.endsAt && s.endsAt < s.startsAt) || undefined}
+                          className={inputClass}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  {sessionLabels.map((label) => (
-                    <div key={label}>
-                      <label htmlFor={`entity-session-${i}-${label}`} className={labelClass} dir="auto">{label}</label>
-                      <input
-                        id={`entity-session-${i}-${label}`}
-                        type="text"
-                        value={s.values[label] ?? ''}
-                        onChange={(e) =>
-                          setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
-                        }
-                        dir={s.values[label] ? 'auto' : undefined}
-                        className={inputClass}
-                      />
-                    </div>
-                  ))}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label htmlFor={`entity-session-${i}-start`} className={labelClass}>{t('lists.rowDate')}</label>
-                      <input
-                        id={`entity-session-${i}-start`}
-                        type="date"
-                        value={s.startsAt}
-                        onChange={(e) => setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, startsAt: e.target.value } : p)))}
-                        className={inputClass}
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor={`entity-session-${i}-end`} className={labelClass}>{t('lists.rowEndDate')}</label>
-                      <input
-                        id={`entity-session-${i}-end`}
-                        type="date"
-                        value={s.endsAt}
-                        min={s.startsAt || undefined}
-                        onChange={(e) => setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, endsAt: e.target.value } : p)))}
-                        className={inputClass}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setSessions((prev) => [...prev, { values: {}, startsAt: '', endsAt: '' }])}
-              className="mt-2 min-h-[36px] inline-flex items-center gap-1 rounded-lg text-xs font-medium text-brand-600 hover:text-brand-700 px-2 -ms-2"
-            >
-              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-              {t('lists.addSession')}
-            </button>
-            <p className="mt-1.5 text-xs text-muted-foreground">{t('lists.rowDateHint')}</p>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setSessions((prev) => [...prev, { values: {}, startsAt: '', endsAt: '' }])}
+                  className="min-h-[40px] w-full inline-flex items-center justify-center gap-1 rounded-xl border border-dashed border-theme-border text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                >
+                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  {t('lists.addSession')}
+                </button>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-muted-foreground">{t('lists.rowDateHint')}</p>
             {anyDateInvalid && (
               <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{t('lists.dateRangeInvalid')}</p>
             )}
-          </div>
+          </section>
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
+      {/* Sticky footer inside the panel's scroll area */}
+      <div className="sticky bottom-0 inset-x-0 flex items-center gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
         {(baseRow || unit.sessions.length > 0) && (
           confirmingDelete ? (
             <Button variant="danger" size="sm" onClick={deleteEntity} loading={saving} className="max-sm:h-11">
@@ -389,6 +389,6 @@ export function FactEntitySheet({
           {tc('save')}
         </Button>
       </div>
-    </DetailSheet>
+    </SidePanel>
   );
 }

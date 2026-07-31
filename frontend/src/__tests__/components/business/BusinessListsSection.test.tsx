@@ -126,7 +126,7 @@ describe('BusinessListsSection', () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     renderSection();
     await screen.findByText('دورة ICDL');
-    const slotRow = screen.getByText('الأحد والثلاثاء').closest('button');
+    const slotRow = screen.getByText('الأحد والثلاثاء').closest('li');
     expect(slotRow?.textContent).not.toContain('ICDL');
   });
 
@@ -170,12 +170,13 @@ describe('BusinessListsSection', () => {
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
 
     // One screen: the name once, the price, AND the session's fields.
-    expect(screen.getByLabelText('Name')).toHaveValue('دورة ICDL');
-    expect(screen.getByLabelText('Price')).toHaveValue('35000');
-    expect(screen.getByLabelText('الأيام')).toHaveValue('الأحد والثلاثاء');
+    // (SidePanel renders desktop + mobile layouts, so fields appear twice.)
+    expect(screen.getAllByLabelText('Name')[0]).toHaveValue('دورة ICDL');
+    expect(screen.getAllByLabelText('Price')[0]).toHaveValue('35000');
+    expect(screen.getAllByLabelText('الأيام')[0]).toHaveValue('الأحد والثلاثاء');
 
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'دورة ICDL مسائية' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.change(screen.getAllByLabelText('Name')[0], { target: { value: 'دورة ICDL مسائية' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]);
 
     await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenCalledWith(
       PAGE,
@@ -194,9 +195,9 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
-    expect(screen.getByLabelText('End date (optional)')).toHaveValue('');
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'دورة ICDL م' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getAllByLabelText('End date (optional)')[0]).toHaveValue('');
+    fireEvent.change(screen.getAllByLabelText('Name')[0], { target: { value: 'دورة ICDL م' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]);
 
     await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenCalledWith(
       PAGE,
@@ -208,25 +209,21 @@ describe('BusinessListsSection', () => {
     ));
   });
 
-  it('adding from a card PREFILLS the entity name and key value, and POSTs to the right collection', async () => {
+  it('the card\'s named add targets the base list with the entity name prefilled', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     vi.mocked(factCollectionsApi.addRow).mockResolvedValue({ data: { data: {} } } as any);
     renderSection();
 
     await screen.findByText('دورة ICDL');
-    fireEvent.click(screen.getAllByText('Add')[0]);
-    fireEvent.click(screen.getByRole('button', { name: /مواعيد الدورات المعلنة/ }));
+    fireEvent.click(screen.getAllByText('Add item')[0]);
 
     expect(screen.getByLabelText('Name')).toHaveValue('دورة ICDL');
-    expect(screen.getByLabelText('الدورة')).toHaveValue('ICDL');
-
+    fireEvent.change(screen.getByLabelText('Price'), { target: { value: '40000' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
     await waitFor(() => expect(factCollectionsApi.addRow).toHaveBeenCalledWith(
-      PAGE, 'coll-slots',
-      expect.objectContaining({
-        name: 'دورة ICDL',
-        attributes: expect.arrayContaining([{ label: 'الدورة', value: 'ICDL' }]),
-      }),
+      PAGE, 'coll-prices',
+      expect.objectContaining({ name: 'دورة ICDL', price: '40000' }),
     ));
   });
 
@@ -264,13 +261,12 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     await screen.findByText('دورة ICDL');
-    fireEvent.click(screen.getAllByText('Add')[0]);
-    fireEvent.click(screen.getByRole('button', { name: /مواعيد الدورات المعلنة/ }));
+    fireEvent.click(screen.getAllByText('Add item')[0]);
     fireEvent.click(screen.getByText('Add a field'));
 
     const labelInput = screen.getByLabelText('Field name');
-    // Colliding with the key attribute is refused with a visible error…
-    fireEvent.change(labelInput, { target: { value: 'الدورة' } });
+    // Colliding with an existing field is refused with a visible error…
+    fireEvent.change(labelInput, { target: { value: 'ملاحظة' } });
     expect(screen.getByText('This field name is already used')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 
@@ -280,7 +276,7 @@ describe('BusinessListsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(factCollectionsApi.addRow).toHaveBeenCalledWith(
-      PAGE, 'coll-slots',
+      PAGE, 'coll-prices',
       expect.objectContaining({
         attributes: expect.arrayContaining([{ label: 'الوصف', value: 'محاسبة عملية' }]),
       }),
