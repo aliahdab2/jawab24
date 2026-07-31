@@ -1204,10 +1204,17 @@ const PagesPage: NextPageWithLayout = () => {
                           )}>{t('platformWhatsApp')}</p>
                           <Badge variant="warning" size="xs">{t('whatsappBeta')}</Badge>
                         </div>
-                        <div className="flex items-center gap-1">
-                          {/* dir=ltr keeps the +NNN phone number readable in RTL */}
-                          <p dir={page.whatsappDisplayPhoneNumber ? 'ltr' : undefined} className={clsx(
-                            'text-xs font-medium',
+                        <div className="flex items-center gap-1 min-w-0">
+                          {/* dir=ltr keeps the +NNN phone number readable in RTL.
+                              A phone number must never wrap: "+1 555-396-9839"
+                              broke across two lines on a narrow Arabic card and
+                              read as two different numbers (reported 2026-07-31).
+                              nowrap + truncate degrades to an ellipsis instead,
+                              tabular-nums keeps the digits from jittering. */}
+                          <p dir={page.whatsappDisplayPhoneNumber ? 'ltr' : undefined}
+                            title={page.whatsappDisplayPhoneNumber ?? undefined}
+                            className={clsx(
+                            'text-xs font-medium whitespace-nowrap truncate tabular-nums text-start',
                             page.whatsappConnected && page.whatsappAutoReplyEnabled
                               ? 'text-emerald-600 dark:text-emerald-400'
                               : 'text-muted-foreground'
@@ -1230,7 +1237,15 @@ const PagesPage: NextPageWithLayout = () => {
                           <button
                             type="button"
                             onClick={() => (isWhatsAppOnly ? setRemoveWhatsAppOnlyPage(page) : setDisconnectWhatsAppPage(page))}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-icon-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                            className={clsx(
+                              'w-7 h-7 rounded-lg flex items-center justify-center text-icon-muted transition-colors',
+                              'hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40',
+                              // 28px is well under the 44px touch minimum, and this
+                              // is a DESTRUCTIVE control sitting next to the toggle —
+                              // a mis-tap disconnects the number. Expand the hit area
+                              // without moving anything, same technique as Toggle.tsx.
+                              'relative before:content-[""] before:absolute before:-inset-2 before:z-0',
+                            )}
                             aria-label={`${t('whatsappDisconnect')} - ${page.name}`}
                             title={t('whatsappDisconnect')}
                           >
