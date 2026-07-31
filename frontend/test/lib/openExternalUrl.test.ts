@@ -4,6 +4,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 vi.mock('@capacitor/core', () => ({
   Capacitor: {
     isNativePlatform: vi.fn(() => false),
+    getPlatform: vi.fn(() => 'android'),
   },
 }));
 
@@ -18,6 +19,10 @@ vi.mock('@capacitor/app-launcher', () => ({
   AppLauncher: {
     openUrl: vi.fn(),
   },
+}));
+
+vi.mock('@/lib/sentryHelpers', () => ({
+  captureError: vi.fn(),
 }));
 
 import { openExternalUrl, openInSystemBrowser } from '@/lib/openExternalUrl';
@@ -102,6 +107,23 @@ describe('openInSystemBrowser', () => {
     await openInSystemBrowser('https://jawab24.com/login');
 
     expect(Browser.open).toHaveBeenCalledWith({ url: 'https://jawab24.com/login' });
+  });
+
+  it('REPORTS the degradation — a Custom Tab is indistinguishable from a real browser in logs', async () => {
+    // 2026-07-31: a missing <queries> https declaration made every launch
+    // resolve { completed: false } on Android 11+, so the app fell back to the
+    // Custom Tab — which carries the same cookies AND the same user-agent.
+    // Server logs showed a healthy handoff while Embedded Signup died. The
+    // fallback must never be silent again.
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+    const { AppLauncher } = await import('@capacitor/app-launcher');
+    const { captureError } = await import('@/lib/sentryHelpers');
+    vi.mocked(AppLauncher.openUrl).mockResolvedValueOnce({ completed: false });
+
+    await openInSystemBrowser('https://jawab24.com/login');
+    await vi.waitFor(() => expect(captureError).toHaveBeenCalled());
+
+    expect(vi.mocked(captureError).mock.calls[0][1]).toContain('degraded');
   });
 
   it('opens a new tab on web, where popups already work', async () => {
