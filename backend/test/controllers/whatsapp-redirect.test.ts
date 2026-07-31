@@ -72,7 +72,23 @@ vi.mock('../../src/services/channelTrial', () => ({
 }));
 vi.mock('../../src/services/businessReadiness', () => ({ businessInfoGate: vi.fn() }));
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
-vi.mock('../../src/services/auth', () => ({ authService: { getUserById: vi.fn().mockResolvedValue(null) } }));
+vi.mock('../../src/services/auth', () => ({
+    authService: {
+        getUserById: vi.fn().mockResolvedValue(null),
+        consumeBrowserHandoffCode: vi.fn().mockResolvedValue(null),
+        generateToken: vi.fn().mockReturnValue('session-token'),
+    },
+}));
+vi.mock('../../src/services/refreshToken', () => ({
+    refreshTokenService: { createRefreshToken: vi.fn().mockResolvedValue('refresh-token') },
+}));
+vi.mock('../../src/services/workspace', () => ({
+    workspaceService: {
+        getMemberRole: vi.fn(),
+        getWorkspace: vi.fn(),
+        resolveDefaultWorkspaceId: vi.fn(),
+    },
+}));
 
 // ── Imports after mocks ─────────────────────────────────────────────────────
 
@@ -81,6 +97,9 @@ import { mintWhatsAppConnectState } from '../../src/utils/whatsappConnectState';
 import { pagesService } from '../../src/services/pages';
 import { whatsappService } from '../../src/services/whatsapp';
 import { subscriptionsService } from '../../src/services/subscriptions';
+import { authService } from '../../src/services/auth';
+import { refreshTokenService } from '../../src/services/refreshToken';
+import { workspaceService } from '../../src/services/workspace';
 
 const entitled = { status: 'active', plan: { slug: 'business', whatsappEnabled: true } };
 const starter = { status: 'active', plan: { slug: 'starter', whatsappEnabled: false } };
@@ -224,6 +243,118 @@ describe('WhatsAppRedirectController.start', () => {
 });
 
 // ── callback ────────────────────────────────────────────────────────────────
+
+// ── appStart (native leg: code → cookies → 302 to Meta) ─────────────────────
+
+function buildAppStartRequest(query: Record<string, string>) {
+    return {
+        query,
+        log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    } as unknown as FastifyRequest<{ Querystring: { code?: string; pageId?: string; coexistence?: string; locale?: string; workspaceId?: string } }>;
+}
+
+function primeAppStartHappy() {
+    vi.mocked(authService.consumeBrowserHandoffCode).mockResolvedValue('user-1');
+    vi.mocked(authService.getUserById).mockResolvedValue({ id: 'user-1' } as never);
+    vi.mocked(workspaceService.getMemberRole).mockResolvedValue({ role: 'owner' } as never);
+    vi.mocked(workspaceService.getWorkspace).mockResolvedValue({ id: 'ws-1', ownerId: 'owner-1' } as never);
+}
+
+describe('WhatsAppRedirectController.appStart', () => {
+    it('happy path: consume code → sign the browser in → 302 STRAIGHT to Meta (no JS hop anywhere)', async () => {
+        primeAppStartHappy();
+        const reply = buildReply();
+        await whatsappRedirectController.appStart(
+            buildAppStartRequest({ code: 'x'.repeat(43), pageId: 'page-1', coexistence: 'false', locale: 'en', workspaceId: 'ws-1' }),
+            reply,
+        );
+
+        // The browser session is REAL login artifacts — the wizard's return to
+        // /pages must find it, and even gate failures render their toast.
+        expect(refreshTokenService.createRefreshToken).toHaveBeenCalledWith('user-1');
+        // Redirected to the dialog, not to any of our pages.
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        expect(target).toContain('https://www.facebook.com/v23.0/dialog/oauth');
+        expect(target).toContain('config_id=cfg-1');
+        expect(target).toContain('state=');
+        // Nonce cookie set alongside the session cookies.
+        expect(vi.mocked(reply.setCookie).mock.calls.some(c => c[0] === WHATSAPP_NONCE_COOKIE)).toBe(true);
+    });
+
+    it('coexistence=true rides into the dialog extras (Business-app onboarding path)', async () => {
+        primeAppStartHappy();
+        const reply = buildReply();
+        await whatsappRedirectController.appStart(
+            buildAppStartRequest({ code: 'x'.repeat(43), coexistence: 'true', locale: 'ar', workspaceId: 'ws-1' }),
+            reply,
+        );
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        expect(decodeURIComponent(target)).toContain('whatsapp_business_app_onboarding');
+    });
+
+    it('expired/used code → /login redirect, no session artifacts minted', async () => {
+        vi.mocked(authService.consumeBrowserHandoffCode).mockResolvedValue(null);
+        const reply = buildReply();
+        await whatsappRedirectController.appStart(buildAppStartRequest({ code: 'stale-code-stale-code' }), reply);
+
+        expect(reply.redirect).toHaveBeenCalledWith('https://jawab24.com/login');
+        expect(refreshTokenService.createRefreshToken).not.toHaveBeenCalled();
+    });
+
+    it('plan gate → signed-in redirect to /pages?whatsappError=WHATSAPP_PLAN_REQUIRED', async () => {
+        primeAppStartHappy();
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starter as never);
+        const reply = buildReply();
+        await whatsappRedirectController.appStart(
+            buildAppStartRequest({ code: 'x'.repeat(43), workspaceId: 'ws-1' }),
+            reply,
+        );
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        expect(target).toContain('/pages?');
+        expect(target).toContain('whatsappError=WHATSAPP_PLAN_REQUIRED');
+        // The failure page renders AUTHENTICATED — cookies were set first.
+        expect(refreshTokenService.createRefreshToken).toHaveBeenCalled();
+    });
+
+    it('non-owner member → error redirect BEFORE any state is minted (owner scope, like POST /start)', async () => {
+        primeAppStartHappy();
+        vi.mocked(workspaceService.getMemberRole).mockResolvedValue({ role: 'admin' } as never);
+        const reply = buildReply();
+        await whatsappRedirectController.appStart(
+            buildAppStartRequest({ code: 'x'.repeat(43), workspaceId: 'ws-1' }),
+            reply,
+        );
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        expect(target).toContain('whatsappError=WHATSAPP_CONNECT_FAILED');
+        expect(vi.mocked(reply.setCookie).mock.calls.some(c => c[0] === WHATSAPP_NONCE_COOKIE)).toBe(false);
+    });
+
+    it('no workspaceId param → falls back to the server-authoritative default workspace', async () => {
+        primeAppStartHappy();
+        vi.mocked(workspaceService.resolveDefaultWorkspaceId).mockResolvedValue('ws-1');
+        const reply = buildReply();
+        await whatsappRedirectController.appStart(
+            buildAppStartRequest({ code: 'x'.repeat(43) }),
+            reply,
+        );
+        expect(workspaceService.resolveDefaultWorkspaceId).toHaveBeenCalledWith('user-1');
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        expect(target).toContain('dialog/oauth');
+    });
+
+    it('404s when the rollout flag is off', async () => {
+        const { config } = await import('../../src/config');
+        const original = config.whatsappConnectRedirect;
+        (config as { whatsappConnectRedirect: boolean }).whatsappConnectRedirect = false;
+        try {
+            const reply = buildReply();
+            await whatsappRedirectController.appStart(buildAppStartRequest({ code: 'x'.repeat(43) }), reply);
+            expect(reply.status).toHaveBeenCalledWith(404);
+        } finally {
+            (config as { whatsappConnectRedirect: boolean }).whatsappConnectRedirect = original;
+        }
+    });
+});
 
 describe('WhatsAppRedirectController.callback', () => {
     it('invalid state → error redirect to the default-locale channels page, nothing exchanged', async () => {

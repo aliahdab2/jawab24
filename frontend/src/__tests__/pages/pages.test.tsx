@@ -711,13 +711,12 @@ describe('PagesPage - WhatsApp', () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
     });
 
-    it('REDIRECT flag, native: Connect opens the SYSTEM BROWSER already signed in via a single-use handoff code', async () => {
+    it('REDIRECT flag, native: the path question opens IN-APP, and the answer launches the server-302 app-start leg', async () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', 'true');
         const { Capacitor } = await import('@capacitor/core');
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
-        // The app exchanges its session for a single-use 60s code — this is
-        // what deletes the login wall (which hung on-device, 2026-07-30). Only
-        // the opaque code may ride the URL, never a session token.
+        // The app exchanges its session for a single-use 60s code — only the
+        // opaque code may ride the URL, never a session token.
         mockedApi.post.mockResolvedValueOnce({ data: { code: 'handoff-code' } } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
@@ -730,16 +729,26 @@ describe('PagesPage - WhatsApp', () => {
             fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
         });
 
+        // The onboarding-path question is asked INSIDE the app — no browser
+        // page is involved before the merchant has answered.
+        expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
+        expect(mockedApi.post).not.toHaveBeenCalledWith('/auth/browser-handoff');
+
+        await act(async () => {
+            fireEvent.click(screen.getByText(enPages.whatsappPathDedicated));
+        });
+
         expect(mockedApi.post).toHaveBeenCalledWith('/auth/browser-handoff');
 
-        // FULL system browser, NOT a Custom Tab: the Custom Tab silently
-        // swallowed the gesture-synchronous jump to Meta's dialog on a real
-        // device (2026-07-30), while full Chrome completed the flow end-to-end.
-        // /auth/sync trades the code for a real login and forwards to the
-        // connect intent — NOT /login: the wall is gone.
+        // The answer opens the SYSTEM browser at the backend app-start URL,
+        // which signs the browser in and 302s STRAIGHT to Meta — the browser's
+        // first document is facebook.com. Every shape that let the page itself
+        // jump to facebook died on a real device (Custom Tab 2026-07-30,
+        // intent-opened Chrome 2026-07-31): no JS navigation may exist here.
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
         await waitFor(() => {
             expect(mockOpenInSystemBrowser).toHaveBeenCalledWith(
-                'https://jawab24.com/en/auth/sync?code=handoff-code&redirect=%2Fpages%3FconnectWhatsApp%3Dtrue%26waPage%3Dpage_x',
+                `${apiBase}/auth/whatsapp/app-start?code=handoff-code&coexistence=false&locale=en&pageId=page_x`,
             );
         });
         expect(mockOpenExternalUrl).not.toHaveBeenCalled();
