@@ -95,9 +95,10 @@ const PagesPage: NextPageWithLayout = () => {
   const [waPreparedUrls, setWaPreparedUrls] = useState<import('@/lib/whatsappRedirect').WhatsAppSignupUrls | null>(null);
   useEffect(() => {
     setWaPreparedUrls(null);
-    // Native never uses pre-minted URLs: the in-app answer goes through the
-    // server-302 app-start leg (launchAppStart), and minting here would set a
-    // useless nonce cookie inside the WebView.
+    // Native never uses pre-minted URLs: the in-app answer mints its own state
+    // (launchNativeConnect) because it needs the `nativeApp` flag, and the
+    // nonce cookie a pre-mint would set lands in the WebView jar the browser
+    // tab can never read.
     if (whatsAppPathPageId === null || !isWhatsAppRedirectConnect() || Capacitor.isNativePlatform()) return;
     let cancelled = false;
     (async () => {
@@ -675,42 +676,37 @@ const PagesPage: NextPageWithLayout = () => {
   };
 
   /**
-   * NATIVE connect leg: exchange the app session for a single-use handoff
-   * code, then open the system browser at the backend's app-start URL — which
-   * signs the browser in (cookies) and 302s DIRECTLY to Meta's dialog. The
-   * browser's first document is facebook.com: there is no page-side JS
-   * navigation anywhere for the device's browser surface to swallow, which is
-   * what killed every earlier shape of this flow on a real device (Custom Tab
-   * AND intent-opened Chrome both dropped location.assign; a server 302 is
-   * followed by the network stack, not the renderer).
+   * NATIVE connect leg — mirrors the SHIPPED, WORKING Facebook page-connect
+   * flow (`handleReconnectFacebook` above): mint the dialog URL from our
+   * authenticated session, then `Browser.open` it so the tab's FIRST document
+   * is facebook.com.
+   *
+   * That last property is the whole fix. Three earlier shapes all put a
+   * jawab24.com page first and tried to reach Meta from there — a page-side
+   * `location.assign` in a Custom Tab (2026-07-30), the same in an
+   * intent-opened Chrome tab (2026-07-31), and a server 302 (2026-07-31) —
+   * and every one of them died silently on a real device while Facebook page
+   * connect, which opens the tab straight at Meta, has worked all along.
+   *
+   * `nativeApp: true` tells the backend this state belongs to a browser that
+   * will never carry our nonce cookie, and to bring the merchant home through
+   * the /auth/app-sync App Link (reopens the app, closes the tab) — again the
+   * same return leg the Facebook flow uses.
    */
-  const launchAppStart = async (pageId: string | null, coexistence: boolean) => {
-    addErrorBreadcrumb('whatsapp-connect', 'opening app-start in system browser', {
+  const launchNativeConnect = async (pageId: string | null, coexistence: boolean) => {
+    addErrorBreadcrumb('whatsapp-connect', 'opening Meta dialog directly in browser tab', {
       hasPage: !!pageId, coexistence,
     });
-    const { openInSystemBrowser } = await import('@/lib/openExternalUrl');
     try {
       const { api } = await import('@/lib/api');
-      const { data } = await api.post<{ code: string }>('/auth/browser-handoff');
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-      const params = new URLSearchParams({
-        code: data.code,
-        coexistence: String(coexistence),
-        locale: language,
+      const { data } = await api.post<{ url: string }>('/auth/whatsapp/start', {
+        pageId, coexistence, locale: language, nativeApp: true,
       });
-      if (pageId) params.set('pageId', pageId);
-      if (activeWorkspaceId) params.set('workspaceId', activeWorkspaceId);
-      await openInSystemBrowser(`${apiBase}/auth/whatsapp/app-start?${params.toString()}`);
+      const { Browser } = await import('@capacitor/browser');
+      await Browser.open({ url: data.url });
     } catch (error) {
-      // Mint failed (offline, expired app session): fall back to the signed-in
-      // web /pages, where the merchant can retry from the browser side.
-      addErrorBreadcrumb('whatsapp-connect', 'app-start mint failed; falling back to web /pages', {});
-      captureError(error, 'App-start handoff mint failed', { tags: { page: 'pages', action: 'whatsapp-connect' } });
-      const { buildWebAuthedUrl } = await import('@/lib/webUrl');
-      const resumePath = pageId
-        ? `/pages?connectWhatsApp=true&waPage=${encodeURIComponent(pageId)}`
-        : '/pages?connectWhatsApp=true';
-      await openInSystemBrowser(buildWebAuthedUrl(resumePath, language));
+      captureError(error, 'Native WhatsApp connect failed', { tags: { page: 'pages', action: 'whatsapp-connect' } });
+      toast.error(t('whatsappConnectFailed'));
     }
   };
 
@@ -724,18 +720,16 @@ const PagesPage: NextPageWithLayout = () => {
     const redirectFlow = isWhatsAppRedirectConnect();
     if (Capacitor.isNativePlatform()) {
       if (redirectFlow) {
-        // Ask the onboarding-path question IN-APP, then hand the browser a
-        // single server URL that 302s STRAIGHT to Meta's dialog (see
-        // launchAppStart). Every earlier shape that let the browser-side page
-        // perform the jump to facebook.com died on a real device — the Custom
-        // Tab swallowed the gesture-synchronous location.assign (2026-07-30),
-        // and so did a genuine intent-opened Chrome tab (2026-07-31) — so no
-        // JS navigation is allowed to exist on this path at all.
+        // Ask the onboarding-path question IN-APP, then open the browser tab
+        // straight at Meta's dialog (see launchNativeConnect) — the same shape
+        // Facebook page connect has used successfully all along. Never route
+        // the tab through a jawab24.com page first: three variants of that
+        // died silently on a real device (2026-07-30/31).
         const existingPage = pageId ? pages.find(p => p.id === pageId) : null;
         if (existingPage?.whatsappConnected) {
           // Reconnect: the path is server-locked to the stored value — no
           // question to ask (see the RECONNECT invariant in proceed() below).
-          await launchAppStart(pageId, existingPage.whatsappCoexistence === true);
+          await launchNativeConnect(pageId, existingPage.whatsappCoexistence === true);
           return;
         }
         setWhatsAppPathPageId(pageId ?? 'new');
@@ -1488,7 +1482,7 @@ const PagesPage: NextPageWithLayout = () => {
           // system browser via the server-302 app-start leg — the only shape
           // this device family has never swallowed (no page-side JS jump).
           if (Capacitor.isNativePlatform() && isWhatsAppRedirectConnect()) {
-            void launchAppStart(target === 'new' ? null : target, coexistence);
+            void launchNativeConnect(target === 'new' ? null : target, coexistence);
             return;
           }
           // Navigate SYNCHRONOUSLY with the tap when the URLs were pre-minted:
