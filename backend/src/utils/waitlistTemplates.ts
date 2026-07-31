@@ -13,8 +13,22 @@ import { WAITLIST_LAUNCH_AR_HTML } from '../templates/waitlistLaunchAr';
 import { WAITLIST_LAUNCH_EN_HTML } from '../templates/waitlistLaunchEn';
 import { POST_REPLY_UPDATE_AR_HTML } from '../templates/postReplyUpdateAr';
 import { POST_REPLY_UPDATE_EN_HTML } from '../templates/postReplyUpdateEn';
+import { WHATSAPP_LAUNCH_AR_HTML } from '../templates/whatsappLaunchAr';
+import { WHATSAPP_LAUNCH_EN_HTML } from '../templates/whatsappLaunchEn';
 
 export const WAITLIST_TEMPLATES: WaitlistEmailTemplate[] = [
+    {
+        id: 'whatsapp-launch-2026-07',
+        name: 'WhatsApp Smart Replies — Beta launch (custom HTML; language per recipient)',
+        subjectEn: 'New in Jawab24: Smart Replies on WhatsApp — your number stays on your phone',
+        subjectAr: 'جديد في جواب24: الردود الذكية على واتساب — ورقمك يبقى على هاتفك',
+        // Plain fallbacks — used only if a recipient's language can't be resolved
+        // AND the resolved-language htmlBody is somehow missing.
+        bodyEn: 'Jawab24 now answers your WhatsApp messages (Beta). If your number is already on the WhatsApp Business app it stays on your phone — Jawab24 replies alongside you. Open Channels to connect: https://jawab24.com/en/pages (Business plan and above.)',
+        bodyAr: 'أصبح جواب24 يرد على رسائل واتساب (تجريبي). إن كان رقمك مستخدمًا في تطبيق «واتساب للأعمال» فسيبقى على هاتفك، ويرد جواب24 إلى جانبك. افتح «قنوات التواصل» للربط: https://jawab24.com/ar/pages (متاح في خطة الأعمال وما فوق.)',
+        htmlBodyAr: WHATSAPP_LAUNCH_AR_HTML,
+        htmlBodyEn: WHATSAPP_LAUNCH_EN_HTML,
+    },
     {
         id: 'post-reply-update-2026-07',
         name: 'Post Reply update (custom HTML — any-comment + image; language per recipient)',
