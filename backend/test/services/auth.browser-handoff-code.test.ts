@@ -44,7 +44,7 @@ describe('authService browser-handoff code (single-use contract)', () => {
         // 32 random bytes base64url ≈ 43 chars — opaque, no claims to decode.
         expect(code.length).toBeGreaterThanOrEqual(40);
         expect(code).not.toContain('.');
-        expect(mockRedis.set).toHaveBeenCalledWith(`handoff:browser:${code}`, 'user-1', 'EX', 60);
+        expect(mockRedis.set).toHaveBeenCalledWith(`handoff:browser:${code}`, 'user-1', 'PX', 60_000);
     });
 
     it('two mints never collide', async () => {

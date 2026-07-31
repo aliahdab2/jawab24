@@ -72,6 +72,27 @@ vi.mock('../../src/services/channelTrial', () => ({
 }));
 vi.mock('../../src/services/businessReadiness', () => ({ businessInfoGate: vi.fn() }));
 vi.mock('../../src/services/facebook', () => ({ facebookService: {} }));
+
+// In-memory Redis: the app-state single-use registry (SET PX + MULTI GET/DEL).
+const appStates = new Map<string, string>();
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        set: vi.fn(async (key: string, value: string) => { appStates.set(key, value); return 'OK'; }),
+        multi: vi.fn(() => {
+            let readKey = '';
+            const chain = {
+                get(key: string) { readKey = key; return chain; },
+                del(_key: string) { return chain; },
+                exec: async () => {
+                    const value = appStates.get(readKey) ?? null;
+                    appStates.delete(readKey);
+                    return [[null, value], [null, 1]] as [Error | null, unknown][];
+                },
+            };
+            return chain;
+        }),
+    },
+}));
 vi.mock('../../src/services/auth', () => ({
     authService: {
         getUserById: vi.fn().mockResolvedValue(null),
@@ -386,6 +407,7 @@ describe('WhatsAppRedirectController.appStart', () => {
 // ── native app flow: dialog opened directly, App-Link return ────────────────
 
 describe('native app connect (mirrors the working Facebook page-connect flow)', () => {
+    beforeEach(() => appStates.clear());
     it('start with nativeApp marks the SIGNED state so the callback can skip the nonce pairing', async () => {
         const reply = buildReply();
         await whatsappRedirectController.start(buildStartRequest({ pageId: 'page-1', nativeApp: true }), reply);
@@ -407,7 +429,10 @@ describe('native app connect (mirrors the working Facebook page-connect flow)', 
 
     it('callback: app state succeeds with NO nonce cookie and returns through the App Link', async () => {
         primeHappyMeta();
-        const { state } = mintState({ app: true });
+        const reply0 = buildReply();
+        await whatsappRedirectController.start(buildStartRequest({ pageId: 'page-1', nativeApp: true }), reply0);
+        const { urls } = vi.mocked(reply0.send).mock.calls[0][0] as { urls: { dedicated: string } };
+        const state = new URL(urls.dedicated).searchParams.get('state') ?? '';
         const reply = buildReply();
         // No nonce cookie at all — the browser tab never had one.
         await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), reply);
@@ -418,6 +443,33 @@ describe('native app connect (mirrors the working Facebook page-connect flow)', 
         expect(decodeURIComponent(target)).toContain('/pages?whatsappConnected=1');
         // No session token may ride the App Link: the app never lost its session.
         expect(target).not.toContain('token=');
+    });
+
+    it('callback: an app state is SINGLE-USE — the replay is refused', async () => {
+        primeHappyMeta();
+        const reply0 = buildReply();
+        await whatsappRedirectController.start(buildStartRequest({ pageId: 'page-1', nativeApp: true }), reply0);
+        const { urls } = vi.mocked(reply0.send).mock.calls[0][0] as { urls: { dedicated: string } };
+        const state = new URL(urls.dedicated).searchParams.get('state') ?? '';
+
+        await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), buildReply());
+        vi.mocked(whatsappService.exchangeCodeForToken).mockClear();
+
+        // Replay within the state's 30-min TTL: without this the replayer's
+        // OWN WhatsApp number would attach to the victim's workspace, since the
+        // callback re-verifies the STATE's user, not the caller's.
+        const replay = buildReply();
+        await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), replay);
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+        expect(decodeURIComponent(vi.mocked(replay.redirect).mock.calls[0][0] as string)).toContain('whatsappError=WHATSAPP_CONNECT_FAILED');
+    });
+
+    it('callback: an app state NEVER registered (forged/expired) is refused', async () => {
+        primeHappyMeta();
+        const { state } = mintState({ app: true }); // minted outside start → never registered
+        const reply = buildReply();
+        await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), reply);
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
     });
 
     it('callback: a WEB state with no nonce cookie still FAILS (the skip is app-only)', async () => {
@@ -442,7 +494,10 @@ describe('native app connect (mirrors the working Facebook page-connect flow)', 
     });
 
     it('callback: merchant cancelled in the wizard on app flow → App Link home, no error param', async () => {
-        const { state } = mintState({ app: true });
+        const reply0 = buildReply();
+        await whatsappRedirectController.start(buildStartRequest({ pageId: 'page-1', nativeApp: true }), reply0);
+        const { urls } = vi.mocked(reply0.send).mock.calls[0][0] as { urls: { dedicated: string } };
+        const state = new URL(urls.dedicated).searchParams.get('state') ?? '';
         const reply = buildReply();
         await whatsappRedirectController.callback(buildCallbackRequest({ error: 'access_denied', state }), reply);
 

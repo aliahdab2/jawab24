@@ -9,8 +9,10 @@ import { WHATSAPP_NONCE_COOKIE_OPTIONS } from '../services/cookies';
 import {
     mintWhatsAppConnectState,
     verifyWhatsAppConnectState,
+    WHATSAPP_STATE_TTL_MS,
     type WhatsAppConnectState,
 } from '../utils/whatsappConnectState';
+import { issueSingleUse, consumeSingleUse } from '../lib/singleUseKey';
 import {
     completeWhatsAppSignup,
     hasWhatsAppPlanAccess,
@@ -114,6 +116,28 @@ function handoffPage(dialogUrl: string, locale: 'ar' | 'en'): string {
 </body>
 </html>`;
 }
+
+/**
+ * Single-use registry for APP-minted states.
+ *
+ * The web flow binds a state to one browser with the nonce cookie; the app
+ * flow cannot (the cookie lands in the WebView's jar, the callback arrives in
+ * the browser's), so without a replacement an app state would be replayable
+ * for its whole 30-minute TTL by anyone who obtained it — from browser history
+ * or the URL it travels in — and a replay attaches the REPLAYER's WhatsApp
+ * number to the victim's workspace, since the callback's ownership re-verify
+ * checks the state's user, not the caller's.
+ *
+ * So app states are consumed exactly once instead. Single-use is a strictly
+ * stronger property than the same-browser binding it replaces, and it reuses
+ * the pattern already proven by the browser-handoff code.
+ */
+const appStateKey = (nonce: string) => `wa:appstate:${nonce}`;
+
+const registerAppState = (nonce: string) => issueSingleUse(appStateKey(nonce), '1', WHATSAPP_STATE_TTL_MS);
+
+/** True exactly once per minted state; false for replays, expiry, or unknown. */
+const consumeAppState = async (nonce: string) => (await consumeSingleUse(appStateKey(nonce))) === '1';
 
 /**
  * Where an APP-initiated connect returns to.
@@ -296,7 +320,14 @@ export class WhatsAppRedirectController {
         const dedicatedVariant = pathLocked ? coexistence : false;
         const first = mintWhatsAppConnectState({ ...stateInput, coexistence: coexistenceVariant });
         const second = mintWhatsAppConnectState({ ...stateInput, coexistence: dedicatedVariant }, first.nonce);
-        args.reply.setCookie(WHATSAPP_NONCE_COOKIE, first.nonce, WHATSAPP_NONCE_COOKIE_OPTIONS);
+        if (args.app) {
+            // No cookie can bind an app state to its browser — bind it to ONE
+            // use instead (see registerAppState). Siblings share the nonce, so
+            // whichever variant the merchant took, the pair is spent together.
+            await registerAppState(first.nonce);
+        } else {
+            args.reply.setCookie(WHATSAPP_NONCE_COOKIE, first.nonce, WHATSAPP_NONCE_COOKIE_OPTIONS);
+        }
 
         const urls = {
             coexistence: buildUrl(first.state, coexistenceVariant),
@@ -429,17 +460,23 @@ export class WhatsAppRedirectController {
             : pagesRedirect(state.locale, params));
         const fail = (errorCode: string) => reply.redirect(home({ whatsappError: errorCode }));
 
-        // Nonce double-submit: the state must have been minted for THIS browser.
-        // SKIPPED for app-minted states — `start` sets the cookie in the app
-        // WebView's jar while this callback arrives in the browser's, so the
-        // pair cannot exist by construction. The signed state (unforgeable,
-        // TTL'd) plus reverifyGates below carry it, exactly as the shipped
-        // Facebook mobile flow does. `state.app` itself is inside the HMAC, so
-        // a web-minted state cannot opt out of the check.
+        // Replay defence, one per flow. `state.app` is inside the HMAC, so a
+        // web-minted state can never take the app branch.
+        //   web — nonce double-submit: the state was minted for THIS browser.
+        //   app — single use: the cookie pair cannot exist across the WebView /
+        //         browser jar boundary, so the state is spent instead
+        //         (registerAppState). Strictly stronger than same-browser
+        //         binding, and it closes the replay window that simply dropping
+        //         the nonce would have left open for the state's full TTL.
         const rawCookie = request.cookies?.[WHATSAPP_NONCE_COOKIE];
         const unsigned = rawCookie ? request.unsignCookie(rawCookie) : null;
         reply.clearCookie(WHATSAPP_NONCE_COOKIE, { path: '/' });
-        if (!state.app && (!unsigned?.valid || unsigned.value !== state.nonce)) {
+        if (state.app) {
+            if (!(await consumeAppState(state.nonce))) {
+                request.log.warn('[WhatsApp redirect] app state already used or expired');
+                return fail('WHATSAPP_CONNECT_FAILED');
+            }
+        } else if (!unsigned?.valid || unsigned.value !== state.nonce) {
             request.log.warn('[WhatsApp redirect] nonce mismatch on callback');
             return fail('WHATSAPP_CONNECT_FAILED');
         }
