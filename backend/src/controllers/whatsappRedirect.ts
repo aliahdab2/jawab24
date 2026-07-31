@@ -115,6 +115,20 @@ function handoffPage(dialogUrl: string, locale: 'ar' | 'en'): string {
 </html>`;
 }
 
+/**
+ * Where an APP-initiated connect returns to.
+ *
+ * The /auth/app-sync App Link is Android-verified (assetlinks.json), so it
+ * reopens Jawab24 and closes the browser tab — the same return leg the shipped
+ * Facebook page-connect flow uses. No token rides it: the app never lost its
+ * session (it only lent the browser one), so `_app.tsx` just navigates to the
+ * intent. `redirect` is locale-less, matching the Facebook flow's contract.
+ */
+function appReturn(params: Record<string, string>): string {
+    const qs = Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : '';
+    return `${config.frontendUrl}/auth/app-sync?redirect=${encodeURIComponent(`/pages${qs}`)}`;
+}
+
 /** The redirect_uri registered at Meta. Must match byte-for-byte on both legs. */
 export function whatsappCallbackUri(): string {
     return `${config.publicApiBaseUrl}/auth/whatsapp/callback`;
@@ -155,7 +169,7 @@ export class WhatsAppRedirectController {
      * nonce cookie and returns the dialog URL for a full-page navigation.
      */
     start = async (
-        request: FastifyRequest<{ Body: { pageId?: string | null; coexistence?: boolean; locale?: string } }>,
+        request: FastifyRequest<{ Body: { pageId?: string | null; coexistence?: boolean; locale?: string; nativeApp?: boolean } }>,
         reply: FastifyReply,
     ) => {
         if (!config.whatsappConnectRedirect) {
@@ -177,6 +191,10 @@ export class WhatsAppRedirectController {
             pageId: typeof request.body?.pageId === 'string' && request.body.pageId ? request.body.pageId : null,
             coexistence: request.body?.coexistence === true,
             locale: request.body?.locale === 'en' ? 'en' : 'ar',
+            // The native app opens the dialog in its own browser tab, so the
+            // nonce cookie set on THIS response never reaches the callback —
+            // the state records that, and the callback returns via App Link.
+            app: request.body?.nativeApp === true,
             reply,
         });
         if (!prep.ok) {
@@ -202,6 +220,8 @@ export class WhatsAppRedirectController {
         pageId: string | null;
         coexistence: boolean;
         locale: 'ar' | 'en';
+        /** Minted for the native app: no nonce pairing, App-Link return. */
+        app?: boolean;
         reply: FastifyReply;
     }): Promise<
         | { ok: true; url: string; urls: { coexistence: string; dedicated: string }; coexistence: boolean; pageId: string | null; locale: 'ar' | 'en' }
@@ -253,6 +273,7 @@ export class WhatsAppRedirectController {
             workspaceId: args.workspaceId,
             pageId,
             locale,
+            ...(args.app ? { app: true as const } : {}),
         };
         const buildUrl = (state: string, withCoexistence: boolean): string => {
             const extras = JSON.stringify({
@@ -401,20 +422,31 @@ export class WhatsAppRedirectController {
             return reply.redirect(pagesRedirect('ar', { whatsappError: 'WHATSAPP_CONNECT_FAILED' }));
         }
 
-        const fail = (errorCode: string) => reply.redirect(pagesRedirect(state.locale, { whatsappError: errorCode }));
+        // Home is the App Link for an app-initiated connect (reopens Jawab24 and
+        // closes the tab), the web channels page otherwise.
+        const home = (params: Record<string, string> = {}) => (state.app
+            ? appReturn(params)
+            : pagesRedirect(state.locale, params));
+        const fail = (errorCode: string) => reply.redirect(home({ whatsappError: errorCode }));
 
         // Nonce double-submit: the state must have been minted for THIS browser.
+        // SKIPPED for app-minted states — `start` sets the cookie in the app
+        // WebView's jar while this callback arrives in the browser's, so the
+        // pair cannot exist by construction. The signed state (unforgeable,
+        // TTL'd) plus reverifyGates below carry it, exactly as the shipped
+        // Facebook mobile flow does. `state.app` itself is inside the HMAC, so
+        // a web-minted state cannot opt out of the check.
         const rawCookie = request.cookies?.[WHATSAPP_NONCE_COOKIE];
         const unsigned = rawCookie ? request.unsignCookie(rawCookie) : null;
         reply.clearCookie(WHATSAPP_NONCE_COOKIE, { path: '/' });
-        if (!unsigned?.valid || unsigned.value !== state.nonce) {
+        if (!state.app && (!unsigned?.valid || unsigned.value !== state.nonce)) {
             request.log.warn('[WhatsApp redirect] nonce mismatch on callback');
             return fail('WHATSAPP_CONNECT_FAILED');
         }
 
         // Merchant backed out inside the wizard — not an error, just go home.
         if (oauthError || !code || typeof code !== 'string') {
-            return reply.redirect(pagesRedirect(state.locale));
+            return reply.redirect(home());
         }
 
         try {
@@ -485,7 +517,7 @@ export class WhatsAppRedirectController {
                 { pageId, phoneNumberId: candidate.id, wabaId: candidate.wabaId, coexistence, tokenExpiresAt },
                 '[WhatsApp redirect] Number connected',
             );
-            return reply.redirect(pagesRedirect(state.locale, { whatsappConnected: '1', waPageId: pageId }));
+            return reply.redirect(home({ whatsappConnected: '1', waPageId: pageId }));
         } catch (error) {
             if ((error as { code?: string })?.code === '23505') {
                 return fail('WHATSAPP_NUMBER_TAKEN');

@@ -93,7 +93,7 @@ vi.mock('../../src/services/workspace', () => ({
 // ── Imports after mocks ─────────────────────────────────────────────────────
 
 import { whatsappRedirectController, pickPhoneCandidate, WHATSAPP_NONCE_COOKIE } from '../../src/controllers/whatsappRedirect';
-import { mintWhatsAppConnectState } from '../../src/utils/whatsappConnectState';
+import { mintWhatsAppConnectState, verifyWhatsAppConnectState } from '../../src/utils/whatsappConnectState';
 import { pagesService } from '../../src/services/pages';
 import { whatsappService } from '../../src/services/whatsapp';
 import { subscriptionsService } from '../../src/services/subscriptions';
@@ -380,6 +380,75 @@ describe('WhatsAppRedirectController.appStart', () => {
         } finally {
             (config as { whatsappConnectRedirect: boolean }).whatsappConnectRedirect = original;
         }
+    });
+});
+
+// ── native app flow: dialog opened directly, App-Link return ────────────────
+
+describe('native app connect (mirrors the working Facebook page-connect flow)', () => {
+    it('start with nativeApp marks the SIGNED state so the callback can skip the nonce pairing', async () => {
+        const reply = buildReply();
+        await whatsappRedirectController.start(buildStartRequest({ pageId: 'page-1', nativeApp: true }), reply);
+
+        const { urls } = vi.mocked(reply.send).mock.calls[0][0] as { urls: { dedicated: string } };
+        const stateParam = new URL(urls.dedicated).searchParams.get('state') ?? '';
+        // The flag must live INSIDE the HMAC — a web-minted state must never be
+        // able to opt out of the nonce check.
+        expect(verifyWhatsAppConnectState(stateParam)?.app).toBe(true);
+    });
+
+    it('a WEB start does NOT set the flag (default stays nonce-paired)', async () => {
+        const reply = buildReply();
+        await whatsappRedirectController.start(buildStartRequest({ pageId: 'page-1' }), reply);
+        const { urls } = vi.mocked(reply.send).mock.calls[0][0] as { urls: { dedicated: string } };
+        const stateParam = new URL(urls.dedicated).searchParams.get('state') ?? '';
+        expect(verifyWhatsAppConnectState(stateParam)?.app).toBeUndefined();
+    });
+
+    it('callback: app state succeeds with NO nonce cookie and returns through the App Link', async () => {
+        primeHappyMeta();
+        const { state } = mintState({ app: true });
+        const reply = buildReply();
+        // No nonce cookie at all — the browser tab never had one.
+        await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), reply);
+
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        // /auth/app-sync is Android-verified → reopens the app and closes the tab.
+        expect(target).toContain('/auth/app-sync?redirect=');
+        expect(decodeURIComponent(target)).toContain('/pages?whatsappConnected=1');
+        // No session token may ride the App Link: the app never lost its session.
+        expect(target).not.toContain('token=');
+    });
+
+    it('callback: a WEB state with no nonce cookie still FAILS (the skip is app-only)', async () => {
+        primeHappyMeta();
+        const { state } = mintState();
+        const reply = buildReply();
+        await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), reply);
+
+        expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
+        expect(vi.mocked(reply.redirect).mock.calls[0][0]).toContain('whatsappError=WHATSAPP_CONNECT_FAILED');
+    });
+
+    it('callback: app-state errors also come home through the App Link, not a web page', async () => {
+        vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(starter as never);
+        const { state } = mintState({ app: true });
+        const reply = buildReply();
+        await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), reply);
+
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        expect(target).toContain('/auth/app-sync?redirect=');
+        expect(decodeURIComponent(target)).toContain('whatsappError=');
+    });
+
+    it('callback: merchant cancelled in the wizard on app flow → App Link home, no error param', async () => {
+        const { state } = mintState({ app: true });
+        const reply = buildReply();
+        await whatsappRedirectController.callback(buildCallbackRequest({ error: 'access_denied', state }), reply);
+
+        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
+        expect(target).toContain('/auth/app-sync?redirect=');
+        expect(decodeURIComponent(target)).not.toContain('whatsappError');
     });
 });
 

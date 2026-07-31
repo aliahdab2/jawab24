@@ -119,6 +119,12 @@ vi.mock('@capacitor/core', () => ({
     },
 }));
 
+// The native connect + Facebook reconnect legs both hand their URL to the
+// Capacitor Browser tab; assertions here are about WHICH url it opens.
+vi.mock('@capacitor/browser', () => ({
+    Browser: { open: vi.fn().mockResolvedValue(undefined) },
+}));
+
 vi.mock('@/components/ui', () => ({
     Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     Button: ({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean }) => (
@@ -711,13 +717,12 @@ describe('PagesPage - WhatsApp', () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', '');
     });
 
-    it('REDIRECT flag, native: the path question opens IN-APP, and the answer launches the server-302 app-start leg', async () => {
+    it('REDIRECT flag, native: the path question opens IN-APP, and the answer opens the browser tab DIRECTLY at Meta', async () => {
         vi.stubEnv('NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT', 'true');
         const { Capacitor } = await import('@capacitor/core');
         vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
-        // The app exchanges its session for a single-use 60s code — only the
-        // opaque code may ride the URL, never a session token.
-        mockedApi.post.mockResolvedValueOnce({ data: { code: 'handoff-code' } } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
+        const metaUrl = 'https://www.facebook.com/v23.0/dialog/oauth?config_id=cfg&state=st';
+        mockedApi.post.mockResolvedValueOnce({ data: { url: metaUrl } } as unknown as Awaited<ReturnType<typeof mockedApi.post>>);
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: [{ ...WA_PAGE, id: 'page_x', whatsappConnected: false, whatsappPhoneNumberId: null, whatsappDisplayPhoneNumber: null }] },
         } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
@@ -729,28 +734,30 @@ describe('PagesPage - WhatsApp', () => {
             fireEvent.click(screen.getByText('Connect', { selector: 'button' }));
         });
 
-        // The onboarding-path question is asked INSIDE the app — no browser
-        // page is involved before the merchant has answered.
+        // The onboarding-path question is asked INSIDE the app — nothing is
+        // minted and no browser opens before the merchant has answered.
         expect(screen.getByText(enPages.whatsappPathTitle)).toBeInTheDocument();
-        expect(mockedApi.post).not.toHaveBeenCalledWith('/auth/browser-handoff');
+        expect(mockedApi.post).not.toHaveBeenCalled();
 
         await act(async () => {
             fireEvent.click(screen.getByText(enPages.whatsappPathDedicated));
         });
 
-        expect(mockedApi.post).toHaveBeenCalledWith('/auth/browser-handoff');
-
-        // The answer opens the SYSTEM browser at the backend app-start URL,
-        // which signs the browser in and 302s STRAIGHT to Meta — the browser's
-        // first document is facebook.com. Every shape that let the page itself
-        // jump to facebook died on a real device (Custom Tab 2026-07-30,
-        // intent-opened Chrome 2026-07-31): no JS navigation may exist here.
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-        await waitFor(() => {
-            expect(mockOpenInSystemBrowser).toHaveBeenCalledWith(
-                `${apiBase}/auth/whatsapp/app-start?code=handoff-code&coexistence=false&locale=en&pageId=page_x`,
-            );
+        // `nativeApp` tells the backend this state belongs to a browser that
+        // will never carry our nonce cookie, and to return via the App Link.
+        expect(mockedApi.post).toHaveBeenCalledWith('/auth/whatsapp/start', {
+            pageId: 'page_x', coexistence: false, locale: 'en', nativeApp: true,
         });
+
+        // The tab's FIRST document must be facebook.com — mirrors the working
+        // Facebook page-connect flow. Routing the tab through a jawab24.com
+        // page first is what died on a real device three separate ways
+        // (Custom Tab + intent-opened Chrome + server 302, 2026-07-30/31).
+        const { Browser } = await import('@capacitor/browser');
+        await waitFor(() => {
+            expect(Browser.open).toHaveBeenCalledWith({ url: metaUrl });
+        });
+        expect(mockOpenInSystemBrowser).not.toHaveBeenCalled();
         expect(mockOpenExternalUrl).not.toHaveBeenCalled();
         expect(screen.queryByText(enPages.whatsappDesktopNeededTitle)).not.toBeInTheDocument();
 

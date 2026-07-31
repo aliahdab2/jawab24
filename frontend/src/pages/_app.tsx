@@ -447,6 +447,16 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
             }
           }
 
+          // No token, but an explicit intent: an app-initiated flow coming
+          // HOME rather than signing in — the WhatsApp connect return leg,
+          // where the app never lost its session (it only lent the browser
+          // one). Go to the intent; pushing `slug` would land on the bridge
+          // page itself, which re-deep-links and loops.
+          if (!token && params.has('redirect')) {
+            routerRef.current.replace(safePath).catch((err: unknown) => captureError(err, 'Deep link return failed', { tags: { page: 'deep-link', action: 'return' } }));
+            return;
+          }
+
           // Fallback: navigate to /auth/sync page (handles legacy deep links without user param)
           if (token) {
             routerRef.current.push(`/auth/sync?token=${encodeURIComponent(token)}&fbToken=${encodeURIComponent(fbToken)}&redirect=${encodeURIComponent(safePath)}`).catch((err: unknown) => captureError(err, 'Deep link auth-sync push failed', { tags: { page: 'deep-link', action: 'auth-sync' } }));

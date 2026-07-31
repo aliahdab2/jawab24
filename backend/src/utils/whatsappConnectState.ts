@@ -25,6 +25,20 @@ export interface WhatsAppConnectState {
     coexistence: boolean;
     /** Return-redirect locale. Constrained to known locales — it becomes part of a 302 target. */
     locale: 'ar' | 'en';
+    /**
+     * Minted for the NATIVE app, which opens the dialog in a Capacitor Browser
+     * tab (mirroring the proven Facebook page-connect flow). Two consequences
+     * at callback time, both keyed off this signed flag so a web state can
+     * never claim them:
+     *  - the nonce cookie is NOT checked: `start` sets it in the app WebView's
+     *    cookie jar while the callback arrives in the BROWSER's jar, so the
+     *    double-submit pair cannot exist. The HMAC state (unforgeable, TTL'd,
+     *    carrying the ids) plus the live ownership re-verify remain — exactly
+     *    the trade the shipped Facebook mobile flow already makes.
+     *  - the return leg is the /auth/app-sync App Link instead of a web page,
+     *    so Android reopens the app and closes the browser tab.
+     */
+    app?: boolean;
     nonce: string;
     /** Epoch ms. Same 10-minute window as the nonce cookie. */
     exp: number;
@@ -51,7 +65,7 @@ function sign(payload: string): Buffer {
  * cookie slot must validate whichever the merchant picks.
  */
 export function mintWhatsAppConnectState(
-    input: Pick<WhatsAppConnectState, 'userId' | 'workspaceId' | 'pageId' | 'coexistence' | 'locale'>,
+    input: Pick<WhatsAppConnectState, 'userId' | 'workspaceId' | 'pageId' | 'coexistence' | 'locale'> & Pick<Partial<WhatsAppConnectState>, 'app'>,
     sharedNonce?: string,
 ): { state: string; nonce: string } {
     const nonce = sharedNonce ?? randomBytes(16).toString('hex');
