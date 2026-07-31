@@ -37,7 +37,7 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import SallaConnected from './connected';
+import SallaConnected from '@/pages/salla/connected';
 
 describe('SallaConnected — auth hydration gate', () => {
     beforeEach(() => {
