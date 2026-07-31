@@ -92,15 +92,18 @@ describe('BusinessListsSection', () => {
     expect(container.querySelector('section')).toBeNull();
   });
 
-  it('shows ONE card per entity with a labelled SECTION per list — the course name once, the list names as section headers', async () => {
+  it('ONE card per entity, and the dates sit DIRECTLY under their price line — nothing far apart', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     renderSection();
 
     expect(await screen.findAllByText('دورة ICDL')).toHaveLength(1);
-    // Each collection label appears once as the completeness strip AND once
-    // per card section that has rows. ICDL card has both sections.
-    expect(screen.getAllByText('أسعار الدورات').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText('مواعيد الدورات المعلنة').length).toBeGreaterThanOrEqual(2);
+    // The session row is NESTED under the price row inside the same card:
+    // it lives in the indented (border-inline-start) list, in the same card div.
+    const sessionRow = screen.getByText('الأحد والثلاثاء').closest('ul');
+    expect(sessionRow?.className).toContain('border-s-2');
+    const card = screen.getByText('دورة ICDL').closest('div.rounded-xl');
+    expect(card?.contains(screen.getByText(/8 جلسات/))).toBe(true);
+    expect(card?.contains(screen.getByText('الأحد والثلاثاء'))).toBe(true);
   });
 
   it('renders every value WITH its label, price without raw column form, and no bare ISO dates', async () => {

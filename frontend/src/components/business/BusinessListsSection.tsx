@@ -10,7 +10,7 @@ import { todayISODate, formatPlainDate } from '@/utils/dateUtils';
 import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/factListGrouping';
 import {
   sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
-  discoverFaceLabel, buildEntityUnit, isDatedCollection,
+  discoverFaceLabel, buildEntityUnit, buildTierBlocks, isDatedCollection,
   type FactListSection, type FactEntityUnit,
 } from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
@@ -183,8 +183,8 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
 
   /** One row line inside its section: labelled pairs · price · readable date,
    *  wrapping (never truncating), the whole line one edit button. */
-  const rowButton = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, showName = false) => {
-    const pairs = rowDisplayAttributes(section, row, { keepKey: showName });
+  const rowButton = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, showName = false, dropFaceLabel?: string | null) => {
+    const pairs = rowDisplayAttributes(section, row, { keepKey: showName, dropLabels: dropFaceLabel ? [dropFaceLabel] : undefined });
     const date = row.startsAt ? formatPlainDate(row.startsAt, intlLocale) : null;
     const hasContent = pairs.length > 0 || row.price || date;
     return (
@@ -349,35 +349,59 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
             <div key={group.key} className="rounded-xl border border-theme-border overflow-hidden">
               <h3 className="px-4 pt-3 pb-1 text-sm font-semibold text-foreground" dir="auto">{group.title}</h3>
 
-              {sections.map((section) => {
-                const live = section.rows.filter((r) => !isExpired(r.row));
-                const expiredRows = section.rows.filter((r) => isExpired(r.row));
-                if (live.length === 0 && !(expanded && expiredRows.length > 0)) return null;
+              {/* Tier blocks — each price line with ITS dates directly under
+                  it (owner: «كل دورة ومعها كل معلوماتها»). Same matching as
+                  the entity form, so what you see is what the form edits. */}
+              {(() => {
+                const sectionOf = (collectionId: string) =>
+                  sections.find((sec) => sec.collection.id === collectionId);
+                const { blocks, orphans } = buildTierBlocks(group, collections, faceLabel);
+                const datedCollection = collections.find(isDatedCollection);
+                const sessionUl = (rows: typeof group.rows, keepFace: boolean) => (
+                  <ul className="ms-5 border-s-2 border-theme-border divide-y divide-theme-border">
+                    {rows.filter((r) => !isExpired(r.row)).map((entry) => {
+                      const sec = sectionOf(entry.collection.id);
+                      return sec && rowButton(group, sec, entry.row, false, false, keepFace ? undefined : faceLabel);
+                    })}
+                    {expanded && rows.filter((r) => isExpired(r.row)).map((entry) => {
+                      const sec = sectionOf(entry.collection.id);
+                      return sec && rowButton(group, sec, entry.row, true, false, keepFace ? undefined : faceLabel);
+                    })}
+                  </ul>
+                );
                 return (
-                  <div key={section.collection.id}>
-                    {collections.length > 1 && (
-                      <div className="flex items-baseline gap-2 flex-wrap px-4 pt-2 pb-1 border-t border-theme-border">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" dir="auto">
-                          {section.collection.label}
-                        </span>
-                        {section.shared.map((s) => (
-                          <span
-                            key={s.label}
-                            dir="auto"
-                            className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
-                          >
-                            {t('lists.attrPair', { label: s.label, value: s.value })}
-                          </span>
-                        ))}
+                  <>
+                    {blocks.map((block, bi) => {
+                      const baseSection = block.base ? sectionOf(block.base.collection.id) : null;
+                      const liveSessions = block.sessions.filter((r) => !isExpired(r.row));
+                      const showSessions = liveSessions.length > 0 || (expanded && block.sessions.length > 0);
+                      return (
+                        <div key={block.base?.row.id ?? `tier-${bi}`} className="border-t border-theme-border">
+                          {block.base && baseSection && (
+                            <ul>{rowButton(group, baseSection, block.base.row, isExpired(block.base.row))}</ul>
+                          )}
+                          {showSessions && sessionUl(block.sessions, !block.base)}
+                          {block.base && datedCollection && liveSessions.length === 0 && (
+                            <p className="ms-9 pb-2 -mt-1 text-xs text-muted-foreground" dir="auto">
+                              {t('lists.tierGap', { list: datedCollection.label })}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {orphans.length > 0 && (
+                      <div className="border-t border-theme-border">
+                        {datedCollection && (
+                          <p className="px-4 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" dir="auto">
+                            {datedCollection.label}
+                          </p>
+                        )}
+                        {sessionUl(orphans, true)}
                       </div>
                     )}
-                    <ul className="divide-y divide-theme-border">
-                      {live.map((entry) => rowButton(group, section, entry.row, false))}
-                      {expanded && expiredRows.map((entry) => rowButton(group, section, entry.row, true))}
-                    </ul>
-                  </div>
+                  </>
                 );
-              })}
+              })()}
 
               <div className="flex items-center gap-1.5 flex-wrap px-4 py-2 border-t border-theme-border">
                 {/* Progressive disclosure: one quiet «+» per card; the

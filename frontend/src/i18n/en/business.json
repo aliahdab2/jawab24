@@ -132,6 +132,7 @@
     "addSession": "Add another date",
     "removeSession": "Remove this date",
     "deleteEntity": "Delete this item and its dates",
-    "deleteEntityConfirm": "Confirm full deletion"
+    "deleteEntityConfirm": "Confirm full deletion",
+    "tierGap": "No announced dates yet in “{list}”"
   }
 }

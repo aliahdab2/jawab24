@@ -80,12 +80,13 @@ export function sectionizeGroup(
 export function rowDisplayAttributes(
   section: FactListSection,
   row: FactRowDto,
-  opts?: { keepKey?: boolean },
+  opts?: { keepKey?: boolean; dropLabels?: string[] },
 ): { label: string; value: string }[] {
   const { collection, labelOrder, shared } = section;
   const kept = (row.attributes ?? []).filter(
     (a) =>
       !(collection.keyAttr && a.label === collection.keyAttr) &&
+      !opts?.dropLabels?.includes(a.label) &&
       !shared.some((s) => s.label === a.label && s.value === a.value.trim()),
   );
   const sorted = kept
@@ -253,4 +254,51 @@ export function buildEntityUnit(
     sessions: sessions.filter((s) => sameFace(s.row)),
     sessionCollection,
   };
+}
+
+/** One visual block inside an entity card: a permanent row (the tier line —
+ *  its face value and price) with the dated session rows that belong to it
+ *  nested directly underneath. The owner's model, applied to the CARD too:
+ *  «المواعيد لازم تكون مع الدورة وسعرها، مش منفصلين». */
+export interface FactTierBlock {
+  base: GroupedRow | null;
+  sessions: GroupedRow[];
+}
+
+/**
+ * Arrange a card's rows as tier blocks using the same matching as the entity
+ * form (single source of truth for "which dates belong to which price"):
+ * zero/one permanent row owns every session; several split by normalized face
+ * equality, and sessions claiming no tier are returned as orphans rather than
+ * guessed onto one.
+ */
+export function buildTierBlocks(
+  group: FactListGroup,
+  collections: FactCollectionWithRows[],
+  faceLabel: string | null,
+): { blocks: FactTierBlock[]; orphans: GroupedRow[] } {
+  const datedIds = new Set(collections.filter(isDatedCollection).map((c) => c.id));
+  const bases = group.rows.filter((r) => !datedIds.has(r.collection.id));
+  const sessions = group.rows.filter((r) => datedIds.has(r.collection.id));
+
+  if (bases.length === 0) {
+    return { blocks: sessions.length ? [{ base: null, sessions }] : [], orphans: [] };
+  }
+  if (bases.length === 1) {
+    return { blocks: [{ base: bases[0], sessions }], orphans: [] };
+  }
+
+  const faceOf = (r: GroupedRow): string | null => {
+    const v = rowFaceValue(r.row, faceLabel);
+    return v === null ? null : norm(v);
+  };
+  const blocks = bases.map((base) => ({ base, sessions: [] as GroupedRow[] }));
+  const orphans: GroupedRow[] = [];
+  for (const s of sessions) {
+    const f = faceOf(s);
+    const home = f === null ? undefined : blocks.find((b) => faceOf(b.base as GroupedRow) === f);
+    if (home) home.sessions.push(s);
+    else orphans.push(s);
+  }
+  return { blocks, orphans };
 }

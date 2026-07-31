@@ -132,6 +132,7 @@
     "addSession": "إضافة موعد آخر",
     "removeSession": "إزالة هذا الموعد",
     "deleteEntity": "حذف هذا العنصر ومواعيده",
-    "deleteEntityConfirm": "تأكيد الحذف الكامل"
+    "deleteEntityConfirm": "تأكيد الحذف الكامل",
+    "tierGap": "لا مواعيد معلنة بعد في «{list}»"
   }
 }
