@@ -1,6 +1,17 @@
 # Google Play Store Listing — Jawab24
 
 > Copy-paste ready for Google Play Console. Both languages.
+>
+> **Status 2026-07-31 — the LIVE listing does NOT mention WhatsApp.** Read back from
+> the Play API: both the Arabic and English descriptions on the Console still say
+> "Facebook & Instagram" only, so nobody searching for WhatsApp finds the app. The
+> copy below is the WhatsApp-launch rewrite, pending the owner's review before it
+> is published.
+>
+> Rules applied: Arabic is **فصحى** throughout (Rule 5 — the previous draft carried
+> «ليش» and «خلّ»); no unverifiable claims (the old "226 سيناريو" line is gone —
+> the eval suite is 125 cases, and a hard number like that ages badly); WhatsApp
+> gets its own section instead of a passing mention.
 
 ---
 
@@ -8,54 +19,60 @@
 
 ### Short Description (80 chars max)
 ```
-ردود ذكية تلقائية على رسائل واتساب وفيسبوك وانستغرام لمتجرك
+ردود ذكية تلقائية على واتساب وفيسبوك وإنستغرام — لا تفوّت زبوناً
 ```
-(62 chars)
+(63 chars)
 
 ### Full Description (4000 chars max)
 ```
-جواب24 — أول نظام عربي متخصص في الرد الذكي التلقائي على رسائل ورسائل عملائك على فيسبوك وإنستغرام وواتساب.
+جواب24 — المساعد العربي الذي يرد تلقائياً على رسائل عملائك وتعليقاتهم على واتساب وفيسبوك وإنستغرام.
 
-وفّر وقتك وزد مبيعاتك بردود فورية دقيقة تعمل 24/7 — حتى وأنت نائم.
+وفّر وقتك وزد مبيعاتك بردود فورية دقيقة تعمل على مدار الساعة، حتى وأنت نائم.
 
-🔹 ليش جواب24؟
+🟢 واتساب — جديد
 
-• رد فوري بأقل من ثانية على كل رسالة وتعليق
-• يفهم العربية بلهجاتها الست (خليجية، مصرية، شامية، مغاربية، سودانية، عراقية)
+• اربط رقم واتساب للأعمال وسيرد جواب24 على رسائل عملائك تلقائياً
+• احتفظ برقمك على هاتفك كما هو: تبقى محادثاتك وجهات اتصالك مكانها، ويرد جواب24 إلى جانبك
+• أو خصّص رقماً منفصلاً للردود التلقائية وحدها
+• وعندما ترد بنفسك من هاتفك، يتوقف جواب24 فوراً ولا يزاحمك
+
+🔹 لماذا جواب24؟
+
+• رد فوري على كل رسالة وتعليق خلال ثوانٍ
+• يفهم اللهجات العربية ويجيب بلهجة عميلك نفسها
 • يرد بالعربية أو الإنجليزية حسب لغة العميل
-• نظام أمان مدمج يمنع اختلاق الأسعار والمعلومات الخاطئة
-• مُختبَر على 226 سيناريو حقيقي لضمان دقة الردود
+• حماية مدمجة تمنع اختلاق الأسعار أو المعلومات غير المؤكدة
 
 🔹 تكامل مع متجرك الإلكتروني
 
 • ربط مباشر مع سلة وشوبيفاي وزد
-• مزامنة تلقائية لكتالوج المنتجات والأسعار
-• يرد بالسعر الصحيح والوصف والتوفر
-• يقترح منتجات مناسبة حسب سؤال العميل
+• مزامنة تلقائية للمنتجات والأسعار
+• يرد بالسعر الصحيح والوصف ومدى التوفر
+• يقترح المنتج المناسب حسب سؤال العميل
 
 🔹 نوعان من الردود
 
-1. الردود الذكية — ذكاء اصطناعي يفهم السياق ويرد من قاعدة المعرفة ومنتجات متجرك
-2. رد البوست — اختر منشوراً وحدد كلمات مفتاحية، ترد عليها بالرسائل الخاصة تلقائياً
+١. الردود الذكية — ذكاء اصطناعي يفهم السياق ويجيب من معلومات نشاطك التجاري ومنتجات متجرك
+٢. رد البوست — اختر منشوراً وحدد كلمات مفتاحية، فيرد على من يكتبها برسالة خاصة تلقائياً
 
-بالإضافة إلى رسائل الترحيب ورسائل خارج ساعات العمل.
+بالإضافة إلى رسائل الترحيب ورسائل خارج أوقات العمل.
 
 🔹 لوحة تحكم متكاملة
 
-• إحصائيات الردود والرسائل بالتفصيل
-• تحكم كامل بأسلوب الرد (رسمي، عادي، حماسي)
-• قاعدة معرفة مخصصة لتدريب الذكاء الاصطناعي
-• إشعارات فورية للعملاء الغاضبين والردود منخفضة الثقة
+• إحصائيات مفصلة للرسائل والردود
+• تحكم كامل بأسلوب الرد ونبرته
+• معلومات نشاطك التجاري: تُدرّب المساعد على منتجاتك وأسعارك وسياساتك
+• تنبيهات فورية للعملاء الغاضبين وللردود منخفضة الثقة
 
-🔹 ابدأ في أقل من دقيقتين
+🔹 ابدأ خلال دقيقتين
 
-1. سجل دخولك بفيسبوك واختر صفحاتك
-2. أضف معلومات نشاطك ومنتجاتك
-3. خلّ جواب يتكفّل بالباقي
+١. سجّل دخولك واربط قنواتك: صفحة فيسبوك أو إنستغرام أو رقم واتساب
+٢. أضف معلومات نشاطك التجاري ومنتجاتك
+٣. دع جواب24 يتكفّل بالباقي
 
-مزوّد تقني معتمد من Meta — تطبيق مُراجَع وموافَق عليه للربط الآمن مع فيسبوك وإنستغرام.
+مزوّد تقني معتمد من Meta — تطبيق مُراجَع وموافَق عليه للربط الآمن مع واتساب وفيسبوك وإنستغرام.
 
-جواب24 — حوّل صفحتك إلى آلة رد ذكية 24/7.
+جواب24 — حوّل صفحتك إلى مساعد يرد على مدار الساعة.
 ```
 
 ---
@@ -64,55 +81,97 @@
 
 ### Short Description (80 chars max)
 ```
-Smart auto-replies for WhatsApp, Facebook & Instagram DMs and comments
+WhatsApp, Facebook & Instagram auto-replies — never miss a customer again
 ```
-(71 chars)
+(72 chars)
 
 ### Full Description (4000 chars max)
 ```
-Jawab24 — The first AI auto-reply platform built for Arabic-speaking and bilingual businesses.
+Jawab24 is the Arabic-first assistant that answers your customers' messages and comments automatically on WhatsApp, Facebook and Instagram.
 
-Save time and boost sales with instant, accurate responses to every message and comment on Facebook, Instagram, and WhatsApp — 24/7, even while you sleep.
+Save hours and win more sales with instant, accurate replies around the clock — even while you sleep.
+
+🟢 WhatsApp — new
+
+• Connect your WhatsApp Business number and let Jawab24 reply to customers automatically
+• Keep the number on your own phone: your chats and contacts stay exactly where they are, and Jawab24 replies alongside you
+• Or dedicate a separate number to automated replies only
+• The moment you reply yourself from your phone, Jawab24 steps back
 
 🔹 Why Jawab24?
 
-• Replies in under 1 second to every message and comment
-• Understands 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghreb, Sudanese, Iraqi)
-• Replies in Arabic or English based on the customer's language
-• Built-in safety system prevents price hallucination and misinformation
-• Extensively tested across 226 real-world scenarios to ensure reply accuracy
+• Replies to every message and comment within seconds
+• Understands Arabic dialects and answers in the customer's own dialect
+• Replies in Arabic or English, matching the customer
+• Built-in guardrails that stop invented prices and unverified claims
 
-🔹 E-Commerce Integration
+🔹 Works with your online store
 
-• Direct integration with Salla, Shopify, and Zid
-• Auto-syncs your product catalog, prices, and availability
-• Replies with correct price, description, and stock status
-• Suggests relevant products based on customer questions
+• Direct integration with Salla, Shopify and Zid
+• Products and prices sync automatically
+• Answers with the correct price, description and availability
+• Suggests the right product for the customer's question
 
-🔹 Two Reply Types
+🔹 Two kinds of replies
 
-1. Smart Replies — AI-powered, context-aware responses from your knowledge base and product catalog
-2. Post Replies — pick any post, set keywords, and Jawab auto-DMs anyone who comments with a match
+1. Smart Replies — AI that understands context and answers from your business information and product catalogue
+2. Post Replies — pick a post, set keywords, and anyone who comments them gets an automatic direct message
 
-Plus greeting messages and out-of-hours replies.
+Plus greeting messages and out-of-hours away messages.
 
-🔹 Full Dashboard
+🔹 A dashboard that tells you everything
 
-• Detailed reply and message analytics
-• Full control over reply style (Professional, Casual, Enthusiastic)
-• Custom knowledge base to train your AI assistant
-• Push notifications for angry customers and low-confidence replies
+• Detailed message and reply statistics
+• Full control over reply tone and style
+• Business information that trains the assistant on your products, prices and policies
+• Instant alerts for upset customers and low-confidence replies
 
-🔹 Get Started in Under 2 Minutes
+🔹 Live in two minutes
 
-1. Sign in with Facebook and select your pages
-2. Add your business info and products
-3. Let Jawab handle the rest
+1. Sign in and connect a channel: a Facebook Page, Instagram, or a WhatsApp number
+2. Add your business information and products
+3. Let Jawab24 handle the rest
 
-Meta Tech Provider — reviewed and approved by Meta to securely connect with your Facebook & Instagram accounts.
+A verified Meta Tech Provider — reviewed and approved for secure connections to WhatsApp, Facebook and Instagram.
 
-Jawab24 — Turn your page into a smart 24/7 sales machine.
+Jawab24 — turn your page into an assistant that never sleeps.
 ```
+
+---
+
+## Release notes — v2.0.20 (20020)
+
+> Replaces the generic "routine maintenance updates" boilerplate currently attached
+> to the internal release. Play shows these under "What's new".
+
+### Arabic
+```
+واتساب من داخل التطبيق 🟢
+• صار بإمكانك ربط رقم واتساب للأعمال مباشرة من التطبيق
+• احتفظ برقمك على هاتفك، أو خصّص رقماً للردود التلقائية وحدها
+• تحسينات على شاشة القنوات وعلى سرعة تسجيل الدخول
+```
+
+### English
+```
+WhatsApp, from inside the app 🟢
+• Connect your WhatsApp Business number directly in the app
+• Keep the number on your phone, or dedicate one to automated replies
+• Channels screen polish and faster sign-in
+```
+
+---
+
+## Open decisions before publishing
+
+1. **Zid** is claimed alongside Salla and Shopify. Salla and Shopify are live;
+   confirm Zid is merchant-ready, or drop it from both locales.
+2. **No "beta" label** in the store copy, even though the in-app WhatsApp row shows
+   a تجريبي chip. Hedged store copy converts worse and the in-app chip already sets
+   expectations — say the word if you want it added.
+3. **Screenshots still show Facebook/Instagram only.** Copy alone brings WhatsApp
+   searches in; a WhatsApp screenshot is what converts them. One capture of the
+   channels card with a connected number would close it.
 
 ---
 
