@@ -442,12 +442,19 @@ describe('native app connect (mirrors the working Facebook page-connect flow)', 
         // No nonce cookie at all — the browser tab never had one.
         await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), reply);
 
-        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
-        // /auth/app-sync is Android-verified → reopens the app and closes the tab.
-        expect(target).toContain('/auth/app-sync?redirect=');
-        expect(decodeURIComponent(target)).toContain('/pages?whatsappConnected=1');
+        // Delivered as a PAGE that navigates, never a 302: Android intercepts
+        // an App Link a page opens, not one the browser follows inside a
+        // redirect chain (a 302 stranded the merchant in the browser after a
+        // SUCCESSFUL connect, 2026-07-31).
+        expect(reply.redirect).not.toHaveBeenCalled();
+        const html = vi.mocked(reply.send).mock.calls[0][0] as string;
+        expect(html).toContain('/auth/app-sync?redirect=');
+        expect(html).toContain('location.replace(');
+        expect(decodeURIComponent(html)).toContain('/pages?whatsappConnected=1');
+        // A manual way back if the script never runs.
+        expect(html).toMatch(/<a href="[^"]*auth\/app-sync/);
         // No session token may ride the App Link: the app never lost its session.
-        expect(target).not.toContain('token=');
+        expect(html).not.toContain('token=');
     });
 
     it('callback: an app state is SINGLE-USE — the replay is refused', async () => {
@@ -466,7 +473,7 @@ describe('native app connect (mirrors the working Facebook page-connect flow)', 
         const replay = buildReply();
         await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), replay);
         expect(whatsappService.exchangeCodeForToken).not.toHaveBeenCalled();
-        expect(decodeURIComponent(vi.mocked(replay.redirect).mock.calls[0][0] as string)).toContain('whatsappError=WHATSAPP_CONNECT_FAILED');
+        expect(decodeURIComponent(vi.mocked(replay.send).mock.calls[0][0] as string)).toContain('whatsappError=WHATSAPP_CONNECT_FAILED');
     });
 
     it('callback: an app state NEVER registered (forged/expired) is refused', async () => {
@@ -493,9 +500,9 @@ describe('native app connect (mirrors the working Facebook page-connect flow)', 
         const reply = buildReply();
         await whatsappRedirectController.callback(buildCallbackRequest({ code: 'fb-code', state }), reply);
 
-        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
-        expect(target).toContain('/auth/app-sync?redirect=');
-        expect(decodeURIComponent(target)).toContain('whatsappError=');
+        const html = vi.mocked(reply.send).mock.calls[0][0] as string;
+        expect(html).toContain('/auth/app-sync?redirect=');
+        expect(decodeURIComponent(html)).toContain('whatsappError=');
     });
 
     it('callback: merchant cancelled in the wizard on app flow → App Link home, no error param', async () => {
@@ -506,9 +513,9 @@ describe('native app connect (mirrors the working Facebook page-connect flow)', 
         const reply = buildReply();
         await whatsappRedirectController.callback(buildCallbackRequest({ error: 'access_denied', state }), reply);
 
-        const target = vi.mocked(reply.redirect).mock.calls[0][0] as string;
-        expect(target).toContain('/auth/app-sync?redirect=');
-        expect(decodeURIComponent(target)).not.toContain('whatsappError');
+        const html = vi.mocked(reply.send).mock.calls[0][0] as string;
+        expect(html).toContain('/auth/app-sync?redirect=');
+        expect(decodeURIComponent(html)).not.toContain('whatsappError');
     });
 });
 
