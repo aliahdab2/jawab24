@@ -268,6 +268,46 @@ Rules, in order of how much they matter:
 5. **Measure before and after against a real corpus, never intuition.** Same method as detector changes: pull real `messages.message` + `comments.message`, run old vs new in one process, best-of-N. Report the delta AND the total across a month's traffic — a per-message number alone is easy to misread.
 6. **Latency must be observable, or the lead is undefendable.** `messageProcessor.ts` already laps all 16 pipeline stages, but via `logger.debug` while prod runs at `info` (`config.logLevel` default, no `LOG_LEVEL` in the server `.env`) — so today those timings are **dark in production**. Don't claim a latency win from local numbers alone.
 
+### 17b. Copy The Working Flow Before Inventing One
+
+**Before building any app↔browser↔third-party bridge, find the one that already
+works in this repo and read it.** Jawab24 has shipped, on-device-proven flows for
+Facebook login, Facebook page connect, and page reconnect. They are the reference
+implementation for "the native app must send the merchant to Meta and get them
+back" — not a starting point to improve on.
+
+This rule exists because ignoring it cost a full night and **six Android releases**
+(2026-07-31). WhatsApp connect kept failing on a real device while Facebook page
+connect worked the whole time, and the difference was one property nobody checked:
+
+| | Facebook page connect (works) | the three WhatsApp attempts (all failed) |
+|---|---|---|
+| Tab's FIRST document | **facebook.com** | a jawab24.com page |
+| Reaching Meta | it *is* the destination | page-side `location.assign`, or a server 302 |
+| Return | `/auth/app-sync` App Link → reopens app, closes tab | web page |
+
+**The invariant: a browser tab the app opens must START at the third party.** All
+three failing shapes — `location.assign` in a Custom Tab, the same in an
+intent-opened Chrome tab, and a server 302 — died silently on the device. The tab
+type, Android 11 package visibility, and JS were all red herrings chased in turn.
+
+Concretely, for any new app→browser handoff:
+- Mint whatever state you need from the **authenticated app session**, then
+  `Browser.open()` the third-party URL directly.
+- Return through the **`/auth/app-sync` App Link** (Android-verified: it reopens
+  the app and closes the tab). Pass only an intent — no session token — when the
+  app never lost its session.
+- **Cookie jars do not cross.** The app WebView and the browser have separate
+  jars, so any cookie-paired defence (CSRF double-submit, nonce) is unavailable
+  on this path. Replace it with an equally strong property — single-use state via
+  `lib/singleUseKey` — never just delete it. A signed state with no replay
+  defence is replayable for its whole TTL, and for connect flows a replay
+  attaches the *attacker's* asset to the victim's workspace.
+- **Server logs cannot tell a Custom Tab from Chrome** — same user-agent, same
+  cookies. Never conclude "the real browser opened" from a Chrome UA; if a code
+  path can silently degrade, mark it in-band (`launchDegraded=1`) so the logs
+  can prove which surface ran.
+
 ### 18. One Session, One Worktree — Never Edit Code in the Main Checkout
 
 **Every session that will change code starts by creating a git worktree.** The main
@@ -381,6 +421,8 @@ Local-first — no CI required:
 | `"{count} item(s)"` | ICU plural: `"{count, plural, one {# item} other {# items}}"` |
 | Hydration guard in `_app.tsx` | Never — guards belong in `DashboardLayout` |
 | Editing code in `~/Documents/AutoReply` | `EnterWorktree` first — one session, one worktree (Rule 18) |
+| Designing a new app→browser→Meta bridge | Read the working Facebook page-connect flow first (Rule 17b) — the tab must START at facebook.com |
+| "a Chrome user-agent in the logs means Chrome opened" | A Custom Tab is identical in logs — mark degradation in-band (Rule 17b) |
 | `git checkout` / `npm install` in the main checkout | Never — it breaks whatever another session is measuring |
 
 ---

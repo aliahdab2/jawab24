@@ -70,7 +70,6 @@ const PagesPage: NextPageWithLayout = () => {
   // this so no non-founder can reach the Meta signup during the canary window.
   const whatsappVisible = isWhatsAppVisible(user?.isAdmin ?? false);
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
-  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
   const isDemoUser = useIsDemoUser();
   const { canEdit, isOwner } = useWorkspaceRole();
   const queryClient = useQueryClient();

@@ -15,7 +15,7 @@ import { subscriptionsService } from './subscriptions';
 import { recordActivationEvent } from './activation';
 import { NEW_SIGNUP_SETTINGS_SEED } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
-import { redis } from '../lib/redis';
+import { issueSingleUse, consumeSingleUse } from '../lib/singleUseKey';
 // Secure JWT-like implementation using HMAC
 const ALGORITHM = 'sha256';
 
@@ -28,7 +28,7 @@ const ALGORITHM = 'sha256';
 // short-lived — it rides a URL (Custom Tab history, nginx access logs), so a
 // logged code must already be worthless. The session credentials themselves
 // never appear in a URL.
-const BROWSER_HANDOFF_CODE_TTL_SECONDS = 60;
+const BROWSER_HANDOFF_CODE_TTL_MS = 60 * 1000;
 const browserHandoffKey = (code: string) => `handoff:browser:${code}`;
 
 export const ACCESS_TOKEN_EXPIRY = 15 * 60 * 1000; // 15 minutes
@@ -351,19 +351,13 @@ export class AuthService {
     /** Mint a single-use app→browser handoff code (60 s TTL, opaque). */
     async mintBrowserHandoffCode(userId: string): Promise<string> {
         const code = crypto.randomBytes(32).toString('base64url');
-        await redis.set(browserHandoffKey(code), userId, 'EX', BROWSER_HANDOFF_CODE_TTL_SECONDS);
+        await issueSingleUse(browserHandoffKey(code), userId, BROWSER_HANDOFF_CODE_TTL_MS);
         return code;
     }
 
-    /**
-     * Atomically consume a handoff code — a second consume returns null.
-     * MULTI GET+DEL rather than GETDEL so no Redis ≥6.2 requirement sneaks in.
-     */
+    /** Atomically consume a handoff code — a second consume returns null. */
     async consumeBrowserHandoffCode(code: string): Promise<string | null> {
-        const key = browserHandoffKey(code);
-        const results = await redis.multi().get(key).del(key).exec();
-        const userId = results?.[0]?.[1];
-        return typeof userId === 'string' && userId.length > 0 ? userId : null;
+        return consumeSingleUse(browserHandoffKey(code));
     }
 
     /**
