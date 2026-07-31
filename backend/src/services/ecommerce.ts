@@ -888,9 +888,37 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
 export const EASY_MODE_PENDING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
+ * Thrown by a claim when the ownership verifier ran and the logged-in user does NOT own
+ * the store behind the pending install. Mapped to 403 by the claim handlers.
+ */
+export class ClaimOwnershipError extends Error {
+    constructor() {
+        super('Claim rejected: logged-in user does not own this store');
+        this.name = 'ClaimOwnershipError';
+    }
+}
+
+/**
+ * Thrown by a claim when ownership could not be VERIFIED (e.g. the platform API call that
+ * proves ownership failed) — distinct from a proven mismatch. Mapped to 502 by the claim
+ * handlers so the merchant retries (for Salla: "Reauthorize App" re-pushes a fresh token).
+ */
+export class ClaimVerificationUnavailableError extends Error {
+    constructor(cause?: unknown) {
+        super('Claim ownership verification unavailable');
+        this.name = 'ClaimVerificationUnavailableError';
+        this.cause = cause;
+    }
+}
+
+/**
  * Claim a pending install: decrypt token, create ecommerce_stores row, mark as claimed.
  * Accepts an optional registerWebhooks callback for platform-specific webhook setup.
  * Returns the new store or null if pending record is invalid/expired.
+ *
+ * `verifyOwnershipFn` (when provided) receives the DECRYPTED access token and must return
+ * true iff the claiming user owns the store — it runs before any store row is written and
+ * a false throws ClaimOwnershipError, leaving the pending row untouched.
  */
 export async function claimPendingInstall(
     pendingId: string,
@@ -898,6 +926,7 @@ export async function claimPendingInstall(
     platform: EcommercePlatform,
     registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<WebhookRegistrationResult | void>,
     saveWebhookStatusFn?: (storeId: string, webhookStatus: WebhookRegistrationResult) => Promise<void>,
+    verifyOwnershipFn?: (decryptedAccessToken: string) => Promise<boolean>,
 ) {
     const result = await db.select().from(pendingEcommerceInstalls)
         .where(eq(pendingEcommerceInstalls.id, pendingId))
@@ -910,7 +939,7 @@ export async function claimPendingInstall(
     if (pending.status !== 'pending' || pending.expiresAt < new Date()) return null;
     if (pending.platform !== platform) return null;
 
-    return finalizeClaim(pending, userId, platform, registerWebhooksFn, saveWebhookStatusFn);
+    return finalizeClaim(pending, userId, platform, registerWebhooksFn, saveWebhookStatusFn, verifyOwnershipFn);
 }
 
 /**
@@ -918,9 +947,10 @@ export async function claimPendingInstall(
  * merchant lands on the post-install page and logs in. Picks the newest pending row for
  * the (platform, merchantId). Returns null if none / expired.
  *
- * SECURITY: the caller MUST have established that this logged-in user owns the given
- * merchant id (verified merchant id from Salla's redirect, or an explicit confirm of a
- * detected store) — this function does not by itself prove ownership.
+ * SECURITY: the merchant id is CLIENT-SUPPLIED and only *selects* the pending row — it is
+ * never proof of ownership. Callers MUST pass `verifyOwnershipFn` (or have otherwise
+ * proven ownership); the Salla handler proves it by matching the store's registered email
+ * (fetched live with the webhook-pushed token) against the logged-in user's email.
  */
 export async function claimPendingInstallByMerchantId(
     merchantId: string,
@@ -928,6 +958,7 @@ export async function claimPendingInstallByMerchantId(
     platform: EcommercePlatform,
     registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<WebhookRegistrationResult | void>,
     saveWebhookStatusFn?: (storeId: string, webhookStatus: WebhookRegistrationResult) => Promise<void>,
+    verifyOwnershipFn?: (decryptedAccessToken: string) => Promise<boolean>,
 ) {
     const result = await db.select().from(pendingEcommerceInstalls)
         .where(and(
@@ -942,7 +973,7 @@ export async function claimPendingInstallByMerchantId(
     if (!pending) return null;
     if (pending.expiresAt < new Date()) return null;
 
-    return finalizeClaim(pending, userId, platform, registerWebhooksFn, saveWebhookStatusFn);
+    return finalizeClaim(pending, userId, platform, registerWebhooksFn, saveWebhookStatusFn, verifyOwnershipFn);
 }
 
 /** Non-secret summary of a pending install, for the post-install claim screen. */
@@ -994,6 +1025,7 @@ async function finalizeClaim(
     platform: EcommercePlatform,
     registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<WebhookRegistrationResult | void>,
     saveWebhookStatusFn?: (storeId: string, webhookStatus: WebhookRegistrationResult) => Promise<void>,
+    verifyOwnershipFn?: (decryptedAccessToken: string) => Promise<boolean>,
 ) {
     // Check if store is already linked to another user
     const existingStore = await getStoreByDomain(platform, pending.storeDomain);
@@ -1006,6 +1038,14 @@ async function finalizeClaim(
     // refreshable (Salla/Zid) without breaking the no-refresh-token case.
     const accessToken = decrypt(pending.accessToken, pending.accessTokenIv);
     const refreshToken = decryptOptional(pending.refreshToken, pending.refreshTokenIv);
+
+    // Ownership proof gate — BEFORE any write. A false is a proven mismatch (403); a
+    // verifier that cannot run at all should throw ClaimVerificationUnavailableError
+    // itself so the handler can distinguish "retry later" from "not yours".
+    if (verifyOwnershipFn) {
+        const ownsStore = await verifyOwnershipFn(accessToken);
+        if (!ownsStore) throw new ClaimOwnershipError();
+    }
 
     // Resolve user's workspace for store scoping
     const [membership] = await db.select({ workspaceId: workspaceMembers.workspaceId })

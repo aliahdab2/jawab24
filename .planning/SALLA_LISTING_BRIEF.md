@@ -86,6 +86,7 @@ Jawab24 هو مندوب مبيعاتك الذكي الذي لا ينام. يرب
 
 أهم المزايا:
 • ردود فورية على رسائل واتساب ورسائل وتعليقات فيسبوك وإنستغرام
+• يرد على تعليقات منشوراتك العامة — وليس الرسائل الخاصة فقط
 • يقرأ منتجاتك وأسعارك من سلة، ويزامنها تلقائياً عند أي تحديث
 • يقنع ويردّ بالعربية الفصحى أو بلهجة عميلك
 • يقترح المنتجات المناسبة من متجرك
@@ -108,6 +109,7 @@ What makes Jawab24 different? It understands Arabic the way your customers actua
 
 Key features:
 • Instant replies to WhatsApp messages and Facebook & Instagram messages and comments
+• Replies on your public post comments — not just DMs
 • Reads your Salla products and prices, auto-syncing on every update
 • Persuades and replies in Modern Standard Arabic or your customer's dialect
 • Recommends the right products from your catalog

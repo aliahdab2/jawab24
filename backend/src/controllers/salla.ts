@@ -11,7 +11,12 @@ import {
     listPendingInstalls,
     saveWebhookStatus,
     EASY_MODE_PENDING_TTL_MS,
+    ClaimOwnershipError,
+    ClaimVerificationUnavailableError,
 } from '../services/ecommerce';
+import { db } from '../db';
+import { users } from '../db/schema';
+import { eq } from 'drizzle-orm';
 import { tryGetUserId } from '../utils/authHelpers';
 import { captureError } from '../utils/sentryHelpers';
 import {
@@ -205,17 +210,16 @@ export async function listPendingHandler(request: FastifyRequest, reply: Fastify
  * POST /salla/store/claim { pendingId } | { merchantId } — claim a staged Easy-Mode
  * install for the logged-in user. Registers webhooks inline (claim time).
  *
- * SECURITY — DORMANT (flag off → 404) until the ownership binding is built. A raw
- * client-supplied `merchantId` is NOT proof of ownership: on its own this path would let
- * any logged-in user claim another merchant's store + token. The binding is deferred
- * pending ONE unconfirmed Salla behaviour — can a published Easy-Mode app initiate the
- * OAuth authorize redirect for identity? — which bifurcates the design (OAuth-round-trip
- * proof vs. owner-email match). See DECISIONS.md D-012 for the two branches + the exact
- * question to Salla. NOTE: `finalizeClaim`'s owner-conflict guard only blocks re-claiming
- * an already-ACTIVE store; it does NOT prove the claimer owns THIS pending row.
+ * OWNERSHIP BINDING (D-012 resolved 2026-07-18, live dry-run): Easy-Mode apps CANNOT use
+ * the OAuth authorize redirect (Salla drops the registered redirect URIs → the authorize
+ * endpoint 404s), so the proof is an owner-email match: the store's registered email —
+ * fetched live from Salla with the webhook-pushed token — must equal the logged-in user's
+ * email (Facebook-OAuth-verified; Jawab24 has no unverified-email signup). The
+ * client-supplied pendingId/merchantId only SELECTS the pending row; it is never trusted
+ * as proof. Users without an email (phone-OTP accounts) cannot claim (403 `no_email`).
  */
 export async function claimStoreHandler(request: FastifyRequest, reply: FastifyReply) {
-    // Dormant until the ownership binding is hardened (see config.salla.easyModeClaimEnabled).
+    // Dormant until the published app is switched to Easy Mode (submission day).
     if (!config.salla.easyModeClaimEnabled) return reply.status(404).send({ error: 'Not found' });
     const userId = tryGetUserId(request);
     if (!userId) return reply.status(401).send({ error: 'Unauthorized' });
@@ -225,20 +229,66 @@ export async function claimStoreHandler(request: FastifyRequest, reply: FastifyR
         return reply.status(400).send({ error: 'pendingId or merchantId is required' });
     }
 
+    const [user] = await db.select({ email: users.email }).from(users)
+        .where(eq(users.id, userId)).limit(1);
+    const userEmail = normalizeEmail(user?.email);
+    if (!userEmail) {
+        return reply.status(403).send({
+            error: 'Your account has no email address, so store ownership cannot be verified',
+            code: 'no_email',
+        });
+    }
+
+    const verifyOwnership = async (accessToken: string) => {
+        let storeInfo: Awaited<ReturnType<typeof sallaService.fetchStoreInfo>>;
+        try {
+            storeInfo = await sallaService.fetchStoreInfo(accessToken);
+        } catch (err) {
+            // Can't prove OR disprove ownership — do not 403; the merchant can re-push a
+            // fresh token via "Reauthorize App" in the Salla store admin and retry.
+            throw new ClaimVerificationUnavailableError(err);
+        }
+        return normalizeEmail(storeInfo.storeEmail) === userEmail;
+    };
+
     try {
         const store = pendingId
-            ? await claimPendingInstall(pendingId, userId, 'salla', registerSallaWebhooks, saveWebhookStatus)
-            : await claimPendingInstallByMerchantId(merchantId as string, userId, 'salla', registerSallaWebhooks, saveWebhookStatus);
+            ? await claimPendingInstall(pendingId, userId, 'salla', registerSallaWebhooks, saveWebhookStatus, verifyOwnership)
+            : await claimPendingInstallByMerchantId(merchantId as string, userId, 'salla', registerSallaWebhooks, saveWebhookStatus, verifyOwnership);
 
         if (!store) return reply.status(404).send({ error: 'No claimable Salla install found' });
         return reply.send({ sallaOnboarding: true, ecommerceStoreId: store.id });
     } catch (err) {
+        if (err instanceof ClaimOwnershipError) {
+            // Deliberately does NOT echo the store's registered email — that would hand an
+            // enumerating attacker a phishing target. The frontend renders the guidance.
+            return reply.status(403).send({
+                error: 'This store is registered to a different email address',
+                code: 'email_mismatch',
+            });
+        }
+        if (err instanceof ClaimVerificationUnavailableError) {
+            captureError(err, 'Salla claim ownership verification unavailable', {
+                tags: { service: 'salla', stage: 'claim-ownership' },
+                extra: { merchantId, pendingId },
+            });
+            return reply.status(502).send({
+                error: 'Could not verify store ownership with Salla — try again shortly',
+                code: 'store_info_unavailable',
+            });
+        }
         if (err instanceof Error && err.message.includes('already connected')) {
             return reply.status(409).send({ error: err.message });
         }
         request.log.error({ err }, 'Failed to claim Salla install');
         return reply.status(500).send({ error: 'Failed to claim Salla install' });
     }
+}
+
+/** Case/whitespace-insensitive email comparison key; null when absent. */
+function normalizeEmail(email: string | null | undefined): string | null {
+    const normalized = email?.trim().toLowerCase();
+    return normalized || null;
 }
 
 // Salla delivers TWO different order payload shapes (verified against live dev-store
@@ -383,11 +433,11 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
 
 // --- Protected API (Jawab24 JWT required) ---
 
-export const {
+const {
     authRedirect,
     authCallback,
     getStore,
-    connectStore,
+    connectStore: oauthConnectStore,
     disconnectStoreHandler,
     syncStore,
     getStoreProducts,
@@ -405,3 +455,31 @@ export const {
     pendingCookieName: 'pendingSallaId',
     pendingCookieOptions: PENDING_SALLA_COOKIE_OPTIONS,
 });
+
+/**
+ * POST /salla/store/connect — mode-aware. Once the published app runs in Easy Mode, the
+ * OAuth authorize endpoint 404s for it (Salla drops registered redirect URIs — proven in
+ * the 2026-07-18 dry-run), so offering the OAuth URL would strand merchants on a Salla
+ * error page. With the Easy-Mode flag on AND the public listing URL configured, send the
+ * App Store listing instead (the frontend redirects to whatever `authUrl` it receives);
+ * installs then arrive via app.store.authorize → pending install → email-match claim.
+ * Dev/Custom-Mode setups (flag off, or URL unset pre-approval) keep the OAuth flow.
+ */
+async function connectStore(request: FastifyRequest, reply: FastifyReply) {
+    if (config.salla.easyModeClaimEnabled && config.salla.appStoreUrl) {
+        return reply.send({ authUrl: config.salla.appStoreUrl, easyMode: true });
+    }
+    return oauthConnectStore(request, reply);
+}
+
+export {
+    authRedirect,
+    authCallback,
+    getStore,
+    connectStore,
+    disconnectStoreHandler,
+    syncStore,
+    getStoreProducts,
+    linkPage,
+    unlinkPage,
+};

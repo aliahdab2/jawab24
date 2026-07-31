@@ -14,6 +14,7 @@
 | `SALLA_EASY_MODE_CLAIM_ENABLED` | **Runtime** — `false`/unset = claim endpoints (`GET /salla/store/pending`, `POST /salla/store/claim`) return 404 (dormant); `true` = Easy-Mode installs claimable | `/var/www/jawab24/env/backend.env` | backend container recreate (no rebuild) |
 | `SALLA_SKIP_PULL_REFRESH_EASY_MODE` | Runtime — `true` = 6h pull-refresh skips Easy-Mode stores (Salla pushes refreshed tokens via re-fired `app.store.authorize`; pulling would race the push) | same file | backend container recreate |
 | `SALLA_CLIENT_ID` / `SALLA_CLIENT_SECRET` / `SALLA_WEBHOOK_SECRET` | Runtime — must match the **production** Salla Partners app (NOT Jawab24-Dev `1565152053`) | same file | backend container recreate |
+| `SALLA_APP_STORE_URL` | Runtime — public listing URL (known at approval). With the claim flag on, `POST /salla/store/connect` redirects here instead of the OAuth authorize URL, which Salla 404s for Easy-Mode apps (no registered redirect_uri — 2026-07-18 dry-run, D-031) | same file | backend container recreate |
 | Portal **Easy Mode** toggle | Salla Partners portal, per app | portal | — (published apps MUST use Easy Mode) |
 
 Two apps exist on the Partners portal: **Jawab24-Dev** (`1565152053`, Custom Mode, dev-store
@@ -28,24 +29,42 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
       international (non-KSA) bank with SWIFT/IBAN, holder name matching passport in English.
       Portal → dropdown by your name → Account Settings → Verify My Account.
       Start immediately: review time unknown, longest lead item.
-- [ ] **Easy-Mode dry-run on Jawab24-Dev done** (founder + engineering, ~30 min portal work):
-      flip Dev app to Easy Mode in the portal → reinstall on the dev store → confirm
-      `app.store.authorize` webhook lands (staged pending install, `handleStoreAuthorize`) →
-      attempt the standard OAuth authorize redirect. Outcomes to record:
-      1. Does the authorize redirect still work in Easy Mode? → settles **D-012** (YES → claim
-         binding reuses shared `authCallback`/`fetchStoreInfo`; NO → owner-email match).
-      2. Does Salla push token refreshes via re-fired `app.store.authorize`, and at what cadence?
-         → decides `SALLA_SKIP_PULL_REFRESH_EASY_MODE`.
-      3. Where are webhooks configured in Easy Mode (portal-level vs API per-store)?
-- [ ] **Easy-Mode claim binding implemented + merged** (engineering, gated on the dry-run):
-      per the confirmed D-012 branch, shipped dormant behind `SALLA_EASY_MODE_CLAIM_ENABLED`.
-      Until then real App-Store installs stage a pending row nobody can claim.
+- [x] **Publish-timing strategy SETTLED (owner, 2026-07-18): no support email — accept
+      auto-publish on approval.** Target is approval-in-hand without a *marketing* launch:
+      submission = willingness to be listed; an unpromoted listing gets near-zero traffic
+      (soft launch), and the public push stays a separate, later decision. Remember pulling
+      a live app back is NOT self-serve (booked Salla meeting once merchants subscribe).
+      The Phase 1 preconditions (WhatsApp canary, env flips incl. the claim flag ON) bind
+      to **submission/review time**, not to the marketing push — reviewers see the
+      listing's claims, and installs must be claimable the moment it's visible.
+      (The §1 email draft in `SALLA_LAUNCH_ACTIONS.md` stays available if ever needed.)
+- [x] **Easy-Mode dry-run on Jawab24-Dev DONE 2026-07-18** (founder via browser extension +
+      local ngrok harness). Outcomes (recorded in **D-031**):
+      1. **Authorize redirect is DEAD in Easy Mode** — Salla drops the registered redirect
+         URIs (no callback field in the portal); `accounts.salla.sa/oauth2/auth` fails with
+         `invalid_request … redirect_uri` before any login screen → D-012 = NO branch
+         (owner-email match). Implication: the merchant-initiated OAuth connect flow is
+         equally dead for the published app (see the `SALLA_APP_STORE_URL` switch above).
+      2. **Token re-push works** — "Reauthorize App" in the store admin re-fires
+         `app.store.authorize` with fresh tokens; ingestion verified live (pending install
+         staged, expiry ~14 days). Automatic near-expiry cadence not observable in a 30-min
+         session (docs say Salla re-fires on refresh) → still set
+         `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true` on submission day.
+      3. Webhook URL is retained portal-level in Easy Mode; the callback URL field is gone.
+- [x] **Easy-Mode claim binding implemented (2026-07-18)** — owner-email match per D-031:
+      claim finalizes only when the store's registered email (fetched live with the pushed
+      token) equals the logged-in user's email; 403 `email_mismatch` / `no_email`,
+      502 `store_info_unavailable` (remedy: Reauthorize App). Shipped dormant behind
+      `SALLA_EASY_MODE_CLAIM_ENABLED`.
 - [ ] **Marketing sign-off** on listing copy §1–2 (`.planning/SALLA_LISTING_BRIEF.md` — honesty
       pass done 2026-07-05; sales-rep frame per D-014, no transact verbs, no "AI agent").
 - [ ] **Designer assets produced** (spec in `SALLA_LAUNCH_ACTIONS.md` §3):
       exactly **3 App Gallery images @ 1366×768**, exactly **3 Key Benefits images @ 1600×1600**
       (each with title + description), **icon 512×512** PNG/JPEG ≤1MB (symbol-only, margin),
       optional **YouTube link ≤2 min**. Include a WhatsApp screenshot — the copy claims it.
+      **Usable drafts EXIST at `docs/store-listing/salla/`** (real AR app UI, verified specs,
+      AR/EN benefit copy in `benefits.md`) — founder review pending; a designer pass is
+      optional polish, not a blocker.
 - [ ] **Support inbox live** + auto-responder pasted (`SALLA_LAUNCH_ACTIONS.md` §2;
       `jawab24.com/help` already live and linked).
 - [ ] **CI green / deploys unblocked**: repo secrets `STRIPE_TEST_PUBLISHABLE_KEY` +
@@ -71,8 +90,8 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
       - Switch the production app to **Easy Mode** (mandatory for published apps).
 - [ ] **Prod env flips** (backend.env, then container recreate — NOT plain `docker restart`;
       use `up -d --force-recreate` per deploy convention):
-      - `SALLA_EASY_MODE_CLAIM_ENABLED=true` (only if Phase 0 binding is merged + deployed)
-      - `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true` if the dry-run confirmed push-refresh
+      - `SALLA_EASY_MODE_CLAIM_ENABLED=true` (binding merged 2026-07-18 — verify deployed)
+      - `SALLA_SKIP_PULL_REFRESH_EASY_MODE=true` (re-push confirmed in the 2026-07-18 dry-run)
 - [ ] **Live smoke**: from a browser, connect the dogfood Salla store against PROD
       (`jawab24.com`) via the production app → store row created with refresh token +
       `token_expires_at`; products sync; webhook delivery 200s in nginx/backend logs;
@@ -84,13 +103,20 @@ client id ≠ dev app). The dry-run happens on Dev; the submission happens on th
       Fill the 6 sections: Basic Info, App Configurations, App Features, Pricing
       (**Salla-managed billing is mandatory for paid apps** — launch is free-tier-only per the
       2026-05-30 decision, so no billing integration needed), Contact, Service Trial.
-- [ ] Expect **5–10 day review**. Assume **auto-publish on approval** (portal shows no hold
-      control — recon 2026-06-12): submit only when ready to be live.
+- [ ] Expect **5–10 day review**. Publish timing per Salla's answer to the §1 email
+      (owner strategy 2026-07-18: approval-in-hand, hold public go-live). Until Salla says
+      otherwise, assume **auto-publish on approval** (portal shows no hold control — recon
+      2026-06-12) and submit only when ready to be listed.
 
 ## Phase 3 — On approval (go-live verification)
 
+- [ ] **Set `SALLA_APP_STORE_URL=<public listing URL>`** in prod backend.env + container
+      recreate, so the dashboard "Connect Salla" action sends merchants to the listing
+      (the OAuth authorize URL is dead for Easy-Mode apps — D-031).
 - [ ] Install from the public App Store listing onto a real store → Easy-Mode token push lands →
-      pending install visible → claim flow binds it to the right Jawab24 account → products sync.
+      pending install visible → claim flow binds it to the right Jawab24 account (owner-email
+      match — sign in with the account whose email matches the store's registered email) →
+      products sync.
 - [ ] `order.created` → customer SMS fires (dedup holds: exactly one shipped SMS, tracking
       upgraded in place — see PR #411 design note).
 - [ ] `app.uninstalled` → store deactivates.

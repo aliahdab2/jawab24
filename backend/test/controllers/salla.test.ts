@@ -62,7 +62,23 @@ const mockClaimPendingInstallByMerchantId = vi.fn();
 const mockListPendingInstalls = vi.fn().mockResolvedValue([]);
 const mockSaveWebhookStatus = vi.fn().mockResolvedValue(undefined);
 
+// Real-shaped error classes so the controller's instanceof mapping is exercised.
+// vi.hoisted: the mock factory evaluates these at import-interception time, which runs
+// before any top-level class statement in this file would.
+const { MockClaimOwnershipError, MockClaimVerificationUnavailableError } = vi.hoisted(() => {
+    class MockClaimOwnershipError extends Error {
+        constructor() { super('Claim rejected: logged-in user does not own this store'); this.name = 'ClaimOwnershipError'; }
+    }
+    class MockClaimVerificationUnavailableError extends Error {
+        cause?: unknown;
+        constructor(cause?: unknown) { super('Claim ownership verification unavailable'); this.name = 'ClaimVerificationUnavailableError'; this.cause = cause; }
+    }
+    return { MockClaimOwnershipError, MockClaimVerificationUnavailableError };
+});
+
 vi.mock('../../src/services/ecommerce', () => ({
+    ClaimOwnershipError: MockClaimOwnershipError,
+    ClaimVerificationUnavailableError: MockClaimVerificationUnavailableError,
     getStoreByDomain: (...args: any[]) => mockGetStoreByDomain(...args),
     getStoreByMerchantId: (...args: any[]) => mockGetStoreByMerchantId(...args),
     // Pass-through to the real domain-first → merchantId-fallback logic so the
@@ -97,6 +113,18 @@ vi.mock('../../src/services/auth', () => ({
     },
 }));
 
+// User email lookup for the claim ownership binding (db.select({email}).from(users)...limit(1)).
+const mockUserRows = vi.fn().mockResolvedValue([{ email: 'owner@store.com' }]);
+vi.mock('../../src/db', () => ({
+    db: {
+        select: vi.fn().mockImplementation(() => ({
+            from: vi.fn().mockReturnValue({
+                where: vi.fn().mockReturnValue({ limit: (...args: any[]) => mockUserRows(...args) }),
+            }),
+        })),
+    },
+}));
+
 const mockCaptureError = vi.fn();
 vi.mock('../../src/utils/sentryHelpers', () => ({
     captureError: (...args: any[]) => mockCaptureError(...args),
@@ -125,6 +153,7 @@ vi.mock('../../src/config', () => ({
             webhookSecret: 'test_salla_webhook_secret',
             scopes: 'offline_access products.read_write settings.read',
             easyModeClaimEnabled: true,
+            appStoreUrl: '',
         },
     },
 }));
@@ -1054,7 +1083,7 @@ describe('Salla Controller', () => {
             const req = authedReq({ merchantId: '671738424' });
             const rep = mockReply();
             await claimStoreHandler(req, rep);
-            expect(mockClaimPendingInstallByMerchantId).toHaveBeenCalledWith('671738424', 'user-123', 'salla', expect.any(Function), expect.any(Function));
+            expect(mockClaimPendingInstallByMerchantId).toHaveBeenCalledWith('671738424', 'user-123', 'salla', expect.any(Function), expect.any(Function), expect.any(Function));
             expect(rep.send).toHaveBeenCalledWith({ sallaOnboarding: true, ecommerceStoreId: 'store-new' });
         });
 
@@ -1063,8 +1092,79 @@ describe('Salla Controller', () => {
             const req = authedReq({ pendingId: 'pending-1' });
             const rep = mockReply();
             await claimStoreHandler(req, rep);
-            expect(mockClaimPendingInstall).toHaveBeenCalledWith('pending-1', 'user-123', 'salla', expect.any(Function), expect.any(Function));
+            expect(mockClaimPendingInstall).toHaveBeenCalledWith('pending-1', 'user-123', 'salla', expect.any(Function), expect.any(Function), expect.any(Function));
             expect(rep.send).toHaveBeenCalledWith({ sallaOnboarding: true, ecommerceStoreId: 'store-pid' });
+        });
+
+        // --- Ownership binding (D-012 resolved 2026-07-18: owner-email match) ---
+
+        /** Runs a claim and returns the ownership verifier the handler passed to the service. */
+        const captureVerifier = async () => {
+            mockClaimPendingInstallByMerchantId.mockResolvedValue({ id: 'store-new' });
+            const req = authedReq({ merchantId: '671738424' });
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            return mockClaimPendingInstallByMerchantId.mock.calls[0][5] as (token: string) => Promise<boolean>;
+        };
+
+        it('ownership verifier: true when the store email matches the logged-in user email', async () => {
+            mockUserRows.mockResolvedValueOnce([{ email: 'owner@store.com' }]);
+            mockFetchStoreInfo.mockResolvedValueOnce({ storeEmail: 'owner@store.com', storeName: 'S', storeCurrency: 'SAR', storeDomain: 'd', merchantId: '671738424' });
+            const verifier = await captureVerifier();
+            await expect(verifier('pushed-token')).resolves.toBe(true);
+            expect(mockFetchStoreInfo).toHaveBeenCalledWith('pushed-token');
+        });
+
+        it('ownership verifier: matches case/whitespace-insensitively (never a false 403 on formatting)', async () => {
+            mockUserRows.mockResolvedValueOnce([{ email: 'Owner@Store.com ' }]);
+            mockFetchStoreInfo.mockResolvedValueOnce({ storeEmail: ' owner@STORE.com', storeName: 'S', storeCurrency: 'SAR', storeDomain: 'd', merchantId: '671738424' });
+            const verifier = await captureVerifier();
+            await expect(verifier('pushed-token')).resolves.toBe(true);
+        });
+
+        it('ownership verifier: false when the store is registered to a different email', async () => {
+            mockUserRows.mockResolvedValueOnce([{ email: 'someone-else@gmail.com' }]);
+            mockFetchStoreInfo.mockResolvedValueOnce({ storeEmail: 'owner@store.com', storeName: 'S', storeCurrency: 'SAR', storeDomain: 'd', merchantId: '671738424' });
+            const verifier = await captureVerifier();
+            await expect(verifier('pushed-token')).resolves.toBe(false);
+        });
+
+        it('ownership verifier: wraps a Salla API failure as verification-unavailable (not a mismatch)', async () => {
+            mockFetchStoreInfo.mockRejectedValueOnce(new Error('salla 500'));
+            const verifier = await captureVerifier();
+            await expect(verifier('pushed-token')).rejects.toBeInstanceOf(MockClaimVerificationUnavailableError);
+        });
+
+        it('403 no_email BEFORE any claim when the account has no email (phone-OTP accounts)', async () => {
+            mockUserRows.mockResolvedValueOnce([{ email: null }]);
+            const req = authedReq({ merchantId: '671738424' });
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(403);
+            expect(rep.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'no_email' }));
+            expect(mockClaimPendingInstallByMerchantId).not.toHaveBeenCalled();
+            expect(mockClaimPendingInstall).not.toHaveBeenCalled();
+        });
+
+        it('403 email_mismatch on ClaimOwnershipError — without echoing the store email', async () => {
+            mockClaimPendingInstallByMerchantId.mockRejectedValue(new MockClaimOwnershipError());
+            const req = authedReq({ merchantId: '671738424' });
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(403);
+            const body = rep.send.mock.calls[0][0];
+            expect(body.code).toBe('email_mismatch');
+            expect(JSON.stringify(body)).not.toContain('@'); // never leak the registered email
+        });
+
+        it('502 store_info_unavailable on ClaimVerificationUnavailableError (retryable, Sentry-captured)', async () => {
+            mockClaimPendingInstallByMerchantId.mockRejectedValue(new MockClaimVerificationUnavailableError(new Error('salla 500')));
+            const req = authedReq({ merchantId: '671738424' });
+            const rep = mockReply();
+            await claimStoreHandler(req, rep);
+            expect(rep.status).toHaveBeenCalledWith(502);
+            expect(rep.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'store_info_unavailable' }));
+            expect(mockCaptureError).toHaveBeenCalled();
         });
 
         it('400 when neither pendingId nor merchantId is supplied', async () => {
@@ -1162,6 +1262,31 @@ describe('Salla Controller', () => {
             await connectStore(req, rep);
 
             // Should still return auth URL — Salla doesn't need shop domain
+            expect(rep.send).toHaveBeenCalledWith({ authUrl: expect.any(String) });
+        });
+
+        it('returns the App Store listing URL (not OAuth) when Easy Mode is live and the URL is set', async () => {
+            // Easy-Mode apps have no registered redirect_uri — Salla 404s the OAuth
+            // authorize endpoint (2026-07-18 dry-run), so the connect action must send
+            // merchants to the public listing instead.
+            config.salla.appStoreUrl = 'https://apps.salla.sa/ar/app/123456';
+            try {
+                const req = mockRequest();
+                const rep = mockReply();
+                await connectStore(req, rep);
+                expect(rep.send).toHaveBeenCalledWith({ authUrl: 'https://apps.salla.sa/ar/app/123456', easyMode: true });
+                expect(rep.setCookie).not.toHaveBeenCalled(); // no OAuth nonce for a listing redirect
+            } finally {
+                config.salla.appStoreUrl = '';
+            }
+        });
+
+        it('keeps the OAuth flow while the listing URL is unset (pre-approval / dev Custom Mode)', async () => {
+            // easyModeClaimEnabled is true in this suite's config mock; URL unset → OAuth.
+            const req = mockRequest();
+            const rep = mockReply();
+            await connectStore(req, rep);
+            expect(rep.setCookie).toHaveBeenCalledWith('sallaNonce', expect.any(String), expect.objectContaining({ signed: true }));
             expect(rep.send).toHaveBeenCalledWith({ authUrl: expect.any(String) });
         });
     });

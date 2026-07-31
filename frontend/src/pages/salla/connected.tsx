@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import axios from 'axios';
 import { ShoppingBag, Loader2, XCircle, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { toast } from 'sonner';
@@ -25,6 +26,11 @@ export default function SallaConnected() {
   const router = useRouter();
   const t = useTranslations('salla');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  // Salla loads this page (the Easy-Mode App URL) as a fresh full-page navigation, so the
+  // persisted auth store hasn't rehydrated on first paint — isAuthenticated reads false
+  // transiently. Wait for _hasHydrated before deciding, or a logged-in merchant flashes
+  // the "you need to log in" screen. (Same rule as DashboardLayout — AI_INSTRUCTIONS §12.)
+  const _hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [phase, setPhase] = useState<Phase>('checking');
   const [merchantId, setMerchantId] = useState<string | null>(null);
   const [storeName, setStoreName] = useState<string | null>(null);
@@ -60,7 +66,7 @@ export default function SallaConnected() {
   }, []);
 
   useEffect(() => {
-    if (!router.isReady) return;
+    if (!router.isReady || !_hasHydrated) return; // keep the 'checking' spinner until auth rehydrates
     if (!isAuthenticated) {
       setPhase('needLogin');
       return;
@@ -70,7 +76,7 @@ export default function SallaConnected() {
       return;
     }
     findPending(merchantId);
-  }, [router.isReady, isAuthenticated, merchantId, findPending]);
+  }, [router.isReady, _hasHydrated, isAuthenticated, merchantId, findPending]);
 
   const handleClaim = useCallback(async () => {
     if (!merchantId) return;
@@ -79,8 +85,19 @@ export default function SallaConnected() {
       await sallaApi.claimInstall(pendingId ? { pendingId } : { merchantId });
       if (typeof window !== 'undefined') window.sessionStorage.removeItem(MERCHANT_STORAGE_KEY);
       router.replace('/salla/onboarding');
-    } catch {
-      toast.error(t('claim.error'));
+    } catch (err) {
+      // Ownership binding: the backend proves the claim by matching the logged-in
+      // account's email against the store's registered Salla email (D-012).
+      const code = axios.isAxiosError(err)
+        ? (err.response?.data as { code?: string } | undefined)?.code
+        : undefined;
+      if (code === 'email_mismatch' || code === 'no_email') {
+        toast.error(t('claim.emailMismatch'));
+      } else if (code === 'store_info_unavailable') {
+        toast.error(t('claim.verifyUnavailable'));
+      } else {
+        toast.error(t('claim.error'));
+      }
       setPhase('found');
     }
   }, [merchantId, pendingId, router, t]);
