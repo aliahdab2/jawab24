@@ -335,6 +335,19 @@ describe('BusinessListsSection', () => {
     expect(screen.queryByText(/upcoming/)).toBeNull();
   });
 
+  it('«أضف أول موعد» opens the form WITH a fresh open session — not the same as «تعديل»', async () => {
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+    renderSection();
+
+    await screen.findByText('دورة ICDL');
+    fireEvent.click(screen.getAllByText('Add the first date')[0]);
+
+    // A new empty session draft is created and expanded: its day chips are
+    // visible and none is selected yet.
+    expect(screen.getAllByRole('button', { name: 'Sunday' })[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getAllByRole('button', { name: 'Saturday' })[0]).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('the entity save strips the legacy endsAt=startsAt artifact — sessions go out with endsAt null', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
