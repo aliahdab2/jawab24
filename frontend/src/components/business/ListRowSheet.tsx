@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X, Check, Trash2, Plus } from 'lucide-react';
-import { DetailSheet, Button } from '@/components/ui';
+import { DetailSheet, Button, InfoPopover } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import type { FactRowDto } from '@/lib/api';
@@ -315,9 +315,14 @@ export function ListRowSheet({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="list-row-date" className="block text-sm text-muted-foreground mb-1.5">
-              {t('lists.rowDate')}
-            </label>
+            <span className="flex items-center gap-1.5 mb-1.5">
+              <label htmlFor="list-row-date" className="text-sm text-muted-foreground">
+                {t('lists.rowDate')}
+              </label>
+              {/* What the dates DO, in the merchant's terms — one tap away
+                  instead of a standing paragraph (owner request). */}
+              <InfoPopover label={t('lists.rowDate')}>{t('lists.rowDateHint')}</InfoPopover>
+            </span>
             <input
               id="list-row-date"
               type="date"
@@ -341,9 +346,6 @@ export function ListRowSheet({
             />
           </div>
         </div>
-        {/* What the dates DO, in the merchant's terms — shown always, not only
-            when set, so the behaviour is learned before it is relied on. */}
-        <p className="text-xs text-muted-foreground -mt-2">{t('lists.rowDateHint')}</p>
         {dateRangeInvalid && (
           <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t('lists.dateRangeInvalid')}</p>
         )}

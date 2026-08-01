@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check, Trash2, Plus, CalendarClock, ChevronDown, CalendarDays, Clock, Calendar, Tag, Banknote, AlignLeft } from 'lucide-react';
 import type { FactStructuredFieldValue, FactStructuredValues } from '@jawab24/shared';
-import { SidePanel, Button, Select } from '@/components/ui';
+import { SidePanel, Button, Select, InfoPopover } from '@/components/ui';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import { formatPlainDate } from '@/utils/dateUtils';
 import {
@@ -713,7 +713,10 @@ export function FactEntitySheet({
                     {propertyRow(`s:${s.draftKey}:dates`, t('lists.rowDate'), <Calendar className="w-3.5 h-3.5" />, datesDisplay(s) || null, (
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label htmlFor={`entity-session-${i}-start`} className={labelClass}>{t('lists.rowDate')}</label>
+                          <span className="flex items-center gap-1.5 mb-1.5">
+                            <label htmlFor={`entity-session-${i}-start`} className="text-sm text-muted-foreground">{t('lists.rowDate')}</label>
+                            <InfoPopover label={t('lists.rowDate')}>{t('lists.rowDateHint')}</InfoPopover>
+                          </span>
                           <input
                             id={`entity-session-${i}-start`}
                             type="date"
@@ -772,7 +775,6 @@ export function FactEntitySheet({
                 </button>
               </div>
             )}
-            <p className="mt-2 text-xs text-muted-foreground">{t('lists.rowDateHint')}</p>
             {anyDateInvalid && (
               <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{t('lists.dateRangeInvalid')}</p>
             )}
