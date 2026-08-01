@@ -23,7 +23,7 @@ import { customType } from 'drizzle-orm/pg-core';
  *
  * Remove this shim (switch back to drizzle's `jsonb`) only after upgrading
  * drizzle-orm to a version whose postgres-js driver passes this repo's
- * round-trip regression test: backend/src/__tests__/integration/jsonbRoundTrip.
+ * round-trip regression test: backend/test/integration/jsonbRoundTrip.test.ts.
  */
 export const jsonb = customType<{ data: unknown; driverData: unknown }>({
     dataType() {

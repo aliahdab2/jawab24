@@ -236,7 +236,8 @@ Each service is independently deployable but shares:
      tolerant string-parsing read for pre-migration rows; migration
      `0148_normalize_double_encoded_jsonb` repaired the stored rows. SQL-side
      contract pinned by `test/integration/jsonbRoundTrip.test.ts` — schema.ts must
-     import `jsonb` from here, never from `drizzle-orm/pg-core`.
+     import `jsonb` from here, never from `drizzle-orm/pg-core` (enforced by an
+     ESLint `no-restricted-imports` rule in `backend/eslint.config.mjs`).
    - Migrations auto-generated via `drizzle-kit generate:pg`
    - 20+ tables for multi-workspace, multi-page, multi-language support
 
