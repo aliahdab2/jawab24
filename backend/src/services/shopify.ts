@@ -133,6 +133,14 @@ const SHOPIFY_WEBHOOK_TOPIC_DEFS = [
 /** REST-style topic names, in registration order — pinned against the adapter copy in webhookTopicDrift.test.ts */
 export const SHOPIFY_WEBHOOK_EVENTS = SHOPIFY_WEBHOOK_TOPIC_DEFS.map(d => d.topic);
 
+/**
+ * Union of delivery route suffixes under /shopify/webhooks. routes/shopify.ts
+ * keys its handler map with this, so a path registered here without a route
+ * handler (or vice versa) is a compile error instead of a silent 404 on
+ * every delivery.
+ */
+export type ShopifyWebhookPath = (typeof SHOPIFY_WEBHOOK_TOPIC_DEFS)[number]['path'];
+
 // The query is app-scoped (only this app's subscriptions are visible), so the
 // realistic ceiling is the 8 topics plus REST-era duplicates — far below one page.
 const WEBHOOK_LIST_PAGE_SIZE = 100;

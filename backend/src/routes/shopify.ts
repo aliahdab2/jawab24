@@ -1,8 +1,19 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, RouteHandlerMethod } from 'fastify';
 import { authenticate } from '../middleware/auth';
 import { resolveWorkspace, requireRole } from '../middleware/workspace';
 import * as shopifyController from '../controllers/shopify';
 import { createReregisterHandler } from '../controllers/ecommerceWebhooks';
+import type { ShopifyWebhookPath } from '../services/shopify';
+
+// Webhook delivery handlers, keyed by the registration path union from
+// SHOPIFY_WEBHOOK_TOPIC_DEFS (services/shopify.ts) — a path subscribed there
+// without a handler here (or a leftover handler) fails type-check.
+const webhookHandlers: Record<ShopifyWebhookPath, RouteHandlerMethod> = {
+    'uninstall': shopifyController.webhookUninstall,
+    'products-update': shopifyController.webhookProductsUpdate,
+    'orders': shopifyController.webhookOrders,
+    'fulfillments': shopifyController.webhookFulfillments,
+};
 
 export default async function shopifyRoutes(fastify: FastifyInstance) {
     // --- Public routes (Shopify calls these) ---
@@ -11,10 +22,9 @@ export default async function shopifyRoutes(fastify: FastifyInstance) {
     fastify.get('/auth/callback', shopifyController.authCallback);
 
     // Webhooks (HMAC-verified in handler)
-    fastify.post('/webhooks/uninstall', shopifyController.webhookUninstall);
-    fastify.post('/webhooks/products-update', shopifyController.webhookProductsUpdate);
-    fastify.post('/webhooks/orders', shopifyController.webhookOrders);
-    fastify.post('/webhooks/fulfillments', shopifyController.webhookFulfillments);
+    for (const [path, handler] of Object.entries(webhookHandlers)) {
+        fastify.post(`/webhooks/${path}`, handler);
+    }
 
     // GDPR mandatory endpoints
     fastify.post('/gdpr/customers/data_request', shopifyController.gdprCustomerDataRequest);
