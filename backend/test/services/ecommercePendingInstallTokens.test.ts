@@ -87,6 +87,7 @@ vi.mock('../../src/db/schema', () => ({
     pendingEcommerceInstalls: {
         id: 'id', platform: 'platform', storeDomain: 'storeDomain', accessToken: 'accessToken',
         accessTokenIv: 'accessTokenIv', refreshToken: 'refreshToken', refreshTokenIv: 'refreshTokenIv',
+        authorizationToken: 'authorizationToken', authorizationTokenIv: 'authorizationTokenIv',
         tokenExpiresAt: 'tokenExpiresAt', scopes: 'scopes', merchantId: 'merchantId', storeName: 'storeName',
         nonce: 'nonce', status: 'status', claimedByUserId: 'claimedByUserId', expiresAt: 'expiresAt',
         createdAt: 'createdAt',
@@ -210,6 +211,120 @@ describe('Pending-install token persistence (Salla/Zid refresh tokens)', () => {
         expect(storeInsert!.values.refreshToken).toBeUndefined();
         expect(storeInsert!.values.refreshTokenIv).toBeUndefined();
         expect(storeInsert!.values.tokenExpiresAt).toBeUndefined();
+    });
+});
+
+describe('Zid dual-credential carry-through (authorizationToken)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        capturedInserts.length = 0;
+        capturedDeletes.length = 0;
+        capturedSelects.length = 0;
+        mockSelectLimit.mockReset();
+        mockSelectLimit.mockResolvedValue([]);
+        mockListResult.mockResolvedValue([]);
+    });
+
+    /** Stage the 3 selects a claim performs: pending row → getStoreByDomain → workspace. */
+    const stageZidPendingRow = (withAuthToken = true) => {
+        const accessEnc = encrypt('zid_manager_abc');
+        const refreshEnc = encryptOptional('zid_refresh_xyz');
+        const authEnc = withAuthToken ? encryptOptional('zid_authorization_jwt') : {};
+        mockSelectLimit
+            .mockResolvedValueOnce([{
+                id: 'pending-zid', platform: 'zid', storeDomain: 'demo.zid.store',
+                accessToken: accessEnc.ciphertext, accessTokenIv: accessEnc.iv,
+                refreshToken: refreshEnc.ciphertext, refreshTokenIv: refreshEnc.iv,
+                authorizationToken: authEnc.ciphertext ?? null, authorizationTokenIv: authEnc.iv ?? null,
+                tokenExpiresAt: null, merchantId: null,
+                status: 'pending', expiresAt: new Date(Date.now() + 300000),
+            }])
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([{ workspaceId: 'ws-1' }]);
+    };
+
+    it('createPendingInstall persists an encrypted authorizationToken alongside the token pair', async () => {
+        await createPendingInstall('zid', {
+            storeDomain: 'demo.zid.store',
+            accessToken: 'zid_manager_abc',
+            refreshToken: 'zid_refresh_xyz',
+            authorizationToken: 'zid_authorization_jwt',
+            tokenExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            nonce: 'nonce123',
+        });
+
+        const pending = findInsert(pendingEcommerceInstalls);
+        expect(pending!.values.authorizationToken).toBeTruthy();
+        expect(pending!.values.authorizationTokenIv).toBeTruthy();
+        // Never stored in plaintext.
+        expect(pending!.values.authorizationToken).not.toBe('zid_authorization_jwt');
+        // Round-trip: the stored ciphertext decrypts back to the original credential.
+        expect(decrypt(
+            pending!.values.authorizationToken as string,
+            pending!.values.authorizationTokenIv as string,
+        )).toBe('zid_authorization_jwt');
+    });
+
+    it('createPendingInstall leaves the authorization fields empty for single-credential platforms (Salla)', async () => {
+        await createPendingInstall('salla', {
+            storeDomain: 'demo.salla.sa',
+            accessToken: 'salla_access',
+            refreshToken: 'salla_refresh',
+            nonce: 'nonce123',
+        });
+
+        const pending = findInsert(pendingEcommerceInstalls);
+        expect(pending!.values.authorizationToken).toBeUndefined();
+        expect(pending!.values.authorizationTokenIv).toBeUndefined();
+    });
+
+    it('claimPendingInstall forwards the authorizationToken to the created store (re-encrypted round-trip)', async () => {
+        stageZidPendingRow();
+
+        const store = await claimPendingInstall('pending-zid', 'user-123', 'zid');
+        expect(store).toBeTruthy();
+
+        const storeInsert = findInsert(ecommerceStores);
+        expect(storeInsert).toBeDefined();
+        expect(storeInsert!.values.authorizationToken).toBeTruthy();
+        expect(storeInsert!.values.authorizationTokenIv).toBeTruthy();
+        expect(decrypt(
+            storeInsert!.values.authorizationToken as string,
+            storeInsert!.values.authorizationTokenIv as string,
+        )).toBe('zid_authorization_jwt');
+    });
+
+    it('claim passes ctx { storeId, authorizationToken } to the registerWebhooks callback', async () => {
+        stageZidPendingRow();
+        const registerFn = vi.fn().mockResolvedValue({ registered: ['order.create'], failed: [], lastAttempt: 'now' });
+        const saveStatusFn = vi.fn().mockResolvedValue(undefined);
+
+        const store = await claimPendingInstall('pending-zid', 'user-123', 'zid', registerFn, saveStatusFn);
+        expect(store).toBeTruthy();
+
+        expect(registerFn).toHaveBeenCalledWith(
+            'demo.zid.store',
+            'zid_manager_abc', // decrypted access token
+            {
+                storeId: 'store-new',
+                authorizationToken: 'zid_authorization_jwt', // decrypted second credential
+            },
+        );
+        expect(saveStatusFn).toHaveBeenCalledWith('store-new', expect.objectContaining({ registered: ['order.create'] }));
+    });
+
+    it('claim of a pre-dual-token row passes ctx.authorizationToken as undefined (callback decides to fail)', async () => {
+        stageZidPendingRow(false);
+        const registerFn = vi.fn().mockResolvedValue({ registered: [], failed: [], lastAttempt: 'now' });
+
+        const store = await claimPendingInstall('pending-zid', 'user-123', 'zid', registerFn);
+        expect(store).toBeTruthy();
+
+        expect(registerFn).toHaveBeenCalledWith(
+            'demo.zid.store',
+            'zid_manager_abc',
+            { storeId: 'store-new', authorizationToken: undefined },
+        );
     });
 });
 

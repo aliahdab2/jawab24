@@ -1088,6 +1088,10 @@ export const pendingEcommerceInstalls = pgTable('pending_ecommerce_installs', {
     accessTokenIv: varchar('access_token_iv', { length: 64 }).notNull(),
     refreshToken: text('refresh_token'),                // AES-256-GCM encrypted; null for Shopify (offline tokens never expire)
     refreshTokenIv: varchar('refresh_token_iv', { length: 64 }),
+    // Zid dual-header auth: companion `Authorization` Bearer token to access_token
+    // (which Zid sends as X-Manager-Token). AES-256-GCM encrypted. Null for Shopify/Salla.
+    authorizationToken: text('authorization_token'),
+    authorizationTokenIv: varchar('authorization_token_iv', { length: 64 }),
     tokenExpiresAt: timestamp('token_expires_at'),      // Salla 14d / Zid ~1y; null for Shopify
     scopes: text('scopes'),
     // Salla Easy Mode: the app.store.authorize webhook delivers tokens server-to-server
@@ -1121,6 +1125,10 @@ export const ecommerceStores = pgTable('ecommerce_stores', {
     accessTokenIv: varchar('access_token_iv', { length: 64 }).notNull(),
     refreshToken: text('refresh_token'),                     // nullable — Shopify never expires, Salla/Zid need refresh
     refreshTokenIv: varchar('refresh_token_iv', { length: 64 }),
+    // Zid dual-header auth: companion `Authorization` Bearer token to access_token
+    // (which Zid sends as X-Manager-Token). AES-256-GCM encrypted. Null for Shopify/Salla.
+    authorizationToken: text('authorization_token'),
+    authorizationTokenIv: varchar('authorization_token_iv', { length: 64 }),
     tokenExpiresAt: timestamp('token_expires_at'),           // null = never expires (Shopify)
 
     // Store info (synced from platform)

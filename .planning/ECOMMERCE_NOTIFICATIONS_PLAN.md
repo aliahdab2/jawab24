@@ -1,5 +1,19 @@
 # E-Commerce Customer Notifications — Implementation Plan
 
+> ## ⚠️ ZID EVENT NAMES IN THIS DOC ARE WRONG — superseded 2026-08-01
+>
+> Every Zid webhook event named below (`order.created`, `order.updated`,
+> `order.shipped`, `order.delivered`, `app.uninstalled`, `product.created/…`) was
+> **invented** — none exist in Zid's API, and this doc is the likely origin of the
+> broken first implementation (D-020). Zid's real events are `order.create` and
+> `order.status.update` (shipped/delivered are STATUS CODES inside it:
+> `indelivery`/`delivered`), `product.create/update/publish/delete`,
+> `abandoned_cart.created/.completed`, and the Partner-Dashboard-configured
+> `app.market.application.install/uninstall`. Source of truth:
+> [`docs/integrations/zid.md`](../docs/integrations/zid.md) (verified contract,
+> 2026-08-01, D-053). The Zid rows/snippets below are kept only as history — do
+> not implement from them.
+
 > ## ✅ STATUS: SHIPPED (SMS channel) — reconciled 2026-05-30
 >
 > **The SMS delivery system described below is live in production.** This doc was

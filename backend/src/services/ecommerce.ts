@@ -304,6 +304,8 @@ export interface CreateStoreOptions {
     storeDomain: string;
     accessToken: string;
     refreshToken?: string;
+    /** Zid only — the second credential (`Authorization` Bearer token). See db/schema.ts. */
+    authorizationToken?: string;
     tokenExpiresAt?: Date;
     shopInfo?: {
         shopName?: string;
@@ -319,6 +321,8 @@ export async function createStore(opts: CreateStoreOptions) {
     const { ciphertext: accessCiphertext, iv: accessIv } = encrypt(opts.accessToken);
     // Refresh token is optional — Salla/Zid have one, Shopify offline tokens don't.
     const { ciphertext: refreshCiphertext, iv: refreshIv } = encryptOptional(opts.refreshToken);
+    // Authorization token is Zid-only (dual-header auth); undefined elsewhere.
+    const { ciphertext: authCiphertext, iv: authIv } = encryptOptional(opts.authorizationToken);
 
     const result = await db.insert(ecommerceStores).values({
         userId: opts.userId,
@@ -329,6 +333,8 @@ export async function createStore(opts: CreateStoreOptions) {
         accessTokenIv: accessIv,
         refreshToken: refreshCiphertext,
         refreshTokenIv: refreshIv,
+        authorizationToken: authCiphertext,
+        authorizationTokenIv: authIv,
         tokenExpiresAt: opts.tokenExpiresAt,
         storeName: opts.shopInfo?.shopName,
         storeEmail: opts.shopInfo?.shopEmail,
@@ -345,6 +351,8 @@ export async function createStore(opts: CreateStoreOptions) {
             accessTokenIv: accessIv,
             refreshToken: refreshCiphertext,
             refreshTokenIv: refreshIv,
+            authorizationToken: authCiphertext,
+            authorizationTokenIv: authIv,
             tokenExpiresAt: opts.tokenExpiresAt,
             storeName: opts.shopInfo?.shopName,
             storeEmail: opts.shopInfo?.shopEmail,
@@ -385,10 +393,13 @@ export async function createStore(opts: CreateStoreOptions) {
 export async function updateStoreTokens(storeId: string, tokens: {
     accessToken: string;
     refreshToken?: string;
+    /** Zid only — rotated `Authorization` Bearer token, when the refresh response carries one. */
+    authorizationToken?: string;
     tokenExpiresAt?: Date;
 }) {
     const { ciphertext: accessCiphertext, iv: accessIv } = encrypt(tokens.accessToken);
     const { ciphertext: refreshCiphertext, iv: refreshIv } = encryptOptional(tokens.refreshToken);
+    const { ciphertext: authCiphertext, iv: authIv } = encryptOptional(tokens.authorizationToken);
 
     const updateSet: Record<string, unknown> = {
         accessToken: accessCiphertext,
@@ -405,6 +416,13 @@ export async function updateStoreTokens(storeId: string, tokens: {
     if (refreshCiphertext) {
         updateSet.refreshToken = refreshCiphertext;
         updateSet.refreshTokenIv = refreshIv;
+    }
+
+    // Same rule for the Zid Authorization token — refresh responses that omit it
+    // must not clobber the stored pair.
+    if (authCiphertext) {
+        updateSet.authorizationToken = authCiphertext;
+        updateSet.authorizationTokenIv = authIv;
     }
 
     // A successful token write means the store is healthy again — clear any prior
@@ -822,6 +840,8 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
     storeDomain: string;
     accessToken: string;
     refreshToken?: string;
+    /** Zid only — the second credential (`Authorization` Bearer token). */
+    authorizationToken?: string;
     tokenExpiresAt?: Date;
     scopes?: string;
     nonce: string;
@@ -862,6 +882,9 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
     // store is refreshable. Without this, app-store (logged-out) installs of
     // Salla/Zid produce stores that silently die when the access token expires.
     const { ciphertext: refreshCiphertext, iv: refreshIv } = encryptOptional(data.refreshToken);
+    // Zid dual-header auth: carry the Authorization token through to the claim too,
+    // or the claimed store can never call the Zid API.
+    const { ciphertext: authCiphertext, iv: authIv } = encryptOptional(data.authorizationToken);
 
     const result = await db.insert(pendingEcommerceInstalls).values({
         platform,
@@ -870,6 +893,8 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
         accessTokenIv: iv,
         refreshToken: refreshCiphertext,
         refreshTokenIv: refreshIv,
+        authorizationToken: authCiphertext,
+        authorizationTokenIv: authIv,
         tokenExpiresAt: data.tokenExpiresAt,
         scopes: data.scopes || null,
         merchantId: data.merchantId || null,
@@ -912,6 +937,16 @@ export class ClaimVerificationUnavailableError extends Error {
 }
 
 /**
+ * Context passed to a claim's webhook-registration callback beyond the basic
+ * (storeDomain, accessToken) pair: the just-created store id (Zid embeds it in each
+ * subscription's target_url) and the decrypted Zid Authorization token (dual-header auth).
+ */
+export interface ClaimWebhookContext {
+    storeId: string;
+    authorizationToken?: string;
+}
+
+/**
  * Claim a pending install: decrypt token, create ecommerce_stores row, mark as claimed.
  * Accepts an optional registerWebhooks callback for platform-specific webhook setup.
  * Returns the new store or null if pending record is invalid/expired.
@@ -924,7 +959,7 @@ export async function claimPendingInstall(
     pendingId: string,
     userId: string,
     platform: EcommercePlatform,
-    registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<WebhookRegistrationResult | void>,
+    registerWebhooksFn?: (storeDomain: string, accessToken: string, ctx?: ClaimWebhookContext) => Promise<WebhookRegistrationResult | void>,
     saveWebhookStatusFn?: (storeId: string, webhookStatus: WebhookRegistrationResult) => Promise<void>,
     verifyOwnershipFn?: (decryptedAccessToken: string) => Promise<boolean>,
 ) {
@@ -956,7 +991,7 @@ export async function claimPendingInstallByMerchantId(
     merchantId: string,
     userId: string,
     platform: EcommercePlatform,
-    registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<WebhookRegistrationResult | void>,
+    registerWebhooksFn?: (storeDomain: string, accessToken: string, ctx?: ClaimWebhookContext) => Promise<WebhookRegistrationResult | void>,
     saveWebhookStatusFn?: (storeId: string, webhookStatus: WebhookRegistrationResult) => Promise<void>,
     verifyOwnershipFn?: (decryptedAccessToken: string) => Promise<boolean>,
 ) {
@@ -1023,7 +1058,7 @@ async function finalizeClaim(
     pending: typeof pendingEcommerceInstalls.$inferSelect,
     userId: string,
     platform: EcommercePlatform,
-    registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<WebhookRegistrationResult | void>,
+    registerWebhooksFn?: (storeDomain: string, accessToken: string, ctx?: ClaimWebhookContext) => Promise<WebhookRegistrationResult | void>,
     saveWebhookStatusFn?: (storeId: string, webhookStatus: WebhookRegistrationResult) => Promise<void>,
     verifyOwnershipFn?: (decryptedAccessToken: string) => Promise<boolean>,
 ) {
@@ -1038,6 +1073,8 @@ async function finalizeClaim(
     // refreshable (Salla/Zid) without breaking the no-refresh-token case.
     const accessToken = decrypt(pending.accessToken, pending.accessTokenIv);
     const refreshToken = decryptOptional(pending.refreshToken, pending.refreshTokenIv);
+    // Zid dual-header auth (undefined for Shopify/Salla rows).
+    const authorizationToken = decryptOptional(pending.authorizationToken, pending.authorizationTokenIv);
 
     // Ownership proof gate — BEFORE any write. A false is a proven mismatch (403); a
     // verifier that cannot run at all should throw ClaimVerificationUnavailableError
@@ -1059,6 +1096,7 @@ async function finalizeClaim(
         storeDomain: pending.storeDomain,
         accessToken,
         refreshToken,
+        authorizationToken,
         tokenExpiresAt: pending.tokenExpiresAt ?? undefined,
         // Carry the Salla Easy-Mode merchant id so the webhook getStoreByMerchantId
         // fallback can resolve this store. A pending row with a merchantId is, by
@@ -1095,7 +1133,10 @@ async function finalizeClaim(
     if (registerWebhooksFn) {
         let webhookStatus: WebhookRegistrationResult | void;
         try {
-            webhookStatus = await registerWebhooksFn(pending.storeDomain, accessToken);
+            webhookStatus = await registerWebhooksFn(pending.storeDomain, accessToken, {
+                storeId: store.id,
+                authorizationToken,
+            });
         } catch (err) {
             captureError(err, `${platform} webhook registration after claim failed`, {
                 tags: { service: platform, stage: 'webhook-registration' },

@@ -69,14 +69,16 @@ const EnvSchema = z.object({
     SALLA_CLIENT_SECRET: z.string().optional(),
     SALLA_HOST_NAME: z.string().optional(),
     SALLA_WEBHOOK_SECRET: z.string().min(16, 'SALLA_WEBHOOK_SECRET must be at least 16 characters').optional(),
-    SALLA_SCOPES: z.string().optional(),
+    // NOTE: SALLA_SCOPES / ZID_SCOPES were declared here for months but never read —
+    // config/index.ts hardcodes both platforms' scope strings. Removed as dead env vars.
 
     // Zid (optional — required for Zid integration)
     ZID_CLIENT_ID: z.string().optional(),
     ZID_CLIENT_SECRET: z.string().optional(),
+    // Zid Partner "Application ID" — webhook subscriptions' original_id field.
+    ZID_APP_ID: z.string().optional(),
     ZID_HOST_NAME: z.string().optional(),
     ZID_WEBHOOK_SECRET: z.string().min(16, 'ZID_WEBHOOK_SECRET must be at least 16 characters').optional(),
-    ZID_SCOPES: z.string().optional(),
 
     // Stripe (optional for development)
     STRIPE_SECRET_KEY: z.string().optional(),
@@ -169,11 +171,22 @@ const EnvSchema = z.object({
         path: ['SALLA_WEBHOOK_SECRET'],
     },
 ).refine(
-    // Same coupling for Zid: routes live on ZID_CLIENT_ID, HMAC needs ZID_WEBHOOK_SECRET.
+    // Same coupling for Zid: routes live on ZID_CLIENT_ID, and webhook deliveries are
+    // authenticated with Basic auth whose password is ZID_WEBHOOK_SECRET (Zid sends no
+    // HMAC signature). Missing secret → verification fails closed → every webhook 401s.
     data => data.NODE_ENV !== 'production' || !data.ZID_CLIENT_ID || !!data.ZID_WEBHOOK_SECRET,
     {
-        message: 'ZID_WEBHOOK_SECRET must be set in production when ZID_CLIENT_ID is configured — Zid webhook HMAC verification fails closed without it (every webhook 401s)',
+        message: 'ZID_WEBHOOK_SECRET must be set in production when ZID_CLIENT_ID is configured — it is the Basic-auth password for Zid webhook deliveries; verification fails closed without it (every webhook 401s)',
         path: ['ZID_WEBHOOK_SECRET'],
+    },
+).refine(
+    // Webhook REGISTRATION needs the Partner app id (original_id in the subscription
+    // body). Without it every subscription attempt fails and the store silently gets
+    // no webhooks — same failure mode the secret guard above closes for verification.
+    data => data.NODE_ENV !== 'production' || !data.ZID_CLIENT_ID || !!data.ZID_APP_ID,
+    {
+        message: 'ZID_APP_ID must be set in production when ZID_CLIENT_ID is configured — Zid webhook subscriptions require it (original_id); registration silently fails without it',
+        path: ['ZID_APP_ID'],
     },
 ).refine(
     // The ai-worker gates its paid OpenAI/Anthropic endpoints on this shared secret.

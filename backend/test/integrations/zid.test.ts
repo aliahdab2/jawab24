@@ -40,6 +40,12 @@ vi.mock('../../src/services/zid', () => ({
     refreshExpiringTokens: (...args: any[]) => mockRefreshExpiringTokens(...args),
 }));
 
+// Mock crypto (adapter registerWebhooks decrypts both stored credentials)
+const mockDecrypt = vi.fn((...args: unknown[]) => `dec(${args[0]})`);
+vi.mock('../../src/services/ecommerceCrypto', () => ({
+    decrypt: (...args: unknown[]) => mockDecrypt(...args),
+}));
+
 // Mock routes
 vi.mock('../../src/routes/zid', () => ({
     default: vi.fn(),
@@ -205,6 +211,87 @@ describe('ZidIntegration', () => {
             const result = await integration.claimPendingInstall(req, mockReply(), 'user-1');
             expect(result).toBeNull();
             expect(req.log.error).toHaveBeenCalled();
+        });
+
+        it('claim callback registers webhooks with the dual credential pair + the new store id', async () => {
+            const req = mockRequest({
+                cookies: { pendingZidId: 'signed_pending_id' },
+                unsignCookie: vi.fn().mockReturnValue({ valid: true, value: 'pending-uuid-123' }),
+            });
+            mockClaimPendingInstall.mockResolvedValue({ id: 'store-new', storeDomain: 'new-store.zid.store' });
+            mockRegisterWebhooks.mockResolvedValue({ registered: ['order.create'], failed: [], lastAttempt: 'now' });
+
+            await integration.claimPendingInstall(req, mockReply(), 'user-1');
+
+            // Invoke the callback the adapter handed to claimPendingInstall, the way
+            // finalizeClaim does: (storeDomain, decrypted access token, ctx).
+            const registerFn = mockClaimPendingInstall.mock.calls[0][3];
+            const result = await registerFn('new-store.zid.store', 'manager-token-plain', {
+                storeId: 'store-new',
+                authorizationToken: 'authorization-jwt-plain',
+            });
+
+            expect(mockRegisterWebhooks).toHaveBeenCalledWith(
+                { managerToken: 'manager-token-plain', authorizationToken: 'authorization-jwt-plain' },
+                'store-new',
+            );
+            expect(result).toEqual({ registered: ['order.create'], failed: [], lastAttempt: 'now' });
+        });
+
+        it('claim callback THROWS for pre-dual-token pending rows (no Authorization token in ctx)', async () => {
+            const req = mockRequest({
+                cookies: { pendingZidId: 'signed_pending_id' },
+                unsignCookie: vi.fn().mockReturnValue({ valid: true, value: 'pending-uuid-123' }),
+            });
+            mockClaimPendingInstall.mockResolvedValue({ id: 'store-new', storeDomain: 'new-store.zid.store' });
+
+            await integration.claimPendingInstall(req, mockReply(), 'user-1');
+
+            const registerFn = mockClaimPendingInstall.mock.calls[0][3];
+            await expect(
+                registerFn('new-store.zid.store', 'manager-token-plain', { storeId: 'store-new' }),
+            ).rejects.toThrow('reconnect required');
+            await expect(
+                registerFn('new-store.zid.store', 'manager-token-plain', undefined),
+            ).rejects.toThrow('reconnect required');
+            expect(mockRegisterWebhooks).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('registerWebhooks (adapter — webhook retry worker entry point)', () => {
+        it('decrypts BOTH stored credentials and passes creds + store id to the service', async () => {
+            const status = { registered: ['product.create'], failed: [], lastAttempt: 'now' };
+            mockRegisterWebhooks.mockResolvedValue(status);
+
+            const result = await integration.registerWebhooks({
+                id: 'store-1',
+                storeDomain: 'demo.zid.store',
+                accessToken: 'encA',
+                accessTokenIv: 'ivA',
+                authorizationToken: 'encZ',
+                authorizationTokenIv: 'ivZ',
+            });
+
+            expect(mockDecrypt).toHaveBeenCalledWith('encA', 'ivA');
+            expect(mockDecrypt).toHaveBeenCalledWith('encZ', 'ivZ');
+            expect(mockRegisterWebhooks).toHaveBeenCalledWith(
+                { managerToken: 'dec(encA)', authorizationToken: 'dec(encZ)' },
+                'store-1',
+            );
+            expect(result).toEqual(status);
+        });
+
+        it('throws (merchant must reconnect) when the store row lacks the Authorization token', async () => {
+            await expect(integration.registerWebhooks({
+                id: 'store-old',
+                storeDomain: 'old.zid.store',
+                accessToken: 'encA',
+                accessTokenIv: 'ivA',
+                authorizationToken: null,
+                authorizationTokenIv: null,
+            })).rejects.toThrow('no Authorization token');
+
+            expect(mockRegisterWebhooks).not.toHaveBeenCalled();
         });
     });
 
