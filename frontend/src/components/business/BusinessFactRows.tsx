@@ -5,7 +5,7 @@ import { WhatsAppIcon } from '@/components/ui';
 import type { Page } from '@jawab24/shared';
 import type { LucideIcon } from 'lucide-react';
 import type { EditableFactKey } from './BusinessFactSheet';
-import { computeFactCoverage, isStorePolicyKey, type BusinessFactKey } from '@/utils/businessCoverage';
+import { computeFactCoverage, isScoredFactKey, isStorePolicyKey, type BusinessFactKey } from '@/utils/businessCoverage';
 import { parseWeek, summarizeWeek, type DayKey } from '@/utils/businessHours';
 
 interface BusinessFactRowsProps {
@@ -91,7 +91,7 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
               <span key={i} className="inline-flex items-center gap-1">
                 {i > 0 && <span aria-hidden="true" className="text-subtle">·</span>}
                 <span>{p}</span>
-                {whatsapp && p === whatsapp && (
+                {whatsapp.includes(p) && (
                   <WhatsAppIcon size={12} className="text-brand-600 flex-shrink-0" aria-label={t('facts.whatsapp')} />
                 )}
               </span>
@@ -120,6 +120,15 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
         {rows.map((row) => {
           const Icon = row.icon;
           const isSet = row.value !== null;
+          // Unscored facts (phone, website) never badge «ناقص»: the readiness
+          // counter above doesn't count them, and an amber "missing" on a row
+          // the score ignores is the two-scoreboards contradiction this module
+          // family exists to prevent. They read «اختياري» in neutral gray.
+          const badge = row.covered
+            ? { className: 'status-success', label: t('state.covered') }
+            : isScoredFactKey(row.key)
+              ? { className: 'status-warning', label: t('state.missing') }
+              : { className: 'bg-muted text-muted-foreground border-theme-border', label: t('state.optional') };
           return (
             <li key={row.key}>
               <button
@@ -145,12 +154,10 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
                         by COLOUR alone (brand teal vs muted), which fails WCAG
                         1.4.1 Use of Colour. The legend below names both dots. */}
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium flex-shrink-0 ${
-                        row.covered ? 'status-success' : 'status-warning'
-                      }`}
+                      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium flex-shrink-0 ${badge.className}`}
                     >
                       <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-current" />
-                      {row.covered ? t('state.covered') : t('state.missing')}
+                      {badge.label}
                     </span>
                   </span>
                   {/* The prompt sits where the value will be — one line does the
@@ -204,6 +211,12 @@ export function BusinessFactRows({ page, onEditFact, onEditHours }: BusinessFact
         <li className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className="w-2 h-2 rounded-full bg-amber-500" />
           {t('state.legendMissing')}
+        </li>
+        <li className="inline-flex items-center gap-1.5">
+          {/* bg-current inherits the list's muted-foreground — theme-correct in
+              dark mode where a literal gray would wash out. */}
+          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-current" />
+          {t('state.legendOptional')}
         </li>
       </ul>
     </section>

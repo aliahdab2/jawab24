@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X, Check, Plus, Trash2, Copy, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
-import { DetailSheet, Button, Toggle } from '@/components/ui';
+import { DetailSheet, Button, Toggle, ConfirmationModal } from '@/components/ui';
+import { TimeSelect } from './TimeSelect';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useMerchantTimezone } from '@/hooks/useMerchantTimezone';
 import {
@@ -72,8 +73,6 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
       : DAY_KEYS.find((d) => initial[d].kind !== 'closed') ?? null,
   );
 
-  useEscapeKey(onClose, true);
-
   const setDay = (day: DayKey, next: WeekState[DayKey]) =>
     setWeek((prev) => ({ ...prev, [day]: next }));
 
@@ -139,13 +138,36 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
   const overlaps = overlappingDays(week);
   const valid = serialized !== null && hasOpenDay(week) && overlaps.length === 0;
 
+  // Compared through the SAME serializer that saves, so "unchanged" means
+  // exactly "saving would write what is already stored". Without this the
+  // sheet opened with a live Save on any page with valid existing hours —
+  // the only editor in the section whose Save wasn't gated on a change.
+  // The baseline is what is STORED, not the seeded editor state: with no
+  // saved hours, `initial` is the regional default week, and diffing against
+  // it would stop a first-time merchant from one-tap-saving that default.
+  const hasStoredHours = !!initialHours && Object.keys(initialHours).length > 0;
+  const initialSerialized = useMemo(() => JSON.stringify(serializeWeek(initial)), [initial]);
+  const dirty = !hasStoredHours || JSON.stringify(serialized) !== initialSerialized;
+
+  // Typed-but-unsaved edits never vanish on a stray tap.
+  const [confirmClose, setConfirmClose] = useState(false);
+  const attemptClose = () => {
+    if (dirty && !saving) setConfirmClose(true);
+    else onClose();
+  };
+  // While the discard confirm is up, ITS Esc handling wins — otherwise one
+  // keypress closes the confirm and this hook instantly re-opens it.
+  useEscapeKey(attemptClose, !confirmClose);
+
   const submit = () => {
-    if (saving || !valid) return;
+    if (saving || !valid || !dirty) return;
     onSave(serialized ?? undefined);
   };
 
   return (
     <DetailSheet
+      fitContent
+      onSwipeDismiss={attemptClose}
       panelClassName="sm:max-h-[80vh]"
       dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'hours-sheet-title' }}
     >
@@ -155,7 +177,7 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
         </h2>
         <button
           type="button"
-          onClick={onClose}
+          onClick={attemptClose}
           aria-label={tc('close')}
           className="min-h-[44px] min-w-[44px] -me-2 flex items-center justify-center rounded-lg hover:bg-surface-100 text-surface-500"
         >
@@ -207,10 +229,16 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
                       {hasOverlap ? t('facts.hoursOverlap') : summary}
                     </span>
                     {isOpen && (
-                      <ChevronDown
-                        className={`w-4 h-4 flex-shrink-0 text-icon-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                        aria-hidden="true"
-                      />
+                      <>
+                        {/* Names the row's PURPOSE for assistive tech — the
+                            visible content alone reads as a bare day + times
+                            with no hint that activating it expands anything. */}
+                        <span className="sr-only">— {t('facts.hoursToggleDetails')}</span>
+                        <ChevronDown
+                          className={`w-4 h-4 flex-shrink-0 text-icon-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          aria-hidden="true"
+                        />
+                      </>
                     )}
                   </button>
                   <Toggle
@@ -245,31 +273,27 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
                             {/* Two bare time boxes and a dash left it to the
                                 merchant to guess which is which — worse in RTL,
                                 where the visual order flips. Google labels both;
-                                so do we. */}
-                            <label htmlFor={fromId} className="block text-[11px] text-muted-foreground mb-1">
+                                so do we. TimeSelect (not the native time input)
+                                so the value always reads «09:00» like the
+                                summaries — see its doc comment. */}
+                            <label id={`${fromId}-label`} className="block text-[11px] text-muted-foreground mb-1">
                               {t('facts.hoursFrom')}
                             </label>
-                            <input
-                              id={fromId}
-                              type="time"
+                            <TimeSelect
                               value={range.from}
-                              onChange={(e) => setRange(day, i, 'from', e.target.value)}
-                              dir="ltr"
-                              className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+                              onChange={(v) => setRange(day, i, 'from', v)}
+                              aria-labelledby={`${fromId}-label`}
                             />
                           </div>
                           <span aria-hidden="true" className="text-muted-foreground pb-3">–</span>
                           <div className="flex-1 min-w-0">
-                            <label htmlFor={toId} className="block text-[11px] text-muted-foreground mb-1">
+                            <label id={`${toId}-label`} className="block text-[11px] text-muted-foreground mb-1">
                               {t('facts.hoursTo')}
                             </label>
-                            <input
-                              id={toId}
-                              type="time"
+                            <TimeSelect
                               value={range.to}
-                              onChange={(e) => setRange(day, i, 'to', e.target.value)}
-                              dir="ltr"
-                              className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+                              onChange={(v) => setRange(day, i, 'to', v)}
+                              aria-labelledby={`${toId}-label`}
                             />
                           </div>
                           {state.ranges.length > 1 && (
@@ -341,20 +365,31 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
       </div>
 
       <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
-        <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
+        <Button variant="secondary" size="sm" onClick={attemptClose} className="max-sm:h-11">
           {tc('cancel')}
         </Button>
         <Button
           size="sm"
           onClick={submit}
           loading={saving}
-          disabled={!valid}
+          disabled={!valid || !dirty}
           icon={<Check className="w-4 h-4" />}
           className="max-sm:h-11 max-sm:px-6 max-sm:flex-1"
         >
           {tc('save')}
         </Button>
       </div>
+
+      <ConfirmationModal
+        isOpen={confirmClose}
+        onClose={() => setConfirmClose(false)}
+        onConfirm={onClose}
+        title={tc('discardTitle')}
+        message={tc('discardMessage')}
+        confirmText={tc('discardConfirm')}
+        cancelText={tc('keepEditing')}
+        variant="warning"
+      />
     </DetailSheet>
   );
 }

@@ -544,7 +544,12 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
                 duration={4000}
                 theme="system"
                 dir={isRTLLocale(effectiveLocale) ? 'rtl' : 'ltr'}
-                offset={{ bottom: '16px' }}
+                // Both props read the SAME token: sonner switches between them
+                // at its own fixed 600px query, but the nav clearance the
+                // offset exists for flips at lg (1024px). The token carries
+                // the breakpoint (16px ≥lg in globals.css), so the 601–1023px
+                // band clears the still-visible bottom nav too.
+                offset={{ bottom: 'var(--toast-offset-bottom)' }}
                 mobileOffset={{ bottom: 'var(--toast-offset-bottom)' }}
               />
               {showPushDeniedBanner && (

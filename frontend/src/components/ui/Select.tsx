@@ -122,6 +122,18 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
     }
   }, [isOpen, searchable]);
 
+  // Open with the current value in view — a long list (48 half-hour slots,
+  // ~400 timezones) otherwise always opens scrolled to its first entry.
+  // Sets scrollTop directly instead of scrollIntoView: the latter also
+  // scrolls ancestors, which would drag the page behind the dropdown.
+  useEffect(() => {
+    const dropdown = dropdownRef.current;
+    const selected = dropdown?.querySelector<HTMLElement>('[data-selected="true"]');
+    if (isOpen && dropdown && selected) {
+      dropdown.scrollTop = selected.offsetTop - dropdown.clientHeight / 2 + selected.clientHeight / 2;
+    }
+  }, [isOpen]);
+
   const handleSelect = (optionValue: string) => {
     onChange(optionValue);
     setIsOpen(false);
@@ -206,6 +218,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
               <button
                 key={option.value}
                 type="button"
+                data-selected={option.value === value || undefined}
                 onClick={() => handleSelect(option.value)}
                 className={clsx(
                   "w-full px-4 py-3 text-start text-sm flex items-center justify-between gap-2 transition-colors",

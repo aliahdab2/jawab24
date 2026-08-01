@@ -182,16 +182,19 @@ function BusinessPageInner() {
     }
   };
 
-  const saveFact = (key: EditableFactKey, raw: string, whatsapp?: string) => {
+  const saveFact = (key: EditableFactKey, raw: string, whatsapp?: string[]) => {
     const value = raw.trim();
     return saveProfile((patch) => {
       switch (key) {
         case 'address': patch.address = value || undefined; break;
         case 'phone':
           patch.phones = value ? value.split(/[,،]/).map((p) => p.trim()).filter(Boolean) : undefined;
-          // The WhatsApp mark rides with the numbers it belongs to. Spread the
-          // existing container: `channels` also holds `preferred`.
-          patch.channels = { ...patch.channels, whatsapp: whatsapp?.trim() || undefined };
+          // The WhatsApp marks ride with the numbers they belong to — any
+          // subset of the listed numbers (stored as an array; legacy rows may
+          // still hold a single string, normalized on read by
+          // `whatsappNumbers`). Spread the existing container: `channels`
+          // also holds `preferred`.
+          patch.channels = { ...patch.channels, whatsapp: whatsapp?.length ? whatsapp : undefined };
           break;
         case 'website': patch.website = value || undefined; break;
         case 'delivery': patch.policies = { ...patch.policies, shipping: value || undefined }; break;

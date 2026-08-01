@@ -220,7 +220,11 @@ export interface BusinessProfile {
   hours?: Record<string, string[]>;
   channels?: {
     preferred?: 'dm' | 'whatsapp' | 'phone';
-    whatsapp?: string;
+    /** The merchant's WhatsApp contact number(s). Historically a single
+     *  string; the /business editor writes an array since any of the listed
+     *  numbers can be on WhatsApp independently. Readers must accept both —
+     *  normalize with `whatsappNumbers()` from `businessInfoPrompt`. */
+    whatsapp?: string | string[];
   };
   language_hint?: 'ar' | 'en' | 'auto';
   /**
@@ -1574,7 +1578,7 @@ export interface WorkspaceSettings {
 }
 
 // --- Business Info structured prompt block (Stage 2.6) ---
-export { formatBusinessInfoPrompt } from './businessInfoPrompt';
+export { formatBusinessInfoPrompt, whatsappNumbers } from './businessInfoPrompt';
 export { applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
 export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, MigrationPlan } from './businessProfileMerge';
 // --- Business hours canonicalizer (Stage 2.6) ---
