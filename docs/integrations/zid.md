@@ -117,13 +117,21 @@ describe titles (grep for it).
 
 ## Live-validation checklist (the D-020 gate — follow-up PR)
 
-Prereq: Zid Partner account + partnership agreement (founder), a Zid dev store, ngrok
-(the Salla Phase-4.2 capture method).
+Prereq — ✅ DONE 2026-08-01 (application submitted, agreement "In Review"): Partner
+account exists (partner.zid.sa, founder), dev store **3195980 "Jawab24 Dev"**
+(https://h47p59.zid.store/ — take out of maintenance mode before captures). Still
+needed: Zid's agreement approval + ngrok (the Salla Phase-4.2 capture method).
 
-1. Create the Partner app: record the real scope names (fix `config.zid.scopes`), the
-   Application ID (`ZID_APP_ID`), redirect URI, and configure the
-   `app.market.application.*` lifecycle webhooks in the dashboard — determine what auth
-   those deliveries carry.
+1. ✅ Partner app CREATED 2026-08-01: app id **7367** "Jawab24" (Draft), **Client ID
+   7192** (secret in dashboard → General Settings). Redirection URL
+   `https://jawab24.com/zid/auth`, Callback URL `https://jawab24.com/zid/auth/callback`.
+   Dashboard scope groups selected: Account R, Account Identity R, Store Core Details R,
+   Orders R, Products R, Webhooks RW. Lifecycle webhook configured:
+   `app.market.application.uninstall` → `https://jawab24.com/zid/webhooks?e=app.market.application.uninstall`.
+   ⚠️ Still from captures: the OAuth **scope strings** for the authorize URL (fix
+   `config.zid.scopes` — dashboard shows groups, not strings), whether `ZID_APP_ID`
+   (webhook `original_id`) is the app id 7367 or the Client ID 7192, and what auth the
+   `app.market.*` lifecycle deliveries carry.
 2. Capture raw responses: token exchange (form-urlencoded accepted? `Authorization` field
    on both grants?), profile, products (+ multilingual name shape), orders, and full
    webhook deliveries (headers + envelope + order payload).

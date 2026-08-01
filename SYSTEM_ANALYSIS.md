@@ -1720,7 +1720,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 
 | # | Gap | Severity | Impact |
 |---|-----|----------|--------|
-| 1 | Zid rebuilt but unvalidated against a live store | Medium | The 2026-08-01 rebuild (D-053) replaced the broken auth/endpoint/webhook layer with the docs.zid.sa-verified contract, but payload-shape parsers are provisional until a real dev-store round-trip (needs the Zid Partner account — founder external). Stays "coming soon" / not user-facing until then (D-020 gate). Checklist: `docs/integrations/zid.md` |
+| 1 | Zid rebuilt but unvalidated against a live store | Medium | The 2026-08-01 rebuild (D-053) replaced the broken auth/endpoint/webhook layer with the docs.zid.sa-verified contract, but payload-shape parsers are provisional until a real dev-store round-trip (Partner application fully submitted 2026-08-01 — app id 7367, dev store 3195980, agreement "In Review"; validation unblocks on Zid's approval). Stays "coming soon" / not user-facing until then (D-020 gate). Checklist: `docs/integrations/zid.md` |
 | ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` — **note**: `setInterval` doesn't survive process restart without external scheduler; acceptable for single-instance deploy |
 | ~~3~~ | ~~No voice input for KB~~ | ~~RESOLVED~~ | Voice recording via VoiceRecordButton.tsx — transcribed via GPT-4o-mini-transcribe before KB ingestion |
 | 4 | Single-language KB | Medium | Must mix both languages in one text |
