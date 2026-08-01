@@ -347,6 +347,30 @@ describe('Shopify Service', () => {
             expect(result.failed).toEqual([]);
         });
 
+        it('prefers the URL-matching subscription over a stale REST-era duplicate of the same topic', async () => {
+            // The REST era could leave TWO subscriptions on one topic (a changed
+            // address POSTed a second subscription; 422 only fired on exact
+            // topic+address match). Updating the stale twin would collide with
+            // the matching one — the matching one must win and the topic skip.
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) {
+                    return listResponse([
+                        { id: 'gid://shopify/WebhookSubscription/10', gqlTopic: 'ORDERS_CREATE', callbackUrl: 'https://stale-tunnel.ngrok.io/shopify/webhooks/orders' },
+                        { id: 'gid://shopify/WebhookSubscription/11', gqlTopic: 'ORDERS_CREATE', callbackUrl: `${WEBHOOK_BASE}/orders` },
+                    ]);
+                }
+                return createSuccess;
+            });
+
+            const result = await registerWebhooks('test-store.myshopify.com', 'token123');
+
+            expect(updateCalls()).toHaveLength(0);
+            expect(createCalls().some(c => c.variables.topic === 'ORDERS_CREATE')).toBe(false);
+            expect(result.registered).toContain('orders/create');
+            expect(result.failed).toEqual([]);
+        });
+
         it('reports a per-topic failure on userErrors without failing the batch', async () => {
             mockCaptureError.mockClear();
             mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {

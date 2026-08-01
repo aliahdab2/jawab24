@@ -133,6 +133,10 @@ const SHOPIFY_WEBHOOK_TOPIC_DEFS = [
 /** REST-style topic names, in registration order — pinned against the adapter copy in webhookTopicDrift.test.ts */
 export const SHOPIFY_WEBHOOK_EVENTS = SHOPIFY_WEBHOOK_TOPIC_DEFS.map(d => d.topic);
 
+// The query is app-scoped (only this app's subscriptions are visible), so the
+// realistic ceiling is the 8 topics plus REST-era duplicates — far below one page.
+const WEBHOOK_LIST_PAGE_SIZE = 100;
+
 const WEBHOOK_SUBSCRIPTIONS_QUERY = `
     query webhookSubscriptions($first: Int!) {
         webhookSubscriptions(first: $first) {
@@ -200,16 +204,17 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
     // (registerWebhooksWithPersist / finalizeClaim) persist a failed-all
     // marker and enqueue a retry.
     const existing = await shopifyGraphQL<WebhookSubscriptionsQueryResult>(
-        shop, accessToken, WEBHOOK_SUBSCRIPTIONS_QUERY, { first: 100 },
+        shop, accessToken, WEBHOOK_SUBSCRIPTIONS_QUERY, { first: WEBHOOK_LIST_PAGE_SIZE },
     );
 
-    const byGqlTopic = new Map<string, { id: string; callbackUrl: string | null }>();
+    const byGqlTopic = new Map<string, Array<{ id: string; callbackUrl: string | null }>>();
     for (const { node } of existing.data.webhookSubscriptions.edges) {
-        if (byGqlTopic.has(node.topic)) continue;
-        byGqlTopic.set(node.topic, {
+        const list = byGqlTopic.get(node.topic) ?? [];
+        list.push({
             id: node.id,
             callbackUrl: node.endpoint?.__typename === 'WebhookHttpEndpoint' ? node.endpoint.callbackUrl ?? null : null,
         });
+        byGqlTopic.set(node.topic, list);
     }
 
     // Topics upserted in parallel — each is an independent mutation. Inner
@@ -217,7 +222,15 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
     const results = await Promise.all(SHOPIFY_WEBHOOK_TOPIC_DEFS.map(async ({ topic, gqlTopic, path }) => {
         const address = `${webhookUrl}/${path}`;
         try {
-            const current = byGqlTopic.get(gqlTopic);
+            // A topic can carry duplicate subscriptions from the REST era (a
+            // changed address POSTed a second subscription instead of updating
+            // the first). Prefer the one already pointing at the right URL —
+            // updating a stale twin instead would collide with it ("address
+            // for this topic has already been taken"). Leftover stale
+            // duplicates are not deleted here: their deliveries fail and
+            // Shopify removes persistently-failing subscriptions itself.
+            const candidates = byGqlTopic.get(gqlTopic) ?? [];
+            const current = candidates.find(c => c.callbackUrl === address) ?? candidates[0];
             if (current && current.callbackUrl === address) {
                 return { topic, error: null };
             }
