@@ -130,8 +130,9 @@ const SHOPIFY_WEBHOOK_TOPIC_DEFS = [
     { topic: 'fulfillments/update', gqlTopic: 'FULFILLMENTS_UPDATE', path: 'fulfillments' },
 ] as const;
 
-/** REST-style topic names, in registration order — pinned against the adapter copy in webhookTopicDrift.test.ts */
-export const SHOPIFY_WEBHOOK_EVENTS = SHOPIFY_WEBHOOK_TOPIC_DEFS.map(d => d.topic);
+/** REST-style topic names, in registration order — pinned against the adapter copy in webhookTopicDrift.test.ts.
+ * Readonly for parity with the Salla/Zid `as const` twins — consumers must not mutate it. */
+export const SHOPIFY_WEBHOOK_EVENTS: readonly string[] = SHOPIFY_WEBHOOK_TOPIC_DEFS.map(d => d.topic);
 
 /**
  * Union of delivery route suffixes under /shopify/webhooks. routes/shopify.ts
@@ -158,6 +159,7 @@ const WEBHOOK_SUBSCRIPTIONS_QUERY = `
                     }
                 }
             }
+            pageInfo { hasNextPage }
         }
     }`;
 
@@ -189,6 +191,7 @@ interface WebhookSubscriptionsQueryResult {
                     endpoint?: { __typename: string; callbackUrl?: string } | null;
                 };
             }>;
+            pageInfo?: { hasNextPage: boolean };
         };
     };
 }
@@ -215,6 +218,20 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
         shop, accessToken, WEBHOOK_SUBSCRIPTIONS_QUERY, { first: WEBHOOK_LIST_PAGE_SIZE },
     );
 
+    // Overflow guard: with subscriptions beyond the first page, the URL-matching
+    // one can sit on the invisible page 2 and the upsert below degenerates into
+    // the exact unhealable "address already taken" loop the list step exists to
+    // prevent. Realistic only on a long-lived dev store (~8 stale twins per
+    // tunnel-hostname change), but when it happens the failure is misleading —
+    // name it loudly so the diagnosis is one Sentry search away.
+    if (existing.data.webhookSubscriptions.pageInfo?.hasNextPage) {
+        captureError(
+            new Error(`Shopify webhook subscription list overflowed one page (>${WEBHOOK_LIST_PAGE_SIZE}) for ${shop}`),
+            'shopify_webhook_list_overflow — upsert may collide with subscriptions on the unseen page',
+            { level: 'warning', tags: { service: 'shopify', flow: 'webhook_registration' }, extra: { shop } },
+        );
+    }
+
     const byGqlTopic = new Map<string, Array<{ id: string; callbackUrl: string | null }>>();
     for (const { node } of existing.data.webhookSubscriptions.edges) {
         const list = byGqlTopic.get(node.topic) ?? [];
@@ -232,15 +249,19 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
         try {
             // A topic can carry duplicate subscriptions from the REST era (a
             // changed address POSTed a second subscription instead of updating
-            // the first). Prefer the one already pointing at the right URL —
-            // updating a stale twin instead would collide with it ("address
-            // for this topic has already been taken"). Leftover stale
-            // duplicates are not deleted here: their deliveries fail and
-            // Shopify removes persistently-failing subscriptions itself.
+            // the first). Prefer the one already pointing at the right URL,
+            // then any HTTP-endpoint twin — updating a stale HTTP twin heals
+            // it in place, while a non-HTTP subscription (EventBridge/PubSub,
+            // created out-of-band on the same credentials; callbackUrl null)
+            // can't take a callbackUrl and would loop on userErrors forever.
+            // Leftover stale duplicates are not deleted here: their deliveries
+            // fail and Shopify removes persistently-failing subscriptions itself.
             const candidates = byGqlTopic.get(gqlTopic) ?? [];
-            const current = candidates.find(c => c.callbackUrl === address) ?? candidates[0];
+            const current = candidates.find(c => c.callbackUrl === address)
+                ?? candidates.find(c => c.callbackUrl !== null)
+                ?? candidates[0];
             if (current && current.callbackUrl === address) {
-                return { topic, error: null };
+                return { topic, error: null, healedFrom: null };
             }
             const userErrors = current
                 ? (await shopifyGraphQL<WebhookUpdateResult>(shop, accessToken, WEBHOOK_UPDATE_MUTATION, {
@@ -252,19 +273,21 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
                     webhookSubscription: { callbackUrl: address, format: 'JSON' },
                 })).data.webhookSubscriptionCreate.userErrors;
             if (userErrors.length > 0) {
-                return { topic, error: userErrors.map(e => e.message).join(', ').slice(0, ERROR_TEXT_MAX_LENGTH) };
+                return { topic, error: userErrors.map(e => e.message).join(', ').slice(0, ERROR_TEXT_MAX_LENGTH), healedFrom: null };
             }
-            return { topic, error: null };
+            return { topic, error: null, healedFrom: current ? current.callbackUrl ?? '(non-http)' : null };
         } catch (err) {
-            return { topic, error: err instanceof Error ? err.message : String(err) };
+            return { topic, error: err instanceof Error ? err.message : String(err), healedFrom: null };
         }
     }));
 
     const registered: string[] = [];
     const failed: Array<{ topic: string; status?: number; error?: string }> = [];
-    for (const { topic, error } of results) {
+    const healed: Array<{ topic: string; from: string }> = [];
+    for (const { topic, error, healedFrom } of results) {
         if (error === null) {
             registered.push(topic);
+            if (healedFrom !== null) healed.push({ topic, from: healedFrom });
         } else {
             failed.push({ topic, error });
             captureError(
@@ -273,6 +296,24 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
                 { tags: { service: 'shopify' }, extra: { topic, error } },
             );
         }
+    }
+
+    // The drift-heal path is the whole point of the GraphQL migration; without
+    // this it is invisible in production telemetry (a regression would present
+    // only as slow webhook-delivery loss). One aggregated event per run — a
+    // hostname change heals up to 8 topics at once. Expected event, so
+    // warning + stable fingerprint (one Sentry issue, alert on frequency).
+    if (healed.length > 0) {
+        captureError(
+            null,
+            `Shopify webhook drift healed: ${healed.length} subscription(s) updated in place`,
+            {
+                level: 'warning',
+                tags: { service: 'shopify', flow: 'webhook_registration' },
+                fingerprint: ['shopify-webhook-drift-healed'],
+                extra: { shop, to: webhookUrl, healed },
+            },
+        );
     }
 
     return { registered, failed, lastAttempt: new Date().toISOString() };
@@ -351,7 +392,10 @@ const RETRY_BASE_DELAY_MS = 1000;
 
 const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
 
-async function shopifyGraphQL<T = unknown>(
+// Exported for services/shopifyBilling.ts — the one other module allowed to
+// talk to the Admin API. It reuses this transport for retry/throttle/timeout
+// behavior instead of growing a second fetch loop.
+export async function shopifyGraphQL<T = unknown>(
     shop: string,
     accessToken: string,
     query: string,

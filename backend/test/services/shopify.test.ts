@@ -422,6 +422,64 @@ describe('Shopify Service', () => {
             await expect(registerWebhooks('test-store.myshopify.com', 'token123'))
                 .rejects.toThrow('Shopify GraphQL HTTP error: 400');
         });
+
+        it('names the page-overflow condition loudly instead of colliding silently', async () => {
+            // >100 subscriptions pushes the URL-matching twin onto an unseen
+            // page 2, degenerating the upsert into the unhealable "address
+            // already taken" loop. The guard can't see page 2 either — but it
+            // makes the failure one Sentry search away instead of a mystery.
+            mockCaptureError.mockClear();
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) {
+                    const full = listResponse([]);
+                    const payload = await full.json() as { data: { webhookSubscriptions: Record<string, unknown> } };
+                    payload.data.webhookSubscriptions.pageInfo = { hasNextPage: true };
+                    return gqlResponse(payload);
+                }
+                return createSuccess;
+            });
+
+            await registerWebhooks('test-store.myshopify.com', 'token123');
+
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                expect.stringContaining('shopify_webhook_list_overflow'),
+                expect.objectContaining({ level: 'warning' }),
+            );
+        });
+
+        it('prefers an HTTP twin over a non-HTTP subscription when healing drift', async () => {
+            // An EventBridge/PubSub subscription (created out-of-band on the
+            // same app credentials) has no callbackUrl and cannot take one —
+            // updating it would loop on userErrors forever. The HTTP twin,
+            // even stale, is the one that can be healed.
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) {
+                    return gqlResponse({
+                        data: {
+                            webhookSubscriptions: {
+                                edges: [
+                                    // Non-HTTP first so naive first-wins would pick it
+                                    { node: { id: 'gid://shopify/WebhookSubscription/20', topic: 'ORDERS_CREATE', endpoint: { __typename: 'WebhookEventBridgeEndpoint' } } },
+                                    { node: { id: 'gid://shopify/WebhookSubscription/21', topic: 'ORDERS_CREATE', endpoint: { __typename: 'WebhookHttpEndpoint', callbackUrl: 'https://stale-tunnel.ngrok.io/shopify/webhooks/orders' } } },
+                                ],
+                            },
+                        },
+                    });
+                }
+                if (body.query.includes('webhookSubscriptionUpdate')) return updateSuccess;
+                return createSuccess;
+            });
+
+            const result = await registerWebhooks('test-store.myshopify.com', 'token123');
+
+            const updates = updateCalls();
+            expect(updates).toHaveLength(1);
+            expect(updates[0].variables.id).toBe('gid://shopify/WebhookSubscription/21');
+            expect(result.failed).toEqual([]);
+        });
     });
 
     // --- buildVariantSummary ---
