@@ -169,12 +169,13 @@ describe('BusinessListsSection', () => {
 
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
 
-    // One screen: the name once, the price, AND the session's fields. The
-    // weekday field renders as CHIPS seeded from the complete parse of
-    // «الأحد والثلاثاء» (test UI locale is en, so chips carry English names).
-    // (SidePanel renders desktop + mobile layouts, so fields appear twice.)
+    // Notion model: fields are collapsed property rows — the price row shows
+    // its value inline, and expanding a row reveals its control. The weekday
+    // chips seed from the complete parse of «الأحد والثلاثاء».
     expect(screen.getAllByLabelText('Name')[0]).toHaveValue('دورة ICDL');
+    fireEvent.click(screen.getAllByRole('button', { name: /Price/ })[0]);
     expect(screen.getAllByLabelText('Price')[0]).toHaveValue('35000');
+    fireEvent.click(screen.getAllByRole('button', { name: /الأيام/ })[0]);
     expect(screen.getAllByRole('button', { name: 'Sunday' })[0]).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getAllByRole('button', { name: 'Tuesday' })[0]).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getAllByRole('button', { name: 'Monday' })[0]).toHaveAttribute('aria-pressed', 'false');
@@ -205,6 +206,7 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: /الأيام/ })[0]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Wednesday' })[0]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
 
@@ -228,6 +230,7 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: /الأيام/ })[0]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Type it manually' })[0]);
 
     const input = screen.getAllByLabelText('الأيام').find((el) => el.tagName === 'INPUT') as HTMLInputElement;
@@ -261,8 +264,10 @@ describe('BusinessListsSection', () => {
 
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
 
-    // Recognition over recall: «12-1» populated the pickers (12:00 → 13:00)
-    // and the guess is FLAGGED for review, not silently trusted.
+    // Recognition over recall: «12-1» populated the pickers (12:00 → 13:00),
+    // the row is flagged «auto», and expanding it shows the full hint.
+    expect(screen.getAllByText('auto').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole('button', { name: /الساعة/ })[0]);
     const label13 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', dayPeriod: 'long', timeZone: 'UTC' })
       .format(new Date(Date.UTC(2024, 0, 7, 13, 0)));
     expect(screen.getAllByText(/Read automatically from the text/).length).toBeGreaterThan(0);
@@ -290,6 +295,7 @@ describe('BusinessListsSection', () => {
     // Reopen and actually EDIT the end time through the consistent picker:
     // the stored string regenerates to the merchant's compact form.
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: /الساعة/ })[0]);
     fireEvent.click(screen.getAllByLabelText('To')[0]);
     const label14 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', dayPeriod: 'long', timeZone: 'UTC' })
       .format(new Date(Date.UTC(2024, 0, 7, 14, 0)));
@@ -335,6 +341,7 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: /Start date/ })[0]);
     expect(screen.getAllByLabelText('End date (optional)')[0]).toHaveValue('');
     fireEvent.change(screen.getAllByLabelText('Name')[0], { target: { value: 'دورة ICDL م' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);

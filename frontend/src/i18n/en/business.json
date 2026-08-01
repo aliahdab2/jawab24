@@ -155,6 +155,8 @@
     "sessionsCount": "{count, plural, one {# date} other {# dates}}",
     "timePick": "Pick a time",
     "autofilledHint": "Read automatically from the text — review, then save",
+    "emptyValue": "Empty",
+    "autofilledFlag": "auto",
     "upcomingCount": "{count, plural, one {# upcoming date} other {# upcoming dates}}",
     "noSessions": "No dates",
     "addFirstSession": "Add the first date",

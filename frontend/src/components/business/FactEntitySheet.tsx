@@ -176,12 +176,26 @@ export function FactEntitySheet({
       ? { [unit.sessions[0].row.id]: true }
       : {},
   );
+  // Notion-model property rows (round 9): each field is a thin
+  // «name · value» row that expands IN PLACE to its editing control.
+  const [openProps, setOpenProps] = useState<Record<string, boolean>>({});
+  const toggleProp = (key: string) =>
+    setOpenProps((prev) => ({ ...prev, [key]: !prev[key] }));
+
   const newDraftSeq = useRef(0);
 
   const addSession = () => {
     const draftKey = `new-${++newDraftSeq.current}`;
     setSessions((prev) => [...prev, { draftKey, values: {}, structured: {}, freeText: {}, guessed: {}, startsAt: '', endsAt: '' }]);
     setOpenSessions((prev) => ({ ...prev, [draftKey]: true }));
+    // A fresh session is being AUTHORED — its rows open ready to fill;
+    // existing sessions keep the dense collapsed rows.
+    setOpenProps((prev) => {
+      const next = { ...prev };
+      for (const l of sessionLabels) if (fieldKinds[l] !== 'other') next[`s:${draftKey}:${l}`] = true;
+      next[`s:${draftKey}:dates`] = true;
+      return next;
+    });
   };
 
   /** A label may render its rich DISPLAY form only when EVERY session showing
@@ -351,91 +365,116 @@ export function FactEntitySheet({
     'w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500';
   const labelClass = 'block text-sm text-muted-foreground mb-1.5';
 
+  /** Collapsed row value for a session field — rich display when structured,
+   *  the raw string otherwise. */
+  const fieldDisplay = (s: SessionDraft, label: string): string => {
+    const raw = (s.values[label] ?? '').trim();
+    if (s.freeText[label]) return raw;
+    const sv = s.structured[label];
+    if (sv?.kind === 'weekdays') return sv.days.length ? formatWeekdays(sv.days, intlLocale) : '';
+    if (sv?.kind === 'timeRange') return structuredDisplay(sv, intlLocale) ?? raw;
+    return raw;
+  };
+  const datesDisplay = (s: SessionDraft): string => {
+    const a = formatPlainDate(s.startsAt || null, intlLocale);
+    const b = formatPlainDate(s.endsAt || null, intlLocale);
+    return a ? (b ? `${a} – ${b}` : a) : '';
+  };
+
+  /** One Notion-style property row: name (start, muted) · value (or «فارغ»),
+   *  expanding in place to the visible control — density without hiding
+   *  editability behind hover states. */
+  const propertyRow = (
+    key: string,
+    rowName: string,
+    value: string,
+    children: React.ReactNode,
+    flag?: React.ReactNode,
+  ) => {
+    const openP = !!openProps[key];
+    return (
+      <div key={key}>
+        <button
+          type="button"
+          onClick={() => toggleProp(key)}
+          aria-expanded={openP}
+          className="w-full min-h-[40px] flex items-center gap-3 px-1.5 rounded-lg text-start hover:bg-muted/50 transition-colors"
+        >
+          <span className="w-24 flex-none text-sm text-muted-foreground truncate" dir="auto">{rowName}</span>
+          <span
+            className={`min-w-0 flex-1 text-sm break-words ${value ? 'text-foreground' : 'text-muted-foreground/60'}`}
+            dir="auto"
+          >
+            {value || t('lists.emptyValue')}
+          </span>
+          {flag}
+        </button>
+        {openP && <div className="px-1.5 pb-3 pt-1">{children}</div>}
+      </div>
+    );
+  };
+
   return (
     <SidePanel isOpen onClose={onClose} title={t('lists.editItem')} subtitle={unit.title}>
-      <div className="p-4 sm:p-5 space-y-8 pb-28">
-        {/* ————— General ————— */}
+      <div className="p-4 sm:p-5 space-y-6 pb-28">
+        {/* ————— Notion model (round 9): a borderless TITLE, then thin
+                property rows that expand in place ————— */}
         <section aria-label={t('lists.sectionGeneral')}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="entity-name" className={labelClass}>{t('lists.rowName')}</label>
-              <input
-                id="entity-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                dir={name ? 'auto' : undefined}
-                className={inputClass}
-              />
-            </div>
-            {unit.faceLabel && (
-              <div>
-                <label htmlFor="entity-face" className={labelClass} dir="auto">{unit.faceLabel}</label>
-                <input
-                  id="entity-face"
-                  type="text"
-                  value={faceValue}
-                  onChange={(e) => setFaceValue(e.target.value)}
-                  dir={faceValue ? 'auto' : undefined}
-                  className={inputClass}
-                />
-              </div>
-            )}
-          </div>
+          <input
+            id="entity-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label={t('lists.rowName')}
+            placeholder={t('lists.rowName')}
+            dir={name ? 'auto' : undefined}
+            className="w-full bg-transparent border-0 p-0 text-xl font-bold text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"
+          />
         </section>
 
-        {/* ————— Pricing — deliberately its own section, never mixed with
-                dates (UX review point 2) ————— */}
-        {baseCollection && (
-          <section aria-label={t('lists.sectionPricing')}>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="entity-price" className={labelClass}>{t('lists.rowPrice')}</label>
-                <input
-                  id="entity-price"
-                  type="text"
-                  inputMode="decimal"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder={t('lists.rowPriceOptional')}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label htmlFor="entity-currency" className={labelClass}>{t('lists.rowCurrency')}</label>
-                <input
-                  id="entity-currency"
-                  type="text"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  dir={currency ? 'auto' : undefined}
-                  placeholder={t('lists.rowCurrencyPlaceholder')}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Merchant free-text fields come LAST with room to write (owner:
-            «الملاحظة آخر شي ونكبر الإدخال») — notes are prose, not a slot. */}
-        {baseCollection && baseLabels.length > 0 && (
-          <div className="space-y-4">
-            {baseLabels.map((label) => (
-              <div key={label}>
-                <label htmlFor={`entity-base-${label}`} className={labelClass} dir="auto">{label}</label>
-                <textarea
-                  id={`entity-base-${label}`}
-                  value={baseValues[label] ?? ''}
-                  onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
-                  dir={baseValues[label] ? 'auto' : undefined}
-                  rows={3}
-                  className={`${inputClass} !min-h-[88px] py-2.5 resize-y`}
-                />
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="divide-y divide-theme-border/40">
+          {unit.faceLabel && propertyRow(
+            'base:face',
+            unit.faceLabel,
+            faceValue.trim(),
+            <input
+              id="entity-face"
+              type="text"
+              value={faceValue}
+              onChange={(e) => setFaceValue(e.target.value)}
+              aria-label={unit.faceLabel}
+              dir={faceValue ? 'auto' : undefined}
+              className={inputClass}
+            />,
+          )}
+          {baseCollection && propertyRow(
+            'base:price',
+            t('lists.rowPrice'),
+            price.trim() ? `${price.trim()}${currency.trim() ? ` ${currency.trim()}` : ''}` : '',
+            <div className="flex gap-2">
+              <input
+                id="entity-price"
+                type="text"
+                inputMode="decimal"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                aria-label={t('lists.rowPrice')}
+                placeholder={t('lists.rowPrice')}
+                className={`${inputClass} flex-1`}
+              />
+              <input
+                id="entity-currency"
+                type="text"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                dir={currency ? 'auto' : undefined}
+                aria-label={t('lists.rowCurrency')}
+                placeholder={t('lists.rowCurrency')}
+                className={`${inputClass} !w-32 flex-none`}
+              />
+            </div>,
+          )}
+        </div>
 
         {/* ————— Dates — each one its own numbered card (point 3) ————— */}
         {sessionCollection && (
@@ -497,14 +536,14 @@ export function FactEntitySheet({
                       </button>
                       )}
                     </div>
-                    {open && sessionLabels.filter((l) => fieldKinds[l] !== 'other').map((label) => {
+                    {open && (
+                    <div className="divide-y divide-theme-border/40">
+                    {sessionLabels.filter((l) => fieldKinds[l] !== 'other').map((label) => {
                       const kind = fieldKinds[label];
                       const ft = !!s.freeText[label];
                       const sv = s.structured[label];
                       const fieldId = `entity-session-${i}-${label}`;
-                      // The escape hatch serves ~5% of edits — a quiet text
-                      // link BELOW the control, never competing with it
-                      // (round-8 review point 3).
+                      const rowKey = `s:${s.draftKey}:${label}`;
                       const switchLink = (toFree: boolean, prefill?: string) => (
                         <button
                           type="button"
@@ -516,14 +555,15 @@ export function FactEntitySheet({
                             : t(kind === 'weekday' ? 'lists.useStructuredDays' : 'lists.useStructuredTime')}
                         </button>
                       );
-                      const fieldLabel = (
-                        <label id={`${fieldId}-label`} htmlFor={fieldId} className="block text-sm text-muted-foreground mb-1.5" dir="auto">{label}</label>
-                      );
+                      const flag = s.guessed[label] && sv ? (
+                        <span className="flex-none text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                          {t('lists.autofilledFlag')}
+                        </span>
+                      ) : undefined;
 
-                      if (kind === 'other' || ft) {
-                        return (
-                          <div key={label}>
-                            {fieldLabel}
+                      if (ft) {
+                        return propertyRow(rowKey, label, (s.values[label] ?? '').trim(), (
+                          <>
                             <input
                               id={fieldId}
                               type="text"
@@ -531,23 +571,21 @@ export function FactEntitySheet({
                               onChange={(e) =>
                                 setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
                               }
+                              aria-label={label}
                               dir={s.values[label] ? 'auto' : undefined}
                               className={inputClass}
                             />
-                            {kind !== 'other' && switchLink(false)}
-                          </div>
-                        );
+                            {switchLink(false)}
+                          </>
+                        ));
                       }
 
                       if (kind === 'weekday') {
                         const days = sv?.kind === 'weekdays' ? sv.days : [];
                         const generated = days.length ? formatWeekdays(days, genLocale(label)) : null;
-                        return (
-                          <div key={label}>
-                            {fieldLabel}
-                            {/* 44×44 round targets, natural width — no
-                                segmented-control stretching (round-8 point 4). */}
-                            <span id={fieldId} role="group" aria-labelledby={`${fieldId}-label`} className="flex flex-wrap gap-1.5">
+                        return propertyRow(rowKey, label, fieldDisplay(s, label), (
+                          <>
+                            <span id={fieldId} role="group" aria-label={label} className="flex flex-wrap gap-1.5">
                               {weekdayInfo(intlLocale).map((d) => {
                                 const on = days.includes(d.index);
                                 return (
@@ -556,7 +594,6 @@ export function FactEntitySheet({
                                     type="button"
                                     aria-pressed={on}
                                     aria-label={d.long}
-                                    title={d.long}
                                     onClick={() => {
                                       const next = on
                                         ? days.filter((x) => x !== d.index)
@@ -575,13 +612,11 @@ export function FactEntitySheet({
                               })}
                             </span>
                             {switchLink(true, generated ?? s.values[label] ?? '')}
-                          </div>
-                        );
+                          </>
+                        ));
                       }
 
-                      // kind === 'time' — one consistent Intl-labelled picker
-                      // (the same Select used across the product), never the
-                      // browser-dependent native input (round-8 point 2).
+                      // kind === 'time'
                       const start = sv?.kind === 'timeRange' ? sv.start : '';
                       const end = sv?.kind === 'timeRange' ? sv.end : '';
                       const setTime = (part: 'start' | 'end', v: string) => {
@@ -600,10 +635,9 @@ export function FactEntitySheet({
                         if (h && m) return t('lists.durationBoth', { h: t('lists.durationHours', { count: h }), m: t('lists.durationMinutes', { count: m }) });
                         return h ? t('lists.durationHours', { count: h }) : t('lists.durationMinutes', { count: m });
                       })();
-                      return (
-                        <div key={label}>
-                          {fieldLabel}
-                          <span className="grid grid-cols-2 gap-3">
+                      return propertyRow(rowKey, label, fieldDisplay(s, label), (
+                        <>
+                          <span className="grid grid-cols-2 gap-2">
                             <span>
                               <span id={`${fieldId}-from-label`} className="block text-xs text-muted-foreground mb-1">{t('lists.timeFrom')}</span>
                               <Select
@@ -625,8 +659,6 @@ export function FactEntitySheet({
                               />
                             </span>
                           </span>
-                          {/* Reserved two-line height: hint/preview/duration swap
-                              in and out without moving the fields below. */}
                           <span className="block min-h-[40px] mt-1.5 space-y-0.5">
                             {s.guessed[label] && storage && (
                               <p className="text-xs text-amber-700 dark:text-amber-400" dir="auto">
@@ -638,9 +670,6 @@ export function FactEntitySheet({
                                 {t('lists.timeCurrentText', { text: (s.values[label] ?? '').trim() })}
                               </p>
                             )}
-                            {/* ONE representation (round-8): the stored string
-                                only — the duration line below already proves the
-                                disambiguation without a second notation. */}
                             {storage && !s.guessed[label] && (
                               <p className="text-xs text-muted-foreground" dir="auto">
                                 {t('lists.previewLabel', { text: storage })}
@@ -651,38 +680,40 @@ export function FactEntitySheet({
                             )}
                           </span>
                           {switchLink(true, storage ?? s.values[label] ?? '')}
-                        </div>
-                      );
+                        </>
+                      ), flag);
                     })}
-                    {open && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label htmlFor={`entity-session-${i}-start`} className={labelClass}>{t('lists.rowDate')}</label>
-                        <input
-                          id={`entity-session-${i}-start`}
-                          type="date"
-                          value={s.startsAt}
-                          onChange={(e) => setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, startsAt: e.target.value } : p)))}
-                          className={inputClass}
-                        />
+                    {propertyRow(`s:${s.draftKey}:dates`, t('lists.rowDate'), datesDisplay(s), (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label htmlFor={`entity-session-${i}-start`} className={labelClass}>{t('lists.rowDate')}</label>
+                          <input
+                            id={`entity-session-${i}-start`}
+                            type="date"
+                            value={s.startsAt}
+                            onChange={(e) => setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, startsAt: e.target.value } : p)))}
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor={`entity-session-${i}-end`} className={labelClass}>{t('lists.rowEndDate')}</label>
+                          <input
+                            id={`entity-session-${i}-end`}
+                            type="date"
+                            value={s.endsAt}
+                            min={s.startsAt || undefined}
+                            onChange={(e) => setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, endsAt: e.target.value } : p)))}
+                            aria-invalid={(s.startsAt && s.endsAt && s.endsAt < s.startsAt) || undefined}
+                            className={inputClass}
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label htmlFor={`entity-session-${i}-end`} className={labelClass}>{t('lists.rowEndDate')}</label>
-                        <input
-                          id={`entity-session-${i}-end`}
-                          type="date"
-                          value={s.endsAt}
-                          min={s.startsAt || undefined}
-                          onChange={(e) => setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, endsAt: e.target.value } : p)))}
-                          aria-invalid={(s.startsAt && s.endsAt && s.endsAt < s.startsAt) || undefined}
-                          className={inputClass}
-                        />
-                      </div>
+                    ))}
                     </div>
                     )}
                     {open && sessionLabels.filter((l) => fieldKinds[l] === 'other').map((label) => (
-                      <div key={label}>
-                        <label htmlFor={`entity-session-${i}-${label}`} className={labelClass} dir="auto">{label}</label>
+                      <div key={label} className="rounded-lg bg-card/70 px-3 py-2 focus-within:ring-2 focus-within:ring-brand-500/30">
+                        <label htmlFor={`entity-session-${i}-${label}`} className="block text-xs text-muted-foreground mb-1" dir="auto">{label}</label>
                         <textarea
                           id={`entity-session-${i}-${label}`}
                           value={s.values[label] ?? ''}
@@ -691,7 +722,8 @@ export function FactEntitySheet({
                           }
                           dir={s.values[label] ? 'auto' : undefined}
                           rows={2}
-                          className={`${inputClass} !min-h-[72px] py-2.5 resize-y`}
+                          placeholder={t('lists.emptyValue')}
+                          className="w-full min-h-[56px] bg-transparent border-0 p-0 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-0 resize-y"
                         />
                       </div>
                     ))}
@@ -713,6 +745,27 @@ export function FactEntitySheet({
               <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{t('lists.dateRangeInvalid')}</p>
             )}
           </section>
+        )}
+
+        {/* The Notion body: merchant free-text lives at the BOTTOM as an open
+            canvas, not a boxed field (owner: «الملاحظة آخر شي ونكبر الإدخال»). */}
+        {baseCollection && baseLabels.length > 0 && (
+          <div className="space-y-3">
+            {baseLabels.map((label) => (
+              <div key={label} className="rounded-xl bg-muted/40 px-3 py-2.5 focus-within:ring-2 focus-within:ring-brand-500/30">
+                <label htmlFor={`entity-base-${label}`} className="block text-sm text-muted-foreground mb-1" dir="auto">{label}</label>
+                <textarea
+                  id={`entity-base-${label}`}
+                  value={baseValues[label] ?? ''}
+                  onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
+                  dir={baseValues[label] ? 'auto' : undefined}
+                  rows={3}
+                  placeholder={t('lists.emptyValue')}
+                  className="w-full min-h-[80px] bg-transparent border-0 p-0 text-base text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-0 resize-y"
+                />
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Destructive action lives at the END of the form, spatially far from
