@@ -140,7 +140,19 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <div
+      ref={containerRef}
+      className="relative"
+      // Esc closes the DROPDOWN only: without stopPropagation it bubbles to a
+      // parent sheet's window-level escape handler, which closes (or asks to
+      // discard) the whole modal mid-pick.
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && isOpen) {
+          e.stopPropagation();
+          setIsOpen(false);
+        }
+      }}
+    >
       {label && <label className="label">{label}</label>}
       
       {/* Trigger Button */}

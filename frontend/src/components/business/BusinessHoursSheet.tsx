@@ -1,10 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { X, Check, Plus, Trash2, Copy, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { DetailSheet, Button, Toggle, ConfirmationModal } from '@/components/ui';
 import { TimeSelect } from './TimeSelect';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { useMerchantTimezone } from '@/hooks/useMerchantTimezone';
 import {
   DAY_KEYS,
@@ -24,6 +25,9 @@ interface BusinessHoursSheetProps {
   /** Existing hours (any accepted day-key form). */
   initialHours: Record<string, string[]> | undefined;
   saving: boolean;
+  /** Save failure, rendered INSIDE the sheet — toasts sit under the modal
+   *  tier (z-45 < z-50), so a toast can't carry this message. */
+  saveError?: string | null;
   onSave: (hours: Record<string, string[]> | undefined) => void;
   onClose: () => void;
 }
@@ -56,7 +60,7 @@ interface BusinessHoursSheetProps {
  * so the merchant sees what the AI will tell customers without scrolling, and
  * pays the extra tap only on the day they actually change.
  */
-export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: BusinessHoursSheetProps) {
+export function BusinessHoursSheet({ initialHours, saving, saveError = null, onSave, onClose }: BusinessHoursSheetProps) {
   const t = useTranslations('business');
   const tc = useTranslations('common');
   const timezone = useMerchantTimezone();
@@ -139,25 +143,40 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
   const valid = serialized !== null && hasOpenDay(week) && overlaps.length === 0;
 
   // Compared through the SAME serializer that saves, so "unchanged" means
-  // exactly "saving would write what is already stored". Without this the
-  // sheet opened with a live Save on any page with valid existing hours —
-  // the only editor in the section whose Save wasn't gated on a change.
-  // The baseline is what is STORED, not the seeded editor state: with no
-  // saved hours, `initial` is the regional default week, and diffing against
-  // it would stop a first-time merchant from one-tap-saving that default.
-  const hasStoredHours = !!initialHours && Object.keys(initialHours).length > 0;
+  // exactly "the editor still shows what it opened with".
   const initialSerialized = useMemo(() => JSON.stringify(serializeWeek(initial)), [initial]);
-  const dirty = !hasStoredHours || JSON.stringify(serialized) !== initialSerialized;
+  const changed = JSON.stringify(serialized) !== initialSerialized;
+
+  // Two gates from one diff, and they differ on purpose:
+  //  - SAVE also opens for a first-time merchant (`!hasStoredHours`): nothing
+  //    is stored yet, so one-tap-saving the seeded default week is a real
+  //    save, not a no-op. The sheet opened with a live Save on pages with
+  //    existing hours — the only editor in the section not gated on a change.
+  //  - The CLOSE GUARD uses `changed` alone: on first open the editor equals
+  //    its seed, and warning «لديك تغييرات غير محفوظة» with zero edits made
+  //    is false — it trains merchants to dismiss the warning.
+  const hasStoredHours = !!initialHours && Object.keys(initialHours).length > 0;
+  const dirty = !hasStoredHours || changed;
 
   // Typed-but-unsaved edits never vanish on a stray tap.
   const [confirmClose, setConfirmClose] = useState(false);
   const attemptClose = () => {
-    if (dirty && !saving) setConfirmClose(true);
+    // Mid-save, closing would race the outcome: a failure needs the sheet
+    // (the inline error renders here), so close waits the last second out.
+    if (saving) return;
+    if (changed) setConfirmClose(true);
     else onClose();
   };
   // While the discard confirm is up, ITS Esc handling wins — otherwise one
   // keypress closes the confirm and this hook instantly re-opens it.
   useEscapeKey(attemptClose, !confirmClose);
+  // Android hardware back must take the SAME guarded path as X/Esc/swipe.
+  // Ref-stabilized so re-renders never re-push this sheet above a stacked
+  // ConfirmationModal in the back-handler stack.
+  const attemptCloseRef = useRef(attemptClose);
+  attemptCloseRef.current = attemptClose;
+  const stableAttemptClose = useCallback(() => attemptCloseRef.current(), []);
+  useModalBackHandler(true, stableAttemptClose);
 
   const submit = () => {
     if (saving || !valid || !dirty) return;
@@ -178,8 +197,9 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
         <button
           type="button"
           onClick={attemptClose}
+          disabled={saving}
           aria-label={tc('close')}
-          className="min-h-[44px] min-w-[44px] -me-2 flex items-center justify-center rounded-lg hover:bg-surface-100 text-surface-500"
+          className="min-h-[44px] min-w-[44px] -me-2 flex items-center justify-center rounded-lg hover:bg-surface-100 text-surface-500 disabled:opacity-40"
         >
           <X className="w-5 h-5" aria-hidden="true" />
         </button>
@@ -263,8 +283,6 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
                 {isExpanded && state.kind === 'ranges' && (
                   <div className="pb-3 space-y-2">
                     {state.ranges.map((range, i) => {
-                      const fromId = `hours-${day}-${i}-from`;
-                      const toId = `hours-${day}-${i}-to`;
                       return (
                         // items-end so the dash and the delete button sit on the
                         // inputs' baseline once the captions push them down.
@@ -275,25 +293,28 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
                                 where the visual order flips. Google labels both;
                                 so do we. TimeSelect (not the native time input)
                                 so the value always reads «09:00» like the
-                                summaries — see its doc comment. */}
-                            <label id={`${fromId}-label`} className="block text-[11px] text-muted-foreground mb-1">
+                                summaries — see its doc comment. The accessible
+                                name carries the DAY too: seven identical
+                                «يفتح» labels are indistinguishable in a
+                                screen-reader's controls list. */}
+                            <span aria-hidden="true" className="block text-[11px] text-muted-foreground mb-1">
                               {t('facts.hoursFrom')}
-                            </label>
+                            </span>
                             <TimeSelect
                               value={range.from}
                               onChange={(v) => setRange(day, i, 'from', v)}
-                              aria-labelledby={`${fromId}-label`}
+                              aria-label={`${dayLabel} — ${t('facts.hoursFrom')}`}
                             />
                           </div>
                           <span aria-hidden="true" className="text-muted-foreground pb-3">–</span>
                           <div className="flex-1 min-w-0">
-                            <label id={`${toId}-label`} className="block text-[11px] text-muted-foreground mb-1">
+                            <span aria-hidden="true" className="block text-[11px] text-muted-foreground mb-1">
                               {t('facts.hoursTo')}
-                            </label>
+                            </span>
                             <TimeSelect
                               value={range.to}
                               onChange={(v) => setRange(day, i, 'to', v)}
-                              aria-labelledby={`${toId}-label`}
+                              aria-label={`${dayLabel} — ${t('facts.hoursTo')}`}
                             />
                           </div>
                           {state.ranges.length > 1 && (
@@ -364,8 +385,16 @@ export function BusinessHoursSheet({ initialHours, saving, onSave, onClose }: Bu
         )}
       </div>
 
+      {/* A failed save reports HERE: the sheet stays open on failure, and a
+          toast would render under this very overlay (toasts cap at z-45). */}
+      {saveError && (
+        <p role="alert" className="flex-shrink-0 mx-4 lg:mx-5 mb-2 rounded-xl alert-error border px-3 py-2 text-sm">
+          {saveError}
+        </p>
+      )}
+
       <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
-        <Button variant="secondary" size="sm" onClick={attemptClose} className="max-sm:h-11">
+        <Button variant="secondary" size="sm" onClick={attemptClose} disabled={saving} className="max-sm:h-11">
           {tc('cancel')}
         </Button>
         <Button

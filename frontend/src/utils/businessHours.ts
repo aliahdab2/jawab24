@@ -173,7 +173,12 @@ export function nextPeriodDefault(ranges: TimeRange[]): TimeRange {
   if (ranges.length === 0) return { ...DEFAULT_RANGE };
   const iv = toIntervals(ranges);
   const lastEnd = iv[iv.length - 1].end;
-  const start = Math.min(lastEnd + 60, 22 * 60);
+  // An hour after the last close, but the late-evening clamp must never pull
+  // the start BEFORE that close: min(lastEnd+60, 22:00) alone put the new
+  // period INSIDE any day closing after 22:00 (09:00-23:00 → 22:00-23:59 =
+  // instant overlap, and the "add period" tap dead-ended on the overlap
+  // gate). Adjacent-to-close is valid — only true overlaps are refused.
+  const start = Math.min(lastEnd + 60, Math.max(22 * 60, lastEnd), 23 * 60 + 58);
   const end = Math.min(start + 180, 23 * 60 + 59);
   return { from: toClock(start), to: toClock(end) };
 }

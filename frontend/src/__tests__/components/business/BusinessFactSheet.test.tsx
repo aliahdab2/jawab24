@@ -261,6 +261,25 @@ describe('BusinessFactSheet — store-answered note', () => {
   });
 });
 
+describe('BusinessFactSheet — save failure', () => {
+  // The sheet stays open on failure and toasts render UNDER the modal tier
+  // (z-45 < z-50), so the sheet itself must carry the error.
+  it('renders the failure inline with role=alert', () => {
+    render(
+      <BusinessFactSheet
+        factKey="address"
+        label="address"
+        initialValue=""
+        saving={false}
+        saveError="Could not save"
+        onSave={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not save');
+  });
+});
+
 describe('BusinessFactSheet — unsaved-changes guard', () => {
   it('closes silently when nothing changed', () => {
     const onClose = vi.fn();

@@ -237,6 +237,16 @@ describe('BusinessHoursSheet — Save is gated on a change', () => {
     renderSheet(undefined);
     expect(saveButton()).toBeEnabled();
   });
+
+  // …but the CLOSE guard must not treat the seeded default as "changes":
+  // open → X with zero edits made must not warn about unsaved changes.
+  it('first-time open still closes silently', () => {
+    const onClose = vi.fn();
+    renderSheet(undefined, vi.fn(), onClose);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalled();
+    expect(screen.queryByTestId('discard-confirm')).not.toBeInTheDocument();
+  });
 });
 
 describe('BusinessHoursSheet — time selects', () => {

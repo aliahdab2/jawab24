@@ -46,8 +46,11 @@ export const DetailSheet: React.FC<DetailSheetProps> = ({
 }) => {
   // Handle-only drag: the panel body scrolls, so a whole-sheet gesture would
   // fight the scroll direction lock. The handle is dead space by design —
-  // pointer events there can own the vertical axis outright.
+  // pointer events there can own the vertical axis outright. The ref mirrors
+  // the state so the release handler reads the LAST pointermove, not the
+  // render-time value — on a fast flick those differ by an event.
   const [dragY, setDragY] = useState(0);
+  const dragYRef = useRef(0);
   const dragStart = useRef<number | null>(null);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -56,12 +59,15 @@ export const DetailSheet: React.FC<DetailSheetProps> = ({
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (dragStart.current === null) return;
-    setDragY(Math.max(0, e.clientY - dragStart.current));
+    const dy = Math.max(0, e.clientY - dragStart.current);
+    dragYRef.current = dy;
+    setDragY(dy);
   };
   const onPointerEnd = () => {
     if (dragStart.current === null) return;
-    const shouldDismiss = dragY > SWIPE_DISMISS_PX;
+    const shouldDismiss = dragYRef.current > SWIPE_DISMISS_PX;
     dragStart.current = null;
+    dragYRef.current = 0;
     setDragY(0);
     if (shouldDismiss) onSwipeDismiss?.();
   };
@@ -91,13 +97,16 @@ export const DetailSheet: React.FC<DetailSheetProps> = ({
       >
         {onSwipeDismiss && (
           <div
-            className="sm:hidden flex-shrink-0 flex justify-center py-2 touch-none cursor-grab"
+            // py-3 for a usable swipe target; the bar needs real contrast —
+            // theme-border on the card surface measured ~1.15:1 in dark mode,
+            // an affordance that effectively didn't exist.
+            className="sm:hidden flex-shrink-0 flex justify-center py-3 touch-none cursor-grab"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerEnd}
             onPointerCancel={onPointerEnd}
           >
-            <span aria-hidden="true" className="h-1 w-10 rounded-full bg-theme-border" />
+            <span aria-hidden="true" className="h-1 w-10 rounded-full bg-muted-foreground/40" />
           </div>
         )}
         {children}

@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { X, Check, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import { DetailSheet, Button, WhatsAppIcon, ConfirmationModal } from '@/components/ui';
 import { VoiceRecordButton } from '@/components/knowledge-base/VoiceRecordButton';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { useTextareaAutoResize } from '@/hooks/useTextareaAutoResize';
 
 /** Facts editable through the single-field sheet. `hours` is NOT here — it is a
@@ -93,6 +94,10 @@ interface BusinessFactSheetProps {
   /** A connected store already answers this fact — writing here is an override. */
   storeAnswered?: boolean;
   saving: boolean;
+  /** Save failure, rendered INSIDE the sheet: toasts are capped below the
+   *  modal tier (z-45 < z-50) so they can never block a footer again — which
+   *  also means a toast can no longer carry this message. */
+  saveError?: string | null;
   /** `whatsapp` is passed for `phone` only — the numbers flagged in the sheet. */
   onSave: (value: string, whatsapp?: string[]) => void;
   onClose: () => void;
@@ -119,6 +124,7 @@ export function BusinessFactSheet({
   initialWhatsapp,
   storeAnswered = false,
   saving,
+  saveError = null,
   onSave,
   onClose,
 }: BusinessFactSheetProps) {
@@ -165,12 +171,21 @@ export function BusinessFactSheet({
 
   // Address runs ~3 lines, policies ~4 — same floors the fixed `rows` gave,
   // but the box now grows with the text instead of clipping it mid-line.
+  // Keyed on `value` so EVERY way the text changes resizes the box — typing,
+  // a preset tap, a voice transcription landing — after React commits, not
+  // before (a synchronous call in the click handler measured the old DOM).
   const { ref: textareaRef, autoResize } = useTextareaAutoResize(factKey === 'address' ? 72 : 96, 320);
   useEffect(() => {
     if (isMultiline && !isMulti && !intake) autoResize();
-  }, [isMultiline, isMulti, intake, autoResize]);
+  }, [value, isMultiline, isMulti, intake, autoResize]);
 
   const joined = entries.map((e) => e.value.trim()).filter(Boolean).join(', ');
+  // Through the SAME split/trim/join as `entries`, so legacy spacing or a
+  // stored duplicate can't make the sheet open already-dirty.
+  const initialJoined = useMemo(
+    () => initialValue.split(/[,،]/).map((p) => p.trim()).filter(Boolean).join(', '),
+    [initialValue],
+  );
   const waList = entries.filter((e) => e.wa && e.value.trim()).map((e) => e.value.trim());
   const initialWaList = useMemo(() => {
     const wa = (Array.isArray(initialWhatsapp) ? initialWhatsapp : initialWhatsapp ? [initialWhatsapp] : [])
@@ -221,7 +236,7 @@ export function BusinessFactSheet({
   };
 
   const dirty = isMulti
-    ? joined !== initialValue.trim()
+    ? joined !== initialJoined
       || JSON.stringify([...waList].sort()) !== JSON.stringify([...initialWaList].sort())
     : intake
       ? composed().trim() !== ''
@@ -230,12 +245,24 @@ export function BusinessFactSheet({
   // ── Close guard: typed-but-unsaved edits never vanish on a stray tap ─────
   const [confirmClose, setConfirmClose] = useState(false);
   const attemptClose = () => {
-    if (dirty && !saving) setConfirmClose(true);
+    // Mid-save, closing would race the outcome: a failure needs the sheet
+    // (the inline error renders here), so close waits the last second out.
+    if (saving) return;
+    if (dirty) setConfirmClose(true);
     else onClose();
   };
   // While the discard confirm is up, ITS Esc handling wins — otherwise one
   // keypress closes the confirm and this hook instantly re-opens it.
   useEscapeKey(attemptClose, !confirmClose);
+  // Android hardware back must take the SAME guarded path as X/Esc/swipe.
+  // Ref-stabilized: useModalBackHandler re-registers when its callback
+  // identity changes, and a re-render while the discard confirm is stacked
+  // on top would push this sheet back above it — back would then close the
+  // sheet under the confirm.
+  const attemptCloseRef = useRef(attemptClose);
+  attemptCloseRef.current = attemptClose;
+  const stableAttemptClose = useCallback(() => attemptCloseRef.current(), []);
+  useModalBackHandler(true, stableAttemptClose);
 
   const addEntry = () => {
     setConfirmingDelete(null);
@@ -249,7 +276,9 @@ export function BusinessFactSheet({
 
   const setEntryValue = (i: number, v: string) => {
     setConfirmingDelete(null);
-    setEntries((prev) => prev.map((e, j) => (j === i ? { ...e, value: v } : e)));
+    // Clearing a number clears its mark too — a checked-but-disabled box on
+    // an empty row claimed a WhatsApp number that no longer exists.
+    setEntries((prev) => prev.map((e, j) => (j === i ? { value: v, wa: v.trim() ? e.wa : false } : e)));
   };
 
   const toggleWa = (i: number) =>
@@ -271,6 +300,14 @@ export function BusinessFactSheet({
 
   const intakeFieldClass =
     'w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500';
+  /** Same Enter-saves behavior as the single-line fields. */
+  const submitOnEnter = (ev: React.KeyboardEvent) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); submit(); }
+  };
+  // The backend caps each policy at 500 chars; these caps keep the COMPOSED
+  // text (labels + all fields) under it so a long answer can't fail at save.
+  const INTAKE_FIELD_MAX = 120;
+  const INTAKE_NOTE_MAX = 200;
 
   return (
     <DetailSheet
@@ -287,8 +324,9 @@ export function BusinessFactSheet({
         <button
           type="button"
           onClick={attemptClose}
+          disabled={saving}
           aria-label={tc('close')}
-          className="min-h-[44px] min-w-[44px] -me-2 flex items-center justify-center rounded-lg hover:bg-surface-100 text-surface-500"
+          className="min-h-[44px] min-w-[44px] -me-2 flex items-center justify-center rounded-lg hover:bg-surface-100 text-surface-500 disabled:opacity-40"
         >
           <X className="w-5 h-5" aria-hidden="true" />
         </button>
@@ -336,6 +374,7 @@ export function BusinessFactSheet({
                     placeholder={t(`facts.placeholder_${factKey}`)}
                     aria-label={`${label} ${i + 1}`}
                     aria-invalid={duplicateIndexes.has(i) || undefined}
+                    aria-describedby={duplicateIndexes.has(i) ? `${inputId}-dup-${i}` : undefined}
                     className={clsx(
                       'flex-1 min-w-0 min-h-[44px] rounded-xl border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500',
                       duplicateIndexes.has(i) ? 'border-red-400 dark:border-red-700' : 'border-theme-border',
@@ -347,7 +386,7 @@ export function BusinessFactSheet({
                         variant="danger"
                         size="sm"
                         onClick={() => removeEntry(i)}
-                        className="flex-shrink-0"
+                        className="flex-shrink-0 min-h-[44px]"
                       >
                         {t('facts.deleteNumberConfirm')}
                       </Button>
@@ -367,7 +406,7 @@ export function BusinessFactSheet({
                   )}
                 </div>
                 {duplicateIndexes.has(i) && (
-                  <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+                  <p id={`${inputId}-dup-${i}`} role="alert" className="text-xs text-red-600 dark:text-red-400">
                     {t('facts.duplicateNumber')}
                   </p>
                 )}
@@ -376,7 +415,7 @@ export function BusinessFactSheet({
                     visible — the old badge read as a label. */}
                 <label
                   className={clsx(
-                    'min-h-[36px] inline-flex items-center gap-1.5 rounded-full ps-2.5 pe-3 text-xs font-medium border transition select-none focus-within:ring-2 focus-within:ring-brand-500',
+                    'min-h-[36px] max-sm:min-h-[44px] inline-flex items-center gap-1.5 rounded-full ps-2.5 pe-3 text-xs font-medium border transition select-none focus-within:ring-2 focus-within:ring-brand-500',
                     !e.value.trim()
                       ? 'opacity-40'
                       : 'cursor-pointer',
@@ -424,7 +463,9 @@ export function BusinessFactSheet({
               <button
                 type="button"
                 aria-pressed={deliveryAnswer === 'yes'}
-                onClick={() => setDeliveryAnswer('yes')}
+                // A real toggle: pressing again un-answers and folds the
+                // detail fields away — aria-pressed promises exactly that.
+                onClick={() => setDeliveryAnswer((prev) => (prev === 'yes' ? null : 'yes'))}
                 className={clsx(
                   'min-h-[44px] rounded-full border px-4 text-sm font-medium transition',
                   deliveryAnswer === 'yes'
@@ -452,7 +493,9 @@ export function BusinessFactSheet({
                     id={`${inputId}-areas`}
                     type="text"
                     value={deliveryAreas}
+                    maxLength={INTAKE_FIELD_MAX}
                     onChange={(ev) => setDeliveryAreas(ev.target.value)}
+                    onKeyDown={submitOnEnter}
                     dir={deliveryAreas ? 'auto' : undefined}
                     autoFocus
                     placeholder={t('facts.deliveryAreasPlaceholder')}
@@ -467,7 +510,9 @@ export function BusinessFactSheet({
                     id={`${inputId}-cost`}
                     type="text"
                     value={deliveryCost}
+                    maxLength={INTAKE_FIELD_MAX}
                     onChange={(ev) => setDeliveryCost(ev.target.value)}
+                    onKeyDown={submitOnEnter}
                     dir={deliveryCost ? 'auto' : undefined}
                     placeholder={t('facts.deliveryCostPlaceholder')}
                     className={intakeFieldClass}
@@ -481,7 +526,9 @@ export function BusinessFactSheet({
                     id={`${inputId}-time`}
                     type="text"
                     value={deliveryTime}
+                    maxLength={INTAKE_FIELD_MAX}
                     onChange={(ev) => setDeliveryTime(ev.target.value)}
+                    onKeyDown={submitOnEnter}
                     dir={deliveryTime ? 'auto' : undefined}
                     placeholder={t('facts.deliveryTimePlaceholder')}
                     className={intakeFieldClass}
@@ -536,7 +583,9 @@ export function BusinessFactSheet({
                 id={`${inputId}-note`}
                 type="text"
                 value={payNote}
+                maxLength={INTAKE_NOTE_MAX}
                 onChange={(ev) => setPayNote(ev.target.value)}
+                onKeyDown={submitOnEnter}
                 dir={payNote ? 'auto' : undefined}
                 placeholder={t('facts.paymentNotePlaceholder')}
                 className={intakeFieldClass}
@@ -556,7 +605,7 @@ export function BusinessFactSheet({
               ref={textareaRef}
               id={inputId}
               value={value}
-              onChange={(e) => { setValue(e.target.value); autoResize(); }}
+              onChange={(e) => setValue(e.target.value)}
               dir={value ? 'auto' : undefined}
               rows={factKey === 'address' ? 3 : 4}
               autoFocus
@@ -597,7 +646,7 @@ export function BusinessFactSheet({
               <button
                 key={presetKey}
                 type="button"
-                onClick={() => { setValue(t(`facts.${presetKey}`)); autoResize(); }}
+                onClick={() => setValue(t(`facts.${presetKey}`))}
                 className="min-h-[36px] rounded-full border border-theme-border bg-card px-3 text-xs font-medium text-muted-foreground hover:bg-surface-100 hover:text-foreground"
               >
                 {t(`facts.${presetKey}`)}
@@ -607,9 +656,17 @@ export function BusinessFactSheet({
         )}
       </div>
 
+      {/* A failed save reports HERE: the sheet stays open on failure, and a
+          toast would render under this very overlay (toasts cap at z-45). */}
+      {saveError && (
+        <p role="alert" className="flex-shrink-0 mx-4 lg:mx-5 mb-2 rounded-xl alert-error border px-3 py-2 text-sm">
+          {saveError}
+        </p>
+      )}
+
       {/* Footer */}
       <div className="flex-shrink-0 flex items-center justify-end gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
-        <Button variant="secondary" size="sm" onClick={attemptClose} className="max-sm:h-11">
+        <Button variant="secondary" size="sm" onClick={attemptClose} disabled={saving} className="max-sm:h-11">
           {tc('cancel')}
         </Button>
         <Button
