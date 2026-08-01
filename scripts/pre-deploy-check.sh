@@ -194,167 +194,52 @@ echo "🔒 Running dependency security audit..."
 
 AUDIT_FAILED=false
 
-# GHSA-3ppc-4f35-3m26 — minimatch ReDoS inside @sentry/node's bundler tooling.
-# Patterns are developer-supplied (not user input); no upstream fix yet.
-# GHSA-gpj5-g38j-94v9 — drizzle-orm SQL injection via dynamic identifiers.
-# We use static schema only (no dynamic table/column names). Fix requires major upgrade (0.29→0.45).
-# GHSA-vpq2-c234-7xj6 — teeny-request via @google-cloud/firestore (optional dep of firebase-admin).
-# Transitive, no direct fix available until firebase-admin ships patched version.
-# GHSA-q4gf-8mx6-v5v3 — Next.js DoS via Server Components (next@16.0.0-beta.0 - 16.2.2).
-# next-intl declares next@^16.0.0 as a peer dep, causing npm to hoist next@16.2.1 at root.
-# Our app runs on frontend/node_modules/next@15.5.15 (patched). The root next@16.x is a
-# resolution artifact only — it does not serve requests. Additionally, we use Pages Router
-# exclusively (no App Router server components), so the DoS vector does not apply.
-# GHSA-w5hq-g745-h8pq — uuid missing buffer bounds check in v3/v5/v6 when caller passes
-# pre-allocated `buf`. Transitive via bullmq/exceljs/gaxios; none of them call uuid with a
-# caller-provided buffer (all use the no-arg form for ID generation). Vulnerable code path
-# unreachable. Re-audit when these packages bump their uuid dep to >=14.
-# GHSA-qx2v-qp2m-jg93 — postcss XSS via unescaped </style> in CSS stringify output (moderate).
-# postcss is build-time CSS tooling for the frontend (tailwindcss/autoprefixer/next). It never
-# processes user-controlled CSS at runtime — output is static CSS files baked into the bundle.
-# The XSS vector requires runtime stringification of attacker-controlled CSS, which we don't do.
-# Surfaces in the backend audit only because npm audit reads the workspace-wide lockfile.
-# GHSA-v2v4-37r5-5v8g — ip-address XSS in Address6 HTML-emitting methods (moderate).
-# Transitive via geoip-lite. We only call geoip.lookup(ip), which returns a plain JS object
-# (country/region/city). The vulnerable Address6.toString()/HTML-emitter methods are never
-# invoked, so the XSS path is unreachable.
-# GHSA-4c35-wcg5-mm9h — next-intl prototype pollution via experimental.messages.precompile
-# with attacker-controlled translation catalog keys. We use the standard getMessages flow
-# (makeGetStaticProps loading static JSON from frontend/src/i18n/{en,ar}/*.json) and do not
-# enable experimental.messages.precompile. Vulnerable code path is unreachable.
-# GHSA-r27j-894h-3w3p — icu-minify DoS via unsanitized `select` key lookup on Object.prototype
-# when precompile: true. Transitive via next-intl's precompile feature, which we don't use
-# (see GHSA-4c35-wcg5-mm9h above). Vulnerable code path is unreachable.
-# GHSA-q6x5-8v7m-xcrf, GHSA-2pr8-phx7-x9h3, GHSA-66ff-xgx4-vchm, GHSA-fx83-v9x8-x52w,
-# GHSA-75px-5xx7-5xc7, GHSA-jvwf-75h9-cwgg, GHSA-685m-2w69-288q, GHSA-f38q-mgvj-vph7,
-# GHSA-j3f2-48v5-ccww —
-# nine protobufjs CVEs (overlong UTF-8 decode, DoS via crafted field names, code injection
-# through bytes-field defaults, prototype injection, code-gen gadget after prototype
-# pollution, DoS via unsafe option paths, DoS via unbounded recursion, schema-derived names
-# shadowing runtime-significant properties, DoS via infinite loop in .proto option parsing).
-# All transitive via firebase-admin ->
-# @google-cloud/firestore -> google-gax -> @grpc/proto-loader -> protobufjs. Reachability:
-# protobufjs only decodes messages exchanged with Google's Firestore service (a trusted
-# Google endpoint). We never parse user-supplied .proto files, never construct protobuf
-# messages from attacker-controlled bytes, and never expose protobuf endpoints to clients.
-# Patched versions exist (7.5.6+) but cannot be applied without breaking the typecheck via
-# pdfjs-dist semver-minor bump in the same lockfile regeneration. Track upstream
-# firebase-admin release that ships protobufjs >=7.5.6 transitively, then drop these.
-# GHSA-h67p-54hq-rp68, GHSA-52cp-r559-cp3m — js-yaml merge-key quadratic-complexity DoS (two
-# sibling advisories for the SAME defect: repeated-alias / merge-key-chain CPU blowup, high).
-# Transitive via gray-matter, which we use only in frontend/src/lib/blog.ts to parse the
-# frontmatter of our OWN static blog markdown (frontend/src/content/blog/{en,ar}/*.md) at build
-# time — never user-supplied YAML. The DoS requires an attacker-controlled YAML document, which
-# never reaches js-yaml. The patched js-yaml (4.x) drops the js-yaml@^3 API gray-matter@4 depends
-# on, so it can't be force-overridden without breaking blog parsing; revisit when gray-matter
-# ships a release built on js-yaml@4.
-# GHSA-3jxr-9vmj-r5cp — brace-expansion DoS via exponential expansion of crafted brace patterns
-# (high). Transitive via glob/minimatch. Every production path reaches it through DEVELOPER-
-# configured glob patterns, never attacker input: @fastify/static (backend, globs the fixed
-# static root at startup), @sentry/bundler-plugin-core (build-time sourcemap upload), and rimraf
-# (build/clean scripts). The exponential blowup requires an attacker-controlled brace string in
-# expand(), which no request path supplies. A bump is available (brace-expansion 2.x/5.0.7+) but
-# only applies via a full lockfile re-resolve (the next-intl→next peer override forces
-# --legacy-peer-deps), which reshuffles unrelated tree nodes (e.g. prunes a stale root axios) —
-# disproportionate churn for an unreachable build/startup-time DoS. Revisit if a runtime path
-# ever globs attacker-supplied patterns, or fold the bump into the next broad lockfile refresh.
+# ── Acknowledged-unreachable advisories ─────────────────────────────────────────
+# Broad dependency refresh 2026-08-01 took the workspace audit from 33 findings
+# (1 critical, 12 high, 20 moderate) down to the 5 GHSAs below:
+#   - in-range updates: tar (the critical), axios, hono, fast-uri, find-my-way,
+#     js-yaml, brace-expansion, protobufjs, @google-cloud/storage, gaxios
+#   - next 15.5.18 → 15.5.22 (clears the entire Next 15.5.x server CVE cluster:
+#     GHSA-m99w/89xv/68g3/4633/4c39/p9j2/q8wf/955p — contrary to the earlier note,
+#     a patched 15.5.x DID ship; no Next 16 needed for these)
+#   - @fastify/swagger-ui 5 → 6 (ships @fastify/static 10: GHSA-83w8/8pvw fixed)
+#   - firebase-admin 13 → 14 (clears the firestore/google-gax/teeny-request chain)
+#   - root overrides: uuid ^11.1.1 (GHSA-w5hq), sharp ^0.35.3 (GHSA-f88m libvips
+#     CVEs), drizzle-kit's esbuild ^0.25 + @hono/node-server ^2 (dev-only cluster)
+#   - REMOVED the vestigial next-intl→next@16.2.3 override (April 2026 artifact,
+#     commit 977cbe67): the tree now holds a SINGLE hoisted next — previously
+#     next-intl/@sentry/nextjs resolved next@16.x while the app ran 15.5.x
+#   - sharp added as an explicit frontend dependency: next/@vercel/og declare it
+#     OPTIONAL and the override made npm silently omit it, but standalone output
+#     REQUIRES sharp for image optimization
+#   - full package-lock.json regeneration (the old blockers — the next-intl
+#     override and --legacy-peer-deps churn — are gone with it)
+# ⚠️ Still NEVER run `npm audit fix` / `--force` here: npm's offered "fixes" for
+# every remaining finding are DOWNGRADES (next@14.2, @vercel/og@1.0.0 — a 2023
+# release older than 0.11.x, autocannon@2, exceljs@3, geoip-lite@1.2).
 #
-# Fixed and removed from this allowlist (bumped to patched versions via root overrides):
-#   GHSA-ph9p-34f9-6g65 (tmp ->0.2.7), GHSA-58qx-3vcg-4xpx (ws ->8.21.0),
-#   GHSA-q8mj-m7cp-5q26 (qs ->6.15.2), GHSA-hmw2-7cc7-3qxx (form-data ->4.0.6).
-# GHSA-f88m-g3jw-g9cj — sharp inherits four libvips CVEs (CVE-2026-33327/33328/35590/35591,
-# high) in the image decoders. Transitive via @vercel/og and next. Reachability: libvips only
-# ever sees images we control. next/image is locked down to a single remotePattern
-# (ui-avatars.com — see frontend/next.config.js), so no merchant-uploaded or arbitrary remote
-# image is ever optimized; @vercel/og renders our own React templates; the rest are our static
-# assets. Exploiting these CVEs requires feeding a malicious image file to the decoder, which
-# no request path does. NOT force-fixable: npm's only offered remedy is `npm audit fix --force`,
-# which installs next@9.3.3 — a six-major downgrade of the framework. A targeted sharp bump to
-# 0.35.x is the real fix; it needs a full lockfile re-resolve under --legacy-peer-deps (the
-# next-intl→next override), so fold it into the next broad dependency refresh and drop this
-# entry then. Revisit immediately if next/image ever gains a remotePattern for merchant content.
-# GHSA-4c8g-83qw-93j6, GHSA-v2hh-gcrm-f6hx — fast-uri host confusion (failed IDN
-# canonicalization / literal-backslash authority delimiter, high). Transitive via
-# fastify -> @fastify/ajv-compiler -> ajv, in BOTH backend and ai-worker. Reachability:
-# ajv calls fast-uri to resolve JSON-Schema $id/$ref URIs, and every schema we compile is
-# developer-authored (Zod -> JSON Schema for route validation). Request bodies are the DATA
-# validated against those schemas, never the URIs parsed by fast-uri. Host confusion matters
-# where a parsed host drives a security or routing decision; ajv makes none — it only keys
-# schema lookups. A patched 3.1.4 exists, but the root override does not take effect without a
-# full lockfile regeneration under --legacy-peer-deps (npm keeps the satisfied transitive pin;
-# invalidating just that entry drops fast-uri from the tree entirely) — the same
-# disproportionate churn documented for GHSA-3jxr above, immediately before a deploy. Fold the
-# bump into the next broad dependency refresh and drop these two entries then. Revisit sooner if
-# any runtime path ever parses attacker-supplied URIs through ajv.
-# GHSA-83w8-p2f5-377r, GHSA-8pvw-jcv7-9cmj — @fastify/static route-guard bypass via
-# non-leading `..`/`%2E%2E` segments, and allowedPath bypass via non-canonical paths
-# (`//file`, `/./file`) — both high, added 2026-07-24. Neither escapes the served root;
-# both only defeat a security boundary (route-based guards / allowedPath callback)
-# protecting files under it. Reachability: our ONLY @fastify/static instance is the one
-# @fastify/swagger-ui registers internally (backend/src/plugins/swagger.ts → swagger-ui
-# lib/routes.js) serving its own bundled public dist assets under /docs/static — no
-# baseDir, no allowedPath, no route guards on those files, nothing under the root is
-# access-restricted. With no boundary to bypass, the vulnerable paths are unreachable.
-# NOT fixable in range: every 9.x is affected (patches are 10.1.1/10.1.2 only) and even
-# the latest @fastify/swagger-ui (6.1.0) still pins @fastify/static ^9, so the fix needs
-# a root override above the declared range + full lockfile regeneration under
-# --legacy-peer-deps — the same disproportionate churn documented for fast-uri above.
-# Fold into the next broad dependency refresh (or a swagger-ui release adopting
-# static@10) and drop these entries then. Revisit IMMEDIATELY if we ever register
-# @fastify/static directly, pass baseDir to swagger-ui, or add auth guards on /docs.
-# GHSA-r28c-9q8g-f849 — postcss path traversal via sourceMappingURL auto-loading →
-# arbitrary .map file disclosure (high, added 2026-07-24). REAL FIX APPLIED for every
-# copy we control: workspace postcss bumped 8.5.15 → 8.5.23 (npm update postcss,
-# 7-line lockfile diff). The remaining audit hit is ONLY next@15.5.x's own pinned
-# nested copy (node_modules/next/node_modules/postcss@8.4.31), which we cannot bump
-# without a Next major. Build-time CSS tooling with no runtime path — same rationale
-# as GHSA-6g55 in the Next 15.5.x cluster below; cleared by the planned Next 16
-# migration. Drop this entry then.
-# GHSA-c96f-x56v-gq3h — find-my-way DDoS via crafted HTTP/2 requests (high, added 2026-07-24).
-# Transitive via fastify (its router), in BOTH backend and ai-worker. Reachability: the advisory
-# is HTTP/2-specific, and neither service enables HTTP/2 — both call fastify({...}) with no
-# `http2: true` (ai-worker/src/server.ts, backend/src/index.ts), so Fastify serves HTTP/1.1 only
-# and the vulnerable path is never taken. ai-worker is additionally internal-only (reached solely
-# by the backend over the Docker network; nginx routes no public traffic to it). A patched
-# find-my-way 9.7.0 exists within fastify's ^9 range, but the root override does not take effect
-# without a full lockfile regeneration under --legacy-peer-deps (the same satisfied-transitive-pin
-# churn documented for fast-uri/brace-expansion above) — disproportionate immediately before a
-# deploy. Fold the bump into the next broad dependency refresh and drop this entry then. Revisit
-# sooner if either service enables HTTP/2 or ai-worker is exposed to untrusted traffic.
+# What remains, and why it is acknowledged instead of fixed:
 #
-# ── Next.js 15.5.x advisory cluster (added 2026-07-23) ──────────────────────────
-# Nine high-severity advisories published against next@15.5.x + a build-time postcss.
-# There is NO stable patch in the 15.5.x line (15.5.21 is the latest and does not clear
-# them); the only fix is a Next 16.x MAJOR upgrade. `npm audit fix` proposes next@9.3.3
-# (a catastrophic downgrade) — never run it. Fold the real fix into a planned Next 16
-# migration and drop these entries then. Reachability against OUR app (pages-router):
-# GHSA-89xv, GHSA-955p, GHSA-m99w, GHSA-4c39 — Server Actions / App Router advisories.
-#   We have NO App Router (`ls frontend/src/app` → none), NO Server Actions (no `'use server'`),
-#   and NO custom server (`next start`, GHSA-89xv is "…on custom servers"). Features absent.
-# GHSA-p9j2 — SSRF via attacker-controlled rewrite DESTINATION hostname. Our next.config
-#   rewrites resolve to fixed INTERNAL paths (`/`, `/api/indexnow-key?key=:indexnowKey`);
-#   no rewrite destination is attacker-controllable to an external host.
-# GHSA-q8wf — DoS in the Image Optimization API via SVG. `dangerouslyAllowSVG` is UNSET,
-#   so next/image refuses to optimize SVGs at all; `images.remotePatterns` is ui-avatars.com
-#   only (no untrusted/merchant image source). Unreachable.
-# GHSA-6g55 — postcss arbitrary file read via sourceMappingURL in CSS comments. Build-time
-#   CSS tooling (tailwind/autoprefixer); no runtime path — same rationale as GHSA-qx2v above.
-# GHSA-68g3, GHSA-4633 — Next.js cache confusion of response bodies for requests WITH bodies.
-#   Lowest-confidence of the set: framework-internal response caching. Our app caches no
-#   body-keyed responses (the only POST route, /api/revalidate, is an auth'd mutation that
-#   is never cached; pages are getStaticProps). Re-verify at the Next 16 upgrade.
-# GHSA-mh99-v99m-4gvg (brace-expansion DoS, <=5.0.7) — UNREACHABLE, allowlisted 2026-07-25.
-# Needs an attacker-controlled brace pattern; every instance takes patterns from library
-# code, never from merchant or customer input:
-#   backend  @fastify/swagger-ui -> @fastify/static -> glob -> minimatch@10  (static /docs assets)
-#   backend  exceljs -> archiver -> readdir-glob -> minimatch@5              (xlsx export dir read)
-#   frontend @sentry/nextjs -> bundler-plugin-core -> glob -> minimatch@10   (BUILD time only)
-# `npm update brace-expansion` genuinely fixed the 5.x instances (5.0.6 -> 5.0.8, 48-line
-# lockfile diff). The residual 1.1.x/2.1.x sit under minimatch@3/@5, whose peer ranges
-# (^1.1.7 / ^2.0.1) cannot take 5.x without an override across a major API change.
-# ⚠️ Do NOT reach for `npm audit fix` here: it silently jumped next 15.5.18 -> 16.2.3 and
-# introduced 13 NEW frontend advisories. Verified and reverted 2026-07-25.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-f38q-mgvj-vph7|GHSA-h67p-54hq-rp68|GHSA-52cp-r559-cp3m|GHSA-3jxr-9vmj-r5cp|GHSA-j3f2-48v5-ccww|GHSA-f88m-g3jw-g9cj|GHSA-4c8g-83qw-93j6|GHSA-v2hh-gcrm-f6hx|GHSA-4633-3j49-mh5q|GHSA-4c39-4ccg-62r3|GHSA-68g3-v927-f742|GHSA-6g55-p6wh-862q|GHSA-89xv-2m56-2m9x|GHSA-955p-x3mx-jcvp|GHSA-m99w-x7hq-7vfj|GHSA-p9j2-gv94-2wf4|GHSA-q8wf-6r8g-63ch|GHSA-c96f-x56v-gq3h|GHSA-83w8-p2f5-377r|GHSA-8pvw-jcv7-9cmj|GHSA-r28c-9q8g-f849|GHSA-mh99-v99m-4gvg"
+# GHSA-gpj5-g38j-94v9 — drizzle-orm SQL injection via dynamic identifiers (high).
+# We use static schema only (no dynamic table/column names), so the vulnerable
+# path is unreachable. Real fix is the drizzle-orm 0.29 → 0.45 major, which
+# touches every query in the backend — planned as its own migration, not foldable
+# into a dependency refresh. Drop this entry then.
+# GHSA-qx2v-qp2m-jg93, GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849 — postcss XSS /
+# arbitrary file read / sourcemap path traversal in next@15.5.x's OWN pinned
+# nested copy (node_modules/next/node_modules/postcss@8.4.31). The workspace-level
+# postcss is already patched; a framework-internal exact pin cannot be bumped
+# without a Next major. Build-time CSS tooling with no runtime path — postcss
+# never stringifies attacker-controlled CSS and nothing loads sourcemaps at
+# runtime. next, next-intl and @sentry/nextjs echo the same three codes
+# transitively. Cleared by the planned Next 16 migration — drop these then.
+# GHSA-v2v4-37r5-5v8g — ip-address XSS in Address6 HTML-emitting methods
+# (moderate). Transitive via geoip-lite, which pins ip-address 5.8.9–5.9.4
+# (patched line is >=10.1.1, an incompatible major). We only call
+# geoip.lookup(ip), which returns a plain data object; the HTML-emitting methods
+# are never invoked. geoip-lite feeds the sanctioned-country check (LEGAL path) —
+# no override experiments here. Revisit when geoip-lite ships on ip-address >=10.
+IGNORED_GHSA="GHSA-gpj5-g38j-94v9|GHSA-qx2v-qp2m-jg93|GHSA-6g55-p6wh-862q|GHSA-r28c-9q8g-f849|GHSA-v2v4-37r5-5v8g"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
