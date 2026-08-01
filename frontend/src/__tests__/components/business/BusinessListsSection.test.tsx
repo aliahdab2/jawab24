@@ -268,8 +268,7 @@ describe('BusinessListsSection', () => {
     // the row is flagged «auto», and expanding it shows the full hint.
     expect(screen.getAllByText('auto').length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('button', { name: /الساعة/ })[0]);
-    const label13 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' })
-      .format(new Date(Date.UTC(2024, 0, 7, 13, 0)));
+    const label13 = '13:00';
     expect(screen.getAllByText(/Read automatically from the text/).length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText('To')[0].textContent).toContain(label13);
 
@@ -297,8 +296,7 @@ describe('BusinessListsSection', () => {
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
     fireEvent.click(screen.getAllByRole('button', { name: /الساعة/ })[0]);
     fireEvent.click(screen.getAllByLabelText('To')[0]);
-    const label14 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' })
-      .format(new Date(Date.UTC(2024, 0, 7, 14, 0)));
+    const label14 = '14:00';
     fireEvent.click(screen.getAllByRole('button', { name: label14 })[0]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
 
@@ -333,19 +331,6 @@ describe('BusinessListsSection', () => {
     await screen.findByText('دورة ICDL');
     expect(screen.getByText('1 announced date')).toBeInTheDocument();
     expect(screen.queryByText(/upcoming/)).toBeNull();
-  });
-
-  it('«أضف أول موعد» opens the form WITH a fresh open session — not the same as «تعديل»', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
-    renderSection();
-
-    await screen.findByText('دورة ICDL');
-    fireEvent.click(screen.getAllByText('Add the first date')[0]);
-
-    // A new empty session draft is created and expanded: its day chips are
-    // visible and none is selected yet.
-    expect(screen.getAllByRole('button', { name: 'Sunday' })[0]).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getAllByRole('button', { name: 'Saturday' })[0]).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('the entity save strips the legacy endsAt=startsAt artifact — sessions go out with endsAt null', async () => {

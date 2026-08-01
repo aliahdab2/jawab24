@@ -38,9 +38,6 @@ interface FactEntitySheetProps {
   unit: FactEntityUnit;
   /** Where the base row lives (or would live) — the first undated collection. */
   baseCollection: FactCollectionWithRows | null;
-  /** Open with a FRESH session already created and expanded — the «أضف أول
-   *  موعد» entry point; plain «تعديل» opens the item as-is. */
-  startWithNewSession?: boolean;
   saving: boolean;
   onSave: (body: FactEntitySaveBody) => void;
   onClose: () => void;
@@ -61,7 +58,6 @@ interface FactEntitySheetProps {
 export function FactEntitySheet({
   unit,
   baseCollection,
-  startWithNewSession,
   saving,
   onSave,
   onClose,
@@ -201,17 +197,6 @@ export function FactEntitySheet({
       return next;
     });
   };
-
-  // The add-first-session entry point: one fresh draft, once (the ref guards
-  // React 18 dev double-invoke).
-  const startedWithNew = useRef(false);
-  React.useEffect(() => {
-    if (startWithNewSession && sessionCollection && !startedWithNew.current) {
-      startedWithNew.current = true;
-      addSession();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   /** A label may render its rich DISPLAY form only when EVERY session showing
    *  a value for it has the structured draft — one row in «12:00–1:00 ظهرًا»

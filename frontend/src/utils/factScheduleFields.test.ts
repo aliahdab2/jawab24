@@ -86,11 +86,9 @@ describe('time formatting', () => {
     expect(formatTimeStorage('13:30')).toBe('1:30');
     expect(formatTimeStorage('00:15')).toBe('12:15');
     expect(formatTimeRangeStorage('12:00', '13:00')).toBe('12-1');
-    const display = formatTimeRangeDisplay('12:00', '13:00', 'ar-SA-u-nu-latn');
-    // Exact day-period wording belongs to Intl — assert the structure only.
-    expect(display).toContain('12:00');
-    expect(display).toContain('1:00');
-    expect(display).toMatch(/–/);
+    // 24-hour display: no period words, nothing to misread.
+    expect(formatTimeRangeDisplay('12:00', '13:00', 'ar-SA-u-nu-latn')).toBe('12:00–13:00');
+    expect(formatTimeRangeDisplay('09:00', '18:30', 'ar-SA-u-nu-latn')).toBe('09:00–18:30');
   });
 
   it('duration is minutes across the range, null when empty or inverted', () => {

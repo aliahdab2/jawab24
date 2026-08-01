@@ -63,7 +63,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   });
 
   const [editing, setEditing] = useState<EditingState | null>(null);
-  const [entityEditing, setEntityEditing] = useState<{ unit: FactEntityUnit; baseCollection: FactCollectionWithRows | null; startWithNewSession?: boolean } | null>(null);
+  const [entityEditing, setEntityEditing] = useState<{ unit: FactEntityUnit; baseCollection: FactCollectionWithRows | null } | null>(null);
   const [showExpired, setShowExpired] = useState<Record<string, boolean>>({});
   // Session groups are collapsible but start EXPANDED — the owner's ruling
   // («كل دورة ومعها كل معلوماتها») outranks the expert's collapsed default;
@@ -138,15 +138,11 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
 
   /** Tapping ANY row opens the whole item as ONE form — price, fields and
    *  dates together (the merchant's mental model). Saved atomically. */
-  const openEntity = (
-    group: FactListGroup,
-    tapped: { collection: FactCollectionWithRows; row: FactRowDto },
-    startWithNewSession = false,
-  ) => {
+  const openEntity = (group: FactListGroup, tapped: { collection: FactCollectionWithRows; row: FactRowDto }) => {
     const unit = buildEntityUnit(group, collections, faceLabel, tapped);
     const baseCollection =
       unit.base?.collection ?? collections.find((c) => !isDatedCollection(c)) ?? null;
-    setEntityEditing({ unit, baseCollection, startWithNewSession });
+    setEntityEditing({ unit, baseCollection });
   };
 
   const saveEntity = async (body: FactEntitySaveBody) => {
@@ -577,21 +573,11 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                             <ul>{tierRow(group, baseSection, block.base.row, isExpired(block.base.row), { soleBase })}</ul>
                           )}
                           {showSessions && sessionZone(block.sessions, `${group.key}:${block.base?.row.id ?? `tier-${bi}`}`)}
-                          {block.base && datedCollection && liveSessions.length === 0 && (
-                            <div className={`mx-3 mb-3 flex items-center gap-2 flex-wrap ${showGapHint ? 'rounded-xl bg-muted/40 px-3 py-2 justify-between' : ''}`}>
-                              {showGapHint && (
-                                <span className="text-xs text-muted-foreground" dir="auto">
-                                  {t('lists.tierGap', { list: datedCollection.label })}
-                                </span>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => openEntity(group, block.base as { collection: FactCollectionWithRows; row: FactRowDto }, true)}
-                                className="min-h-[30px] inline-flex items-center gap-1 rounded-full bg-brand-500/10 px-2.5 text-[11px] font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-500/20"
-                              >
-                                <Plus className="w-3 h-3" aria-hidden="true" />
-                                {t('lists.addFirstSession')}
-                              </button>
+                          {showGapHint && (
+                            <div className="mx-3 mb-3 rounded-xl bg-muted/40 px-3 py-2">
+                              <span className="text-xs text-muted-foreground" dir="auto">
+                                {t('lists.tierGap', { list: datedCollection?.label ?? '' })}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -652,7 +638,6 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
         <FactEntitySheet
           unit={entityEditing.unit}
           baseCollection={entityEditing.baseCollection}
-          startWithNewSession={entityEditing.startWithNewSession}
           saving={saving}
           onSave={saveEntity}
           onClose={() => setEntityEditing(null)}
