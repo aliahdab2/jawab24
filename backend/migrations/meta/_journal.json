@@ -1009,6 +1009,13 @@
       "when": 1785493523910,
       "tag": "0144_optimal_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "5",
+      "when": 1785541291009,
+      "tag": "0145_worthless_leper_queen",
+      "breakpoints": true
     }
   ]
 }

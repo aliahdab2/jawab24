@@ -95,6 +95,9 @@ export class FactCollectionLimitError extends Error {
 export interface FactRowInput {
     name: string;
     attributes?: { label: string; value: string }[] | null;
+    /** Structured shadow of attribute values (round-7 write-back contract) —
+     *  never read by the prompt pipeline. */
+    structured?: import('@jawab24/shared').FactStructuredValues | null;
     price?: string | null;
     currency?: string | null;
     startsAt?: string | null;
@@ -456,6 +459,7 @@ class FactCollectionsService {
                 collectionId,
                 name: input.name,
                 attributes: input.attributes ?? null,
+                structured: input.structured ?? null,
                 price: input.price ?? null,
                 currency: input.currency ?? null,
                 startsAt: input.startsAt ?? null,
@@ -482,6 +486,7 @@ class FactCollectionsService {
         const set: Record<string, unknown> = { updatedAt: new Date() };
         if (patch.name !== undefined) set.name = patch.name;
         if (patch.attributes !== undefined) set.attributes = patch.attributes;
+        if (patch.structured !== undefined) set.structured = patch.structured;
         if (patch.price !== undefined) set.price = patch.price;
         if (patch.currency !== undefined) set.currency = patch.currency;
         if (patch.startsAt !== undefined) set.startsAt = patch.startsAt;
@@ -631,6 +636,7 @@ class FactCollectionsService {
                         .set({
                             name: u.name,
                             attributes: u.attributes ?? null,
+                            structured: u.structured ?? null,
                             price: u.price ?? null,
                             currency: u.currency ?? null,
                             startsAt: u.startsAt ?? null,
@@ -650,6 +656,7 @@ class FactCollectionsService {
                         collectionId: u.collectionId,
                         name: u.name,
                         attributes: u.attributes ?? null,
+                        structured: u.structured ?? null,
                         price: u.price ?? null,
                         currency: u.currency ?? null,
                         startsAt: u.startsAt ?? null,

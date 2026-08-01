@@ -1314,6 +1314,13 @@ export const factRows = pgTable('fact_rows', {
     // jsonb, raw `->>` returns NULL). The collection's keyAttr names which
     // label carries the key («المدينة»: «حي الرمال»).
     attributes: jsonb('attributes').$type<{ label: string; value: string }[]>(),
+    // Structured SHADOW of attribute values, keyed by attribute label
+    // (round-7 write-back contract): the string in `attributes` stays the
+    // merchant-visible source of truth the AI quotes; this column carries the
+    // machine form ({days:[0,2]} / {start,end}) the editor generated it from.
+    // The prompt pipeline NEVER reads it — sorting/counting/expiry
+    // intelligence only. Nullable; rows authored as free text simply have none.
+    structured: jsonb('structured').$type<import('@jawab24/shared').FactStructuredValues>(),
     // Optional money — a delivery-zone row has a price, an outlet row does
     // not. The renderer shows the column only when ANY row in the collection
     // prices it (no "price on request" stamped on pharmacies — the defect

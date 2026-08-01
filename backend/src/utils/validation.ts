@@ -260,9 +260,30 @@ export type CatalogItemUpdateInput = z.infer<typeof CatalogItemUpdateSchema>;
  * hygiene — so a value that is valid in one structured store is valid in the
  * other and vice versa.
  */
+/** "HH:MM", 24-hour — exactly what `<input type="time">` emits. */
+const TimeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be HH:MM');
+
+/**
+ * Structured SHADOW of an attribute value (round-7 write-back contract). The
+ * attribute STRING stays the merchant-visible truth the AI quotes; the shadow
+ * is the machine form the editor generated it from. Keyed by attribute label,
+ * same cap as the attribute list itself.
+ */
+const StructuredFieldValue = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('weekdays'),
+        days: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+    }),
+    z.object({ kind: z.literal('timeRange'), start: TimeOfDay, end: TimeOfDay }),
+]);
+export const FactStructuredValuesInput = z
+    .record(z.string().trim().min(1).max(60), StructuredFieldValue)
+    .refine(v => Object.keys(v).length <= 12, { message: 'At most 12 structured fields' });
+
 const FactRowFields = {
     name: z.string().trim().min(1, 'Name is required').max(200),
     attributes: CatalogAttributesInput.optional().transform(v => v ?? null),
+    structured: FactStructuredValuesInput.nullable().optional().transform(v => (v && Object.keys(v).length ? v : null)),
     price: PriceInput.optional().transform(v => v ?? null),
     currency: CurrencyInput.optional().transform(v => v ?? null),
     startsAt: CatalogDateInput.optional().transform(v => v ?? null),
@@ -307,6 +328,7 @@ export const FactEntitySaveSchema = z.object({
 export const FactRowUpdateSchema = z.object({
     name: z.string().trim().min(1).max(200).optional(),
     attributes: CatalogAttributesInput.optional(),
+    structured: FactStructuredValuesInput.nullable().optional(),
     price: PriceInput.optional(),
     currency: CurrencyInput.optional(),
     startsAt: CatalogDateInput.optional(),

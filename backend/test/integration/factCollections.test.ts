@@ -376,6 +376,51 @@ describe('fact collections — atomic entity save (single-form editor)', () => {
         expect(await readKbVersion(pageId)).toBeGreaterThan(before);
     });
 
+    it('persists the structured SHADOW alongside the untouched attribute string, and clears it on a free-text save', async () => {
+        const [slotRow] = await rowsOf(slotsId);
+
+        // Structured save: the string is what the editor generated; the shadow
+        // rides along in the same upsert.
+        await factCollectionsService.saveEntityRows(pageId, {
+            upserts: [{
+                collectionId: slotsId, rowId: slotRow.id, name: 'دورة الأمين',
+                attributes: [{ label: 'الدورة', value: 'الأمين' }, { label: 'الأيام', value: 'الأحد والثلاثاء' }, { label: 'الساعة', value: '12-1' }],
+                structured: {
+                    'الأيام': { kind: 'weekdays', days: [0, 2] },
+                    'الساعة': { kind: 'timeRange', start: '12:00', end: '13:00' },
+                },
+                price: null, currency: null, startsAt: '2027-08-04', endsAt: null,
+            }],
+            deletes: [],
+        });
+
+        let [saved] = await rowsOf(slotsId);
+        expect(saved.attributes).toEqual(expect.arrayContaining([{ label: 'الأيام', value: 'الأحد والثلاثاء' }]));
+        expect(saved.structured).toEqual({
+            'الأيام': { kind: 'weekdays', days: [0, 2] },
+            'الساعة': { kind: 'timeRange', start: '12:00', end: '13:00' },
+        });
+
+        // The editor list read exposes the shadow to the frontend.
+        const collections = await factCollectionsService.listCollectionsWithRows(pageId);
+        const slotsCollection = collections.find(c => c.id === slotsId);
+        expect(slotsCollection?.rows[0]?.structured?.['الأيام']).toEqual({ kind: 'weekdays', days: [0, 2] });
+
+        // Free-text save (escape hatch): the shadow is REPLACED by null —
+        // never left stale against a string it no longer describes.
+        await factCollectionsService.saveEntityRows(pageId, {
+            upserts: [{
+                collectionId: slotsId, rowId: slotRow.id, name: 'دورة الأمين',
+                attributes: [{ label: 'الدورة', value: 'الأمين' }, { label: 'الأيام', value: 'حسب التنسيق المسبق' }],
+                structured: null,
+                price: null, currency: null, startsAt: '2027-08-04', endsAt: null,
+            }],
+            deletes: [],
+        });
+        [saved] = await rowsOf(slotsId);
+        expect(saved.structured).toBeNull();
+    });
+
     it('is ATOMIC — one stale row id aborts everything, nothing half-saves', async () => {
         const [priceRow] = await rowsOf(pricesId);
         await expect(factCollectionsService.saveEntityRows(pageId, {

@@ -1,12 +1,18 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check, Trash2, Plus, CalendarClock, ChevronDown } from 'lucide-react';
+import type { FactStructuredFieldValue, FactStructuredValues } from '@jawab24/shared';
 import { SidePanel, Button } from '@/components/ui';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import { formatPlainDate } from '@/utils/dateUtils';
+import {
+  classifyCollectionField, weekdayInfo, parseWeekdays, formatWeekdays,
+  formatTimeRangeStorage, formatTimeRangeDisplay, durationMinutes, structuredDisplay,
+  generationLocale, type ScheduleFieldKind,
+} from '@/utils/factScheduleFields';
 import { useLanguage } from '@/i18n/hooks';
 import type { FactCollectionWithRows, FactEntitySaveBody } from '@/lib/api';
-import { collectionAttributeLabels, type FactEntityUnit } from '@/utils/factListLayout';
+import { collectionAttributeLabels, sessionValueKind, type FactEntityUnit } from '@/utils/factListLayout';
 
 interface SessionDraft {
   /** undefined = a new session authored in this sheet. */
@@ -14,6 +20,12 @@ interface SessionDraft {
   /** Stable identity for React keys and open/closed state — survives removals. */
   draftKey: string;
   values: Record<string, string>;
+  /** Structured drafts per label — the write-back contract's machine half.
+   *  On save the STRING is regenerated from these; they ride along as shadow. */
+  structured: Record<string, FactStructuredFieldValue | null>;
+  /** Per-label escape hatch: true = the merchant edits raw text for this
+   *  field, and no shadow is written. */
+  freeText: Record<string, boolean>;
   startsAt: string;
   endsAt: string;
 }
@@ -68,6 +80,42 @@ export function FactEntitySheet({
     ? collectionAttributeLabels(sessionCollection).filter((l) => !reserved(sessionCollection).has(l))
     : [];
 
+  /** What each session field IS — derived from the merchant's own rows
+   *  (existing shadows, else majority value shape), never from label words. */
+  const fieldKinds = useMemo<Record<string, ScheduleFieldKind>>(
+    () => Object.fromEntries(sessionLabels.map((l) => [
+      l, sessionCollection ? classifyCollectionField(sessionCollection, l) : 'other',
+    ])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessionCollection],
+  );
+
+  /** Stored-string generation locale per field — follows the DATA's script,
+   *  not the viewer's UI language (the byte-contract). */
+  const genLocale = (label: string): string =>
+    sessionCollection ? generationLocale(sessionCollection, label, intlLocale) : intlLocale;
+
+  /** Initial per-label control state for one session (never guesses into
+   *  storage): a stored shadow wins; a COMPLETELY parseable weekday string
+   *  seeds the chips; a value the control can't represent starts on the
+   *  free-text escape hatch; ambiguous times start empty and keep the string. */
+  const seedField = (
+    kind: ScheduleFieldKind,
+    value: string,
+    shadow: FactStructuredFieldValue | undefined,
+  ): { structured: FactStructuredFieldValue | null; freeText: boolean } => {
+    if (shadow) return { structured: shadow, freeText: false };
+    if (kind === 'weekday') {
+      const days = value ? parseWeekdays(value) : null;
+      if (days) return { structured: { kind: 'weekdays', days }, freeText: false };
+      return { structured: null, freeText: !!value.trim() };
+    }
+    if (kind === 'time') {
+      return { structured: null, freeText: !!value.trim() && sessionValueKind(value) !== 'time' };
+    }
+    return { structured: null, freeText: false };
+  };
+
   const [name, setName] = useState(baseRow?.name ?? unit.sessions[0]?.row.name ?? unit.title);
   const [faceValue, setFaceValue] = useState(unit.faceValue ?? '');
   const [price, setPrice] = useState(baseRow?.price ? formatCatalogPrice(baseRow.price) : '');
@@ -80,16 +128,28 @@ export function FactEntitySheet({
     return v;
   });
   const [sessions, setSessions] = useState<SessionDraft[]>(() =>
-    unit.sessions.map((s) => ({
-      rowId: s.row.id,
-      draftKey: s.row.id,
-      values: Object.fromEntries(
+    unit.sessions.map((s) => {
+      const values = Object.fromEntries(
         sessionLabels.map((l) => [l, s.row.attributes?.find((a) => a.label === l)?.value ?? '']),
-      ),
-      startsAt: s.row.startsAt ?? '',
-      // endsAt === startsAt is the one-field era's artifact, not merchant intent.
-      endsAt: s.row.endsAt && s.row.endsAt !== s.row.startsAt ? s.row.endsAt : '',
-    })),
+      );
+      const structured: Record<string, FactStructuredFieldValue | null> = {};
+      const freeText: Record<string, boolean> = {};
+      for (const l of sessionLabels) {
+        const seeded = seedField(fieldKinds[l], values[l] ?? '', s.row.structured?.[l]);
+        structured[l] = seeded.structured;
+        freeText[l] = seeded.freeText;
+      }
+      return {
+        rowId: s.row.id,
+        draftKey: s.row.id,
+        values,
+        structured,
+        freeText,
+        startsAt: s.row.startsAt ?? '',
+        // endsAt === startsAt is the one-field era's artifact, not merchant intent.
+        endsAt: s.row.endsAt && s.row.endsAt !== s.row.startsAt ? s.row.endsAt : '',
+      };
+    }),
   );
   const [removedSessionIds, setRemovedSessionIds] = useState<string[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -105,17 +165,47 @@ export function FactEntitySheet({
 
   const addSession = () => {
     const draftKey = `new-${++newDraftSeq.current}`;
-    setSessions((prev) => [...prev, { draftKey, values: {}, startsAt: '', endsAt: '' }]);
+    setSessions((prev) => [...prev, { draftKey, values: {}, structured: {}, freeText: {}, startsAt: '', endsAt: '' }]);
     setOpenSessions((prev) => ({ ...prev, [draftKey]: true }));
   };
 
-  /** Collapsed summary: the session's own values and start date — what the
-   *  expert's sketch shows («الأحد والثلاثاء · 12–1 · يبدأ 3 أغسطس»). */
+  /** Collapsed summary: the session's own values and start date. Structured
+   *  fields render their DISPLAY form here («12:00–1:00 ظهرًا») — presentation
+   *  need not mimic the storage format; the stored string stays «12-1». */
   const sessionSummary = (s: SessionDraft): string => {
-    const parts = sessionLabels.map((l) => (s.values[l] ?? '').trim()).filter(Boolean);
+    const parts = sessionLabels
+      .map((l) => {
+        const sv = !s.freeText[l] ? s.structured[l] : null;
+        return (sv ? structuredDisplay(sv, intlLocale) : null) ?? (s.values[l] ?? '').trim();
+      })
+      .filter(Boolean);
     const date = formatPlainDate(s.startsAt || null, intlLocale);
     if (date) parts.push(t('lists.startsOn', { date }));
     return parts.join(' · ');
+  };
+
+  /** The write-back contract, applied at save time: an ACTIVE control owns its
+   *  field — the stored string is regenerated from the structured draft and
+   *  the draft rides along as shadow. Everything else stores exactly what the
+   *  text field says, with no shadow. Time controls left empty keep the
+   *  original string (we never guess «12-1» into clock times). */
+  const resolveSessionField = (
+    s: SessionDraft,
+    label: string,
+  ): { value: string; shadow: FactStructuredFieldValue | null } => {
+    const raw = (s.values[label] ?? '').trim();
+    if (s.freeText[label]) return { value: raw, shadow: null };
+    const sv = s.structured[label];
+    if (sv?.kind === 'weekdays') {
+      return sv.days.length
+        ? { value: formatWeekdays(sv.days, genLocale(label)), shadow: sv }
+        : { value: '', shadow: null };
+    }
+    if (sv?.kind === 'timeRange') {
+      const generated = formatTimeRangeStorage(sv.start, sv.end);
+      if (generated) return { value: generated, shadow: sv };
+    }
+    return { value: raw, shadow: null };
   };
 
   const anyDateInvalid = sessions.some(
@@ -132,6 +222,24 @@ export function FactEntitySheet({
     }
     return null;
   };
+
+  const setFieldStructured = (i: number, label: string, sv: FactStructuredFieldValue | null) =>
+    setSessions((prev) => prev.map((p, j) => (
+      j === i ? { ...p, structured: { ...p.structured, [label]: sv } } : p
+    )));
+
+  /** Toggle the escape hatch; entering free text prefills the input with the
+   *  string the control was generating, so nothing visibly changes. */
+  const setFieldFreeText = (i: number, label: string, ft: boolean, prefill?: string) =>
+    setSessions((prev) => prev.map((p, j) => (
+      j === i
+        ? {
+            ...p,
+            freeText: { ...p.freeText, [label]: ft },
+            values: prefill !== undefined ? { ...p.values, [label]: prefill } : p.values,
+          }
+        : p
+    )));
 
   const buildBody = (): FactEntitySaveBody => {
     const body: FactEntitySaveBody = { upserts: [], deletes: [] };
@@ -163,17 +271,20 @@ export function FactEntitySheet({
       const keyValue = sessionKeyValue();
       for (const s of sessions) {
         const attrs: { label: string; value: string }[] = [];
+        const shadows: FactStructuredValues = {};
         if (sessionCollection.keyAttr && keyValue) attrs.push({ label: sessionCollection.keyAttr, value: keyValue });
         if (unit.faceLabel && faceValue.trim()) attrs.push({ label: unit.faceLabel, value: faceValue.trim() });
         for (const l of sessionLabels) {
-          const v = (s.values[l] ?? '').trim();
-          if (v) attrs.push({ label: l, value: v });
+          const { value, shadow } = resolveSessionField(s, l);
+          if (value) attrs.push({ label: l, value });
+          if (shadow) shadows[l] = shadow;
         }
         body.upserts.push({
           collectionId: sessionCollection.id,
           ...(s.rowId ? { rowId: s.rowId } : {}),
           name: name.trim(),
           attributes: attrs.length ? attrs : null,
+          structured: Object.keys(shadows).length ? shadows : null,
           price: null,
           currency: null,
           startsAt: s.startsAt || null,
@@ -356,21 +467,137 @@ export function FactEntitySheet({
                       </button>
                       )}
                     </div>
-                    {open && sessionLabels.map((label) => (
-                      <div key={label}>
-                        <label htmlFor={`entity-session-${i}-${label}`} className={labelClass} dir="auto">{label}</label>
-                        <input
-                          id={`entity-session-${i}-${label}`}
-                          type="text"
-                          value={s.values[label] ?? ''}
-                          onChange={(e) =>
-                            setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
-                          }
-                          dir={s.values[label] ? 'auto' : undefined}
-                          className={inputClass}
-                        />
-                      </div>
-                    ))}
+                    {open && sessionLabels.map((label) => {
+                      const kind = fieldKinds[label];
+                      const ft = !!s.freeText[label];
+                      const sv = s.structured[label];
+                      const fieldId = `entity-session-${i}-${label}`;
+                      const switchLink = (toFree: boolean, prefill?: string) => (
+                        <button
+                          type="button"
+                          onClick={() => setFieldFreeText(i, label, toFree, toFree ? prefill : undefined)}
+                          className="text-[11px] font-medium text-brand-600 hover:underline underline-offset-2 whitespace-nowrap"
+                        >
+                          {toFree ? t('lists.useFreeText') : t('lists.useStructured')}
+                        </button>
+                      );
+                      const fieldHeader = (control: React.ReactNode) => (
+                        <span className="flex items-center justify-between gap-2 mb-1.5">
+                          <label htmlFor={fieldId} className="text-sm text-muted-foreground" dir="auto">{label}</label>
+                          {control}
+                        </span>
+                      );
+
+                      if (kind === 'other' || ft) {
+                        return (
+                          <div key={label}>
+                            {fieldHeader(kind !== 'other' ? switchLink(false) : null)}
+                            <input
+                              id={fieldId}
+                              type="text"
+                              value={s.values[label] ?? ''}
+                              onChange={(e) =>
+                                setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
+                              }
+                              dir={s.values[label] ? 'auto' : undefined}
+                              className={inputClass}
+                            />
+                          </div>
+                        );
+                      }
+
+                      if (kind === 'weekday') {
+                        const days = sv?.kind === 'weekdays' ? sv.days : [];
+                        const generated = days.length ? formatWeekdays(days, genLocale(label)) : null;
+                        return (
+                          <div key={label}>
+                            {fieldHeader(switchLink(true, generated ?? s.values[label] ?? ''))}
+                            <span id={fieldId} role="group" aria-label={label} className="flex gap-1">
+                              {weekdayInfo(intlLocale).map((d) => {
+                                const on = days.includes(d.index);
+                                return (
+                                  <button
+                                    key={d.index}
+                                    type="button"
+                                    aria-pressed={on}
+                                    aria-label={d.long}
+                                    title={d.long}
+                                    onClick={() => {
+                                      const next = on
+                                        ? days.filter((x) => x !== d.index)
+                                        : [...days, d.index].sort((a, b) => a - b);
+                                      setFieldStructured(i, label, { kind: 'weekdays', days: next });
+                                    }}
+                                    className={`flex-1 min-h-[40px] rounded-lg text-base transition-all ${
+                                      on
+                                        ? 'bg-brand-600 text-white font-bold scale-[1.06] shadow-sm'
+                                        : 'bg-card border border-theme-border text-muted-foreground hover:bg-surface-100'
+                                    }`}
+                                  >
+                                    {d.narrow}
+                                  </button>
+                                );
+                              })}
+                            </span>
+                            {generated && (
+                              <p className="mt-1.5 text-xs text-muted-foreground" dir="auto">
+                                {t('lists.previewLabel', { text: generated })}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // kind === 'time'
+                      const start = sv?.kind === 'timeRange' ? sv.start : '';
+                      const end = sv?.kind === 'timeRange' ? sv.end : '';
+                      const setTime = (part: 'start' | 'end', v: string) => {
+                        const next: FactStructuredFieldValue = {
+                          kind: 'timeRange',
+                          start: part === 'start' ? v : start,
+                          end: part === 'end' ? v : end,
+                        };
+                        setFieldStructured(i, label, next.start || next.end ? next : null);
+                      };
+                      const storage = start && end ? formatTimeRangeStorage(start, end) : null;
+                      const display = start && end ? formatTimeRangeDisplay(start, end, intlLocale) : null;
+                      const dur = start && end ? durationMinutes(start, end) : null;
+                      const durText = dur === null ? null : (() => {
+                        const h = Math.floor(dur / 60);
+                        const m = dur % 60;
+                        if (h && m) return t('lists.durationBoth', { h: t('lists.durationHours', { count: h }), m: t('lists.durationMinutes', { count: m }) });
+                        return h ? t('lists.durationHours', { count: h }) : t('lists.durationMinutes', { count: m });
+                      })();
+                      return (
+                        <div key={label}>
+                          {fieldHeader(switchLink(true, storage ?? s.values[label] ?? ''))}
+                          <span className="grid grid-cols-2 gap-3">
+                            <span>
+                              <label htmlFor={fieldId} className="block text-xs text-muted-foreground mb-1">{t('lists.timeFrom')}</label>
+                              <input id={fieldId} type="time" value={start} onChange={(e) => setTime('start', e.target.value)} className={inputClass} />
+                            </span>
+                            <span>
+                              <label htmlFor={`${fieldId}-end`} className="block text-xs text-muted-foreground mb-1">{t('lists.timeTo')}</label>
+                              <input id={`${fieldId}-end`} type="time" value={end} onChange={(e) => setTime('end', e.target.value)} className={inputClass} />
+                            </span>
+                          </span>
+                          {!storage && (s.values[label] ?? '').trim() && (
+                            <p className="mt-1.5 text-xs text-muted-foreground" dir="auto">
+                              {t('lists.timeCurrentText', { text: (s.values[label] ?? '').trim() })}
+                            </p>
+                          )}
+                          {storage && (
+                            <p className="mt-1.5 text-xs text-muted-foreground" dir="auto">
+                              {t('lists.previewLabel', { text: storage })}
+                              {display && <span className="ms-1 text-subtle">({display})</span>}
+                            </p>
+                          )}
+                          {durText && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">{t('lists.durationLabel', { d: durText })}</p>
+                          )}
+                        </div>
+                      );
+                    })}
                     {open && (
                     <div className="grid grid-cols-2 gap-3">
                       <div>

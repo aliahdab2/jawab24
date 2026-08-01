@@ -15,7 +15,7 @@
 import axios, { AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate, ActivationFunnel, CatalogItem, CatalogItemType, CatalogVertical, CatalogVerticalSource, FactStructuredValues } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -217,6 +217,10 @@ export interface FactRowDto {
   id: string;
   name: string;
   attributes: { label: string; value: string }[] | null;
+  /** Structured shadow of attribute values, keyed by label (round-7
+   *  write-back contract) — display/sorting intelligence only; the string
+   *  in `attributes` stays what the AI quotes. */
+  structured?: FactStructuredValues | null;
   price: string | null;
   currency: string | null;
   startsAt: string | null;
@@ -239,6 +243,7 @@ export interface FactCollectionWithRows {
 export interface FactRowBody {
   name?: string;
   attributes?: { label: string; value: string }[] | null;
+  structured?: FactStructuredValues | null;
   price?: string | number | null;
   currency?: string | null;
   startsAt?: string | null;
