@@ -198,11 +198,16 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
             ar: 'تم تجديد اشتراكك بنجاح. شكراً لاستخدامك Jawab24!',
         },
     },
+    // Fired by services/trialReminders.ts three days before trial_ends_at.
+    // The body carries the end DATE, not a day count: the count needs a
+    // different Arabic plural form for 1 / 2 / 3+ days, which this template
+    // system (plain {var} substitution, no ICU) cannot express — "خلال 1 أيام"
+    // is what the day-count version actually rendered.
     trial_ending: {
-        titles: { en: 'Trial Ending Soon', ar: 'تنتهي الفترة التجريبية قريباً' },
+        titles: { en: 'Your free trial is ending', ar: 'فترتك التجريبية على وشك الانتهاء' },
         bodies: {
-            en: 'Your free trial ends in {days} days. Subscribe now to keep using Jawab24.',
-            ar: 'تنتهي فترتك التجريبية المجانية خلال {days} أيام. اشترك الآن للاستمرار في استخدام Jawab24.',
+            en: 'Your Jawab24 free trial ends on {trialEnd}. Subscribe now so your replies keep running.',
+            ar: 'تنتهي فترتك التجريبية المجانية في Jawab24 بتاريخ {trialEnd}. اشترك الآن لتستمر ردودك دون انقطاع.',
         },
     },
     flagged_reply: {

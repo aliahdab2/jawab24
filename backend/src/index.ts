@@ -60,6 +60,8 @@ import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { startWhatsAppTokenHealthCron, stopWhatsAppTokenHealthCron, setWhatsAppTokenHealthLogger } from "./services/whatsappTokenHealth";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
+import { setTrialRemindersLogger, runTrialEndingReminders } from "./services/trialReminders";
+import { scheduleRecurringJob } from "./lib/scheduledJob";
 import { captureError } from "./utils/sentryHelpers";
 import { smsService } from "./services/sms";
 import { emailService } from "./services/email";
@@ -362,41 +364,49 @@ const start = async () => {
     setWhatsAppTokenHealthLogger(workerLogger);
     startWhatsAppTokenHealthCron();
 
+    const logJobError = (err: unknown, msg: string) => server.log.error(err, msg);
+    const DAILY_MS = 24 * 60 * 60 * 1000;
+
     // Lead digest cron — once per day, emails owners with ≥10 new leads
     // Threshold + stamping in service guarantees at most one email per user per day.
     setLeadDigestLogger(workerLogger);
-    const LEAD_DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
-    setInterval(() => {
-      runDailyLeadDigest().catch(err => {
-        server.log.error(err, '[LeadDigest] Scheduled run failed');
-        captureError(err, '[LeadDigest] Scheduled run failed', { tags: { cron: 'lead_digest' }, level: 'error' });
-      });
-    }, LEAD_DIGEST_INTERVAL_MS);
-    // First run delayed 5 min after startup so it doesn't block boot
-    setTimeout(() => {
-      runDailyLeadDigest().catch(err => {
-        server.log.error(err, '[LeadDigest] Initial run failed');
-        captureError(err, '[LeadDigest] Initial run failed', { tags: { cron: 'lead_digest' }, level: 'error' });
-      });
-    }, 5 * 60 * 1000);
+    scheduleRecurringJob({
+      label: '[LeadDigest]',
+      tag: 'lead_digest',
+      intervalMs: DAILY_MS,
+      // First run delayed 5 min after startup so it doesn't block boot
+      initialDelayMs: 5 * 60 * 1000,
+      run: runDailyLeadDigest,
+      logError: logJobError,
+    });
+
+    // Trial-ending reminder cron — once per day, warns merchants 3 days before
+    // their trial expires. Stamping in the service guarantees one warning per
+    // trial no matter how often this runs.
+    setTrialRemindersLogger(workerLogger);
+    scheduleRecurringJob({
+      label: '[TrialReminders]',
+      tag: 'trial_reminders',
+      intervalMs: DAILY_MS,
+      // Staggered 2 min behind the lead digest so the two daily jobs don't share a tick
+      initialDelayMs: 7 * 60 * 1000,
+      run: runTrialEndingReminders,
+      logError: logJobError,
+    });
 
     // Database cleanup scheduler — runs every 6 hours to enforce data retention
     // AI cache: 30 days, logs: 90 days, usage logs: 180 days
     const { runAllCleanupTasks } = await import("./utils/cleanup");
     const cleanupLogger = createRequestLogger(server.log);
-    setInterval(() => {
-      runAllCleanupTasks(undefined, cleanupLogger).catch(err => {
-        server.log.error(err, 'Scheduled cleanup failed');
-        captureError(err, 'Scheduled cleanup failed', { tags: { cron: 'cleanup' }, level: 'error' });
-      });
-    }, 6 * 60 * 60 * 1000); // Every 6 hours
-    // Run once on startup (delayed 60s to let DB connections settle)
-    setTimeout(() => {
-      runAllCleanupTasks(undefined, cleanupLogger).catch(err => {
-        server.log.error(err, 'Initial cleanup failed');
-        captureError(err, 'Initial cleanup failed', { tags: { cron: 'cleanup' }, level: 'error' });
-      });
-    }, 60_000);
+    scheduleRecurringJob({
+      label: '[Cleanup]',
+      tag: 'cleanup',
+      intervalMs: 6 * 60 * 60 * 1000,
+      // Delayed 60s to let DB connections settle
+      initialDelayMs: 60_000,
+      run: () => runAllCleanupTasks(undefined, cleanupLogger),
+      logError: logJobError,
+    });
 
     // OpenAI cost snapshot + credit-runway alert — once per day. Pulls the
     // AUTHORITATIVE Costs API (trailing window so late OpenAI adjustments overwrite
@@ -404,28 +414,22 @@ const start = async () => {
     // proactive "credits low" alert BEFORE the wallet hits zero (the 2026-06-28
     // outage had no early warning). No-ops when no org admin key is configured.
     const { runOpenAiCostSync } = await import("./services/aiCostSync");
-    const COST_SNAPSHOT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
-    const runCostSnapshot = async () => {
-      // Daily incremental: trailing 3-day window (idempotent upsert absorbs late
-      // OpenAI cost adjustments). The admin "Sync now" button uses a wider backfill.
-      const result = await runOpenAiCostSync(3);
-      if (result.configured) {
-        server.log.info({ synced: result.synced }, '[CostSnapshot] Synced OpenAI cost snapshots');
-      }
-    };
-    setInterval(() => {
-      runCostSnapshot().catch(err => {
-        server.log.error(err, '[CostSnapshot] Scheduled run failed');
-        captureError(err, '[CostSnapshot] Scheduled run failed', { tags: { cron: 'ai_cost_snapshot' }, level: 'error' });
-      });
-    }, COST_SNAPSHOT_INTERVAL_MS);
-    // First run delayed 90s after boot so DB connections settle.
-    setTimeout(() => {
-      runCostSnapshot().catch(err => {
-        server.log.error(err, '[CostSnapshot] Initial run failed');
-        captureError(err, '[CostSnapshot] Initial run failed', { tags: { cron: 'ai_cost_snapshot' }, level: 'error' });
-      });
-    }, 90_000);
+    scheduleRecurringJob({
+      label: '[CostSnapshot]',
+      tag: 'ai_cost_snapshot',
+      intervalMs: DAILY_MS,
+      // First run delayed 90s after boot so DB connections settle.
+      initialDelayMs: 90_000,
+      run: async () => {
+        // Daily incremental: trailing 3-day window (idempotent upsert absorbs late
+        // OpenAI cost adjustments). The admin "Sync now" button uses a wider backfill.
+        const result = await runOpenAiCostSync(3);
+        if (result.configured) {
+          server.log.info({ synced: result.synced }, '[CostSnapshot] Synced OpenAI cost snapshots');
+        }
+      },
+      logError: logJobError,
+    });
 
     // Reply-queue backlog watch — the D-016 "sustained queue wait-time" signal.
     // Evaluates live queue depth + recent p95 wait every minute; two consecutive
