@@ -196,6 +196,64 @@ export function formatTimeRangeDisplay(start: string, end: string, intlLocale: s
   return `${bare}–${fmt.format(at(e))}`;
 }
 
+/** One time's display label («12:00 ظهرًا») — Intl's flexible day period, so
+ *  every browser renders the SAME text (the native time input did not). */
+export function formatTimeLabel(hm: string, intlLocale: string): string | null {
+  const mins = parseHM(hm);
+  if (mins === null) return null;
+  return new Intl.DateTimeFormat(intlLocale, {
+    hour: 'numeric', minute: '2-digit', dayPeriod: 'long', timeZone: 'UTC',
+  }).format(new Date(Date.UTC(2024, 0, 7, Math.floor(mins / 60), mins % 60)));
+}
+
+/** The reusable picker's option list — one consistent, Intl-labelled set of
+ *  half-hour times for the whole product. */
+export function timeOptions(intlLocale: string, stepMinutes = 30): { value: string; label: string }[] {
+  const out: { value: string; label: string }[] = [];
+  for (let mins = 0; mins < 24 * 60; mins += stepMinutes) {
+    const value = `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+    out.push({ value, label: formatTimeLabel(value, intlLocale) as string });
+  }
+  return out;
+}
+
+/** 12-hour merchant hour → a plausible DAYTIME 24-hour guess: 8–11 read as
+ *  morning, 12 as noon, 1–7 as afternoon/evening. Hours already >12 pass
+ *  through as 24-hour. */
+const guessHour24 = (h: number): number | null => {
+  if (h > 23 || h < 0) return null;
+  if (h > 12) return h;
+  if (h === 12) return 12;
+  if (h >= 8) return h;
+  return h + 12;
+};
+
+/**
+ * Best-guess clock times for an ambiguous merchant range («12-1», «5-6») —
+ * used to PREFILL the controls only (recognition over recall; round-8 review).
+ * Hard safety: the guess is returned ONLY when regenerating storage from it
+ * reproduces the normalized original byte-for-byte, so saving an untouched
+ * prefill can never alter what customers see — only the shadow is new.
+ */
+export function parseTimeRangeGuess(value: string): { start: string; end: string } | null {
+  const n = norm(value);
+  const m = /^(\d{1,2})(?::(\d{2}))?-(\d{1,2})(?::(\d{2}))?$/.exec(n);
+  if (!m) return null;
+  const h1 = guessHour24(Number(m[1]));
+  const h2raw = guessHour24(Number(m[3]));
+  if (h1 === null || h2raw === null) return null;
+  const m1 = Number(m[2] ?? 0);
+  const m2 = Number(m[4] ?? 0);
+  if (m1 > 59 || m2 > 59) return null;
+  let endMins = h2raw * 60 + m2;
+  const startMins = h1 * 60 + m1;
+  if (endMins <= startMins && h2raw + 12 <= 23) endMins = (h2raw + 12) * 60 + m2;
+  if (endMins <= startMins) return null;
+  const toHM = (mins: number) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+  const guess = { start: toHM(startMins), end: toHM(endMins) };
+  return formatTimeRangeStorage(guess.start, guess.end) === n ? guess : null;
+}
+
 /** Session length in minutes; null when the range is empty or inverted —
  *  the live-duration hint simply doesn't render then. */
 export function durationMinutes(start: string, end: string): number | null {

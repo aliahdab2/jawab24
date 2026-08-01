@@ -2,13 +2,13 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Check, Trash2, Plus, CalendarClock, ChevronDown } from 'lucide-react';
 import type { FactStructuredFieldValue, FactStructuredValues } from '@jawab24/shared';
-import { SidePanel, Button } from '@/components/ui';
+import { SidePanel, Button, Select } from '@/components/ui';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import { formatPlainDate } from '@/utils/dateUtils';
 import {
   classifyCollectionField, weekdayInfo, parseWeekdays, formatWeekdays,
-  formatTimeRangeStorage, formatTimeRangeDisplay, durationMinutes, structuredDisplay,
-  generationLocale, type ScheduleFieldKind,
+  formatTimeRangeStorage, durationMinutes, structuredDisplay, parseTimeRangeGuess,
+  timeOptions, generationLocale, type ScheduleFieldKind,
 } from '@/utils/factScheduleFields';
 import { useLanguage } from '@/i18n/hooks';
 import type { FactCollectionWithRows, FactEntitySaveBody } from '@/lib/api';
@@ -26,6 +26,10 @@ interface SessionDraft {
   /** Per-label escape hatch: true = the merchant edits raw text for this
    *  field, and no shadow is written. */
   freeText: Record<string, boolean>;
+  /** Labels whose structured draft is an UNCONFIRMED automatic read of the
+   *  stored text (recognition over recall) — flagged in the UI; touching the
+   *  control clears the flag, saving confirms it. */
+  guessed: Record<string, boolean>;
   startsAt: string;
   endsAt: string;
 }
@@ -90,6 +94,9 @@ export function FactEntitySheet({
     [sessionCollection],
   );
 
+  /** One consistent time list for the pickers — Intl labels, same everywhere. */
+  const pickerOptions = useMemo(() => timeOptions(intlLocale), [intlLocale]);
+
   /** Stored-string generation locale per field — follows the DATA's script,
    *  not the viewer's UI language (the byte-contract). */
   const genLocale = (label: string): string =>
@@ -103,17 +110,22 @@ export function FactEntitySheet({
     kind: ScheduleFieldKind,
     value: string,
     shadow: FactStructuredFieldValue | undefined,
-  ): { structured: FactStructuredFieldValue | null; freeText: boolean } => {
-    if (shadow) return { structured: shadow, freeText: false };
+  ): { structured: FactStructuredFieldValue | null; freeText: boolean; guessed: boolean } => {
+    if (shadow) return { structured: shadow, freeText: false, guessed: false };
     if (kind === 'weekday') {
       const days = value ? parseWeekdays(value) : null;
-      if (days) return { structured: { kind: 'weekdays', days }, freeText: false };
-      return { structured: null, freeText: !!value.trim() };
+      if (days) return { structured: { kind: 'weekdays', days }, freeText: false, guessed: false };
+      return { structured: null, freeText: !!value.trim(), guessed: false };
     }
     if (kind === 'time') {
-      return { structured: null, freeText: !!value.trim() && sessionValueKind(value) !== 'time' };
+      // Recognition over recall (round-8): a parseable range PREFILLS the
+      // pickers as a flagged guess. Guarded upstream: the guess only exists
+      // when it regenerates the stored string byte-identically.
+      const guess = value ? parseTimeRangeGuess(value) : null;
+      if (guess) return { structured: { kind: 'timeRange', ...guess }, freeText: false, guessed: true };
+      return { structured: null, freeText: !!value.trim() && sessionValueKind(value) !== 'time', guessed: false };
     }
-    return { structured: null, freeText: false };
+    return { structured: null, freeText: false, guessed: false };
   };
 
   const [name, setName] = useState(baseRow?.name ?? unit.sessions[0]?.row.name ?? unit.title);
@@ -134,10 +146,12 @@ export function FactEntitySheet({
       );
       const structured: Record<string, FactStructuredFieldValue | null> = {};
       const freeText: Record<string, boolean> = {};
+      const guessed: Record<string, boolean> = {};
       for (const l of sessionLabels) {
         const seeded = seedField(fieldKinds[l], values[l] ?? '', s.row.structured?.[l]);
         structured[l] = seeded.structured;
         freeText[l] = seeded.freeText;
+        guessed[l] = seeded.guessed;
       }
       return {
         rowId: s.row.id,
@@ -145,6 +159,7 @@ export function FactEntitySheet({
         values,
         structured,
         freeText,
+        guessed,
         startsAt: s.row.startsAt ?? '',
         // endsAt === startsAt is the one-field era's artifact, not merchant intent.
         endsAt: s.row.endsAt && s.row.endsAt !== s.row.startsAt ? s.row.endsAt : '',
@@ -165,9 +180,20 @@ export function FactEntitySheet({
 
   const addSession = () => {
     const draftKey = `new-${++newDraftSeq.current}`;
-    setSessions((prev) => [...prev, { draftKey, values: {}, structured: {}, freeText: {}, startsAt: '', endsAt: '' }]);
+    setSessions((prev) => [...prev, { draftKey, values: {}, structured: {}, freeText: {}, guessed: {}, startsAt: '', endsAt: '' }]);
     setOpenSessions((prev) => ({ ...prev, [draftKey]: true }));
   };
+
+  /** A label may render its rich DISPLAY form only when EVERY session showing
+   *  a value for it has the structured draft — one row in «12:00–1:00 ظهرًا»
+   *  next to four in «1-2» reads as broken, not as migration (round-8:
+   *  consistency beats richness). */
+  const labelUniformlyStructured = (label: string): boolean =>
+    sessions.every((s) => {
+      const v = (s.values[label] ?? '').trim();
+      if (!v) return true;
+      return !s.freeText[label] && !!s.structured[label];
+    });
 
   /** Collapsed summary: the session's own values and start date. Structured
    *  fields render their DISPLAY form here («12:00–1:00 ظهرًا») — presentation
@@ -175,7 +201,7 @@ export function FactEntitySheet({
   const sessionSummary = (s: SessionDraft): string => {
     const parts = sessionLabels
       .map((l) => {
-        const sv = !s.freeText[l] ? s.structured[l] : null;
+        const sv = !s.freeText[l] && labelUniformlyStructured(l) ? s.structured[l] : null;
         return (sv ? structuredDisplay(sv, intlLocale) : null) ?? (s.values[l] ?? '').trim();
       })
       .filter(Boolean);
@@ -225,7 +251,9 @@ export function FactEntitySheet({
 
   const setFieldStructured = (i: number, label: string, sv: FactStructuredFieldValue | null) =>
     setSessions((prev) => prev.map((p, j) => (
-      j === i ? { ...p, structured: { ...p.structured, [label]: sv } } : p
+      j === i
+        ? { ...p, structured: { ...p.structured, [label]: sv }, guessed: { ...p.guessed, [label]: false } }
+        : p
     )));
 
   /** Toggle the escape hatch; entering free text prefills the input with the
@@ -472,26 +500,26 @@ export function FactEntitySheet({
                       const ft = !!s.freeText[label];
                       const sv = s.structured[label];
                       const fieldId = `entity-session-${i}-${label}`;
+                      // The escape hatch serves ~5% of edits — a quiet text
+                      // link BELOW the control, never competing with it
+                      // (round-8 review point 3).
                       const switchLink = (toFree: boolean, prefill?: string) => (
                         <button
                           type="button"
                           onClick={() => setFieldFreeText(i, label, toFree, toFree ? prefill : undefined)}
-                          className="text-[11px] font-medium text-brand-600 hover:underline underline-offset-2 whitespace-nowrap"
+                          className="mt-1 text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 whitespace-nowrap"
                         >
                           {toFree ? t('lists.useFreeText') : t('lists.useStructured')}
                         </button>
                       );
-                      const fieldHeader = (control: React.ReactNode) => (
-                        <span className="flex items-center justify-between gap-2 mb-1.5">
-                          <label htmlFor={fieldId} className="text-sm text-muted-foreground" dir="auto">{label}</label>
-                          {control}
-                        </span>
+                      const fieldLabel = (
+                        <label id={`${fieldId}-label`} htmlFor={fieldId} className="block text-sm text-muted-foreground mb-1.5" dir="auto">{label}</label>
                       );
 
                       if (kind === 'other' || ft) {
                         return (
                           <div key={label}>
-                            {fieldHeader(kind !== 'other' ? switchLink(false) : null)}
+                            {fieldLabel}
                             <input
                               id={fieldId}
                               type="text"
@@ -502,6 +530,7 @@ export function FactEntitySheet({
                               dir={s.values[label] ? 'auto' : undefined}
                               className={inputClass}
                             />
+                            {kind !== 'other' && switchLink(false)}
                           </div>
                         );
                       }
@@ -511,8 +540,10 @@ export function FactEntitySheet({
                         const generated = days.length ? formatWeekdays(days, genLocale(label)) : null;
                         return (
                           <div key={label}>
-                            {fieldHeader(switchLink(true, generated ?? s.values[label] ?? ''))}
-                            <span id={fieldId} role="group" aria-label={label} className="flex gap-1">
+                            {fieldLabel}
+                            {/* 44×44 round targets, natural width — no
+                                segmented-control stretching (round-8 point 4). */}
+                            <span id={fieldId} role="group" aria-labelledby={`${fieldId}-label`} className="flex flex-wrap gap-1.5">
                               {weekdayInfo(intlLocale).map((d) => {
                                 const on = days.includes(d.index);
                                 return (
@@ -528,9 +559,9 @@ export function FactEntitySheet({
                                         : [...days, d.index].sort((a, b) => a - b);
                                       setFieldStructured(i, label, { kind: 'weekdays', days: next });
                                     }}
-                                    className={`flex-1 min-h-[40px] rounded-lg text-base transition-all ${
+                                    className={`w-11 h-11 rounded-full text-base transition-all ${
                                       on
-                                        ? 'bg-brand-600 text-white font-bold scale-[1.06] shadow-sm'
+                                        ? 'bg-brand-600 text-white font-bold shadow-sm'
                                         : 'bg-card border border-theme-border text-muted-foreground hover:bg-surface-100'
                                     }`}
                                   >
@@ -539,16 +570,23 @@ export function FactEntitySheet({
                                 );
                               })}
                             </span>
-                            {generated && (
-                              <p className="mt-1.5 text-xs text-muted-foreground" dir="auto">
-                                {t('lists.previewLabel', { text: generated })}
-                              </p>
-                            )}
+                            {/* Reserved height — appearing text must not shift
+                                the form (round-8 layout-shift catch). */}
+                            <span className="block min-h-[20px] mt-1.5">
+                              {generated && (
+                                <p className="text-xs text-muted-foreground" dir="auto">
+                                  {t('lists.previewLabel', { text: generated })}
+                                </p>
+                              )}
+                            </span>
+                            {switchLink(true, generated ?? s.values[label] ?? '')}
                           </div>
                         );
                       }
 
-                      // kind === 'time'
+                      // kind === 'time' — one consistent Intl-labelled picker
+                      // (the same Select used across the product), never the
+                      // browser-dependent native input (round-8 point 2).
                       const start = sv?.kind === 'timeRange' ? sv.start : '';
                       const end = sv?.kind === 'timeRange' ? sv.end : '';
                       const setTime = (part: 'start' | 'end', v: string) => {
@@ -560,7 +598,6 @@ export function FactEntitySheet({
                         setFieldStructured(i, label, next.start || next.end ? next : null);
                       };
                       const storage = start && end ? formatTimeRangeStorage(start, end) : null;
-                      const display = start && end ? formatTimeRangeDisplay(start, end, intlLocale) : null;
                       const dur = start && end ? durationMinutes(start, end) : null;
                       const durText = dur === null ? null : (() => {
                         const h = Math.floor(dur / 60);
@@ -570,31 +607,55 @@ export function FactEntitySheet({
                       })();
                       return (
                         <div key={label}>
-                          {fieldHeader(switchLink(true, storage ?? s.values[label] ?? ''))}
+                          {fieldLabel}
                           <span className="grid grid-cols-2 gap-3">
                             <span>
-                              <label htmlFor={fieldId} className="block text-xs text-muted-foreground mb-1">{t('lists.timeFrom')}</label>
-                              <input id={fieldId} type="time" value={start} onChange={(e) => setTime('start', e.target.value)} className={inputClass} />
+                              <span id={`${fieldId}-from-label`} className="block text-xs text-muted-foreground mb-1">{t('lists.timeFrom')}</span>
+                              <Select
+                                value={start}
+                                onChange={(v) => setTime('start', v)}
+                                options={pickerOptions}
+                                placeholder={t('lists.timePick')}
+                                aria-labelledby={`${fieldId}-from-label`}
+                              />
                             </span>
                             <span>
-                              <label htmlFor={`${fieldId}-end`} className="block text-xs text-muted-foreground mb-1">{t('lists.timeTo')}</label>
-                              <input id={`${fieldId}-end`} type="time" value={end} onChange={(e) => setTime('end', e.target.value)} className={inputClass} />
+                              <span id={`${fieldId}-to-label`} className="block text-xs text-muted-foreground mb-1">{t('lists.timeTo')}</span>
+                              <Select
+                                value={end}
+                                onChange={(v) => setTime('end', v)}
+                                options={pickerOptions}
+                                placeholder={t('lists.timePick')}
+                                aria-labelledby={`${fieldId}-to-label`}
+                              />
                             </span>
                           </span>
-                          {!storage && (s.values[label] ?? '').trim() && (
-                            <p className="mt-1.5 text-xs text-muted-foreground" dir="auto">
-                              {t('lists.timeCurrentText', { text: (s.values[label] ?? '').trim() })}
-                            </p>
-                          )}
-                          {storage && (
-                            <p className="mt-1.5 text-xs text-muted-foreground" dir="auto">
-                              {t('lists.previewLabel', { text: storage })}
-                              {display && <span className="ms-1 text-subtle">({display})</span>}
-                            </p>
-                          )}
-                          {durText && (
-                            <p className="mt-0.5 text-xs text-muted-foreground">{t('lists.durationLabel', { d: durText })}</p>
-                          )}
+                          {/* Reserved two-line height: hint/preview/duration swap
+                              in and out without moving the fields below. */}
+                          <span className="block min-h-[40px] mt-1.5 space-y-0.5">
+                            {s.guessed[label] && storage && (
+                              <p className="text-xs text-amber-700 dark:text-amber-400" dir="auto">
+                                {t('lists.autofilledHint')}
+                              </p>
+                            )}
+                            {!storage && (s.values[label] ?? '').trim() && (
+                              <p className="text-xs text-muted-foreground" dir="auto">
+                                {t('lists.timeCurrentText', { text: (s.values[label] ?? '').trim() })}
+                              </p>
+                            )}
+                            {/* ONE representation (round-8): the stored string
+                                only — the duration line below already proves the
+                                disambiguation without a second notation. */}
+                            {storage && !s.guessed[label] && (
+                              <p className="text-xs text-muted-foreground" dir="auto">
+                                {t('lists.previewLabel', { text: storage })}
+                              </p>
+                            )}
+                            {durText && (
+                              <p className="text-xs text-muted-foreground">{t('lists.durationLabel', { d: durText })}</p>
+                            )}
+                          </span>
+                          {switchLink(true, storage ?? s.values[label] ?? '')}
                         </div>
                       );
                     })}

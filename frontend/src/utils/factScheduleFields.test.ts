@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   classifyCollectionField, parseWeekdays, formatWeekdays, generationLocale,
   formatTimeStorage, formatTimeRangeStorage, formatTimeRangeDisplay,
-  durationMinutes, weekdayInfo,
+  durationMinutes, weekdayInfo, parseTimeRangeGuess, timeOptions,
 } from './factScheduleFields';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -107,5 +107,39 @@ describe('weekdayInfo', () => {
     expect(ar).toHaveLength(7);
     expect(ar[0].long).toBe('الأحد');
     expect(ar.map((d) => d.narrow).join(' ')).toBe('ح ن ث ر خ ج س');
+  });
+});
+
+describe('parseTimeRangeGuess — prefill guesses, hard-guarded by the byte round-trip', () => {
+  it('reads merchant ranges into plausible daytime clock times', () => {
+    expect(parseTimeRangeGuess('12-1')).toEqual({ start: '12:00', end: '13:00' });
+    expect(parseTimeRangeGuess('5-6')).toEqual({ start: '17:00', end: '18:00' });
+    expect(parseTimeRangeGuess('10-11')).toEqual({ start: '10:00', end: '11:00' });
+    expect(parseTimeRangeGuess('٤-٦')).toEqual({ start: '16:00', end: '18:00' });
+    expect(parseTimeRangeGuess('12:30-2')).toEqual({ start: '12:30', end: '14:00' });
+  });
+
+  it('never yields a guess whose regenerated storage differs from the original', () => {
+    for (const v of ['12-1', '5-6', '10-11', '9-8', '11-1', '12:30-2']) {
+      const g = parseTimeRangeGuess(v);
+      if (g) expect(formatTimeRangeStorage(g.start, g.end)).toBe(v);
+    }
+  });
+
+  it('refuses free text, spaced ranges and impossible ranges', () => {
+    expect(parseTimeRangeGuess('حسب التنسيق')).toBeNull();
+    expect(parseTimeRangeGuess('من 12 إلى 1')).toBeNull();
+    expect(parseTimeRangeGuess('12 - 1')).toBeNull();
+    expect(parseTimeRangeGuess('')).toBeNull();
+  });
+});
+
+describe('timeOptions — the consistent picker list', () => {
+  it('emits 48 half-hour options with Intl labels', () => {
+    const opts = timeOptions('ar-SA-u-nu-latn');
+    expect(opts).toHaveLength(48);
+    expect(opts[0].value).toBe('00:00');
+    expect(opts[25].value).toBe('12:30');
+    for (const o of opts) expect(o.label).toBeTruthy();
   });
 });

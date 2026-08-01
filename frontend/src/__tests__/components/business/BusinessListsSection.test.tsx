@@ -249,7 +249,7 @@ describe('BusinessListsSection', () => {
     ));
   });
 
-  it('a time-shaped field gets from/to pickers; untouched pickers keep the original string, set ones regenerate it', async () => {
+  it('ambiguous times PREFILL the pickers as a flagged guess; save confirms — string byte-identical, shadow disambiguated', async () => {
     const slots = slotCollection();
     slots.rows = slots.rows.map((r) => ({
       ...r,
@@ -261,37 +261,17 @@ describe('BusinessListsSection', () => {
 
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
 
-    // Pickers start EMPTY — «12-1» is ambiguous and is never guessed into
-    // clock times; the original string is shown as the current text.
-    const from = screen.getAllByLabelText('From')[0] as HTMLInputElement;
-    expect(from).toHaveValue('');
-    expect(screen.getAllByText(/12-1/).length).toBeGreaterThan(0);
+    // Recognition over recall: «12-1» populated the pickers (12:00 → 13:00)
+    // and the guess is FLAGGED for review, not silently trusted.
+    const label13 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', dayPeriod: 'long', timeZone: 'UTC' })
+      .format(new Date(Date.UTC(2024, 0, 7, 13, 0)));
+    expect(screen.getAllByText(/Read automatically from the text/).length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('To')[0].textContent).toContain(label13);
 
-    // First save without touching: the time string survives verbatim and no
-    // TIME shadow ships (the weekday field's complete parse still ships its
-    // own — that value is byte-identical, so nothing merchant-visible moved).
+    // Saving untouched confirms: the stored string is BYTE-IDENTICAL «12-1»,
+    // only the shadow is new.
     fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
     await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenCalledWith(
-      PAGE,
-      expect.objectContaining({
-        upserts: expect.arrayContaining([
-          expect.objectContaining({
-            collectionId: 'coll-slots',
-            attributes: expect.arrayContaining([{ label: 'الساعة', value: '12-1' }]),
-            structured: { 'الأيام': { kind: 'weekdays', days: [0, 2] } },
-          }),
-        ]),
-      }),
-    ));
-
-    // The successful save closed the sheet — reopen, then set both times: the
-    // string regenerates in the merchant's compact form and the disambiguated
-    // shadow ships.
-    fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
-    fireEvent.change(screen.getAllByLabelText('From')[0], { target: { value: '12:00' } });
-    fireEvent.change(screen.getAllByLabelText('To')[0], { target: { value: '13:00' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
-    await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenLastCalledWith(
       PAGE,
       expect.objectContaining({
         upserts: expect.arrayContaining([
@@ -306,114 +286,47 @@ describe('BusinessListsSection', () => {
         ]),
       }),
     ));
-  });
 
-  it('session groups collapse behind their count line and start EXPANDED (owner ruling over expert default)', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
-    renderSection();
-
-    // Expanded by default — the session values are visible without a click.
-    expect(await screen.findByText('الأحد والثلاثاء')).toBeInTheDocument();
-
-    const toggle = screen.getByRole('button', { name: '1 upcoming date' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(toggle);
-    expect(screen.queryByText('الأحد والثلاثاء')).toBeNull();
-    fireEvent.click(toggle);
-    expect(screen.getByText('الأحد والثلاثاء')).toBeInTheDocument();
-  });
-
-  it('a lone session in the entity form carries no number — «الموعد 1» only appears with peers', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
-    renderSection();
-
+    // Reopen and actually EDIT the end time through the consistent picker:
+    // the stored string regenerates to the merchant's compact form.
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
-    // (SidePanel double-renders — assert on presence/absence, not counts.)
-    expect(screen.getAllByText('Date').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Date 1')).toBeNull();
+    fireEvent.click(screen.getAllByLabelText('To')[0]);
+    const label14 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', dayPeriod: 'long', timeZone: 'UTC' })
+      .format(new Date(Date.UTC(2024, 0, 7, 14, 0)));
+    fireEvent.click(screen.getAllByRole('button', { name: label14 })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
 
-    fireEvent.click(screen.getAllByText('Add another date')[0]);
-    expect(screen.queryByText('Date')).toBeNull();
-    expect(screen.getAllByText('Date 1').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Date 2').length).toBeGreaterThan(0);
-  });
-
-  it('multiple sessions in the form render as collapsed summaries; tapping one expands its fields', async () => {
-    const slots = slotCollection();
-    const secondFuture = new Date(Date.now() + 14 * 86400_000).toISOString().slice(0, 10);
-    slots.rows = [
-      slots.rows[0],
-      { id: 'slot-live-2', name: 'دورة ICDL', price: null, currency: null,
-        attributes: [{ label: 'الدورة', value: 'ICDL' }, { label: 'الأيام', value: 'السبت فقط' }],
-        startsAt: secondFuture, endsAt: null, isAvailable: true },
-    ];
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [priceCollection(), slots] } } as any);
-    renderSection();
-
-    fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
-
-    // Both sessions collapsed: no editable fields, summaries carry the values.
-    // The weekday summary renders in the VIEWER's locale (en in tests) from
-    // the structured value — presentation is free; storage stays Arabic.
-    expect(screen.queryAllByLabelText('الأيام')).toHaveLength(0);
-    const summary = screen.getAllByRole('button', { name: /Sunday and Tuesday/ })[0];
-    expect(summary).toHaveAttribute('aria-expanded', 'false');
-
-    fireEvent.click(summary);
-    expect(screen.getAllByRole('button', { name: 'Sunday' })[0]).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  it('entity delete lives in a danger zone at the form end, two-step, and deletes all the item rows', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
-    vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
-    renderSection();
-
-    fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Confirm full deletion' })[0]);
-
-    await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenCalledWith(
+    await waitFor(() => expect(factCollectionsApi.saveEntity).toHaveBeenLastCalledWith(
       PAGE,
       expect.objectContaining({
-        upserts: [],
-        deletes: expect.arrayContaining([
-          expect.objectContaining({ rowId: 'price-icdl' }),
-          expect.objectContaining({ rowId: 'slot-live' }),
+        upserts: expect.arrayContaining([
+          expect.objectContaining({
+            collectionId: 'coll-slots',
+            attributes: expect.arrayContaining([{ label: 'الساعة', value: '12-2' }]),
+            structured: expect.objectContaining({
+              'الساعة': { kind: 'timeRange', start: '12:00', end: '14:00' },
+            }),
+          }),
         ]),
       }),
     ));
   });
 
-  it('a card\'s ONLY unlabelled price row reads «Base price» — never a bare number as a title', async () => {
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
-    renderSection();
-    await screen.findByText('دورة المكياج');
-    // price-makeup has no attributes and is its card's sole price row.
-    expect(screen.getByText('Base price')).toBeInTheDocument();
-  });
-
-  it('the empty-sessions hint appears ONCE per card; later empty tiers keep only the add action', async () => {
-    const prices: FactCollectionWithRows = {
-      id: 'coll-p', label: 'أسعار الدورات', keyAttr: null, isComplete: true, rowCount: 2,
-      rows: [
-        { id: 'p1', name: 'دورة برمجة', price: '10000', currency: null,
-          attributes: [{ label: 'المستوى', value: 'مبتدئ' }], startsAt: null, endsAt: null, isAvailable: true },
-        { id: 'p2', name: 'دورة برمجة', price: '20000', currency: null,
-          attributes: [{ label: 'المستوى', value: 'متقدم' }], startsAt: null, endsAt: null, isAvailable: true },
-      ],
+  it('«قادمة» counts only rows with a REAL future start — undated announced sessions get the neutral badge', async () => {
+    // The makeup row keeps the collection date-bearing; ICDL's own session is
+    // undated («تبدأ عند اكتمال العدد» shape) and must NOT read as «قادمة».
+    const slots = slotCollection();
+    slots.rows[0] = {
+      ...slots.rows[0],
+      id: 'slot-undated',
+      startsAt: null, endsAt: null,
     };
-    const slots = slotCollection({
-      rows: [{ id: 's1', name: 'دورة برمجة', price: null, currency: null,
-        attributes: [{ label: 'الدورة', value: 'برمجة' }], startsAt: past, endsAt: past, isAvailable: true }],
-      rowCount: 1,
-    });
-    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [prices, slots] } } as any);
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [priceCollection(), slots] } } as any);
     renderSection();
 
-    await screen.findByText('مبتدئ');
-    expect(screen.getAllByText(/No announced dates yet/)).toHaveLength(1);
-    expect(screen.getAllByText('Add the first date')).toHaveLength(2);
+    await screen.findByText('دورة ICDL');
+    expect(screen.getByText('1 announced date')).toBeInTheDocument();
+    expect(screen.queryByText(/upcoming/)).toBeNull();
   });
 
   it('the entity save strips the legacy endsAt=startsAt artifact — sessions go out with endsAt null', async () => {

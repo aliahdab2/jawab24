@@ -485,11 +485,21 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
               <div className="flex items-center justify-between gap-2 flex-wrap px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30">
                 <h3 className="text-[15px] font-bold text-foreground" dir="auto">{group.title}</h3>
                 {collections.some(isDatedCollection) && (() => {
-                  const upcoming = group.rows.filter((r) =>
-                    isDatedCollection(r.collection) && !isExpired(r.row)).length;
-                  return upcoming > 0 ? (
+                  // «قادمة» is a promise — only rows with a REAL future start
+                  // date earn it (round-8: wrong counts destroy trust).
+                  // Undated announced sessions get their own neutral badge
+                  // instead of inflating the upcoming number.
+                  const live = group.rows.filter((r) =>
+                    isDatedCollection(r.collection) && !isExpired(r.row));
+                  const scheduled = live.filter((r) => !!r.row.startsAt).length;
+                  const unscheduled = live.length - scheduled;
+                  return scheduled > 0 ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400">
-                      {t('lists.upcomingCount', { count: upcoming })}
+                      {t('lists.upcomingCount', { count: scheduled })}
+                    </span>
+                  ) : unscheduled > 0 ? (
+                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                      {t('lists.announcedCount', { count: unscheduled })}
                     </span>
                   ) : (
                     <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
@@ -525,7 +535,9 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                           className={`w-3.5 h-3.5 flex-shrink-0 transition-transform ${collapsed ? 'ltr:-rotate-90 rtl:rotate-90' : ''}`}
                           aria-hidden="true"
                         />
-                        {t('lists.upcomingCount', { count: liveCount })}
+                        {/* Neutral count — the toggle groups dated AND undated
+                            rows, so it must not promise «قادمة» (round-8). */}
+                        {t('lists.sessionsCount', { count: liveCount })}
                       </button>
                       {!collapsed && (
                         <ul className="divide-y divide-theme-border/50">
