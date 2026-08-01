@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, Trash2, Plus, CalendarClock, ChevronDown } from 'lucide-react';
+import { Check, Trash2, Plus, CalendarClock, ChevronDown, CalendarDays, Clock, Calendar, Tag, Banknote } from 'lucide-react';
 import type { FactStructuredFieldValue, FactStructuredValues } from '@jawab24/shared';
 import { SidePanel, Button, Select } from '@/components/ui';
 import { formatCatalogPrice } from '@/utils/priceFormat';
@@ -381,13 +381,15 @@ export function FactEntitySheet({
     return a ? (b ? `${a} – ${b}` : a) : '';
   };
 
-  /** One Notion-style property row: name (start, muted) · value (or «فارغ»),
-   *  expanding in place to the visible control — density without hiding
-   *  editability behind hover states. */
+  /** One Notion-style property row: a small TYPE ICON + name (start, muted),
+   *  the value (or a light «فارغ») filling the rest — no divider lines, no
+   *  chevron; hover background is the affordance, and the control expands in
+   *  place with Notion's quick fade-slide. */
   const propertyRow = (
     key: string,
     rowName: string,
-    value: string,
+    icon: React.ReactNode,
+    value: React.ReactNode | null,
     children: React.ReactNode,
     flag?: React.ReactNode,
   ) => {
@@ -398,21 +400,39 @@ export function FactEntitySheet({
           type="button"
           onClick={() => toggleProp(key)}
           aria-expanded={openP}
-          className="w-full min-h-[40px] flex items-center gap-3 px-1.5 rounded-lg text-start hover:bg-muted/50 transition-colors"
+          className="w-full min-h-[38px] flex items-center gap-2 px-1.5 py-1 rounded-lg text-start hover:bg-muted/50 transition-colors"
         >
-          <span className="w-24 flex-none text-sm text-muted-foreground truncate" dir="auto">{rowName}</span>
-          <span
-            className={`min-w-0 flex-1 text-sm break-words ${value ? 'text-foreground' : 'text-muted-foreground/60'}`}
-            dir="auto"
-          >
-            {value || t('lists.emptyValue')}
+          <span className="w-28 flex-none flex items-center gap-1.5 min-w-0">
+            <span className="flex-none text-icon-muted" aria-hidden="true">{icon}</span>
+            <span className="min-w-0 text-sm text-muted-foreground truncate" dir="auto">{rowName}</span>
+          </span>
+          <span className="min-w-0 flex-1 text-sm break-words text-foreground" dir="auto">
+            {value ?? <span className="text-muted-foreground/50">{t('lists.emptyValue')}</span>}
           </span>
           {flag}
         </button>
-        {openP && <div className="px-1.5 pb-3 pt-1">{children}</div>}
+        {openP && (
+          <div className="px-1.5 pb-3 pt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+            {children}
+          </div>
+        )}
       </div>
     );
   };
+
+  /** Notion multi-select look: selected days as small tinted chips in the
+   *  collapsed row value. */
+  const dayChips = (days: number[]): React.ReactNode => (
+    <span className="flex flex-wrap gap-1">
+      {weekdayInfo(intlLocale)
+        .filter((d) => days.includes(d.index))
+        .map((d) => (
+          <span key={d.index} className="px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-700 dark:text-brand-300 text-xs font-medium">
+            {d.long}
+          </span>
+        ))}
+    </span>
+  );
 
   return (
     <SidePanel isOpen onClose={onClose} title={t('lists.editItem')} subtitle={unit.title}>
@@ -428,15 +448,16 @@ export function FactEntitySheet({
             aria-label={t('lists.rowName')}
             placeholder={t('lists.rowName')}
             dir={name ? 'auto' : undefined}
-            className="w-full bg-transparent border-0 p-0 text-xl font-bold text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"
+            className="w-full bg-transparent border-0 p-0 text-2xl font-bold text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"
           />
         </section>
 
-        <div className="divide-y divide-theme-border/40">
+        <div className="space-y-0.5">
           {unit.faceLabel && propertyRow(
             'base:face',
             unit.faceLabel,
-            faceValue.trim(),
+            <Tag className="w-3.5 h-3.5" />,
+            faceValue.trim() || null,
             <input
               id="entity-face"
               type="text"
@@ -450,7 +471,10 @@ export function FactEntitySheet({
           {baseCollection && propertyRow(
             'base:price',
             t('lists.rowPrice'),
-            price.trim() ? `${price.trim()}${currency.trim() ? ` ${currency.trim()}` : ''}` : '',
+            <Banknote className="w-3.5 h-3.5" />,
+            price.trim()
+              ? `${Number(price) ? Number(price).toLocaleString(intlLocale) : price.trim()}${currency.trim() ? ` ${currency.trim()}` : ''}`
+              : null,
             <div className="flex gap-2">
               <input
                 id="entity-price"
@@ -493,22 +517,20 @@ export function FactEntitySheet({
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-0.5">
                 {sessions.map((s, i) => {
                   const open = !!openSessions[s.draftKey];
                   const summary = sessionSummary(s);
                   return (
-                  <div key={s.draftKey} className={`rounded-xl bg-muted/40 ${open ? 'p-3 space-y-3' : ''}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      {/* The header is the collapse toggle: a summary line when
-                          closed, the plain label when open. Users don't care
-                          that it's number 1 — the ordinal appears only once
-                          there are peers to tell apart. */}
+                  <div key={s.draftKey}>
+                    <div className="flex items-center gap-1">
+                      {/* Notion toggle block: chevron + summary line, children
+                          indent under a light start-edge rule — no gray box. */}
                       <button
                         type="button"
                         onClick={() => setOpenSessions((prev) => ({ ...prev, [s.draftKey]: !open }))}
                         aria-expanded={open}
-                        className={`min-w-0 flex-1 min-h-[40px] flex items-center gap-2 text-start ${open ? '' : 'px-3'}`}
+                        className="min-w-0 flex-1 min-h-[36px] flex items-center gap-2 px-1.5 rounded-lg text-start hover:bg-muted/50 transition-colors"
                       >
                         <ChevronDown
                           className={`w-3.5 h-3.5 flex-shrink-0 text-icon-muted transition-transform ${open ? '' : 'ltr:-rotate-90 rtl:rotate-90'}`}
@@ -537,7 +559,8 @@ export function FactEntitySheet({
                       )}
                     </div>
                     {open && (
-                    <div className="divide-y divide-theme-border/40">
+                    <div className="ms-[13px] border-s border-theme-border/50 ps-3 pt-1 pb-2 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="space-y-0.5">
                     {sessionLabels.filter((l) => fieldKinds[l] !== 'other').map((label) => {
                       const kind = fieldKinds[label];
                       const ft = !!s.freeText[label];
@@ -561,8 +584,12 @@ export function FactEntitySheet({
                         </span>
                       ) : undefined;
 
+                      const kindIcon = kind === 'weekday'
+                        ? <CalendarDays className="w-3.5 h-3.5" />
+                        : <Clock className="w-3.5 h-3.5" />;
+
                       if (ft) {
-                        return propertyRow(rowKey, label, (s.values[label] ?? '').trim(), (
+                        return propertyRow(rowKey, label, kindIcon, (s.values[label] ?? '').trim() || null, (
                           <>
                             <input
                               id={fieldId}
@@ -583,7 +610,7 @@ export function FactEntitySheet({
                       if (kind === 'weekday') {
                         const days = sv?.kind === 'weekdays' ? sv.days : [];
                         const generated = days.length ? formatWeekdays(days, genLocale(label)) : null;
-                        return propertyRow(rowKey, label, fieldDisplay(s, label), (
+                        return propertyRow(rowKey, label, kindIcon, days.length ? dayChips(days) : (fieldDisplay(s, label) || null), (
                           <>
                             <span id={fieldId} role="group" aria-label={label} className="flex flex-wrap gap-1.5">
                               {weekdayInfo(intlLocale).map((d) => {
@@ -635,7 +662,7 @@ export function FactEntitySheet({
                         if (h && m) return t('lists.durationBoth', { h: t('lists.durationHours', { count: h }), m: t('lists.durationMinutes', { count: m }) });
                         return h ? t('lists.durationHours', { count: h }) : t('lists.durationMinutes', { count: m });
                       })();
-                      return propertyRow(rowKey, label, fieldDisplay(s, label), (
+                      return propertyRow(rowKey, label, kindIcon, fieldDisplay(s, label) || null, (
                         <>
                           <span className="grid grid-cols-2 gap-2">
                             <span>
@@ -683,7 +710,7 @@ export function FactEntitySheet({
                         </>
                       ), flag);
                     })}
-                    {propertyRow(`s:${s.draftKey}:dates`, t('lists.rowDate'), datesDisplay(s), (
+                    {propertyRow(`s:${s.draftKey}:dates`, t('lists.rowDate'), <Calendar className="w-3.5 h-3.5" />, datesDisplay(s) || null, (
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label htmlFor={`entity-session-${i}-start`} className={labelClass}>{t('lists.rowDate')}</label>
@@ -710,9 +737,8 @@ export function FactEntitySheet({
                       </div>
                     ))}
                     </div>
-                    )}
-                    {open && sessionLabels.filter((l) => fieldKinds[l] === 'other').map((label) => (
-                      <div key={label} className="rounded-lg bg-card/70 px-3 py-2 focus-within:ring-2 focus-within:ring-brand-500/30">
+                    {sessionLabels.filter((l) => fieldKinds[l] === 'other').map((label) => (
+                      <div key={label} className="rounded-lg bg-muted/40 px-3 py-2 focus-within:ring-2 focus-within:ring-brand-500/30">
                         <label htmlFor={`entity-session-${i}-${label}`} className="block text-xs text-muted-foreground mb-1" dir="auto">{label}</label>
                         <textarea
                           id={`entity-session-${i}-${label}`}
@@ -727,15 +753,17 @@ export function FactEntitySheet({
                         />
                       </div>
                     ))}
+                    </div>
+                    )}
                   </div>
                   );
                 })}
                 <button
                   type="button"
                   onClick={addSession}
-                  className="min-h-[40px] w-full inline-flex items-center justify-center gap-1 rounded-xl border border-dashed border-theme-border text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                  className="w-full min-h-[36px] flex items-center gap-2 px-1.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors text-start"
                 >
-                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  <Plus className="w-4 h-4 text-icon-muted" aria-hidden="true" />
                   {t('lists.addSession')}
                 </button>
               </div>
