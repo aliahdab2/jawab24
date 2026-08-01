@@ -1,4 +1,7 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, numeric, date, check, customType, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, index, uniqueIndex, real, numeric, date, check, customType, type AnyPgColumn } from 'drizzle-orm/pg-core';
+// Fixed jsonb column type — drizzle 0.29's own `jsonb` double-encodes through
+// postgres-js and stores jsonb *strings* (see jsonbColumn.ts for the full story).
+import { jsonb } from './jsonbColumn';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE } from '@jawab24/shared';
 import type { LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
