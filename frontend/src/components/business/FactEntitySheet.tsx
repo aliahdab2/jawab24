@@ -396,21 +396,23 @@ export function FactEntitySheet({
     const openP = !!openProps[key];
     return (
       <div key={key}>
-        <button
-          type="button"
-          onClick={() => toggleProp(key)}
-          aria-expanded={openP}
-          className="w-full min-h-[38px] flex items-center gap-2 px-1.5 py-1 rounded-lg text-start hover:bg-muted/50 transition-colors"
-        >
-          <span className="w-28 flex-none flex items-center gap-1.5 min-w-0">
-            <span className="flex-none text-icon-muted" aria-hidden="true">{icon}</span>
-            <span className="min-w-0 text-sm text-muted-foreground truncate" dir="auto">{rowName}</span>
-          </span>
-          <span className="min-w-0 flex-1 text-sm break-words text-foreground" dir="auto">
-            {value ?? <span className="text-muted-foreground/50">{t('lists.emptyValue')}</span>}
-          </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => toggleProp(key)}
+            aria-expanded={openP}
+            className="min-w-0 flex-1 min-h-[38px] flex items-center gap-2 px-1.5 py-1 rounded-lg text-start hover:bg-muted/50 transition-colors"
+          >
+            <span className="w-28 flex-none flex items-center gap-1.5 min-w-0">
+              <span className="flex-none text-icon-muted" aria-hidden="true">{icon}</span>
+              <span className="min-w-0 text-sm text-muted-foreground truncate" dir="auto">{rowName}</span>
+            </span>
+            <span className="min-w-0 flex-1 text-sm break-words text-foreground" dir="auto">
+              {value ?? <span className="text-muted-foreground/50">{t('lists.emptyValue')}</span>}
+            </span>
+          </button>
           {flag}
-        </button>
+        </div>
         {openP && (
           <div className="px-1.5 pb-3 pt-1 animate-in fade-in slide-in-from-top-1 duration-150">
             {children}
@@ -713,10 +715,7 @@ export function FactEntitySheet({
                     {propertyRow(`s:${s.draftKey}:dates`, t('lists.rowDate'), <Calendar className="w-3.5 h-3.5" />, datesDisplay(s) || null, (
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <span className="flex items-center gap-1.5 mb-1.5">
-                            <label htmlFor={`entity-session-${i}-start`} className="text-sm text-muted-foreground">{t('lists.rowDate')}</label>
-                            <InfoPopover label={t('lists.rowDate')}>{t('lists.rowDateHint')}</InfoPopover>
-                          </span>
+                          <label htmlFor={`entity-session-${i}-start`} className="block text-sm text-muted-foreground mb-1.5">{t('lists.rowDate')}</label>
                           <input
                             id={`entity-session-${i}-start`}
                             type="date"
@@ -738,6 +737,8 @@ export function FactEntitySheet({
                           />
                         </div>
                       </div>
+                    ), (
+                      <InfoPopover label={t('lists.rowDate')}>{t('lists.rowDateHint')}</InfoPopover>
                     ))}
                     </div>
                     {sessionLabels.filter((l) => fieldKinds[l] === 'other').map((label) => propertyRow(
