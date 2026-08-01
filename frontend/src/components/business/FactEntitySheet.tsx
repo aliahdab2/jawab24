@@ -556,25 +556,16 @@ export function FactEntitySheet({
                                         : [...days, d.index].sort((a, b) => a - b);
                                       setFieldStructured(i, label, { kind: 'weekdays', days: next });
                                     }}
-                                    className={`w-11 h-11 rounded-full text-base transition-all ${
+                                    className={`min-h-[36px] px-3 rounded-full text-xs transition-all ${
                                       on
-                                        ? 'bg-brand-600 text-white font-bold shadow-sm'
+                                        ? 'bg-brand-600 text-white font-semibold shadow-sm'
                                         : 'bg-card border border-theme-border text-muted-foreground hover:bg-surface-100'
                                     }`}
                                   >
-                                    {d.narrow}
+                                    {d.long}
                                   </button>
                                 );
                               })}
-                            </span>
-                            {/* Reserved height — appearing text must not shift
-                                the form (round-8 layout-shift catch). */}
-                            <span className="block min-h-[20px] mt-1.5">
-                              {generated && (
-                                <p className="text-xs text-muted-foreground" dir="auto">
-                                  {t('lists.previewLabel', { text: generated })}
-                                </p>
-                              )}
                             </span>
                             {switchLink(true, generated ?? s.values[label] ?? '')}
                           </div>
