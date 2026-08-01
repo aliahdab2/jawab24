@@ -483,6 +483,8 @@ export function FactEntitySheet({
             price.trim()
               ? `${Number(price) ? Number(price).toLocaleString(intlLocale) : price.trim()}${currency.trim() ? ` ${currency.trim()}` : ''}`
               : null,
+            // Compact inline editor — a number and a currency word don't need a
+            // full-width row (owner). 16px text stays (iOS zoom rule).
             <div className="flex gap-2">
               <input
                 id="entity-price"
@@ -492,7 +494,7 @@ export function FactEntitySheet({
                 onChange={(e) => setPrice(e.target.value)}
                 aria-label={t('lists.rowPrice')}
                 placeholder={t('lists.rowPrice')}
-                className={`${inputClass} flex-1`}
+                className={`${inputClass} !min-h-[38px] !w-36 flex-none`}
               />
               <input
                 id="entity-currency"
@@ -502,7 +504,7 @@ export function FactEntitySheet({
                 dir={currency ? 'auto' : undefined}
                 aria-label={t('lists.rowCurrency')}
                 placeholder={t('lists.rowCurrency')}
-                className={`${inputClass} !w-32 flex-none`}
+                className={`${inputClass} !min-h-[38px] !w-32 flex-none`}
               />
             </div>,
           )}
