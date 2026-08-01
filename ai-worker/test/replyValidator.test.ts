@@ -3,6 +3,7 @@ import {
     flagHallucinatedPrice,
     isCommentTooLong,
     stripSelfIdentification,
+    isOwnBrandPage,
     SELF_ID_FALLBACKS,
     validateReply,
 } from '../src/services/reply/replyValidator';
@@ -700,6 +701,61 @@ describe('stripSelfIdentification (Check 6)', () => {
             expect(out.reply).toContain('الشحن متاح');
         });
     });
+
+    // On the vendor's OWN page the brand IS the business — stripping it turned
+    // every website/app-link answer into a SELF_ID_FALLBACKS identity line
+    // (prod, Jawab24 support page, 2026-08-01: «موقعكم الالكتروني» asked 3×,
+    // deflected 3×). Brand needles and the flag-gated AI vocabulary are product
+    // talk there; first-person tripwires and "chatbot" stay decisive everywhere.
+    describe('own-brand page exemption (ownBrandPage)', () => {
+        it('keeps the brand and the website URL on the vendor page — the exact prod failure', () => {
+            const reply = 'موقعنا الإلكتروني https://jawab24.com وفيه كل التفاصيل عن الخدمة.';
+            expect(stripSelfIdentification(reply, 'ar', false, true)).toEqual({ reply, stripped: false });
+        });
+
+        it('keeps a self-reported product description on the vendor page («جواب24 منصة ذكاء اصطناعي»)', () => {
+            const reply = 'جواب24 منصة ذكاء اصطناعي ترد على عملائك تلقائياً على مدار الساعة.';
+            expect(stripSelfIdentification(reply, 'ar', true, true)).toEqual({ reply, stripped: false });
+        });
+
+        it('still strips first-person bot claims on the vendor page — the tripwire is universal', () => {
+            const out = stripSelfIdentification('أنا روبوت أرد تلقائياً. موقعنا jawab24.com دائماً متاح.', 'ar', false, true);
+            expect(out.stripped).toBe(true);
+            expect(out.reply).not.toMatch(/أنا روبوت/);
+            expect(out.reply).toContain('jawab24.com');
+        });
+
+        it('still strips "chatbot" on the vendor page', () => {
+            const out = stripSelfIdentification('You are talking to a chatbot. Visit jawab24.com for details today.', 'en', false, true);
+            expect(out.stripped).toBe(true);
+            expect(out.reply).not.toMatch(/chatbot/i);
+            expect(out.reply).toContain('jawab24.com');
+        });
+
+        // The no-space Arabic form slipped through the original needle and reached
+        // customers on merchant pages (prod, 2026-08-01: «جواب24 هو موظف ذكي…»
+        // survived Check 6 on the vendor page only by luck of this gap).
+        it('strips the no-space «جواب24» form on MERCHANT pages', () => {
+            const out = stripSelfIdentification('هذا الرد من جواب24 التلقائي. ساعات الدوام من 9 صباحاً حتى 5 مساءً.', 'ar');
+            expect(out.stripped).toBe(true);
+            expect(out.reply).not.toMatch(/جواب24/);
+            expect(out.reply).toContain('ساعات الدوام');
+        });
+    });
+});
+
+describe('isOwnBrandPage', () => {
+    it('matches the vendor page name in all brand spellings', () => {
+        for (const name of ['Jawab24', 'jawab24', 'Jawab 24', 'جواب24', 'جواب 24', 'جواب٢٤', 'جواب ٢٤ للدعم']) {
+            expect(isOwnBrandPage(name)).toBe(true);
+        }
+    });
+
+    it('rejects merchant page names and missing names', () => {
+        for (const name of ['متجر الإلكترونيات', 'BAMBO LIBYA', 'معهد الفريق الدمشقي للتأهيل', undefined]) {
+            expect(isOwnBrandPage(name)).toBe(false);
+        }
+    });
 });
 
 describe('validateReply orchestration', () => {
@@ -917,6 +973,29 @@ describe('validateReply orchestration', () => {
             const out = validateReply(base({ reply, language: 'ar' }), req('عندكم مكانس؟'));
             expect(out.reply).toBe(reply);
             expect(out.flags).not.toContain('self_identification_stripped');
+        });
+
+        // Wiring for the own-brand exemption: validateReply must derive it from
+        // request.context.pageName — dropping that argument at the call site
+        // would leave the direct stripSelfIdentification tests green while the
+        // vendor page regresses to identity fallbacks (the 2026-08-01 incident).
+        it('vendor page (context.pageName = Jawab24) → brand/URL reply survives untouched', () => {
+            const reply = 'موقعنا الإلكتروني https://jawab24.com وفيه كل تفاصيل الخدمة والأسعار.';
+            const out = validateReply(
+                base({ reply, language: 'ar' }),
+                req('موقعكم الالكتروني؟', { pageName: 'Jawab24' }),
+            );
+            expect(out.reply).toBe(reply);
+            expect(out.flags).not.toContain('self_identification_stripped');
+        });
+
+        it('merchant page → the SAME brand reply is stripped (proves pageName drives the exemption)', () => {
+            const out = validateReply(
+                base({ reply: 'موقعنا الإلكتروني https://jawab24.com وفيه كل تفاصيل الخدمة والأسعار.', language: 'ar' }),
+                req('موقعكم الالكتروني؟', { pageName: 'متجر الإلكترونيات' }),
+            );
+            expect(out.reply).not.toMatch(/jawab24/i);
+            expect(out.flags).toContain('self_identification_stripped');
         });
     });
 });

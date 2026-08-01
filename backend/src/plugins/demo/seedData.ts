@@ -440,6 +440,38 @@ export const DEMO_PAGES = [
         autoReplyEnabled: true,
         instagramUsername: null,
     },
+    {
+        // OWN-BRAND fixture (playground-eval Cat 72). The vendor's own support
+        // page: the page name matches isOwnBrandPage (replyValidator Check 6),
+        // so brand mentions — «موقعنا jawab24.com» — must SURVIVE validation
+        // instead of being swapped for SELF_ID_FALLBACKS identity lines (prod
+        // incident 2026-08-01: website asked 3×, deflected 3×). KB deliberately
+        // contains the site + Play Store link and NO prices (pricing lives on
+        // the site), so Check 1 never interacts with these cases. Appended LAST:
+        // DEMO_MESSAGES/DEMO_POSTS reference pages by array index.
+        facebookPageId: 'demo_page_support',
+        name: 'Jawab24',
+        suggestedKnowledgeBase: `جواب24 — موظف ذكي يرد على عملاء نشاطك التجاري
+
+ما هو جواب24؟
+جواب24 منصة تربط صفحات فيسبوك وإنستغرام ورقم واتساب الخاص بنشاطك التجاري، وترد على أسئلة عملائك في التعليقات والرسائل فوراً وعلى مدار الساعة، اعتماداً على معلومات نشاطك التجاري التي تضيفها بنفسك.
+
+الموقع الإلكتروني: https://jawab24.com
+تطبيق أندرويد على غوغل بلاي: https://play.google.com/store/apps/details?id=com.jawab24.app
+الأسعار والباقات: https://jawab24.com/pricing — وتوجد تجربة مجانية لمدة شهر كامل.
+
+كيف أبدأ؟
+1. سجّل حساباً من الموقع أو التطبيق.
+2. اربط صفحتك على فيسبوك أو إنستغرام أو رقم واتساب.
+3. أضف معلومات نشاطك التجاري: المنتجات، الأسعار، أوقات الدوام، وسياساتك.
+بعدها يتولى جواب24 الرد على عملائك مباشرة.
+
+خدمة الرد تعمل تلقائياً على مدار الساعة طوال أيام الأسبوع.
+الدعم الفني: عبر رسائل هذه الصفحة أو من داخل التطبيق.
+خدمتنا إلكترونية بالكامل وتعمل عبر الإنترنت، ولا يوجد لدينا فرع أو محل.`,
+        autoReplyEnabled: true,
+        instagramUsername: null,
+    },
 ];
 
 /**

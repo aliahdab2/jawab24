@@ -459,7 +459,7 @@ Local-first — no CI required:
 
 **Tier 2 (Deploy only):** Docker smoke tests, post-deploy health checks, content smoke test.
 
-**Tier 3 (Manual):** `npm run test:ecommerce:shopify`, `npm run test:ecommerce:salla`, `npm run eval` (125 AI test cases). Use skills for setup.
+**Tier 3 (Manual):** `npm run test:ecommerce:shopify`, `npm run test:ecommerce:salla`, `npm run eval` (the AI reply eval suite — 440+ cases in `scripts/playground-eval.ts`). Use skills for setup.
 
 ---
 
