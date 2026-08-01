@@ -832,10 +832,16 @@ export const subscriptions = pgTable('subscriptions', {
     currentPeriodEnd: timestamp('current_period_end'),
 
     // Payment info (for Stripe integration)
-    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID
-    paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual'
+    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID / Shopify AppSubscription GID
+    paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual', 'shopify'
     stripeCustomerId: varchar('stripe_customer_id', { length: 255 }), // Stripe Customer ID
     stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }), // For tracking
+    // Shopify App Pricing (managed billing): the *.myshopify.com domain whose app
+    // subscription this row mirrors. Required when payment_method='shopify' (CHECK
+    // below), unique among shopify rows (partial index) so one shop can never bill
+    // two workspaces. Lives here — NOT on ecommerce_stores — so the paid state
+    // survives GDPR shop/redact deleting the store row.
+    shopifyShopDomain: varchar('shopify_shop_domain', { length: 255 }),
     cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false), // Cancel at period end flag
 
     // Cancellation
@@ -849,6 +855,22 @@ export const subscriptions = pgTable('subscriptions', {
         userIdIdx: index('idx_subscriptions_user_id').on(table.userId),
         statusIdx: index('idx_subscriptions_status').on(table.status),
         planIdIdx: index('idx_subscriptions_plan_id').on(table.planId),
+        // One NON-CANCELED local mirror per shop (same conditional-constraint
+        // pattern as topup_purchases). Canceled rows are excluded on purpose:
+        // they keep their domain for audit, and a shop that uninstalled from
+        // workspace A must stay adoptable by workspace B — a full-scope unique
+        // index would deadlock that adoption forever, unhealably.
+        // NOTE: drizzle-kit 0.x drops .where() when generating SQL — the real
+        // partial index lives in migration 0147 (hand-amended, 0108 precedent).
+        shopifyShopDomainUnique: uniqueIndex('idx_subscriptions_shopify_shop_domain')
+            .on(table.shopifyShopDomain)
+            .where(sql`${table.paymentMethod} = 'shopify' AND ${table.status} <> 'canceled'`),
+        // A shopify-billed row without its shop domain is unreconcilable — the
+        // 6h sweep and the uninstall cancel both resolve rows by this column.
+        shopifyDomainRequiredCheck: check(
+            'subscriptions_shopify_domain_required',
+            sql`${table.paymentMethod} IS DISTINCT FROM 'shopify' OR ${table.shopifyShopDomain} IS NOT NULL`
+        ),
     };
 });
 

@@ -83,6 +83,14 @@ vi.mock('../../src/services/shopify', () => ({
 }));
 
 const mockVerifyToken = vi.fn();
+// webhookUninstall dynamically imports the billing mirror to cancel the local
+// subscription (D-D); the real module would drag in the db config.
+const mockCancelShopifySubscriptionLocal = vi.fn().mockResolvedValue(false);
+vi.mock('../../src/services/shopifyBilling', () => ({
+    cancelShopifySubscriptionLocal: (...a: unknown[]) => mockCancelShopifySubscriptionLocal(...a),
+    syncShopifyBilling: vi.fn().mockResolvedValue({ outcome: 'no_store', changed: false }),
+}));
+
 vi.mock('../../src/services/auth', () => ({
     authService: {
         verifyToken: (...args: any[]) => mockVerifyToken(...args),
@@ -700,6 +708,11 @@ describe('Shopify Controller', () => {
             await webhookUninstall(req, rep);
 
             expect(mockDeactivateStore).toHaveBeenCalledWith('test.myshopify.com');
+            // D-D: the local billing mirror is canceled on uninstall — a paid
+            // local subscription must not outlive the app.
+            expect(mockCancelShopifySubscriptionLocal).toHaveBeenCalledWith(
+                'test.myshopify.com', 'shopify_app_uninstalled', expect.anything(),
+            );
             expect(rep.status).toHaveBeenCalledWith(200);
         });
     });

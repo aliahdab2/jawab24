@@ -1384,3 +1384,30 @@ describe('startOfUtcDay', () => {
     });
 });
 
+
+describe('isPayingCustomer — Shopify rail lock', () => {
+    // Locked by AI_INSTRUCTIONS/D-A: a Shopify AppSubscription GID stored in
+    // externalSubscriptionId reads as PAYING through the first branch, by
+    // design — a Shopify-managed trial is card-equivalent commitment exactly
+    // like a Stripe-managed one. If someone narrows that branch to Stripe ids,
+    // this test is the tripwire.
+    it('treats a shopify-billed row (AppSubscription GID) as paying', async () => {
+        const { isPayingCustomer } = await import('../../src/services/subscriptions');
+        expect(isPayingCustomer({
+            status: 'trialing',
+            externalSubscriptionId: 'gid://shopify/AppSubscription/123',
+            stripeCustomerId: null,
+            paymentMethod: 'shopify',
+        })).toBe(true);
+    });
+
+    it('still rejects a bare trial row with no billing identity', async () => {
+        const { isPayingCustomer } = await import('../../src/services/subscriptions');
+        expect(isPayingCustomer({
+            status: 'trialing',
+            externalSubscriptionId: null,
+            stripeCustomerId: null,
+            paymentMethod: null,
+        })).toBe(false);
+    });
+});

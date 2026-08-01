@@ -67,6 +67,20 @@ export class ShopifyIntegration implements EcommerceIntegration {
             const store = await claimPendingInstall(result.value, userId);
             if (store) {
                 reply.clearCookie('pendingShopifyId', { path: '/' });
+
+                // Billing trigger #2 (D-C): the merchant may have picked an App
+                // Pricing plan before ever logging in here, in which case the
+                // billing return endpoint fired against a pending install with
+                // no subject user. Best-effort — the 6h reconciler is the
+                // safety net, and a claim must never fail on a billing hiccup.
+                const { syncShopifyBilling } = await import('../services/shopifyBilling');
+                syncShopifyBilling(store.storeDomain, request.log).catch(err => {
+                    request.log.warn(
+                        { err, shopDomain: store.storeDomain },
+                        'Post-claim Shopify billing sync failed — reconciler will retry'
+                    );
+                });
+
                 return { shopifyOnboarding: true, ecommerceStoreId: store.id };
             }
         } catch (err) {

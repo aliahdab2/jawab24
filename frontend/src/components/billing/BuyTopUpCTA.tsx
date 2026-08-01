@@ -10,6 +10,8 @@ interface BuyTopUpCTAProps {
     userEmail?: string;
     /** Free plan users can't buy top-ups — hides the CTA entirely. */
     planSlug?: string;
+    /** Shopify-billed workspaces can't buy Stripe top-ups (D-G) — hides the CTA. */
+    paymentMethod?: string;
     /** Override default 'primary' button variant. */
     variant?: 'primary' | 'secondary';
     size?: 'sm' | 'md';
@@ -21,13 +23,16 @@ interface BuyTopUpCTAProps {
  * Hidden when:
  *   - User is on iOS native (App Store Guideline 3.1.1: no in-app billing UI)
  *   - User is on the Free plan (must subscribe first before topping up)
+ *   - The workspace is Shopify-billed (D-G: no Stripe surfaces beside
+ *     Shopify-managed billing)
  */
-export function BuyTopUpCTA({ userEmail, planSlug, variant = 'primary', size = 'sm' }: BuyTopUpCTAProps) {
+export function BuyTopUpCTA({ userEmail, planSlug, paymentMethod, variant = 'primary', size = 'sm' }: BuyTopUpCTAProps) {
     const t = useTranslations('topup');
     const [isOpen, setIsOpen] = useState(false);
 
     if (isIOSNative()) return null;
     if (planSlug === 'free') return null;
+    if (paymentMethod === 'shopify') return null;
 
     return (
         <>

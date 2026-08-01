@@ -518,6 +518,25 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 ) : null}
               </div>
             </div>
+
+            {/* Shopify-billed workspaces change plans inside Shopify admin (D-G).
+                The grid below stays browsable, but every select action routes to
+                the deep link (useSelectPlan guard) — say so up front. */}
+            {usage.subscription.paymentMethod === 'shopify' && (
+              <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 py-2.5 px-4 alert-violet border rounded-2xl text-sm">
+                <span className="font-medium">{tPricing('shopifyManagedBody')}</span>
+                {usage.subscription.shopifyManageUrl && (
+                  <a
+                    href={usage.subscription.shopifyManageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold underline underline-offset-2 whitespace-nowrap"
+                  >
+                    {tPricing('shopifyManagedCta')}
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         )}
 

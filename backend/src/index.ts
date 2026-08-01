@@ -463,6 +463,8 @@ const start = async () => {
       run: () => Promise<R>;
       recovered: (r: R) => { count: number; message: string };
       enabled?: () => boolean;
+      /** Override the 15-min default for sweeps that call rate-limited third-party APIs per row. */
+      intervalMs?: number;
     }) => {
       const tick = (phase: string) => {
         if (opts.enabled && !opts.enabled()) return; // kill-switch / feature gate
@@ -483,7 +485,7 @@ const start = async () => {
             captureError(err, `[${opts.label}] ${phase} failed`, { tags: { cron: opts.tag }, level: 'error' });
           });
       };
-      setInterval(() => tick('scheduled sweep'), RECONCILE_INTERVAL_MS);
+      setInterval(() => tick('scheduled sweep'), opts.intervalMs ?? RECONCILE_INTERVAL_MS);
       setTimeout(() => tick('initial sweep'), 3 * 60 * 1000);
     };
 
@@ -528,6 +530,22 @@ const start = async () => {
       enabled: () => !!config.stripe.secretKey,
       run: () => reconcileStripeSubscriptions({ log: server.log }),
       recovered: r => ({ count: r.healed, message: `Subscription reconciliation activated ${r.healed} merchant(s) who had paid but were never linked` }),
+    });
+
+    // Shopify App Pricing billing reconciliation — the authority of last resort
+    // (D-B/D-C). Shopify delivers NO webhook for App Pricing enrollments after
+    // 2026-04-28, so the redirect trigger + post-claim hook are best-effort and
+    // THIS sweep is what guarantees a paying merchant is eventually activated
+    // (and a lapsed one eventually paused). 6-hourly, not 15-min: each swept
+    // store costs one Admin API call against Shopify's rate budget.
+    const { reconcileShopifyBilling } = await import('./services/shopifyBilling');
+    scheduleReconcileCron({
+      label: 'ShopifyBillingReconcile',
+      tag: 'shopify_billing_reconcile',
+      enabled: () => !!config.shopify.apiKey,
+      intervalMs: 6 * 60 * 60 * 1000,
+      run: () => reconcileShopifyBilling({ log: server.log }),
+      recovered: r => ({ count: r.healed, message: `Shopify billing reconciliation mirrored ${r.healed} subscription change(s) the live triggers missed` }),
     });
 
     // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms

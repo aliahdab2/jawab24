@@ -621,6 +621,7 @@ const DashboardPage: NextPageWithLayout = () => {
           aiReplies={usage.aiReplies}
           resetsAt={usage.currentPeriod?.end}
           planSlug={usage.subscription?.plan?.slug}
+          paymentMethod={usage.subscription?.paymentMethod}
           userEmail={user?.email}
           topupBalance={usage.topup?.balance}
         />

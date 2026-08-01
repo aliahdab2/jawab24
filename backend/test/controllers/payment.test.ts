@@ -76,6 +76,9 @@ vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         initializeUsagePeriod: vi.fn().mockResolvedValue(undefined),
         invalidateStatusCache: vi.fn().mockResolvedValue(undefined),
+        // null = not shopify-billed; the D-G guard (rejectIfShopifyBilled)
+        // consults this before every Stripe surface.
+        getUserSubscription: vi.fn().mockResolvedValue(null),
     },
 }));
 
@@ -167,6 +170,22 @@ describe('Payment Controller', () => {
                 geo: { country: 'US' }, // Mock allowed geo for sanctions check
                 log: { error: vi.fn() },
             };
+        });
+
+        it('rejects a shopify-billed account with 400 SHOPIFY_BILLED before any Stripe call (D-G)', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValueOnce({
+                paymentMethod: 'shopify',
+                status: 'active',
+            } as never);
+
+            await paymentController.createCheckoutSession(mockRequest, mockReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'SHOPIFY_BILLED' }),
+            );
+            expect(stripeService.createCheckoutSession).not.toHaveBeenCalled();
         });
 
         it('should create checkout session successfully', async () => {

@@ -26,6 +26,12 @@ export default async function shopifyRoutes(fastify: FastifyInstance) {
         fastify.post(`/webhooks/${path}`, handler);
     }
 
+    // App Pricing billing return (D-C) — public trigger, verified server-side.
+    // Rate-limited: it fans out to an Admin API call per hit.
+    fastify.get('/billing/return', {
+        config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    }, shopifyController.billingReturn);
+
     // GDPR mandatory endpoints
     fastify.post('/gdpr/customers/data_request', shopifyController.gdprCustomerDataRequest);
     fastify.post('/gdpr/customers/redact', shopifyController.gdprCustomerRedact);

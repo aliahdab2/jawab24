@@ -209,6 +209,11 @@ export const config = {
         scopes: 'read_products,read_content,read_orders,read_fulfillments,read_inventory',
         hostName: process.env.SHOPIFY_HOST_NAME || '',
         tokenEncryptionKey: process.env.SHOPIFY_TOKEN_ENCRYPTION_KEY || '',
+        // The app's URL handle on the Shopify App Store — the {app_handle} segment of
+        // the merchant-facing plan-management deep link
+        // (https://admin.shopify.com/store/{store}/charges/{app_handle}/pricing_plans).
+        // Known once the listing exists; empty = frontend hides the deep link.
+        appHandle: process.env.SHOPIFY_APP_HANDLE || '',
     },
 
     // Salla App (disabled until credentials are set)

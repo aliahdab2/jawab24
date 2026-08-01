@@ -10,6 +10,7 @@ vi.mock('../../src/middleware/auth', () => ({
 vi.mock('../../src/controllers/shopify', () => ({
     authRedirect: vi.fn(),
     authCallback: vi.fn(),
+    billingReturn: vi.fn(),
     webhookUninstall: vi.fn(),
     webhookProductsUpdate: vi.fn(),
     webhookOrders: vi.fn(),
@@ -43,6 +44,9 @@ describe('Shopify Routes', () => {
         // Public OAuth routes
         expect(registeredRoutes).toContain('GET /auth');
         expect(registeredRoutes).toContain('GET /auth/callback');
+
+        // App Pricing billing return (D-054)
+        expect(registeredRoutes).toContain('GET /billing/return');
 
         // Webhook routes
         expect(registeredRoutes).toContain('POST /webhooks/uninstall');

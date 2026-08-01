@@ -19,6 +19,25 @@ interface AuthenticatedRequest extends FastifyRequest {
     user?: { userId: string; isAdmin?: boolean };
 }
 
+/**
+ * Shopify-billed accounts must never reach a Stripe surface (D-G): Shopify
+ * forbids off-platform billing for App Store installs, and a second live
+ * subscription would double-bill the merchant. A CANCELED shopify mirror does
+ * not block — a merchant who uninstalled the Shopify app is free to come back
+ * through Stripe. Returns true (and sends the 400) when the caller must stop.
+ */
+async function rejectIfShopifyBilled(userId: string, reply: FastifyReply): Promise<boolean> {
+    const sub = await subscriptionsService.getUserSubscription(userId);
+    if (sub?.paymentMethod === 'shopify' && sub.status !== 'canceled') {
+        reply.status(400).send({
+            error: 'Billing for this account is managed in Shopify admin',
+            code: 'SHOPIFY_BILLED',
+        });
+        return true;
+    }
+    return false;
+}
+
 export class PaymentController {
     /**
      * Create Stripe Checkout Session
@@ -33,6 +52,8 @@ export class PaymentController {
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
+
+            if (await rejectIfShopifyBilled(userId, reply)) return;
 
             // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
 
@@ -196,6 +217,8 @@ export class PaymentController {
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
+
+            if (await rejectIfShopifyBilled(userId, reply)) return;
 
             // SANCTIONS CHECK
 
@@ -442,6 +465,8 @@ export class PaymentController {
                     currentPeriodEnd: subscriptions.currentPeriodEnd,
                     cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd,
                     trialEndsAt: subscriptions.trialEndsAt,
+                    paymentMethod: subscriptions.paymentMethod,
+                    shopifyShopDomain: subscriptions.shopifyShopDomain,
                 })
                 .from(subscriptions)
                 .innerJoin(plans, eq(subscriptions.planId, plans.id))
@@ -469,6 +494,13 @@ export class PaymentController {
                 currentPeriodEnd: subscription.currentPeriodEnd,
                 cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
                 trialEndsAt: subscription.trialEndsAt || undefined,
+                paymentMethod: (subscription.paymentMethod as SubscriptionStatus['paymentMethod']) || undefined,
+                // The deep link into Shopify admin plan management needs the store
+                // handle; the app handle half comes from config (see below).
+                shopifyShopDomain: subscription.shopifyShopDomain || undefined,
+                shopifyAppHandle: subscription.paymentMethod === 'shopify'
+                    ? config.shopify.appHandle || undefined
+                    : undefined,
             };
 
             return reply.send(response);
@@ -502,6 +534,8 @@ export class PaymentController {
             }
 
             // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
+
+            if (await rejectIfShopifyBilled(userId, reply)) return;
 
             // Check if geo is sanctioned
             if (request.geo && isSanctionedGeo(request.geo)) {
