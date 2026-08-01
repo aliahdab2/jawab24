@@ -106,65 +106,171 @@ export function verifyWebhookHmac(body: string, hmacHeader: string): boolean {
 export type { WebhookRegistrationResult as WebhookStatus } from './ecommerce';
 import type { WebhookRegistrationResult } from './ecommerce';
 
+// Each subscription pairs the REST-style topic name (what X-Shopify-Topic
+// carries on deliveries and what webhookStatus persists — the format predates
+// the GraphQL migration and existing DB rows/UI depend on it) with the
+// WebhookSubscriptionTopic enum the Admin GraphQL API speaks, plus the
+// delivery route suffix under /shopify/webhooks.
+const SHOPIFY_WEBHOOK_TOPIC_DEFS = [
+    { topic: 'app/uninstalled', gqlTopic: 'APP_UNINSTALLED', path: 'uninstall' },
+    { topic: 'products/create', gqlTopic: 'PRODUCTS_CREATE', path: 'products-update' },
+    { topic: 'products/update', gqlTopic: 'PRODUCTS_UPDATE', path: 'products-update' },
+    { topic: 'products/delete', gqlTopic: 'PRODUCTS_DELETE', path: 'products-update' },
+    // Order lifecycle — for customer notifications
+    { topic: 'orders/create', gqlTopic: 'ORDERS_CREATE', path: 'orders' },
+    { topic: 'orders/fulfilled', gqlTopic: 'ORDERS_FULFILLED', path: 'orders' },
+    // orders/cancelled is subscribed but intentionally a no-op today:
+    // buildShopifyOrderEvent has no 'orders/cancelled' branch (no cancellation
+    // notification is designed yet), so the webhook is received and 200'd without
+    // dispatching. Kept subscribed so the feature can be added handler-side without
+    // a re-registration round-trip on every existing store.
+    { topic: 'orders/cancelled', gqlTopic: 'ORDERS_CANCELLED', path: 'orders' },
+    // Delivery — order-level fulfillment_status never becomes 'delivered'; the delivered
+    // signal is fulfillment.shipment_status, delivered via the fulfillments/update topic.
+    { topic: 'fulfillments/update', gqlTopic: 'FULFILLMENTS_UPDATE', path: 'fulfillments' },
+] as const;
+
+/** REST-style topic names, in registration order — pinned against the adapter copy in webhookTopicDrift.test.ts */
+export const SHOPIFY_WEBHOOK_EVENTS = SHOPIFY_WEBHOOK_TOPIC_DEFS.map(d => d.topic);
+
+/**
+ * Union of delivery route suffixes under /shopify/webhooks. routes/shopify.ts
+ * keys its handler map with this, so a path registered here without a route
+ * handler (or vice versa) is a compile error instead of a silent 404 on
+ * every delivery.
+ */
+export type ShopifyWebhookPath = (typeof SHOPIFY_WEBHOOK_TOPIC_DEFS)[number]['path'];
+
+// The query is app-scoped (only this app's subscriptions are visible), so the
+// realistic ceiling is the 8 topics plus REST-era duplicates — far below one page.
+const WEBHOOK_LIST_PAGE_SIZE = 100;
+
+const WEBHOOK_SUBSCRIPTIONS_QUERY = `
+    query webhookSubscriptions($first: Int!) {
+        webhookSubscriptions(first: $first) {
+            edges {
+                node {
+                    id
+                    topic
+                    endpoint {
+                        __typename
+                        ... on WebhookHttpEndpoint { callbackUrl }
+                    }
+                }
+            }
+        }
+    }`;
+
+const WEBHOOK_CREATE_MUTATION = `
+    mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
+        webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
+            webhookSubscription { id }
+            userErrors { field message }
+        }
+    }`;
+
+const WEBHOOK_UPDATE_MUTATION = `
+    mutation webhookSubscriptionUpdate($id: ID!, $webhookSubscription: WebhookSubscriptionInput!) {
+        webhookSubscriptionUpdate(id: $id, webhookSubscription: $webhookSubscription) {
+            webhookSubscription { id }
+            userErrors { field message }
+        }
+    }`;
+
+interface WebhookUserError { field?: string[] | null; message: string }
+
+interface WebhookSubscriptionsQueryResult {
+    data: {
+        webhookSubscriptions: {
+            edges: Array<{
+                node: {
+                    id: string;
+                    topic: string;
+                    endpoint?: { __typename: string; callbackUrl?: string } | null;
+                };
+            }>;
+        };
+    };
+}
+
+interface WebhookCreateResult {
+    data: { webhookSubscriptionCreate: { webhookSubscription: { id: string } | null; userErrors: WebhookUserError[] } };
+}
+
+interface WebhookUpdateResult {
+    data: { webhookSubscriptionUpdate: { webhookSubscription: { id: string } | null; userErrors: WebhookUserError[] } };
+}
+
 export async function registerWebhooks(shop: string, accessToken: string): Promise<WebhookRegistrationResult> {
     const webhookUrl = `https://${config.shopify.hostName}/shopify/webhooks`;
-    const topics = [
-        { topic: 'app/uninstalled', address: `${webhookUrl}/uninstall` },
-        { topic: 'products/create', address: `${webhookUrl}/products-update` },
-        { topic: 'products/update', address: `${webhookUrl}/products-update` },
-        { topic: 'products/delete', address: `${webhookUrl}/products-update` },
-        // Order lifecycle — for customer notifications
-        { topic: 'orders/create', address: `${webhookUrl}/orders` },
-        { topic: 'orders/fulfilled', address: `${webhookUrl}/orders` },
-        // orders/cancelled is subscribed but intentionally a no-op today:
-        // buildShopifyOrderEvent has no 'orders/cancelled' branch (no cancellation
-        // notification is designed yet), so the webhook is received and 200'd without
-        // dispatching. Kept subscribed so the feature can be added handler-side without
-        // a re-registration round-trip on every existing store.
-        { topic: 'orders/cancelled', address: `${webhookUrl}/orders` },
-        // Delivery — order-level fulfillment_status never becomes 'delivered'; the delivered
-        // signal is fulfillment.shipment_status, delivered via the fulfillments/update topic.
-        { topic: 'fulfillments/update', address: `${webhookUrl}/fulfillments` },
-    ];
+
+    // List this app's existing subscriptions first so registration is a true
+    // upsert: a changed callback URL (hostName drift, dev tunnels) updates the
+    // existing subscription in place. The REST predecessor could only POST and
+    // treat 422 as "already registered", which silently left a stale address
+    // in place. If the list query itself fails, this throws — callers
+    // (registerWebhooksWithPersist / finalizeClaim) persist a failed-all
+    // marker and enqueue a retry.
+    const existing = await shopifyGraphQL<WebhookSubscriptionsQueryResult>(
+        shop, accessToken, WEBHOOK_SUBSCRIPTIONS_QUERY, { first: WEBHOOK_LIST_PAGE_SIZE },
+    );
+
+    const byGqlTopic = new Map<string, Array<{ id: string; callbackUrl: string | null }>>();
+    for (const { node } of existing.data.webhookSubscriptions.edges) {
+        const list = byGqlTopic.get(node.topic) ?? [];
+        list.push({
+            id: node.id,
+            callbackUrl: node.endpoint?.__typename === 'WebhookHttpEndpoint' ? node.endpoint.callbackUrl ?? null : null,
+        });
+        byGqlTopic.set(node.topic, list);
+    }
+
+    // Topics upserted in parallel — each is an independent mutation. Inner
+    // try/catch means one topic's failure never rejects the batch.
+    const results = await Promise.all(SHOPIFY_WEBHOOK_TOPIC_DEFS.map(async ({ topic, gqlTopic, path }) => {
+        const address = `${webhookUrl}/${path}`;
+        try {
+            // A topic can carry duplicate subscriptions from the REST era (a
+            // changed address POSTed a second subscription instead of updating
+            // the first). Prefer the one already pointing at the right URL —
+            // updating a stale twin instead would collide with it ("address
+            // for this topic has already been taken"). Leftover stale
+            // duplicates are not deleted here: their deliveries fail and
+            // Shopify removes persistently-failing subscriptions itself.
+            const candidates = byGqlTopic.get(gqlTopic) ?? [];
+            const current = candidates.find(c => c.callbackUrl === address) ?? candidates[0];
+            if (current && current.callbackUrl === address) {
+                return { topic, error: null };
+            }
+            const userErrors = current
+                ? (await shopifyGraphQL<WebhookUpdateResult>(shop, accessToken, WEBHOOK_UPDATE_MUTATION, {
+                    id: current.id,
+                    webhookSubscription: { callbackUrl: address },
+                })).data.webhookSubscriptionUpdate.userErrors
+                : (await shopifyGraphQL<WebhookCreateResult>(shop, accessToken, WEBHOOK_CREATE_MUTATION, {
+                    topic: gqlTopic,
+                    webhookSubscription: { callbackUrl: address, format: 'JSON' },
+                })).data.webhookSubscriptionCreate.userErrors;
+            if (userErrors.length > 0) {
+                return { topic, error: userErrors.map(e => e.message).join(', ').slice(0, ERROR_TEXT_MAX_LENGTH) };
+            }
+            return { topic, error: null };
+        } catch (err) {
+            return { topic, error: err instanceof Error ? err.message : String(err) };
+        }
+    }));
 
     const registered: string[] = [];
     const failed: Array<{ topic: string; status?: number; error?: string }> = [];
-
-    // Topics subscribed in parallel — each is an independent REST call.
-    const results = await Promise.allSettled(topics.map(({ topic, address }) =>
-        tracedExternalCall('shopify', 'registerWebhook', () =>
-            fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Shopify-Access-Token': accessToken,
-                },
-                body: JSON.stringify({ webhook: { topic, address, format: 'json' } }),
-            }).then(async response => ({ topic, response, body: response.ok ? '' : await response.text() })),
-        ),
-    ));
-
-    for (let i = 0; i < results.length; i++) {
-        const { topic } = topics[i];
-        const result = results[i];
-        if (result.status === 'rejected') {
-            const err = result.reason;
-            failed.push({ topic, error: err instanceof Error ? err.message : String(err) });
-            captureError(err, `Shopify webhook registration error: ${topic}`, { tags: { service: 'shopify' } });
-            continue;
-        }
-        const { response, body } = result.value;
-        if (response.ok) {
-            registered.push(topic);
-        } else if (response.status === 422) {
-            // 422 = already registered, treat as success
+    for (const { topic, error } of results) {
+        if (error === null) {
             registered.push(topic);
         } else {
-            failed.push({ topic, status: response.status, error: body.slice(0, ERROR_TEXT_MAX_LENGTH) });
+            failed.push({ topic, error });
             captureError(
-                new Error(`Shopify webhook registration failed: ${topic} ${response.status}`),
+                new Error(`Shopify webhook registration failed: ${topic}: ${error}`),
                 `Shopify webhook registration failed: ${topic}`,
-                { tags: { service: 'shopify' }, extra: { topic, status: response.status, body } },
+                { tags: { service: 'shopify' }, extra: { topic, error } },
             );
         }
     }
@@ -245,7 +351,12 @@ const RETRY_BASE_DELAY_MS = 1000;
 
 const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
 
-async function shopifyGraphQL<T = unknown>(shop: string, accessToken: string, query: string): Promise<T> {
+async function shopifyGraphQL<T = unknown>(
+    shop: string,
+    accessToken: string,
+    query: string,
+    variables?: Record<string, unknown>,
+): Promise<T> {
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -256,7 +367,7 @@ async function shopifyGraphQL<T = unknown>(shop: string, accessToken: string, qu
                     'Content-Type': 'application/json',
                     'X-Shopify-Access-Token': accessToken,
                 },
-                body: JSON.stringify({ query }),
+                body: JSON.stringify(variables ? { query, variables } : { query }),
                 // Without a timeout a hung Shopify connection stalls the caller
                 // indefinitely (audit 2026-07-09); a timed-out attempt throws and
                 // surfaces to the caller like any network error.

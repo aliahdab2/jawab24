@@ -191,11 +191,13 @@ When a comment/message arrives for a page linked to a store:
 
 ### Subscribed webhook topics
 
-Source of truth: `registerWebhooks` in `services/shopify.ts` (paired with `SHOPIFY_WEBHOOK_TOPICS` in `integrations/shopify.ts`; the pair is pinned in `test/integrations/webhookTopicDrift.test.ts`):
+Source of truth: `SHOPIFY_WEBHOOK_TOPIC_DEFS` / `SHOPIFY_WEBHOOK_EVENTS` in `services/shopify.ts` (paired with `SHOPIFY_WEBHOOK_TOPICS` in `integrations/shopify.ts`; the pair is pinned in `test/integrations/webhookTopicDrift.test.ts`):
 
 `app/uninstalled`, `products/create`, `products/update`, `products/delete`, `orders/create`, `orders/fulfilled`, `orders/cancelled`, `fulfillments/update`
 
-> **New topics only register at install/claim.** After deploying a topic change, run `npx ts-node scripts/reregister-webhooks.ts shopify` once so already-connected stores subscribe to it (idempotent — Shopify returns 422 for an already-registered topic, treated as success). Per-workspace, the admin "Re-register" button hits `POST /shopify/store/webhooks/reregister`.
+Registration goes through the Admin **GraphQL** API (`webhookSubscriptions` query + `webhookSubscriptionCreate`/`webhookSubscriptionUpdate` mutations) as a **list-then-upsert**: existing subscriptions are matched by topic; a subscription whose callback URL drifted (hostname change, dev tunnel) is updated in place instead of left stale. Deliveries still carry the REST-style topic name in `X-Shopify-Topic`, and `webhookStatus.registered` keeps that format — handlers and the integrations UI are unchanged.
+
+> **New topics only register at install/claim.** After deploying a topic change, run `npx ts-node scripts/reregister-webhooks.ts shopify` once so already-connected stores subscribe to it (idempotent — already-registered topics with a matching callback URL are skipped, drifted ones updated). Per-workspace, the admin "Re-register" button hits `POST /shopify/store/webhooks/reregister`.
 
 ---
 
