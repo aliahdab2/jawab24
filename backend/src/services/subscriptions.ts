@@ -6,7 +6,7 @@ import { trialLedgerService, type TrialIdentity } from './trialLedger';
 import { redis } from '../lib/redis';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
-import { config } from '../config';
+import { isShopifyBilled, buildShopifyManageUrl } from '../config/shopifyBilling';
 import type { NotificationType } from './notifications';
 import {
     resolveAiQuotaStatus,
@@ -117,6 +117,33 @@ export class QuotaExhaustedError extends Error {
     }
 }
 
+/**
+ * Lazy-expiry canaries, one per rail where an EXTERNAL authority advances the
+ * billing period — stripe via renewal webhooks, shopify via the 6h billing
+ * reconciler (D-B; the 3-day past_due grace absorbs a late sweep). A row on
+ * these rails lazily expiring means the authority is broken; a Sentry warning
+ * fires before a paying customer notices. 'manual' is deliberately absent
+ * (D-023: manual expiry IS the normal path). New managed rails (zid, salla)
+ * get an entry here — never another copied if-block.
+ */
+const LAZY_EXPIRY_CANARIES: Record<string, {
+    message: string;
+    flow: string;
+    /** stripe rows without an external id are unlinked legacy rows — no authority to blame */
+    requiresExternalId: boolean;
+}> = {
+    stripe: {
+        message: 'Stripe subscription lazily expired — renewal webhook did not advance the period',
+        flow: 'lazy_expiry',
+        requiresExternalId: true,
+    },
+    shopify: {
+        message: 'Shopify-billed subscription lazily expired — the billing reconciler did not advance the period',
+        flow: 'lazy_expiry_shopify',
+        requiresExternalId: false,
+    },
+};
+
 /** Statuses that allow AI reply generation. */
 const ACTIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(['active', 'trialing']);
 /** Cache TTL for subscription status (seconds). Short so payment events reflect quickly. */
@@ -191,47 +218,28 @@ export const subscriptionsService = {
                 needsUpdate = true;
                 newStatus = sub.cancelAtPeriodEnd ? 'canceled' : 'past_due';
 
-                // Canary: a Stripe subscription reaching this branch means its
-                // renewal webhook never advanced the period — the exact failure
-                // that silently re-downgraded a paid customer (see utils/stripeCompat.ts).
-                // For an active Stripe sub the period should always be fresh; flag it
-                // loudly instead of quietly flipping a paying customer to past_due.
-                if (sub.paymentMethod === 'stripe' && sub.externalSubscriptionId && !sub.cancelAtPeriodEnd) {
-                    captureError(
-                        null,
-                        'Stripe subscription lazily expired — renewal webhook did not advance the period',
-                        {
-                            level: 'warning',
-                            tags: { service: 'subscriptions', flow: 'lazy_expiry' },
-                            extra: {
-                                subscriptionId: sub.id,
-                                externalSubscriptionId: sub.externalSubscriptionId,
-                                currentPeriodEnd: sub.currentPeriodEnd,
-                            },
-                        }
-                    );
-                }
-
-                // Shopify twin (D-B): expiry is reconcile-driven — a renewal
-                // should have been mirrored by the 6h billing sweep long before
-                // the lazy check trips (3-day past_due grace covers a late
-                // reconcile). Reaching here means the sweep is broken or the
-                // shop's token died; flag it before a paying merchant notices.
-                if (sub.paymentMethod === 'shopify' && !sub.cancelAtPeriodEnd) {
-                    captureError(
-                        null,
-                        'Shopify-billed subscription lazily expired — the billing reconciler did not advance the period',
-                        {
-                            level: 'warning',
-                            tags: { service: 'subscriptions', flow: 'lazy_expiry_shopify' },
-                            extra: {
-                                subscriptionId: sub.id,
-                                externalSubscriptionId: sub.externalSubscriptionId,
-                                shopifyShopDomain: sub.shopifyShopDomain,
-                                currentPeriodEnd: sub.currentPeriodEnd,
-                            },
-                        }
-                    );
+                // Canary: on rails where an EXTERNAL authority advances the
+                // period (see LAZY_EXPIRY_CANARIES), a row reaching this branch
+                // means that authority failed — the exact failure that silently
+                // re-downgraded a paid Stripe customer (utils/stripeCompat.ts).
+                // Flag it loudly instead of quietly flipping a paying customer
+                // to past_due.
+                const canary = sub.paymentMethod ? LAZY_EXPIRY_CANARIES[sub.paymentMethod] : undefined;
+                if (
+                    canary &&
+                    !sub.cancelAtPeriodEnd &&
+                    (!canary.requiresExternalId || sub.externalSubscriptionId)
+                ) {
+                    captureError(null, canary.message, {
+                        level: 'warning',
+                        tags: { service: 'subscriptions', flow: canary.flow },
+                        extra: {
+                            subscriptionId: sub.id,
+                            externalSubscriptionId: sub.externalSubscriptionId,
+                            shopifyShopDomain: sub.shopifyShopDomain,
+                            currentPeriodEnd: sub.currentPeriodEnd,
+                        },
+                    });
                 }
             }
         }
@@ -550,25 +558,22 @@ export const subscriptionsService = {
                 trialDaysRemaining,
                 renewsAt: subscription.currentPeriodEnd?.toString(),
                 hasStripeCustomer: Boolean(subscription.stripeCustomerId),
-                // A CANCELED shopify mirror must NOT read as shopify-billed:
-                // the merchant uninstalled the app and is free to come back
-                // through Stripe (mirrors the backend guard's canceled
-                // exemption). Suppressed HERE — the single choke point — so no
-                // frontend consumer (plan select, top-up CTA, pricing banner)
-                // can dead-end a returning merchant.
+                // A CANCELED shopify mirror must NOT read as shopify-billed
+                // (isShopifyBilled carries the exemption): the merchant
+                // uninstalled the app and is free to come back through Stripe.
+                // Suppressed HERE — the single choke point — so no frontend
+                // consumer (plan select, top-up CTA, pricing banner) can
+                // dead-end a returning merchant.
                 paymentMethod:
-                    subscription.paymentMethod === 'shopify' && subscription.status === 'canceled'
+                    subscription.paymentMethod === 'shopify' && !isShopifyBilled(subscription)
                         ? undefined
                         : subscription.paymentMethod ?? undefined,
                 // Shopify-billed workspaces manage their plan inside Shopify
                 // admin (D-G) — hand the frontend the exact deep link so it
                 // never has to assemble Shopify URLs itself.
                 shopifyManageUrl:
-                    subscription.paymentMethod === 'shopify' &&
-                    subscription.status !== 'canceled' &&
-                    subscription.shopifyShopDomain &&
-                    config.shopify.appHandle
-                        ? `https://admin.shopify.com/store/${subscription.shopifyShopDomain.replace('.myshopify.com', '')}/charges/${config.shopify.appHandle}/pricing_plans`
+                    isShopifyBilled(subscription) && subscription.shopifyShopDomain
+                        ? buildShopifyManageUrl(subscription.shopifyShopDomain)
                         : undefined,
             },
         };

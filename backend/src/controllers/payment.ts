@@ -6,6 +6,7 @@ import { db } from '../db';
 import { subscriptions, users, plans, stripeWebhookEvents } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { config } from '../config';
+import { isShopifyBilled } from '../config/shopifyBilling';
 import { captureError } from '../utils/sentryHelpers';
 import { isSanctionedGeo } from '../utils/sanctions';
 import { shouldBlockUnknownGeo } from '../middleware/geo';
@@ -22,13 +23,14 @@ interface AuthenticatedRequest extends FastifyRequest {
 /**
  * Shopify-billed accounts must never reach a Stripe surface (D-G): Shopify
  * forbids off-platform billing for App Store installs, and a second live
- * subscription would double-bill the merchant. A CANCELED shopify mirror does
- * not block — a merchant who uninstalled the Shopify app is free to come back
- * through Stripe. Returns true (and sends the 400) when the caller must stop.
+ * subscription would double-bill the merchant. The canceled-mirror exemption
+ * lives inside isShopifyBilled — a merchant who uninstalled the Shopify app is
+ * free to come back through Stripe. Returns true (and sends the 400) when the
+ * caller must stop.
  */
 async function rejectIfShopifyBilled(userId: string, reply: FastifyReply): Promise<boolean> {
     const sub = await subscriptionsService.getUserSubscription(userId);
-    if (sub?.paymentMethod === 'shopify' && sub.status !== 'canceled') {
+    if (sub && isShopifyBilled(sub)) {
         reply.status(400).send({
             error: 'Billing for this account is managed in Shopify admin',
             code: 'SHOPIFY_BILLED',
@@ -324,12 +326,6 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
-            // D-G covers EVERY Stripe surface, not just subscriptions: a top-up
-            // is a Stripe charge beside Shopify billing — the exact off-platform
-            // billing Shopify forbids for App Store installs. The hidden CTA is
-            // the friendly layer; this is the enforcement.
-            if (await rejectIfShopifyBilled(userId, reply)) return;
-
             // KILL-SWITCH — authoritative gate. When top-up is disabled no
             // PaymentIntent is ever created, so charging is off the instant the
             // flag flips (env change + recreate), independent of any frontend.
@@ -348,6 +344,14 @@ export class PaymentController {
                 request.log.warn({ userId, geo: request.geo }, 'Top-up blocked: unknown geo');
                 return reply.status(403).send({ error: 'Unable to process payment at this time', code: 'GEO_VERIFICATION_REQUIRED' });
             }
+
+            // D-G covers EVERY Stripe surface, not just subscriptions: a top-up
+            // is a Stripe charge beside Shopify billing — the exact off-platform
+            // billing Shopify forbids for App Store installs. The hidden CTA is
+            // the friendly layer; this is the enforcement. Runs AFTER the free
+            // in-memory gates (kill-switch, geo) — it is the only check here
+            // that costs a DB read.
+            if (await rejectIfShopifyBilled(userId, reply)) return;
 
             const pack = request.body.pack;
             const packConfig = pack ? config.topup.packs[pack as TopupPack] : undefined;
@@ -471,8 +475,6 @@ export class PaymentController {
                     currentPeriodEnd: subscriptions.currentPeriodEnd,
                     cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd,
                     trialEndsAt: subscriptions.trialEndsAt,
-                    paymentMethod: subscriptions.paymentMethod,
-                    shopifyShopDomain: subscriptions.shopifyShopDomain,
                 })
                 .from(subscriptions)
                 .innerJoin(plans, eq(subscriptions.planId, plans.id))
@@ -500,16 +502,6 @@ export class PaymentController {
                 currentPeriodEnd: subscription.currentPeriodEnd,
                 cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
                 trialEndsAt: subscription.trialEndsAt || undefined,
-                paymentMethod: (subscription.paymentMethod as SubscriptionStatus['paymentMethod']) || undefined,
-                // Deep-link fields only while the mirror is live — a canceled
-                // shopify mirror means the app is gone and the merchant is back
-                // on the Stripe rail (same exemption as rejectIfShopifyBilled).
-                shopifyShopDomain: subscription.paymentMethod === 'shopify' && subscription.status !== 'canceled'
-                    ? subscription.shopifyShopDomain || undefined
-                    : undefined,
-                shopifyAppHandle: subscription.paymentMethod === 'shopify' && subscription.status !== 'canceled'
-                    ? config.shopify.appHandle || undefined
-                    : undefined,
             };
 
             return reply.send(response);

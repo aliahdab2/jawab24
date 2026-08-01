@@ -530,7 +530,10 @@ export async function billingReturn(request: FastifyRequest, reply: FastifyReply
         const result = await syncShopifyBilling(shop, request.log);
         request.log.info({ shop, outcome: result.outcome }, 'Shopify billing return processed');
     } catch (error) {
-        billingParam = 'sync_failed'; // truthful marker — the reconciler will redo the sync
+        // In-band access-log breadcrumb (the Rule-17b marker doctrine): nothing
+        // reads this param client-side today — its job is making a failed
+        // return-leg sync greppable in nginx logs. The reconciler redoes the sync.
+        billingParam = 'sync_failed';
         captureError(error, 'Shopify billing return sync failed — reconciler will retry', {
             tags: { service: 'shopify_billing', flow: 'billing_return' },
             extra: { shop },

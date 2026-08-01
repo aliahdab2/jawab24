@@ -5,9 +5,9 @@ import { subscriptionsService } from './subscriptions';
 import { plansService } from './plans';
 import { shopifyGraphQL } from './shopify';
 import { decrypt } from './ecommerceCrypto';
-import { mapShopifyPlanToSlug } from '../config/shopifyBilling';
+import { mapShopifyPlanToSlug, LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
 import { captureError } from '../utils/sentryHelpers';
-import type { LinkLogger } from './subscriptionLinking';
+import { noopLinkLogger, type LinkLogger } from './subscriptionLinking';
 
 /**
  * Shopify App Pricing → local subscription mirror.
@@ -87,8 +87,7 @@ export async function fetchShopifyActiveSubscription(
     return subs.find(s => s.status === 'ACTIVE') ?? null;
 }
 
-/** Local statuses that mean "this row is currently entitling somebody". */
-const LIVE_STATUSES = ['active', 'trialing', 'past_due'] as const;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ShopifyBillingSyncOutcome =
     | 'adopted'          // local row now mirrors the Shopify subscription
@@ -118,32 +117,35 @@ export async function adoptShopifySubscription(
     shopDomain: string,
     log: LinkLogger,
 ): Promise<ShopifyBillingSyncResult> {
+    // Both fail-loud shapes, defined once. `unknownPlan` = D-I (config drift,
+    // level error); `refuse` = D-H (a live relationship is in the way, level
+    // warning, human decides). Fingerprints are explicit per call so their
+    // presence/absence is a visible decision, not an accident.
+    const unknownPlan = (error: string, summary: string, extra: Record<string, unknown>): ShopifyBillingSyncResult => {
+        captureError(new Error(error), summary, {
+            level: 'error',
+            tags: { service: 'shopify_billing', flow: 'plan_mapping' },
+            extra: { shopDomain, ...extra },
+        });
+        return { outcome: 'unknown_plan', changed: false };
+    };
+    const refuse = (error: string, summary: string, extra: Record<string, unknown>, fingerprint?: string[]): ShopifyBillingSyncResult => {
+        captureError(new Error(error), summary, {
+            level: 'warning',
+            tags: { service: 'shopify_billing', flow: 'adopt_refused' },
+            fingerprint,
+            extra: { shopDomain, userId, appSubscriptionId: appSub.id, ...extra },
+        });
+        return { outcome: 'refused', changed: false };
+    };
+
     const slug = mapShopifyPlanToSlug(appSub.name);
     if (!slug) {
-        captureError(
-            new Error(`Shopify plan "${appSub.name}" maps to no local plan slug`),
+        return unknownPlan(
+            `Shopify plan "${appSub.name}" maps to no local plan slug`,
             'Shopify billing: unknown plan — refusing to activate (D-I)',
-            {
-                level: 'error',
-                tags: { service: 'shopify_billing', flow: 'plan_mapping' },
-                extra: { shopDomain, appSubscriptionId: appSub.id, planName: appSub.name },
-            },
+            { appSubscriptionId: appSub.id, planName: appSub.name },
         );
-        return { outcome: 'unknown_plan', changed: false };
-    }
-
-    const plan = await plansService.getPlanBySlug(slug);
-    if (!plan) {
-        captureError(
-            new Error(`Plan slug "${slug}" has no row in plans — Shopify billing cannot activate`),
-            'Shopify billing: mapped slug missing from plans table (D-I)',
-            {
-                level: 'error',
-                tags: { service: 'shopify_billing', flow: 'plan_mapping' },
-                extra: { shopDomain, slug },
-            },
-        );
-        return { outcome: 'unknown_plan', changed: false };
     }
 
     const [current] = await db
@@ -152,6 +154,8 @@ export async function adoptShopifySubscription(
         .where(eq(subscriptions.userId, userId))
         .orderBy(desc(subscriptions.createdAt))
         .limit(1);
+    const currentIsLive =
+        !!current && (LIVE_SUBSCRIPTION_STATUSES as readonly string[]).includes(current.status ?? '');
 
     // Two active Shopify stores resolving to one subject user must NOT
     // ping-pong the mirror between them: each flip would rewrite GID/domain/
@@ -160,29 +164,17 @@ export async function adoptShopifySubscription(
     // bills this workspace. Same-domain new-GID adoption (plan upgrades)
     // stays allowed.
     if (
-        current &&
+        currentIsLive &&
         current.paymentMethod === 'shopify' &&
         current.shopifyShopDomain &&
-        current.shopifyShopDomain !== shopDomain &&
-        (LIVE_STATUSES as readonly string[]).includes(current.status ?? '')
+        current.shopifyShopDomain !== shopDomain
     ) {
-        captureError(
-            new Error(`Shopify subscription for ${shopDomain} collides with a live mirror for ${current.shopifyShopDomain}`),
+        return refuse(
+            `Shopify subscription for ${shopDomain} collides with a live mirror for ${current.shopifyShopDomain}`,
             'Shopify billing: refusing cross-shop adoption over a live shopify mirror (D-H)',
-            {
-                level: 'warning',
-                tags: { service: 'shopify_billing', flow: 'adopt_refused' },
-                fingerprint: ['shopify-billing-cross-shop-refused'],
-                extra: {
-                    shopDomain,
-                    userId,
-                    appSubscriptionId: appSub.id,
-                    localSubscriptionId: current.id,
-                    localShopDomain: current.shopifyShopDomain,
-                },
-            },
+            { localSubscriptionId: current.id, localShopDomain: current.shopifyShopDomain },
+            ['shopify-billing-cross-shop-refused'],
         );
-        return { outcome: 'refused', changed: false };
     }
 
     // D-H: never silently take over a live paid relationship on another rail.
@@ -191,34 +183,32 @@ export async function adoptShopifySubscription(
     // untangle — Sentry and stand down. 'paypal' is a documented legacy value
     // for this column — treated like stripe/manual rather than silently eaten.
     if (
-        current &&
-        (current.paymentMethod === 'stripe' || current.paymentMethod === 'manual' || current.paymentMethod === 'paypal') &&
-        (LIVE_STATUSES as readonly string[]).includes(current.status ?? '')
+        currentIsLive &&
+        ['stripe', 'manual', 'paypal'].includes(current.paymentMethod ?? '')
     ) {
-        captureError(
-            new Error(`Shopify subscription for ${shopDomain} collides with a live ${current.paymentMethod} subscription`),
+        return refuse(
+            `Shopify subscription for ${shopDomain} collides with a live ${current.paymentMethod} subscription`,
             'Shopify billing: refusing to adopt over a paying stripe/manual row (D-H)',
-            {
-                level: 'warning',
-                tags: { service: 'shopify_billing', flow: 'adopt_refused' },
-                extra: {
-                    shopDomain,
-                    userId,
-                    appSubscriptionId: appSub.id,
-                    localSubscriptionId: current.id,
-                    localPaymentMethod: current.paymentMethod,
-                    localStatus: current.status,
-                },
-            },
+            { localSubscriptionId: current.id, localPaymentMethod: current.paymentMethod, localStatus: current.status },
         );
-        return { outcome: 'refused', changed: false };
+    }
+
+    // Plan row fetched AFTER the refusal gates — a refused adoption must not
+    // pay for a plans read it never uses.
+    const plan = await plansService.getPlanBySlug(slug);
+    if (!plan) {
+        return unknownPlan(
+            `Plan slug "${slug}" has no row in plans — Shopify billing cannot activate`,
+            'Shopify billing: mapped slug missing from plans table (D-I)',
+            { slug },
+        );
     }
 
     // D-J: trials mirror Shopify — the trial clock is createdAt + trialDays,
     // Shopify's own accounting. No local trial ledger involvement.
     const now = new Date();
     const trialEndsAt = appSub.trialDays && appSub.trialDays > 0
-        ? new Date(new Date(appSub.createdAt).getTime() + appSub.trialDays * 24 * 60 * 60 * 1000)
+        ? new Date(new Date(appSub.createdAt).getTime() + appSub.trialDays * DAY_MS)
         : null;
     const status = trialEndsAt && trialEndsAt > now ? 'trialing' : 'active';
     const periodEnd = appSub.currentPeriodEnd ? new Date(appSub.currentPeriodEnd) : null;
@@ -307,6 +297,33 @@ export async function adoptShopifySubscription(
 }
 
 /**
+ * Transition every LIVE mirror row for a shop and invalidate the affected
+ * owners' status caches. The WHERE triple here is THE row-targeting invariant
+ * of this module — the same shape as the partial unique index in migration
+ * 0147 — so cancel (uninstall / gdpr redact) and pause (Shopify shows no
+ * subscription) share one copy of it instead of drifting apart.
+ */
+async function updateLiveMirrorsForShop(
+    shopDomain: string,
+    set: Partial<typeof subscriptions.$inferInsert>,
+): Promise<Array<{ id: string; userId: string }>> {
+    const rows = await db
+        .update(subscriptions)
+        .set(set)
+        .where(and(
+            eq(subscriptions.paymentMethod, 'shopify'),
+            eq(subscriptions.shopifyShopDomain, shopDomain),
+            inArray(subscriptions.status, [...LIVE_SUBSCRIPTION_STATUSES]),
+        ))
+        .returning({ id: subscriptions.id, userId: subscriptions.userId });
+
+    for (const row of rows) {
+        await subscriptionsService.invalidateStatusCache(row.userId);
+    }
+    return rows;
+}
+
+/**
  * Cancel the local mirror for a shop — the app was uninstalled (D-D).
  * Keyed on shopify_shop_domain, so it works even after deactivateStore has
  * already run. Returns true when a live row was actually canceled.
@@ -316,24 +333,12 @@ export async function cancelShopifySubscriptionLocal(
     reason: string,
     log: LinkLogger,
 ): Promise<boolean> {
-    const rows = await db
-        .update(subscriptions)
-        .set({
-            status: 'canceled',
-            canceledAt: new Date(),
-            cancelReason: reason,
-            updatedAt: new Date(),
-        })
-        .where(and(
-            eq(subscriptions.paymentMethod, 'shopify'),
-            eq(subscriptions.shopifyShopDomain, shopDomain),
-            inArray(subscriptions.status, [...LIVE_STATUSES]),
-        ))
-        .returning({ id: subscriptions.id, userId: subscriptions.userId });
-
-    for (const row of rows) {
-        await subscriptionsService.invalidateStatusCache(row.userId);
-    }
+    const rows = await updateLiveMirrorsForShop(shopDomain, {
+        status: 'canceled',
+        canceledAt: new Date(),
+        cancelReason: reason,
+        updatedAt: new Date(),
+    });
     if (rows.length > 0) {
         log.info(
             { shopDomain, reason, canceled: rows.length },
@@ -366,24 +371,25 @@ export async function syncShopifyBilling(
         return { outcome: 'no_store', changed: false };
     }
 
-    // D-E: the entitlement subject is the WORKSPACE OWNER (the
-    // hasWhatsAppPlanAccess pattern) — plan limits are resolved against the
-    // owner's subscription, so the mirror must land on the owner's row even
-    // when a non-owner member connected the store.
-    let subjectUserId = store.userId;
-    if (store.workspaceId) {
-        const [ws] = await db
-            .select({ ownerId: workspaces.ownerId })
-            .from(workspaces)
-            .where(eq(workspaces.id, store.workspaceId))
-            .limit(1);
-        if (ws) subjectUserId = ws.ownerId;
-    }
-
     const accessToken = decrypt(store.accessToken, store.accessTokenIv);
     const appSub = await fetchShopifyActiveSubscription(shopDomain, accessToken);
 
     if (appSub) {
+        // D-E: the entitlement subject is the WORKSPACE OWNER (the
+        // hasWhatsAppPlanAccess pattern) — plan limits are resolved against the
+        // owner's subscription, so the mirror must land on the owner's row even
+        // when a non-owner member connected the store. Resolved only here: the
+        // pause/no-op branches below never need it, and the 6h sweep's steady
+        // state should not pay a query per store for nothing.
+        let subjectUserId = store.userId;
+        if (store.workspaceId) {
+            const [ws] = await db
+                .select({ ownerId: workspaces.ownerId })
+                .from(workspaces)
+                .where(eq(workspaces.id, store.workspaceId))
+                .limit(1);
+            if (ws) subjectUserId = ws.ownerId;
+        }
         return adoptShopifySubscription(subjectUserId, appSub, shopDomain, log);
     }
 
@@ -391,19 +397,7 @@ export async function syncShopifyBilling(
     // (D-B: reconcile-driven expiry — cancellation inside Shopify has no
     // webhook either). 'paused', not 'canceled': the app is still installed
     // and re-picking a plan reactivates through the same sync.
-    const paused = await db
-        .update(subscriptions)
-        .set({ status: 'paused', updatedAt: new Date() })
-        .where(and(
-            eq(subscriptions.paymentMethod, 'shopify'),
-            eq(subscriptions.shopifyShopDomain, shopDomain),
-            inArray(subscriptions.status, [...LIVE_STATUSES]),
-        ))
-        .returning({ userId: subscriptions.userId });
-
-    for (const row of paused) {
-        await subscriptionsService.invalidateStatusCache(row.userId);
-    }
+    const paused = await updateLiveMirrorsForShop(shopDomain, { status: 'paused', updatedAt: new Date() });
     if (paused.length > 0) {
         log.info({ shopDomain }, 'Shopify shows no active subscription — paused local mirror');
         return { outcome: 'paused', changed: true };
@@ -435,7 +429,7 @@ export interface ShopifyBillingSweepResult {
 export async function reconcileShopifyBilling(options?: {
     log?: LinkLogger;
 }): Promise<ShopifyBillingSweepResult> {
-    const log = options?.log ?? { info: () => {}, warn: () => {} };
+    const log = options?.log ?? noopLinkLogger;
     const result: ShopifyBillingSweepResult = {
         scanned: 0, healed: 0, flagged: 0, orphaned: 0, errors: 0,
     };
@@ -470,7 +464,7 @@ export async function reconcileShopifyBilling(options?: {
     const activeDomains = stores.map(s => s.storeDomain);
     const orphanWhere = and(
         eq(subscriptions.paymentMethod, 'shopify'),
-        inArray(subscriptions.status, [...LIVE_STATUSES]),
+        inArray(subscriptions.status, [...LIVE_SUBSCRIPTION_STATUSES]),
         ...(activeDomains.length > 0
             ? [notInArray(subscriptions.shopifyShopDomain, activeDomains)]
             : []),

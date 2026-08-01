@@ -1,5 +1,10 @@
+import { config } from './index';
+
 /**
- * Shopify App Pricing → local plan mapping.
+ * Shopify App Pricing → local plan mapping, plus the shared billing-mirror
+ * vocabulary (live-status boundary, billed predicate, admin deep link) that
+ * both billing rails and every consumer surface import from HERE — one home,
+ * so a ruling change is a one-site edit (Rule 10.8).
  *
  * Ruling D-I (Shopify billing design, 2026-08-01): the plan HANDLES configured
  * in the Shopify Partner Dashboard are our plan slugs, verbatim. The Admin API
@@ -14,10 +19,49 @@
  */
 
 /** Plan slugs sellable through Shopify App Pricing at launch. Scale tiers are an
- * open owner decision (plan §Open questions) — add the slug here when ruled. */
-export const SHOPIFY_BILLABLE_PLAN_SLUGS = ['starter', 'business', 'pro'] as const;
+ * open owner decision (plan §Open questions) — add the slug here when ruled.
+ * Deliberately not exported: mapShopifyPlanToSlug is the only sanctioned reader. */
+const SHOPIFY_BILLABLE_PLAN_SLUGS = ['starter', 'business', 'pro'] as const;
 
 export type ShopifyBillablePlanSlug = (typeof SHOPIFY_BILLABLE_PLAN_SLUGS)[number];
+
+/**
+ * Statuses under which a subscription row is currently entitling somebody —
+ * the D-H adoption-refusal boundary on BOTH billing rails: a Shopify adoption
+ * must not overwrite a row in these states on another rail, and a Stripe
+ * adoption must not overwrite a live shopify mirror. Distinct from the
+ * canceled-exemption boundary below ('paused' is live here, exempt nowhere).
+ */
+export const LIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due'] as const;
+
+/**
+ * Is this row a Shopify-billed relationship the D-G rule applies to?
+ *
+ * The canceled exemption is load-bearing: a canceled mirror means the merchant
+ * uninstalled the app and MUST be free to come back through Stripe — so a
+ * canceled row blocks nothing and shows no Shopify surfaces. A 'paused' mirror
+ * (installed but not paying) still counts as shopify-billed: re-picking a plan
+ * inside Shopify is the recovery path, never Stripe.
+ */
+export function isShopifyBilled(row: {
+    paymentMethod?: string | null;
+    status?: string | null;
+}): boolean {
+    return row.paymentMethod === 'shopify' && row.status !== 'canceled';
+}
+
+/**
+ * The ONE encoding of the Shopify admin plan-management deep link
+ * (admin.shopify.com/store/{store}/charges/{app_handle}/pricing_plans).
+ * Shopify has changed its admin URL shape before — every consumer goes
+ * through here so a future change is a one-line fix. Returns undefined until
+ * SHOPIFY_APP_HANDLE is configured (the listing must exist first).
+ */
+export function buildShopifyManageUrl(shopDomain: string): string | undefined {
+    if (!config.shopify.appHandle) return undefined;
+    const storeHandle = shopDomain.replace('.myshopify.com', '');
+    return `https://admin.shopify.com/store/${storeHandle}/charges/${config.shopify.appHandle}/pricing_plans`;
+}
 
 /**
  * Resolve a Shopify plan identifier — a plan handle from the billing return
