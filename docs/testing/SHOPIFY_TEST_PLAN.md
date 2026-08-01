@@ -220,14 +220,14 @@ For each test, send the listed message as a real DM to the linked FB test page a
 
 ## E. Order Webhooks → SMS Notifications
 
-> Requires P-7 (test phone number with SMS receive). All these check that `customer_notifications_log` rows are created with status `delivered` and an actual SMS lands.
+> Requires P-7 (test phone number with SMS receive). All these check that `customer_notifications_log` rows are created with status `sent` (the enum is pending/sent/failed/cancelled — there is no `delivered` status) and an actual SMS lands.
 
 ### E-1. New order → order_confirmed SMS
 **Steps:** Place a test order on the dev store with the test phone number.
 
 **Expected:**
 - `orders/create` webhook received
-- A row in `customer_notifications_log` with `notificationType='order_confirmed'`, `status='delivered'`
+- A row in `customer_notifications_log` with `notificationType='order_confirmed'`, `status='sent'`
 - SMS arrives within 30s
 
 ### E-2. Order fulfilled → order_shipped SMS

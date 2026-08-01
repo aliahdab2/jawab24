@@ -41,7 +41,7 @@ surprise.
 | P-2 | Dev store **3195980 "Jawab24 Dev"** accessible and **OUT of maintenance mode** (maintenance blocked Salla's cart captures) | `https://h47p59.zid.store/` renders the storefront publicly | ☐ |
 | P-3 | Partner app **7367** (Client ID 7192) reachable; decide dev-redirect strategy: dedicated DEV app (mirrors `Jawab24-Dev` on Salla, recommended) OR temporarily point app 7367's Redirection/Callback URLs at ngrok | Partner Dashboard → app → General Settings | ☐ |
 | P-4 | Backend running locally with dev `.env`: `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_APP_ID`, `ZID_HOST_NAME=<ngrok host>`, `ZID_WEBHOOK_SECRET` (≥16 chars) | `curl http://localhost:3100/health` — ⚠️ backend runs on **3100** on this machine (3000 is taken by an unrelated dev server; check `lsof -iTCP:3000 -sTCP:LISTEN`, never kill what you find) | ☐ |
-| P-5 | ai-worker running (port 3005) — the KB-enrichment reply and agent-tool cases need it | `curl http://localhost:3005/health` | ☐ |
+| P-5 | ai-worker running — the KB-enrichment reply and agent-tool cases need it. Default port **3002** (`ai-worker/src/config.ts`); if you run it on 3005 per the worktree convention, you MUST also set `AI_SERVICE_URL=http://localhost:3005` on the backend or every reply dies `AiWorkerUnreachable` | `curl http://localhost:3002/health` (or 3005 + matching `AI_SERVICE_URL`) | ☐ |
 | P-6 | ngrok tunnel to the backend; inspector open at `127.0.0.1:4040` | `https://<ngrok>/health` OK | ☐ |
 | P-7 | At least one Facebook test page connected with a valid token (for §C/§D live DMs) | Pages list shows it | ☐ |
 | P-8 | Test phone number that can receive real SMS (the order loop sends real messages) | — | ☐ |
@@ -73,7 +73,9 @@ authorize redirect) → approve on Zid → land back via `GET /zid/auth/callback
 **Expected:**
 - `ecommerce_stores` row: `platform='zid'`, `is_active=true`, **BOTH credentials
   encrypted** (`access_token` AND `authorization_token`/`_iv` — the dual-credential
-  design, migration 0146), `store_domain` = hostname, `merchant_id` set
+  design, migration 0146), `store_domain` = hostname, merchantId present in
+  `platform_data->>'merchantId'` (there is no `merchant_id` column on
+  `ecommerce_stores` — only on `pending_ecommerce_installs`)
 - Webhook registration ran: `platformData.webhookStatus` = **6/6 registered**
   (`product.create/update/publish/delete`, `order.create`, `order.status.update`)
 - Background product sync enqueued
@@ -178,7 +180,9 @@ confirmed**. From the live API, resolve:
 **Steps:** Place a REAL order on the dev storefront with the test phone as customer.
 
 **Expected:** Delivery Basic-auth verified → `customer_notifications_log` row
-(`order_confirmed`, `delivered`) → **SMS arrives on the test phone**.
+(`notification_type='order_confirmed'`, `status='sent'` — the enum is
+pending/sent/failed/cancelled; there is no `delivered` status) → **SMS arrives on the
+test phone**.
 
 **Capture — C5**: headers (is `Authorization: Basic` present? exact scheme casing —
 verification fails closed on `basic …`), envelope (`data` vs `order` vs root),
