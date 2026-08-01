@@ -350,15 +350,12 @@ export function FactEntitySheet({
   const inputClass =
     'w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500';
   const labelClass = 'block text-sm text-muted-foreground mb-1.5';
-  const sectionTitleClass =
-    'text-[11px] font-bold uppercase tracking-wide text-muted-foreground mb-3';
 
   return (
     <SidePanel isOpen onClose={onClose} title={t('lists.editItem')} subtitle={unit.title}>
       <div className="p-4 sm:p-5 space-y-8 pb-28">
         {/* ————— General ————— */}
         <section aria-label={t('lists.sectionGeneral')}>
-          <h3 className={sectionTitleClass}>{t('lists.sectionGeneral')}</h3>
           <div className="space-y-4">
             <div>
               <label htmlFor="entity-name" className={labelClass}>{t('lists.rowName')}</label>
@@ -404,7 +401,6 @@ export function FactEntitySheet({
                 dates (UX review point 2) ————— */}
         {baseCollection && (
           <section aria-label={t('lists.sectionPricing')}>
-            <h3 className={sectionTitleClass}>{t('lists.sectionPricing')}</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label htmlFor="entity-price" className={labelClass}>{t('lists.rowPrice')}</label>
@@ -437,7 +433,6 @@ export function FactEntitySheet({
         {/* ————— Dates — each one its own numbered card (point 3) ————— */}
         {sessionCollection && (
           <section aria-label={t('lists.sessions')}>
-            <h3 className={sectionTitleClass}>{t('lists.sessions')}</h3>
             {sessions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-theme-border px-4 py-6 text-center">
                 <CalendarClock className="w-6 h-6 mx-auto text-icon-muted" aria-hidden="true" />
