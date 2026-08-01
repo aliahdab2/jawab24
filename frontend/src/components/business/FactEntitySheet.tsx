@@ -221,7 +221,7 @@ export function FactEntitySheet({
       .filter(Boolean);
     const date = formatPlainDate(s.startsAt || null, intlLocale);
     if (date) parts.push(t('lists.startsOn', { date }));
-    return parts.join(' · ');
+    return parts.join(t('lists.listSeparator'));
   };
 
   /** The write-back contract, applied at save time: an ACTIVE control owns its
@@ -437,7 +437,13 @@ export function FactEntitySheet({
   );
 
   return (
-    <SidePanel isOpen onClose={onClose} title={t('lists.editItem')} subtitle={unit.title}>
+    <SidePanel
+      isOpen
+      onClose={onClose}
+      title={t('lists.editItem')}
+      subtitle={unit.title}
+      headerExtra={<InfoPopover label={t('lists.sessions')}>{t('lists.rowDateHint')}</InfoPopover>}
+    >
       <div className="p-4 sm:p-5 space-y-6 pb-28">
         {/* ————— Notion model (round 9): a borderless TITLE, then thin
                 property rows that expand in place ————— */}
@@ -766,19 +772,14 @@ export function FactEntitySheet({
                   </div>
                   );
                 })}
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={addSession}
-                    className="min-w-0 flex-1 min-h-[36px] flex items-center gap-2 px-1.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors text-start"
-                  >
-                    <Plus className="w-4 h-4 text-icon-muted" aria-hidden="true" />
-                    {t('lists.addSession')}
-                  </button>
-                  {/* Always-visible entry point for the date behaviour — the
-                      contextual one on the التاريخ row needs a session open. */}
-                  <InfoPopover label={t('lists.sessions')}>{t('lists.rowDateHint')}</InfoPopover>
-                </div>
+                <button
+                  type="button"
+                  onClick={addSession}
+                  className="w-full min-h-[36px] flex items-center gap-2 px-1.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors text-start"
+                >
+                  <Plus className="w-4 h-4 text-icon-muted" aria-hidden="true" />
+                  {t('lists.addSession')}
+                </button>
               </div>
             )}
             {anyDateInvalid && (

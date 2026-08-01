@@ -162,6 +162,7 @@
     "addFirstSession": "Add the first date",
     "addNamed": "Add {thing}",
     "addItem": "Add item",
-    "completenessHint": "This controls how Jawab answers when a customer asks about something that is not in this list."
+    "completenessHint": "This controls how Jawab answers when a customer asks about something that is not in this list.",
+    "listSeparator": " — "
   }
 }

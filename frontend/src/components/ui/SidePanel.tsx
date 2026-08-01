@@ -12,6 +12,8 @@ interface SidePanelProps {
   onClose: () => void;
   title: string;
   subtitle?: string;
+  /** Optional extra header content (e.g. an InfoPopover) rendered beside the title. */
+  headerExtra?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -29,7 +31,7 @@ interface SidePanelProps {
  *
  * Accessibility: Escape key, back-button handler, body scroll lock, aria-modal.
  */
-export function SidePanel({ isOpen, onClose, title, subtitle, children }: SidePanelProps) {
+export function SidePanel({ isOpen, onClose, title, subtitle, headerExtra, children }: SidePanelProps) {
   const tc = useTranslations('common');
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -118,7 +120,10 @@ export function SidePanel({ isOpen, onClose, title, subtitle, children }: SidePa
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-theme-border flex-shrink-0">
           <div className="min-w-0 pe-4">
-            <h2 className="text-lg font-bold text-foreground truncate">{title}</h2>
+            <span className="flex items-center gap-2 min-w-0">
+              <h2 className="text-lg font-bold text-foreground truncate">{title}</h2>
+              {headerExtra}
+            </span>
             {subtitle && <p className="text-xs text-muted-foreground truncate mt-0.5">{subtitle}</p>}
           </div>
           <button
@@ -173,7 +178,10 @@ export function SidePanel({ isOpen, onClose, title, subtitle, children }: SidePa
           onTouchEnd={onTouchEnd}
         >
           <div className="min-w-0 pe-4">
-            <h2 className="text-lg font-bold text-foreground truncate">{title}</h2>
+            <span className="flex items-center gap-2 min-w-0">
+              <h2 className="text-lg font-bold text-foreground truncate">{title}</h2>
+              {headerExtra}
+            </span>
             {subtitle && <p className="text-xs text-muted-foreground truncate mt-0.5">{subtitle}</p>}
           </div>
           <button

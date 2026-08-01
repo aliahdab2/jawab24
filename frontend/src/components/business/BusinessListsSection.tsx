@@ -257,7 +257,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                     <span key={a.label}>
                       <span className="text-muted-foreground">{a.label}: </span>
                       {a.value}
-                      {i < pairs.length - 1 && ' · '}
+                      {i < pairs.length - 1 && t('lists.listSeparator')}
                     </span>
                   ))}
                 </span>
@@ -270,7 +270,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
             </span>
             {title && pairs.length > 0 && (
               <span className="block text-xs text-muted-foreground mt-0.5 break-words" dir="auto">
-                {pairs.map((a) => `${a.label}: ${a.value}`).join(' · ')}
+                {pairs.map((a) => `${a.label}: ${a.value}`).join(t('lists.listSeparator'))}
               </span>
             )}
           </span>
@@ -357,7 +357,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
             </span>
             {pairs.length > 0 && (
               <span className="block text-xs text-muted-foreground mt-0.5 break-words" dir="auto">
-                {pairs.map((a) => `${a.label}: ${a.value}`).join(' · ')}
+                {pairs.map((a) => `${a.label}: ${a.value}`).join(t('lists.listSeparator'))}
               </span>
             )}
           </span>
