@@ -273,9 +273,44 @@ run_audit "jawab24-ai-worker" "AI Worker"
 if [ "$AUDIT_FAILED" = true ]; then
     echo ""
     echo -e "${RED}   High/critical vulnerabilities detected in production dependencies!${NC}"
-    echo -e "${RED}   Run 'npm audit' for details and 'npm audit fix' to attempt auto-fix.${NC}"
+    echo -e "${RED}   Run 'npm audit' for details. Do NOT run 'npm audit fix' (its fixes are${NC}"
+    echo -e "${RED}   downgrades here — see the allowlist comments above). Bump the affected${NC}"
+    echo -e "${RED}   package deliberately or allowlist with a written reachability rationale.${NC}"
     exit 1
 fi
+
+# =============================================
+# 0.95. Lockfile cross-platform native binaries (npm/cli#4828)
+# =============================================
+# Production Docker builds run on linux-arm64 Alpine (musl). Regenerating
+# package-lock.json on a dev Mac WITH node_modules present makes npm record only
+# the darwin variants of native-binary packages (npm/cli#4828); the server's
+# npm ci then can't install e.g. @rollup/rollup-linux-arm64-musl and the image
+# build dies mid-webpack (2026-08-01 deploy failure, right after PR #589).
+# Regenerate locks ONLY from a clean tree:
+#   rm -rf node_modules package-lock.json && npm install
+echo ""
+echo "🧩 Checking lockfile carries linux-arm64 native binaries (npm/cli#4828)..."
+MATRIX_FAILED=false
+for pair in \
+    "@rollup/rollup-darwin-arm64:@rollup/rollup-linux-arm64-musl" \
+    "@esbuild/darwin-arm64:@esbuild/linux-arm64" \
+    "@next/swc-darwin-arm64:@next/swc-linux-arm64-musl" \
+    "@img/sharp-darwin-arm64:@img/sharp-linuxmusl-arm64"; do
+    darwin_pkg="${pair%%:*}"
+    linux_pkg="${pair##*:}"
+    if grep -q "\"node_modules/${darwin_pkg}\"" package-lock.json && \
+       ! grep -q "\"node_modules/${linux_pkg}\"" package-lock.json; then
+        echo -e "${RED}   ❌ lockfile has ${darwin_pkg} but is missing ${linux_pkg}${NC}"
+        MATRIX_FAILED=true
+    fi
+done
+if [ "$MATRIX_FAILED" = true ]; then
+    echo -e "${RED}   The server (linux-arm64 musl) cannot build from this lockfile.${NC}"
+    echo -e "${RED}   Fix: rm -rf node_modules package-lock.json && npm install  (clean-tree regen)${NC}"
+    exit 1
+fi
+echo -e "${GREEN}   ✅ linux-arm64 native binary matrix present${NC}"
 
 # =============================================
 # 1.0. Check REDIS_PASSWORD is set and not the placeholder
