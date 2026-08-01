@@ -36,15 +36,12 @@
 
 import type { BusinessProfile } from './index';
 import type { MerchantProvenanceMap } from './businessProfileMerge';
+import { SHORT_DAY_KEYS, LONG_DAY_KEYS, DAY_LABELS_EN } from './businessHours';
 
-const DAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
-const DAY_SHORT_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
-const DAY_LABELS: Record<string, string> = {
-    monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday',
-    thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday',
-    mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
-    thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday',
-};
+// Saturday-first (CLDR ar-SY/ar-EG week order) — see businessHours.ts.
+const DAY_ORDER = LONG_DAY_KEYS;
+const DAY_SHORT_ORDER = SHORT_DAY_KEYS;
+const DAY_LABELS = DAY_LABELS_EN;
 
 const NOT_PROVIDED = '[NOT_PROVIDED]';
 
