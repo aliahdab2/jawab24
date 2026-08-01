@@ -297,6 +297,19 @@ export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
 };
 
 /**
+ * True when the page itself IS the platform brand — Jawab24's own support
+ * page — so brand mentions in a reply are the page talking about its own
+ * product, not the assistant leaking the tool a merchant uses. Keyed on the
+ * page name (works for any vendor-owned FB/IG/WhatsApp surface) rather than a
+ * page-id allowlist, so it needs no per-environment configuration and the
+ * demo/eval fixture qualifies the same way production does.
+ */
+export function isOwnBrandPage(pageName?: string): boolean {
+    if (!pageName) return false;
+    return /jawab\s?24|جواب\s?(?:24|٢٤)/i.test(pageName);
+}
+
+/**
  * Check 6 — the bot must never reveal it's automated. Strips only the offending
  * sentence(s) and keeps the rest; falls back to a pooled reply (in fallbackLang)
  * only if fewer than 10 useful characters remain.
@@ -319,6 +332,15 @@ export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
  *   re-creates a #236-style swap — but every swap is flagged, needs-attention,
  *   and cache-blocked, so it is seen, not silent.
  *
+ * Own-brand exemption (`ownBrandPage`): on the vendor's OWN page the brand IS
+ * the business, so the brand needles and the flag-gated AI vocabulary are
+ * product talk there — «موقعنا jawab24.com» is the answer to "what's your
+ * website?", not a leak. Pre-exemption, Check 6 stripped exactly that sentence
+ * and swapped in SELF_ID_FALLBACKS lines, so the Jawab24 support page dodged
+ * every website/app-link question with identity statements (prod, 2026-08-01).
+ * The first-person tripwires and "chatbot"/"bot" stay active on every page —
+ * even our own page speaks as a «موظف ذكي», never as a bot.
+ *
  * Returns `stripped` so the caller records the swap as
  * `self_identification_stripped` — DELIBERATELY merchant-visible (flag_reason
  * chip + needs-attention): a substituted reply is exactly what a merchant
@@ -329,23 +351,34 @@ export function stripSelfIdentification(
     reply: string,
     fallbackLang: string,
     selfReported = false,
+    ownBrandPage = false,
 ): { reply: string; stripped: boolean } {
     if (!reply) {
         return { reply, stripped: false };
     }
-    // Lexically DECISIVE reveals — strings with no legitimate product reading:
-    // the platform brand, "chatbot", English "bot" OUTSIDE "robot" ((?<!ro)),
-    // and literal first-person claims («أنا روبوت», "I'm a bot") which are
-    // decisive regardless of the flag. Deliberately NOT here (#495 review):
+    // Lexically DECISIVE reveals on EVERY page — strings with no legitimate
+    // product reading: "chatbot", English "bot" OUTSIDE "robot" ((?<!ro)), and
+    // literal first-person claims («أنا روبوت», "I'm a bot") which are decisive
+    // regardless of the flag. Deliberately NOT here (#495 review):
     // روبوت / "robot" are PRODUCTS (robot vacuums, robot toys) and bare بوت is
     // a winter BOOT — those live in the flag-gated set below. (The old
     // /\bبوت\b/ branch was dead anyway: ASCII \b never matches around Arabic.)
-    const botWords = /(?<!ro)bot\b|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24|(?:أنا|انا) (?:روبوت|بوت|ذكاء اصطناعي)|I(?:['’]m| am) (?:a |an )?(?:bot|robot|AI)\b/i;
+    const universalReveals = /(?<!ro)bot\b|chat\s*bot|(?:أنا|انا) (?:روبوت|بوت|ذكاء اصطناعي)|I(?:['’]m| am) (?:a |an )?(?:bot|robot|AI)\b/i;
+    // The platform brand is decisive ONLY on a merchant's page — a reply naming
+    // Jawab24 there means the assistant leaked the tool behind the page. On the
+    // vendor's own page (ownBrandPage) the brand is the business and these are
+    // skipped. «جواب24» (Arabic + ASCII digits, no space) was missing from the
+    // original needle and reached customers on merchant pages — now covered.
+    const brandReveals = /jawab\s?24|جواب\s?(?:24|٢٤)/i;
     // Ambiguous vocabulary — ordinary product language until the model's own
-    // report says the reply identifies ITSELF as automated.
+    // report says the reply identifies ITSELF as automated. Skipped on the
+    // vendor's own page: there the product IS the automation, so even a
+    // self-reported "جواب24 منصة ذكاء اصطناعي" is a correct product description.
     const aiWords = /ذكاء (?:ال)?[اإ]صطناعي|artificial intelligence|روبوت/i;
     const offending = (text: string): boolean =>
-        botWords.test(text) || (selfReported && aiWords.test(text));
+        universalReveals.test(text)
+        || (!ownBrandPage && brandReveals.test(text))
+        || (!ownBrandPage && selfReported && aiWords.test(text));
     if (!offending(reply)) {
         return { reply, stripped: false };
     }
@@ -491,6 +524,7 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     const selfReported = flags.includes('self_identified_as_automation');
     const { reply: finalReply, stripped } = stripSelfIdentification(
         reply, parsed.language || request.language || 'ar', selfReported,
+        isOwnBrandPage(request.context?.pageName),
     );
     if (stripped && !flags.includes('self_identification_stripped')) {
         flags.push('self_identification_stripped');

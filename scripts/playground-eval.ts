@@ -56,7 +56,7 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor';
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor' | 'support';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -153,6 +153,8 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     moto: /المجد|موتوسيكلات|motoshop/i,
     incense: /بيت البخور|incense/i,
     distributor: /رواء|distributor/i,
+    // The vendor's own support page (own-brand Check 6 exemption, Cat 72).
+    support: /jawab\s?24/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -4764,6 +4766,34 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['الدوخة', 'دوار'],
         },
         notes: 'PROD replay, turn 3: after the fumbled name turn the customer restates the goal. Reply must engage the nursing course and never revisit الدوخة as a symptom.',
+    },
+
+    // ─── Category 72: Own-Brand Page — Check 6 brand exemption ───
+    // The vendor's own support page ('support' fixture, name "Jawab24"). Pre-fix,
+    // Check 6's brand needle stripped every sentence naming Jawab24/jawab24.com,
+    // so website/app-link answers were swapped for SELF_ID_FALLBACKS identity
+    // lines — the customer asked for the site 3× and was deflected 3× (prod,
+    // 2026-08-01). These replay that conversation end-to-end through the
+    // playground (same validateReply choke point as production).
+    {
+        id: 750, category: 72, categoryName: 'Own-Brand Page', channel: 'dm',
+        message: 'موقعكم الالكتروني؟',
+        page: 'support',
+        expected: {
+            replyContains: ['jawab24.com'],
+            flagsAbsent: ['self_identification_stripped'],
+        },
+        notes: 'PROD replay: the website question on the Jawab24 page must return the URL from the KB, not an identity fallback («معك أحد أعضاء الفريق…»).',
+    },
+    {
+        id: 751, category: 72, categoryName: 'Own-Brand Page', channel: 'dm',
+        message: 'رابط تحميل البرنامج',
+        page: 'support',
+        expected: {
+            replyContainsAny: ['play.google.com', 'jawab24.com'],
+            flagsAbsent: ['self_identification_stripped'],
+        },
+        notes: 'PROD replay («رابط البرنامج»): the app-link question must surface the Play Store or site link — both are in the fixture KB.',
     },
 
 ];
