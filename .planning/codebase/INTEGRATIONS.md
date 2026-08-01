@@ -252,7 +252,8 @@ Android manifest: `<queries>` must declare a `VIEW`+`https` intent (Android 11+ 
   - Verification: HMAC-SHA256 base64 signature in `X-Shopify-Hmac-SHA256` header
   - Signature Key: Shopify API secret
   - GDPR endpoints: `/gdpr/customers/{data_request,redact}`, `/gdpr/shop/redact` (mandatory for App Store)
-  - Source-of-truth topic list: `registerWebhooks` in `services/shopify.ts` + `SHOPIFY_WEBHOOK_TOPICS` in `integrations/shopify.ts`; pinned in `test/integrations/webhookTopicDrift.test.ts`. New topics need `scripts/reregister-webhooks.ts shopify` for already-connected stores.
+  - Registration: Admin GraphQL API (`webhookSubscriptions` query + `webhookSubscriptionCreate`/`webhookSubscriptionUpdate`), list-then-upsert — a subscription whose callback URL drifted is updated in place. `webhookStatus`/`X-Shopify-Topic` keep REST-style topic names.
+  - Source-of-truth topic list: `SHOPIFY_WEBHOOK_TOPIC_DEFS`/`SHOPIFY_WEBHOOK_EVENTS` in `services/shopify.ts` + `SHOPIFY_WEBHOOK_TOPICS` in `integrations/shopify.ts`; pinned in `test/integrations/webhookTopicDrift.test.ts`. New topics need `scripts/reregister-webhooks.ts shopify` for already-connected stores.
 
 - **Background Worker**:
   - `ecommerceSyncWorker` - syncs products on interval

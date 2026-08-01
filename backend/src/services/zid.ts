@@ -231,7 +231,7 @@ export async function registerWebhooks(creds: ZidCredentials, storeId: string): 
         if (response.ok) {
             registered.push(event);
         } else if (response.status === 409 || response.status === 422) {
-            // Already-exists — treat as success (Shopify 422 / Salla 422 precedent;
+            // Already-exists — treat as success (Salla 422 precedent;
             // Zid's exact duplicate status is unconfirmed, both tolerated).
             registered.push(event);
         } else {

@@ -13,6 +13,7 @@ import { SallaIntegration } from '../../src/integrations/salla';
 import { ZidIntegration } from '../../src/integrations/zid';
 import { SALLA_WEBHOOK_EVENTS } from '../../src/services/salla';
 import { ZID_WEBHOOK_EVENTS } from '../../src/services/zid';
+import { SHOPIFY_WEBHOOK_EVENTS } from '../../src/services/shopify';
 
 describe('webhook topic drift', () => {
     it('Salla adapter topics match SALLA_WEBHOOK_EVENTS', () => {
@@ -25,23 +26,8 @@ describe('webhook topic drift', () => {
         expect([...adapter.getWebhookTopics()]).toEqual([...ZID_WEBHOOK_EVENTS]);
     });
 
-    it('Shopify adapter exposes the topics it actually subscribes to', () => {
-        // Shopify's source-of-truth list lives inside the registerWebhooks
-        // function body (each entry pairs a topic with a delivery URL), so
-        // there is no exported constant to compare against. Pin the expected
-        // list here — if registerWebhooks gains/loses a topic, both this list
-        // and the adapter constant must be updated, and that combined diff
-        // is the review checkpoint.
+    it('Shopify adapter topics match SHOPIFY_WEBHOOK_EVENTS', () => {
         const adapter = new ShopifyIntegration();
-        expect([...adapter.getWebhookTopics()]).toEqual([
-            'app/uninstalled',
-            'products/create',
-            'products/update',
-            'products/delete',
-            'orders/create',
-            'orders/fulfilled',
-            'orders/cancelled',
-            'fulfillments/update',
-        ]);
+        expect([...adapter.getWebhookTopics()]).toEqual([...SHOPIFY_WEBHOOK_EVENTS]);
     });
 });
