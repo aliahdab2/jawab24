@@ -179,30 +179,37 @@ export function formatTimeRangeStorage(start: string, end: string): string | nul
   return s && e ? `${s}-${e}` : null;
 }
 
-/** Display form with the ambiguity resolved: «12:00–1:00 ظهرًا» — the start
- *  drops its day period, the end carries Intl's flexible one. Display only;
- *  storage stays the compact merchant form. */
+/** Display form with the ambiguity resolved: «12:00–1:00 م» — uniform ص/م
+ *  markers (platform convention), shown once when both ends share a period,
+ *  on both when they differ («11:00 ص–1:00 م»). Display only; storage stays
+ *  the compact merchant form. */
 export function formatTimeRangeDisplay(start: string, end: string, intlLocale: string): string | null {
   const s = parseHM(start);
   const e = parseHM(end);
   if (s === null || e === null) return null;
   const fmt = new Intl.DateTimeFormat(intlLocale, {
-    hour: 'numeric', minute: '2-digit', dayPeriod: 'long', timeZone: 'UTC',
+    hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC',
   });
   const at = (mins: number) => new Date(Date.UTC(2024, 0, 7, Math.floor(mins / 60), mins % 60));
-  const bare = fmt.formatToParts(at(s))
-    .filter((p) => p.type !== 'dayPeriod')
+  const sParts = fmt.formatToParts(at(s));
+  const eParts = fmt.formatToParts(at(e));
+  const period = (parts: Intl.DateTimeFormatPart[]) => parts.find((p) => p.type === 'dayPeriod')?.value ?? '';
+  const samePeriod = period(sParts) === period(eParts);
+  const text = (parts: Intl.DateTimeFormatPart[], dropPeriod: boolean) => parts
+    .filter((p) => !(dropPeriod && p.type === 'dayPeriod'))
     .map((p) => p.value).join('').trim().replace(/[،,]$/, '').trim();
-  return `${bare}–${fmt.format(at(e))}`;
+  return `${text(sParts, samePeriod)}–${text(eParts, false)}`;
 }
 
-/** One time's display label («12:00 ظهرًا») — Intl's flexible day period, so
- *  every browser renders the SAME text (the native time input did not). */
+/** One time's display label («12:00 م») — the uniform ص/م markers every OS
+ *  and scheduling product uses in Arabic 12-hour UI. Intl's flexible day
+ *  periods (ظهرًا/بعد الظهر/ليلًا…) are prose style and read inconsistently
+ *  in a picker list (owner call, matches platform convention). */
 export function formatTimeLabel(hm: string, intlLocale: string): string | null {
   const mins = parseHM(hm);
   if (mins === null) return null;
   return new Intl.DateTimeFormat(intlLocale, {
-    hour: 'numeric', minute: '2-digit', dayPeriod: 'long', timeZone: 'UTC',
+    hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC',
   }).format(new Date(Date.UTC(2024, 0, 7, Math.floor(mins / 60), mins % 60)));
 }
 

@@ -268,7 +268,7 @@ describe('BusinessListsSection', () => {
     // the row is flagged «auto», and expanding it shows the full hint.
     expect(screen.getAllByText('auto').length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole('button', { name: /الساعة/ })[0]);
-    const label13 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', dayPeriod: 'long', timeZone: 'UTC' })
+    const label13 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' })
       .format(new Date(Date.UTC(2024, 0, 7, 13, 0)));
     expect(screen.getAllByText(/Read automatically from the text/).length).toBeGreaterThan(0);
     expect(screen.getAllByLabelText('To')[0].textContent).toContain(label13);
@@ -297,7 +297,7 @@ describe('BusinessListsSection', () => {
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
     fireEvent.click(screen.getAllByRole('button', { name: /الساعة/ })[0]);
     fireEvent.click(screen.getAllByLabelText('To')[0]);
-    const label14 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', dayPeriod: 'long', timeZone: 'UTC' })
+    const label14 = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' })
       .format(new Date(Date.UTC(2024, 0, 7, 14, 0)));
     fireEvent.click(screen.getAllByRole('button', { name: label14 })[0]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Save changes' })[0]);
