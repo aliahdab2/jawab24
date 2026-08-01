@@ -408,7 +408,7 @@ export function FactEntitySheet({
               <span className="min-w-0 text-sm text-muted-foreground truncate" dir="auto">{rowName}</span>
             </span>
             <span className="min-w-0 flex-1 text-sm break-words text-foreground" dir="auto">
-              {value ?? <span className="text-muted-foreground/50">{t('lists.emptyValue')}</span>}
+              {value}
             </span>
           </button>
           {flag}
