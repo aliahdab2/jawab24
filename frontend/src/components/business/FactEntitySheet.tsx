@@ -509,7 +509,9 @@ export function FactEntitySheet({
                           onClick={() => setFieldFreeText(i, label, toFree, toFree ? prefill : undefined)}
                           className="mt-1 text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 whitespace-nowrap"
                         >
-                          {toFree ? t('lists.useFreeText') : t('lists.useStructured')}
+                          {toFree
+                            ? t('lists.useFreeText')
+                            : t(kind === 'weekday' ? 'lists.useStructuredDays' : 'lists.useStructuredTime')}
                         </button>
                       );
                       const fieldLabel = (

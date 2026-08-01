@@ -228,7 +228,7 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Use custom text' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Type it manually' })[0]);
 
     const input = screen.getAllByLabelText('الأيام').find((el) => el.tagName === 'INPUT') as HTMLInputElement;
     expect(input).toHaveValue('الأحد والثلاثاء');
