@@ -488,6 +488,39 @@ else
     exit 1
 fi
 
+# Smoke-test the standalone artifact — boot the traced server and request one
+# page. Catches runtime modules Next's file tracing missed (dynamic requires):
+# 2026-08-01 a floated @sentry/nextjs@10.69 required meriyah dynamically; the
+# build passed but every SSR request 500'd with MODULE_NOT_FOUND, and it only
+# surfaced 10 minutes later in the E2E step. This dies here in seconds instead.
+STANDALONE_SERVER="frontend/.next/standalone/frontend/server.js"
+if [ -f "$STANDALONE_SERVER" ]; then
+    SMOKE_PORT=3197
+    PORT=$SMOKE_PORT HOSTNAME=127.0.0.1 node "$STANDALONE_SERVER" > /tmp/standalone-smoke.log 2>&1 &
+    SMOKE_PID=$!
+    SMOKE_OK=false
+    for _ in $(seq 1 30); do
+        if ! kill -0 "$SMOKE_PID" 2>/dev/null; then break; fi
+        SMOKE_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${SMOKE_PORT}/en/login" 2>/dev/null)
+        if [ "$SMOKE_CODE" = "200" ]; then SMOKE_OK=true; break; fi
+        if [ "$SMOKE_CODE" = "500" ]; then break; fi
+        sleep 1
+    done
+    kill "$SMOKE_PID" 2>/dev/null; wait "$SMOKE_PID" 2>/dev/null
+    if [ "$SMOKE_OK" = true ]; then
+        echo -e "${GREEN}   ✅ Standalone server smoke test passes (SSR 200)${NC}"
+    else
+        echo -e "${RED}   ❌ Standalone server failed to serve a page (got '${SMOKE_CODE:-no response}')${NC}"
+        echo -e "${RED}   A runtime module is likely missing from the standalone trace:${NC}"
+        grep -m 3 "Cannot find module" /tmp/standalone-smoke.log | sed 's/^/      /'
+        echo -e "${RED}   Full log: /tmp/standalone-smoke.log${NC}"
+        exit 1
+    fi
+else
+    echo -e "${RED}   ❌ No standalone server.js after build — output: 'standalone' broken?${NC}"
+    exit 1
+fi
+
 if npm run build --workspace=jawab24-ai-worker > /dev/null 2>&1; then
     echo -e "${GREEN}   ✅ AI Worker builds successfully${NC}"
 else
