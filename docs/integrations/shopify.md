@@ -184,7 +184,8 @@ verify-and-reconcile**, never by events:
   pattern), regardless of which member connected the store.
 - **Uninstall** (`webhookUninstall`) cancels the local mirror before deactivating the
   store — a paid local subscription can no longer outlive the app (D-023 class).
-- **No Stripe beside it:** checkout / change-plan / subscription-intent return 400
+- **No Stripe beside it:** all six Stripe surfaces — checkout, subscription-intent,
+  change-plan, top-up intent, cancel-subscription, billing portal — return 400
   `SHOPIFY_BILLED`; the frontend hides the top-up CTA and routes plan management to
   `admin.shopify.com/store/{store}/charges/{app_handle}/pricing_plans`
   (`SHOPIFY_APP_HANDLE` env, exposed as `shopifyManageUrl` in `/subscription/usage`).
