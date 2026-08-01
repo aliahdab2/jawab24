@@ -1126,7 +1126,7 @@ Top Products:
 |----------|--------|-------|-------------|--------------|-------------------|
 | **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Full (retry incl. THROTTLED, exhaustion flag, manual reregister, frontend recovery UI) |
 | **Salla** | Active | OAuth 2.0 (Custom + **Easy Mode**) | 14 days (auto-refresh, single-use refresh tokens) | REST, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Full (lifted to platform-agnostic in PR #27, 2026-05-07) |
-| **Zid** | ❌ Broken (rebuild pending) | OAuth 2.0 | — | — | ❌ Built against the wrong API contract; never round-tripped a real store. Surfaced as "coming soon" on the (admin-only) integrations page until rebuilt. See `docs/integrations/zid.md`, D-020 |
+| **Zid** | 🔧 Rebuilt — pending live validation (not user-facing) | OAuth 2.0 (dual-token: Bearer + X-Manager-Token) | ~1 year (auto-refresh) | REST, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Shares the platform-agnostic hardening; deliveries verified via timing-safe Basic auth (Zid sends no HMAC). Rebuilt 2026-08-01 against the docs.zid.sa-verified contract (D-053); still surfaced as "coming soon" until a real dev-store round-trip passes (D-020 gate). See `docs/integrations/zid.md` |
 
 **Salla Easy Mode** (required for the public App Store listing): published apps receive tokens via the server-to-server `app.store.authorize` webhook (the OAuth callback is never hit — Easy Mode drops the app's registered redirect URIs entirely, so the OAuth authorize endpoint 404s for it; proven live 2026-07-18, D-031). `controllers/salla.ts:handleStoreAuthorize` ingests/refreshes tokens idempotently; fresh installs stage a `merchantId`-keyed pending install (`pending_ecommerce_installs.merchant_id`, migration `0123`) that the merchant claims after login via `GET /salla/store/pending` + `POST /salla/store/claim` (landing page `frontend/src/pages/salla/connected.tsx`). The claim is bound by an **owner-email match** (D-031): the store's registered email, fetched live with the pushed token, must equal the logged-in user's (Facebook-verified) email — client-supplied ids never prove ownership. With Easy Mode live, `POST /salla/store/connect` redirects to the public listing (`SALLA_APP_STORE_URL`) instead of the dead OAuth URL. Custom Mode (OAuth redirect) is retained for dev.
 
@@ -1186,7 +1186,7 @@ Products synced from Shopify/Salla
 **المنصات المدعومة:**
 - **Shopify**: نشط، OAuth 2.0، التوكن لا ينتهي أبداً
 - **سلة (Salla)**: نشط، OAuth 2.0، التوكن ينتهي كل 14 يوم (تجديد تلقائي)
-- **زد (Zid)**: ❌ معطّل — بحاجة لإعادة بناء (مبني على تعاقد API خاطئ ولم يُختبر مع متجر حقيقي؛ راجع `docs/integrations/zid.md` وقرار D-020)
+- **زد (Zid)**: 🔧 أُعيد بناؤه وفق التعاقد الموثّق (2026-08-01) — بانتظار التحقق على متجر تجريبي حقيقي قبل الإتاحة للتجار (بوابة قرار D-020؛ راجع `docs/integrations/zid.md` وقرار D-053)
 
 ---
 
@@ -1720,7 +1720,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 
 | # | Gap | Severity | Impact |
 |---|-----|----------|--------|
-| 1 | Zid e-commerce broken (rebuild pending) | High | Adapter/service/controller exist but were built against the wrong Zid API (single auth header, non-existent event names, likely wrong endpoints); a merchant can't connect. Do not present as production-ready. Bug list + rebuild scope: `docs/integrations/zid.md`; ruling D-020 |
+| 1 | Zid rebuilt but unvalidated against a live store | Medium | The 2026-08-01 rebuild (D-053) replaced the broken auth/endpoint/webhook layer with the docs.zid.sa-verified contract, but payload-shape parsers are provisional until a real dev-store round-trip (needs the Zid Partner account — founder external). Stays "coming soon" / not user-facing until then (D-020 gate). Checklist: `docs/integrations/zid.md` |
 | ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` — **note**: `setInterval` doesn't survive process restart without external scheduler; acceptable for single-instance deploy |
 | ~~3~~ | ~~No voice input for KB~~ | ~~RESOLVED~~ | Voice recording via VoiceRecordButton.tsx — transcribed via GPT-4o-mini-transcribe before KB ingestion |
 | 4 | Single-language KB | Medium | Must mix both languages in one text |

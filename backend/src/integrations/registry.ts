@@ -16,6 +16,10 @@ export interface StoreForWebhooks {
     accessToken: string;
     /** AES-256-GCM IV paired with `accessToken`. */
     accessTokenIv: string;
+    /** Zid only — encrypted `Authorization` Bearer token (dual-header auth). */
+    authorizationToken?: string | null;
+    /** AES-256-GCM IV paired with `authorizationToken`. */
+    authorizationTokenIv?: string | null;
 }
 
 /**

@@ -275,12 +275,12 @@ Android manifest: `<queries>` must declare a `VIEW`+`https` intent (Android 11+ 
   - Integration: `/backend/src/integrations/shopify.ts`
   - Service: `/backend/src/services/shopify.ts`
   - Routes: `/backend/src/routes/shopify.ts`
-  - Crypto: `/backend/src/services/shopifyCrypto.ts`
+  - Crypto (shared, all platforms): `/backend/src/services/ecommerceCrypto.ts`
 
 - **DB Tables**:
-  - `ecommerce_stores` - store info + encrypted token
+  - `ecommerce_stores` - store info + encrypted tokens
   - `ecommerce_products` - product cache
-  - `ecommerce_store_pages` - page ↔ store linking
+  - Page ↔ store linking is the `pages.ecommerce_store_id` FK (there is no `ecommerce_store_pages` table)
 
 ---
 
@@ -303,10 +303,10 @@ Android manifest: `<queries>` must declare a `VIEW`+`https` intent (Android 11+ 
     - **Connect action is mode-aware**: `POST /salla/store/connect` returns the public App Store listing URL (`SALLA_APP_STORE_URL`, set at approval) instead of the OAuth authorize URL when the Easy-Mode flag is on — otherwise merchants would land on Salla's `invalid_request` error page.
     - Schema: `pending_ecommerce_installs.merchant_id` + `store_name` (migration `0123`).
 
-- **API Endpoints Used**:
+- **API Endpoints Used** (base `https://api.salla.dev/admin/v2`):
   - `/products` - list products
-  - `/orders` - order data
-  - `/merchants/profile` - store info
+  - `/orders` - order data (list shape differs from detail — see `mapSallaOrderToOrderInfo`)
+  - `/store/info` - store info (used by `fetchStoreInfo`, incl. the Easy-Mode ownership check)
 
 - **Webhook Integration**:
   - Endpoint: `/salla/webhooks` (POST) — single endpoint, dispatched by `event` field in body
@@ -329,20 +329,22 @@ Android manifest: `<queries>` must declare a `VIEW`+`https` intent (Android 11+ 
 ---
 
 ### Zid
-- **Status**: ❌ **Broken end-to-end — rebuild pending**. The adapter/service/controller/routes exist and are enabled when `ZID_CLIENT_ID` is set, but the code was built against the wrong Zid API contract and has never round-tripped a real Zid store: it sends only `X-MANAGER-TOKEN` (Zid requires **both** `Authorization: Bearer <oauth>` and `X-Manager-Token`), subscribes to non-existent event names (`order.created`/`order.shipped` vs Zid's real `order.create`/`order.status.update`), and likely targets the wrong endpoints (`/v1/products` vs `/v1/managers/...`). Tests mock the wrong shapes, so they pass while nothing works. **Do not present Zid as production-ready.** Full bug list + rebuild scope: [`docs/integrations/zid.md`](../../docs/integrations/zid.md). Ruling: [`DECISIONS.md` D-020](../../DECISIONS.md).
-- **Purpose**: Saudi Arabia e-commerce platform — product sync + KB enrichment + AI agent tools (intended; not yet functional)
-- **Auth Flow**: OAuth2 (same pattern as Salla — redirect flow, no domain input required)
+- **Status**: 🔧 **Rebuilt against the verified API contract (2026-08-01) — pending live dev-store validation, NOT user-facing.** The original implementation was built on an assumed contract and never round-tripped a real store (D-020); the rebuild replaced the auth/endpoint/webhook layer with the contract verified from docs.zid.sa. It ships dark (`ZID_CLIENT_ID` unset in prod; `coming_soon` badge on the integrations page) until a real dev-store round-trip passes — D-020's gate stands. Contract, provisional parsers, and the validation checklist: [`docs/integrations/zid.md`](../../docs/integrations/zid.md). Rulings: D-020 (gate), D-053 (rebuild).
+- **Purpose**: Saudi Arabia e-commerce platform — product sync + KB enrichment + AI agent tools
+- **Auth Flow**: OAuth2 redirect (same shape as Salla), but the token response carries **two credentials**: `access_token` (sent as `X-Manager-Token`) + `Authorization` (sent as `Authorization: Bearer`) — both required on every Merchant API call, both AES-256-GCM encrypted (`ecommerce_stores.authorization_token`/`_iv`, migration `0146`). Token lifetime ~1 year; shared refresher (`ecommerceTokenRefresh.ts`) parses a rotated `Authorization` field when present.
+- **Webhooks**: registered per store via `POST /v1/managers/webhooks` (body carries `original_id` = `ZID_APP_ID` + a Basic-auth username/password pair); deliveries are verified by **timing-safe HTTP Basic auth** (`utils/basicAuthVerify.ts`) — Zid sends no HMAC signature. Events: `product.create/update/publish/delete`, `order.create`, `order.status.update` (`indelivery`→shipped, `delivered`→delivered). Uninstall arrives as the Partner-Dashboard-configured `app.market.application.uninstall`.
 - **Configuration**:
   - `ZID_CLIENT_ID` - OAuth app ID
   - `ZID_CLIENT_SECRET` - OAuth secret
+  - `ZID_APP_ID` - Partner Application ID (webhook subscriptions' `original_id`; prod-required with the client id)
   - `ZID_HOST_NAME` - App hostname for redirect URI
-  - `ZID_WEBHOOK_SECRET` - HMAC secret for webhook verification
-  - `ZID_SCOPES` - Comma-separated OAuth scopes
-- **Implementation** (present but non-functional):
+  - `ZID_WEBHOOK_SECRET` - Basic-auth password for webhook deliveries (username fixed in code)
+- **Implementation**:
   - Integration: `/backend/src/integrations/zid.ts`
   - Service: `/backend/src/services/zid.ts`
   - Controller: `/backend/src/controllers/zid.ts`
   - Routes: `/backend/src/routes/zid.ts`
+  - Basic-auth verify: `/backend/src/utils/basicAuthVerify.ts`
 - **AI Agent Tools** (shared, platform-agnostic — same 5 as Shopify/Salla): `lookup_order`, `track_shipment`, `check_inventory`, `verify_and_get_order`, `verify_and_get_shipment` (whitelist in `packages/shared/src/ecommerce-tools.ts`, executed via `ecommerceActions.ts`)
 
 ---
@@ -776,7 +778,7 @@ Voice-to-text for KB content via microphone:
 | Instagram API | Comments + DM auto-replies | `FACEBOOK_*` env vars | ⚠️ Code ready, permissions deferred |
 | Shopify | Product sync + KB enrichment | `SHOPIFY_*` env vars | ✅ Production |
 | Salla | Product sync (Middle East) | `SALLA_*` env vars | ✅ Production |
-| Zid | Product sync + KB enrichment (Saudi) | `ZID_*` env vars | ❌ Broken — rebuild pending (see `docs/integrations/zid.md`, D-020) |
+| Zid | Product sync + KB enrichment (Saudi) | `ZID_*` env vars | 🔧 Rebuilt — pending live dev-store validation, not user-facing (see `docs/integrations/zid.md`, D-020/D-053) |
 | OpenAI | Smart reply generation | `OPENAI_API_KEY` | ✅ Production |
 | Anthropic Claude | Tier-2 failover LLM + playground | `ANTHROPIC_API_KEY` | ✅ Active (circuit-open failover) |
 | Stripe | Subscription payments | `STRIPE_*` env vars | ✅ Production |

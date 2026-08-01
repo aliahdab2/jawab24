@@ -516,3 +516,44 @@ engine's date machinery (`startsAt`/`endsAt`, query-time expiry exclusion,
 fully valid for product merchants (posts-scan, post-reply mining, store sync); B0.5's
 question ("0 → confirmed on a phone in <5 min") is answered on the fact-row review
 surface instead, and the catalog flow gets its pilot with a PRODUCT merchant later.
+
+## D-053 · Zid is rebuilt against the docs-verified contract (dual-token auth, /v1/managers endpoints, Basic-auth webhooks); D-020's live round-trip gate still stands
+
+Engineering ruling, 2026-08-01 (owner directed "rebuild now, validate when the Partner
+account exists"; contract verified against docs.zid.sa the same day — branch
+`feat/zid-rebuild`).
+
+**What changed.** The D-020 defects are fixed at the root, not patched:
+
+- **Dual-token auth.** Zid's token response carries TWO credentials: `access_token`
+  (sent as `X-Manager-Token`) and `Authorization` (sent as `Authorization: Bearer`).
+  The second one is now persisted in dedicated encrypted columns
+  (`authorization_token`/`_iv` on `ecommerce_stores` AND `pending_ecommerce_installs`,
+  migration `0146`) — rejected alternatives: plaintext in `platformData` jsonb (breaks
+  the crypto invariant) and a JSON blob inside the accessToken ciphertext (breaks every
+  shared decrypt path). Shared plumbing (`OAuthTokenResponse`, `createStore`,
+  `updateStoreTokens`, pending installs, claim ctx, token refresher,
+  `ecommerceApiGet extraHeaders`) widened with OPTIONAL fields only — Salla/Shopify
+  behavior unchanged.
+- **Basic-auth webhooks replace the invented HMAC.** Zid authenticates deliveries with
+  the `username`/`password` pair set at subscription time (`Authorization: Basic …`);
+  there is no `x-zid-signature`. Verification is timing-safe
+  (`utils/basicAuthVerify.ts`); `ZID_WEBHOOK_SECRET` is reused as the password with a
+  fixed code-constant username, so the env surface barely changes. New `ZID_APP_ID`
+  env (the subscription body's `original_id`) is prod-required alongside the secret.
+- **Real endpoints + events.** `/v1/managers/account/profile`,
+  `/v1/managers/store/orders`, `/v1/products/` (dual headers + `Role: Manager`);
+  events `product.create/update/publish/delete`, `order.create`,
+  `order.status.update` (status code `indelivery` → shipped, `delivered` → delivered).
+  Uninstall = the Partner-Dashboard-configured `app.market.application.uninstall`.
+  Dead `ZID_SCOPES`/`SALLA_SCOPES` env vars removed. Product cap now derives from
+  `PRODUCT_SAFETY_CAP` (the silent 300-product truncation is gone).
+
+**What this does NOT change.** D-020's gate is untouched: Zid stays dark
+(`ZID_CLIENT_ID` unset in prod, `coming_soon` badge on the integrations page) until a
+REAL dev-store round-trip passes. Payload-shape parsers are explicitly `[provisional]`
+(tests carry the marker in describe titles) because no live capture exists yet — the
+webhook delivery envelope, products/profile envelopes, orders search params, and
+refresh rotation of the `Authorization` token are all confirmed during live validation
+(checklist in `docs/integrations/zid.md`), which is blocked on the founder's Zid
+Partner signup (partnership agreement + dev store).

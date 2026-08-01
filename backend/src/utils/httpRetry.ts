@@ -15,7 +15,8 @@ export interface EcommerceApiGetOptions {
     /**
      * Auth header value — the *entire* header value string, e.g.:
      * - Salla: `"Bearer <token>"`
-     * - Zid:   `"<token>"` (sent as `X-MANAGER-TOKEN`)
+     * - Zid:   `"Bearer <authorization token>"` (its second credential rides in
+     *   `extraHeaders` as `X-Manager-Token` — dual-header auth)
      */
     authHeaderValue: string;
     /**
@@ -23,6 +24,13 @@ export interface EcommerceApiGetOptions {
      * Defaults to `"Authorization"`.
      */
     authHeaderName?: string;
+    /**
+     * Additional headers merged into the request AFTER the auth header. Zid's
+     * Merchant API needs two credentials at once (`Authorization: Bearer` +
+     * `X-Manager-Token`, plus `Role: Manager` on some endpoints) — a single
+     * auth header cannot express that.
+     */
+    extraHeaders?: Record<string, string>;
 }
 
 /**
@@ -38,7 +46,7 @@ export async function ecommerceApiGet<T = unknown>(
     url: string,
     options: EcommerceApiGetOptions,
 ): Promise<T> {
-    const { platform, authHeaderValue, authHeaderName = 'Authorization' } = options;
+    const { platform, authHeaderValue, authHeaderName = 'Authorization', extraHeaders } = options;
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -53,6 +61,7 @@ export async function ecommerceApiGet<T = unknown>(
                     headers: {
                         [authHeaderName]: authHeaderValue,
                         'Accept': 'application/json',
+                        ...extraHeaders,
                     },
                     signal: controller.signal,
                 }),
