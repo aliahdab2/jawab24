@@ -366,3 +366,84 @@ describe('reconcileShopifyBilling', () => {
         expect(result).toEqual(expect.objectContaining({ scanned: 2, errors: 1, orphaned: 0 }));
     });
 });
+
+describe('adoptShopifySubscription — additional refusal surfaces', () => {
+    it('refuses cross-shop adoption over a live shopify mirror (two-store thrash guard)', async () => {
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: 'shopify', status: 'active',
+            externalSubscriptionId: 'gid://shopify/AppSubscription/999',
+            shopifyShopDomain: 'other-store.myshopify.com',
+            currentPeriodStart: null, currentPeriodEnd: null,
+        }]) as never);
+
+        const result = await adoptShopifySubscription('u1', appSub(), SHOP, mkLog());
+
+        expect(result).toEqual({ outcome: 'refused', changed: false });
+        expect(mockCaptureError).toHaveBeenCalled();
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+        // The quota window must NOT be reset by a refused adoption.
+        expect(subscriptionsService.initializeUsagePeriod).not.toHaveBeenCalled();
+    });
+
+    it('still allows same-shop adoption under a new GID (plan upgrade, O-2)', async () => {
+        const chain = q([]);
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: 'shopify', status: 'active',
+            externalSubscriptionId: 'gid://shopify/AppSubscription/999',
+            shopifyShopDomain: SHOP, planId: 'plan_starter_id',
+            currentPeriodStart: new Date('2026-07-01T00:00:00Z'),
+            currentPeriodEnd: new Date('2026-08-01T00:00:00Z'),
+        }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        const result = await adoptShopifySubscription('u1', appSub(), SHOP, mkLog());
+
+        expect(result).toEqual({ outcome: 'adopted', changed: true });
+    });
+
+    it('refuses over a live manual (comp) row like a stripe one (D-H)', async () => {
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: 'manual', status: 'active',
+            externalSubscriptionId: null, currentPeriodEnd: null, currentPeriodStart: null,
+        }]) as never);
+
+        const result = await adoptShopifySubscription('u1', appSub(), SHOP, mkLog());
+
+        expect(result).toEqual({ outcome: 'refused', changed: false });
+    });
+
+    it('clears stale Stripe identity when taking over a canceled stripe row', async () => {
+        const chain = q([]);
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: 'stripe', status: 'canceled',
+            externalSubscriptionId: 'sub_old', stripeCustomerId: 'cus_old',
+            currentPeriodEnd: null, currentPeriodStart: null,
+        }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await adoptShopifySubscription('u1', appSub(), SHOP, mkLog());
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({
+            stripeCustomerId: null,
+            stripeCheckoutSessionId: null,
+        }));
+    });
+});
+
+describe('reconcileShopifyBilling — sweep-error visibility', () => {
+    it('raises ONE aggregated Sentry event when stores fail to sync', async () => {
+        vi.mocked(db.select)
+            .mockReturnValueOnce(q([{ storeDomain: 'a.myshopify.com' }]) as never)
+            .mockImplementationOnce(() => { throw new Error('token dead'); })
+            .mockReturnValueOnce(q([]) as never);
+
+        await reconcileShopifyBilling({ log: mkLog() });
+
+        expect(mockCaptureError).toHaveBeenCalledWith(
+            expect.any(Error),
+            'Shopify billing reconciliation sweep errors',
+            expect.objectContaining({ fingerprint: ['shopify-billing-sweep-errors'] }),
+        );
+    });
+});

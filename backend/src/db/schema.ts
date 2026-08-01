@@ -864,7 +864,7 @@ export const subscriptions = pgTable('subscriptions', {
         // partial index lives in migration 0147 (hand-amended, 0108 precedent).
         shopifyShopDomainUnique: uniqueIndex('idx_subscriptions_shopify_shop_domain')
             .on(table.shopifyShopDomain)
-            .where(sql`${table.paymentMethod} = 'shopify' AND ${table.status} <> 'canceled'`),
+            .where(sql`${table.paymentMethod} = 'shopify' AND ${table.status} IS DISTINCT FROM 'canceled'`),
         // A shopify-billed row without its shop domain is unreconcilable — the
         // 6h sweep and the uninstall cancel both resolve rows by this column.
         shopifyDomainRequiredCheck: check(

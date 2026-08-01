@@ -591,13 +591,23 @@ authority of last resort; also flags orphaned live mirrors whose store row vanis
   lazy-expiry Sentry canary sits beside the Stripe one.
 - Uninstall webhook cancels the local mirror (closes the D-023-class hole where a paid
   local sub outlived the app), keyed by shop domain so it works regardless of store-row
-  state. Trials mirror Shopify's clock (trialDays) and bypass the Stripe trial ledger.
-- No Stripe beside Shopify: shopify-billed accounts are hard-blocked from
-  checkout/change-plan/subscription-intent (code `SHOPIFY_BILLED`), the top-up CTA is
-  hidden, and the pricing page routes plan management to the admin deep link
+  state; `gdpr/shop/redact` repeats the cancel as a second provably-post-uninstall
+  signal (idempotent — covers a missed uninstall delivery). Trials mirror Shopify's
+  clock (trialDays) and bypass the Stripe trial ledger.
+- No Stripe beside Shopify — on EVERY Stripe surface, server-side: checkout session,
+  subscription intent, change-plan, top-up intent, cancel-subscription, and billing
+  portal all reject shopify-billed accounts with 400 `SHOPIFY_BILLED` (a hidden CTA is
+  never the enforcement). The top-up CTA is hidden and the pricing page routes plan
+  management to the admin deep link
   (`admin.shopify.com/store/{store}/charges/{app_handle}/pricing_plans`,
-  `SHOPIFY_APP_HANDLE` env). Never adopt over a LIVE stripe/manual row — Sentry, a
-  human untangles it.
+  `SHOPIFY_APP_HANDLE` env). A CANCELED mirror is exempt everywhere — the backend guard
+  and the frontend signals alike (suppressed at the `getUsageSummary` choke point) — so
+  a merchant who uninstalled the app can come back through Stripe.
+- Adoption refusals (all Sentry + stand down, a human decides): over a LIVE
+  stripe/manual/paypal row (double-billing risk), and over a live shopify mirror for a
+  DIFFERENT shop — two active stores on one workspace would otherwise ping-pong the
+  mirror and reset the quota window every sync. The Stripe rail carries the symmetric
+  guard: `adoptStripeSubscription` never overwrites a live shopify mirror.
 - Store-connect plan-gating is deliberately DEFERRED: gating connect on a plan would
   break the reviewer-walked install funnel; revisit after listing approval.
 

@@ -462,6 +462,14 @@ export async function gdprShopRedact(request: FastifyRequest, reply: FastifyRepl
         // soft deactivate done at uninstall time.
         const { shop_domain } = request.body as { shop_domain?: string };
         if (shop_domain) {
+            // shop/redact is a second HMAC-verified, provably-post-uninstall
+            // signal: if the uninstall webhook was missed, the paid local
+            // mirror is still live here. Cancel it (idempotent no-op when the
+            // uninstall path already did) instead of leaving it to the
+            // orphan-flag → human loop — prevention over detection.
+            const { cancelShopifySubscriptionLocal } = await import('../services/shopifyBilling');
+            await cancelShopifySubscriptionLocal(shop_domain, 'shopify_shop_redacted', request.log);
+
             const purged = await purgeStore('shopify', shop_domain);
             request.log.info({ shop_domain, purged }, 'Shopify GDPR shop/redact processed');
         }
@@ -516,18 +524,20 @@ export async function billingReturn(request: FastifyRequest, reply: FastifyReply
         return reply.redirect(`${frontendUrl}/dashboard`);
     }
 
+    let billingParam = 'synced';
     try {
         const { syncShopifyBilling } = await import('../services/shopifyBilling');
         const result = await syncShopifyBilling(shop, request.log);
         request.log.info({ shop, outcome: result.outcome }, 'Shopify billing return processed');
     } catch (error) {
+        billingParam = 'sync_failed'; // truthful marker — the reconciler will redo the sync
         captureError(error, 'Shopify billing return sync failed — reconciler will retry', {
             tags: { service: 'shopify_billing', flow: 'billing_return' },
             extra: { shop },
         });
     }
 
-    return reply.redirect(`${frontendUrl}/shopify/onboarding?billing=synced`);
+    return reply.redirect(`${frontendUrl}/shopify/onboarding?billing=${billingParam}`);
 }
 
 export async function disconnectStoreHandler(request: FastifyRequest, reply: FastifyReply) {

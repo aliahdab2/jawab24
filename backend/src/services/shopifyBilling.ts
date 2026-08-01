@@ -153,13 +153,46 @@ export async function adoptShopifySubscription(
         .orderBy(desc(subscriptions.createdAt))
         .limit(1);
 
+    // Two active Shopify stores resolving to one subject user must NOT
+    // ping-pong the mirror between them: each flip would rewrite GID/domain/
+    // plan and re-run initializeUsagePeriod — silently resetting the quota
+    // window every sync. Same D-H posture: Sentry, human decides which shop
+    // bills this workspace. Same-domain new-GID adoption (plan upgrades)
+    // stays allowed.
+    if (
+        current &&
+        current.paymentMethod === 'shopify' &&
+        current.shopifyShopDomain &&
+        current.shopifyShopDomain !== shopDomain &&
+        (LIVE_STATUSES as readonly string[]).includes(current.status ?? '')
+    ) {
+        captureError(
+            new Error(`Shopify subscription for ${shopDomain} collides with a live mirror for ${current.shopifyShopDomain}`),
+            'Shopify billing: refusing cross-shop adoption over a live shopify mirror (D-H)',
+            {
+                level: 'warning',
+                tags: { service: 'shopify_billing', flow: 'adopt_refused' },
+                fingerprint: ['shopify-billing-cross-shop-refused'],
+                extra: {
+                    shopDomain,
+                    userId,
+                    appSubscriptionId: appSub.id,
+                    localSubscriptionId: current.id,
+                    localShopDomain: current.shopifyShopDomain,
+                },
+            },
+        );
+        return { outcome: 'refused', changed: false };
+    }
+
     // D-H: never silently take over a live paid relationship on another rail.
     // A canceled/paused stripe row is fair game (the merchant left and came
     // back through Shopify); a live one is a double-billing risk a human must
-    // untangle — Sentry and stand down.
+    // untangle — Sentry and stand down. 'paypal' is a documented legacy value
+    // for this column — treated like stripe/manual rather than silently eaten.
     if (
         current &&
-        (current.paymentMethod === 'stripe' || current.paymentMethod === 'manual') &&
+        (current.paymentMethod === 'stripe' || current.paymentMethod === 'manual' || current.paymentMethod === 'paypal') &&
         (LIVE_STATUSES as readonly string[]).includes(current.status ?? '')
     ) {
         captureError(
@@ -221,6 +254,11 @@ export async function adoptShopifySubscription(
         externalSubscriptionId: appSub.id,
         paymentMethod: 'shopify' as const,
         shopifyShopDomain: shopDomain,
+        // Stale Stripe identity must not survive onto the mirror: a lingering
+        // stripeCustomerId would read hasStripeCustomer=true, get reused by
+        // top-up intents, and point the billing portal at a dead customer.
+        stripeCustomerId: null,
+        stripeCheckoutSessionId: null,
         currentPeriodStart: periodStart,
         currentPeriodEnd: periodEnd,
         trialEndsAt,
@@ -230,6 +268,10 @@ export async function adoptShopifySubscription(
         updatedAt: now,
     };
 
+    // Select-then-write without a transaction: a concurrent billingReturn +
+    // reconciler pair can race to insert. The partial unique index on
+    // shopify_shop_domain IS the serialization mechanism — the loser throws,
+    // the caller's error isolation absorbs it, and the next sync no-ops.
     if (current) {
         await db.update(subscriptions).set(values).where(eq(subscriptions.id, current.id));
     } else {
@@ -446,7 +488,25 @@ export async function reconcileShopifyBilling(options?: {
             {
                 level: 'warning',
                 tags: { cron: 'shopify_billing_reconcile' },
+                fingerprint: ['shopify-billing-orphaned-mirrors'],
                 extra: { ...result, domains: orphans.map(o => o.shopifyShopDomain) },
+            },
+        );
+    }
+
+    // This sweep is the authority of last resort (D-B) — if it fails across
+    // the board (dead token class, code regression), NOTHING else will ever
+    // activate a paying merchant. Per-store warns don't reach Sentry, so a
+    // systemic failure must raise one aggregated, fingerprinted event.
+    if (result.errors > 0) {
+        captureError(
+            new Error(`Shopify billing reconciliation failed for ${result.errors}/${result.scanned} store(s)`),
+            'Shopify billing reconciliation sweep errors',
+            {
+                level: 'warning',
+                tags: { cron: 'shopify_billing_reconcile' },
+                fingerprint: ['shopify-billing-sweep-errors'],
+                extra: { ...result },
             },
         );
     }

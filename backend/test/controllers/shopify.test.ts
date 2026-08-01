@@ -83,12 +83,13 @@ vi.mock('../../src/services/shopify', () => ({
 }));
 
 const mockVerifyToken = vi.fn();
-// webhookUninstall dynamically imports the billing mirror to cancel the local
-// subscription (D-D); the real module would drag in the db config.
+// webhookUninstall / gdprShopRedact / billingReturn dynamically import the
+// billing mirror; the real module would drag in the db config.
 const mockCancelShopifySubscriptionLocal = vi.fn().mockResolvedValue(false);
+const mockSyncShopifyBilling = vi.fn().mockResolvedValue({ outcome: 'no_store', changed: false });
 vi.mock('../../src/services/shopifyBilling', () => ({
     cancelShopifySubscriptionLocal: (...a: unknown[]) => mockCancelShopifySubscriptionLocal(...a),
-    syncShopifyBilling: vi.fn().mockResolvedValue({ outcome: 'no_store', changed: false }),
+    syncShopifyBilling: (...a: unknown[]) => mockSyncShopifyBilling(...a),
 }));
 
 vi.mock('../../src/services/auth', () => ({
@@ -157,6 +158,7 @@ vi.mock('../../src/services/orderNotificationScheduler', async (importActual) =>
 import {
     authRedirect,
     authCallback,
+    billingReturn,
     webhookUninstall,
     webhookProductsUpdate,
     webhookOrders,
@@ -714,6 +716,42 @@ describe('Shopify Controller', () => {
                 'test.myshopify.com', 'shopify_app_uninstalled', expect.anything(),
             );
             expect(rep.status).toHaveBeenCalledWith(200);
+        });
+    });
+
+    // --- billingReturn (App Pricing return URL, D-054) ---
+
+    describe('billingReturn', () => {
+        it('bounces an invalid shop param to the dashboard without touching billing', async () => {
+            const req = mockRequest({ query: { shop: 'evil.example.com' }, log: { info: vi.fn() } });
+            const rep = mockReply();
+
+            await billingReturn(req, rep);
+
+            expect(mockSyncShopifyBilling).not.toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/dashboard');
+        });
+
+        it('verifies server-side and redirects with billing=synced', async () => {
+            mockSyncShopifyBilling.mockResolvedValueOnce({ outcome: 'adopted', changed: true });
+            const req = mockRequest({ query: { shop: 'test.myshopify.com', plan_handle: 'business' }, log: { info: vi.fn() } });
+            const rep = mockReply();
+
+            await billingReturn(req, rep);
+
+            // Only the shop domain reaches the sync — plan_handle is never trusted.
+            expect(mockSyncShopifyBilling).toHaveBeenCalledWith('test.myshopify.com', expect.anything());
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/shopify/onboarding?billing=synced');
+        });
+
+        it('never strands the merchant on a sync failure — redirects with a truthful marker', async () => {
+            mockSyncShopifyBilling.mockRejectedValueOnce(new Error('shopify 500'));
+            const req = mockRequest({ query: { shop: 'test.myshopify.com' }, log: { info: vi.fn() } });
+            const rep = mockReply();
+
+            await billingReturn(req, rep);
+
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/shopify/onboarding?billing=sync_failed');
         });
     });
 

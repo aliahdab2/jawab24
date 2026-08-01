@@ -20,26 +20,20 @@ export const SHOPIFY_BILLABLE_PLAN_SLUGS = ['starter', 'business', 'pro'] as con
 export type ShopifyBillablePlanSlug = (typeof SHOPIFY_BILLABLE_PLAN_SLUGS)[number];
 
 /**
- * Display names as configured on the App Pricing plans, lowercased. The handle
- * IS the slug (D-I), so slugs need no extra rows; this table only absorbs the
- * name → slug hop for Admin API results.
- */
-const PLAN_NAME_TO_SLUG: Record<string, ShopifyBillablePlanSlug> = {
-    'starter': 'starter',
-    'business': 'business',
-    'pro': 'pro',
-};
-
-/**
  * Resolve a Shopify plan identifier — a plan handle from the billing return
  * redirect, or an AppSubscription name from the Admin API — to a local plan
  * slug. Returns null for anything unknown; callers must treat null as a
  * fail-loud condition, never a default.
+ *
+ * Today the lowercase display names equal the slugs, so one lookup covers
+ * both. If a dashboard plan's display name ever diverges from its handle
+ * (e.g. Arabic display names), add an explicit name→slug table here — do NOT
+ * loosen the fail-loud contract.
  */
 export function mapShopifyPlanToSlug(handleOrName: string): ShopifyBillablePlanSlug | null {
     const normalized = handleOrName.trim().toLowerCase();
     if ((SHOPIFY_BILLABLE_PLAN_SLUGS as readonly string[]).includes(normalized)) {
         return normalized as ShopifyBillablePlanSlug;
     }
-    return PLAN_NAME_TO_SLUG[normalized] ?? null;
+    return null;
 }

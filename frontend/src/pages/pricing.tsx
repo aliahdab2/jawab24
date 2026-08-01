@@ -20,6 +20,7 @@ import type { NextPageWithLayout } from './_app';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHero';
 import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings, getSarMonthlyEquivalent, formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import { PlanTabSelector } from '@/components/billing/PlanTabSelector';
 
 interface PricingPageProps {
@@ -526,14 +527,16 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
               <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 py-2.5 px-4 alert-violet border rounded-2xl text-sm">
                 <span className="font-medium">{tPricing('shopifyManagedBody')}</span>
                 {usage.subscription.shopifyManageUrl && (
-                  <a
-                    href={usage.subscription.shopifyManageUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  // openExternalUrl, not a raw anchor: on native the deep link
+                  // must open in the system browser / Custom Tab like every
+                  // other external billing surface (same path as useSelectPlan).
+                  <button
+                    type="button"
+                    onClick={() => { void openExternalUrl(usage.subscription.shopifyManageUrl!); }}
                     className="font-bold underline underline-offset-2 whitespace-nowrap"
                   >
                     {tPricing('shopifyManagedCta')}
-                  </a>
+                  </button>
                 )}
               </div>
             )}

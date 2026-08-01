@@ -550,12 +550,22 @@ export const subscriptionsService = {
                 trialDaysRemaining,
                 renewsAt: subscription.currentPeriodEnd?.toString(),
                 hasStripeCustomer: Boolean(subscription.stripeCustomerId),
-                paymentMethod: subscription.paymentMethod ?? undefined,
+                // A CANCELED shopify mirror must NOT read as shopify-billed:
+                // the merchant uninstalled the app and is free to come back
+                // through Stripe (mirrors the backend guard's canceled
+                // exemption). Suppressed HERE — the single choke point — so no
+                // frontend consumer (plan select, top-up CTA, pricing banner)
+                // can dead-end a returning merchant.
+                paymentMethod:
+                    subscription.paymentMethod === 'shopify' && subscription.status === 'canceled'
+                        ? undefined
+                        : subscription.paymentMethod ?? undefined,
                 // Shopify-billed workspaces manage their plan inside Shopify
                 // admin (D-G) — hand the frontend the exact deep link so it
                 // never has to assemble Shopify URLs itself.
                 shopifyManageUrl:
                     subscription.paymentMethod === 'shopify' &&
+                    subscription.status !== 'canceled' &&
                     subscription.shopifyShopDomain &&
                     config.shopify.appHandle
                         ? `https://admin.shopify.com/store/${subscription.shopifyShopDomain.replace('.myshopify.com', '')}/charges/${config.shopify.appHandle}/pricing_plans`

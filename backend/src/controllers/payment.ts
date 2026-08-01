@@ -324,6 +324,12 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
+            // D-G covers EVERY Stripe surface, not just subscriptions: a top-up
+            // is a Stripe charge beside Shopify billing — the exact off-platform
+            // billing Shopify forbids for App Store installs. The hidden CTA is
+            // the friendly layer; this is the enforcement.
+            if (await rejectIfShopifyBilled(userId, reply)) return;
+
             // KILL-SWITCH — authoritative gate. When top-up is disabled no
             // PaymentIntent is ever created, so charging is off the instant the
             // flag flips (env change + recreate), independent of any frontend.
@@ -495,10 +501,13 @@ export class PaymentController {
                 cancelAtPeriodEnd: subscription.cancelAtPeriodEnd || false,
                 trialEndsAt: subscription.trialEndsAt || undefined,
                 paymentMethod: (subscription.paymentMethod as SubscriptionStatus['paymentMethod']) || undefined,
-                // The deep link into Shopify admin plan management needs the store
-                // handle; the app handle half comes from config (see below).
-                shopifyShopDomain: subscription.shopifyShopDomain || undefined,
-                shopifyAppHandle: subscription.paymentMethod === 'shopify'
+                // Deep-link fields only while the mirror is live — a canceled
+                // shopify mirror means the app is gone and the merchant is back
+                // on the Stripe rail (same exemption as rejectIfShopifyBilled).
+                shopifyShopDomain: subscription.paymentMethod === 'shopify' && subscription.status !== 'canceled'
+                    ? subscription.shopifyShopDomain || undefined
+                    : undefined,
+                shopifyAppHandle: subscription.paymentMethod === 'shopify' && subscription.status !== 'canceled'
                     ? config.shopify.appHandle || undefined
                     : undefined,
             };
@@ -660,6 +669,11 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
+            // D-G: a shopify row's externalSubscriptionId is an AppSubscription
+            // GID — passing it to stripeService.cancelSubscription is a
+            // guaranteed Stripe error. Cancellation lives in Shopify admin.
+            if (await rejectIfShopifyBilled(userId, reply)) return;
+
             // Get subscription
             const [subscription] = await db
                 .select()
@@ -701,6 +715,11 @@ export class PaymentController {
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
+
+            // D-G: the Stripe portal would open against a stale/foreign Stripe
+            // customer for a shopify-billed account. Plan management lives in
+            // Shopify admin.
+            if (await rejectIfShopifyBilled(userId, reply)) return;
 
             // SANCTIONS CHECK: Block billing portal access for sanctioned jurisdictions
 

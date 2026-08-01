@@ -71,11 +71,37 @@ export async function adoptStripeSubscription(
     // signup already created a local trial row, and leaving it behind would let
     // the subscription resolver keep serving the stale trial.
     const [current] = await db
-        .select({ id: subscriptions.id })
+        .select({
+            id: subscriptions.id,
+            paymentMethod: subscriptions.paymentMethod,
+            status: subscriptions.status,
+        })
         .from(subscriptions)
         .where(eq(subscriptions.userId, userId))
         .orderBy(desc(subscriptions.createdAt))
         .limit(1);
+
+    // Mirror of the Shopify rail's D-H: never overwrite a LIVE shopify mirror
+    // with a Stripe adoption — the AppSubscription GID would be lost and the
+    // Shopify reconciler would refuse (and Sentry) every 6h while the merchant
+    // is double-billed. A canceled/paused shopify row is fair game.
+    if (
+        current &&
+        current.paymentMethod === 'shopify' &&
+        ['active', 'trialing', 'past_due'].includes(current.status ?? '')
+    ) {
+        captureError(
+            new Error(`Stripe subscription ${stripeSubscription.id} collides with a live shopify-billed row for user ${userId}`),
+            'Stripe adoption refused over a live Shopify mirror (D-H twin)',
+            {
+                level: 'warning',
+                tags: { service: 'subscriptions', flow: 'adopt_refused' },
+                fingerprint: ['stripe-adopt-refused-shopify-mirror'],
+                extra: { subscriptionId: stripeSubscription.id, userId, localSubscriptionId: current.id },
+            },
+        );
+        return false;
+    }
 
     const period = getSubscriptionPeriod(stripeSubscription);
     const values = {
