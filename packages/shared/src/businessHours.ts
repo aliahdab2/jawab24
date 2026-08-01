@@ -59,10 +59,32 @@ const RANGE_SEPARATOR = /\s*(?:[-–—]|to|إلى|حتى)\s*/i;
 // sync emits the short form (mon…sun); the KB extractor also targets short.
 // Long names are accepted for forward-compat with hand-authored / imported
 // data. Both are rendered by `formatBusinessInfoPrompt` (businessInfoPrompt.ts).
+//
+// ORDER IS MEANINGFUL: Saturday-first. Our markets start the week on Saturday
+// (CLDR week data — ar-SY/ar-EG/ar-LY firstDay = Saturday, weekend = Fri+Sat),
+// so every rendered week (prompt blocks, KB chunks, the hours editor) must
+// enumerate sat→fri. Monday-first is ISO-8601 interchange order and
+// Sunday-first is US display order — neither belongs in anything a merchant
+// or customer reads, and a Sunday-first week in the prompt is exactly what
+// produced the «من الأحد للسبت» reply on the Damascus institute page.
 
-export const SHORT_DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
-export const LONG_DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+export const SHORT_DAY_KEYS = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
+export const LONG_DAY_KEYS = ['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as const;
 const ALLOWED_DAY_KEYS = new Set<string>([...SHORT_DAY_KEYS, ...LONG_DAY_KEYS]);
+
+/**
+ * Position of a day key (short or long, any case) in the Saturday-first week.
+ * Unknown keys sort last (returns SHORT_DAY_KEYS.length) so callers can order
+ * mixed/dirty key sets without dropping data.
+ */
+export function dayOrderIndex(day: string): number {
+    const k = day.trim().toLowerCase();
+    const short = SHORT_DAY_KEYS.indexOf(k as typeof SHORT_DAY_KEYS[number]);
+    if (short !== -1) return short;
+    const long = LONG_DAY_KEYS.indexOf(k as typeof LONG_DAY_KEYS[number]);
+    if (long !== -1) return long;
+    return SHORT_DAY_KEYS.length;
+}
 
 /** True if `day` is a recognized day key (short mon…sun or long monday…sunday, case-insensitive). */
 export function isValidDayKey(day: string): boolean {

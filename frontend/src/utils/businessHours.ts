@@ -1,4 +1,4 @@
-import { canonicalizeHoursEntry } from '@jawab24/shared';
+import { canonicalizeHoursEntry, SHORT_DAY_KEYS } from '@jawab24/shared';
 
 /**
  * Week model for the working-hours editor.
@@ -16,7 +16,9 @@ import { canonicalizeHoursEntry } from '@jawab24/shared';
  * ("HH:MM-HH:MM" / "closed" / "all day").
  */
 
-export const DAY_KEYS = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
+// Saturday-first — the single source of truth for week order lives in
+// @jawab24/shared (CLDR ar-SY/ar-EG week data; see businessHours.ts there).
+export const DAY_KEYS = SHORT_DAY_KEYS;
 export type DayKey = typeof DAY_KEYS[number];
 
 /** Default working week for the region: Friday off. */

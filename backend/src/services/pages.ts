@@ -2,7 +2,7 @@ import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable, catalogItems, ecommerceStores } from '../db/schema';
 import { eq, and, ne, desc, sql, count, isNotNull, inArray } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, UpdateLeadConfigDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
-import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
+import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, applyKbExtractToMerchant, SHORT_DAY_KEYS, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { operationalFactsExtractor } from './kb/operationalFactsExtractor';
 import { storeAnswersPolicies } from './ecommerce';
 import { facebookService } from './facebook';
@@ -69,9 +69,12 @@ function formatBusinessHours(hours: FacebookPageHours | undefined): string | nul
         }
     }
 
-    // Format into readable string
+    // Format into readable string, Saturday-first (CLDR week order for our
+    // markets — see SHORT_DAY_KEYS in @jawab24/shared), not FB insertion order.
     const lines: string[] = [];
-    for (const [day, slots] of Object.entries(dayHours)) {
+    for (const day of SHORT_DAY_KEYS) {
+        const slots = dayHours[day];
+        if (!slots) continue;
         const dayName = dayNames[day] || day;
         const times = slots
             .filter(s => s.open && s.close)

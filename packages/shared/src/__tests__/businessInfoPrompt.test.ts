@@ -115,7 +115,7 @@ describe('formatBusinessInfoPrompt', () => {
             expect(block).not.toContain('واتساب');
         });
 
-        it('renders hours in day order, not insertion order', () => {
+        it('renders hours in Saturday-first week order (CLDR ar-SY), not insertion order', () => {
             const block = formatBusinessInfoPrompt({
                 hours: {
                     fri: ['closed'],
@@ -124,12 +124,31 @@ describe('formatBusinessInfoPrompt', () => {
                 },
             });
             expect(block).not.toBeNull();
+            const sundayIdx = block!.indexOf('Sunday');
             const mondayIdx = block!.indexOf('Monday');
             const fridayIdx = block!.indexOf('Friday');
-            const sundayIdx = block!.indexOf('Sunday');
-            expect(mondayIdx).toBeGreaterThan(-1);
+            expect(sundayIdx).toBeGreaterThan(-1);
+            expect(sundayIdx).toBeLessThan(mondayIdx);
             expect(mondayIdx).toBeLessThan(fridayIdx);
-            expect(fridayIdx).toBeLessThan(sundayIdx);
+        });
+
+        // The «من الأحد للسبت» regression (Damascus institute, 2026-08-01): a
+        // Sunday-first/Monday-first week in the prompt nudges the model toward
+        // the US week convention. Our markets start the week on Saturday and
+        // end it on the Friday weekend (CLDR ar-SY/ar-EG/ar-LY).
+        it('renders a full week starting Saturday and ending Friday', () => {
+            const block = formatBusinessInfoPrompt({
+                hours: {
+                    mon: ['09:00-20:00'], tue: ['09:00-20:00'], wed: ['09:00-20:00'],
+                    thu: ['09:00-20:00'], fri: ['closed'], sat: ['09:00-20:00'], sun: ['09:00-20:00'],
+                },
+            });
+            expect(block).not.toBeNull();
+            const idx = (d: string) => block!.indexOf(d);
+            expect(idx('Saturday')).toBeLessThan(idx('Sunday'));
+            expect(idx('Sunday')).toBeLessThan(idx('Monday'));
+            expect(idx('Wednesday')).toBeLessThan(idx('Thursday'));
+            expect(idx('Thursday')).toBeLessThan(idx('Friday'));
         });
     });
 

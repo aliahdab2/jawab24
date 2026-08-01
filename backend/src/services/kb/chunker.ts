@@ -1,4 +1,4 @@
-import { normalizeArabic } from '@jawab24/shared';
+import { normalizeArabic, dayOrderIndex } from '@jawab24/shared';
 
 export interface KbChunk {
     type: 'offering' | 'policy' | 'faq' | 'info' | 'hours' | 'location' | 'contact' | 'product';
@@ -238,7 +238,10 @@ export function chunkBusinessProfile(profile: Record<string, unknown>): KbChunk[
             mon: 'Monday/الإثنين', tue: 'Tuesday/الثلاثاء', wed: 'Wednesday/الأربعاء',
             thu: 'Thursday/الخميس', fri: 'Friday/الجمعة', sat: 'Saturday/السبت', sun: 'Sunday/الأحد',
         };
+        // Saturday-first (CLDR week order for our markets); unknown keys keep
+        // their insertion order at the end rather than being dropped.
         const lines = Object.entries(hoursObj)
+            .sort(([a], [b]) => dayOrderIndex(a) - dayOrderIndex(b))
             .map(([day, slots]) => `${dayNames[day] || day}: ${(slots as string[]).join(', ')}`)
             .join('\n');
         if (lines) {
