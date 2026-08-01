@@ -1571,6 +1571,27 @@ html.is-native {
   --mobile-offset-bottom: var(--toast-offset-bottom) !important;
 }
 
+/* ≥lg the bottom nav is gone (sidebar layout), so toasts return to a plain
+   16px corner offset. Same token — both Toaster props (`offset` and
+   `mobileOffset`) read it, so the clearance follows the nav's own breakpoint
+   instead of sonner's fixed 600px media query, which left the 601–1023px band
+   (small laptops, tablets) with toasts painted over the still-visible nav and
+   over modal footers. */
+@media (min-width: 1024px) {
+  :root {
+    --toast-offset-bottom: 16px;
+  }
+}
+
+/* Toasts sit ABOVE the app chrome (sidebar/nav, z-40) but BELOW every modal
+   tier (z-50, z-[60], z-[100]). sonner ships z-index 999999999, which painted
+   a «رسالة جديدة» toast over an open sheet's sticky footer and blocked the
+   Save/Cancel buttons under it. The `html` prefix outranks the library's own
+   [data-sonner-toaster] rule regardless of stylesheet order. */
+html [data-sonner-toaster] {
+  z-index: 45;
+}
+
 /* Native apps: use injected variable (Android WebView doesn't report env() correctly) */
 .is-native .pt-safe {
   padding-top: var(--sai-top);

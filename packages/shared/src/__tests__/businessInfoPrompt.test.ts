@@ -105,6 +105,24 @@ describe('formatBusinessInfoPrompt', () => {
             expect(block).toContain('- WhatsApp / واتساب: +963937549674');
         });
 
+        // The /business editor stores an ARRAY since any listed number can be
+        // on WhatsApp independently; legacy rows still hold a single string.
+        it('renders every WhatsApp number from array storage', () => {
+            const block = formatBusinessInfoPrompt({
+                address: 'Damascus',
+                channels: { whatsapp: ['+963937549674', '+963911111111'] },
+            });
+            expect(block).toContain('- WhatsApp / واتساب: +963937549674, +963911111111');
+        });
+
+        it('treats an array of blank entries as unset', () => {
+            const block = formatBusinessInfoPrompt({
+                address: 'Damascus',
+                channels: { whatsapp: ['  ', ''] },
+            });
+            expect(block).not.toContain('WhatsApp');
+        });
+
         // PRESENT-ONLY: no [NOT_PROVIDED] counterpart. An absence line would cost
         // a token on every reply for every merchant (almost none set this) and
         // invite the model to volunteer "we have no WhatsApp". Keeping it absent

@@ -37,10 +37,22 @@ describe('BusinessFactRows — state badges', () => {
     expect(screen.queryByText('Missing')).not.toBeInTheDocument();
   });
 
-  it('marks an empty fact Missing', () => {
+  // Only SCORED facts read Missing. Phone and website sit outside
+  // READINESS_AREAS, and an amber «ناقص» on a row the counter ignores is the
+  // two-scoreboards contradiction this module family exists to prevent — those
+  // rows read a neutral Optional instead.
+  it('marks empty scored facts Missing and unscored ones Optional', () => {
     renderRows(makePage());
-    expect(screen.getAllByText('Missing')).toHaveLength(6);
+    expect(screen.getAllByText('Missing')).toHaveLength(4);
+    expect(screen.getAllByText('Optional')).toHaveLength(2);
+    expect(within(row('Phone')).getByText('Optional')).toBeInTheDocument();
+    expect(within(row('Website')).getByText('Optional')).toBeInTheDocument();
     expect(screen.queryByText('Complete')).not.toBeInTheDocument();
+  });
+
+  it('a filled unscored fact reads Complete like any other', () => {
+    renderRows(makePage({ website: 'example.com' }));
+    expect(within(row('Website')).getByText('Complete')).toBeInTheDocument();
   });
 
   it('badges per row, not in bulk', () => {
@@ -49,10 +61,21 @@ describe('BusinessFactRows — state badges', () => {
     expect(within(row('Address')).getByText('Missing')).toBeInTheDocument();
   });
 
-  it('explains both dot colours in a legend', () => {
+  it('explains all three dot colours in a legend', () => {
     renderRows(makePage());
     expect(screen.getByText('Complete — Jawab uses it')).toBeInTheDocument();
     expect(screen.getByText('Missing — needs your input')).toBeInTheDocument();
+    expect(screen.getByText('Optional — add it if you have one')).toBeInTheDocument();
+  });
+
+  // Any listed number can be on WhatsApp — the mark is per-number, not a
+  // single exclusive flag (legacy single-string storage still renders).
+  it('marks every WhatsApp number, not just one', () => {
+    renderRows(makePage({
+      phones: ['0911111111', '0922222222'],
+      channels: { whatsapp: ['0911111111', '0922222222'] },
+    }));
+    expect(within(row('Phone')).getAllByLabelText('WhatsApp')).toHaveLength(2);
   });
 
   // A store-answered fact is not a gap: the store's policiesSummary reaches

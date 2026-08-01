@@ -146,10 +146,19 @@ describe('nextPeriodDefault', () => {
     expect(dayHasOverlap({ kind: 'ranges', ranges: [...existing, next] })).toBe(false);
   });
 
-  it('stays inside the day when the previous period ends late', () => {
-    const next = nextPeriodDefault([{ from: '08:00', to: '23:00' }]);
-    expect(next.from).toBe('22:00');
-    expect(next.to).toBe('23:59');
+  it('keeps the pre-22:00 clamp behavior for a 21:30 close', () => {
+    expect(nextPeriodDefault([{ from: '09:00', to: '21:30' }])).toEqual({ from: '22:00', to: '23:59' });
+  });
+
+  // This test used to pin `from: '22:00'` — i.e. a new period starting INSIDE
+  // the existing 08:00-23:00 one, dead-ending "add period" on the overlap
+  // gate. The clamp must never pull the start before the previous close;
+  // adjacent-to-close is the valid fallback.
+  it('stays inside the day and non-overlapping when the previous period ends late', () => {
+    const late = [{ from: '08:00', to: '23:00' }];
+    const next = nextPeriodDefault(late);
+    expect(next).toEqual({ from: '23:00', to: '23:59' });
+    expect(dayHasOverlap({ kind: 'ranges', ranges: [...late, next] })).toBe(false);
   });
 });
 

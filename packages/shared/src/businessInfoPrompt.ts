@@ -109,11 +109,21 @@ function joinPhones(p: BusinessProfile): string | null {
     return phones.length > 0 ? phones.join(', ') : null;
 }
 
-/** The merchant's WhatsApp contact, if they gave one. Distinct from `phones`:
- *  a number customers can MESSAGE, not necessarily one they can call. */
-function formatWhatsapp(p: BusinessProfile): string | null {
+/** Normalize `channels.whatsapp` (legacy single string OR array) to a clean
+ *  list. THE one reader of the field's dual shape — every consumer (prompt,
+ *  coverage, editor) goes through this so the legacy string never leaks. */
+export function whatsappNumbers(p: BusinessProfile): string[] {
     const wa = p.channels?.whatsapp;
-    return typeof wa === 'string' && wa.trim() !== '' ? wa.trim() : null;
+    const list = Array.isArray(wa) ? wa : typeof wa === 'string' ? [wa] : [];
+    return list.map((n) => n.trim()).filter(Boolean);
+}
+
+/** The merchant's WhatsApp contact(s), if they gave any. Distinct from
+ *  `phones`: numbers customers can MESSAGE, not necessarily ones they can
+ *  call. */
+function formatWhatsapp(p: BusinessProfile): string | null {
+    const numbers = whatsappNumbers(p);
+    return numbers.length > 0 ? numbers.join(', ') : null;
 }
 
 function formatHours(p: BusinessProfile): string | null {
