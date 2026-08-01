@@ -60,15 +60,22 @@ export function SettingsSection({ customer }: Props) {
     // METADATA, not a language, so iterating raw keys printed the string "en"
     // as if it were persona text. Pull it out and use it as a caption instead.
     const { sourceLang, ...langVariants } = values.brandVoiceNotesMulti ?? {};
-    const baseNotes = (values.brandVoiceNotes ?? '').trim();
-    const hasBaseNotes = Boolean(baseNotes);
-
-    // A translation identical to the original is not worth a second copy of a
-    // 400-word persona — it only matters THAT it exists. Show the differing
-    // ones in full; collapse the identical ones to their language codes.
     const variants = Object.entries(langVariants).filter(([, txt]) => txt && txt.trim());
-    const differingVariants = variants.filter(([, txt]) => txt.trim() !== baseNotes);
-    const identicalLangs = variants.filter(([, txt]) => txt.trim() === baseNotes).map(([lang]) => lang);
+
+    // Only the merchant-AUTHORED text is shown in full — a machine translation of
+    // a 400-word persona is noise for support, and the legacy `brandVoiceNotes`
+    // column is just an en-preferring sync of this jsonb (so printing it first
+    // showed an Arabic merchant's persona in English). sourceLang names the
+    // authored language; 'manual' means every language is hand-written and
+    // missing/'default' means authorship is unknown — show all variants in both
+    // cases. Rows predating the multi column only have brandVoiceNotes.
+    const authoredLang =
+        sourceLang && sourceLang !== 'manual' && sourceLang !== 'default' && langVariants[sourceLang]?.trim()
+            ? String(sourceLang)
+            : null;
+    const shownVariants = authoredLang ? variants.filter(([lang]) => lang === authoredLang) : variants;
+    const translatedLangs = authoredLang ? variants.filter(([lang]) => lang !== authoredLang).map(([lang]) => lang) : [];
+    const legacyNotes = variants.length === 0 ? (values.brandVoiceNotes ?? '').trim() : '';
 
     return (
         <div className="space-y-6">
@@ -93,30 +100,35 @@ export function SettingsSection({ customer }: Props) {
                     </span>
                 </div>
 
-                {hasBaseNotes && (
+                {legacyNotes && (
                     <pre className="text-sm text-foreground whitespace-pre-wrap break-words bg-muted rounded-lg p-3 font-sans" dir="auto">
-                        {values.brandVoiceNotes}
+                        {legacyNotes}
                     </pre>
                 )}
 
-                {differingVariants.map(([lang, txt]) => (
+                {shownVariants.map(([lang, txt]) => (
                     <div key={lang}>
-                        <span className="text-xs font-medium text-muted-foreground uppercase">{lang}</span>
+                        {/* The language label only earns its row when several variants show
+                            (hand-written in both languages / unknown authorship) — for a
+                            single authored text the caption below already names it. */}
+                        {shownVariants.length > 1 && (
+                            <span className="text-xs font-medium text-muted-foreground uppercase">{lang}</span>
+                        )}
                         <pre className="text-sm text-foreground whitespace-pre-wrap break-words bg-muted rounded-lg p-3 font-sans mt-1" dir="auto">
                             {txt}
                         </pre>
                     </div>
                 ))}
 
-                {(identicalLangs.length > 0 || sourceLang) && (
+                {(authoredLang || translatedLangs.length > 0) && (
                     <p className="text-xs text-muted-foreground">
-                        {identicalLangs.length > 0 && t('customer.personaSameAsOriginal', { langs: identicalLangs.join(', ').toUpperCase() })}
-                        {identicalLangs.length > 0 && sourceLang && ' · '}
-                        {sourceLang && t('customer.personaSourceLang', { lang: String(sourceLang).toUpperCase() })}
+                        {authoredLang && t('customer.personaSourceLang', { lang: authoredLang.toUpperCase() })}
+                        {authoredLang && translatedLangs.length > 0 && ' · '}
+                        {translatedLangs.length > 0 && t('customer.personaAutoTranslatedTo', { langs: translatedLangs.join(', ').toUpperCase() })}
                     </p>
                 )}
 
-                {!hasBaseNotes && variants.length === 0 && (
+                {!legacyNotes && variants.length === 0 && (
                     <p className="text-sm text-muted-foreground">{t('customer.personaEmpty')}</p>
                 )}
             </Card>

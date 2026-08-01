@@ -4,49 +4,10 @@ import {
   changedSettingsFields,
   buildChangedSettingsPayload,
 } from '@/components/settings/buildUpdatePayload';
-import type { SettingsState } from '@/components/settings/types';
+import { makeServerSettings } from '../../testUtils/settingsFactory';
 
-function makeSettings(overrides: Record<string, unknown> = {}): SettingsState {
-  return {
-    // non-schema fields that must never appear in the PUT payload
-    id: 'settings-1',
-    userId: 'user-1',
-    pushNotifications: true,
-    // schema fields
-    dashboardLanguage: 'ar',
-    defaultReplyLanguage: 'ar',
-    autoDetectLanguage: true,
-    aiEnabled: true,
-    aiModel: 'gpt-4o-mini',
-    notificationsEnabled: true,
-    newLeadAlertsEnabled: true,
-    commentReplyMode: 'public',
-    commentsAutoReply: true,
-    messagesAutoReply: true,
-    businessHoursOnly: false,
-    businessHoursStart: '09:00',
-    businessHoursEnd: '17:00',
-    timezone: 'UTC',
-    awayMessageMulti: {},
-    greetingMessageMulti: {},
-    greetingMessageEnabled: true,
-    limitFallbackEnabled: false,
-    limitFallbackMessageMulti: {},
-    dualReplyNudgeMulti: {},
-    brandVoiceNotesMulti: {},
-    awayMessage: '',
-    greetingMessage: '',
-    replyDelay: 0,
-    dualReplyNudge: '',
-    commentEscalationMinutes: 30,
-    messageEscalationMinutes: 30,
-    handoffPauseDurationMinutes: 60,
-    replyStyle: 'professional',
-    brandVoiceNotes: '',
-    holdLowConfidence: false,
-    ...overrides,
-  } as unknown as SettingsState;
-}
+const makeSettings = makeServerSettings;
+
 
 describe('changedSettingsFields', () => {
   it('returns only the fields that changed', () => {

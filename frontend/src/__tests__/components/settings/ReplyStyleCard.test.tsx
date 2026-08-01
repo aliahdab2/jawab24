@@ -16,74 +16,12 @@ vi.mock('@/lib/api', () => ({
   },
 }));
 
-vi.mock('@/components/ui', () => ({
-  Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
-    <div className={className}>{children}</div>
-  ),
-  Toggle: ({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) => (
-    <button data-testid="toggle" onClick={() => onChange(!enabled)}>
-      {enabled ? 'ON' : 'OFF'}
-    </button>
-  ),
-  InputFieldWrapper: ({ children, trailing }: { children: React.ReactNode; trailing?: React.ReactNode }) => (
-    <div>{children}{trailing}</div>
-  ),
-  // Mirrors the REAL Select's contract closely enough for these tests: a
-  // combobox role carrying the selected value. The real one renders a custom
-  // listbox (the native <select> popup is OS-drawn and rendered WHITE in dark
-  // mode — why the card switched); tests only assert which page is selected.
-  Select: ({ value, onChange, options, 'aria-labelledby': labelledBy }: {
-    value: string; onChange: (v: string) => void;
-    options: { value: string; label: string }[]; 'aria-labelledby'?: string;
-  }) => (
-    <select role="combobox" aria-labelledby={labelledBy} value={value} onChange={(e) => onChange(e.target.value)}>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  ),
-  CharCounter: ({ value, max }: { value: string | number; max: number }) => {
-    const len = typeof value === 'string' ? value.length : value;
-    return <span>{len}/{max}</span>;
-  },
-}));
+vi.mock('@/components/ui', () => import('../../testUtils/uiMocks'));
 
 // next-intl mock from setup.ts handles `useTranslations` automatically with real EN strings.
 
 import { pagesApi } from '@/lib/api';
-
-function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {
-  return {
-    dashboardLanguage: 'en',
-    defaultReplyLanguage: 'ar',
-    autoDetectLanguage: true,
-    aiEnabled: true,
-    aiModel: 'gpt-4o-mini',
-    notificationsEnabled: false,
-    newLeadAlertsEnabled: false,
-    pushNotifications: false,
-    commentReplyMode: 'dual',
-    commentsAutoReply: true,
-    messagesAutoReply: true,
-    businessHoursOnly: false,
-    businessHoursStart: '09:00',
-    businessHoursEnd: '17:00',
-    timezone: 'UTC',
-    awayMessageMulti: {},
-    greetingMessageMulti: {},
-    dualReplyNudgeMulti: {},
-    awayMessage: '',
-    greetingMessage: '',
-    replyDelay: 0,
-    dualReplyNudge: '',
-    brandVoiceNotesMulti: {},
-    replyStyle: 'professional',
-    brandVoiceNotes: '',
-    holdLowConfidence: false,
-    commentEscalationMinutes: 30,
-    messageEscalationMinutes: 30,
-    handoffPauseDurationMinutes: 60,
-    ...overrides,
-  };
-}
+import { makeSettings } from '../../testUtils/settingsFactory';
 
 describe('ReplyStyleCard', () => {
   beforeEach(() => {

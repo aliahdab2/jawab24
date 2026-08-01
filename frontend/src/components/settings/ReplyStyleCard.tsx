@@ -9,6 +9,7 @@ import { useTranslations } from 'next-intl';
 import { pagesApi } from '@/lib/api';
 import { getLocaleDirection } from '@/utils/locale';
 import { usePersistedBoolean } from '@/hooks/usePersistedBoolean';
+import { useMultilingualSettingsField } from '@/hooks/useMultilingualSettingsField';
 import type { SettingsCardProps } from './types';
 
 // Lazy-load the modal — keeps it out of the settings-page bundle until the merchant
@@ -28,10 +29,12 @@ interface ReplyStyleCardProps extends SettingsCardProps {
 
 export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAdvanced }: ReplyStyleCardProps) {
   const t = useTranslations('settings');
-  const currentLang = settings.dashboardLanguage;
-  const value = settings.brandVoiceNotesMulti?.[currentLang] || '';
-  const sourceLang = settings.brandVoiceNotesMulti?.sourceLang;
-  const isAutoTranslated = !!(sourceLang && sourceLang !== 'manual' && sourceLang !== 'default' && sourceLang !== currentLang && value);
+  const field = useMultilingualSettingsField(settings.brandVoiceNotesMulti);
+  const { currentLang, value, sourceLang } = field;
+  // Unlike the message cards, the persona shows a machine translation in place
+  // (italic, editable) rather than blanking it — and treats system defaults as
+  // ordinary content, hence the extra 'default' + non-empty conditions.
+  const isAutoTranslated = field.isAutoTranslated && sourceLang !== 'default' && !!value;
   const isEmpty = !value.trim();
 
   const [testPage, setTestPage] = useState<Page | null>(null);
@@ -65,14 +68,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   };
 
   const updateValue = (next: string) => {
-    setSettings({
-      ...settings,
-      brandVoiceNotesMulti: {
-        ...settings.brandVoiceNotesMulti,
-        [currentLang]: next,
-        sourceLang: currentLang,
-      },
-    });
+    setSettings({ ...settings, brandVoiceNotesMulti: field.withValue(next) });
   };
 
   const insertExample = (example: string) => {

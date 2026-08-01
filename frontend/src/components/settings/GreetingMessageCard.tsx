@@ -4,15 +4,14 @@ import { Card, InputFieldWrapper, CharCounter, Toggle } from '@/components/ui';
 import { MessageCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { getLocaleDirection } from '@/utils/locale';
+import { useMultilingualSettingsField } from '@/hooks/useMultilingualSettingsField';
 import type { SettingsCardProps } from './types';
 
 export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps) {
   const t = useTranslations('settings');
 
-  const currentLang = settings.dashboardLanguage;
-  const value = settings.greetingMessageMulti?.[currentLang] || '';
-  const sourceLang = settings.greetingMessageMulti?.sourceLang;
-  const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+  const field = useMultilingualSettingsField(settings.greetingMessageMulti);
+  const { currentLang, value, isAutoTranslated } = field;
   const displayValue = isAutoTranslated ? '' : value;
   const placeholder = isAutoTranslated && value ? value : t('greetingMessagePlaceholder');
   const maxChars = MAX_TEMPLATE_MESSAGE_LENGTH;
@@ -56,15 +55,7 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
           disabled={!enabled}
           aria-disabled={!enabled}
           onChange={(e) => {
-            const newValue = e.target.value;
-            setSettings({
-              ...settings,
-              greetingMessageMulti: {
-                ...settings.greetingMessageMulti,
-                [currentLang]: newValue,
-                sourceLang: currentLang,
-              },
-            });
+            setSettings({ ...settings, greetingMessageMulti: field.withValue(e.target.value) });
           }}
         />
       </InputFieldWrapper>

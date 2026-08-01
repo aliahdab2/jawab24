@@ -320,10 +320,11 @@ const SettingsPage: NextPageWithLayout = () => {
     setSaving(true);
     setSaved(false);
     try {
-      if (settings.dashboardLanguage && settings.dashboardLanguage !== language) {
-        setLanguage(settings.dashboardLanguage as 'ar' | 'en');
-      }
-
+      // No locale flip here: LanguageSelector persists + switches the locale
+      // itself at click time, so dashboardLanguage ≠ current locale at Save
+      // means the merchant chose a session language elsewhere (header toggle,
+      // /en|/ar URL) — snapping them to the stored preference mid-save yanked
+      // the UI out of the language they were reading.
       const response = await settingsApi.update(validation.data as Record<string, unknown>);
       const data = response.data;
       if (data) {

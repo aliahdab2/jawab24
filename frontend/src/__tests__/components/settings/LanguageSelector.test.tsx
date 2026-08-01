@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { LanguageSelector } from '@/components/settings/LanguageSelector';
 import type { SettingsState } from '@/components/settings/types';
 import { settingsApi } from '@/lib/api';
+import { makeServerSettings } from '../../testUtils/settingsFactory';
 import { toast } from 'sonner';
 
 vi.mock('@/lib/api', () => ({
@@ -17,59 +18,11 @@ vi.mock('@/lib/sentryHelpers', () => ({
   captureError: vi.fn(),
 }));
 
-vi.mock('@/components/ui', () => ({
-  Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
-    <div className={className}>{children}</div>
-  ),
-}));
+vi.mock('@/components/ui', () => import('../../testUtils/uiMocks'));
 
 const mockUpdate = vi.mocked(settingsApi.update);
 
-// `SettingsState` carries fields that are NOT part of the `PUT /settings`
-// contract: the server-owned `id`/`userId` (merged in from the GET response at
-// runtime) and the client-only `pushNotifications`. `UpdateSettingsSchema` is
-// `.strict()`, so any of them in the body makes the backend 400 the whole PUT.
-function makeSettings(overrides: Record<string, unknown> = {}): SettingsState {
-  return {
-    // server-owned / client-only fields that MUST be stripped before PUT
-    id: 'settings-1',
-    userId: 'user-1',
-    pushNotifications: true,
-    // schema fields
-    dashboardLanguage: 'ar',
-    defaultReplyLanguage: 'ar',
-    autoDetectLanguage: true,
-    aiEnabled: true,
-    aiModel: 'gpt-4o-mini',
-    notificationsEnabled: true,
-    newLeadAlertsEnabled: true,
-    commentReplyMode: 'public',
-    commentsAutoReply: true,
-    messagesAutoReply: true,
-    businessHoursOnly: false,
-    businessHoursStart: '09:00',
-    businessHoursEnd: '17:00',
-    timezone: 'UTC',
-    awayMessageMulti: {},
-    greetingMessageMulti: {},
-    greetingMessageEnabled: true,
-    limitFallbackEnabled: false,
-    limitFallbackMessageMulti: {},
-    dualReplyNudgeMulti: {},
-    brandVoiceNotesMulti: {},
-    awayMessage: '',
-    greetingMessage: '',
-    replyDelay: 0,
-    dualReplyNudge: '',
-    commentEscalationMinutes: 30,
-    messageEscalationMinutes: 30,
-    handoffPauseDurationMinutes: 60,
-    replyStyle: 'professional',
-    brandVoiceNotes: '',
-    holdLowConfidence: false,
-    ...overrides,
-  } as unknown as SettingsState;
-}
+const makeSettings = makeServerSettings;
 
 function renderSelector(settings: SettingsState) {
   const setSettings = vi.fn();
