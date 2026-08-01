@@ -117,6 +117,10 @@ describe titles (grep for it).
 
 ## Live-validation checklist (the D-020 gate — follow-up PR)
 
+> **Execution run-book: `docs/testing/ZID_TEST_PLAN.md`** (created 2026-08-01,
+> authoritative — captures C1–C11, billing spec, real-traffic soak, publish rehearsal).
+> The checklist below is the condensed summary.
+
 Prereq — ✅ DONE 2026-08-01 (application submitted, agreement "In Review"): Partner
 account exists (partner.zid.sa, founder), dev store **3195980 "Jawab24 Dev"**
 (https://h47p59.zid.store/ — take out of maintenance mode before captures). Still
