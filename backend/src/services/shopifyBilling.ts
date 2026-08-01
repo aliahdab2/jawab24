@@ -8,6 +8,7 @@ import { decrypt } from './ecommerceCrypto';
 import { mapShopifyPlanToSlug, LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
 import { captureError } from '../utils/sentryHelpers';
 import { noopLinkLogger, type LinkLogger } from './subscriptionLinking';
+import { isDemoStore } from './demoStore';
 
 /**
  * Shopify App Pricing → local subscription mirror.
@@ -434,13 +435,22 @@ export async function reconcileShopifyBilling(options?: {
         scanned: 0, healed: 0, flagged: 0, orphaned: 0, errors: 0,
     };
 
-    const stores = await db
-        .select({ storeDomain: ecommerceStores.storeDomain })
+    const storeRows = await db
+        .select({
+            storeDomain: ecommerceStores.storeDomain,
+            platformData: ecommerceStores.platformData,
+        })
         .from(ecommerceStores)
         .where(and(
             eq(ecommerceStores.platform, 'shopify'),
             eq(ecommerceStores.isActive, true),
         ));
+
+    // Demo-seeded stores hold placeholder tokens that decrypt() rejects — every
+    // real-API path must skip them (see services/demoStore.ts; the filter is a
+    // JS predicate because jsonb rows can be stored as string scalars, so a SQL
+    // `platformData->>'demo'` condition silently matches nothing).
+    const stores = storeRows.filter(store => !isDemoStore(store));
 
     for (const store of stores) {
         result.scanned++;
@@ -461,7 +471,10 @@ export async function reconcileShopifyBilling(options?: {
     // webhook was missed — the merchant may still be billed by Shopify or may
     // have left entirely; either way Shopify is unreachable without the store
     // token, so a human decides (same posture as the Stripe sweep's orphans).
-    const activeDomains = stores.map(s => s.storeDomain);
+    // Orphan detection keys on "does an active store row exist", so demo rows
+    // stay in the domain list — a demo subscription mirrored to a demo store
+    // must not be flagged as orphaned.
+    const activeDomains = storeRows.map(s => s.storeDomain);
     const orphanWhere = and(
         eq(subscriptions.paymentMethod, 'shopify'),
         inArray(subscriptions.status, [...LIVE_SUBSCRIPTION_STATUSES]),

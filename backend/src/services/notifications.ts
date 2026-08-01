@@ -656,20 +656,26 @@ class NotificationService {
         }
 
         try {
+            // Lazy-required so the SDK never loads when FCM is unconfigured.
+            // firebase-admin v14 exposes ONLY the modular entry points — the
+            // namespaced API (admin.apps / admin.credential / admin.messaging)
+            // no longer exists (regression: JAWAB24-BACKEND-1R).
             // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const admin = require('firebase-admin');
+            const { getApps, initializeApp, cert } = require('firebase-admin/app');
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { getMessaging } = require('firebase-admin/messaging');
 
-            if (!admin.apps.length) {
+            if (!getApps().length) {
                 const serviceAccount = JSON.parse(firebaseCredentials);
-                admin.initializeApp({
-                    credential: admin.credential.cert(serviceAccount),
+                initializeApp({
+                    credential: cert(serviceAccount),
                 });
             }
 
             const tokenStrings = tokens.map(t => t.token);
             const message = buildFcmMessage(payload, userLanguage, tokenStrings);
 
-            const response = await admin.messaging().sendEachForMulticast(message);
+            const response = await getMessaging().sendEachForMulticast(message);
 
             // Per-token bookkeeping: audit log + selective token deletion.
             // Transient failures are aggregated into a single Sentry event after
