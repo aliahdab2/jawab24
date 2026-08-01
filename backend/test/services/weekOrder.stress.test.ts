@@ -60,13 +60,12 @@ describe('stress: chunkBusinessProfile hours chunk ordering', () => {
         }).find((c) => c.type === 'hours');
         expect(chunk).toBeDefined();
         const lines = chunk!.contentOriginal.split('\n');
-        // Long/cased keys have no Arabic label mapping (labels are keyed by
-        // lowercase short form) so they render raw — but they must still SORT
-        // into their weekday position.
+        // Long/cased keys resolve to bilingual labels exactly like they sort
+        // (lowercase lookup); only genuinely unknown keys render raw, last.
         expect(lines[0]).toContain('السبت');
-        expect(lines[1]).toContain('MON');
-        expect(lines[2]).toContain('Thursday');
-        expect(lines[3]).toContain('friday');
+        expect(lines[1]).toContain('الإثنين');
+        expect(lines[2]).toContain('الخميس');
+        expect(lines[3]).toContain('الجمعة');
         expect(lines[4]).toContain('not-a-day');
     });
 

@@ -91,6 +91,25 @@ export function isValidDayKey(day: string): boolean {
     return ALLOWED_DAY_KEYS.has(day.trim().toLowerCase());
 }
 
+// ─── Day labels ────────────────────────────────────────────────────────────
+// Rendered day names, keyed by BOTH short and long day keys (lowercase),
+// aligned with the Saturday-first order above. The single source for every
+// surface that prints a weekday (prompt block, KB chunks, FB-import text) —
+// do not hand-write day-name maps elsewhere.
+
+const EN_NAMES = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] as const;
+const AR_NAMES = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'] as const;
+
+function buildLabelMap(names: readonly string[]): Record<string, string> {
+    const out: Record<string, string> = {};
+    SHORT_DAY_KEYS.forEach((k, i) => { out[k] = names[i]; });
+    LONG_DAY_KEYS.forEach((k, i) => { out[k] = names[i]; });
+    return out;
+}
+
+export const DAY_LABELS_EN: Record<string, string> = buildLabelMap(EN_NAMES);
+export const DAY_LABELS_AR: Record<string, string> = buildLabelMap(AR_NAMES);
+
 // ─── Public API ──────────────────────────────────────────────────────────
 
 /**

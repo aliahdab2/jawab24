@@ -1,4 +1,4 @@
-import { canonicalizeHoursEntry, SHORT_DAY_KEYS } from '@jawab24/shared';
+import { canonicalizeHoursEntry, SHORT_DAY_KEYS, LONG_DAY_KEYS } from '@jawab24/shared';
 
 /**
  * Week model for the working-hours editor.
@@ -26,17 +26,11 @@ export const DEFAULT_OPEN_DAYS: readonly DayKey[] = ['sat', 'sun', 'mon', 'tue',
 
 export const DEFAULT_RANGE: TimeRange = { from: '09:00', to: '17:00' };
 
-/** Long day keys are an accepted storage form (see shared LONG_DAY_KEYS), and
- *  they are NOT `${short}day` — "sat" → "saturday", not "satday". */
-const LONG_BY_SHORT: Record<DayKey, string> = {
-  sat: 'saturday',
-  sun: 'sunday',
-  mon: 'monday',
-  tue: 'tuesday',
-  wed: 'wednesday',
-  thu: 'thursday',
-  fri: 'friday',
-};
+/** Long day keys are an accepted storage form. Derived from the aligned
+ *  shared arrays so the mapping can never drift. */
+const LONG_BY_SHORT = Object.fromEntries(
+  SHORT_DAY_KEYS.map((k, i) => [k, LONG_DAY_KEYS[i]]),
+) as Record<DayKey, string>;
 
 export interface TimeRange { from: string; to: string }
 
