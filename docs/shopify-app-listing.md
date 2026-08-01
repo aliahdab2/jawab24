@@ -218,7 +218,7 @@ All 5 scopes are actively used in `backend/src/services/shopify.ts`
 | Scope | Why |
 |-------|-----|
 | `read_products` | Sync product catalog (names, prices, variants, images) for AI replies |
-| `read_content` | Access store pages and blog content for Business Info enrichment |
+| `read_content` | Sync store policies (shipping/refund) into Business Info for accurate AI replies |
 | `read_orders` | Look up order status when customers ask "where is my order?" |
 | `read_fulfillments` | Provide shipping/tracking information in AI replies |
 | `read_inventory` | Check stock availability for "is this in stock?" questions |
@@ -237,9 +237,9 @@ What to declare in the questionnaire (all answers derivable from shipped code):
 
 | Question | Answer |
 |----------|--------|
-| Which fields | Customer **name** and **phone** only (order-status replies + order SMS notifications). No address; email is not read from orders |
-| Why | Merchants' customers ask "where is my order?" in DMs; the AI answers with the order's status. Order/fulfillment webhooks trigger customer SMS notifications (confirmed / shipped / delivered) |
-| Storage | Access tokens encrypted at rest with AES-256-GCM (`ecommerceCrypto.ts`); order data is fetched on demand and only the fields needed for a notification are persisted (data minimization) |
+| Which fields | Customer **name**, **phone**, and **shipping city/province** (order-status replies read `shippingAddress { city province }` to say where a shipment is headed — `services/shopify.ts` `lookupOrder`/`getShipmentTracking`). No street address; customer email is not read from orders |
+| Why | Merchants' customers ask "where is my order?" in DMs; the AI answers with the order's status and destination city. Order/fulfillment webhooks trigger customer SMS notifications (confirmed / shipped / delivered) |
+| Storage | Access tokens encrypted at rest with AES-256-GCM (`ecommerceCrypto.ts`); order data is fetched on demand — persisted only as the notification log row (phone, name, order number, rendered message), plus a short-TTL Redis cache for the order-lookup identity challenge. Address fields are never persisted to the database |
 | Retention / deletion | GDPR webhooks fully implemented: `customers/data_request`, `customers/redact`, `shop/redact` (see §10). `shop/redact` deletes store data and cancels the local billing mirror |
 
 > **V5 caveat (verify in dogfood):** whether prod stores already redact phone/name
@@ -301,7 +301,7 @@ lowercase to the same slugs (keep them as below).
 | `starter` | Starter | $15/month | 1 page, 1,500 AI replies/mo, Facebook + Instagram |
 | `business` | Business | $39/month | 2 pages, 4,500 AI replies/mo, + WhatsApp + e-commerce |
 | `pro` | Pro | $79/month | 5 pages, 10,000 AI replies/mo, priority support |
-| *(private)* | Test $0 | $0/month | Private test plan for dev-store dogfood (§O) — never public |
+| `starter-test` *(private)* | Starter | $0/month | Private test plan for dev-store dogfood (§O) — never public. Its **display name must be a billable one** ("Starter"): activation resolves the AppSubscription NAME, so a plan named "Test $0" can never activate (fail-loud by design). The handle is free to differ — handles only arrive as untrusted triggers |
 
 Also configure on **every** plan:
 - **Redirection (return) URL**: `https://jawab24.com/shopify/billing/return`
@@ -344,7 +344,7 @@ Founder day-0 (ordered by lead time — items 1–3 gate everything downstream):
 - [ ] **V1**: verify distribution method is unselected or "Shopify App Store" (2 min, irreversible if wrong)
 - [ ] **PCD Level 2 request** submitted (§9 — longest lead)
 - [ ] 3 GDPR webhook URLs typed into the Partner Dashboard (§10)
-- [ ] App Pricing plans created: handles `starter`/`business`/`pro` + private $0 test plan, return URL `https://jawab24.com/shopify/billing/return`, trial days per owner decision (§12)
+- [ ] App Pricing plans created: handles `starter`/`business`/`pro` + private $0 test plan (display name "Starter" — §12), return URL `https://jawab24.com/shopify/billing/return`, trial days per owner decision (§12)
 - [ ] `SHOPIFY_APP_HANDLE` set in `env/backend.env` once the listing exists
 
 Engineering / assets:

@@ -512,6 +512,13 @@ Prereqs: App Pricing plans configured with **handles = plan slugs** (starter/bus
 a private **$0 test plan**, redirection URL `https://<host>/shopify/billing/return`,
 `SHOPIFY_APP_HANDLE` set. Dev-store charges are free within the same Partner org.
 
+> ⚠️ The $0 test plan's **display name must lowercase to a billable slug** (e.g. name
+> it `Starter`, handle `starter-test`) — activation resolves the AppSubscription's
+> NAME through `mapShopifyPlanToSlug` (`syncShopifyBilling` reads `appSub.name`, not
+> the handle), so a plan named "Test $0" can never activate a mirror (fail-loud by
+> design) and O-1 would fail before it starts. O-8 covers the unknown-name path
+> deliberately.
+
 **O-0 (V3 gate, run FIRST).** After selecting the $0 plan, query
 `currentAppInstallation { activeSubscriptions { id name status } }` with the store token
 (GraphiQL). If App Pricing enrollments do NOT appear here, STOP — swap
