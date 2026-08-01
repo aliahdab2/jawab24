@@ -41,7 +41,7 @@ export function getIngestionService(): KbIngestionService | null {
  * Format Facebook hours object into readable text
  * Facebook returns hours like: { "mon_1_open": "09:00", "mon_1_close": "18:00", ... }
  */
-function formatBusinessHours(hours: FacebookPageHours | undefined): string | null {
+export function formatBusinessHours(hours: FacebookPageHours | undefined): string | null {
     if (!hours || Object.keys(hours).length === 0) return null;
 
     const dayNames: Record<string, string> = {
