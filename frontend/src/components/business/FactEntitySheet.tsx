@@ -381,19 +381,6 @@ export function FactEntitySheet({
                 />
               </div>
             )}
-            {baseCollection && baseLabels.map((label) => (
-              <div key={label}>
-                <label htmlFor={`entity-base-${label}`} className={labelClass} dir="auto">{label}</label>
-                <input
-                  id={`entity-base-${label}`}
-                  type="text"
-                  value={baseValues[label] ?? ''}
-                  onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
-                  dir={baseValues[label] ? 'auto' : undefined}
-                  className={inputClass}
-                />
-              </div>
-            ))}
           </div>
         </section>
 
@@ -428,6 +415,26 @@ export function FactEntitySheet({
               </div>
             </div>
           </section>
+        )}
+
+        {/* Merchant free-text fields come LAST with room to write (owner:
+            «الملاحظة آخر شي ونكبر الإدخال») — notes are prose, not a slot. */}
+        {baseCollection && baseLabels.length > 0 && (
+          <div className="space-y-4">
+            {baseLabels.map((label) => (
+              <div key={label}>
+                <label htmlFor={`entity-base-${label}`} className={labelClass} dir="auto">{label}</label>
+                <textarea
+                  id={`entity-base-${label}`}
+                  value={baseValues[label] ?? ''}
+                  onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
+                  dir={baseValues[label] ? 'auto' : undefined}
+                  rows={3}
+                  className={`${inputClass} !min-h-[88px] py-2.5 resize-y`}
+                />
+              </div>
+            ))}
+          </div>
         )}
 
         {/* ————— Dates — each one its own numbered card (point 3) ————— */}
@@ -490,7 +497,7 @@ export function FactEntitySheet({
                       </button>
                       )}
                     </div>
-                    {open && sessionLabels.map((label) => {
+                    {open && sessionLabels.filter((l) => fieldKinds[l] !== 'other').map((label) => {
                       const kind = fieldKinds[label];
                       const ft = !!s.freeText[label];
                       const sv = s.structured[label];
@@ -673,6 +680,21 @@ export function FactEntitySheet({
                       </div>
                     </div>
                     )}
+                    {open && sessionLabels.filter((l) => fieldKinds[l] === 'other').map((label) => (
+                      <div key={label}>
+                        <label htmlFor={`entity-session-${i}-${label}`} className={labelClass} dir="auto">{label}</label>
+                        <textarea
+                          id={`entity-session-${i}-${label}`}
+                          value={s.values[label] ?? ''}
+                          onChange={(e) =>
+                            setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
+                          }
+                          dir={s.values[label] ? 'auto' : undefined}
+                          rows={2}
+                          className={`${inputClass} !min-h-[72px] py-2.5 resize-y`}
+                        />
+                      </div>
+                    ))}
                   </div>
                   );
                 })}
