@@ -506,13 +506,38 @@ After everything else passes:
 
 ---
 
+## O. Billing — Shopify App Pricing (D-054)
+
+Prereqs: App Pricing plans configured with **handles = plan slugs** (starter/business/pro),
+a private **$0 test plan**, redirection URL `https://<host>/shopify/billing/return`,
+`SHOPIFY_APP_HANDLE` set. Dev-store charges are free within the same Partner org.
+
+**O-0 (V3 gate, run FIRST).** After selecting the $0 plan, query
+`currentAppInstallation { activeSubscriptions { id name status } }` with the store token
+(GraphiQL). If App Pricing enrollments do NOT appear here, STOP — swap
+`fetchShopifyActiveSubscription` internals to the Partner API before running O-1…O-7.
+
+| ID | Test | Expected |
+|----|------|----------|
+| O-1 | Select the $0 test plan in Shopify → approve → land back on jawab24.com | `GET /shopify/billing/return` hit; local row: `payment_method='shopify'`, GID in `external_subscription_id`, `shopify_shop_domain` set, status `active` (or `trialing` if the plan has trial days), usage window initialized, subject = workspace OWNER |
+| O-2 | Upgrade to a higher plan inside Shopify admin | Next sync (return hit or ≤6h reconcile) moves `plan_id` to the new slug; period advances contiguously; NO duplicate row |
+| O-3 | Cancel the subscription inside Shopify admin (app stays installed) | Reconciler pauses the local mirror (`status='paused'`); replies blocked; re-selecting a plan reactivates through the same sync |
+| O-4 | Uninstall the app while the subscription is live | `webhookUninstall` cancels the local mirror (`status='canceled'`, `cancel_reason='shopify_app_uninstalled'`) AND deactivates the store — no paid local sub outlives the app |
+| O-5 | Reinstall + re-select a plan on the same workspace | Same row re-adopted (update, not insert); no unique-index collision |
+| O-6 | Select a plan, then KILL the browser before the return redirect | Row still adopted by the reconciler within 6h (or run `reconcileShopifyBilling` manually) — the return endpoint must not be a single point of failure |
+| O-7 | While shopify-billed: open /pricing, /checkout, top-up CTA | Pricing shows the "managed in Shopify" banner + deep link; plan clicks route to Shopify admin; `/checkout` bounces (`SHOPIFY_BILLED`); top-up CTA hidden; `POST /payment/create-subscription-intent` returns 400 `SHOPIFY_BILLED` |
+| O-8 | Plan with an unknown handle (create a `qa-temp` plan) | NO activation; Sentry `unknown plan` event; merchant stays on previous state (fail-loud, never guess) |
+| O-9 | Stripe-paying user installs the app on the same workspace and picks a plan | Adoption REFUSED (D-H); Sentry collision warning; Stripe row untouched — a human resolves |
+
+---
+
 ## How to use this doc
 
 1. Open in a markdown editor that supports task lists, OR copy each section into a Notion/Linear ticket
 2. Run sections **in order** — many depend on prior sections
 3. For each test ID: pass / fail / blocked — log evidence (screenshot, log line, DB query)
 4. **For every failure, open a bug ticket and link the test ID** so resubmission can prove the regression is fixed
-5. Don't proceed to App Store submission until **A through L are all green**. M and N can be partial if non-blocking.
+5. Don't proceed to App Store submission until **A through L plus O are all green**. M and N can be partial if non-blocking.
 
 ---
 
@@ -522,6 +547,7 @@ After everything else passes:
 |------|--------|
 | 2026-04-25 | Initial test plan covering Steps 1 + 2 + existing Shopify integration (OAuth, sync, page linking, agent tools, order webhooks, GDPR, security). |
 | 2026-04-25 | Dogfood session executed Sections A + B; surfaced 5 install/sync bugs. A-1.3 + A-1.4 closed in commit `723872b9`. A-1.5, A-1.9, B-3.1 closed in commit `b5ff88d2`. Backend now exposes `webhookHealth` field + `POST /shopify/store/webhooks/reregister`. Frontend banner + Try-again CTA shipped in `ff2d6324`; controller decrypt-in-trycatch hardening in `1c3eef8e`. |
+| 2026-08-01 | Added §O (App Pricing billing, D-054) with the V3 gate O-0; submission gate widened to A–L + O. |
 
 ## Resolved bugs
 

@@ -6,6 +6,7 @@ import { trialLedgerService, type TrialIdentity } from './trialLedger';
 import { redis } from '../lib/redis';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
+import { config } from '../config';
 import type { NotificationType } from './notifications';
 import {
     resolveAiQuotaStatus,
@@ -84,6 +85,11 @@ export function resolveAiUsageNotificationType(
  * card-on-file customer mid Stripe-managed trial (status='trialing' with an
  * externalSubscriptionId) is a real customer, not a free-trial farmer. Only the
  * 'manual' comp path requires status='active' so a canceled comp doesn't count.
+ *
+ * Shopify-billed rows (payment_method='shopify') read as paying through the
+ * first branch BY DESIGN: their externalSubscriptionId holds the AppSubscription
+ * GID, and a Shopify-managed trial is card-equivalent commitment exactly like a
+ * Stripe-managed one (locked by test — see subscriptions isPayingCustomer suite).
  *
  * Pure function — exported for unit testing.
  */
@@ -200,6 +206,28 @@ export const subscriptionsService = {
                             extra: {
                                 subscriptionId: sub.id,
                                 externalSubscriptionId: sub.externalSubscriptionId,
+                                currentPeriodEnd: sub.currentPeriodEnd,
+                            },
+                        }
+                    );
+                }
+
+                // Shopify twin (D-B): expiry is reconcile-driven — a renewal
+                // should have been mirrored by the 6h billing sweep long before
+                // the lazy check trips (3-day past_due grace covers a late
+                // reconcile). Reaching here means the sweep is broken or the
+                // shop's token died; flag it before a paying merchant notices.
+                if (sub.paymentMethod === 'shopify' && !sub.cancelAtPeriodEnd) {
+                    captureError(
+                        null,
+                        'Shopify-billed subscription lazily expired — the billing reconciler did not advance the period',
+                        {
+                            level: 'warning',
+                            tags: { service: 'subscriptions', flow: 'lazy_expiry_shopify' },
+                            extra: {
+                                subscriptionId: sub.id,
+                                externalSubscriptionId: sub.externalSubscriptionId,
+                                shopifyShopDomain: sub.shopifyShopDomain,
                                 currentPeriodEnd: sub.currentPeriodEnd,
                             },
                         }
@@ -522,6 +550,26 @@ export const subscriptionsService = {
                 trialDaysRemaining,
                 renewsAt: subscription.currentPeriodEnd?.toString(),
                 hasStripeCustomer: Boolean(subscription.stripeCustomerId),
+                // A CANCELED shopify mirror must NOT read as shopify-billed:
+                // the merchant uninstalled the app and is free to come back
+                // through Stripe (mirrors the backend guard's canceled
+                // exemption). Suppressed HERE — the single choke point — so no
+                // frontend consumer (plan select, top-up CTA, pricing banner)
+                // can dead-end a returning merchant.
+                paymentMethod:
+                    subscription.paymentMethod === 'shopify' && subscription.status === 'canceled'
+                        ? undefined
+                        : subscription.paymentMethod ?? undefined,
+                // Shopify-billed workspaces manage their plan inside Shopify
+                // admin (D-G) — hand the frontend the exact deep link so it
+                // never has to assemble Shopify URLs itself.
+                shopifyManageUrl:
+                    subscription.paymentMethod === 'shopify' &&
+                    subscription.status !== 'canceled' &&
+                    subscription.shopifyShopDomain &&
+                    config.shopify.appHandle
+                        ? `https://admin.shopify.com/store/${subscription.shopifyShopDomain.replace('.myshopify.com', '')}/charges/${config.shopify.appHandle}/pricing_plans`
+                        : undefined,
             },
         };
     },
@@ -1133,6 +1181,7 @@ export const subscriptionsService = {
             planId: row.planId,
             status: (row.status || 'active') as SubscriptionStatus,
             paymentMethod: row.paymentMethod,
+            shopifyShopDomain: row.shopifyShopDomain,
             trialEndsAt: row.trialEndsAt,
             currentPeriodStart: row.currentPeriodStart || new Date(),
             currentPeriodEnd: row.currentPeriodEnd,

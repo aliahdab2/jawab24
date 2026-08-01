@@ -205,6 +205,13 @@ export async function webhookUninstall(request: FastifyRequest, reply: FastifyRe
 
         const { myshopify_domain } = request.body as { myshopify_domain?: string };
         if (myshopify_domain) {
+            // D-D: cancel the local billing mirror FIRST — it is keyed on
+            // subscriptions.shopify_shop_domain, not on the store row, but
+            // running it before deactivateStore keeps the ordering safe if the
+            // store row ever becomes an input. Without this, uninstalling left
+            // a paid local subscription alive forever (the D-023 bug class).
+            const { cancelShopifySubscriptionLocal } = await import('../services/shopifyBilling');
+            await cancelShopifySubscriptionLocal(myshopify_domain, 'shopify_app_uninstalled', request.log);
             await shopifyService.deactivateStore(myshopify_domain);
         }
 
@@ -455,6 +462,14 @@ export async function gdprShopRedact(request: FastifyRequest, reply: FastifyRepl
         // soft deactivate done at uninstall time.
         const { shop_domain } = request.body as { shop_domain?: string };
         if (shop_domain) {
+            // shop/redact is a second HMAC-verified, provably-post-uninstall
+            // signal: if the uninstall webhook was missed, the paid local
+            // mirror is still live here. Cancel it (idempotent no-op when the
+            // uninstall path already did) instead of leaving it to the
+            // orphan-flag → human loop — prevention over detection.
+            const { cancelShopifySubscriptionLocal } = await import('../services/shopifyBilling');
+            await cancelShopifySubscriptionLocal(shop_domain, 'shopify_shop_redacted', request.log);
+
             const purged = await purgeStore('shopify', shop_domain);
             request.log.info({ shop_domain, purged }, 'Shopify GDPR shop/redact processed');
         }
@@ -480,7 +495,7 @@ export async function getStore(request: FastifyRequest, reply: FastifyReply) {
 
 export async function connectStore(request: FastifyRequest, reply: FastifyReply) {
     const { shopDomain } = request.body as { shopDomain?: string };
-    if (!shopDomain || !/^[a-zA-Z0-9][a-zA-Z0-9-]*\.myshopify\.com$/.test(shopDomain)) {
+    if (!shopDomain || !SHOPIFY_SHOP_DOMAIN.test(shopDomain)) {
         return reply.status(400).send({ error: 'Invalid shop domain. Use format: store-name.myshopify.com' });
     }
 
@@ -489,6 +504,40 @@ export async function connectStore(request: FastifyRequest, reply: FastifyReply)
 
     const authUrl = shopifyService.buildAuthUrl(shopDomain, nonce);
     return reply.send({ authUrl });
+}
+
+/**
+ * GET /shopify/billing/return — the redirection URL configured on every App
+ * Pricing plan. Shopify sends the merchant here after they approve (or abandon)
+ * a plan selection. The query params (`shop`, `plan_handle`, `charge_id`) are
+ * UNTRUSTED triggers only (D-C): billing state is verified server-side through
+ * syncShopifyBilling; nothing is ever activated from a redirect param. Public
+ * and rate-limited — the merchant may not be logged in in this browser, and the
+ * 6-hourly reconciler redoes any sync that fails here, so every path ends in a
+ * redirect, never an error page.
+ */
+export async function billingReturn(request: FastifyRequest, reply: FastifyReply) {
+    const { shop } = request.query as { shop?: string };
+    const frontendUrl = config.frontendUrl;
+
+    if (!shop || !SHOPIFY_SHOP_DOMAIN.test(shop)) {
+        return reply.redirect(`${frontendUrl}/dashboard`);
+    }
+
+    let billingParam = 'synced';
+    try {
+        const { syncShopifyBilling } = await import('../services/shopifyBilling');
+        const result = await syncShopifyBilling(shop, request.log);
+        request.log.info({ shop, outcome: result.outcome }, 'Shopify billing return processed');
+    } catch (error) {
+        billingParam = 'sync_failed'; // truthful marker — the reconciler will redo the sync
+        captureError(error, 'Shopify billing return sync failed — reconciler will retry', {
+            tags: { service: 'shopify_billing', flow: 'billing_return' },
+            extra: { shop },
+        });
+    }
+
+    return reply.redirect(`${frontendUrl}/shopify/onboarding?billing=${billingParam}`);
 }
 
 export async function disconnectStoreHandler(request: FastifyRequest, reply: FastifyReply) {

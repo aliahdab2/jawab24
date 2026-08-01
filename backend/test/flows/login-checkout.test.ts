@@ -93,6 +93,16 @@ vi.mock('../../src/services/notifications', () => ({
     },
 }));
 
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        // null = not shopify-billed, so the D-G guard lets checkout proceed.
+        getUserSubscription: vi.fn().mockResolvedValue(null),
+        initializeUsagePeriod: vi.fn().mockResolvedValue(undefined),
+        invalidateStatusCache: vi.fn().mockResolvedValue(undefined),
+        PRIORITY_SQL: {},
+    },
+}));
+
 vi.mock('../../src/db', () => ({
     db: {
         select: vi.fn(() => ({

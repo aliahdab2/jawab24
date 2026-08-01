@@ -76,6 +76,9 @@ vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         initializeUsagePeriod: vi.fn().mockResolvedValue(undefined),
         invalidateStatusCache: vi.fn().mockResolvedValue(undefined),
+        // null = not shopify-billed; the D-G guard (rejectIfShopifyBilled)
+        // consults this before every Stripe surface.
+        getUserSubscription: vi.fn().mockResolvedValue(null),
     },
 }));
 
@@ -111,6 +114,9 @@ vi.mock('../../src/config', () => ({
         frontendUrl: 'http://localhost:3001',
         stripe: {
             webhookSecret: 'whsec_test',
+        },
+        shopify: {
+            appHandle: '',
         },
         topup: {
             enabled: true,
@@ -167,6 +173,64 @@ describe('Payment Controller', () => {
                 geo: { country: 'US' }, // Mock allowed geo for sanctions check
                 log: { error: vi.fn() },
             };
+        });
+
+        it('rejects a shopify-billed account with 400 SHOPIFY_BILLED before any Stripe call (D-G)', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValueOnce({
+                paymentMethod: 'shopify',
+                status: 'active',
+            } as never);
+
+            await paymentController.createCheckoutSession(mockRequest, mockReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'SHOPIFY_BILLED' }),
+            );
+            expect(stripeService.createCheckoutSession).not.toHaveBeenCalled();
+        });
+
+        // D-G is a blanket rule: EVERY Stripe surface refuses shopify-billed
+        // accounts server-side. One parameterized pin per endpoint so a new
+        // handler that forgets the guard shows up as a missing row here.
+        it.each([
+            ['createSubscriptionIntent', { planId: 'plan_123' }],
+            ['changePlan', { planId: 'plan_123' }],
+            ['createTopupIntent', { pack: '5k' }],
+            ['cancelSubscription', {}],
+            ['createBillingPortalSession', {}],
+        ] as const)('%s rejects shopify-billed with 400 SHOPIFY_BILLED', async (method, body) => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValueOnce({
+                paymentMethod: 'shopify',
+                status: 'active',
+            } as never);
+            mockRequest.body = body;
+
+            await (paymentController[method] as (req: unknown, rep: unknown) => Promise<unknown>)(
+                mockRequest, mockReply,
+            );
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'SHOPIFY_BILLED' }),
+            );
+        });
+
+        it('lets a CANCELED shopify mirror through the guard — the merchant is back on the Stripe rail', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValueOnce({
+                paymentMethod: 'shopify',
+                status: 'canceled',
+            } as never);
+            // Passes the guard, then 404s on the (unmocked-empty) user lookup —
+            // proving the request reached the normal handler body.
+            await paymentController.createCheckoutSession(mockRequest, mockReply);
+
+            expect(mockReply.send).not.toHaveBeenCalledWith(
+                expect.objectContaining({ code: 'SHOPIFY_BILLED' }),
+            );
         });
 
         it('should create checkout session successfully', async () => {

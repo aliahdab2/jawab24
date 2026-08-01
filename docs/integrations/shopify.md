@@ -160,6 +160,44 @@ When a comment/message arrives for a page linked to a store:
 
 ---
 
+## Billing (Shopify App Pricing) — D-054
+
+Merchants installing from the App Store pay INSIDE Shopify (App Pricing); Stripe never
+touches them. Shopify delivers **no webhook** for App Pricing enrollments
+(post-2026-04-28 apps), so the local `subscriptions` row is a **mirror maintained by
+verify-and-reconcile**, never by events:
+
+- **One choke point:** `services/shopifyBilling.ts → syncShopifyBilling(shopDomain)`
+  asks the Admin API (`currentAppInstallation.activeSubscriptions`) and reconciles the
+  local row (adopt / pause / no-op). Idempotent — no drift, no write.
+- **Three triggers:** `GET /shopify/billing/return` (the redirection URL configured on
+  every App Pricing plan; its query params only *trigger* a server-side verify),
+  the post-claim hook in `integrations/shopify.ts`, and a 6-hourly reconciler in
+  `index.ts` (`ShopifyBillingReconcile`) that also Sentry-flags orphaned live mirrors.
+- **Row shape (migration 0147):** `payment_method='shopify'`, AppSubscription GID in
+  `external_subscription_id`, shop domain in `shopify_shop_domain` (CHECK-required;
+  partial-unique among non-canceled shopify rows so an uninstalled shop stays
+  adoptable by another workspace).
+- **Plan mapping (fail-loud):** App Pricing plan handles = plan slugs;
+  `config/shopifyBilling.ts` maps handle/name → slug. Unknown → NO activation + Sentry.
+- **Subject:** the workspace OWNER's subscription row (the `hasWhatsAppPlanAccess`
+  pattern), regardless of which member connected the store.
+- **Uninstall** (`webhookUninstall`) cancels the local mirror before deactivating the
+  store — a paid local subscription can no longer outlive the app (D-023 class).
+- **No Stripe beside it:** checkout / change-plan / subscription-intent return 400
+  `SHOPIFY_BILLED`; the frontend hides the top-up CTA and routes plan management to
+  `admin.shopify.com/store/{store}/charges/{app_handle}/pricing_plans`
+  (`SHOPIFY_APP_HANDLE` env, exposed as `shopifyManageUrl` in `/subscription/usage`).
+- **Trials** mirror Shopify's own clock (`trialDays`); the Stripe trial ledger is not
+  involved.
+
+> ⚠️ **Pending live verification (V3):** whether `activeSubscriptions` reflects App
+> Pricing enrollments is confirmed only at the dev-store dogfood (§O of
+> `docs/testing/SHOPIFY_TEST_PLAN.md`). The fork is isolated inside
+> `fetchShopifyActiveSubscription` — a swap to the Partner API changes no callers.
+
+---
+
 ## API Endpoints
 
 ### Public (no auth required)
@@ -168,6 +206,7 @@ When a comment/message arrives for a page linked to a store:
 |--------|------|-------------|
 | GET | `/shopify/auth` | Start OAuth flow |
 | GET | `/shopify/auth/callback` | OAuth callback |
+| GET | `/shopify/billing/return` | App Pricing return URL — triggers server-side billing sync (rate-limited) |
 | POST | `/shopify/webhooks/uninstall` | App uninstalled webhook |
 | POST | `/shopify/webhooks/products-update` | Product create/update/delete webhook |
 | POST | `/shopify/webhooks/orders` | Order create/fulfilled/cancelled webhook |

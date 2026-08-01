@@ -686,7 +686,10 @@ export interface Subscription {
   plan?: Plan; // Joined plan data
   status: SubscriptionStatus;
   stripeCustomerId?: string | null;
-  paymentMethod?: string | null; // 'stripe' | 'paypal' | 'manual'
+  paymentMethod?: string | null; // 'stripe' | 'paypal' | 'manual' | 'shopify'
+  /** Set when paymentMethod='shopify': the *.myshopify.com domain whose App
+   * Pricing subscription this row mirrors. */
+  shopifyShopDomain?: string | null;
   trialEndsAt?: string | Date | null;
   currentPeriodStart: string | Date;
   currentPeriodEnd?: string | Date | null;
@@ -741,6 +744,12 @@ export interface UsageSummary {
     trialDaysRemaining?: number;
     renewsAt?: string;
     hasStripeCustomer?: boolean;
+    /** 'shopify' = billing lives in Shopify admin: the frontend must route
+     * plan changes there and never into Stripe checkout/top-ups (D-G). */
+    paymentMethod?: string;
+    /** Deep link into Shopify admin plan management. Present only for
+     * shopify-billed workspaces when the app handle is configured. */
+    shopifyManageUrl?: string;
   };
 }
 

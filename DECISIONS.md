@@ -557,3 +557,61 @@ webhook delivery envelope, products/profile envelopes, orders search params, and
 refresh rotation of the `Authorization` token are all confirmed during live validation
 (checklist in `docs/integrations/zid.md`), which is blocked on the founder's Zid
 Partner signup (partnership agreement + dev store).
+
+## D-054 · Shopify billing = App Pricing mirrored by verify-and-reconcile — one sync choke point, no webhook dependency, no Stripe beside it
+
+Engineering ruling, 2026-08-01 (implements the owner's 2026-08-01 decision that the
+public Shopify listing uses Shopify App Pricing — Shopify forbids off-platform billing
+for listed apps; branch `feat/shopify-billing`). Condensed from design rulings D-A…D-J
+in `~/.claude/plans/make-a-worktree-and-calm-avalanche.md` §Track 2.
+
+**The shape.** Shopify owns the money and delivers NO webhook for App Pricing
+enrollments (post-2026-04-28 apps). Our side therefore MIRRORS, never listens:
+`syncShopifyBilling(shopDomain)` (services/shopifyBilling.ts) is the single idempotent
+choke point that asks the Admin API (`currentAppInstallation.activeSubscriptions`) what
+is true and reconciles the local row. Three triggers, all funneling into it: the
+configured billing **return endpoint** (`GET /shopify/billing/return` — `shop`/
+`plan_handle` query params are UNTRUSTED triggers, nothing activates from them), the
+**post-claim hook** (installs claimed at login), and the **6-hourly reconciler** (the
+authority of last resort; also flags orphaned live mirrors whose store row vanished).
+
+**Rulings.**
+- Discriminator: `subscriptions.payment_method='shopify'` + AppSubscription GID in
+  `external_subscription_id` + new `shopify_shop_domain` column (migration 0147).
+  Uniqueness = ONE NON-CANCELED shopify mirror per shop (partial index; canceled rows
+  excluded so an uninstalled shop stays adoptable by another workspace — a full-scope
+  unique index would deadlock that forever). CHECK: a shopify row must carry its domain.
+- Plan identity: App Pricing plan HANDLES are our plan slugs verbatim; the Admin API's
+  display name maps through `config/shopifyBilling.ts`. Unknown handle/name → NO
+  activation, loud Sentry (never guess a paying merchant onto a plan).
+- Entitlement subject: the WORKSPACE OWNER (the `hasWhatsAppPlanAccess` pattern), not
+  the member who connected the store.
+- Expiry is reconcile-driven; the manual-midnight rule (D-023) does NOT apply
+  ('shopify' ≠ 'manual'); the 3-day past_due grace absorbs a late sweep; a shopify
+  lazy-expiry Sentry canary sits beside the Stripe one.
+- Uninstall webhook cancels the local mirror (closes the D-023-class hole where a paid
+  local sub outlived the app), keyed by shop domain so it works regardless of store-row
+  state; `gdpr/shop/redact` repeats the cancel as a second provably-post-uninstall
+  signal (idempotent — covers a missed uninstall delivery). Trials mirror Shopify's
+  clock (trialDays) and bypass the Stripe trial ledger.
+- No Stripe beside Shopify — on EVERY Stripe surface, server-side: checkout session,
+  subscription intent, change-plan, top-up intent, cancel-subscription, and billing
+  portal all reject shopify-billed accounts with 400 `SHOPIFY_BILLED` (a hidden CTA is
+  never the enforcement). The top-up CTA is hidden and the pricing page routes plan
+  management to the admin deep link
+  (`admin.shopify.com/store/{store}/charges/{app_handle}/pricing_plans`,
+  `SHOPIFY_APP_HANDLE` env). A CANCELED mirror is exempt everywhere — the backend guard
+  and the frontend signals alike (suppressed at the `getUsageSummary` choke point) — so
+  a merchant who uninstalled the app can come back through Stripe.
+- Adoption refusals (all Sentry + stand down, a human decides): over a LIVE
+  stripe/manual/paypal row (double-billing risk), and over a live shopify mirror for a
+  DIFFERENT shop — two active stores on one workspace would otherwise ping-pong the
+  mirror and reset the quota window every sync. The Stripe rail carries the symmetric
+  guard: `adoptStripeSubscription` never overwrites a live shopify mirror.
+- Store-connect plan-gating is deliberately DEFERRED: gating connect on a plan would
+  break the reviewer-walked install funnel; revisit after listing approval.
+
+**Verify-first caveat (V3).** Whether `activeSubscriptions` reflects App Pricing
+enrollments is unverified until the dev-store dogfood; the fork is isolated inside
+`fetchShopifyActiveSubscription` — if it proves wrong, its internals swap to the
+Partner API with zero caller changes.

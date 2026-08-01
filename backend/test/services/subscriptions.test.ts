@@ -1384,3 +1384,73 @@ describe('startOfUtcDay', () => {
     });
 });
 
+
+describe('isPayingCustomer — Shopify rail lock', () => {
+    // Locked by AI_INSTRUCTIONS/D-A: a Shopify AppSubscription GID stored in
+    // externalSubscriptionId reads as PAYING through the first branch, by
+    // design — a Shopify-managed trial is card-equivalent commitment exactly
+    // like a Stripe-managed one. If someone narrows that branch to Stripe ids,
+    // this test is the tripwire.
+    it('treats a shopify-billed row (AppSubscription GID) as paying', async () => {
+        const { isPayingCustomer } = await import('../../src/services/subscriptions');
+        expect(isPayingCustomer({
+            status: 'trialing',
+            externalSubscriptionId: 'gid://shopify/AppSubscription/123',
+            stripeCustomerId: null,
+            paymentMethod: 'shopify',
+        })).toBe(true);
+    });
+
+    it('still rejects a bare trial row with no billing identity', async () => {
+        const { isPayingCustomer } = await import('../../src/services/subscriptions');
+        expect(isPayingCustomer({
+            status: 'trialing',
+            externalSubscriptionId: null,
+            stripeCustomerId: null,
+            paymentMethod: null,
+        })).toBe(false);
+    });
+});
+
+describe('getUsageSummary — shopify signals suppressed on a CANCELED mirror (H2)', () => {
+    // A merchant who uninstalled the Shopify app has ONE row: the canceled
+    // mirror. If it still read as shopify-billed, every frontend surface would
+    // dead-end them into an app they no longer have — they must be free to
+    // come back through Stripe (same exemption as rejectIfShopifyBilled).
+    const basePlan = { id: 'p1', slug: 'business', maxPages: 3, maxAiRepliesPerMonth: 4500 };
+
+    const stubInternals = (subscription: Record<string, unknown>) => {
+        vi.spyOn(subscriptionsService, 'resolveWorkspaceSubscription').mockResolvedValue({
+            subscription: { plan: basePlan, ...subscription },
+            ownerId: 'u1',
+        } as never);
+        vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(null);
+        vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(0);
+        vi.spyOn(subscriptionsService, 'getTopupSummary').mockResolvedValue({ balance: 0, lifetimePurchased: 0 });
+    };
+
+    it('drops paymentMethod and the manage URL for a canceled shopify mirror', async () => {
+        stubInternals({
+            status: 'canceled',
+            paymentMethod: 'shopify',
+            shopifyShopDomain: 'left.myshopify.com',
+        });
+
+        const summary = await subscriptionsService.getUsageSummary('u1', 'ws1');
+
+        expect(summary?.subscription.paymentMethod).toBeUndefined();
+        expect(summary?.subscription.shopifyManageUrl).toBeUndefined();
+    });
+
+    it('keeps paymentMethod=shopify for a live mirror', async () => {
+        stubInternals({
+            status: 'active',
+            paymentMethod: 'shopify',
+            shopifyShopDomain: 'live.myshopify.com',
+        });
+
+        const summary = await subscriptionsService.getUsageSummary('u1', 'ws1');
+
+        expect(summary?.subscription.paymentMethod).toBe('shopify');
+    });
+});

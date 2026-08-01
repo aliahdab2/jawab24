@@ -254,3 +254,33 @@ describe('reconcileStripeSubscriptions', () => {
         expect(stripeService.listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ status: 'trialing' }));
     });
 });
+
+describe('adoptStripeSubscription — D-H twin (Shopify mirror protection)', () => {
+    it('refuses to overwrite a live shopify-billed row and alerts Sentry', async () => {
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: 'shopify', status: 'active',
+        }]) as never);
+
+        await expect(adoptStripeSubscription(paidSub(), mkLog())).resolves.toBe(false);
+
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+        expect(mockCaptureError).toHaveBeenCalledWith(
+            expect.any(Error),
+            expect.stringContaining('Shopify mirror'),
+            expect.objectContaining({ fingerprint: ['stripe-adopt-refused-shopify-mirror'] }),
+        );
+    });
+
+    it('still adopts over a canceled shopify row — the merchant came back through Stripe', async () => {
+        const chain = q([]);
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: 'shopify', status: 'canceled',
+        }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await expect(adoptStripeSubscription(paidSub(), mkLog())).resolves.toBe(true);
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ paymentMethod: 'stripe' }));
+    });
+});
