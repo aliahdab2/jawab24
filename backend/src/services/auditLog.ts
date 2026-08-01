@@ -42,10 +42,11 @@ export interface AuditEntry {
     entityType?: string;       // 'template', 'rule', 'page', 'settings', etc.
     entityId?: string;         // The specific entity affected
     // The page a page-scoped event concerns. Written to the DEDICATED, typed
-    // `logs.page_id` column — NOT metadata. This matters: `logs.metadata` is a
-    // jsonb column the postgres-js layer stores as a double-encoded STRING scalar
-    // (see test/integration/flagMeta.test.ts), so `metadata->>'entityId'` filters
-    // silently return NULL. Filter page-scoped audit by `page_id = …` instead.
+    // `logs.page_id` column — NOT metadata: it is indexed and type-safe, so it
+    // stays the sanctioned filter for page-scoped audit queries. (Historically
+    // `metadata->>'entityId'` also returned NULL because jsonb values were
+    // double-encoded as strings; fixed by db/jsonbColumn.ts + migration 0148,
+    // pinned by test/integration/flagMeta.test.ts and auditAutoReplyToggle.)
     pageId?: string;
     metadata?: Record<string, unknown>; // Structured context (no PII) — READ-only:
     // do not build SQL filters on its sub-keys; see the pageId note above.

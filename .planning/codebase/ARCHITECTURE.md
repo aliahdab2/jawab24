@@ -227,6 +227,17 @@ Each service is independently deployable but shares:
 6. **Database Layer** (`src/db/`):
    - `schema.ts` — Drizzle ORM table definitions (users, pages, messages, subscriptions, etc.)
    - `index.ts` — Drizzle client singleton
+   - `jsonbColumn.ts` — the repo's `jsonb()` column type. Drizzle 0.29's built-in
+     `jsonb` double-encodes through postgres-js (drizzle-orm#724): every value it
+     wrote landed as a jsonb *string*, invisible to the SQL `?`/`->` operators
+     (~440k prod rows by 2026-08-01; this hid all grounding-verifier shadow flags).
+     App code never noticed because drizzle reads double-decode symmetrically.
+     The shim passes raw values to the driver (single serialization) and keeps a
+     tolerant string-parsing read for pre-migration rows; migration
+     `0148_normalize_double_encoded_jsonb` repaired the stored rows. SQL-side
+     contract pinned by `test/integration/jsonbRoundTrip.test.ts` — schema.ts must
+     import `jsonb` from here, never from `drizzle-orm/pg-core` (enforced by an
+     ESLint `no-restricted-imports` rule in `backend/eslint.config.mjs`).
    - Migrations auto-generated via `drizzle-kit generate:pg`
    - 20+ tables for multi-workspace, multi-page, multi-language support
 
