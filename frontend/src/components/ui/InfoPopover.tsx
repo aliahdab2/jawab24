@@ -56,7 +56,7 @@ export function InfoPopover({ label, children, panelWidth = 'md', triggerClassNa
           dir={dir}
           aria-label={label}
           className={clsx(
-            'px-3 py-2.5 text-xs bg-surface-800 text-white dark:bg-surface-100 dark:text-surface-900 rounded-lg shadow-lg text-start z-50',
+            'px-3 py-2.5 text-xs bg-surface-800 text-white dark:bg-surface-100 dark:text-surface-900 rounded-lg shadow-lg text-start z-[70]',
             'max-w-[calc(100vw-1rem)]',
             PANEL_WIDTHS[panelWidth],
           )}
