@@ -115,9 +115,6 @@ vi.mock('../../src/config', () => ({
         stripe: {
             webhookSecret: 'whsec_test',
         },
-        shopify: {
-            appHandle: '',
-        },
         topup: {
             enabled: true,
             packs: {

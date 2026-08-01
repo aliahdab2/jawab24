@@ -10,7 +10,7 @@
  * webhook still returning success. One merchant paid $39 and stayed on his
  * signup trial; only 1 of 66 subscription rows was linked at all.
  */
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type Stripe from 'stripe';
 
 vi.mock('../../src/db', () => ({ db: { select: vi.fn(), update: vi.fn(), insert: vi.fn() } }));
@@ -49,19 +49,7 @@ import { adoptStripeSubscription, reconcileStripeSubscriptions } from '../../src
 import { db } from '../../src/db';
 import { stripeService } from '../../src/services/stripe';
 import { subscriptionsService } from '../../src/services/subscriptions';
-
-type QueryMock = Promise<unknown[]> & {
-    from: Mock; where: Mock; limit: Mock; orderBy: Mock; set: Mock; values: Mock;
-};
-function q(rows: unknown[]): QueryMock {
-    const p = Promise.resolve(rows) as QueryMock;
-    for (const m of ['from', 'where', 'limit', 'orderBy', 'set', 'values'] as const) {
-        p[m] = vi.fn(() => q(rows));
-    }
-    return p;
-}
-
-const mkLog = () => ({ info: vi.fn(), warn: vi.fn() });
+import { q, mkLog } from '../helpers/drizzleQueryMock';
 
 const paidSub = (over: Record<string, unknown> = {}) => ({
     id: 'sub_new',

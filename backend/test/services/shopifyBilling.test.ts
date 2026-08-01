@@ -7,7 +7,7 @@
  * (2026-07-25, $39 charged, trial served). Every rule here (D-A…D-J) exists to
  * keep that from recurring on the Shopify rail.
  */
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../src/db', () => ({ db: { select: vi.fn(), update: vi.fn(), insert: vi.fn() } }));
 
@@ -70,19 +70,7 @@ import {
 } from '../../src/services/shopifyBilling';
 import { db } from '../../src/db';
 import { subscriptionsService } from '../../src/services/subscriptions';
-
-type QueryMock = Promise<unknown[]> & {
-    from: Mock; where: Mock; limit: Mock; orderBy: Mock; set: Mock; values: Mock; returning: Mock;
-};
-function q(rows: unknown[]): QueryMock {
-    const p = Promise.resolve(rows) as QueryMock;
-    for (const m of ['from', 'where', 'limit', 'orderBy', 'set', 'values', 'returning'] as const) {
-        p[m] = vi.fn(() => q(rows));
-    }
-    return p;
-}
-
-const mkLog = () => ({ info: vi.fn(), warn: vi.fn() });
+import { q, mkLog } from '../helpers/drizzleQueryMock';
 
 const GID = 'gid://shopify/AppSubscription/123';
 const SHOP = 'jawab24-dev.myshopify.com';
@@ -104,9 +92,11 @@ const graphqlActive = (subs: ShopifyAppSubscription[]) => ({
 
 beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(db.select).mockReturnValue(q([]) as never);
-    vi.mocked(db.update).mockReturnValue(q([]) as never);
-    vi.mocked(db.insert).mockReturnValue(q([]) as never);
+    // mockReset (not just clear): drops leftover mockReturnValueOnce queues a
+    // prior test didn't consume — clearAllMocks alone lets them leak forward.
+    vi.mocked(db.select).mockReset().mockReturnValue(q([]) as never);
+    vi.mocked(db.update).mockReset().mockReturnValue(q([]) as never);
+    vi.mocked(db.insert).mockReset().mockReturnValue(q([]) as never);
     mockGetPlanBySlug.mockResolvedValue({ id: 'plan_business_id', slug: 'business' });
 });
 
@@ -288,11 +278,12 @@ describe('syncShopifyBilling', () => {
         expect(insertChain.values).toHaveBeenCalledWith(expect.objectContaining({ userId: 'owner_user' }));
     });
 
+    // The pause/no-op branches never resolve the workspace owner (that lookup
+    // lives inside the adopt branch), so these tests queue ONLY the store row.
+
     it('pauses the live local mirror when Shopify shows no active subscription (D-B)', async () => {
         const updateChain = q([{ userId: 'owner_user' }]);
-        vi.mocked(db.select)
-            .mockReturnValueOnce(q([store]) as never)
-            .mockReturnValueOnce(q([{ ownerId: 'owner_user' }]) as never);
+        vi.mocked(db.select).mockReturnValueOnce(q([store]) as never);
         vi.mocked(db.update).mockReturnValue(updateChain as never);
         mockGraphQL.mockResolvedValue(graphqlActive([]));
 
@@ -304,9 +295,7 @@ describe('syncShopifyBilling', () => {
     });
 
     it('returns no_subscription when neither side has anything', async () => {
-        vi.mocked(db.select)
-            .mockReturnValueOnce(q([store]) as never)
-            .mockReturnValueOnce(q([{ ownerId: 'owner_user' }]) as never);
+        vi.mocked(db.select).mockReturnValueOnce(q([store]) as never);
         vi.mocked(db.update).mockReturnValue(q([]) as never);
         mockGraphQL.mockResolvedValue(graphqlActive([]));
 
@@ -316,9 +305,7 @@ describe('syncShopifyBilling', () => {
     });
 
     it('ignores non-ACTIVE app subscriptions (DECLINED/EXPIRED never activate)', async () => {
-        vi.mocked(db.select)
-            .mockReturnValueOnce(q([store]) as never)
-            .mockReturnValueOnce(q([{ ownerId: 'owner_user' }]) as never);
+        vi.mocked(db.select).mockReturnValueOnce(q([store]) as never);
         vi.mocked(db.update).mockReturnValue(q([]) as never);
         mockGraphQL.mockResolvedValue(graphqlActive([appSub({ status: 'DECLINED' })]));
 

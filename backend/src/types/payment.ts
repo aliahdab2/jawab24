@@ -31,15 +31,11 @@ export interface SubscriptionStatus {
     currentPeriodEnd: Date;
     cancelAtPeriodEnd: boolean;
     trialEndsAt?: Date;
-    /** How this subscription is billed. 'shopify' rows are managed inside
-     * Shopify admin — the frontend must route plan changes there (D-G) and
-     * never into Stripe checkout. */
-    paymentMethod?: 'stripe' | 'paypal' | 'manual' | 'shopify';
-    /** Set when paymentMethod='shopify': the *.myshopify.com domain, for the
-     * admin deep link https://admin.shopify.com/store/{store}/charges/{app}/pricing_plans */
-    shopifyShopDomain?: string;
-    /** The app's App Store handle (config), the {app} half of the deep link. */
-    shopifyAppHandle?: string;
+    // Billing-rail data (paymentMethod / shopifyManageUrl) deliberately lives
+    // on GET /subscription/usage ONLY — the one contract the frontend consumes
+    // (getUsageSummary is the choke point for the D-G suppression rules). If
+    // this endpoint ever needs it, mirror that assembled contract; never
+    // expose raw deep-link parts for clients to assemble.
 }
 
 export interface StripeWebhookEvent {

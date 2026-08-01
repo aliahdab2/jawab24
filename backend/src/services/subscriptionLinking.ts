@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { subscriptions } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
+import { LIVE_SUBSCRIPTION_STATUSES } from '../config/shopifyBilling';
 import { stripeService, stripeRefId } from './stripe';
 import { subscriptionsService } from './subscriptions';
 import { stripeTsToDate } from '../utils/stripeTime';
@@ -32,6 +33,10 @@ export interface LinkLogger {
     info: (obj: Record<string, unknown>, msg: string) => void;
     warn: (obj: Record<string, unknown>, msg: string) => void;
 }
+
+/** Silent default for cron callers that pass no logger. NOT the `noopLogger`
+ * in types/logger.ts — that interface has the opposite (msg, data) order. */
+export const noopLinkLogger: LinkLogger = { info: () => {}, warn: () => {} };
 
 /**
  * Attach a Stripe subscription to the local row it belongs to, keyed on the
@@ -88,7 +93,7 @@ export async function adoptStripeSubscription(
     if (
         current &&
         current.paymentMethod === 'shopify' &&
-        ['active', 'trialing', 'past_due'].includes(current.status ?? '')
+        (LIVE_SUBSCRIPTION_STATUSES as readonly string[]).includes(current.status ?? '')
     ) {
         captureError(
             new Error(`Stripe subscription ${stripeSubscription.id} collides with a live shopify-billed row for user ${userId}`),
@@ -180,7 +185,7 @@ export async function reconcileStripeSubscriptions(options?: {
     log?: LinkLogger;
 }): Promise<SubscriptionSweepResult> {
     const limit = options?.limit ?? 100;
-    const log = options?.log ?? { info: () => {}, warn: () => {} };
+    const log = options?.log ?? noopLinkLogger;
 
     const result: SubscriptionSweepResult = {
         scanned: 0, healed: 0, alreadyLinked: 0, orphaned: 0, errors: 0,

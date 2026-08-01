@@ -261,7 +261,7 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
                 ?? candidates.find(c => c.callbackUrl !== null)
                 ?? candidates[0];
             if (current && current.callbackUrl === address) {
-                return { topic, error: null, healedFrom: null };
+                return { topic, error: null };
             }
             const userErrors = current
                 ? (await shopifyGraphQL<WebhookUpdateResult>(shop, accessToken, WEBHOOK_UPDATE_MUTATION, {
@@ -273,21 +273,22 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
                     webhookSubscription: { callbackUrl: address, format: 'JSON' },
                 })).data.webhookSubscriptionCreate.userErrors;
             if (userErrors.length > 0) {
-                return { topic, error: userErrors.map(e => e.message).join(', ').slice(0, ERROR_TEXT_MAX_LENGTH), healedFrom: null };
+                return { topic, error: userErrors.map(e => e.message).join(', ').slice(0, ERROR_TEXT_MAX_LENGTH) };
             }
-            return { topic, error: null, healedFrom: current ? current.callbackUrl ?? '(non-http)' : null };
+            // healedFrom set ONLY on the update path — its presence IS the drift signal.
+            return { topic, error: null, healedFrom: current ? current.callbackUrl ?? '(non-http)' : undefined };
         } catch (err) {
-            return { topic, error: err instanceof Error ? err.message : String(err), healedFrom: null };
+            return { topic, error: err instanceof Error ? err.message : String(err) };
         }
     }));
 
     const registered: string[] = [];
     const failed: Array<{ topic: string; status?: number; error?: string }> = [];
     const healed: Array<{ topic: string; from: string }> = [];
-    for (const { topic, error, healedFrom } of results) {
+    for (const { topic, error, healedFrom } of results as Array<{ topic: string; error: string | null; healedFrom?: string }>) {
         if (error === null) {
             registered.push(topic);
-            if (healedFrom !== null) healed.push({ topic, from: healedFrom });
+            if (healedFrom !== undefined) healed.push({ topic, from: healedFrom });
         } else {
             failed.push({ topic, error });
             captureError(
