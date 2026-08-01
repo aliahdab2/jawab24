@@ -156,6 +156,7 @@
     "timePick": "اختر الوقت",
     "autofilledHint": "قراءة تلقائية من النص — راجعها ثم احفظ",
     "emptyValue": "فارغ",
+    "notePlaceholder": "اكتب هنا…",
     "autofilledFlag": "تلقائي",
     "upcomingCount": "{count, plural, zero {لا مواعيد قادمة} one {موعد واحد قادم} two {موعدان قادمان} few {# مواعيد قادمة} many {# موعدًا قادمًا} other {# موعد قادم}}",
     "noSessions": "لا مواعيد",

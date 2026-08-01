@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check, Trash2, Plus, CalendarClock, ChevronDown, CalendarDays, Clock, Calendar, Tag, Banknote } from 'lucide-react';
+import { Check, Trash2, Plus, CalendarClock, ChevronDown, CalendarDays, Clock, Calendar, Tag, Banknote, AlignLeft } from 'lucide-react';
 import type { FactStructuredFieldValue, FactStructuredValues } from '@jawab24/shared';
 import { SidePanel, Button, Select } from '@/components/ui';
 import { formatCatalogPrice } from '@/utils/priceFormat';
@@ -737,21 +737,25 @@ export function FactEntitySheet({
                       </div>
                     ))}
                     </div>
-                    {sessionLabels.filter((l) => fieldKinds[l] === 'other').map((label) => (
-                      <div key={label} className="rounded-lg bg-muted/40 px-3 py-2 focus-within:ring-2 focus-within:ring-brand-500/30">
-                        <label htmlFor={`entity-session-${i}-${label}`} className="block text-xs text-muted-foreground mb-1" dir="auto">{label}</label>
-                        <textarea
-                          id={`entity-session-${i}-${label}`}
-                          value={s.values[label] ?? ''}
-                          onChange={(e) =>
-                            setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
-                          }
-                          dir={s.values[label] ? 'auto' : undefined}
-                          rows={2}
-                          placeholder={t('lists.emptyValue')}
-                          className="w-full min-h-[56px] bg-transparent border-0 p-0 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-0 resize-y"
-                        />
-                      </div>
+                    {sessionLabels.filter((l) => fieldKinds[l] === 'other').map((label) => propertyRow(
+                      `s:${s.draftKey}:note:${label}`,
+                      label,
+                      <AlignLeft className="w-3.5 h-3.5" />,
+                      (s.values[label] ?? '').trim()
+                        ? <span className="block truncate" dir="auto">{(s.values[label] ?? '').trim()}</span>
+                        : null,
+                      <textarea
+                        id={`entity-session-${i}-${label}`}
+                        value={s.values[label] ?? ''}
+                        onChange={(e) =>
+                          setSessions((prev) => prev.map((p, j) => (j === i ? { ...p, values: { ...p.values, [label]: e.target.value } } : p)))
+                        }
+                        aria-label={label}
+                        dir={s.values[label] ? 'auto' : undefined}
+                        rows={2}
+                        placeholder={t('lists.notePlaceholder')}
+                        className={`${inputClass} !min-h-[64px] py-2 resize-y`}
+                      />,
                     ))}
                     </div>
                     )}
@@ -778,20 +782,24 @@ export function FactEntitySheet({
         {/* The Notion body: merchant free-text lives at the BOTTOM as an open
             canvas, not a boxed field (owner: «الملاحظة آخر شي ونكبر الإدخال»). */}
         {baseCollection && baseLabels.length > 0 && (
-          <div className="space-y-3">
-            {baseLabels.map((label) => (
-              <div key={label} className="rounded-xl bg-muted/40 px-3 py-2.5 focus-within:ring-2 focus-within:ring-brand-500/30">
-                <label htmlFor={`entity-base-${label}`} className="block text-sm text-muted-foreground mb-1" dir="auto">{label}</label>
-                <textarea
-                  id={`entity-base-${label}`}
-                  value={baseValues[label] ?? ''}
-                  onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
-                  dir={baseValues[label] ? 'auto' : undefined}
-                  rows={3}
-                  placeholder={t('lists.emptyValue')}
-                  className="w-full min-h-[80px] bg-transparent border-0 p-0 text-base text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-0 resize-y"
-                />
-              </div>
+          <div className="space-y-0.5">
+            {baseLabels.map((label) => propertyRow(
+              `base:note:${label}`,
+              label,
+              <AlignLeft className="w-3.5 h-3.5" />,
+              (baseValues[label] ?? '').trim()
+                ? <span className="block truncate" dir="auto">{(baseValues[label] ?? '').trim()}</span>
+                : null,
+              <textarea
+                id={`entity-base-${label}`}
+                value={baseValues[label] ?? ''}
+                onChange={(e) => setBaseValues((prev) => ({ ...prev, [label]: e.target.value }))}
+                aria-label={label}
+                dir={baseValues[label] ? 'auto' : undefined}
+                rows={3}
+                placeholder={t('lists.notePlaceholder')}
+                className={`${inputClass} !min-h-[88px] py-2.5 resize-y`}
+              />,
             ))}
           </div>
         )}
