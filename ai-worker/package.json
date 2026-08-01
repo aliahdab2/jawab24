@@ -15,7 +15,7 @@
         "@fastify/cors": "^11.2.0",
         "@fastify/rate-limit": "^10.3.0",
         "@jawab24/shared": "*",
-        "@sentry/node": "^10.35.0",
+        "@sentry/node": "10.56.0",
         "bullmq": "^5.66.4",
         "dotenv": "^16.3.1",
         "fastify": "5.8.5",
