@@ -766,14 +766,19 @@ export function FactEntitySheet({
                   </div>
                   );
                 })}
-                <button
-                  type="button"
-                  onClick={addSession}
-                  className="w-full min-h-[36px] flex items-center gap-2 px-1.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors text-start"
-                >
-                  <Plus className="w-4 h-4 text-icon-muted" aria-hidden="true" />
-                  {t('lists.addSession')}
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={addSession}
+                    className="min-w-0 flex-1 min-h-[36px] flex items-center gap-2 px-1.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors text-start"
+                  >
+                    <Plus className="w-4 h-4 text-icon-muted" aria-hidden="true" />
+                    {t('lists.addSession')}
+                  </button>
+                  {/* Always-visible entry point for the date behaviour — the
+                      contextual one on the التاريخ row needs a session open. */}
+                  <InfoPopover label={t('lists.sessions')}>{t('lists.rowDateHint')}</InfoPopover>
+                </div>
               </div>
             )}
             {anyDateInvalid && (
