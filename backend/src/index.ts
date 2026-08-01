@@ -190,9 +190,13 @@ const start = async () => {
       "com.jawab24.app",
     ];
 
+    // Dev allows ANY localhost port: worktree dev servers run on their own
+    // ports (Rule 18.5 — 3001 is frequently held by another checkout), and a
+    // hard-coded pair forced every parallel worktree into a CORS dead end.
+    // Production stays pinned to the configured frontend origin.
     const allowedOrigins = isProduction
       ? [config.frontendUrl, ...mobileOrigins]
-      : ["http://localhost:3000", "http://localhost:3001", ...mobileOrigins];
+      : [/^http:\/\/localhost:\d+$/, ...mobileOrigins];
 
     await registerPlugin(server, cors, {
       origin: allowedOrigins,
