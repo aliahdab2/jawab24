@@ -604,6 +604,11 @@ describe('Zid Controller', () => {
             expect(mockVerifyWebhookBasicAuth).toHaveBeenCalledWith(undefined);
             expect(rep.status).toHaveBeenCalledWith(401);
             expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
+            // The rejection must be visible in the logs (scheme only, no credentials).
+            expect(req.log.warn).toHaveBeenCalledWith(
+                { scheme: 'none' },
+                expect.stringContaining('Zid webhook rejected'),
+            );
         });
 
         it('rejects with 401 when the credentials are wrong', async () => {
@@ -617,6 +622,10 @@ describe('Zid Controller', () => {
             expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid webhook credentials' });
             expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
             expect(mockDeactivateStore).not.toHaveBeenCalled();
+            expect(req.log.warn).toHaveBeenCalledWith(
+                { scheme: 'Basic' },
+                expect.stringContaining('Zid webhook rejected'),
+            );
         });
     });
 

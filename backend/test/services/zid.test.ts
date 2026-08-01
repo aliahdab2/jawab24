@@ -1168,6 +1168,17 @@ describe('Zid Service', () => {
             ]);
         });
 
+        it('omits price entirely (undefined, not an empty string) when Zid provides none', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ price: undefined, sale_price: undefined })],
+            }));
+
+            const result = await checkInventory('store-1', 'Test Product');
+
+            expect(result).not.toBeNull();
+            expect(result?.price).toBeUndefined();
+        });
+
         it('returns null when no product matches', async () => {
             mockFetch.mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct({ name: 'Other' })] }));
             expect(await checkInventory('store-1', 'nonexistent')).toBeNull();

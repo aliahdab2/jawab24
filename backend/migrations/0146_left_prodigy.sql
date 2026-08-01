@@ -6,7 +6,3 @@ ALTER TABLE "ecommerce_stores" ADD COLUMN "authorization_token" text;--> stateme
 ALTER TABLE "ecommerce_stores" ADD COLUMN "authorization_token_iv" varchar(64);--> statement-breakpoint
 ALTER TABLE "pending_ecommerce_installs" ADD COLUMN "authorization_token" text;--> statement-breakpoint
 ALTER TABLE "pending_ecommerce_installs" ADD COLUMN "authorization_token_iv" varchar(64);
--- NOTE: drizzle-kit also re-emitted subscriptions.trial_ending_notified_at here
--- because migration 0145 was hand-authored without a snapshot update; the column
--- already exists everywhere 0145 ran, so the duplicate ALTER was removed. This
--- migration's snapshot absorbs the drift — future generates won't re-emit it.

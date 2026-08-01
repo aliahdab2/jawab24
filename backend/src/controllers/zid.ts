@@ -42,6 +42,13 @@ function credsFromTokens(tokens: OAuthTokenResponse): zidService.ZidCredentials 
 function verifyZidWebhookAuth(request: FastifyRequest, reply: FastifyReply): boolean {
     const header = request.headers.authorization;
     if (!zidService.verifyWebhookBasicAuth(header)) {
+        // Rejections must be visible: a wrong/rotated ZID_WEBHOOK_SECRET or an
+        // unexpected scheme casing would otherwise drop every delivery silently.
+        // Log the scheme word only — never the credential material.
+        request.log.warn(
+            { scheme: header ? header.split(' ')[0] : 'none' },
+            'Zid webhook rejected: Basic auth verification failed',
+        );
         reply.status(401).send({ error: 'Invalid webhook credentials' });
         return false;
     }

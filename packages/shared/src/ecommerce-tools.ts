@@ -85,7 +85,7 @@ export interface OrderInfo {
     items: Array<{ name: string; quantity: number; price: string }>;
     totalAmount: string;
     currency: string;
-    paymentStatus: string;     // paid, pending, refunded, partially_refunded
+    paymentStatus: string;     // paid, pending, refunded, partially_refunded; 'unknown' when the platform doesn't expose it (Zid, until its payment field is capture-confirmed)
     refundAmount?: string;
     shippingCity?: string;
     shippingDistrict?: string;

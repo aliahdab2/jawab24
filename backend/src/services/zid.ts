@@ -397,7 +397,7 @@ async function fetchAllProducts(creds: ZidCredentials): Promise<ZidProduct[]> {
         const products = extractProducts(data);
         allProducts.push(...products);
 
-        if (products.length < PRODUCTS_PAGE_SIZE || (data.next !== undefined && data.next === null)) break;
+        if (products.length < PRODUCTS_PAGE_SIZE || data.next === null) break;
         page++;
     }
 
@@ -672,7 +672,9 @@ export async function checkInventory(storeId: string, productName: string, varia
         available: (bestMatch.quantity ?? 0) > 0,
         quantity: bestMatch.quantity ?? 0,
         variants: variants.length > 0 ? variants : undefined,
-        price: price !== undefined && price !== null ? `${price} ${currency}` : '',
+        // InventoryInfo.price is optional — omit it entirely when Zid provides no
+        // price rather than handing the AI an empty "price:" field.
+        price: price !== undefined && price !== null ? `${price} ${currency}` : undefined,
         currency,
         productUrl: bestMatch.html_url || (handle && storeDomain
             ? `https://${storeDomain}/products/${handle}`
