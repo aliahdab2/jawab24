@@ -496,23 +496,43 @@ fi
 STANDALONE_SERVER="frontend/.next/standalone/frontend/server.js"
 if [ -f "$STANDALONE_SERVER" ]; then
     SMOKE_PORT=3197
+    # a foreign/stale listener would answer our curl and fake the verdict —
+    # refuse to run rather than report an untrustworthy result
+    if lsof -iTCP:${SMOKE_PORT} -sTCP:LISTEN >/dev/null 2>&1; then
+        echo -e "${RED}   ❌ Port ${SMOKE_PORT} is already in use — cannot smoke-test the standalone server.${NC}"
+        echo -e "${RED}   Likely a stale smoke server from an aborted run:${NC}"
+        lsof -iTCP:${SMOKE_PORT} -sTCP:LISTEN 2>/dev/null | sed 's/^/      /' || true
+        echo -e "${RED}   Kill it and rerun.${NC}"
+        exit 1
+    fi
     PORT=$SMOKE_PORT HOSTNAME=127.0.0.1 node "$STANDALONE_SERVER" > /tmp/standalone-smoke.log 2>&1 &
     SMOKE_PID=$!
     SMOKE_OK=false
+    # every command below is || true guarded: this script runs under set -e, and
+    # a pre-bind curl (exit 7), a kill on an exited PID, or wait's SIGTERM status
+    # must poll/clean up, not abort the whole check (bit us 2026-08-01)
     for _ in $(seq 1 30); do
         if ! kill -0 "$SMOKE_PID" 2>/dev/null; then break; fi
-        SMOKE_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${SMOKE_PORT}/en/login" 2>/dev/null)
+        SMOKE_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${SMOKE_PORT}/en/login" 2>/dev/null || true)
         if [ "$SMOKE_CODE" = "200" ]; then SMOKE_OK=true; break; fi
         if [ "$SMOKE_CODE" = "500" ]; then break; fi
         sleep 1
     done
-    kill "$SMOKE_PID" 2>/dev/null; wait "$SMOKE_PID" 2>/dev/null
+    # Next's standalone server shuts down "gracefully" on SIGTERM and can
+    # linger holding the port (orphan observed 2026-08-01) — escalate to KILL
+    kill "$SMOKE_PID" 2>/dev/null || true
+    for _ in 1 2 3; do
+        kill -0 "$SMOKE_PID" 2>/dev/null || break
+        sleep 1
+    done
+    kill -9 "$SMOKE_PID" 2>/dev/null || true
+    wait "$SMOKE_PID" 2>/dev/null || true
     if [ "$SMOKE_OK" = true ]; then
         echo -e "${GREEN}   ✅ Standalone server smoke test passes (SSR 200)${NC}"
     else
         echo -e "${RED}   ❌ Standalone server failed to serve a page (got '${SMOKE_CODE:-no response}')${NC}"
         echo -e "${RED}   A runtime module is likely missing from the standalone trace:${NC}"
-        grep -m 3 "Cannot find module" /tmp/standalone-smoke.log | sed 's/^/      /'
+        grep -m 3 "Cannot find module" /tmp/standalone-smoke.log 2>/dev/null | sed 's/^/      /' || true
         echo -e "${RED}   Full log: /tmp/standalone-smoke.log${NC}"
         exit 1
     fi
