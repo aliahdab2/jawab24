@@ -448,6 +448,39 @@ export function detectCommentLanguage(commentText: string, postMessage?: string 
 }
 
 /**
+ * Resolve the language hint the backend sends the ai-worker for a DM.
+ *
+ * Low-confidence Latin detection — the en@<MIN_CERTAIN_CONFIDENCE "Latin
+ * script, recognized nothing" floor (Arabizi, bare names, acronyms like
+ * "ICDL") — with ANY prior thread context defers to the ai-worker's
+ * history-first chain by sending no hint at all; a confident read travels
+ * as-is. English-only on purpose: a NAMED-but-unevidenced language (tr@0.55
+ * from a bare `ç`/`ı`) keeps its own language as the default rather than
+ * inherit the thread's — the prompt's soft directive already stops it being
+ * asserted as the customer's. The floor deliberately stays a BLUNT instrument
+ * (it also catches accent-free French — a known, accepted limitation; the
+ * isLowSignalLatinToken narrowing was tried 2026-07-29 and REVERTED; see
+ * backend/test/services/deferToHistory.test.ts).
+ *
+ * Single source of truth for BOTH backend reply paths — generateForMessage
+ * (production) and generateForPlayground (eval/test tool). The two had
+ * drifted: defer-to-history landed only on the production path, so the
+ * playground kept asserting the Latin floor as an explicit language and
+ * answered a Latin-script bare name ("Weaam Aldoukha") in English
+ * mid-Arabic-thread — a harness artifact production would not produce
+ * (caught 2026-08-01). Lives here, next to its inputs, per the Phase 1a
+ * consolidation rule: language logic in one shared module so surfaces cannot
+ * drift apart.
+ */
+export function resolveDmLanguageHint(text: string, hasPriorHistory: boolean): string | undefined {
+    const detected = detectLanguage(text);
+    const { language: msgLang } = detected;
+    const isLowConfidenceLatin = msgLang === 'en' && !isCertainDetection(detected);
+    if (isLowConfidenceLatin && hasPriorHistory) return undefined;
+    return msgLang !== 'unknown' ? msgLang : undefined;
+}
+
+/**
  * Map language code to full name
  */
 export function getLanguageName(code: SupportedLanguage): string {

@@ -207,4 +207,8 @@ Customer: "ما اسم المدرّبة التي ستتولى التدريب؟" 
 
 Example 14 — QUANTITY in an order (dual suffix "علبتين" = TWO): multiply the unit price by the stated quantity — never total a single unit:
 Customer: "بدي علبتين من كريم الأساس مع التوصيل، كم المجموع؟" | KB has: "كريم الأساس - 80 ريال" and "التوصيل - 20 ريال"
-{"reply":"علبتين كريم الأساس 160 ريال، ومع التوصيل 20 ريال يصير المجموع 180 ريال 👌","intent":"PURCHASE_INTENT","confidence":"high","hedging":false,"language":"ar","flags":[]}`;
+{"reply":"علبتين كريم الأساس 160 ريال، ومع التوصيل 20 ريال يصير المجموع 180 ريال 👌","intent":"PURCHASE_INTENT","confidence":"high","hedging":false,"language":"ar","flags":[]}
+
+Example 15 — Customer answers YOUR request for their details with a bare name (surnames often look like ordinary nouns — الحداد here is a family name, NOT the blacksmith trade). It is the answer you asked for: NEVER spam, never a new topic, never a re-greet + "how can I help?" reset — take the name and ask only for the fields still missing:
+Your previous turn: "زوديني باسمك ورقمك ونوع الدورة اللي حابة تسجلي فيها ومنرتب معك" | Customer: "ليلى الحداد"
+{"reply":"شكراً ليلى! باقي رقمك ونوع الدورة اللي حابة تسجلي فيها.","intent":"PURCHASE_INTENT","confidence":"high","hedging":false,"language":"ar","flags":[]}`;

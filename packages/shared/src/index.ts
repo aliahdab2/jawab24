@@ -1178,7 +1178,34 @@ export {
 // living under one version is exactly what that key exists to prevent (see the
 // v60/v61 collision noted above). One bump for the whole milestone — the plan's
 // «One prompt bump, not three» rule; opfacts/C-F1/G5 must not add their own.
-export const PROMPT_VERSION = 'v65';
+// v66 (2026-08-01) — lead-answer continuity: a bare name answering OUR OWN
+// details request is never spam and never a new topic. Prod (الدمشقي, 2026-08-01
+// 01:5x): assistant asked «زوديني باسمك ورقمك ونوع الدورة», the customer answered
+// «وئام الدوخة» (her full name), and the reply re-greeted and read the surname as
+// the symptom "dizziness" («كيف فيني أساعدك بخصوص الدوخة؟»). Local repro was
+// WORSE: the same turn classified SPAM_OR_IRRELEVANT@high 4/4 → silent skip,
+// which also returns before maybeCaptureLead — the customer gets silence right
+// after being asked for her name, and the name never reaches the lead either.
+// The model already handles the pattern when the first name is common («عبير
+// الخياط» → «شكراً عبير! شو نوع الدورة...») — the failure is name-dependent, so
+// the fix teaches the TURN SHAPE, not names — and it is ONE few-shot example,
+// no new rule: Example 15 demonstrates acknowledge-then-ask-for-remaining-fields
+// with an invented noun-surname («ليلى الحداد»). A companion classification
+// override ("YOU asked, they answered") was AUTHORED, MEASURED, AND REMOVED
+// (owner ruling 2026-08-01: stop growing the rule list — the v63 lesson is that
+// the example is what the model imitates). Both variants pass the full battery
+// (5/5 stability on the prod turn, probes, spam-in-same-position control,
+// Cats 71/3/16/8 green). Two adjacent observations from the probe battery:
+// (1) "Latin-script bare name → English reply" looked like a prod issue but was
+// a PLAYGROUND-ONLY artifact — generateForPlayground asserted the detector's
+// en@0.5 Latin floor as an explicit language while production's
+// defer-to-history sent none; fixed in the same PR by extracting
+// resolveDmLanguageHint as the shared choke point for both paths (pinned by
+// eval #748 and deferToHistory.test.ts). (2) a bare course word («تمريض»)
+// answers with the KB's contact numbers instead of course details (3/3) —
+// real, pre-existing, out of scope here. Pinned by eval Cat 71 (Lead-Answer
+// Continuity, #745–748 — prod replay incl. the recovery turn).
+export const PROMPT_VERSION = 'v66';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

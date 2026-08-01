@@ -388,6 +388,32 @@ Rules that follow from it:
    'useEffect')`). Check `git diff --stat` first; if your change doesn't touch that
    workspace, it's an install artifact — say so rather than claiming a false green.
 
+### 19. Reply-Touching Changes Must Be Mirrored in the Eval
+
+Any change that can alter what a customer receives as a reply — the ai-worker prompt
+(static prefix or dynamic blocks), reply generation (`generator.ts`,
+`messageProcessor.ts`, `commentProcessor.ts`), language resolution, intent/flag/
+confidence handling, reply caching — must land **in the same PR** with its mirror
+in the eval:
+
+1. **Every behavior change gets an eval case.** A new behavior → a case that pins
+   it (prod replays are the gold standard: the real conversation, the real page
+   fixture). A bug fix → a case that failed before the fix and passes after. A
+   known-open gap → an `expectedFail` (XGAP) case, so the gap is documented by a
+   running test instead of rotting on a branch.
+2. **The eval harness must exercise the SAME code as production.** The playground
+   path (`generateForPlayground`) shares production logic through single choke
+   points (`computeReplyFlags`, `resolveDmLanguageHint`). Never re-implement or
+   fork production reply logic inside the playground/eval path — extract a shared
+   function both paths call. Precedent (2026-08-01): defer-to-history language
+   logic landed only on the production path; the playground drifted, asserted the
+   Latin-floor language explicitly, and "reproduced" an English-reply bug that
+   production never had — a real investigation wasted on a broken measuring stick.
+3. **Tests import production predicates — never copy them.** A test that inlines a
+   production expression drifts silently when the expression changes
+   (`deferToHistory.test.ts` did exactly this until 2026-08-01; it now calls
+   `resolveDmLanguageHint` directly).
+
 ---
 
 ## Common Commands

@@ -22,6 +22,7 @@ export {
     isRTL,
     getLanguageName,
     isCertainDetection,
+    resolveDmLanguageHint,
     MIN_CERTAIN_CONFIDENCE,
     type SupportedLanguage,
     type LanguageDetectionResult,
