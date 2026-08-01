@@ -76,7 +76,10 @@ const INPUT_TYPE: Partial<Record<EditableFactKey, 'tel'>> = { phone: 'tel' };
  * while the fact is EMPTY: existing text can't be parsed back into fields, so
  * editing stays free-text.
  */
-const PAYMENT_METHODS = ['cash', 'shamcash', 'transfer', 'card'] as const;
+// Generic methods only — no country-specific brands (owner ruling 2026-08-01:
+// شام كاش is Syrian while merchants span Libya and beyond; local wallets go in
+// the free note, which composes into the same text).
+const PAYMENT_METHODS = ['cash', 'transfer', 'card', 'cod'] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 interface BusinessFactSheetProps {
