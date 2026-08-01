@@ -220,11 +220,7 @@ AUDIT_FAILED=false
 #
 # What remains, and why it is acknowledged instead of fixed:
 #
-# GHSA-gpj5-g38j-94v9 — drizzle-orm SQL injection via dynamic identifiers (high).
-# We use static schema only (no dynamic table/column names), so the vulnerable
-# path is unreachable. Real fix is the drizzle-orm 0.29 → 0.45 major, which
-# touches every query in the backend — planned as its own migration, not foldable
-# into a dependency refresh. Drop this entry then.
+# GHSA-gpj5 (drizzle-orm SQLi) — DROPPED 2026-08-01: fixed by the 0.29→0.45 upgrade.
 # GHSA-qx2v-qp2m-jg93, GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849 — postcss XSS /
 # arbitrary file read / sourcemap path traversal in next@15.5.x's OWN pinned
 # nested copy (node_modules/next/node_modules/postcss@8.4.31). The workspace-level
@@ -239,7 +235,7 @@ AUDIT_FAILED=false
 # geoip.lookup(ip), which returns a plain data object; the HTML-emitting methods
 # are never invoked. geoip-lite feeds the sanctioned-country check (LEGAL path) —
 # no override experiments here. Revisit when geoip-lite ships on ip-address >=10.
-IGNORED_GHSA="GHSA-gpj5-g38j-94v9|GHSA-qx2v-qp2m-jg93|GHSA-6g55-p6wh-862q|GHSA-r28c-9q8g-f849|GHSA-v2v4-37r5-5v8g"
+IGNORED_GHSA="GHSA-qx2v-qp2m-jg93|GHSA-6g55-p6wh-862q|GHSA-r28c-9q8g-f849|GHSA-v2v4-37r5-5v8g"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {

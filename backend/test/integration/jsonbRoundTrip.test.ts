@@ -64,9 +64,12 @@ describe('jsonb columns store objects, not JSON-encoded strings', () => {
         const msg = await insertMessage(page.id, 'sender-jsonb-3');
 
         // Plant the pre-migration shape: a jsonb STRING holding the JSON text.
+        // to_jsonb(text) builds the string scalar server-side — planting must not
+        // depend on the wire serializer double-encoding (that was 0.29 behavior;
+        // the restored serializers in src/db pass strings through untouched).
         await testDb.execute(sql`
             UPDATE messages
-            SET flag_meta = ${JSON.stringify({ legacy: true })}::jsonb
+            SET flag_meta = to_jsonb(${JSON.stringify({ legacy: true })}::text)
             WHERE id = ${msg.id}
         `);
         const planted = await rawMeta(msg.id);
@@ -86,7 +89,7 @@ describe('jsonb columns store objects, not JSON-encoded strings', () => {
 
         await testDb.execute(sql`
             UPDATE messages
-            SET flag_meta = ${JSON.stringify({ [SHADOW_KEY]: { claims: [] } })}::jsonb
+            SET flag_meta = to_jsonb(${JSON.stringify({ [SHADOW_KEY]: { claims: [] } })}::text)
             WHERE id = ${msg.id}
         `);
         expect((await rawMeta(msg.id)).key_visible).toBe(false); // invisible while string
