@@ -167,7 +167,19 @@ OPENAI_API_KEY=sk-proj-...
 NEXT_PUBLIC_API_URL=https://your-domain.com/api
 NEXT_PUBLIC_FB_APP_ID=your_facebook_app_id
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_publishable_key
+NEXT_PUBLIC_SENTRY_DSN=https://...ingest.sentry.io/...
+NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
 ```
+
+> **`NEXT_PUBLIC_*` is BUILD-time, not runtime.** `next build` inlines these
+> into the bundle, so the deploy script exports `env/frontend.env` and passes
+> each one as a Docker **build arg**. A var that is missing from the file — or
+> from a service's `build.args` in `docker-compose.yml` /
+> `docker-compose.blue.yml` / `docker-compose.green.yml` — is compiled to
+> `undefined` and the feature dies inside the image; adding it to the container
+> environment afterwards cannot fix it. All three frontend services tag the same
+> image, so their arg lists must stay identical (`frontend/test/deployBuildArgs.test.ts`
+> enforces this, and the Dockerfile refuses to build without the Stripe key).
 
 ### GitHub Secrets
 

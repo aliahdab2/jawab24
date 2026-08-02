@@ -149,6 +149,22 @@ build_images() {
     export GIT_COMMIT=$(git rev-parse HEAD)
     echo "📝 Git commit: $(git rev-parse --short HEAD)"
 
+    # Preflight: NEXT_PUBLIC_* are inlined by `next build` and cannot be
+    # repaired at runtime, so a missing one ships a silently broken image.
+    # The Dockerfile refuses to build without the Stripe key — catch it here
+    # first so the failure names the fix instead of costing a full build.
+    local MISSING_PUBLIC=""
+    for v in NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY NEXT_PUBLIC_SENTRY_DSN NEXT_PUBLIC_API_URL; do
+        eval "val=\${$v:-}"
+        [ -n "$val" ] || MISSING_PUBLIC="$MISSING_PUBLIC $v"
+    done
+    if [ -n "$MISSING_PUBLIC" ]; then
+        echo "❌ ERROR: missing frontend build env:$MISSING_PUBLIC"
+        echo "   These are baked into the image at build time. Add them to"
+        echo "   ./env/frontend.env on this host, then re-run the deploy."
+        exit 1
+    fi
+
     # Build ONLY the target env's images, ONE AT A TIME. Two hard-won facts
     # (2026-08-02, deploy OOM after the drizzle-orm 0.45 upgrade):
     #   1. Compose v2 builds every service in the merged file set CONCURRENTLY —
@@ -530,6 +546,24 @@ smoke_test_content() {
     fi
 
     echo "   ✅ Login page returns valid HTML with Next.js content"
+
+    # 3. Verify the Stripe publishable key was actually INLINED into the bundle.
+    #    This is the only check that inspects the shipped artifact rather than
+    #    the inputs, so it catches every way the key can go missing: an arg
+    #    dropped from a compose overlay, an env/frontend.env that lost the line,
+    #    or a stale cached image. Without the key `getStripePromise()` folds to
+    #    `return null` and every merchant gets a checkout with no card form
+    #    (2026-08-02). Runs BEFORE the traffic switch, so a bad build never
+    #    reaches customers.
+    if docker exec "$F_ID" grep -rqE 'pk_(live|test)_' /app/frontend/.next/static 2>/dev/null; then
+        echo "   ✅ Stripe publishable key inlined in the frontend bundle"
+    else
+        echo "   ❌ No Stripe publishable key found in /app/frontend/.next/static!"
+        echo "   Checkout would render with no payment form. Check that"
+        echo "   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is set in ./env/frontend.env"
+        echo "   and passed as a build arg by the frontend-$DEPLOY_ENV service."
+        exit 1
+    fi
 
     # Also verify the API health endpoint
     B_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "backend-$DEPLOY_ENV")
