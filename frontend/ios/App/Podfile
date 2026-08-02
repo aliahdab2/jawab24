@@ -1,4 +1,11 @@
-require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+# Resolve @capacitor/ios through Node so npm-workspace hoisting (root vs
+# frontend/node_modules) can't break the path.
+def capacitor_ios_path
+  @capacitor_ios_path ||= File.dirname(Pod::Executable.execute_command('node', ['-p',
+    "require.resolve('@capacitor/ios/package.json', { paths: ['#{__dir__}'] })"]).strip)
+end
+
+require_relative File.join(capacitor_ios_path, 'scripts/pods_helpers')
 
 platform :ios, '15.0'
 
@@ -9,8 +16,8 @@ use_frameworks!
 install! 'cocoapods', :disable_input_output_paths => true
 
 def capacitor_pods
-  pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
-  pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/ios'
+  pod 'Capacitor', :path => capacitor_ios_path
+  pod 'CapacitorCordova', :path => capacitor_ios_path
 end
 
 target 'App' do

@@ -1043,3 +1043,29 @@ confirmed too: 100% of 75,584 Facebook comments in the last 30 days carry a `fro
 because our own page has no comment from a non-admin account to test against. So "does a
 tag actually appear" is answered by the first armed post on a live page — which is safe to
 run, given the failure mode above.
+
+## D-064 · iOS App Store billing: web-only, zero commission — no IAP before launch
+
+Owner ruling, 2026-08-02.
+
+**The rule.** The iOS app launches (and stays) as a free companion app with NO in-app
+commerce: subscriptions are sold exclusively on jawab24.com via Stripe. Apple's 15/30%
+commission applies only to sales transacted inside the app, so this model owes Apple
+0% — permanently. This is Guideline 3.1.3(b) ("Multiplatform Services") and the
+standard B2B SaaS pattern (Slack, HubSpot, ManyChat).
+
+**Why it was ruled.** The launch stalled for 3 months (May–Aug 2026) on the belief that
+Apple would take 30% of Jawab24 revenue. It would not: the reader-app gating shipped in
+`498b5c34` (May 2026) — `isIOSNative()`, `useIOSPaymentRedirect`, UpgradeCTA hidden,
+pricing nav gated — already removes everything Apple could tax.
+
+**Standing discipline.** Every new upgrade/pricing/plan CTA must go through the iOS
+gating (`isIOSNative` / the `iosOr(...IOS)` copy pattern). One stray "upgrade" link or
+"buy on our website" phrase visible on iOS is an instant Guideline 3.1.1 rejection.
+
+**Parked, not rejected.** Adding IAP later as an extra payment rail is allowed IF a
+verified case appears — the candidate rationale is Libyan merchants who cannot pay via
+Stripe (0/7 top-ups) but can pay Apple's Libya storefront in local currency. Gate:
+verify Libya-storefront payment methods with a real Libyan Apple ID, enroll in the
+Small Business Program (15%), sign the Paid Apps Agreement. Do not build IAP before the
+app is launched and that verification is done.
