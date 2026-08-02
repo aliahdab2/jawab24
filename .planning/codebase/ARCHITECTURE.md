@@ -235,6 +235,10 @@ Each service is independently deployable but shares:
      params at the wire, passing drizzle's pre-stringified column values through
      untouched. Every `drizzle(client)` instance needs the call (the app client
      gets it at module init; `test/integration/setup.ts` applies it to `testDb`).
+     Read direction: identity parsers mean raw reads (`db.execute` rows and bare
+     `sql<>` fields in `.select()`, which bypass column mappers) return Postgres
+     TEXT for date/timestamp columns, not `Date` — wrap in `new Date(...)` at the
+     consumer (see `getAiCacheStats` in `utils/cleanup.ts`).
    - `jsonbColumn.ts` — the repo's `jsonb()` column type. Drizzle 0.29's built-in
      `jsonb` double-encodes through postgres-js (drizzle-orm#724): every value it
      wrote landed as a jsonb *string*, invisible to the SQL `?`/`->` operators

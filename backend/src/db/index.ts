@@ -35,6 +35,9 @@ export const db = drizzle(client, {
 // mapFromDriverValue own the read direction (incl. timezone handling).
 // Must run AFTER drizzle(client) — construct() overwrites these entries. Any other
 // drizzle(client) instance (e.g. the integration-test client) needs the same call.
+// Deliberate SUBSET of the OIDs drizzle nulls: time (1083) and the array OIDs
+// (1182/1185/1115/1231) stay identity because the schema has no time or
+// date/numeric-array columns — add them here if such a column ever appears.
 export function restoreRawParamSerializers(pgClient: ReturnType<typeof postgres>): void {
     // OIDs: 1184 timestamptz, 1114 timestamp, 1082 date.
     for (const oid of [1184, 1114, 1082]) {
