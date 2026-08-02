@@ -226,19 +226,33 @@ Each service is independently deployable but shares:
 
 6. **Database Layer** (`src/db/`):
    - `schema.ts` — Drizzle ORM table definitions (users, pages, messages, subscriptions, etc.)
-   - `index.ts` — Drizzle client singleton
+   - `index.ts` — Drizzle client singleton. Also home of `restoreRawParamSerializers`:
+     drizzle-orm ≥0.30 (`drizzle(client)`) replaces the postgres-js client's
+     date/timestamp/json serializers with identity functions so its column mappers
+     own conversion — which crashes any raw ``sql`...${date}` `` / `db.execute`
+     fragment with a Date/Object/Array param (ERR_INVALID_ARG_TYPE at Bind). The
+     restore converts Dates to ISO and JSON-stringifies non-string json/jsonb
+     params at the wire, passing drizzle's pre-stringified column values through
+     untouched. Every `drizzle(client)` instance needs the call (the app client
+     gets it at module init; `test/integration/setup.ts` applies it to `testDb`).
+     Read direction: identity parsers mean raw reads (`db.execute` rows and bare
+     `sql<>` fields in `.select()`, which bypass column mappers) return Postgres
+     TEXT for date/timestamp columns, not `Date` — wrap in `new Date(...)` at the
+     consumer (see `getAiCacheStats` in `utils/cleanup.ts`).
    - `jsonbColumn.ts` — the repo's `jsonb()` column type. Drizzle 0.29's built-in
      `jsonb` double-encodes through postgres-js (drizzle-orm#724): every value it
      wrote landed as a jsonb *string*, invisible to the SQL `?`/`->` operators
      (~440k prod rows by 2026-08-01; this hid all grounding-verifier shadow flags).
      App code never noticed because drizzle reads double-decode symmetrically.
-     The shim passes raw values to the driver (single serialization) and keeps a
+     The shim passes raw values to the driver (single serialization — under
+     drizzle ≥0.30 this depends on `restoreRawParamSerializers` above) and keeps a
      tolerant string-parsing read for pre-migration rows; migration
      `0148_normalize_double_encoded_jsonb` repaired the stored rows. SQL-side
      contract pinned by `test/integration/jsonbRoundTrip.test.ts` — schema.ts must
      import `jsonb` from here, never from `drizzle-orm/pg-core` (enforced by an
      ESLint `no-restricted-imports` rule in `backend/eslint.config.mjs`).
-   - Migrations auto-generated via `drizzle-kit generate:pg`
+   - Migrations auto-generated via `drizzle-kit generate` (drizzle-orm 0.45.2 +
+     drizzle-kit 0.31.10, exact-pinned; migration meta upgraded to snapshot v7)
    - 20+ tables for multi-workspace, multi-page, multi-language support
 
 7. **Workers** (`src/workers/`):

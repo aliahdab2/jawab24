@@ -267,19 +267,22 @@ export async function getAiCacheStats(): Promise<{
     oldestEntry: Date | null;
     newestEntry: Date | null;
 }> {
+    // Bare sql<> select fields bypass drizzle's column mappers (noopDecoder), and
+    // drizzle >=0.30 installs identity parsers on the client — so these aggregates
+    // arrive as raw Postgres text ("2026-08-02 06:54:44.743+00"), not Date objects.
     const stats = await db
         .select({
             count: sql<number>`count(*)`,
             totalHits: sql<number>`coalesce(sum(hit_count), 0)`,
-            oldest: sql<Date>`min(created_at)`,
-            newest: sql<Date>`max(last_used_at)`,
+            oldest: sql<string | Date | null>`min(created_at)`,
+            newest: sql<string | Date | null>`max(last_used_at)`,
         })
         .from(aiCache);
-    
+
     return {
         totalEntries: Number(stats[0]?.count) || 0,
         totalHits: Number(stats[0]?.totalHits) || 0,
-        oldestEntry: stats[0]?.oldest || null,
-        newestEntry: stats[0]?.newest || null,
+        oldestEntry: stats[0]?.oldest ? new Date(stats[0].oldest) : null,
+        newestEntry: stats[0]?.newest ? new Date(stats[0].newest) : null,
     };
 }

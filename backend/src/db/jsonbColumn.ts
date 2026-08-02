@@ -24,6 +24,13 @@ import { customType } from 'drizzle-orm/pg-core';
  * Remove this shim (switch back to drizzle's `jsonb`) only after upgrading
  * drizzle-orm to a version whose postgres-js driver passes this repo's
  * round-trip regression test: backend/test/integration/jsonbRoundTrip.test.ts.
+ *
+ * String-scalar caveat (drizzle >=0.30 + restoreRawParamSerializers): JS strings
+ * pass to the wire RAW — valid-JSON text is stored as its parsed structure and
+ * non-JSON text errors server-side. Never write a bare string intending a JSON
+ * string scalar; build it server-side (`to_jsonb(...::text)`) like the
+ * round-trip test does. No production column stores string scalars (0148
+ * normalized the legacy rows away).
  */
 export const jsonb = customType<{ data: unknown; driverData: unknown }>({
     dataType() {

@@ -266,11 +266,14 @@ describe('cleanup utilities', () => {
 
     describe('getAiCacheStats', () => {
         it('should return cache statistics', async () => {
+            // Raw sql<> aggregates come back as Postgres TEXT under drizzle >=0.30
+            // (identity parsers + noopDecoder) — the mock must mirror that shape,
+            // or the Date re-hydration in getAiCacheStats goes untested.
             const mockFrom = vi.fn().mockResolvedValue([{
                 count: 42,
                 totalHits: 1500,
-                oldest: new Date('2024-01-01'),
-                newest: new Date('2024-06-01'),
+                oldest: '2024-01-01 00:00:00+00',
+                newest: '2024-06-01 00:00:00+00',
             }]);
             vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
 
@@ -278,8 +281,8 @@ describe('cleanup utilities', () => {
 
             expect(stats.totalEntries).toBe(42);
             expect(stats.totalHits).toBe(1500);
-            expect(stats.oldestEntry).toEqual(new Date('2024-01-01'));
-            expect(stats.newestEntry).toEqual(new Date('2024-06-01'));
+            expect(stats.oldestEntry).toEqual(new Date('2024-01-01T00:00:00Z'));
+            expect(stats.newestEntry).toEqual(new Date('2024-06-01T00:00:00Z'));
         });
 
         it('should return zeros when cache is empty', async () => {
