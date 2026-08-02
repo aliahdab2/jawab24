@@ -188,6 +188,17 @@ export interface ParsedReply {
 
 /** Result of validateReply — `hedging` is consumed and dropped. */
 export interface ValidatedReply {
+    /**
+     * The reply to send — or EMPTY, which is not self-describing and must never
+     * be branched on alone. Three states share `reply: ''`:
+     *   - `intent` OFFENSIVE / SPAM_OR_IRRELEVANT → intentional silence.
+     *   - `flags` contains `self_identification_exhausted` → a deliverable HOLD
+     *     (Check 6 stripped every sentence); the backend flags the row for
+     *     merchant review. Use `isHeldEmptyReply(flags)` — never a bare
+     *     `!reply` — or the flag is swallowed and the hold degrades into a
+     *     generic ai_empty_reply failure.
+     *   - otherwise → a generation failure (`AiEmptyReplyError`).
+     */
     reply: string;
     intent?: string;
     confidence?: string;

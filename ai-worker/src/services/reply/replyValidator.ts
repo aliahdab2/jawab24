@@ -273,6 +273,37 @@ export function isCommentTooLong(reply: string, channel: 'comment' | 'dm'): bool
 }
 
 /**
+ * Check 6 exhausted the reply: every sentence was reveal talk, so `reply` comes
+ * back EMPTY and this flag rides the flags array as the cross-service HOLD
+ * signal (backend `HOLD_REPLY_FLAGS` → `held_self_identification`).
+ *
+ * Exported because an empty reply is NOT self-describing on the wire — it means
+ * three different things (see {@link isHeldEmptyReply}) and every consumer that
+ * branches on emptiness must consult this flag to tell them apart.
+ */
+export const SELF_ID_EXHAUSTED_FLAG = 'self_identification_exhausted';
+
+/**
+ * True when an empty reply is a deliverable HOLD rather than a generation
+ * failure.
+ *
+ * `reply: ''` carries three distinct meanings across the worker→backend
+ * boundary, and only the third is an error:
+ *   1. INTENTIONAL — OFFENSIVE / SPAM_OR_IRRELEVANT: the prompt asks for it.
+ *   2. HELD — Check 6 stripped the entire reply (this predicate). The backend
+ *      flags the row for merchant review; nothing is sent, nothing is retried.
+ *   3. FAILURE — anything else (truncation at the model cap, broken JSON).
+ *      Throws `AiEmptyReplyError`.
+ *
+ * The empty-reply guard in openai.ts is the single arbiter between the three;
+ * this predicate exists so meaning 2 is decided HERE, next to the code that
+ * produces it, instead of being re-derived at each call site.
+ */
+export function isHeldEmptyReply(flags: readonly string[] | undefined): boolean {
+    return !!flags?.includes(SELF_ID_EXHAUSTED_FLAG);
+}
+
+/**
  * True when the page itself IS the platform brand — Jawab24's own support
  * page — so brand mentions in a reply are the page talking about its own
  * product, not the assistant leaking the tool a merchant uses. Keyed on the
@@ -518,8 +549,23 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // The empty reply + this flag are the cross-service HOLD signal — the
     // backend holds the message for merchant review (held_self_identification)
     // instead of sending; the validator never substitutes invented text.
-    if (stripped && finalReply === '' && !flags.includes('self_identification_exhausted')) {
-        flags.push('self_identification_exhausted');
+    if (stripped && finalReply === '' && !flags.includes(SELF_ID_EXHAUSTED_FLAG)) {
+        flags.push(SELF_ID_EXHAUSTED_FLAG);
+        // Canonical emit site for this event — validateReply is the ONE function
+        // all three generation paths (default model, provider abstraction, tool
+        // loop) share, so logging here can't drift per-path. The pre-strip reply
+        // is the only record of what the model actually said: it is deliberately
+        // NOT stored on the row (it is the automation reveal itself — surfacing
+        // it in the merchant's composer would put the forbidden text one tap
+        // from the customer), so without this line the failure is undiagnosable.
+        console.log(JSON.stringify({
+            event: 'self_identification_exhausted',
+            pipeline: request.context?.pipeline,
+            intent: parsed.intent,
+            selfReported,
+            ownBrandPage: isOwnBrandPage(request.context?.pageName),
+            strippedReply: reply.slice(0, 300),
+        }));
     }
 
     return {

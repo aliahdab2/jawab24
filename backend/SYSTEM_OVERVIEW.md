@@ -49,6 +49,7 @@ Implemented in `messageProcessor.ts`. Platform-agnostic -- all platform-specific
 | 12 | **Generate reply** -- template match -> AI with RAG -> fallback (see Section 5). Enriches KB with e-commerce data, business profile, brand voice notes | -- |
 | 12b | **Price fallback** -- if AI hallucinated a price (`price_not_in_kb`), replace with safe canned response | -- |
 | 12c | **Skip offensive** -- `offensive_or_abusive` flag or `OFFENSIVE`/`SPAM_OR_IRRELEVANT` intent: flag and notify, no reply sent | Skipped (risky) |
+| 12c-bis | **Withhold exhausted self-ID strip** (always on) -- Check 6 stripped the ENTIRE reply, so the worker returns an empty reply + `self_identification_exhausted`: flag as `held_self_identification`, notify, capture the lead, send nothing. Runs before 12d (a low-confidence exhausted reply would be held with an empty draft) and before the `!replyText` guard (whose `success:false` re-bills the same doomed generation) | Held for review |
 | 12d | **Hold low-confidence** -- when `holdLowConfidence` setting enabled and confidence is low: store original AI reply, flag as `held_low_confidence`, notify merchant | Held for review |
 | 12e | **Max length enforcement** -- truncate at sentence boundary: Facebook 2000 chars, Instagram 1000 chars | -- |
 | 13 | **Send reply** -- via platform adapter. On failure: mark as `delivery_failed`, SSE notify, return | Send failed |
@@ -75,6 +76,7 @@ Implemented in `commentProcessor.ts`. Same adapter pattern as DMs.
 | 8 | **Generate reply** -- same priority stack as DMs, with comment reply mode awareness | -- |
 | 8b | **Price fallback** | -- |
 | 8c | **Skip offensive** | Skipped (risky) |
+| 8c-bis | **Withhold exhausted self-ID strip** (always on) -- mirror of DM 12c-bis; also runs before step 9, whose adapter fallback would re-inject canned text | Held for review |
 | 8d | **Hold low-confidence** | Held for review |
 | 9 | **Handle no-reply** -- use adapter fallback or notify merchant | No reply generated |
 | 9b | **Max length** -- public mode: 500 chars (truncated at sentence). Private/dual modes: no truncation (sent as DM) | -- |
@@ -286,6 +288,9 @@ All flags are comma-separated in the `flagReason` field.
 | `exchange_request` | AI | Customer wants to exchange a product |
 | `delivery_failed` | Pipeline | Platform API rejected the reply (not an AI flag) |
 | `held_low_confidence` | Pipeline | Reply held for merchant review (holdLowConfidence setting) |
+| `self_identification_stripped` | Validator (Check 6) | Automated-identity wording was removed from the reply. Also blocks the reply caches |
+| `self_identification_exhausted` | Validator (Check 6) | Check 6 stripped EVERY sentence — the worker returns an empty reply carrying this flag. Cross-service hold signal; never a generation failure |
+| `held_self_identification` | Pipeline | Stored reason for a row withheld by 12c-bis / 8c-bis. Always on — no merchant setting |
 
 ### Urgent Flags
 

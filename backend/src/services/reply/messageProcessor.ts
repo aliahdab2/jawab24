@@ -759,6 +759,53 @@ export class MessageProcessor {
                 return { success: true, messageId: platformMessageId };
             }
 
+            // 12c-bis. Withhold exhausted self-identification strips (always on, no
+            // setting): Check 6 removed the ENTIRE reply — all reveal talk — and the
+            // validator no longer substitutes a canned identity line (it answered
+            // "who are you?" whatever the customer asked; prod, Jawab24 page,
+            // 2026-08-01). Nothing defensible to send → flag for merchant review.
+            //
+            // Ordering is load-bearing in BOTH directions:
+            //   - BEFORE 12d: a low-confidence exhausted reply would otherwise be
+            //     stored as `held_low_confidence` with an EMPTY draft, giving the
+            //     merchant a review affordance with nothing in it.
+            //   - BEFORE the !replyText guard: its success:false re-enqueues and
+            //     re-bills the same doomed generation.
+            //
+            // Deliberately `flagMessage`, NOT `markAsReplied('')` like 12d: nothing
+            // was sent, so the row must stay unreplied (a false replied/repliedAt
+            // corrupts response-time reporting), and there is no draft worth
+            // reviewing — the pre-strip text IS the automation reveal, so putting it
+            // in the merchant's composer would leave the forbidden line one tap from
+            // the customer. Same row shape as the 12c offensive skip.
+            if (shouldHoldReply(flagReason)) {
+                await messagesService.flagMessage(
+                    storedMessage.id, 'held_self_identification', aiIntent,
+                );
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
+                    'flagged_reply',
+                    { senderName: senderName || senderId, reason: 'held_self_identification' },
+                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
+                ).catch(err => this.logger.error('Held reply notification failed', { err }));
+                // The customer's message still carries whatever they volunteered —
+                // a phone number, an order detail. Withholding OUR reply must not
+                // discard THEIR lead, so capture runs here as well as on the send
+                // path (the shared capture below is downstream of this return).
+                leadExtractorService.maybeCaptureLead({
+                    pageId: page.id,
+                    userId,
+                    workspaceId,
+                    sourceId: storedMessage.id,
+                    sourceType: 'message',
+                    senderId,
+                    senderName,
+                    messageText: consolidatedText,
+                }).catch(() => { /* errors captured inside maybeCaptureLead */ });
+                pipelineMetrics.record(pipeline, 'held_self_identification');
+                return { success: true, messageId: platformMessageId };
+            }
+
             // 12d. Hold low-confidence replies for merchant review when enabled
             if (userSettings.holdLowConfidence && confidence === 'low' && replyMethod === 'ai') {
                 await messagesService.markAsReplied(
@@ -772,29 +819,6 @@ export class MessageProcessor {
                     { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
                 ).catch(err => this.logger.error('Held reply notification failed', { err }));
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
-                return { success: true, messageId: platformMessageId };
-            }
-
-            // 12d-bis. Hold exhausted self-identification strips (always on, no
-            // setting): Check 6 removed the ENTIRE reply — all reveal talk — and
-            // the validator no longer substitutes a canned identity line (it
-            // answered "who are you?" whatever the customer asked; prod, Jawab24
-            // page, 2026-08-01). Nothing defensible to send → hold for merchant
-            // review like 12d. Must run BEFORE the !replyText guard below: its
-            // success:false would re-enqueue and re-bill the same doomed
-            // generation.
-            if (shouldHoldReply(flagReason)) {
-                await messagesService.markAsReplied(
-                    storedMessage.id, '', replyMethod,
-                    true, 'held_self_identification', aiIntent, db, aiOriginalReply,
-                );
-                notificationService.sendTemplateNotificationToWorkspace(
-                    workspaceId,
-                    'flagged_reply',
-                    { senderName: senderName || senderId, reason: 'held_self_identification' },
-                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
-                ).catch(err => this.logger.error('Held reply notification failed', { err }));
-                pipelineMetrics.record(pipeline, 'held_self_identification');
                 return { success: true, messageId: platformMessageId };
             }
 

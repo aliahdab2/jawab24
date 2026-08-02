@@ -669,6 +669,42 @@ export class CommentProcessor {
                 return { success: true, commentId: comment.id };
             }
 
+            // 8c-bis. Withhold exhausted self-identification strips (always on, no
+            // setting) — same rationale, ordering and row shape as the DM pipeline
+            // (12c-bis): Check 6 removed the ENTIRE reply (all reveal talk) and the
+            // validator no longer substitutes a canned identity line.
+            //
+            // Must run BEFORE 8d (a low-confidence exhausted reply would be stored
+            // as `held_low_confidence` with an empty draft) and BEFORE step 9 (its
+            // adapter fallback would swap in canned text — the exact failure mode
+            // this exists to remove). `flagComment`, not `markAsReplied('')`: the
+            // public comment is genuinely unanswered, and the pre-strip text is the
+            // automation reveal itself, so it must not become a merchant draft.
+            if (shouldHoldReply(flagReason)) {
+                await adapter.flagComment(comment.id, 'held_self_identification', aiIntent);
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
+                    'flagged_reply',
+                    { senderName: fromName || 'Unknown', reason: 'held_self_identification' },
+                    { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                ).catch(err => this.logger.error('Held reply notification failed', { err }));
+                // Withholding OUR reply must not discard THEIR lead — the shared
+                // capture lives in sendAndFinalize, downstream of this return.
+                leadExtractorService.maybeCaptureLead({
+                    pageId: page.id,
+                    userId,
+                    workspaceId,
+                    sourceId: comment.id,
+                    sourceType: 'comment',
+                    senderId: fromId ?? '',
+                    senderName: fromName,
+                    messageText: commentMessage,
+                    postMessage: content.message || undefined,
+                }).catch(() => { /* errors captured inside maybeCaptureLead */ });
+                pipelineMetrics.record(pipeline, 'held_self_identification');
+                return { success: true, commentId: comment.id };
+            }
+
             // 8d. Hold low-confidence replies for merchant review when enabled
             if (userSettings.holdLowConfidence && confidence === 'low' && replyMethod === 'ai') {
                 const lang = detectLanguageCode(commentMessage);
@@ -684,29 +720,6 @@ export class CommentProcessor {
                     { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
                 ).catch(err => this.logger.error('Held reply notification failed', { err }));
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
-                return { success: true, commentId: comment.id };
-            }
-
-            // 8d-bis. Hold exhausted self-identification strips (always on, no
-            // setting) — same rationale as the DM pipeline (12d-bis): Check 6
-            // removed the ENTIRE reply (all reveal talk) and the validator no
-            // longer substitutes a canned identity line. Must run BEFORE step 9:
-            // its adapter fallback would swap in canned text — the exact failure
-            // mode this hold exists to remove.
-            if (shouldHoldReply(flagReason)) {
-                const lang = detectLanguageCode(commentMessage);
-                await adapter.markAsReplied(
-                    comment.id, '', replyMethod,
-                    lang === 'unknown' ? 'en' : lang,
-                    true, 'held_self_identification', aiIntent, aiOriginalReply,
-                );
-                notificationService.sendTemplateNotificationToWorkspace(
-                    workspaceId,
-                    'flagged_reply',
-                    { senderName: fromName || 'Unknown', reason: 'held_self_identification' },
-                    { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
-                ).catch(err => this.logger.error('Held reply notification failed', { err }));
-                pipelineMetrics.record(pipeline, 'held_self_identification');
                 return { success: true, commentId: comment.id };
             }
 

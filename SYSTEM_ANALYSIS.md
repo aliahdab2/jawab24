@@ -1936,6 +1936,7 @@ These are tracked per pipeline (facebook_comment, instagram_comment, facebook_me
 | `send_failed` | Generated but failed to send | Error |
 | `skipped_risky` | Offensive/spam detected | Normal |
 | `held_low_confidence` | AI reply held for review | Normal |
+| `held_self_identification` | Check 6 stripped the whole reply — withheld for merchant review (always on) | Watch |
 | `error` | Unhandled error in pipeline | Error |
 
 ### AI Cost Tracking
@@ -2186,6 +2187,7 @@ The `analytics` service computes these from live tables (30-day window):
 | `send_failed` | فشل الإرسال | خطأ |
 | `skipped_risky` | محتوى مسيء/سبام | طبيعي |
 | `held_low_confidence` | محتجز للمراجعة | طبيعي |
+| `held_self_identification` | حُجِب الرد لأن الفحص السادس أزال كل جُمله — بانتظار مراجعة التاجر | مراقبة |
 | `error` | خطأ غير متوقع | خطأ |
 
 ### عتبات التنبيه المقترحة

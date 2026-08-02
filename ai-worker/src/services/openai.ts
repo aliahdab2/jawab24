@@ -19,7 +19,7 @@ import {
     buildSystemPrompt as buildSystemPromptText,
     buildUserPrompt,
 } from './reply/promptBuilder';
-import { validateReply as runValidateReply } from './reply/replyValidator';
+import { validateReply as runValidateReply, isHeldEmptyReply } from './reply/replyValidator';
 import type { GenerateRequest, GenerateResponse, ParsedReply, ValidatedReply, TokenInfo } from './reply/types';
 
 // Re-export the request/response contract so existing importers keep using
@@ -180,7 +180,8 @@ export class OpenAIService {
             // Post-reply validation: catch issues the prompt alone can't prevent
             const validated = this.validateReply(parsed, request);
 
-            // Empty reply has two distinct meanings, and only one is a failure:
+            // Empty reply has THREE distinct meanings, and only one is a failure.
+            // This guard is the single arbiter between them:
             //
             //   1. INTENTIONAL — OFFENSIVE / SPAM_OR_IRRELEVANT: the prompt explicitly
             //      instructs GPT to return reply:"" for these intents (see L99-100
@@ -188,15 +189,25 @@ export class OpenAIService {
             //      in generator.ts handles them silently. Returning empty reply here
             //      is the contract — not an error.
             //
-            //   2. FAILURE — bot-words filter stripped a real reply down to <10 chars,
-            //      OR GPT failed to produce content for a normal intent. Throw so
-            //      the merchant gets needs_attention with the specific reason.
+            //   2. HELD — Check 6 stripped the ENTIRE reply (all reveal talk) and the
+            //      validator raised `self_identification_exhausted`. Also the contract:
+            //      the empty reply + that flag ARE the hold signal, and the backend
+            //      flags the row for merchant review (held_self_identification).
+            //      Throwing here would swallow the flag before it crosses the wire and
+            //      book the event as a generic ai_empty_reply — which is exactly what
+            //      happened when the canned-fallback pool was deleted: the pool had
+            //      kept this branch unreachable, and removing it silently routed every
+            //      exhausted strip into meaning 3.
+            //
+            //   3. FAILURE — GPT failed to produce content for a normal intent, or the
+            //      reply was truncated at the model cap / arrived as broken JSON. Throw
+            //      so the merchant gets needs_attention with the specific reason.
             //
             // PR B (#139) initially threw for ALL empty replies, which spammed Sentry
             // and merchant notifications with every legitimate "ignore the troll"
             // case (107 events in 3h on a single page after deploy). Intent-aware.
             const isIntentionalEmpty = validated.intent === 'OFFENSIVE' || validated.intent === 'SPAM_OR_IRRELEVANT';
-            if (!validated.reply && !isIntentionalEmpty) {
+            if (!validated.reply && !isIntentionalEmpty && !isHeldEmptyReply(validated.flags)) {
                 recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'AiEmptyReplyError');
                 // The truncation-specific message reaches the backend's flag_meta
                 // (reconstructed from the wire), so a recurrence is diagnosable

@@ -60,8 +60,11 @@ const REJECT_FLAGS: readonly CacheRejectReason[] = [
     'language_mismatch',
     // Check 6 mutated the reply (stripped the reveal sentence) — caching the
     // trimmed remainder against the customer's actual question would serve a
-    // partial answer for 30 days (#495 review L2). Exhausted strips also carry
-    // this flag, but they never reach caching: the pipeline holds them unsent.
+    // partial answer for 30 days (#495 review L2). This flag is ALSO what keeps
+    // an exhausted strip (reply stripped to empty) out of the caches: the save
+    // decision is made here, at generation time, well before the pipeline
+    // decides to withhold — so the hold is not what protects the cache, this
+    // entry is. Removing it would start caching empty replies.
     'self_identification_stripped',
 ];
 

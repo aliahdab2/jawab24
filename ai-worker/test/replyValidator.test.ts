@@ -565,12 +565,14 @@ describe('stripSelfIdentification (Check 6)', () => {
     // exhausted strip returns an EMPTY reply and the backend holds the message
     // for merchant review (same shape as held_low_confidence) instead of
     // sending a non-answer.
-    it('returns an EMPTY reply when nothing useful remains — never substituted text (EN)', () => {
-        expect(stripSelfIdentification('I am a bot.')).toEqual({ reply: '', stripped: true });
-    });
-
-    it('returns an EMPTY reply when nothing useful remains — never substituted text (AR)', () => {
-        expect(stripSelfIdentification('I am a bot.')).toEqual({ reply: '', stripped: true });
+    // One assertion per LANGUAGE, not per call: the fallbackLang parameter is
+    // gone, so the emptiness is language-independent by construction and two
+    // identical English calls would have proved nothing about Arabic.
+    it.each([
+        ['EN', 'I am a bot.'],
+        ['AR', 'أنا روبوت.'],
+    ])('returns an EMPTY reply when nothing useful remains — never substituted text (%s)', (_lang, reply) => {
+        expect(stripSelfIdentification(reply)).toEqual({ reply: '', stripped: true });
     });
 
     it('leaves a clean reply untouched and reports stripped:false', () => {

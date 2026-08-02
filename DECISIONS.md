@@ -615,3 +615,49 @@ authority of last resort; also flags orphaned live mirrors whose store row vanis
 enrollments is unverified until the dev-store dogfood; the fork is isolated inside
 `fetchShopifyActiveSubscription` — if it proves wrong, its internals swap to the
 Partner API with zero caller changes.
+
+---
+
+## D-055 · A guard may withhold an answer; it must never invent a different one
+
+Engineering ruling, 2026-08-02 (PR #604, branch `fix/check6-exhausted-strip-hold`).
+
+**The rule.** When a reply-path guard rejects the model's output, its only sanctioned
+outcomes are *send less* or *send nothing*. Substituting text the guard authored is
+forbidden. A guard knows what is wrong with a reply; it does not know what the customer
+asked, so anything it writes is a non-answer that also blocks the retry from being
+different.
+
+**The evidence.** Check 6 (`stripSelfIdentification`) used to swap a random
+`SELF_ID_FALLBACKS` identity line in whenever stripping left <10 useful characters.
+Every line in that pool answers "who am I talking to?", so on the Jawab24 support page
+(prod, 2026-08-01) «موقعكم الالكتروني» was asked four times and deflected four times
+with «معك أحد أعضاء الفريق…». Two more prospects hit it the same day. The pool is
+deleted: an exhausted strip returns an EMPTY reply plus
+`self_identification_exhausted`, and both pipelines flag the row
+(`held_self_identification`) so the merchant answers personally.
+
+**Three consequences, each learned the hard way in review of the first attempt:**
+
+1. **An empty reply is not self-describing — never branch on `!reply` alone.** On the
+   worker→backend boundary `reply: ''` means three different things: intentional
+   silence (OFFENSIVE / SPAM_OR_IRRELEVANT), a deliverable HOLD (this flag), or a
+   generation failure. `openai.ts`'s empty-reply guard is the SINGLE arbiter and must
+   consult `isHeldEmptyReply(flags)`. The first attempt shipped without it: the guard
+   threw `AiEmptyReplyError` before the flag crossed the wire, so both pipelines' hold
+   branches were unreachable on the default-model path — i.e. all of production — and
+   the fix was inert while its tests, and the eval, were green. **A new flag is only
+   real once a test crosses the boundary it must survive.**
+2. **Withholding is not "replied".** A withheld row is flagged (`flagMessage` /
+   `flagComment`), never `markAsReplied('')`: a false `replied`/`repliedAt` reports a
+   response time for a customer who never got one. This also declines to store a draft
+   — the pre-strip text IS the automation reveal, and the held-reply UI pre-fills the
+   merchant's composer from `aiOriginalReply`, which would leave the forbidden line one
+   tap from the customer.
+3. **Withholding OUR reply must not discard THEIR data.** Lead capture lives on the
+   send path, so every early return has to carry it explicitly or the customer's phone
+   number is lost outright.
+
+**Scope.** The rule binds every reply-path guard, not just Check 6. The price guard
+(eval #544 — a correct SYP redenomination replaced by «تواصل معنا» at the moment of
+sale) is the same defect and is expected to be fixed the same way.
