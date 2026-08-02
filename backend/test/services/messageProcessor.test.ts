@@ -1891,6 +1891,62 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         );
     });
 
+    // messagesAutoReply=false is a standing merchant choice, not a schedule. The
+    // shipped default away text must never fire on this branch — off means off.
+    // (2026-08-01: a pharmacy with DMs off and no business hours told 37 customers
+    // «خارج أوقات العمل» — at 09:05, in copy the merchant never saw or wrote.)
+    it('stays SILENT when DM auto-reply is off and no away message was authored', async () => {
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: false, replyDelay: 0,
+        } as any);
+        vi.mocked(redis.set).mockResolvedValue('OK');
+        // allowDefault:false → nothing authored → null (pinned by workspaceSettings tests)
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue(null);
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'hello?', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Messages auto-reply disabled');
+        // The permanent-off branch must ask for authored-text-only…
+        expect(workspaceSettingsService.getAwayMessage).toHaveBeenCalledWith(
+            'test_workspace_id', expect.anything(), { allowDefault: false },
+        );
+        // …and with none configured, the customer hears nothing at all.
+        expect(adapter.sendAwayMessage).not.toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+    });
+
+    it('allows the default away text on the business-hours branch (temporary closure)', async () => {
+        // Toggle ON but outside the configured hours — the folded check is false
+        // while messagesAutoReply stays true. Here the default notice is accurate.
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, businessHoursOnly: true, replyDelay: 0,
+        } as any);
+        vi.mocked(redis.set).mockResolvedValue('OK');
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('نحن حالياً خارج أوقات العمل');
+
+        const adapter = webhookPreStoredAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'مرحبا', 'msg-1',
+        );
+
+        expect(workspaceSettingsService.getAwayMessage).toHaveBeenCalledWith(
+            'test_workspace_id', expect.anything(), { allowDefault: true },
+        );
+        expect(adapter.sendAwayMessage).toHaveBeenCalledWith(
+            expect.anything(), 'sender-1', 'نحن حالياً خارج أوقات العمل',
+        );
+    });
+
     it('does NOT spam the away message while the 24h cooldown is still held', async () => {
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
