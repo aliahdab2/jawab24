@@ -163,6 +163,7 @@
     "addNamed": "إضافة {thing}",
     "addItem": "إضافة عنصر",
     "completenessHint": "يتحكم هذا في ردّ جواب عندما يسأل الزبون عن شيء غير موجود في هذه القائمة.",
-    "listSeparator": " — "
+    "listSeparator": " — ",
+    "missingKeyGroup": "بدون {label}"
   }
 }

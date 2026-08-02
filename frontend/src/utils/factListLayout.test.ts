@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind } from './factListLayout';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups } from './factListLayout';
 import { groupFactCollections } from './factListGrouping';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -261,5 +261,54 @@ describe('sessionValueKind', () => {
     expect(sessionValueKind('8 جلسات')).toBe('other');
     expect(sessionValueKind('salmon sundae')).toBe('other');
     expect(sessionValueKind('')).toBe('other');
+  });
+});
+
+describe('sectionKeyGroups', () => {
+  const directory = (keyAttr: string | null, rows: FactRowDto[]) => {
+    const collection = coll('صيدليات المدينة', keyAttr, rows);
+    const group = { key: collection.id, title: collection.label, rows: rows.map((r) => ({ collection, row: r })) };
+    const [section] = sectionizeGroup(group, [collection]);
+    return { section, entries: section.rows };
+  };
+
+  it('groups by the key value, first-seen order, display keeps first raw spelling', () => {
+    const { section, entries } = directory('المنطقة', [
+      row('صيدلية النرجس', { attributes: [{ label: 'المنطقة', value: 'حي الرمال' }] }),
+      row('صيدلية الفيروز', { attributes: [{ label: 'المنطقة', value: 'تلة الريح' }] }),
+      // Spacing variant of the FIRST area — must fold into it, not open a third
+      row('صيدلية السنبلة', { attributes: [{ label: 'المنطقة', value: 'حي  الرمال' }] }),
+    ]);
+    const groups = sectionKeyGroups(section, entries);
+    expect(groups).not.toBeNull();
+    expect(groups!.map((g) => g.display)).toEqual(['حي الرمال', 'تلة الريح']);
+    expect(groups![0].rows.map((r) => r.row.name)).toEqual(['صيدلية النرجس', 'صيدلية السنبلة']);
+  });
+
+  it('returns null (flat) when the collection has no key attribute', () => {
+    const { section, entries } = directory(null, [
+      row('رواء رقم 1', { attributes: [{ label: 'السلسلة', value: 'عادي' }] }),
+      row('رواء رقم 2', { attributes: [{ label: 'السلسلة', value: 'عادي' }] }),
+    ]);
+    expect(sectionKeyGroups(section, entries)).toBeNull();
+  });
+
+  it('returns null (flat) when every key value is unique — headers per row are noise', () => {
+    const { section, entries } = directory('المنطقة', [
+      row('أ', { attributes: [{ label: 'المنطقة', value: 'الشرق' }] }),
+      row('ب', { attributes: [{ label: 'المنطقة', value: 'الغرب' }] }),
+    ]);
+    expect(sectionKeyGroups(section, entries)).toBeNull();
+  });
+
+  it('rows missing the key value land in a trailing null bucket', () => {
+    const { section, entries } = directory('المنطقة', [
+      row('أ', { attributes: [{ label: 'المنطقة', value: 'الشرق' }] }),
+      row('ب', { attributes: [{ label: 'المنطقة', value: 'الشرق' }] }),
+      row('ج', { attributes: null }),
+    ]);
+    const groups = sectionKeyGroups(section, entries);
+    expect(groups!.at(-1)!.value).toBeNull();
+    expect(groups!.at(-1)!.rows.map((r) => r.row.name)).toEqual(['ج']);
   });
 });

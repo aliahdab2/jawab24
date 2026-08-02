@@ -104,6 +104,63 @@ export function rowDisplayAttributes(
   return sorted;
 }
 
+/** One key-value bucket of a directory section: the bucket's display spelling
+ *  (first raw occurrence) and its rows. `value === null` is the missing-key
+ *  bucket, always rendered LAST. */
+export interface SectionKeyGroup {
+  value: string | null;
+  display: string | null;
+  rows: GroupedRow[];
+}
+
+/**
+ * Group a directory section's rows by the collection's KEY attribute value —
+ * the axis the merchant thinks in («which pharmacies are in area X»), and the
+ * SAME axis reply-time row gating matches the customer's message against, so
+ * the editor shows the data the way the engine reads it. Purely data-driven,
+ * no vocabulary: the headers are the merchant's own key values.
+ *
+ * Returns null (render flat, unchanged) unless the collection HAS a key AND at
+ * least one key value is shared by two rows — when every value is unique a
+ * header per row is noise, not structure. Key values match through the shared
+ * normalizer (spacing/hamza variants are one area), display keeps the first
+ * raw spelling. Rows missing the key value land in a trailing null bucket so
+ * the gap is VISIBLE — the same rows silently suppress reply-time gating
+ * (factCollections.ts rowsMissingKey guard), so surfacing them is the nudge
+ * that gets the data fixed.
+ */
+export function sectionKeyGroups(
+  section: FactListSection,
+  rows: GroupedRow[],
+): SectionKeyGroup[] | null {
+  const keyAttr = section.collection.keyAttr;
+  if (!keyAttr) return null;
+  const keyLabel = norm(keyAttr);
+  const buckets = new Map<string, SectionKeyGroup>();
+  const order: SectionKeyGroup[] = [];
+  const missing: SectionKeyGroup = { value: null, display: null, rows: [] };
+  for (const entry of rows) {
+    const raw = entry.row.attributes
+      ?.find((a) => norm(a.label) === keyLabel)
+      ?.value.trim();
+    if (!raw) {
+      missing.rows.push(entry);
+      continue;
+    }
+    const id = norm(raw);
+    let bucket = buckets.get(id);
+    if (!bucket) {
+      bucket = { value: id, display: raw, rows: [] };
+      buckets.set(id, bucket);
+      order.push(bucket);
+    }
+    bucket.rows.push(entry);
+  }
+  if (!order.some((b) => b.rows.length >= 2)) return null;
+  if (missing.rows.length > 0) order.push(missing);
+  return order;
+}
+
 /** UNION of attribute labels across ALL of a collection's rows, first-seen
  *  order. The row sheet previously sampled rows[0], and 22 of the pilot's 46
  *  price rows carry attributes = null — a merchant adding a row would get a

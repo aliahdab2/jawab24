@@ -392,12 +392,41 @@ describe('BusinessListsSection', () => {
     // ONE h3 (the list), not one per pharmacy…
     const headings = document.querySelectorAll('h3');
     expect(headings).toHaveLength(1);
-    // …rows show their own names WITH their labelled area…
+    // …rows are GROUPED under the key value (the merchant's search axis —
+    // the same axis reply-time gating matches): the area is a group header
+    // with a count, said once — NOT repeated inside each row.
+    expect(screen.getByText('حي الرمال')).toBeInTheDocument();
+    expect(screen.getByText('تلة الريح')).toBeInTheDocument();
+    expect(screen.getByText('(2)')).toBeInTheDocument();
     const rowBtn = screen.getByText('صيدلية الفيروز').closest('button');
-    expect(rowBtn?.textContent).toContain('المنطقة');
-    expect(rowBtn?.textContent).toContain('تلة الريح');
+    expect(rowBtn?.textContent).not.toContain('المنطقة');
+    expect(rowBtn?.textContent).not.toContain('تلة الريح');
+    // Each group carries its own prefilled add action.
+    const groupAdds = screen.getAllByRole('button', { name: /Add item — / });
+    expect(groupAdds).toHaveLength(2);
     // …and no dates block leaks into an undated business.
     expect(screen.queryByText(/يبدأ|starts/)).toBeNull();
+  });
+
+  it('a grouped directory add action prefills the group key value', async () => {
+    const outlets: FactCollectionWithRows = {
+      id: 'coll-outlets',
+      label: 'الصيدليات التي تتوفر فيها منتجاتنا',
+      keyAttr: 'المنطقة',
+      isComplete: true,
+      rowCount: 2,
+      rows: [
+        { id: 'o1', name: 'صيدلية النرجس', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+        { id: 'o2', name: 'صيدلية الياقوتة', attributes: [{ label: 'المنطقة', value: 'حي الرمال' }], price: null, currency: null, startsAt: null, endsAt: null, isAvailable: true },
+      ],
+    };
+    vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [outlets] } } as any);
+    renderSection();
+
+    await screen.findByText('صيدلية النرجس');
+    fireEvent.click(screen.getByRole('button', { name: 'Add item — حي الرمال' }));
+    // The row sheet opens with the group's area already filled in.
+    expect(screen.getByLabelText('المنطقة')).toHaveValue('حي الرمال');
   });
 
   it('the merchant can author a NEW field, and a label colliding with the list key is refused', async () => {

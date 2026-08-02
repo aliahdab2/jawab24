@@ -11,7 +11,7 @@ import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/f
 import {
   sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
   discoverFaceLabel, buildEntityUnit, buildTierBlocks, isDatedCollection,
-  sessionValueKind, type FactListSection, type FactEntityUnit,
+  sessionValueKind, sectionKeyGroups, type FactListSection, type FactEntityUnit,
 } from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
@@ -341,8 +341,8 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
 
   /** A DIRECTORY line (contact-list pattern): bold name, muted labelled
    *  detail beneath, price at the end when the list prices things. */
-  const directoryRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean) => {
-    const pairs = rowDisplayAttributes(section, row, { keepKey: true });
+  const directoryRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, dropKey = false) => {
+    const pairs = rowDisplayAttributes(section, row, { keepKey: !dropKey });
     return (
       <li key={row.id} className="list-none">
         <button
@@ -448,10 +448,58 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
               <div className="px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30">
                 <h3 className="text-[15px] font-bold text-foreground" dir="auto">{collection.label}</h3>
               </div>
-              <ul className="divide-y divide-theme-border/60">
-                {live.map((entry) => directoryRow(syntheticGroup, section, entry.row, false))}
-                {expanded && expiredRows.map((entry) => directoryRow(syntheticGroup, section, entry.row, true))}
-              </ul>
+              {(() => {
+                // Grouped by the list's KEY value (the merchant's search axis —
+                // «which pharmacies are in area X» — and the same axis the
+                // reply engine gates rows by). Falls back to the flat list
+                // whenever the data doesn't compress (no key / all unique).
+                const keyGroups = sectionKeyGroups(section, live);
+                if (!keyGroups) {
+                  return (
+                    <ul className="divide-y divide-theme-border/60">
+                      {live.map((entry) => directoryRow(syntheticGroup, section, entry.row, false))}
+                      {expanded && expiredRows.map((entry) => directoryRow(syntheticGroup, section, entry.row, true))}
+                    </ul>
+                  );
+                }
+                return (
+                  <div>
+                    {keyGroups.map((kg) => (
+                      <div key={kg.value ?? '__missing__'}>
+                        <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/40 border-y border-theme-border/60 first:border-t-0">
+                          <span className="text-xs font-bold text-foreground break-words" dir="auto">
+                            {kg.display ?? t('lists.missingKeyGroup', { label: collection.keyAttr ?? '' })}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">({kg.rows.length})</span>
+                          {kg.display && collection.keyAttr && (
+                            <button
+                              type="button"
+                              onClick={() => setEditing({
+                                collection,
+                                row: null,
+                                initial: { attributes: [{ label: collection.keyAttr as string, value: kg.display as string }] },
+                              })}
+                              aria-label={`${t('lists.addItem')} — ${kg.display}`}
+                              className="ms-auto min-h-[28px] inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
+                            >
+                              <Plus className="w-3 h-3" aria-hidden="true" />
+                              {t('lists.addItem')}
+                            </button>
+                          )}
+                        </div>
+                        <ul className="divide-y divide-theme-border/60">
+                          {kg.rows.map((entry) => directoryRow(syntheticGroup, section, entry.row, false, !!kg.display))}
+                        </ul>
+                      </div>
+                    ))}
+                    {expanded && expiredRows.length > 0 && (
+                      <ul className="divide-y divide-theme-border/60 border-t border-theme-border/60">
+                        {expiredRows.map((entry) => directoryRow(syntheticGroup, section, entry.row, true))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="flex items-center gap-1.5 flex-wrap px-4 py-2 border-t border-theme-border">
                 <button
                   type="button"
