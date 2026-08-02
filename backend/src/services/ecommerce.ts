@@ -189,7 +189,10 @@ export async function markStoreNeedsReauth(storeId: string): Promise<void> {
     await mergeStorePlatformData(storeId, { tokenHealth: 'invalid' });
 }
 
-export const KB_MAX_CHARS = 8000; // Must match ai-worker's KB_MAX_CHARS
+// Budget for the store-ENRICHED KB string built in getEnrichedKnowledgeBase (store
+// summary + policies first, merchant KB truncated to the remainder). An independent
+// value — NOT a mirror of ai-worker's KB_MAX_CHARS, which is 16k.
+export const KB_MAX_CHARS = 8000;
 
 // Hard ceiling on how many products a single store syncs into the DB. This is an
 // abuse/runaway guard, NOT a plan limit — per-plan `plans.maxProducts` is not enforced
