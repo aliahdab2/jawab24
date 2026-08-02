@@ -374,7 +374,16 @@ export class MessageProcessor {
 
             if (!isMessagesEnabled) {
                 const customerLang = detectTemplateLanguage(messageText);
-                const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);
+                // Two distinct "off" states share this branch (the enabled check folds
+                // them): outside business hours — temporary, an away notice is accurate —
+                // and messagesAutoReply=false — a standing merchant choice with no
+                // "later". On the permanent branch only merchant-authored text may
+                // speak for the merchant (allowDefault:false → null when none is
+                // configured, and the send below is skipped). Off means off: we never
+                // invent copy for a channel the merchant explicitly disabled.
+                const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang, {
+                    allowDefault: Boolean(userSettings.messagesAutoReply),
+                });
                 // Send at most once per sender per 24h — NOT once per lifetime.
                 //
                 // History: gating on `isNew` suppressed the away message entirely (the

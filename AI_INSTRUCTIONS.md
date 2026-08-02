@@ -230,6 +230,7 @@ After any feature addition, integration, or architectural change, update these d
 | `.planning/codebase/INTEGRATIONS.md` | New/changed integration details |
 | `.planning/codebase/ARCHITECTURE.md` | Structural changes to how the system is built |
 | `backend/docs/OBJECT_STORAGE.md` | Anything about merchant image storage — provider, backups, key rotation, the `ImageStorage` S3 abstraction (see D-032) |
+| `backend/docs/SETTINGS.md` | Any settings field added/renamed/removed, any change to the reply gate chain, or any change to what/when auto-messages (away, greeting, quota fallback, nudges) are sent |
 
 Rules:
 - Never leave a doc saying "Planned" or "Not implemented" after shipping the feature
