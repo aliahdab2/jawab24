@@ -9,8 +9,32 @@
 
 - **`settings` table — keyed by `user_id`, one row per merchant.** Settings are per-user,
   NOT per-page: a merchant with three pages has one settings row governing all of them.
-  `workspaceSettingsService.getSettings(workspaceId)` resolves the workspace owner's row
-  (legacy user-keyed reads are served through the same store, D-026).
+  This legacy row is the **UI write target**; on every save the pipeline-relevant fields
+  are synced into the workspace JSONB (`syncPipelineFieldsToWorkspace`).
+- **`workspaces.settings` JSONB — the pipeline read target (D-026).** Every reply-path
+  gate reads `workspaceSettingsService.getSettings(page.workspaceId)` (JSONB merged over
+  read-time defaults, with drift-heal from the owner's legacy row for *missing* keys).
+  ⚠️ The two stores drift **by design**: `NEW_SIGNUP_SETTINGS_SEED` (D-025) writes
+  auto-reply OFF into the JSONB only, so a new signup's legacy row shows the column
+  defaults (everything ON) while the pipeline is silent. Therefore **no display surface
+  may show the raw legacy row**: the merchant settings API and the admin support console
+  (`getUserDetail` → `overlayPipelineSettings`) both overlay `WORKSPACE_OVERLAY_FIELDS`
+  (`services/pipelineFields.ts`) from the workspace store before display/diagnostics.
+  Sole exception: `aiModel` — the admin override writes the legacy table and
+  `aiModelResolver` reads it back, so legacy is authoritative for that one field.
+  The shared overlay loop is `overlayWorkspaceFields` (`services/pipelineFields.ts`) —
+  both surfaces call it; never re-implement the loop at a call site.
+  - The console resolves **which** workspace to overlay from the displayed pages'
+    own `pages.workspaceId` (what the pipeline keys on), falling back to
+    memberships only when there are no pages (`resolvePipelineWorkspaceId`).
+  - The console payload carries `settings.source`: `'effective'` (overlaid) or
+    `'legacy-fallback'` (overlay unavailable — the UI shows a warning banner,
+    because raw legacy values are exactly the state that hid the 30 silent
+    post-D-025 signups).
+  - The console's "changed from default" markers compare against the **legacy
+    column defaults** — so every post-D-025 signup shows `commentsAutoReply`,
+    `messagesAutoReply`, `commentReplyMode` as changed. That is the signup seed,
+    not merchant action.
 - **`pages.auto_reply_enabled` — the page master switch** lives on the page row, not in
   settings. `pages.auto_reply_disabled_reason` records who/what turned it off (`user`, …).
 - **Multilingual fields** (`*_multi` JSONB) hold `{ ar, en, sourceLang }`. `sourceLang`

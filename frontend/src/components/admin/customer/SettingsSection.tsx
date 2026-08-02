@@ -79,6 +79,18 @@ export function SettingsSection({ customer }: Props) {
 
     return (
         <div className="space-y-6">
+            {/* The backend overlays the workspace store (what the reply pipeline
+                actually reads, D-026) before sending values. When that overlay
+                could not run, the values below are the raw legacy row — the
+                exact state that once showed 30 silent merchants as healthy —
+                so the degradation must never pass silently. */}
+            {settings.source === 'legacy-fallback' && (
+                <div className="flex items-start gap-2 status-warning border rounded-lg px-3 py-2" role="alert">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+                    <span className="text-sm">{t('customer.settingsLegacyFallbackWarn')}</span>
+                </div>
+            )}
+
             {/* Persona / brand voice */}
             <Card className="space-y-4">
                 <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">

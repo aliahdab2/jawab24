@@ -11,10 +11,14 @@ vi.mock('next-intl', () => ({ useTranslations: () => (k: string) => k }));
 // first (an en-preferring sync of the jsonb) and then every differing variant —
 // so an Arabic-authoring merchant's persona appeared in English first AND in
 // Arabic again. Support must see the merchant-AUTHORED text, once.
-function makeCustomer(settingsValues: Record<string, unknown>): CustomerDetail {
+function makeCustomer(
+  settingsValues: Record<string, unknown>,
+  source: 'effective' | 'legacy-fallback' = 'effective',
+): CustomerDetail {
   return {
     health: [],
     settings: {
+      source,
       values: { replyStyle: 'professional', ...settingsValues },
       nonDefaultKeys: [],
     },
@@ -64,5 +68,22 @@ describe('SettingsSection — persona shows the merchant-authored language only'
     render(<SettingsSection customer={makeCustomer({ brandVoiceNotes: '', brandVoiceNotesMulti: {} })} />);
 
     expect(screen.getByText('customer.personaEmpty')).toBeInTheDocument();
+  });
+});
+
+describe('SettingsSection — legacy-fallback warning', () => {
+  // When the backend could not overlay the workspace store, the values shown
+  // are the raw legacy row — the state that once reported 30 silent merchants
+  // as healthy. The degradation must be visible, never silent.
+  it('renders the warning banner when settings.source is legacy-fallback', () => {
+    render(<SettingsSection customer={makeCustomer({}, 'legacy-fallback')} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('customer.settingsLegacyFallbackWarn');
+  });
+
+  it('renders no banner for effective settings', () => {
+    render(<SettingsSection customer={makeCustomer({})} />);
+
+    expect(screen.queryByText('customer.settingsLegacyFallbackWarn')).not.toBeInTheDocument();
   });
 });
