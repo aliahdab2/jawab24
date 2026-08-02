@@ -22,6 +22,19 @@
   (`services/pipelineFields.ts`) from the workspace store before display/diagnostics.
   Sole exception: `aiModel` — the admin override writes the legacy table and
   `aiModelResolver` reads it back, so legacy is authoritative for that one field.
+  The shared overlay loop is `overlayWorkspaceFields` (`services/pipelineFields.ts`) —
+  both surfaces call it; never re-implement the loop at a call site.
+  - The console resolves **which** workspace to overlay from the displayed pages'
+    own `pages.workspaceId` (what the pipeline keys on), falling back to
+    memberships only when there are no pages (`resolvePipelineWorkspaceId`).
+  - The console payload carries `settings.source`: `'effective'` (overlaid) or
+    `'legacy-fallback'` (overlay unavailable — the UI shows a warning banner,
+    because raw legacy values are exactly the state that hid the 30 silent
+    post-D-025 signups).
+  - The console's "changed from default" markers compare against the **legacy
+    column defaults** — so every post-D-025 signup shows `commentsAutoReply`,
+    `messagesAutoReply`, `commentReplyMode` as changed. That is the signup seed,
+    not merchant action.
 - **`pages.auto_reply_enabled` — the page master switch** lives on the page row, not in
   settings. `pages.auto_reply_disabled_reason` records who/what turned it off (`user`, …).
 - **Multilingual fields** (`*_multi` JSONB) hold `{ ar, en, sourceLang }`. `sourceLang`

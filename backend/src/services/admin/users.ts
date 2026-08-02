@@ -6,7 +6,7 @@ import {
 } from '../../db/schema';
 import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'drizzle-orm';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
-import { computeHealthFlags, computeNonDefaultKeys, overlayPipelineSettings, type SupportSettings } from './health';
+import { computeHealthFlags, computeNonDefaultKeys, overlayPipelineSettings, resolvePipelineWorkspaceId, type SupportSettings } from './health';
 import { workspaceSettingsService } from '../workspaceSettings';
 import { emailService } from '../email';
 import { accountNoticeEmailTemplate } from '../../utils/emailTemplates';
@@ -283,6 +283,9 @@ class AdminUsersService {
             .select({
                 id: pages.id,
                 name: pages.name,
+                // Feeds resolvePipelineWorkspaceId only (destructured out of the
+                // payload below) — the pipeline keys settings on page.workspaceId.
+                workspaceId: pages.workspaceId,
                 facebookPageId: pages.facebookPageId,
                 instagramUsername: pages.instagramUsername,
                 instagramAccountId: pages.instagramAccountId,
@@ -438,7 +441,7 @@ class AdminUsersService {
         // Nest the KB summary under `kb`, keeping the length-only inputs off the
         // top-level page object.
         const pagesPayload = userPages.map(p => {
-            const { kbLength, kbActiveVersion, kbUpdatedAt, ...rest } = p;
+            const { kbLength, kbActiveVersion, kbUpdatedAt, workspaceId: _workspaceId, ...rest } = p;
             const c = chunksByPage.get(p.id);
             return {
                 ...rest,
@@ -547,23 +550,43 @@ class AdminUsersService {
         // auto-reply OFF into the JSONB only, so the raw legacy row claims the
         // toggles are ON while the pipeline drops every message. Overlay the
         // workspace store so the console (values, non-default markers, health
-        // flags) reports what the pipeline actually obeys. Workspace resolution
-        // mirrors settingsService.resolveWorkspaceId (one workspace per user);
-        // prefer the owned workspace for determinism when memberships exist in
-        // several. Fails open to the legacy row — a workspace-store hiccup must
-        // never 500 the support console.
+        // flags) reports what the pipeline actually obeys. The workspace is
+        // resolved from the displayed pages' own workspaceId (what the pipeline
+        // keys on), falling back to memberships — see resolvePipelineWorkspaceId.
+        // Fails open to the legacy row — a workspace-store hiccup must never
+        // 500 the support console — but the payload then says so via
+        // `settings.source`, because a silent fallback re-creates exactly the
+        // misleading state this overlay exists to kill.
         let effectiveSettings: SupportSettings | null = settingsRow ?? null;
-        const pipelineWorkspaceId = (membershipRows.find(r => r.ownerId === userId) ?? membershipRows[0])?.workspaceId;
+        let settingsSource: 'effective' | 'legacy-fallback' = 'legacy-fallback';
+        const pipelineWorkspaceId = resolvePipelineWorkspaceId(
+            userPages.map(p => p.workspaceId),
+            membershipRows,
+            userId,
+        );
         if (settingsRow && pipelineWorkspaceId) {
             try {
                 const wsSettings = await workspaceSettingsService.getSettings(pipelineWorkspaceId);
                 effectiveSettings = overlayPipelineSettings(settingsRow, wsSettings as unknown as Record<string, unknown>);
+                settingsSource = 'effective';
             } catch (error) {
                 captureError(error, 'admin getUserDetail workspace-settings overlay failed', {
                     tags: { context: 'admin', action: 'workspace-settings-overlay' },
                     extra: { userId, workspaceId: pipelineWorkspaceId },
                 });
             }
+        } else if (settingsRow) {
+            // A settings row with no resolvable workspace is itself an anomaly
+            // (signup always creates one) — surface it instead of silently
+            // showing legacy values as if they were the pipeline truth.
+            captureError(
+                new Error('settings row present but no resolvable workspace'),
+                'admin getUserDetail: no pipeline workspace to overlay',
+                {
+                    tags: { context: 'admin', action: 'workspace-settings-overlay' },
+                    extra: { userId },
+                },
+            );
         }
 
         const health = computeHealthFlags({
@@ -595,7 +618,14 @@ class AdminUsersService {
             ...user,
             aiModel,
             settings: effectiveSettings
-                ? { values: effectiveSettings, nonDefaultKeys: computeNonDefaultKeys(effectiveSettings) }
+                ? {
+                    values: effectiveSettings,
+                    nonDefaultKeys: computeNonDefaultKeys(effectiveSettings),
+                    // 'legacy-fallback' = the overlay didn't run; the values are
+                    // the raw legacy row and may not match the pipeline. The
+                    // console renders a warning off this — never drop it silently.
+                    source: settingsSource,
+                }
                 : null,
             subscription: subscription || null,
             pages: pagesPayload,

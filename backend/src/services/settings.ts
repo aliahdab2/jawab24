@@ -6,7 +6,7 @@ import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared
 import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
-import { PIPELINE_FIELDS, WORKSPACE_OVERLAY_FIELDS } from './pipelineFields';
+import { PIPELINE_FIELDS, overlayWorkspaceFields } from './pipelineFields';
 import { coerceMultiLang } from './multiLangTranslation';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
@@ -111,13 +111,11 @@ export class SettingsService {
             if (!workspaceId) return result;
 
             const workspaceSettings = await workspaceSettingsService.getSettings(workspaceId);
-            const workspaceRecord = workspaceSettings as unknown as Record<string, unknown>;
-            const overlaid = { ...result } as Record<string, unknown>;
             // aiModel is excluded from the overlay — see WORKSPACE_OVERLAY_FIELDS.
-            for (const field of WORKSPACE_OVERLAY_FIELDS) {
-                const value = workspaceRecord[field];
-                if (value !== undefined) overlaid[field] = value;
-            }
+            const overlaid = overlayWorkspaceFields(
+                result as unknown as Record<string, unknown>,
+                workspaceSettings as unknown as Record<string, unknown>,
+            );
             // The workspace store can hold *Multi values copied verbatim from the
             // legacy row (drift-heal/backfill), including the double-encoded-string
             // shape — normalize AFTER overlaying so a string never reaches clients

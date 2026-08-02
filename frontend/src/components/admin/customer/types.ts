@@ -30,6 +30,13 @@ export interface PageKbSummary {
  * keys that deviate from their schema default (for "changed" markers).
  */
 export interface CustomerSettings {
+    /**
+     * 'effective' = pipeline truth (legacy row overlaid with the workspace
+     * store the reply pipeline reads). 'legacy-fallback' = the overlay didn't
+     * run; values are the raw legacy row and may not match what the pipeline
+     * obeys — the section renders a warning banner off this.
+     */
+    source: 'effective' | 'legacy-fallback';
     values: {
         aiEnabled: boolean | null;
         aiModel: string | null;

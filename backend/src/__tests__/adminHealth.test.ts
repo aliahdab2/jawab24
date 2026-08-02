@@ -5,6 +5,7 @@ import {
     computeNonDefaultKeys,
     isPlaceholderPersona,
     overlayPipelineSettings,
+    resolvePipelineWorkspaceId,
     SETTINGS_DEFAULTS,
     SUPPORT_SETTINGS_KEYS,
     type HealthInput,
@@ -584,5 +585,50 @@ describe('overlayPipelineSettings — effective settings for the console (D-026)
         overlayPipelineSettings(legacy, newSignupWorkspace);
         expect(legacy.messagesAutoReply).toBe(true);
         expect(legacy.commentReplyMode).toBe('public');
+    });
+
+    it('a double-encoded multi in the LEGACY row is normalized too, even when the store has no value for it', () => {
+        // Same corruption class as the workspace-side case, but originating in
+        // the legacy table itself — the coercion must not depend on an overlay
+        // having replaced the field.
+        const legacy = healthySettings({
+            awayMessageMulti: '{"ar":"نعود قريباً"}' as unknown as Record<string, string>,
+        });
+        const effective = overlayPipelineSettings(legacy, { messagesAutoReply: false });
+        expect(effective.awayMessageMulti).toEqual({ ar: 'نعود قريباً' });
+    });
+});
+
+describe('resolvePipelineWorkspaceId — which workspace the pipeline actually obeys', () => {
+    const OWNED = 'ws-owned';
+    const OTHER = 'ws-other';
+    const memberships = [
+        { workspaceId: OTHER, ownerId: 'someone-else' },
+        { workspaceId: OWNED, ownerId: 'me' },
+    ];
+
+    it('the displayed pages’ workspace wins over memberships — the pipeline keys on page.workspaceId (page-transfer case)', () => {
+        expect(resolvePipelineWorkspaceId(['ws-pages'], memberships, 'me')).toBe('ws-pages');
+    });
+
+    it('pages split across workspaces → the one covering the most displayed pages', () => {
+        expect(resolvePipelineWorkspaceId(['ws-a', 'ws-b', 'ws-b'], memberships, 'me')).toBe('ws-b');
+    });
+
+    it('a page-count tie prefers the workspace this user owns', () => {
+        expect(resolvePipelineWorkspaceId([OTHER, OWNED], memberships, 'me')).toBe(OWNED);
+    });
+
+    it('no pages → the owned membership, even when a foreign membership sorts first', () => {
+        expect(resolvePipelineWorkspaceId([], memberships, 'me')).toBe(OWNED);
+    });
+
+    it('team-member-only (no pages, no owned workspace) → the first membership', () => {
+        expect(resolvePipelineWorkspaceId([], [{ workspaceId: OTHER, ownerId: 'someone-else' }], 'me')).toBe(OTHER);
+    });
+
+    it('pages with null workspaceId are ignored; nothing at all → undefined', () => {
+        expect(resolvePipelineWorkspaceId([null], memberships, 'me')).toBe(OWNED);
+        expect(resolvePipelineWorkspaceId([null], [], 'me')).toBeUndefined();
     });
 });

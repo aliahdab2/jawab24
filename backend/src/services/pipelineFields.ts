@@ -40,3 +40,29 @@ export type PipelineField = typeof PIPELINE_FIELDS[number];
  * stale. Overlaying it would misreport the model actually in use.
  */
 export const WORKSPACE_OVERLAY_FIELDS = PIPELINE_FIELDS.filter(f => f !== 'aiModel');
+
+/**
+ * Copy the WORKSPACE_OVERLAY_FIELDS the workspace store defines onto a copy of
+ * `base` — the single overlay loop shared by both display surfaces (the
+ * merchant settings read path and the admin support console). Multilingual
+ * normalization stays at each call site: the two surfaces carry different
+ * shapes (full UserSettings with sourceLang metadata vs the console's subset
+ * row).
+ *
+ * `onlyExistingKeys` restricts the overlay to keys `base` already carries —
+ * the console's leak-guard, so nothing workspace-internal enters a payload
+ * built from an explicit column subset.
+ */
+export function overlayWorkspaceFields<T extends Record<string, unknown>>(
+    base: T,
+    workspace: Record<string, unknown>,
+    opts: { onlyExistingKeys?: boolean } = {},
+): T {
+    const overlaid: Record<string, unknown> = { ...base };
+    for (const field of WORKSPACE_OVERLAY_FIELDS) {
+        if (opts.onlyExistingKeys && !(field in overlaid)) continue;
+        const value = workspace[field];
+        if (value !== undefined) overlaid[field] = value;
+    }
+    return overlaid as T;
+}
