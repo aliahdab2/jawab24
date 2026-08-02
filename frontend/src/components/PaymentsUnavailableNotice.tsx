@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { isIOSNative } from '@/lib/capacitor';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
+import { getCachedGeoCountry, hasLocalPaymentAlternative } from '@/utils/geoCheck';
 
 /**
  * PaymentsUnavailableNotice Component
@@ -21,15 +22,18 @@ export function PaymentsUnavailableNotice() {
     const t = useTranslations('payment');
     const { user } = useAuthStore();
     const userEmail = user?.email || '';
+    const country = getCachedGeoCountry();
 
     // App Store Guideline 3.1.1: no payment/upgrade steering (incl. WhatsApp routing) on iOS native.
     if (isIOSNative()) {
         return null;
     }
 
+    // Translated, and it names payment explicitly — support answers one number
+    // from several entry points and needs to know which one this came from.
     const whatsappMessage = userEmail
-        ? `Hi! I'd like to upgrade my Jawab24 account.\nEmail: ${userEmail}`
-        : `Hi! I'd like to upgrade my Jawab24 account.`;
+        ? `${t('unavailable.whatsappMessageCheckout')}\n${t('unavailable.whatsappEmailLine', { email: userEmail })}`
+        : t('unavailable.whatsappMessageCheckout');
     const whatsappUrl = buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, whatsappMessage);
 
     return (
@@ -45,7 +49,16 @@ export function PaymentsUnavailableNotice() {
                     <p className="text-muted-foreground text-sm leading-relaxed mb-4">
                         {t('unavailable.message')}
                     </p>
-                    
+
+                    {/* Region-specific rail (Syria → Sham Cash). Hidden when the
+                        country is unknown — never guess a merchant into a
+                        payment method they can't use. */}
+                    {hasLocalPaymentAlternative(country) && (
+                        <p className="text-foreground text-sm leading-relaxed mb-4 font-medium">
+                            {t('unavailable.localAlternative')}
+                        </p>
+                    )}
+
                     {/* WhatsApp Contact Button - Pre-fills user's email */}
                     <a
                         href={whatsappUrl}

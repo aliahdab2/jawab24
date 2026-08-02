@@ -33,6 +33,29 @@ interface CachedGeoData {
 }
 
 /**
+ * DEV OVERRIDE: simulate a blocked jurisdiction from the browser console.
+ *
+ *   localStorage.setItem('SIMULATE_SANCTIONS', 'true')  → blocked, country unknown
+ *   localStorage.setItem('SIMULATE_SANCTIONS', 'SY')    → blocked, resolved as Syria
+ *
+ * The country form exists because the region-specific copy (Sham Cash for
+ * Syria) is invisible without one — a bare `true` reproduces the fail-closed
+ * path where we block without ever resolving a country, which is a real state
+ * but not the one you want when checking that copy.
+ */
+function readSimulatedSanctions(): { active: boolean; country?: string } {
+    if (typeof window === 'undefined') return { active: false };
+    const raw = window.localStorage.getItem('SIMULATE_SANCTIONS');
+    if (!raw) return { active: false };
+    if (raw === 'true') return { active: true };
+    // Anything else is only honoured as an ISO-3166 alpha-2 code, so a stray
+    // 'false' or '0' left in storage cannot silently block a real user.
+    return /^[A-Za-z]{2}$/.test(raw)
+        ? { active: true, country: raw.toUpperCase() }
+        : { active: false };
+}
+
+/**
  * Create a promise that rejects after a timeout
  */
 function timeout(ms: number): Promise<never> {
@@ -111,11 +134,11 @@ export async function isUserSanctionedNonBlocking(timeoutMs: number = 2000): Pro
 
     try {
         // DEV OVERRIDE: Allow simulating sanctions via localStorage
-        if (typeof window !== 'undefined' && window.localStorage.getItem('SIMULATE_SANCTIONS') === 'true') {
+        const simulated = readSimulatedSanctions();
+        if (simulated.active) {
             console.warn('Simulating Sanctions Mode Active');
-            const result = { sanctioned: true, cached: false, timedOut: false };
-            cacheGeoCheck(true);
-            return result;
+            cacheGeoCheck(true, simulated.country);
+            return { sanctioned: true, country: simulated.country, cached: false, timedOut: false };
         }
 
         // Get API URL from environment (required for mobile where origin is localhost)
@@ -180,8 +203,12 @@ export async function isUserSanctionedNonBlocking(timeoutMs: number = 2000): Pro
 export async function isUserSanctioned(): Promise<boolean> {
     try {
         // DEV OVERRIDE
-        if (typeof window !== 'undefined' && window.localStorage.getItem('SIMULATE_SANCTIONS') === 'true') {
+        const simulated = readSimulatedSanctions();
+        if (simulated.active) {
             console.warn('Simulating Sanctions Mode Active');
+            // Cache the simulated country too, so the sanctioned UI can render
+            // its region-specific copy (it reads the country from the cache).
+            cacheGeoCheck(true, simulated.country);
             return true;
         }
 
@@ -216,8 +243,39 @@ export async function isUserSanctioned(): Promise<boolean> {
 }
 
 /**
+ * Country code from the cached geo check, without issuing a request.
+ *
+ * The sanctioned UI only renders after `isUserSanctioned()` /
+ * `isUserSanctionedNonBlocking()` has resolved, and both write the country into
+ * the same cache — so by the time a notice is on screen the country is already
+ * known locally. Reading it here keeps the region-specific copy off the
+ * per-render network path and avoids prop-drilling the country through three
+ * unrelated call sites (pricing, scale, checkout).
+ *
+ * Returns undefined when the country is genuinely unknown — including the
+ * fail-closed case where `isUserSanctioned()` blocked without ever reaching the
+ * API. Callers must treat undefined as "no region-specific copy", never as a
+ * guess.
+ */
+export function getCachedGeoCountry(): string | undefined {
+    return getCachedGeoCheck()?.country;
+}
+
+/**
+ * Whether a blocked region has a local payment rail we can point the merchant
+ * at. Stripe cannot process the charge, but that is not the same as "no way to
+ * pay" — Syria has Sham Cash (شام كاش), arranged manually through support.
+ *
+ * Shared by both sanctioned surfaces (the pricing card fallback and the
+ * checkout notice) so the country list lives in exactly one place.
+ */
+export function hasLocalPaymentAlternative(country?: string): boolean {
+    return country?.toUpperCase() === 'SY';
+}
+
+/**
  * Get the user's country code (if available)
- * 
+ *
  * @returns Promise<string | undefined> - ISO country code or undefined
  */
 export async function getUserCountry(): Promise<string | undefined> {
