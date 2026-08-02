@@ -5,6 +5,7 @@ import { messagesService } from '../../src/services/messages';
 import { invalidateWorkspaceStatsCache } from '../../src/services/pages';
 import { conversationsService } from '../../src/services/conversations';
 import { replyGenerator } from '../../src/services/reply/generator';
+import { leadExtractorService } from '../../src/services/leadExtractor';
 import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { redis } from '../../src/lib/redis';
@@ -103,6 +104,10 @@ vi.mock('../../src/db', () => ({
 }));
 vi.mock('../../src/lib/eventBus', () => ({
     publishSSEEvent: vi.fn(),
+}));
+
+vi.mock('../../src/services/leadExtractor', () => ({
+    leadExtractorService: { maybeCaptureLead: vi.fn().mockResolvedValue(undefined) },
 }));
 
 // --- Mock adapter factory ---
@@ -2276,6 +2281,65 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         expect(sendReply).not.toHaveBeenCalled();
         expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
         expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('withholds an exhausted self-identification strip — nothing sent, no retry, typing cleared', async () => {
+        // Check 6 strip-to-empty: the ai-worker returns an EMPTY reply with the
+        // exhausted flag instead of a canned SELF_ID_FALLBACKS identity line
+        // (which answered "who are you?" whatever the customer asked — prod,
+        // Jawab24 page, 2026-08-01). flagReason carries the joined ai flags
+        // verbatim (generator contract); the processor must flag the row and
+        // stop — NOT fall through to the "No reply generated" error path, whose
+        // success:false would re-enqueue and re-bill the same doomed generation.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'self_identification_stripped,self_identification_exhausted',
+            aiIntent: 'QUESTION',
+        } as any);
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
+
+        const result = await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'موقعكم الالكتروني', 'msg-1');
+
+        expect(result.success).toBe(true);
+        expect(sendReply).not.toHaveBeenCalled();
+        // Flagged for review under the specific reason — NOT markAsReplied('').
+        // Nothing was sent, so a replied/repliedAt row would report a response
+        // time for a customer who never got an answer; and the only draft
+        // available is the automation reveal itself, which must never become a
+        // one-tap send in the merchant's composer.
+        expect(messagesService.flagMessage).toHaveBeenCalledWith(
+            'msg-uuid', 'held_self_identification', 'QUESTION',
+        );
+        expect(messagesService.markAsReplied).not.toHaveBeenCalled();
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+        expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('still captures the customer lead when the reply is withheld', async () => {
+        // Withholding OUR reply must not discard THEIR data. The shared
+        // maybeCaptureLead call sits on the send path, downstream of the
+        // withhold return — so a customer who volunteers a phone number in the
+        // same message that trips Check 6 would otherwise be lost outright.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'self_identification_stripped,self_identification_exhausted',
+            aiIntent: 'QUESTION',
+        } as any);
+
+        const adapter = createMockAdapter({});
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'رقمي 0912345678', 'msg-1');
+
+        expect(leadExtractorService.maybeCaptureLead).toHaveBeenCalledWith(
+            expect.objectContaining({ sourceId: 'msg-uuid', sourceType: 'message', messageText: 'رقمي 0912345678' }),
+        );
     });
 
     it('clears typing_on with typing_off when the generator returns an empty reply', async () => {
