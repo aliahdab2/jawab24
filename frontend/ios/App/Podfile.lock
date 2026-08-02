@@ -1,7 +1,7 @@
 PODS:
-  - Capacitor (8.2.0):
+  - Capacitor (8.5.0):
     - CapacitorCordova
-  - CapacitorCordova (8.2.0)
+  - CapacitorCordova (8.5.0)
   - Firebase/CoreOnly (12.12.1):
     - FirebaseCore (~> 12.12.1)
   - Firebase/Messaging (12.12.1):
@@ -62,8 +62,8 @@ PODS:
   - PromisesObjC (2.4.0)
 
 DEPENDENCIES:
-  - "Capacitor (from `../../node_modules/@capacitor/ios`)"
-  - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
+  - "Capacitor (from `/Users/aliahdab/Documents/AutoReply/.claude/worktrees/ios-launch-2026-08/node_modules/@capacitor/ios`)"
+  - "CapacitorCordova (from `/Users/aliahdab/Documents/AutoReply/.claude/worktrees/ios-launch-2026-08/node_modules/@capacitor/ios`)"
   - Firebase/Messaging
 
 SPEC REPOS:
@@ -80,13 +80,13 @@ SPEC REPOS:
 
 EXTERNAL SOURCES:
   Capacitor:
-    :path: "../../node_modules/@capacitor/ios"
+    :path: "/Users/aliahdab/Documents/AutoReply/.claude/worktrees/ios-launch-2026-08/node_modules/@capacitor/ios"
   CapacitorCordova:
-    :path: "../../node_modules/@capacitor/ios"
+    :path: "/Users/aliahdab/Documents/AutoReply/.claude/worktrees/ios-launch-2026-08/node_modules/@capacitor/ios"
 
 SPEC CHECKSUMS:
-  Capacitor: 49a454e1cdbd520bc106a220adca7913536a4933
-  CapacitorCordova: a9ac88d84a1f5280f33b349fe50fce1902683ac0
+  Capacitor: 00b87168591cc006ea6f5c0de681ec5c39a2c8eb
+  CapacitorCordova: 9d3acbb574048e7167d2af127a0af2123e619f2f
   Firebase: 14f11e91129d246a8a6166b4c1c2ea61b56806ec
   FirebaseCore: 86241206e656f5c80c995e370e6c975913b9b284
   FirebaseCoreInternal: 7c12fc3011d889085e765e317d7b9fd1cef97af9
@@ -97,6 +97,6 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
 
-PODFILE CHECKSUM: 068b4207bbb2f20037e64b6055edfbfbce83dcfd
+PODFILE CHECKSUM: 72d549303483d38d3a99e8984d2492e7b4504a85
 
 COCOAPODS: 1.16.2
