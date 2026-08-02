@@ -35,7 +35,11 @@ vi.mock('@/hooks', () => ({ useOwnerGate: () => false }));
 
 // --- Sanctions / platform -------------------------------------------------
 const geo = { sanctioned: false };
-vi.mock('@/utils/geoCheck', () => ({
+// Spread the real module: only the two network-backed checks are stubbed. The
+// pure helpers (getCachedGeoCountry / hasLocalPaymentAlternative) stay real, so
+// adding an export to geoCheck can't silently blow up a component that uses it.
+vi.mock('@/utils/geoCheck', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/utils/geoCheck')>()),
     isUserSanctioned: () => Promise.resolve(geo.sanctioned),
     isUserSanctionedNonBlocking: () => Promise.resolve({ sanctioned: geo.sanctioned, cached: false, timedOut: false }),
 }));

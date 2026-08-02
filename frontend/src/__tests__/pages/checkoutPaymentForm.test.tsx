@@ -41,7 +41,10 @@ vi.mock('next/head', () => ({ __esModule: true, default: () => null }));
 vi.mock('@/lib/api', () => ({ api: { post: vi.fn() }, publicApi: { get: vi.fn() } }));
 vi.mock('@/lib/store', () => ({ useAuthStore: () => ({ isAuthenticated: true }) }));
 vi.mock('@/hoc', () => ({ withOwnerOnly: (c: unknown) => c }));
-vi.mock('@/utils/geoCheck', () => ({ isUserSanctioned: () => Promise.resolve(false) }));
+vi.mock('@/utils/geoCheck', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/utils/geoCheck')>()),
+    isUserSanctioned: () => Promise.resolve(false),
+}));
 vi.mock('@/lib/capacitor', () => ({ isNativePlatform: () => false, isIOSNative: () => false }));
 // `loaderResult` decides what the memoized loadStripe() promise does: null (no
 // publishable key), a rejection (script blocked/offline), or a resolved value.

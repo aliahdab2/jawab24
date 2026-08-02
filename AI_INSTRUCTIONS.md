@@ -95,7 +95,7 @@ t('title');  tc('save');
 **Adding a page (or putting a shared component on a page) — load EVERY namespace it renders.**
 A page's `getStaticProps` / `makeGetStaticProps` must list a namespace for **every** component it renders, not just the page's own text. Walk each child component's `useTranslations('<ns>')` and include all of them:
 - `BuyTopUpCTA` / `TopUpRequestModal` → `topup`
-- `SanctionedCtaFallback` and any plan card's sanctioned state → `payment` + `landing`
+- `SanctionedCtaFallback` and any plan card's sanctioned state → `payment`
 - a page reusing dashboard widgets → whatever those widgets call
 
 Miss one and **only that page** shows raw keys (e.g. `topup.modal.title`). `translation:validate` will **NOT** catch it — it checks en/ar key parity, not per-page namespace loading.

@@ -61,7 +61,8 @@ vi.mock('@/lib/api-utils', () => ({
 // next-intl is mocked globally in test/setup.ts — real English translations are used
 
 // Mock geo check to allow payments (not sanctioned)
-vi.mock('@/utils/geoCheck', () => ({
+vi.mock('@/utils/geoCheck', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/utils/geoCheck')>()),
     isUserSanctioned: vi.fn().mockResolvedValue(false),
     isUserSanctionedNonBlocking: vi.fn().mockResolvedValue({
         sanctioned: false,
