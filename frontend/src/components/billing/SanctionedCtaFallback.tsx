@@ -1,6 +1,6 @@
 import { useTranslations } from 'next-intl';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
-import { getCachedGeoCountry, hasLocalPaymentAlternative } from '@/utils/geoCheck';
+import { LocalPaymentAlternativeNote } from './LocalPaymentAlternativeNote';
 
 /**
  * Shown in place of a payment CTA when the user is in a sanctioned region
@@ -14,16 +14,11 @@ import { getCachedGeoCountry, hasLocalPaymentAlternative } from '@/utils/geoChec
  */
 export function SanctionedCtaFallback() {
   const t = useTranslations('payment');
-  const country = getCachedGeoCountry();
 
   return (
     <div className="text-center p-3 bg-slate-50 dark:bg-surface-200 rounded-xl border border-theme-border">
       <p className="text-xs font-bold text-muted-foreground mb-1">{t('unavailable.message')}</p>
-      {/* Region-specific rail (Syria → Sham Cash). Absent when the country is
-          unknown — we never guess a merchant into a payment method. */}
-      {hasLocalPaymentAlternative(country) && (
-        <p className="text-xs text-muted-foreground mb-1">{t('unavailable.localAlternative')}</p>
-      )}
+      <LocalPaymentAlternativeNote className="text-xs text-muted-foreground mb-1" />
       <a
         href={buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, t('unavailable.whatsappMessagePricing'))}
         target="_blank"

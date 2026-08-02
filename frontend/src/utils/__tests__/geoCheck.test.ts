@@ -1,13 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+  GEO_CACHE_KEY,
   getCachedGeoCountry,
   hasLocalPaymentAlternative,
   isUserSanctioned,
   isUserSanctionedNonBlocking,
 } from '../geoCheck';
 
-const GEO_CACHE_KEY = 'jawab24_geo_check';
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Seed the geo cache the way a real check would. */
+function seedCache(country: string | undefined, ageMs = 0) {
+  localStorage.setItem(
+    GEO_CACHE_KEY,
+    JSON.stringify({ sanctioned: true, country, timestamp: Date.now() - ageMs }),
+  );
+}
 
 describe('hasLocalPaymentAlternative', () => {
   it('is true for Syria', () => {
@@ -38,10 +46,7 @@ describe('getCachedGeoCountry', () => {
   });
 
   it('returns the country written by a geo check', () => {
-    localStorage.setItem(
-      GEO_CACHE_KEY,
-      JSON.stringify({ sanctioned: true, country: 'SY', timestamp: Date.now() }),
-    );
+    seedCache('SY');
     expect(getCachedGeoCountry()).toBe('SY');
   });
 
@@ -50,10 +55,7 @@ describe('getCachedGeoCountry', () => {
   });
 
   it('returns undefined for an expired entry', () => {
-    localStorage.setItem(
-      GEO_CACHE_KEY,
-      JSON.stringify({ sanctioned: true, country: 'SY', timestamp: Date.now() - DAY_MS - 1000 }),
-    );
+    seedCache('SY', DAY_MS + 1000);
     expect(getCachedGeoCountry()).toBeUndefined();
   });
 
@@ -63,10 +65,7 @@ describe('getCachedGeoCountry', () => {
   });
 
   it('returns undefined when the cached verdict carries no country', () => {
-    localStorage.setItem(
-      GEO_CACHE_KEY,
-      JSON.stringify({ sanctioned: true, timestamp: Date.now() }),
-    );
+    seedCache(undefined);
     expect(getCachedGeoCountry()).toBeUndefined();
   });
 });
@@ -74,21 +73,21 @@ describe('getCachedGeoCountry', () => {
 describe('SIMULATE_SANCTIONS override', () => {
   beforeEach(() => {
     localStorage.clear();
-    // No test here may reach the network — an override that falls through to
-    // fetch would pass for the wrong reason.
+    // No test here may reach the network — an override that fell through to
+    // fetch would otherwise pass for the wrong reason.
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network disabled in test'));
   });
 
   it('blocks and resolves the country when set to an ISO code', async () => {
     localStorage.setItem('SIMULATE_SANCTIONS', 'SY');
     await expect(isUserSanctioned()).resolves.toBe(true);
-    // Cached, so the sanctioned UI can render the region-specific copy.
     expect(getCachedGeoCountry()).toBe('SY');
   });
 
   it('lowercase code is normalised', async () => {
     localStorage.setItem('SIMULATE_SANCTIONS', 'sy');
-    await isUserSanctionedNonBlocking(50);
+    const result = await isUserSanctionedNonBlocking(50);
+    expect(result.country).toBe('SY');
     expect(getCachedGeoCountry()).toBe('SY');
   });
 
@@ -104,10 +103,35 @@ describe('SIMULATE_SANCTIONS override', () => {
     for (const junk of ['false', '0', 'yes', 'SYR']) {
       localStorage.clear();
       localStorage.setItem('SIMULATE_SANCTIONS', junk);
-      // The override is skipped, so the (disabled) network path runs and the
-      // no-cache fail-closed rule applies — never the simulated shortcut.
       const result = await isUserSanctionedNonBlocking(50);
       expect(result.sanctioned, `"${junk}" must not trip the override`).toBe(false);
     }
+  });
+
+  it('outranks a cached "not sanctioned" verdict', async () => {
+    // Regression: the cache used to be consulted BEFORE the flag, so turning the
+    // simulation on after any normal page view did nothing for up to 24h.
+    localStorage.setItem(
+      GEO_CACHE_KEY,
+      JSON.stringify({ sanctioned: false, country: 'SE', timestamp: Date.now() }),
+    );
+    localStorage.setItem('SIMULATE_SANCTIONS', 'SY');
+
+    const result = await isUserSanctionedNonBlocking(50);
+    expect(result.sanctioned).toBe(true);
+    expect(result.country).toBe('SY');
+    expect(getCachedGeoCountry()).toBe('SY');
+  });
+
+  it('leaves no cached verdict behind when the flag is removed', async () => {
+    // Persisting the simulation would keep blocking for the full TTL after the
+    // flag is gone, with nothing on screen to explain why.
+    localStorage.setItem('SIMULATE_SANCTIONS', 'SY');
+    await isUserSanctioned();
+    await isUserSanctionedNonBlocking(50);
+
+    localStorage.removeItem('SIMULATE_SANCTIONS');
+    expect(localStorage.getItem(GEO_CACHE_KEY)).toBeNull();
+    expect(getCachedGeoCountry()).toBeUndefined();
   });
 });

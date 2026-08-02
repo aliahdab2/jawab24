@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { SanctionedCtaFallback } from '../SanctionedCtaFallback';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
+import { GEO_CACHE_KEY } from '@/utils/geoCheck';
 import en from '@/i18n/en/payment.json';
 
 /**
@@ -20,8 +21,6 @@ import en from '@/i18n/en/payment.json';
  * Strings are imported from the locale JSON, never retyped, so a copy edit
  * moves the assertion with it.
  */
-
-const GEO_CACHE_KEY = 'jawab24_geo_check';
 
 function cacheCountry(country: string | undefined) {
   localStorage.setItem(
@@ -65,6 +64,15 @@ describe('SanctionedCtaFallback', () => {
   it('does not offer Sham Cash when no geo check has run at all', () => {
     render(<SanctionedCtaFallback />);
     expect(screen.queryByText(en.unavailable.localAlternative)).not.toBeInTheDocument();
+  });
+
+  it('honours the SIMULATE_SANCTIONS country override', () => {
+    // The documented way to preview this copy. It writes no cache entry, so the
+    // component has to read the flag itself — pinned here because a regression
+    // would be invisible until someone tried to test the feature.
+    localStorage.setItem('SIMULATE_SANCTIONS', 'SY');
+    render(<SanctionedCtaFallback />);
+    expect(screen.getByText(en.unavailable.localAlternative)).toBeInTheDocument();
   });
 });
 

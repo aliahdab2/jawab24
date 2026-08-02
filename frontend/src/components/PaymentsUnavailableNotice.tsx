@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { isIOSNative } from '@/lib/capacitor';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
-import { getCachedGeoCountry, hasLocalPaymentAlternative } from '@/utils/geoCheck';
+import { LocalPaymentAlternativeNote } from '@/components/billing/LocalPaymentAlternativeNote';
 
 /**
  * PaymentsUnavailableNotice Component
@@ -22,7 +22,6 @@ export function PaymentsUnavailableNotice() {
     const t = useTranslations('payment');
     const { user } = useAuthStore();
     const userEmail = user?.email || '';
-    const country = getCachedGeoCountry();
 
     // App Store Guideline 3.1.1: no payment/upgrade steering (incl. WhatsApp routing) on iOS native.
     if (isIOSNative()) {
@@ -50,14 +49,7 @@ export function PaymentsUnavailableNotice() {
                         {t('unavailable.message')}
                     </p>
 
-                    {/* Region-specific rail (Syria → Sham Cash). Hidden when the
-                        country is unknown — never guess a merchant into a
-                        payment method they can't use. */}
-                    {hasLocalPaymentAlternative(country) && (
-                        <p className="text-foreground text-sm leading-relaxed mb-4 font-medium">
-                            {t('unavailable.localAlternative')}
-                        </p>
-                    )}
+                    <LocalPaymentAlternativeNote className="text-foreground text-sm leading-relaxed mb-4 font-medium" />
 
                     {/* WhatsApp Contact Button - Pre-fills user's email */}
                     <a
