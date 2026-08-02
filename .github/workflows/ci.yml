@@ -287,6 +287,11 @@ jobs:
           push: false
           load: true
           tags: jawab24-frontend:test
+          # The image refuses to build without a publishable key — a missing one
+          # inlines `undefined` and ships a checkout with no card form. A test
+          # placeholder keeps this smoke build exercising the real inline path.
+          build-args: |
+            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_placeholder
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
