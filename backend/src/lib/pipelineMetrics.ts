@@ -38,6 +38,7 @@ export type Outcome =
     | 'skipped_risky'
     | 'skipped_spam'
     | 'held_low_confidence'
+    | 'held_self_identification'
     | 'greeting_sent'
     | 'greeting_suppressed'
     | 'greeting_prefixed'

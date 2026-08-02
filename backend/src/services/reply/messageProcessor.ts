@@ -3,7 +3,7 @@ import { messagesService } from '../messages';
 import { conversationsService } from '../conversations';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
-import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
+import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, shouldHoldReply, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
 import { detectTemplateLanguage } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
@@ -772,6 +772,29 @@ export class MessageProcessor {
                     { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
                 ).catch(err => this.logger.error('Held reply notification failed', { err }));
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
+                return { success: true, messageId: platformMessageId };
+            }
+
+            // 12d-bis. Hold exhausted self-identification strips (always on, no
+            // setting): Check 6 removed the ENTIRE reply — all reveal talk — and
+            // the validator no longer substitutes a canned identity line (it
+            // answered "who are you?" whatever the customer asked; prod, Jawab24
+            // page, 2026-08-01). Nothing defensible to send → hold for merchant
+            // review like 12d. Must run BEFORE the !replyText guard below: its
+            // success:false would re-enqueue and re-bill the same doomed
+            // generation.
+            if (shouldHoldReply(flagReason)) {
+                await messagesService.markAsReplied(
+                    storedMessage.id, '', replyMethod,
+                    true, 'held_self_identification', aiIntent, db, aiOriginalReply,
+                );
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
+                    'flagged_reply',
+                    { senderName: senderName || senderId, reason: 'held_self_identification' },
+                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
+                ).catch(err => this.logger.error('Held reply notification failed', { err }));
+                pipelineMetrics.record(pipeline, 'held_self_identification');
                 return { success: true, messageId: platformMessageId };
             }
 

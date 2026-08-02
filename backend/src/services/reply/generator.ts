@@ -38,6 +38,19 @@ export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive'] as const;
 export const SAFE_FALLBACK_FLAGS = ['price_not_in_kb'] as const;
 export const SKIP_REPLY_INTENTS = ['OFFENSIVE', 'SPAM_OR_IRRELEVANT'] as const;
 
+/** Flags that hold the reply for merchant review instead of sending.
+ *  self_identification_exhausted = Check 6 stripped the ENTIRE reply (all
+ *  reveal talk) and the validator no longer substitutes a canned identity
+ *  line — it answered "who are you?" whatever the customer asked (prod,
+ *  Jawab24 page, 2026-08-01). With nothing defensible to send, the message
+ *  is held exactly like held_low_confidence. Stored flag_reason for held
+ *  rows: 'held_self_identification'. */
+export const HOLD_REPLY_FLAGS = ['self_identification_exhausted'] as const;
+
+export function shouldHoldReply(flagReason?: string): boolean {
+    return hasAnyFlag(flagReason, HOLD_REPLY_FLAGS);
+}
+
 /** Intents that skip silently — no needsAttention flag, no notification.
  *  Tagging someone, emoji-only, "follow me", etc. are irrelevant noise.
  *  Offensive content is excluded — it warrants merchant awareness. */

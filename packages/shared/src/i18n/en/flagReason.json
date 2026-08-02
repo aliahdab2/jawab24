@@ -35,5 +35,7 @@
   "AI flagged this reply": "Flagged for review",
   "self_identified_as_automation": "AI self-reference detected",
   "self_identification_stripped": "Automated-identity wording removed from the reply",
+  "self_identification_exhausted": "Reply withheld — it only revealed automation",
+  "held_self_identification": "Held for your review — the reply would have revealed automation",
   "reply_not_grounded": "Reply not grounded in Business Info"
 }

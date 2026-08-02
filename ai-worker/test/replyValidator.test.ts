@@ -4,7 +4,6 @@ import {
     isCommentTooLong,
     stripSelfIdentification,
     isOwnBrandPage,
-    SELF_ID_FALLBACKS,
     validateReply,
 } from '../src/services/reply/replyValidator';
 import type { GenerateRequest, ParsedReply } from '../src/services/reply/types';
@@ -552,48 +551,42 @@ describe('isCommentTooLong (Check 2)', () => {
 
 describe('stripSelfIdentification (Check 6)', () => {
     it('strips only the offending sentence and keeps the rest', () => {
-        const out = stripSelfIdentification('I am a chatbot. The price is 150 SAR and we deliver fast.', 'en');
+        const out = stripSelfIdentification('I am a chatbot. The price is 150 SAR and we deliver fast.');
         expect(out.reply).not.toMatch(/chatbot/i);
         expect(out.reply).toContain('The price is 150 SAR');
         expect(out.stripped).toBe(true);
     });
 
-    it('falls back to a pooled EN reply when nothing useful remains', () => {
-        expect(SELF_ID_FALLBACKS.en).toContain(stripSelfIdentification('I am a bot.', 'en').reply);
+    // Exhausted strip = the ENTIRE reply was reveal talk. The old contract
+    // substituted a canned SELF_ID_FALLBACKS identity line here, which answered
+    // "who are you?" regardless of what the customer actually asked (prod,
+    // 2026-08-01: «موقعكم الالكتروني» → «معك أحد أعضاء الفريق…», repeated
+    // verbatim on retry). New contract: the validator NEVER invents text — an
+    // exhausted strip returns an EMPTY reply and the backend holds the message
+    // for merchant review (same shape as held_low_confidence) instead of
+    // sending a non-answer.
+    it('returns an EMPTY reply when nothing useful remains — never substituted text (EN)', () => {
+        expect(stripSelfIdentification('I am a bot.')).toEqual({ reply: '', stripped: true });
     });
 
-    it('falls back to a pooled AR reply when fallbackLang is ar', () => {
-        expect(SELF_ID_FALLBACKS.ar).toContain(stripSelfIdentification('I am a bot.', 'ar').reply);
-    });
-
-    it('fallback pool varies — not the same string every time (repetition source, 2026-07-24)', () => {
-        const seen = new Set<string>();
-        for (let i = 0; i < 60; i++) {
-            seen.add(stripSelfIdentification('I am a bot.', 'ar').reply);
-        }
-        expect(seen.size).toBeGreaterThan(1);
-    });
-
-    it('fallback pool is channel-neutral — no Facebook-specific "الصفحة"/"page" (WhatsApp shares this path)', () => {
-        for (const s of [...SELF_ID_FALLBACKS.ar, ...SELF_ID_FALLBACKS.en]) {
-            expect(s).not.toMatch(/الصفحة|page/i);
-        }
+    it('returns an EMPTY reply when nothing useful remains — never substituted text (AR)', () => {
+        expect(stripSelfIdentification('I am a bot.')).toEqual({ reply: '', stripped: true });
     });
 
     it('leaves a clean reply untouched and reports stripped:false', () => {
-        const out = stripSelfIdentification('Hello there, how can I help?', 'en');
+        const out = stripSelfIdentification('Hello there, how can I help?');
         expect(out.reply).toBe('Hello there, how can I help?');
         expect(out.stripped).toBe(false);
     });
 
     it('strips the Jawab24 brand name', () => {
-        const out = stripSelfIdentification('This is Jawab24 speaking. Our hours are 9 to 5 every weekday here.', 'en');
+        const out = stripSelfIdentification('This is Jawab24 speaking. Our hours are 9 to 5 every weekday here.');
         expect(out.reply).not.toMatch(/jawab24/i);
         expect(out.reply).toContain('Our hours are 9 to 5');
     });
 
     it('returns empty input unchanged', () => {
-        expect(stripSelfIdentification('', 'ar')).toEqual({ reply: '', stripped: false });
+        expect(stripSelfIdentification('')).toEqual({ reply: '', stripped: false });
     });
 
     // Regression (prod 2026-07-17): the dot inside "Jawab24.com" was treated as a
@@ -601,23 +594,23 @@ describe('stripSelfIdentification (Check 6)', () => {
     // fragment "com ممكن يساعدوك أكتر." which was sent to a customer.
     it('does not split inside a domain — no orphaned "com" fragment survives', () => {
         const out = stripSelfIdentification(
-            'ما عندي هالمعلومة حالياً، بس فريق Jawab24.com ممكن يساعدوك أكتر.', 'ar');
+            'ما عندي هالمعلومة حالياً، بس فريق Jawab24.com ممكن يساعدوك أكتر.');
         expect(out.reply).not.toMatch(/jawab24/i);
         expect(out.reply).not.toMatch(/\bcom\b/);
-        // Whole sentence stripped → under 10 useful chars → pooled AR fallback.
-        expect(SELF_ID_FALLBACKS.ar).toContain(out.reply);
+        // Whole sentence stripped → under 10 useful chars → exhausted, empty.
+        expect(out.reply).toBe('');
     });
 
     it('keeps non-offending sentences intact when a domain sentence is stripped', () => {
         const out = stripSelfIdentification(
-            'You can visit Jawab24.com for details. Our hours are 9 to 5 every weekday here.', 'en');
+            'You can visit Jawab24.com for details. Our hours are 9 to 5 every weekday here.');
         expect(out.reply).not.toMatch(/jawab24|(^|\s)com\b/i);
         expect(out.reply).toContain('Our hours are 9 to 5');
     });
 
     it('does not treat decimals as sentence boundaries', () => {
         const reply = 'I am a bot. Delivery takes 2.5 days on average for most orders.';
-        const out = stripSelfIdentification(reply, 'en');
+        const out = stripSelfIdentification(reply);
         expect(out.reply).toBe('Delivery takes 2.5 days on average for most orders.');
     });
 
@@ -631,29 +624,29 @@ describe('stripSelfIdentification (Check 6)', () => {
     describe('ambiguous AI vocabulary — gated by the model self-report (v59)', () => {
         it('keeps an Arabic spec sentence mentioning ذكاء اصطناعي when the model did not self-report', () => {
             const reply = 'كاميرا Samsung Galaxy S24 بدقة 200 ميجابكسل مع ذكاء اصطناعي، وشاشة 6.2 بوصة بسطوع عالي.';
-            expect(stripSelfIdentification(reply, 'ar')).toEqual({ reply, stripped: false });
+            expect(stripSelfIdentification(reply)).toEqual({ reply, stripped: false });
         });
 
         it('keeps an English AI-feature sentence without a self-report', () => {
             const reply = 'The S24 camera uses artificial intelligence for photo editing and instant translation.';
-            expect(stripSelfIdentification(reply, 'en')).toEqual({ reply, stripped: false });
+            expect(stripSelfIdentification(reply)).toEqual({ reply, stripped: false });
         });
 
-        it('strips a self-reported AI reveal down to the pool («أنا ذكاء اصطناعي»)', () => {
-            const out = stripSelfIdentification('أنا ذكاء اصطناعي أساعدك هنا.', 'ar', true);
-            expect(SELF_ID_FALLBACKS.ar).toContain(out.reply);
+        it('strips a self-reported AI reveal to EMPTY when nothing else remains («أنا ذكاء اصطناعي»)', () => {
+            const out = stripSelfIdentification('أنا ذكاء اصطناعي أساعدك هنا.', true);
+            expect(out.reply).toBe('');
             expect(out.stripped).toBe(true);
         });
 
         it('is dialect-blind by design — the flag decides, not pronoun lists («آني ذكاء اصطناعي»)', () => {
-            const out = stripSelfIdentification('آني ذكاء اصطناعي وياك للرد السريع. التوصيل خلال يومين لكل المناطق.', 'ar', true);
+            const out = stripSelfIdentification('آني ذكاء اصطناعي وياك للرد السريع. التوصيل خلال يومين لكل المناطق.', true);
             expect(out.reply).not.toMatch(/ذكاء اصطناعي/);
             expect(out.reply).toContain('التوصيل خلال يومين');
         });
 
         it('strips only the self-reported AI sentence and keeps the informative rest', () => {
             const out = stripSelfIdentification(
-                'I am an artificial intelligence assistant. Delivery takes 3 days for most orders.', 'en', true);
+                'I am an artificial intelligence assistant. Delivery takes 3 days for most orders.', true);
             expect(out.reply).not.toMatch(/artificial intelligence/i);
             expect(out.reply).toContain('Delivery takes 3 days');
         });
@@ -666,21 +659,21 @@ describe('stripSelfIdentification (Check 6)', () => {
         // are observable in prod via self_identification_stripped counts.
         it('without a self-report, non-first-person AI wording passes through the VALIDATOR untouched', () => {
             const reply = 'هذا النظام يعتمد على الذكاء الاصطناعي في اقتراح المقاسات المناسبة.';
-            expect(stripSelfIdentification(reply, 'ar', false)).toEqual({ reply, stripped: false });
+            expect(stripSelfIdentification(reply, false)).toEqual({ reply, stripped: false });
         });
 
-        it('the literal first-person claim «أنا ذكاء اصطناعي» is DECISIVE — stripped even without the flag', () => {
-            const out = stripSelfIdentification('أنا ذكاء اصطناعي أساعدك هنا.', 'ar', false);
-            expect(SELF_ID_FALLBACKS.ar).toContain(out.reply);
+        it('the literal first-person claim «أنا ذكاء اصطناعي» is DECISIVE — stripped to EMPTY even without the flag', () => {
+            const out = stripSelfIdentification('أنا ذكاء اصطناعي أساعدك هنا.', false);
+            expect(out.reply).toBe('');
             expect(out.stripped).toBe(true);
         });
 
         it('lexically-decisive reveals (chatbot / first-person «أنا روبوت») strip regardless of the flag', () => {
-            const out = stripSelfIdentification('You are talking to a chatbot. The device costs 2900 SAR with tax.', 'en');
+            const out = stripSelfIdentification('You are talking to a chatbot. The device costs 2900 SAR with tax.');
             expect(out.reply).not.toMatch(/chatbot/i);
             expect(out.reply).toContain('2900 SAR');
 
-            const ar = stripSelfIdentification('أنا روبوت أرد عليك تلقائياً. سعر الجهاز 2900 ريال شامل الضريبة.', 'ar');
+            const ar = stripSelfIdentification('أنا روبوت أرد عليك تلقائياً. سعر الجهاز 2900 ريال شامل الضريبة.');
             expect(ar.reply).not.toMatch(/روبوت/);
             expect(ar.reply).toContain('2900 ريال');
         });
@@ -690,13 +683,13 @@ describe('stripSelfIdentification (Check 6)', () => {
         // a literal first-person claim makes them a reveal.
         it('keeps ROBOT-product sentences in both languages when the model did not self-report', () => {
             const ar = 'مكنسة روبوت ذكية للتنظيف اليومي بسعر 899 ريال.';
-            expect(stripSelfIdentification(ar, 'ar')).toEqual({ reply: ar, stripped: false });
+            expect(stripSelfIdentification(ar)).toEqual({ reply: ar, stripped: false });
             const en = 'The robot vacuum cleans daily and costs 899 SAR.';
-            expect(stripSelfIdentification(en, 'en')).toEqual({ reply: en, stripped: false });
+            expect(stripSelfIdentification(en)).toEqual({ reply: en, stripped: false });
         });
 
         it('strips a روبوت sentence when the model self-reported', () => {
-            const out = stripSelfIdentification('معك روبوت الرد الآلي هنا. الشحن متاح لكل المدن.', 'ar', true);
+            const out = stripSelfIdentification('معك روبوت الرد الآلي هنا. الشحن متاح لكل المدن.', true);
             expect(out.reply).not.toMatch(/روبوت/);
             expect(out.reply).toContain('الشحن متاح');
         });
@@ -710,23 +703,23 @@ describe('stripSelfIdentification (Check 6)', () => {
     describe('own-brand page exemption (ownBrandPage)', () => {
         it('keeps the brand and the website URL on the vendor page — the exact prod failure', () => {
             const reply = 'موقعنا الإلكتروني https://jawab24.com وفيه كل التفاصيل عن الخدمة.';
-            expect(stripSelfIdentification(reply, 'ar', false, true)).toEqual({ reply, stripped: false });
+            expect(stripSelfIdentification(reply, false, true)).toEqual({ reply, stripped: false });
         });
 
         it('keeps a self-reported product description on the vendor page («جواب24 منصة ذكاء اصطناعي»)', () => {
             const reply = 'جواب24 منصة ذكاء اصطناعي ترد على عملائك تلقائياً على مدار الساعة.';
-            expect(stripSelfIdentification(reply, 'ar', true, true)).toEqual({ reply, stripped: false });
+            expect(stripSelfIdentification(reply, true, true)).toEqual({ reply, stripped: false });
         });
 
         it('still strips first-person bot claims on the vendor page — the tripwire is universal', () => {
-            const out = stripSelfIdentification('أنا روبوت أرد تلقائياً. موقعنا jawab24.com دائماً متاح.', 'ar', false, true);
+            const out = stripSelfIdentification('أنا روبوت أرد تلقائياً. موقعنا jawab24.com دائماً متاح.', false, true);
             expect(out.stripped).toBe(true);
             expect(out.reply).not.toMatch(/أنا روبوت/);
             expect(out.reply).toContain('jawab24.com');
         });
 
         it('still strips "chatbot" on the vendor page', () => {
-            const out = stripSelfIdentification('You are talking to a chatbot. Visit jawab24.com for details today.', 'en', false, true);
+            const out = stripSelfIdentification('You are talking to a chatbot. Visit jawab24.com for details today.', false, true);
             expect(out.stripped).toBe(true);
             expect(out.reply).not.toMatch(/chatbot/i);
             expect(out.reply).toContain('jawab24.com');
@@ -736,7 +729,7 @@ describe('stripSelfIdentification (Check 6)', () => {
         // customers on merchant pages (prod, 2026-08-01: «جواب24 هو موظف ذكي…»
         // survived Check 6 on the vendor page only by luck of this gap).
         it('strips the no-space «جواب24» form on MERCHANT pages', () => {
-            const out = stripSelfIdentification('هذا الرد من جواب24 التلقائي. ساعات الدوام من 9 صباحاً حتى 5 مساءً.', 'ar');
+            const out = stripSelfIdentification('هذا الرد من جواب24 التلقائي. ساعات الدوام من 9 صباحاً حتى 5 مساءً.');
             expect(out.stripped).toBe(true);
             expect(out.reply).not.toMatch(/جواب24/);
             expect(out.reply).toContain('ساعات الدوام');
@@ -996,6 +989,31 @@ describe('validateReply orchestration', () => {
             );
             expect(out.reply).not.toMatch(/jawab24/i);
             expect(out.flags).toContain('self_identification_stripped');
+        });
+
+        // Exhausted strip crosses the service boundary as a FLAG plus an empty
+        // reply — never as invented text. The backend generator maps the flag to
+        // a hold (mirroring held_low_confidence) so the merchant answers
+        // personally instead of the customer receiving a canned identity line
+        // that ignores their question (prod, 2026-08-01).
+        it('all-reveal reply → EMPTY reply + self_identification_exhausted flag (the hold signal)', () => {
+            const out = validateReply(
+                base({ reply: 'أنا روبوت أرد عليك تلقائياً.', language: 'ar' }),
+                req('موقعكم الالكتروني؟'),
+            );
+            expect(out.reply).toBe('');
+            expect(out.flags).toContain('self_identification_stripped');
+            expect(out.flags).toContain('self_identification_exhausted');
+        });
+
+        it('partial strip keeps the informative rest and does NOT raise the exhausted flag', () => {
+            const out = validateReply(
+                base({ reply: 'أنا روبوت أرد عليك تلقائياً. سعر الجهاز 2900 ريال شامل الضريبة.', language: 'ar' }),
+                req('كم السعر؟'),
+            );
+            expect(out.reply).toContain('2900 ريال');
+            expect(out.flags).toContain('self_identification_stripped');
+            expect(out.flags).not.toContain('self_identification_exhausted');
         });
     });
 });

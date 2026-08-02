@@ -1080,6 +1080,12 @@ export {
 //     the stance (team member, never claim human, never reveal automation) unchanged.
 // (2) CODE: Check 6 canned fallback → small channel-neutral pool (replyValidator
 //     SELF_ID_FALLBACKS; «الفريق» not «الصفحة» — WhatsApp shares the path).
+//     [Pool REMOVED 2026-08-01, no version bump (code-only): a canned identity line
+//     answers "who are you?" whatever the customer asked (prod, Jawab24 page —
+//     «موقعكم الالكتروني» ×4 → «معك أحد أعضاء الفريق…»). Exhausted strips now return
+//     EMPTY + `self_identification_exhausted`; both pipelines HOLD the message for
+//     merchant review (flag_reason `held_self_identification`), mirroring
+//     held_low_confidence. Partial strips unchanged.]
 // (3) INFORM: the clock — minutesSinceLastMessage plumbed backend→worker (platform-generic,
 //     computed from messages.created_at; WhatsApp-ready) and rendered as a fact + meaning
 //     line IN THE USER PROMPT adjacent to the message («[Time since the previous message:

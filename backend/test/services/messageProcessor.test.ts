@@ -2278,6 +2278,40 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         expect(sendTypingOff).toHaveBeenCalledTimes(1);
     });
 
+    it('holds an exhausted self-identification strip — nothing sent, no retry, typing cleared', async () => {
+        // Check 6 strip-to-empty: the ai-worker returns an EMPTY reply with the
+        // exhausted flag instead of a canned SELF_ID_FALLBACKS identity line
+        // (which answered "who are you?" whatever the customer asked — prod,
+        // Jawab24 page, 2026-08-01). flagReason carries the joined ai flags
+        // verbatim (generator contract); the processor must hold exactly like
+        // held_low_confidence (12d) — storing the held_self_identification
+        // reason — NOT fall through to the "No reply generated" error path,
+        // whose success:false would re-enqueue and re-bill the same doomed
+        // generation.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'self_identification_stripped,self_identification_exhausted',
+            aiIntent: 'QUESTION',
+        } as any);
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
+
+        const result = await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'موقعكم الالكتروني', 'msg-1');
+
+        expect(result.success).toBe(true);
+        expect(sendReply).not.toHaveBeenCalled();
+        // Held for review: empty reply text, needs-attention, the held reason.
+        const holdCall = vi.mocked(messagesService.markAsReplied).mock.calls.at(-1);
+        expect(holdCall?.slice(0, 5)).toEqual(['msg-uuid', '', 'ai', true, 'held_self_identification']);
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+        expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
     it('clears typing_on with typing_off when the generator returns an empty reply', async () => {
         vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
             replyText: '',

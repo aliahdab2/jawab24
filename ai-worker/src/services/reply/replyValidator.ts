@@ -273,30 +273,6 @@ export function isCommentTooLong(reply: string, channel: 'comment' | 'dm'): bool
 }
 
 /**
- * Fallback pool for Check 6 — used only when stripping leaves nothing useful.
- * A single fixed string here was itself a repetition source in prod (the same
- * line reached customers on 3 different pages verbatim, found 2026-07-24), so
- * the rare fallback path draws from a small pool instead. Neutral light register
- * on purpose: this code path cannot know the customer's dialect.
- */
-// Channel-neutral wording on purpose ("الفريق", never "الصفحة"): this same code path
-// serves Facebook, Instagram, and WhatsApp — "page team" only makes sense on the first two.
-export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
-    ar: [
-        'أنا من الفريق هنا، كيف أقدر أساعدك؟',
-        'معك أحد أعضاء الفريق — تفضل، كيف نخدمك؟',
-        'أنا من فريق خدمة العملاء عندنا، تفضل بسؤالك.',
-        'الفريق في خدمتك — اسأل ما تحتاج.',
-    ],
-    en: [
-        'I\'m part of the team here. How can I help you?',
-        'You\'re chatting with our team — what can I do for you?',
-        'I\'m with the team here, happy to help.',
-        'Team member here — what would you like to know?',
-    ],
-};
-
-/**
  * True when the page itself IS the platform brand — Jawab24's own support
  * page — so brand mentions in a reply are the page talking about its own
  * product, not the assistant leaking the tool a merchant uses. Keyed on the
@@ -311,8 +287,12 @@ export function isOwnBrandPage(pageName?: string): boolean {
 
 /**
  * Check 6 — the bot must never reveal it's automated. Strips only the offending
- * sentence(s) and keeps the rest; falls back to a pooled reply (in fallbackLang)
- * only if fewer than 10 useful characters remain.
+ * sentence(s) and keeps the rest; if fewer than 10 useful characters remain the
+ * strip is EXHAUSTED and the reply comes back empty — the validator never
+ * invents text (no canned fallback: a substituted identity line answered "who
+ * are you?" whatever the customer asked — prod, 2026-08-01). validateReply
+ * raises `self_identification_exhausted` on that case and the backend holds
+ * the message for merchant review instead of sending.
  *
  * Two vocabulary classes (v59):
  * - Lexically DECISIVE strings, stripped unconditionally: the platform brand,
@@ -336,7 +316,7 @@ export function isOwnBrandPage(pageName?: string): boolean {
  * the business, so the brand needles and the flag-gated AI vocabulary are
  * product talk there — «موقعنا jawab24.com» is the answer to "what's your
  * website?", not a leak. Pre-exemption, Check 6 stripped exactly that sentence
- * and swapped in SELF_ID_FALLBACKS lines, so the Jawab24 support page dodged
+ * and swapped in canned identity lines, so the Jawab24 support page dodged
  * every website/app-link question with identity statements (prod, 2026-08-01).
  * The first-person tripwires and "chatbot"/"bot" stay active on every page —
  * even our own page speaks as a «موظف ذكي», never as a bot.
@@ -349,7 +329,6 @@ export function isOwnBrandPage(pageName?: string): boolean {
  */
 export function stripSelfIdentification(
     reply: string,
-    fallbackLang: string,
     selfReported = false,
     ownBrandPage = false,
 ): { reply: string; stripped: boolean } {
@@ -400,8 +379,14 @@ export function stripSelfIdentification(
     }
     const filtered = kept.join('').trim();
     if (filtered.length < 10) {
-        const pool = SELF_ID_FALLBACKS[fallbackLang === 'ar' ? 'ar' : 'en'];
-        return { reply: pool[Math.floor(Math.random() * pool.length)], stripped: true };
+        // Exhausted: the ENTIRE reply was reveal talk. The old contract swapped
+        // in a canned SELF_ID_FALLBACKS identity line here — which answered
+        // "who are you?" regardless of what the customer actually asked, and
+        // repeated verbatim on retry (prod, Jawab24 page, 2026-08-01:
+        // «موقعكم الالكتروني» ×4 → «معك أحد أعضاء الفريق…»). The validator must
+        // never invent text: return empty and let the backend HOLD the message
+        // for merchant review (validateReply raises self_identification_exhausted).
+        return { reply: '', stripped: true };
     }
     return { reply: filtered, stripped: true };
 }
@@ -523,11 +508,18 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // (the silence is how #236 hid for months).
     const selfReported = flags.includes('self_identified_as_automation');
     const { reply: finalReply, stripped } = stripSelfIdentification(
-        reply, parsed.language || request.language || 'ar', selfReported,
+        reply, selfReported,
         isOwnBrandPage(request.context?.pageName),
     );
     if (stripped && !flags.includes('self_identification_stripped')) {
         flags.push('self_identification_stripped');
+    }
+    // Exhausted strip: the whole reply was reveal talk and nothing survived.
+    // The empty reply + this flag are the cross-service HOLD signal — the
+    // backend holds the message for merchant review (held_self_identification)
+    // instead of sending; the validator never substitutes invented text.
+    if (stripped && finalReply === '' && !flags.includes('self_identification_exhausted')) {
+        flags.push('self_identification_exhausted');
     }
 
     return {
