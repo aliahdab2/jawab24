@@ -19,7 +19,11 @@ COPY backend ./backend
 
 # Build
 RUN npm run build --workspace=@jawab24/shared
-RUN npm run build --workspace=jawab24-backend
+# Explicit heap for the backend build (lint + type-check + tsc): drizzle-orm
+# 0.45's type inference pushed peak tsc memory past Node's heuristic default
+# (half of host RAM, capped) on the 4-core production host — OOM'd the
+# 2026-08-02 deploy. 3 GB is deliberate headroom, not a measured minimum.
+RUN NODE_OPTIONS=--max-old-space-size=3072 npm run build --workspace=jawab24-backend
 
 # Remove dev dependencies to reduce image size (~200-300MB savings)
 RUN npm prune --omit=dev

@@ -149,14 +149,26 @@ build_images() {
     export GIT_COMMIT=$(git rev-parse HEAD)
     echo "📝 Git commit: $(git rev-parse --short HEAD)"
 
-    # Deliberately NOT --parallel: the build runs on the same 4-core host that is
-    # serving live traffic (blue-green), and three concurrent no-cache image builds
-    # saturate the CPU and push the box into swap — every page gets slow for the
-    # whole build. Sequential builds keep the site responsive; the deploy itself
-    # just takes a few minutes longer.
-    docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build \
-        --no-cache \
-        --build-arg GIT_COMMIT=$GIT_COMMIT
+    # Build ONLY the target env's images, ONE AT A TIME. Two hard-won facts
+    # (2026-08-02, deploy OOM after the drizzle-orm 0.45 upgrade):
+    #   1. Compose v2 builds every service in the merged file set CONCURRENTLY —
+    #      the v1 --parallel flag is gone, so "not passing --parallel" no longer
+    #      serializes anything.
+    #   2. The blue/green overlay ADDS backend-$ENV/frontend-$ENV/ai-worker-$ENV
+    #      alongside the base backend/frontend/ai-worker, so an unscoped build
+    #      compiled SIX images at once on the 4-core live host. The base three
+    #      are legacy services that start_new_env() stops anyway — never build
+    #      them here.
+    # The 6-way contention pushed the backend tsc pass (heavier types since
+    # drizzle-orm 0.45) past Node's heuristic heap cap: FATAL "heap out of
+    # memory" at Bind stage 10/11, deploy dead before any migration ran.
+    for svc in backend-$DEPLOY_ENV frontend-$DEPLOY_ENV ai-worker-$DEPLOY_ENV; do
+        echo "🏗️  Building $svc..."
+        docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml build \
+            --no-cache \
+            --build-arg GIT_COMMIT=$GIT_COMMIT \
+            "$svc"
+    done
     echo "✅ Images built successfully"
 }
 
