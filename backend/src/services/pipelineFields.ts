@@ -26,3 +26,17 @@ export const PIPELINE_FIELDS = [
 ] as const;
 
 export type PipelineField = typeof PIPELINE_FIELDS[number];
+
+/**
+ * Pipeline fields served from the workspace store when READING settings for
+ * display (D-026) — the merchant settings API and the admin support console
+ * both overlay these over the legacy per-user row, so what they show is what
+ * the reply pipeline actually obeys.
+ *
+ * `aiModel` is deliberately EXCLUDED: the admin model override writes the
+ * legacy `settings` table directly (services/admin/users.ts) and the pipeline
+ * resolves the model from that same table via aiModelResolver — so for
+ * `aiModel` the LEGACY store is authoritative and the workspace copy can be
+ * stale. Overlaying it would misreport the model actually in use.
+ */
+export const WORKSPACE_OVERLAY_FIELDS = PIPELINE_FIELDS.filter(f => f !== 'aiModel');

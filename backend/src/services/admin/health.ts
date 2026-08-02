@@ -1,4 +1,6 @@
 import { DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE, resolveAiQuotaStatus } from '@jawab24/shared';
+import { coerceMultiLang } from '../multiLangTranslation';
+import { WORKSPACE_OVERLAY_FIELDS } from '../pipelineFields';
 
 /**
  * Admin support-console health flags.
@@ -201,6 +203,51 @@ export function computeNonDefaultKeys(settings: Partial<SupportSettings> | null)
         }
     }
     return changed;
+}
+
+/**
+ * Multilingual JSONB fields the console displays. Normalized after overlaying
+ * (mirroring settingsService.normalizeMultiFields): the workspace store can
+ * hold these double-encoded — a JSON *string* — via drift-heal/backfill, and a
+ * string here would corrupt `isEmptyRecord` (Object.keys('…') is non-empty),
+ * `isPlaceholderPersona` (Object.values over characters), and the console UI.
+ */
+const MULTI_LANG_SUPPORT_FIELDS = ['brandVoiceNotesMulti', 'greetingMessageMulti', 'awayMessageMulti'] as const;
+
+/**
+ * Overlay the workspace-store pipeline fields onto the legacy settings row —
+ * the EFFECTIVE settings, as the reply pipeline sees them (D-026).
+ *
+ * The reply pipeline reads pipeline fields from the workspace JSONB
+ * (`workspaceSettingsService.getSettings(page.workspaceId)`), never from the
+ * legacy per-user row this console selects. The two stores drift by design:
+ * `NEW_SIGNUP_SETTINGS_SEED` writes auto-reply OFF into the JSONB only, so a
+ * new signup's legacy row shows the column defaults (everything ON) while the
+ * pipeline is silent. Feeding the raw legacy row to the console hid exactly
+ * the failure class support hunts here ("why isn't this merchant getting
+ * replies?" — 30 drifted users on 2026-08-02, all showing healthy toggles).
+ *
+ * Pure and per-field fail-open: only fields the legacy row already carries are
+ * replaced (nothing pipeline-internal leaks into the payload), and a field the
+ * workspace store lacks keeps its legacy value. `aiModel` stays legacy — see
+ * WORKSPACE_OVERLAY_FIELDS.
+ */
+export function overlayPipelineSettings(
+    legacy: SupportSettings,
+    workspace: Record<string, unknown>,
+): SupportSettings {
+    const effective: Record<string, unknown> = { ...legacy };
+    for (const field of WORKSPACE_OVERLAY_FIELDS) {
+        if (!(field in effective)) continue;
+        const value = workspace[field];
+        if (value !== undefined) effective[field] = value;
+    }
+    for (const field of MULTI_LANG_SUPPORT_FIELDS) {
+        const value = effective[field];
+        // Preserve null (row never touched) — coerce only actual values.
+        if (value !== null && value !== undefined) effective[field] = coerceMultiLang(value);
+    }
+    return effective as unknown as SupportSettings;
 }
 
 /** Template markers left in a persona, e.g. "[Your Assistant's Name]". */

@@ -4,6 +4,7 @@ import {
     computeHealthFlags,
     computeNonDefaultKeys,
     isPlaceholderPersona,
+    overlayPipelineSettings,
     SETTINGS_DEFAULTS,
     SUPPORT_SETTINGS_KEYS,
     type HealthInput,
@@ -11,6 +12,7 @@ import {
     type SupportSettings,
     type PageKbSummary,
 } from '../services/admin/health';
+import { DEFAULTS as WORKSPACE_DEFAULTS, NEW_SIGNUP_SETTINGS_SEED } from '../services/workspaceSettings';
 import { settings } from '../db/schema';
 
 /**
@@ -505,4 +507,82 @@ describe('SETTINGS_DEFAULTS stays in sync with the Drizzle schema', () => {
             expect(col.default).toEqual((SETTINGS_DEFAULTS as Record<string, unknown>)[key]);
         });
     }
+});
+
+describe('overlayPipelineSettings — effective settings for the console (D-026)', () => {
+    // The workspace store exactly as the pipeline reads it for a NEW signup:
+    // read-time defaults merged with the D-025 seed — auto-reply OFF on both
+    // surfaces, dual comment mode. Real production constants, not copies.
+    const newSignupWorkspace = { ...WORKSPACE_DEFAULTS, ...NEW_SIGNUP_SETTINGS_SEED } as unknown as Record<string, unknown>;
+
+    it('a new signup shows the pipeline truth — toggles OFF — not the legacy column defaults (a.tbbaa regression, 2026-08-02)', () => {
+        // The raw legacy row reads everything ON (column defaults): exactly what
+        // the console wrongly displayed while the reply worker skipped every DM
+        // with "Messages auto-reply disabled".
+        const effective = overlayPipelineSettings(healthySettings(), newSignupWorkspace);
+        expect(effective.commentsAutoReply).toBe(false);
+        expect(effective.messagesAutoReply).toBe(false);
+        expect(effective.commentReplyMode).toBe('dual');
+    });
+
+    it('health flags fire on the effective values: red all_channels_silent for a seeded new signup', () => {
+        const effective = overlayPipelineSettings(healthySettings(), newSignupWorkspace);
+        const flags = computeHealthFlags(healthyInput({ settings: effective }));
+        expect(flags.find(f => f.key === 'all_channels_silent')?.severity).toBe('red');
+    });
+
+    it('non-default markers are computed on the effective values', () => {
+        const marked = computeNonDefaultKeys(overlayPipelineSettings(healthySettings(), newSignupWorkspace));
+        expect(marked).toEqual(expect.arrayContaining(['commentsAutoReply', 'messagesAutoReply', 'commentReplyMode']));
+    });
+
+    it('aiModel is NEVER overlaid — the legacy store is authoritative for it (admin override path)', () => {
+        const legacy = healthySettings({ aiModel: 'gpt-4.1' });
+        const effective = overlayPipelineSettings(legacy, { ...newSignupWorkspace, aiModel: 'gpt-4o-mini' });
+        expect(effective.aiModel).toBe('gpt-4.1');
+    });
+
+    it('fields the workspace store lacks keep their legacy values (per-field fail-open)', () => {
+        const legacy = healthySettings({ replyDelay: 7, timezone: 'Africa/Cairo' });
+        const effective = overlayPipelineSettings(legacy, { messagesAutoReply: false });
+        expect(effective.replyDelay).toBe(7);
+        expect(effective.timezone).toBe('Africa/Cairo');
+        expect(effective.messagesAutoReply).toBe(false);
+    });
+
+    it('workspace-only pipeline fields never leak into the console payload', () => {
+        const effective = overlayPipelineSettings(healthySettings(), {
+            ...newSignupWorkspace,
+            dualReplyNudgeVariations: { ar: ['رد'] },
+            handoffPauseDurationMinutes: 30,
+        }) as unknown as Record<string, unknown>;
+        expect('dualReplyNudgeVariations' in effective).toBe(false);
+        expect('handoffPauseDurationMinutes' in effective).toBe(false);
+    });
+
+    it('double-encoded multilingual values from the workspace store are normalized to objects', () => {
+        // Drift-heal/backfill can copy a *Multi column verbatim as a JSON string;
+        // unnormalized it would corrupt isEmptyRecord / isPlaceholderPersona.
+        const effective = overlayPipelineSettings(healthySettings(), {
+            ...newSignupWorkspace,
+            awayMessageMulti: '{"ar":"نعود قريباً"}',
+            brandVoiceNotesMulti: '{"ar":"نتحدث بود ونجيب مباشرة"}',
+        });
+        expect(effective.awayMessageMulti).toEqual({ ar: 'نعود قريباً' });
+        expect(effective.brandVoiceNotesMulti).toEqual({ ar: 'نتحدث بود ونجيب مباشرة' });
+        expect(isPlaceholderPersona(null, effective.brandVoiceNotesMulti)).toBe(false);
+    });
+
+    it('null multilingual fields on an untouched legacy row stay null when the store has no value', () => {
+        const legacy = healthySettings({ greetingMessageMulti: null });
+        const effective = overlayPipelineSettings(legacy, { messagesAutoReply: false });
+        expect(effective.greetingMessageMulti).toBeNull();
+    });
+
+    it('does not mutate the legacy row', () => {
+        const legacy = healthySettings();
+        overlayPipelineSettings(legacy, newSignupWorkspace);
+        expect(legacy.messagesAutoReply).toBe(true);
+        expect(legacy.commentReplyMode).toBe('public');
+    });
 });

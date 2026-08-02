@@ -6,7 +6,8 @@ import {
 } from '../../db/schema';
 import { eq, ilike, desc, and, gte, lte, sql, inArray, or, type SQL } from 'drizzle-orm';
 import { NotFoundError, ValidationError, ExternalServiceError } from '../../utils/errors';
-import { computeHealthFlags, computeNonDefaultKeys } from './health';
+import { computeHealthFlags, computeNonDefaultKeys, overlayPipelineSettings, type SupportSettings } from './health';
+import { workspaceSettingsService } from '../workspaceSettings';
 import { emailService } from '../email';
 import { accountNoticeEmailTemplate } from '../../utils/emailTemplates';
 import { captureError } from '../../utils/sentryHelpers';
@@ -345,6 +346,9 @@ class AdminUsersService {
             .orderBy(workspaces.createdAt),
         ]);
         const settingsRow = settingsRows[0];
+        // aiModel stays legacy-derived on purpose: the admin override below
+        // writes the legacy table, and aiModelResolver reads it back — legacy
+        // is authoritative for this one field (see WORKSPACE_OVERLAY_FIELDS).
         const aiModel: string | null = settingsRow?.aiModel ?? null;
         const subscription = subscriptionRows[0];
         const currentUsage = currentUsageRows[0];
@@ -530,16 +534,42 @@ class AdminUsersService {
             };
         }
 
-        // Owns no pages but belongs to someone else's workspace — the settings
-        // shown are NOT the row driving replies (the owner's is). Surfaced as an
-        // info flag rather than resolving the owner's settings here.
+        // Owns no pages but belongs to someone else's workspace. The workspace
+        // overlay below still resolves that workspace's pipeline fields (the
+        // values actually driving its replies), but the legacy-only fields
+        // (notifications, lead alerts, timestamps) are this member's own row —
+        // the info flag points support at the owner for those.
         const isTeamMemberOnly = userPages.length === 0 && workspacesPayload.some(w => !w.isOwner);
         const usageLimit = subscription?.maxAiRepliesPerMonth || null;
+
+        // The reply pipeline reads pipeline fields from the workspace JSONB
+        // (D-026), not the legacy row selected above — and a new signup seeds
+        // auto-reply OFF into the JSONB only, so the raw legacy row claims the
+        // toggles are ON while the pipeline drops every message. Overlay the
+        // workspace store so the console (values, non-default markers, health
+        // flags) reports what the pipeline actually obeys. Workspace resolution
+        // mirrors settingsService.resolveWorkspaceId (one workspace per user);
+        // prefer the owned workspace for determinism when memberships exist in
+        // several. Fails open to the legacy row — a workspace-store hiccup must
+        // never 500 the support console.
+        let effectiveSettings: SupportSettings | null = settingsRow ?? null;
+        const pipelineWorkspaceId = (membershipRows.find(r => r.ownerId === userId) ?? membershipRows[0])?.workspaceId;
+        if (settingsRow && pipelineWorkspaceId) {
+            try {
+                const wsSettings = await workspaceSettingsService.getSettings(pipelineWorkspaceId);
+                effectiveSettings = overlayPipelineSettings(settingsRow, wsSettings as unknown as Record<string, unknown>);
+            } catch (error) {
+                captureError(error, 'admin getUserDetail workspace-settings overlay failed', {
+                    tags: { context: 'admin', action: 'workspace-settings-overlay' },
+                    extra: { userId, workspaceId: pipelineWorkspaceId },
+                });
+            }
+        }
 
         const health = computeHealthFlags({
             now,
             lastSeenAt: user.lastSeenAt,
-            settings: settingsRow ?? null,
+            settings: effectiveSettings,
             subscription: subscription
                 ? { status: subscription.status, trialEndsAt: subscription.trialEndsAt }
                 : null,
@@ -564,8 +594,8 @@ class AdminUsersService {
         return {
             ...user,
             aiModel,
-            settings: settingsRow
-                ? { values: settingsRow, nonDefaultKeys: computeNonDefaultKeys(settingsRow) }
+            settings: effectiveSettings
+                ? { values: effectiveSettings, nonDefaultKeys: computeNonDefaultKeys(effectiveSettings) }
                 : null,
             subscription: subscription || null,
             pages: pagesPayload,
