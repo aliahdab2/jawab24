@@ -681,6 +681,8 @@ member passes, everyone else — including null user / missing workspaces — st
 Shipped in #582 alongside the G1b editor polish marathon. Numbered D-056 to fill the
 gap #612 left when it recorded D-057 directly after D-055.
 
+---
+
 ## D-057 · A dated fact row's START date owns its visibility; the end date is descriptive
 
 Owner ruling, 2026-07-31 — «تاريخ النهاية لا يجب أن نعتمد عليه». Implemented in
