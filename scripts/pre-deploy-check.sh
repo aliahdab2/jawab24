@@ -218,7 +218,9 @@ AUDIT_FAILED=false
 # every remaining finding are DOWNGRADES (next@14.2, @vercel/og@1.0.0 — a 2023
 # release older than 0.11.x, autocannon@2, exceljs@3, geoip-lite@1.2).
 #
-# What remains, and why it is acknowledged instead of fixed:
+# What remains, and why it is acknowledged instead of fixed (list drifts as
+# advisories publish against the SAME pinned deps — 2026-08-04 added two new
+# codes for the already-acknowledged postcss and ip-address pins; count is 6):
 #
 # GHSA-gpj5 (drizzle-orm SQLi) — DROPPED 2026-08-01: fixed by the 0.29→0.45 upgrade.
 # GHSA-qx2v-qp2m-jg93, GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849 — postcss XSS /
@@ -229,13 +231,34 @@ AUDIT_FAILED=false
 # never stringifies attacker-controlled CSS and nothing loads sourcemaps at
 # runtime. next, next-intl and @sentry/nextjs echo the same three codes
 # transitively. Cleared by the planned Next 16 migration — drop these then.
+# GHSA-fxqj-rqcc-2cmp — postcss follow-up published as the "incomplete fix of
+# GHSA-6g55" (added 2026-08-04): attacker-controlled sourceMappingURL reads
+# arbitrary .map files when `from` is unset. Same nested next@15.5.x pinned
+# copy, same reachability as its three siblings above: build-time tooling over
+# repo-authored CSS only — no attacker-supplied CSS or sourceMappingURL ever
+# enters the build, and nothing parses CSS at runtime. next 15.5.22 is the
+# LATEST 15.5.x (verified 2026-08-04), so no in-range bump exists. Cleared by
+# the planned Next 16 migration together with the other three.
 # GHSA-v2v4-37r5-5v8g — ip-address XSS in Address6 HTML-emitting methods
 # (moderate). Transitive via geoip-lite, which pins ip-address 5.8.9–5.9.4
 # (patched line is >=10.1.1, an incompatible major). We only call
 # geoip.lookup(ip), which returns a plain data object; the HTML-emitting methods
 # are never invoked. geoip-lite feeds the sanctioned-country check (LEGAL path) —
 # no override experiments here. Revisit when geoip-lite ships on ip-address >=10.
-IGNORED_GHSA="GHSA-qx2v-qp2m-jg93|GHSA-6g55-p6wh-862q|GHSA-r28c-9q8g-f849|GHSA-v2v4-37r5-5v8g"
+# GHSA-mwp4-54f8-5fhr — ip-address Address4 decodes leading-zero octets as
+# decimal while OS resolvers decode them as octal → validate-then-connect SSRF
+# / trust-boundary bypass (high; added 2026-08-04). Unreachable here: the only
+# call is geoip.lookup(request.ip) in backend/src/middleware/geo.ts, mapping
+# the IP to a country for the sanctions gate — the string is never resolved,
+# dialed, or fetched, so there is no second decoder for the parser/resolver
+# differential to bypass. request.ip is Fastify's XFF-resolved address behind
+# nginx, not raw attacker text reaching a connect path.
+# PROPER RETIREMENT for both ip-address codes: geoip-lite >=2.0.2 rides
+# ip-address ^10.2.0 (2.0.3 current) but every 2.x requires node >=24 and the
+# backend ships on node:22-alpine — bundle the bump with the Node 24 platform
+# upgrade, do NOT override ip-address under geoip-lite 1.x (5.x→10.x is an
+# incompatible major inside the LEGAL sanctions path).
+IGNORED_GHSA="GHSA-qx2v-qp2m-jg93|GHSA-6g55-p6wh-862q|GHSA-r28c-9q8g-f849|GHSA-fxqj-rqcc-2cmp|GHSA-v2v4-37r5-5v8g|GHSA-mwp4-54f8-5fhr"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
