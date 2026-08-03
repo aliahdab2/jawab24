@@ -68,6 +68,54 @@ describe('renderFactCollectionBlock — the shapes that disqualified catalog_ite
     it('returns undefined when every row is expired — an empty block must gate, not render', () => {
         expect(renderFactCollectionBlock(outlets, [row({ endsAt: '2026-01-01' })], TODAY)).toBeUndefined();
     });
+
+    // ── The start-date rule (D-057) at the block level ────────────────────────
+    // The predicate itself is exhaustively tested in
+    // packages/shared/src/__tests__/factSchedule.test.ts; these pin that the
+    // RENDERER honours it, since the block is what the model actually reads.
+    describe('start-date visibility', () => {
+        it('drops a row the day after it starts, even with a future end date', () => {
+            // The behaviour change: a cohort running 20 Jul → 1 Sep is no longer
+            // announceable on 28 Jul. Announcing a course that already began is
+            // the stale-date failure the ruling exists to kill.
+            const block = renderFactCollectionBlock(outlets, [
+                row({ name: 'دورة بدأت', startsAt: '2026-07-20', endsAt: '2026-09-01' }),
+            ], TODAY);
+            expect(block).toBeUndefined();
+        });
+
+        it('keeps a row that starts today, and one that starts later', () => {
+            const block = must(renderFactCollectionBlock(outlets, [
+                row({ name: 'دورة اليوم', startsAt: TODAY, endsAt: null }),
+                row({ name: 'دورة قادمة', startsAt: '2026-09-01', endsAt: null }),
+            ], TODAY));
+            expect(block).toContain('دورة اليوم');
+            expect(block).toContain('دورة قادمة');
+        });
+
+        it('still prints the descriptive end date for a live row', () => {
+            // endsAt stopped governing visibility; it did NOT stop being shown.
+            const block = must(renderFactCollectionBlock(outlets, [
+                row({ name: 'دورة قادمة', startsAt: '2026-09-01', endsAt: '2026-12-01' }),
+            ], TODAY));
+            expect(block).toContain('starts 2026-09-01');
+            expect(block).toContain('ends 2026-12-01');
+        });
+
+        it('is byte-identical to the legacy rule on startsAt === endsAt rows', () => {
+            // Every dated row written by the one-date-field era has this shape, so
+            // this is the guarantee that the deploy changes nothing for existing
+            // merchants. Live and expired sides both pinned.
+            const live = must(renderFactCollectionBlock(outlets, [
+                row({ name: 'دورة سارية', startsAt: '2026-09-01', endsAt: '2026-09-01' }),
+            ], TODAY));
+            expect(live).toContain('دورة سارية');
+
+            expect(renderFactCollectionBlock(outlets, [
+                row({ name: 'دورة ماضية', startsAt: '2026-07-01', endsAt: '2026-07-01' }),
+            ], TODAY)).toBeUndefined();
+        });
+    });
 });
 
 describe('renderCoverageStatement — the 28%→0% mechanism', () => {

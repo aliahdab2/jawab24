@@ -661,3 +661,43 @@ deleted: an exhausted strip returns an EMPTY reply plus
 **Scope.** The rule binds every reply-path guard, not just Check 6. The price guard
 (eval #544 — a correct SYP redenomination replaced by «تواصل معنا» at the moment of
 sale) is the same defect and is expected to be fixed the same way.
+
+---
+
+## D-057 · A dated fact row's START date owns its visibility; the end date is descriptive
+
+Owner ruling, 2026-07-31 — «تاريخ النهاية لا يجب أن نعتمد عليه». Implemented in
+PR "feat(facts): start-date visibility rule" (branch `feat/fact-start-date-engine`).
+
+**The rule.** A `fact_rows` row that carries a `starts_at` leaves the prompt the day
+AFTER that date. Its `ends_at` is not consulted. A row with no `starts_at` keeps the
+old behaviour: it lives forever unless an `ends_at` has passed. `ends_at` remains
+printed for the customer — it stopped governing visibility, it did not stop being
+shown.
+
+**Why.** An announced cohort that has already begun is stale the moment it starts,
+whatever its end date claims. The merchant announces «تبدأ الدورة ١ سبتمبر»; on
+2 September that row is no longer an offer, it is a record. Keying visibility on the
+end date kept it in the prompt for the whole run of the course, which is precisely the
+v38 stale-date class the dated columns exist to kill.
+
+**Scope — this DIVERGES from `catalog_items`,** which keeps the end-date rule. The
+divergence is deliberate: a catalog item is a thing you can still buy until it expires;
+a dated fact row is an announcement that goes stale at its start.
+
+**One definition, three consumers.** The rule is `isRowLive` in
+`@jawab24/shared/factSchedule` — imported by the backend renderer and by the merchant
+editor. The third consumer is the SQL `WHERE` clause in
+`buildFactCollectionsContext`, which cannot import it, so the two are pinned by the
+contract test *"isRowLive — SQL and TS agree over the full date matrix"* in
+`backend/test/integration/factCollections.test.ts`. That test was verified to FAIL when
+the SQL is reverted to the old rule. **Do not add a fourth hand-written copy.**
+
+**Deploy safety.** Behaviour is unchanged for every row that exists today: the
+one-date-field editor wrote `starts_at === ends_at`, and for that shape — and for
+undated rows — the old and new rules agree exactly. This is pinned by executable tests
+(`packages/shared/src/__tests__/factSchedule.test.ts`) rather than asserted in a PR
+body, and by a renderer-level byte-identical case. The divergent shape
+(`starts_at !== ends_at`) is only reachable once an editor can author it, which is a
+LATER PR — deliberately not this one, so this change is provably inert on deploy and
+safely revertible.
