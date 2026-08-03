@@ -7,7 +7,7 @@ import { ChevronDown, ChevronUp, Loader2, RotateCcw, ScanSearch, Trash2, X } fro
 import { DetailSheet } from '@/components/ui/DetailSheet';
 import { Button, CharCounter, Textarea } from '@/components/ui';
 import { FileUploadButton } from '@/components/knowledge-base/FileUploadButton';
-import { catalogApi, type CatalogExtractResponse, type CatalogItemInput } from '@/lib/api';
+import { catalogApi, type CatalogExtractResponse, type CatalogItemInput, type CatalogScanResponse } from '@/lib/api';
 import {
   MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEMS_PER_PAGE, reconcileCatalogProposals,
   type CatalogVertical, type ReconcileExistingItem, type ReconcileKind,
@@ -49,10 +49,10 @@ function isAddBound(row: ProposalRow): boolean {
 
 interface CatalogImportSheetProps {
   pageId: string;
-  /** 'paste' (default): paste/upload → extract. 'scan': read the page's recent
-   *  FB posts server-side — no input step, opens straight into the review.
-   *  'scanReplies': same, from the page's configured Post Reply auto-replies. */
-  mode?: 'paste' | 'scan' | 'scanReplies';
+  /** 'paste' (default): paste/upload → extract. 'scan': read the page server-side
+   *  (recent FB posts + configured Post Reply auto-replies, D-059) — no input
+   *  step, opens straight into the review. */
+  mode?: 'paste' | 'scan';
   /** The page's current catalog (any CatalogItem[] fits) — proposals are
    *  classified against it (D-038: new / already-there / price-changed)
    *  instead of blind-inserting. */
@@ -64,9 +64,6 @@ interface CatalogImportSheetProps {
   defaultCurrency?: string;
   /** Pre-filled paste (e.g. arriving from the Business Info price-list warning). */
   initialText?: string;
-  /** scanReplies only: the scan reported the page has no Post Reply configured —
-   *  the host hides the action (the presence gate closing after the fact). */
-  onNoPostReplies?: () => void;
   /** Called with the number of items created + the first created item's name
    *  (feeds the "try asking Jawab about it" nudge) + the number of existing
    *  items whose price was updated — parent refreshes + closes. */
@@ -88,17 +85,20 @@ interface CatalogImportSheetProps {
  * stay private (only ever sent inside replies/DMs, never posted).
  */
 export function CatalogImportSheet({
-  pageId, mode = 'paste', existingItems, vertical, defaultCurrency, initialText, onNoPostReplies, onDone, onClose,
+  pageId, mode = 'paste', existingItems, vertical, defaultCurrency, initialText, onDone, onClose,
 }: CatalogImportSheetProps) {
   const t = useTranslations('catalog');
 
-  const isScanMode = mode === 'scan' || mode === 'scanReplies';
+  const isScanMode = mode === 'scan';
   const [phase, setPhase] = useState<Phase>(isScanMode ? 'scanning' : 'input');
   const [text, setText] = useState(initialText ?? '');
   const [rows, setRows] = useState<ProposalRow[]>([]);
   const [meta, setMeta] = useState<Pick<CatalogExtractResponse, 'dropped' | 'overflow' | 'truncated'> | null>(null);
   const [scanUpToDate, setScanUpToDate] = useState(false);
-  const [noPostReplies, setNoPostReplies] = useState(false);
+  /** What the scan actually read — shown to the merchant so the scan's window
+   *  is never a mystery ("we read N posts and M replies"), and, when the posts
+   *  could not be read, WHY (an honest degraded notice instead of silence). */
+  const [scanInfo, setScanInfo] = useState<Pick<CatalogScanResponse, 'postsScanned' | 'repliesScanned' | 'postsUnavailable'> | null>(null);
 
   /** Classify arriving proposals against the current catalog (D-038): a name
    *  already there with the same price starts DESELECTED (nothing to do); with
@@ -147,25 +147,11 @@ export function CatalogImportSheet({
     scanFired.current = true;
     (async () => {
       try {
-        if (mode === 'scanReplies') {
-          const { data } = await catalogApi.scanPostReplies(pageId);
-          if (data.noPostReplies) {
-            // Presence gate closed after the fact: nothing was scanned (and no
-            // paid call burned) — show why in place, and let the host hide the
-            // action so the dead end isn't offered again.
-            setNoPostReplies(true);
-            onNoPostReplies?.();
-            setPhase('review');
-            return;
-          }
-          setRows(buildRows(data.items));
-          setMeta({ dropped: data.dropped, overflow: data.overflow, truncated: data.truncated });
-        } else {
-          const { data } = await catalogApi.scanPosts(pageId);
-          setRows(buildRows(data.items));
-          setMeta({ dropped: data.dropped, overflow: data.overflow, truncated: data.truncated });
-          setScanUpToDate(data.upToDate);
-        }
+        const { data } = await catalogApi.scanPage(pageId);
+        setRows(buildRows(data.items));
+        setMeta({ dropped: data.dropped, overflow: data.overflow, truncated: data.truncated });
+        setScanUpToDate(data.upToDate);
+        setScanInfo({ postsScanned: data.postsScanned, repliesScanned: data.repliesScanned, postsUnavailable: data.postsUnavailable });
         setPhase('review');
       } catch (err) {
         // Nothing typed, nothing lost — toast and close; the scan button remains.
@@ -285,17 +271,27 @@ export function CatalogImportSheet({
 
   /** [title, hint] for the empty review card — each entry path has its own story. */
   const emptyStateKeys = (): [string, string] => {
-    if (mode === 'scanReplies') {
-      return noPostReplies
-        ? ['replyScan.noReplies', 'replyScan.noRepliesHint']
-        : ['replyScan.emptyResult', 'replyScan.emptyResultHint'];
-    }
     if (mode === 'scan') {
-      return scanUpToDate ? ['scan.upToDate', 'scan.upToDateHint'] : ['scan.emptyResult', 'scan.emptyResultHint'];
+      if (scanUpToDate) return ['scan.upToDate', 'scan.upToDateHint'];
+      // Posts weren't read → only the configured replies were scanned, and
+      // «nothing in your posts» would claim a read that never happened.
+      if (scanInfo?.postsUnavailable) return ['scan.emptyResultReplies', 'scan.emptyResultHint'];
+      return ['scan.emptyResult', 'scan.emptyResultHint'];
     }
     return ['import.emptyResult', 'import.emptyResultHint'];
   };
   const [emptyTitleKey, emptyHintKey] = emptyStateKeys();
+
+  /** The degraded-scan notice (posts unreadable, replies still scanned) — shown
+   *  in review whether or not proposals arrived, so a broken token is never
+   *  silently dressed up as a normal scan. */
+  const postsUnavailableKey = mode === 'scan' && scanInfo?.postsUnavailable
+    ? ({
+      noFacebook: 'scan.postsUnreadableNoFacebook',
+      disconnected: 'scan.postsUnreadableDisconnected',
+      graph_error: 'scan.postsUnreadableError',
+    } as const)[scanInfo.postsUnavailable]
+    : null;
 
   const titleId = 'catalog-import-title';
   const inReview = phase === 'review' || phase === 'saving';
@@ -310,7 +306,7 @@ export function CatalogImportSheet({
     <DetailSheet dialogProps={{ role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId }} panelClassName="sm:h-auto">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
         <h2 id={titleId} className="text-lg font-semibold text-foreground">
-          {mode === 'scanReplies' ? t('replyScan.title') : mode === 'scan' ? t('scan.title') : t('import.title')}
+          {mode === 'scan' ? t('scan.title') : t('import.title')}
         </h2>
         <button type="button" onClick={onClose} aria-label={t('actions.cancel')}
           className="p-1.5 rounded-lg text-icon-muted hover:bg-muted transition-colors">
@@ -324,7 +320,7 @@ export function CatalogImportSheet({
             <ScanSearch className="w-8 h-8 mx-auto text-icon-muted" aria-hidden="true" />
             <p className="text-sm text-muted-foreground mt-3 flex items-center justify-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-              {mode === 'scanReplies' ? t('replyScan.scanning') : t('scan.scanning')}
+              {t('scan.scanning')}
             </p>
           </div>
         )}
@@ -362,18 +358,30 @@ export function CatalogImportSheet({
           <div className="rounded-2xl border border-dashed border-border p-6 text-center">
             <h3 className="text-base font-semibold text-foreground">{t(emptyTitleKey)}</h3>
             <p className="text-sm text-muted-foreground mt-1">{t(emptyHintKey)}</p>
+            {postsUnavailableKey && (
+              <p className="alert-warning rounded-xl px-3 py-2 text-xs mt-3 text-start">{t(postsUnavailableKey)}</p>
+            )}
           </div>
         )}
 
         {inReview && rows.length > 0 && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              {mode === 'scanReplies'
-                ? t('replyScan.reviewHint', { count: rows.length })
-                : mode === 'scan'
-                  ? t('scan.reviewHint', { count: rows.length })
-                  : t('import.reviewHint', { count: rows.length })}
+              {mode === 'scan'
+                ? t('scan.reviewHint', { count: rows.length })
+                : t('import.reviewHint', { count: rows.length })}
             </p>
+            {/* What the scan actually read — the window is bounded (newest posts
+                only), and an unbounded-sounding «we read your posts» taught
+                merchants to expect their whole history. Numbers keep it honest. */}
+            {mode === 'scan' && scanInfo && (scanInfo.postsScanned > 0 || scanInfo.repliesScanned > 0) && (
+              <p className="text-xs text-muted-foreground">
+                {t('scan.scannedNote', { posts: scanInfo.postsScanned, replies: scanInfo.repliesScanned })}
+              </p>
+            )}
+            {postsUnavailableKey && (
+              <p className="alert-warning rounded-xl px-3 py-2 text-xs">{t(postsUnavailableKey)}</p>
+            )}
             {/* The price-completion nudge — the real work of the review step.
                 Posts rarely carry prices (deliberately); a priceless item only
                 lets the AI deflect. The privacy promise is what makes merchants

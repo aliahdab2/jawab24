@@ -540,9 +540,13 @@ export class FacebookService {
      * List a page's recent published posts (newest first) for the Post Reply picker.
      * Returns the id, text, thumbnail, timestamp, and comment count plus a Graph cursor
      * for "load more". Fail-soft: an API error returns an empty page rather than throwing,
-     * so a token blip degrades the picker to empty instead of erroring the whole request.
+     * so a token blip degrades the picker to empty instead of erroring the whole request —
+     * but `failed: true` marks that path, because a caller that DERIVES state from
+     * emptiness (the catalog scan's "up to date") must be able to tell "no posts"
+     * from "Graph errored": conflating them told merchants "all up to date" while
+     * their token was the thing that broke.
      *
-     * `fullImages` (catalog posts-scan) additionally requests the attachment tree
+     * `fullImages` (catalog page-scan) additionally requests the attachment tree
      * and returns every full-resolution image URL per post. `full_picture` alone
      * is not enough there: it is a single downscaled preview, and album posts
      * (course schedules, product line-ups) carry their content in subattachments —
@@ -552,7 +556,7 @@ export class FacebookService {
         pageId: string,
         pageAccessToken: string,
         opts?: { limit?: number; after?: string; fullImages?: boolean },
-    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; imageUrls: string[]; createdTime: string | null; commentsCount: number | null }>; nextCursor: string | null }> {
+    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; imageUrls: string[]; createdTime: string | null; commentsCount: number | null }>; nextCursor: string | null; failed: boolean }> {
         try {
             const attachmentFields = opts?.fullImages
                 ? ',attachments{media_type,media{image{src}},subattachments.limit(20){media_type,media{image{src}}}}'
@@ -577,16 +581,16 @@ export class FacebookService {
                 commentsCount: ((p.comments as { summary?: { total_count?: number } })?.summary?.total_count) ?? null,
             }));
             const nextCursor = (response.data?.paging?.cursors?.after as string) || null;
-            return { posts, nextCursor };
+            return { posts, nextCursor, failed: false };
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 this.logger.error('[Facebook] Error listing page posts', {
                     pageId,
                     error: error.response?.data?.error?.message || error.message,
                 });
-                return { posts: [], nextCursor: null };
+                return { posts: [], nextCursor: null, failed: true };
             }
-            return { posts: [], nextCursor: null };
+            return { posts: [], nextCursor: null, failed: true };
         }
     }
 

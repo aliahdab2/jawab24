@@ -32,20 +32,14 @@ export default async function catalogRoutes(fastify: FastifyInstance) {
             config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
         }, catalogController.extract.bind(catalogController));
 
-        // Posts scan — the priciest route here (up to 10 Vision calls + one
-        // extraction per scan), so its rate limit is tighter than /extract's.
+        // Page scan (posts + configured Post Replies, D-059) — the priciest
+        // route here (up to 10 Vision calls + one extraction per scan), so its
+        // rate limit is tighter than /extract's. Path kept as scan-posts so
+        // app builds shipped before the merge keep working.
         adminRoutes.post('/pages/:pageId/catalog/scan-posts', {
-            schema: { tags: ['Catalog'], summary: "Read the page's recent posts into proposed catalog items (no persistence)", security: auth },
+            schema: { tags: ['Catalog'], summary: "Read the page's recent posts + Post Reply auto-replies into proposed catalog items (no persistence)", security: auth },
             config: { rateLimit: { max: 2, timeWindow: '1 minute' } },
-        }, catalogController.scanPosts.bind(catalogController));
-
-        // Post Reply scan — one extraction call over the merchant's own
-        // configured auto-replies (no Graph/Vision), presence-gated in the
-        // controller. Same "scan gesture" rate limit as scan-posts.
-        adminRoutes.post('/pages/:pageId/catalog/scan-post-replies', {
-            schema: { tags: ['Catalog'], summary: "Read the page's Post Reply auto-replies into proposed catalog items (no persistence)", security: auth },
-            config: { rateLimit: { max: 2, timeWindow: '1 minute' } },
-        }, catalogController.scanPostReplies.bind(catalogController));
+        }, catalogController.scanPage.bind(catalogController));
 
         adminRoutes.post('/pages/:pageId/catalog/batch', {
             schema: { tags: ['Catalog'], summary: 'Create multiple catalog items in one transaction', security: auth },

@@ -773,3 +773,49 @@ line. The catalog conflicts (#717–#719) are untouched — they test a path tha
 **Still open (C-F2):** ~7 live pages measured 07-23 already hold a disagreement. They do not
 self-heal — this fires on the next fact edit. A read-only report, then a per-merchant
 decision. **Never auto-delete a merchant's Business Info line from a script.**
+
+## D-059 · One page scan: posts + configured Post Replies merged, replies ageless, degradation honest
+
+**Decided:** 2026-08-04 · **Status:** Active · Owner-proposed («البوست ممكن يكون معه رد
+بوست هدول التنين غالبًا بيكون منتج كامل مع سعر — منعملهم سكان مع بعض») after ruling the
+catalog section «غير مفيدة حاليًا»; refined in review.
+
+**The insight is the merchant's own publishing pattern.** A post names the product and
+deliberately withholds the price («علق بنقطة»); the configured Post Reply is where that
+price actually lives. Scanned separately (the pre-D-059 shape: `scan-posts` +
+`scan-post-replies`, two near-identical «منشوراتك» buttons), each source proposed HALF an
+item — priceless names from posts, and a second pass over replies that re-proposed the
+same products for reconcile. Merged, a post + its reply is ONE complete proposal: name
+from the post, price from the reply.
+
+**The rulings:**
+
+1. **One scan, one button** («استخراج منتجاتك من صفحتك»). `scan-post-replies` (endpoint,
+   service method, UI button, `replyScan.*` i18n) is REMOVED, not deprecated. The path
+   `catalog/scan-posts` is kept for shipped app builds.
+2. **Cut images, not posts.** The owner's first instinct (window 25 → 10 posts) was
+   redeclined: the Graph call costs the same regardless, the real spend is Vision, and a
+   smaller window worsens the unreachable-history gap. Instead a replied post *with its
+   own text* spends ZERO image budget — the budget goes to the posts that still need OCR
+   to be identified. A text-less replied post keeps its images (the name may only exist
+   in the photo).
+3. **Replies are ageless.** They live in our DB (free — no Graph, no Vision), so they are
+   read on EVERY scan regardless of the 25-post window and the bookmark. This recovers
+   the highest-signal slice of old history: exactly the posts the merchant bothered to
+   configure a reply for. Re-proposals are absorbed by the review sheet's reconcile
+   (D-038); reply price *changes* surface as update conflicts — that is a feature, offers
+   rotate.
+4. **Degradation must be honest.** `getPagePosts` is fail-soft, and the old scan read a
+   Graph error's empty page as «كل شيء محدّث» — telling the merchant to go post something
+   while their token was the broken thing. The scan now distinguishes: blocked page with
+   replies → replies-only scan (`postsUnavailable: 'disconnected' | 'noFacebook'`),
+   transient Graph failure → `'graph_error'`, and «up to date» is only claimable after an
+   ACTUAL successful posts read with nothing new AND no replies. Only a page with neither
+   source still 409s. The bookmark never advances on an unread window.
+5. **Show the numbers.** The review states what was read («قرأنا: N منشور · M ردّ بوست») —
+   the bounded window stops being a mystery the merchant misreads as «it read my whole
+   page».
+
+**Still open, deliberately:** older posts beyond the newest-25 window remain unreachable
+by scan (paste import is the fallback); videos/reels are not read; every scan re-runs the
+reply extraction (bounded by the 10/day cap — revisit only if cost data says so).

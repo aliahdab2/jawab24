@@ -216,12 +216,13 @@ export class CatalogController {
     }
 
     /**
-     * POST /pages/:pageId/catalog/scan-posts — read the page's recent FB posts
-     * (text + images) into PROPOSED items. Persists no items (same review-then-
-     * /batch contract as extract); only the scan bookmark advances. Cost order
-     * mirrors extract: capacity → auth → daily cap (fail closed) → paid calls.
+     * POST /pages/:pageId/catalog/scan-posts — read the page (recent FB posts +
+     * configured Post Reply auto-replies, D-059) into PROPOSED items. Persists
+     * no items (same review-then-/batch contract as extract); only the scan
+     * bookmark advances. Cost order mirrors extract: capacity → auth → daily
+     * cap (fail closed) → paid calls.
      */
-    async scanPosts(
+    async scanPage(
         request: FastifyRequest<{ Params: { pageId: string } }>,
         reply: FastifyReply,
     ) {
@@ -257,7 +258,7 @@ export class CatalogController {
 
         let result;
         try {
-            result = await catalogScanService.scanPosts(req.workspaceId, request.params.pageId, { userId });
+            result = await catalogScanService.scanPage(req.workspaceId, request.params.pageId, { userId });
         } catch (err) {
             if (err instanceof CatalogStoreConflictError) return sendStoreConflict(reply, err);
             if (err instanceof CatalogScanUnavailableError) {
@@ -266,8 +267,9 @@ export class CatalogController {
             throw err;
         }
         if (!result) return reply.status(404).send({ error: 'Page not found' });
-        // An up-to-date no-op consumed no paid calls — don't count it against the cap.
-        if (!result.upToDate) void incrementDailyCap(capKey);
+        // Count only scans that reached a paid call (Vision and/or extraction).
+        // Up-to-date no-ops and a graph_error with no replies consumed nothing.
+        if (result.postsScanned > 0 || result.repliesScanned > 0) void incrementDailyCap(capKey);
 
         const existing = await catalogService.listCatalogItems(req.workspaceId, request.params.pageId) ?? [];
         const { items, overflow } = capNewProposals(result.items, existing, capacity.remaining);
@@ -278,72 +280,9 @@ export class CatalogController {
             remainingCapacity: capacity.remaining,
             truncated: result.truncated,
             postsScanned: result.postsScanned,
-            upToDate: result.upToDate,
-        });
-    }
-
-    /**
-     * POST /pages/:pageId/catalog/scan-post-replies — read the page's configured
-     * Post Reply auto-replies into PROPOSED items (same review-then-/batch
-     * contract; persists nothing). Costs one LLM extraction call (no Vision, no
-     * Graph), so it shares the extract cost class. Presence-gated: a page with no
-     * Post Reply returns noPostReplies:true and consumes no paid call.
-     */
-    async scanPostReplies(
-        request: FastifyRequest<{ Params: { pageId: string } }>,
-        reply: FastifyReply,
-    ) {
-        const req = request as ResolvedWorkspaceRequest;
-
-        let capacity;
-        try {
-            capacity = await catalogService.getCatalogCapacity(req.workspaceId, request.params.pageId);
-        } catch (err) {
-            if (err instanceof CatalogStoreConflictError) return sendStoreConflict(reply, err);
-            throw err;
-        }
-        if (!capacity) return reply.status(404).send({ error: 'Page not found' });
-        if (capacity.remaining <= 0) {
-            return reply.status(403).send({ error: 'Catalog is full', code: 'CATALOG_LIMIT_REACHED' });
-        }
-
-        const userId = req.user?.userId;
-        if (!userId) return reply.status(401).send({ error: 'Authentication required' });
-
-        const capKey = dailyCapKey('catalog_postreply_scan', userId);
-        try {
-            const cap = await checkDailyCap(capKey, EXTRACT_DAILY_LIMIT);
-            if (!cap.allowed) {
-                return reply.status(429).send({ error: 'Daily scan limit reached. Try again tomorrow.', code: 'daily_limit_reached' });
-            }
-        } catch (err) {
-            captureError(err, 'Catalog post-reply scan quota check unavailable', {
-                level: 'warning', tags: { service: 'catalog-scan' },
-            });
-            return reply.status(503).send({ error: 'Quota check unavailable. Try again shortly.', code: 'quota_check_unavailable' });
-        }
-
-        let result;
-        try {
-            result = await catalogScanService.scanPostReplies(req.workspaceId, request.params.pageId, { userId });
-        } catch (err) {
-            if (err instanceof CatalogStoreConflictError) return sendStoreConflict(reply, err);
-            throw err;
-        }
-        if (!result) return reply.status(404).send({ error: 'Page not found' });
-        // A no-Post-Reply page consumed no paid call — don't count it against the cap.
-        if (!result.noPostReplies) void incrementDailyCap(capKey);
-
-        const existing = await catalogService.listCatalogItems(req.workspaceId, request.params.pageId) ?? [];
-        const { items, overflow } = capNewProposals(result.items, existing, capacity.remaining);
-        return reply.send({
-            items,
-            dropped: result.dropped,
-            overflow,
-            remainingCapacity: capacity.remaining,
-            truncated: result.truncated,
             repliesScanned: result.repliesScanned,
-            noPostReplies: result.noPostReplies,
+            upToDate: result.upToDate,
+            postsUnavailable: result.postsUnavailable,
         });
     }
 
