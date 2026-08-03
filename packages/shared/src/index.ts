@@ -1622,3 +1622,8 @@ export type {
     BusinessAuditFindingKind,
     DeterministicFindingCode,
 } from './businessAudit';
+// --- Fact-row visibility (start-date rule, D-057) — the ONE home for this
+// predicate. Backend renderer, frontend editor and the SQL clause all key off
+// it; see factSchedule.ts for why the SQL copy needs a contract test. ---
+export { isRowLive } from './factSchedule';
+export type { FactRowSchedule } from './factSchedule';

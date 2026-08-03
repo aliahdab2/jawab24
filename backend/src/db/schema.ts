@@ -1365,9 +1365,20 @@ export const factRows = pgTable('fact_rows', {
     // that disqualified catalog_items as the home for lists).
     price: numeric('price', { precision: 12, scale: 2 }),
     currency: varchar('currency', { length: 30 }), // widened 0144: CurrencyInput truncates at 30, and «ل.س بالعملة القديمة» must fit
-    // Optional validity window — same self-expiry semantics as catalog_items:
-    // a passed endsAt EXCLUDES the row from the prompt while the merchant UI
-    // keeps it (the v38 stale-date class, killed by dates not by memory).
+    // Optional validity window. Self-expiry kills the v38 stale-date class by
+    // dates, not by model memory — but note this DIVERGES from catalog_items:
+    //
+    //   THE START DATE OWNS VISIBILITY (owner ruling 2026-07-31, D-057).
+    //   A row with a startsAt leaves the prompt the day AFTER it starts, because
+    //   an announced cohort that has already begun is stale whatever its endsAt
+    //   claims. endsAt is DESCRIPTIVE — printed for the customer — and gates only
+    //   rows that carry no startsAt.
+    //
+    // The rule lives in ONE place: `isRowLive` in @jawab24/shared/factSchedule.
+    // The merchant UI keeps expired rows with an "Ended" badge, computed from the
+    // same function. Real columns (not attributes JSONB) because the prompt-build
+    // query pre-filters at SQL level — see the lockstep note in
+    // services/factCollections.ts buildFactCollectionsContext.
     startsAt: isoDateString('starts_at'),
     endsAt: isoDateString('ends_at'),
     isAvailable: boolean('is_available').notNull().default(true),

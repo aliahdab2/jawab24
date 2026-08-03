@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { isRowLive } from '@jawab24/shared';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { formatCatalogPrice } from '@/utils/priceFormat';
@@ -176,13 +177,12 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     });
   };
 
-  // Local-timezone today for DISPLAY grouping only — the authoritative
-  // exclusion happens server-side at prompt-build time. Mirrors the engine's
-  // isRowLive rule: the START date decides; endsAt is a fallback for undated
-  // rows only (owner ruling 2026-07-31 — the end date is never load-bearing).
+  // DISPLAY grouping only — the authoritative exclusion happens server-side at
+  // prompt-build time. `isRowLive` (@jawab24/shared) is the SAME predicate the
+  // renderer and the SQL clause use, so the badge a merchant sees can never
+  // disagree with what the AI was given. Never re-derive "expired" locally.
   const today = todayISODate();
-  const isExpired = (row: FactRowDto) =>
-    row.startsAt ? row.startsAt < today : !!row.endsAt && row.endsAt < today;
+  const isExpired = (row: FactRowDto) => !isRowLive(row, today);
 
   /** Display price with digit grouping («35,000») — display only; forms keep
    *  plain digits. Falls back to the raw string for non-numeric prices. */

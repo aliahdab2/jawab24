@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { isRowLive } from '@jawab24/shared';
 import { testDb, createTestUser, createTestPage } from './setup';
 import { factCollectionsService, MAX_COLLECTIONS_PER_PAGE } from '../../src/services/factCollections';
 import * as schema from '../../src/db/schema';
@@ -117,6 +118,53 @@ describe('fact collections — the engine end to end', () => {
         // still present in the data — expiry silences a row, it never deletes it
         const [collection] = await factCollectionsService.listCollections(pageId);
         expect(collection.rowCount).toBe(2);
+    });
+
+    /**
+     * THE LOCKSTEP TEST. `isRowLive` exists in TypeScript (@jawab24/shared, used by
+     * the renderer and the merchant editor) and, unavoidably, a second time as a SQL
+     * WHERE clause in buildFactCollectionsContext — SQL cannot import a function.
+     *
+     * Two hand-written expressions of one rule drift. This asserts they agree over
+     * the FULL date matrix, so a change to either side fails here until the other
+     * follows. Without it the SQL branch added by the start-date ruling is exercised
+     * by no test at all, and a divergence is invisible: SQL over-fetching is masked
+     * by the renderer's own filter, while SQL under-fetching silently drops rows the
+     * merchant can still see in the editor.
+     */
+    it('isRowLive — SQL and TS agree over the full date matrix', async () => {
+        const TODAY = '2026-07-28';
+        const DATES = [null, '2026-07-27', TODAY, '2026-07-29'] as const;
+        const label = (d: string | null) => (d === null ? 'null' : d);
+
+        // 16 rows: every (startsAt, endsAt) combination, each named after its shape
+        // so a failure message says exactly which combination diverged.
+        const rows = DATES.flatMap(startsAt =>
+            DATES.map(endsAt => ({
+                name: `row s=${label(startsAt)} e=${label(endsAt)}`,
+                startsAt,
+                endsAt,
+            })),
+        );
+
+        await factCollectionsService.createCollection(pageId, {
+            label: 'مصفوفة التواريخ', keyAttr: null, rows,
+        });
+
+        // What the QUERY returned (SQL predicate) — the block only ever contains
+        // rows the WHERE clause let through.
+        const block = (await factCollectionsService.buildFactCollectionsContext(pageId, undefined, TODAY)).block ?? '';
+        const sqlLive = rows.filter(r => block.includes(r.name)).map(r => r.name).sort();
+
+        // What the SHARED PREDICATE says (TS) — the single source of truth.
+        const tsLive = rows.filter(r => isRowLive(r, TODAY)).map(r => r.name).sort();
+
+        expect(sqlLive).toEqual(tsLive);
+
+        // Guard against the assertion passing vacuously (e.g. an empty block, or a
+        // predicate that says "everything"): the matrix must genuinely split.
+        expect(tsLive.length).toBeGreaterThan(0);
+        expect(tsLive.length).toBeLessThan(rows.length);
     });
 
     it('each collection carries its OWN completeness — they do not leak into each other', async () => {
