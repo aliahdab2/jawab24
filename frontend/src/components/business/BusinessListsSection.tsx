@@ -3,9 +3,9 @@ import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { isRowLive } from '@jawab24/shared';
+import { isRowLive, MAX_ROWS_PER_COLLECTION } from '@jawab24/shared';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
-import { captureError } from '@/lib/sentryHelpers';
+import { captureError, getBackendErrorCode, getStatusCode } from '@/lib/sentryHelpers';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import { todayISODate, formatPlainDateParts } from '@/utils/dateUtils';
 import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/factListGrouping';
@@ -54,10 +54,11 @@ interface EditingState {
  */
 export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   const t = useTranslations('business');
+  const tc = useTranslations('common');
   const { intlLocale } = useLanguage();
   const queryClient = useQueryClient();
 
-  const { data } = useQuery<FactCollectionWithRows[]>({
+  const { data, isLoading, isError, error, refetch } = useQuery<FactCollectionWithRows[]>({
     queryKey: ['fact-collections', pageId],
     queryFn: () => factCollectionsApi.list(pageId).then((r) => r.data.data),
     enabled: !!pageId,
@@ -86,9 +87,87 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     [groups],
   );
 
+  /**
+   * A failed load must NEVER look like an empty one. Rendering `null` on error
+   * told the merchant "you have no lists" when the truth was "we could not
+   * reach the server" — the most alarming possible failure, indistinguishable
+   * from the benign one, and invisible to Sentry because nothing reported it.
+   * `return null` is now reserved for the genuinely-empty case.
+   *
+   * These early returns MUST stay below every hook above: the memos were added
+   * by the grouped-lists work after this guard was written, and returning above
+   * them would change the hook count between renders.
+   */
+  if (isError) {
+    captureError(error, 'Failed to load fact collections', {
+      tags: { action: 'load-fact-collections' },
+      extra: { pageId, statusCode: getStatusCode(error), backendCode: getBackendErrorCode(error) },
+    });
+    return (
+      <section aria-label={t('lists.title')} className="rounded-2xl border border-theme-border bg-card p-4 sm:p-5">
+        <p className="text-sm text-muted-foreground" role="alert">{t('lists.loadFailed')}</p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="mt-2 min-h-[32px] inline-flex items-center gap-1 rounded-full border border-theme-border px-3 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+        >
+          {tc('tryAgain')}
+        </button>
+      </section>
+    );
+  }
+
+  // NO loading skeleton, deliberately. Absence IS the rollout gate: this section
+  // renders only for pages that have collections, which today is a small
+  // minority — a skeleton would flash on every /business page for a section that
+  // is then going to render nothing. Pinned by "renders NOTHING for a page
+  // without collections".
+  if (isLoading) return null;
+
   if (collections.length === 0) return null;
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['fact-collections', pageId] });
+
+  /**
+   * Turn a failed write into the RIGHT instruction.
+   *
+   * Every failure used to surface as «تعذّر الحفظ — حاول مجدداً» / "try again",
+   * which is wrong for most of them: retrying never clears a stale row (the
+   * server says *reload*), never frees a full collection, and never makes the
+   * last row deletable. The server now names the reason; this maps it to copy
+   * and, for a stale editor, refetches so the retry can actually succeed.
+   */
+  const reportWriteFailure = async (error: unknown, action: string) => {
+    const backendCode = getBackendErrorCode(error);
+    captureError(error, `Failed to ${action}`, {
+      tags: { action, backendCode: backendCode ?? 'none' },
+      extra: { pageId, statusCode: getStatusCode(error), backendCode },
+    });
+    switch (backendCode) {
+      case 'STALE_ROW':
+        // The row changed under us. Retrying the same body cannot work, so
+        // reload and close the sheet rather than inviting a doomed second tap.
+        // BOTH editors are dismissed: each holds row ids that the refetch has
+        // just invalidated, and the entity sheet can hit this too (its bulk
+        // save resolves every rowId it was opened with).
+        toast.error(t('lists.errStaleRow'));
+        await refresh();
+        setEditing(null);
+        setEntityEditing(null);
+        break;
+      case 'ROW_LIMIT':
+        toast.error(t('lists.errRowLimit', { max: MAX_ROWS_PER_COLLECTION }));
+        break;
+      case 'LAST_ROW':
+        toast.error(t('lists.errLastRow'));
+        break;
+      case 'DATE_ORDER':
+        toast.error(t('lists.errDateOrder'));
+        break;
+      default:
+        toast.error(t('lists.saveFailed'));
+    }
+  };
 
   const save = async (body: Parameters<React.ComponentProps<typeof ListRowSheet>['onSave']>[0]) => {
     if (!editing) return;
@@ -103,8 +182,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
       setEditing(null);
       toast.success(t('lists.saved'));
     } catch (error) {
-      captureError(error, 'Failed to save fact row', { tags: { action: 'save-fact-row' } });
-      toast.error(t('lists.saveFailed'));
+      await reportWriteFailure(error, 'save-fact-row');
     } finally {
       setSaving(false);
     }
@@ -119,8 +197,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
       setEditing(null);
       toast.success(t('lists.deleted'));
     } catch (error) {
-      captureError(error, 'Failed to delete fact row', { tags: { action: 'delete-fact-row' } });
-      toast.error(t('lists.saveFailed'));
+      await reportWriteFailure(error, 'delete-fact-row');
     } finally {
       setSaving(false);
     }
@@ -132,8 +209,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
       await refresh();
       toast.success(t('lists.saved'));
     } catch (error) {
-      captureError(error, 'Failed to set list completeness', { tags: { action: 'set-list-completeness' } });
-      toast.error(t('lists.saveFailed'));
+      await reportWriteFailure(error, 'set-list-completeness');
     }
   };
 
@@ -154,8 +230,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
       setEntityEditing(null);
       toast.success(t('lists.saved'));
     } catch (error) {
-      captureError(error, 'Failed to save fact entity', { tags: { action: 'save-fact-entity' } });
-      toast.error(t('lists.saveFailed'));
+      await reportWriteFailure(error, 'save-fact-entity');
     } finally {
       setSaving(false);
     }

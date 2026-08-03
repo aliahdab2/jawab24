@@ -13,6 +13,7 @@
  */
 import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '../db';
+import { redis } from '../lib/redis';
 import { factCollections, factRows } from '../db/schema';
 import { pagesService } from './pages';
 import { Logger, noopLogger } from '../types';
@@ -25,12 +26,12 @@ import {
 } from './factCollectionsRenderer';
 import { matchCollections } from './factCollectionsMatcher';
 
-/** Bound per page so an import can't balloon the prompt or the UI. Generous
- *  relative to reality: BAMBO's real directory is ~240 rows in ONE collection,
- *  and a page having more than a handful of distinct fact KINDS is a signal to
- *  look at, not a case to serve. */
-export const MAX_COLLECTIONS_PER_PAGE = 12;
-export const MAX_ROWS_PER_COLLECTION = 500;
+/** Bound per page so an import can't balloon the prompt or the UI. Defined in
+ *  @jawab24/shared because the editor must name the cap it just hit; re-exported
+ *  here so every existing importer keeps working. */
+import { MAX_COLLECTIONS_PER_PAGE, MAX_ROWS_PER_COLLECTION } from '@jawab24/shared';
+
+export { MAX_COLLECTIONS_PER_PAGE, MAX_ROWS_PER_COLLECTION };
 
 /**
  * How much of a list the model is allowed to see.
@@ -85,10 +86,37 @@ export interface FactCollectionsContext {
     gated: boolean;
 }
 
+/**
+ * Machine-readable reasons a fact write was refused.
+ *
+ * The message is a DEVELOPER string — never shown to a merchant. The client
+ * maps the code to its own translated copy, because the instruction differs per
+ * reason and "try again" is wrong for most of them: a stale row needs a RELOAD,
+ * a full collection needs a deletion, the last row cannot be deleted at all.
+ */
+export type FactCollectionErrorCode =
+    /** A rowId that no longer exists (or never belonged here) — the editor is stale. */
+    | 'STALE_ROW'
+    /** MAX_ROWS_PER_COLLECTION reached. */
+    | 'ROW_LIMIT'
+    /** MAX_COLLECTIONS_PER_PAGE reached. */
+    | 'COLLECTION_LIMIT'
+    /** Deleting this row would empty the collection and silently drop its
+     *  coverage boundary from the prompt — refused. */
+    | 'LAST_ROW'
+    /** endsAt < startsAt — a row born expired. Client input error, not a conflict. */
+    | 'DATE_ORDER';
+
 export class FactCollectionLimitError extends Error {
-    constructor(message: string) {
+    /** Set at every throw site so the controller never has to guess from the
+     *  message. Two endpoints used to map the SAME last-row rule to different
+     *  codes ('LIMIT' vs 'LAST_ROW') because each catch block picked its own. */
+    readonly code: FactCollectionErrorCode;
+
+    constructor(message: string, code: FactCollectionErrorCode) {
         super(message);
         this.name = 'FactCollectionLimitError';
+        this.code = code;
     }
 }
 
@@ -192,7 +220,13 @@ class FactCollectionsService {
             if (rows.length === 0) {
                 // A collection that renders nothing is invisible to the merchant
                 // and to us — the likely cause is every row having expired.
-                this.logger.info('fact collection rendered no rows', {
+                // REPLY PATH: fires once per collection per inbound message for a
+                // condition that never self-heals, so a log line here is permanent
+                // per-message spam. A counter answers the only question that
+                // matters — "is this happening, and how much?" — and the detail
+                // stays at debug for whoever is actually investigating.
+                redis.incr('metrics:facts:collection_empty').catch(() => {});
+                this.logger.debug('fact collection rendered no rows', {
                     pageId, collectionId: c.id, label: c.label,
                 });
                 continue;
@@ -205,6 +239,7 @@ class FactCollectionsService {
             // what turned this into a High finding in review.
             const { keyValues, rowsMissingKey } = indexKeyValues(c.keyAttr, promptRows);
             if (rowsMissingKey > 0) {
+                redis.incr('metrics:facts:rows_missing_key').catch(() => {});
                 this.logger.warn('fact collection has rows missing its key attribute — coverage index suppressed', {
                     pageId, collectionId: c.id, label: c.label, keyAttr: c.keyAttr,
                     rowsMissingKey, totalRows: promptRows.length,
@@ -254,7 +289,12 @@ class FactCollectionsService {
                     // naming my shops", so the log must say WHICH list, how the
                     // message matched, and how much was withheld — pageId alone
                     // cannot answer that question after the fact.
-                    this.logger.info('fact collection rows gated by deterministic match', {
+                    // REPLY PATH and the normal case for any keyed page: counter,
+                    // not a log line. Note the payload below includes values
+                    // derived from the CUSTOMER's message, which is a second
+                    // reason to keep it off info.
+                    redis.incr('metrics:facts:rows_gated').catch(() => {});
+                    this.logger.debug('fact collection rows gated by deterministic match', {
                         pageId, collectionId: c.id, label: c.label, keyAttr,
                         matchedValues: matched, rowsShown: displayRows.length, rowsTotal: promptRows.length,
                     });
@@ -334,10 +374,10 @@ class FactCollectionsService {
      */
     async createCollection(pageId: string, input: CreateCollectionInput) {
         if (input.rows.length === 0) {
-            throw new FactCollectionLimitError('A collection needs at least one row');
+            throw new FactCollectionLimitError('A collection needs at least one row', 'LAST_ROW');
         }
         if (input.rows.length > MAX_ROWS_PER_COLLECTION) {
-            throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`);
+            throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`, 'ROW_LIMIT');
         }
 
         const existing = await db
@@ -345,7 +385,7 @@ class FactCollectionsService {
             .from(factCollections)
             .where(eq(factCollections.pageId, pageId));
         if (existing.length >= MAX_COLLECTIONS_PER_PAGE) {
-            throw new FactCollectionLimitError(`At most ${MAX_COLLECTIONS_PER_PAGE} collections per page`);
+            throw new FactCollectionLimitError(`At most ${MAX_COLLECTIONS_PER_PAGE} collections per page`, 'COLLECTION_LIMIT');
         }
 
         const created = await db.transaction(async (tx) => {
@@ -455,7 +495,7 @@ class FactCollectionsService {
                 .from(factRows)
                 .where(eq(factRows.collectionId, collectionId));
             if ((rows[0]?.count ?? 0) >= MAX_ROWS_PER_COLLECTION) {
-                throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`);
+                throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`, 'ROW_LIMIT');
             }
             const [row] = await tx.insert(factRows).values({
                 collectionId,
@@ -543,7 +583,7 @@ class FactCollectionsService {
                 .from(factRows)
                 .where(eq(factRows.collectionId, collectionId));
             if (count <= 1) {
-                throw new FactCollectionLimitError('Cannot delete the last row — delete the collection instead');
+                throw new FactCollectionLimitError('Cannot delete the last row — delete the collection instead', 'LAST_ROW');
             }
             const [row] = await tx
                 .delete(factRows)
@@ -613,10 +653,10 @@ class FactCollectionsService {
                 const removals = input.deletes.filter(d => d.collectionId === id).length;
                 const net = state.count + inserts - removals;
                 if (net <= 0) {
-                    throw new FactCollectionLimitError('Cannot delete the last row — delete the collection instead');
+                    throw new FactCollectionLimitError('Cannot delete the last row — delete the collection instead', 'LAST_ROW');
                 }
                 if (net > MAX_ROWS_PER_COLLECTION) {
-                    throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`);
+                    throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`, 'ROW_LIMIT');
                 }
             }
 
@@ -626,7 +666,7 @@ class FactCollectionsService {
                     .delete(factRows)
                     .where(and(eq(factRows.id, d.rowId), eq(factRows.collectionId, d.collectionId)))
                     .returning({ id: factRows.id });
-                if (!row) throw new FactCollectionLimitError('Row not found — reload and try again');
+                if (!row) throw new FactCollectionLimitError('Row not found — reload and try again', 'STALE_ROW');
                 deletedIds.push(row.id);
             }
 
@@ -648,7 +688,7 @@ class FactCollectionsService {
                         })
                         .where(and(eq(factRows.id, u.rowId), eq(factRows.collectionId, u.collectionId)))
                         .returning();
-                    if (!row) throw new FactCollectionLimitError('Row not found — reload and try again');
+                    if (!row) throw new FactCollectionLimitError('Row not found — reload and try again', 'STALE_ROW');
                     upserted.push(row);
                 } else {
                     const state = byCollection.get(u.collectionId) ?? { count: 0, maxSort: -1 };
@@ -689,7 +729,7 @@ class FactCollectionsService {
  *  limit error so both write paths surface it through one channel. */
 function assertRowDateRange(startsAt: string | null | undefined, endsAt: string | null | undefined): void {
     if (startsAt && endsAt && endsAt < startsAt) {
-        throw new FactCollectionLimitError('End date must not be before the start date');
+        throw new FactCollectionLimitError('End date must not be before the start date', 'DATE_ORDER');
     }
 }
 

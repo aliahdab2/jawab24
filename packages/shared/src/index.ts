@@ -445,6 +445,15 @@ export const MAX_CATALOG_ITEMS_PER_PAGE = 300;
  *  anything a merchant can paste or upload fits in one extraction. */
 export const MAX_CATALOG_IMPORT_CHARS = 16_000;
 
+/** Fact-engine caps. Shared because the SERVER enforces them and the CLIENT has
+ *  to tell the merchant which one they hit — a second copy in the frontend is
+ *  how the two silently drift apart. Same reasoning as the catalog caps above.
+ *  Generous relative to reality: BAMBO's real directory is ~240 rows in ONE
+ *  collection, and a page with more than a handful of distinct fact KINDS is a
+ *  signal to look at, not a case to serve. */
+export const MAX_COLLECTIONS_PER_PAGE = 12;
+export const MAX_ROWS_PER_COLLECTION = 500;
+
 /** A label+value detail on a catalog item ("المدة: ٦ أسابيع", "سنة الصنع: 2019").
  *  Free text by design — the AI consumes these only as rendered prompt TEXT, so
  *  labels need no stable key semantics; the UI merely SUGGESTS per-type labels. */
