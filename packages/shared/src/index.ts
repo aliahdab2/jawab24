@@ -87,6 +87,8 @@ export { isSafeRedirectPath } from './utils/redirect';
 export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
 export { parseFlagReason, hasAnyFlag } from './utils/flag-reason';
 export { matchCatalogLinesInKb, matchStructuredFieldLinesInKb, removeKbLines } from './catalogKbMatch';
+export { detectCatalogLikePatterns } from './kbContentClassifier';
+export type { CatalogReason, CatalogDetection } from './kbContentClassifier';
 export { reconcileCatalogProposals } from './catalogReconcile';
 export type { ReconcileExistingItem, ReconcileProposalItem, ReconcileKind, ReconcileResult } from './catalogReconcile';
 export { postsScanEligibility } from './catalogScanEligibility';

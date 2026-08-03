@@ -107,6 +107,28 @@ Contact us for custom quotes.`;
             expect(result.reasons).toContain('course_catalog');
         });
 
+        it('flags Arabic-Indic digit prices (١٥٠٠ ريال) — digit normalization pre-pass', () => {
+            const text = `قائمة أسعارنا الحالية:
+- عطر العود الملكي: ١٥٠٠ ريال
+- عطر الياسمين: ٧٥٠ ريال
+- مجموعة الهدايا: ٢٢٥٠ ريال
+التوصيل مجاني داخل المدينة.`;
+            const result = detectCatalogLikePatterns(text);
+            expect(result.priceCount).toBe(3);
+            expect(result.hasCatalog).toBe(true);
+            expect(result.reasons).toContain('price_list');
+        });
+
+        it('flags Libyan dinar abbreviation prices (د.ل) — found live on a real merchant KB', () => {
+            const text = `قائمة اسعار الكريمات ومنتجات اخرى:
+Zinc Ointment ABENA 20% 100ml — 50 د.ل
+Soothing Cream BAMBO 100ml — 38 د.ل
+Intimate Bio Wet Wipes ABENA — 17.5 د.ل`;
+            const result = detectCatalogLikePatterns(text);
+            expect(result.priceCount).toBe(3);
+            expect(result.hasCatalog).toBe(true);
+        });
+
         it('flags catalog with $ symbol prefix prices', () => {
             const text = `Pricing for our services:
 - Small: $99 for basic features
