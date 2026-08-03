@@ -4033,7 +4033,7 @@ const TEST_CASES: TestCase[] = [
     { id: 685, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'كم سعر كاوتش ميشلان؟', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'] }, notes: 'Price-on-request item (null price → "price on request" in the block) — any invented number trips the catalog-grounded guard and fails this case.' },
     { id: 686, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'كم سعر دورة صيانة الموتوسيكلات؟', page: 'moto', expected: { flagsAbsent: ['info_not_in_kb', 'price_not_in_kb'], replyContainsAny: ['1200', '١٢٠٠', '1,200'] }, notes: 'Course-type item ([course] tag) — generic types answer like products.' },
     { id: 687, category: 62, categoryName: 'Native Catalog', channel: 'dm', message: 'بكم الهوندا CG المستعملة؟', page: 'moto', expected: { flagsAbsent: ['price_not_in_kb'], replyContainsAny: ['5500', '٥٥٠٠', '5,500'] }, notes: 'Vehicle-type item ([vehicle] tag) — the used-bike listing.' },
-    { id: 688, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'وين موقعكم؟', page: 'moto', expected: { confidence: ['high'], replyContainsAny: ['العزيزية', 'الرياض'] }, notes: 'Feature-must-not-distort guard (v1 post-mortem lesson 4): an off-topic (non-product) question on a catalog page is still answered normally. Since v57 this fixture also carries a merchant-confirmed address, so the answer may come from BUSINESS_INFO rather than the KB text — either is fine here; case 720 is the one that pins WHICH source wins.' },
+    { id: 688, category: 62, categoryName: 'Native Catalog', channel: 'comment', message: 'وين موقعكم؟', page: 'moto', expected: { confidence: ['high'], replyContainsAny: ['العزيزية', 'الرياض'] }, notes: 'Feature-must-not-distort guard (v1 post-mortem lesson 4): an off-topic (non-product) question on a catalog page is still answered normally. The address now lives ONLY in the merchant-confirmed field (the stale KB line was retired with #720), so «الرياض» is what this case rides on — «العزيزية» is kept in the alternatives only so an accidental re-introduction of the stale line still reads as a pass HERE and fails loudly in 720, where it belongs.' },
     // Flexible-fields cases (dates + attributes). The dated fixture course is
     // seeded at today+30 (relative, never stale) and /auth/demo re-seeds on
     // login, so the eval-run date matches the seed date.
@@ -4332,8 +4332,9 @@ const TEST_CASES: TestCase[] = [
         expected: {
             replyContainsAny: ['النسيم'],
             replyNotContains: ['العزيزية'],
+            flagsAbsent: ['info_not_in_kb'],
         },
-        notes: 'The OTHER authority axis, finally testable: merchant-confirmed address (النسيم) vs the stale address still sitting in the KB text (العزيزية). Case 411 claimed this precedence but only ever ran it on an AGREEING page — this is the real conflict.',
+        notes: 'The confirmed address (النسيم) is the ONLY address on this page — the KB text no longer carries the stale «حي العزيزية» line. Asserts BUSINESS_INFO is actually answered from, and that the retired value never reappears. This case was a standing RED while the fixture kept both: the model always chose the KB line, because STATIC_SYSTEM_PREFIX makes <business_knowledge> the sole factual source and its final self-check deletes anything absent from it — two prompt attempts died on that. Per C-FINAL the conflict is resolved by never letting the line reach the model (cleanup offered the moment a fact is confirmed, /business + post-import), and the PROPOSAL half is pinned in catalogKbMatch.test.ts on the verbatim fixture line. Do NOT re-add a stale address here to "test precedence" — that only restores a permanent red.',
     },
 
     // ── Category 69: Distributor / Outlet-Directory KB ──────────────────────

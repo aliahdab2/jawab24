@@ -142,18 +142,41 @@ export interface StructuredFieldLineMatch {
 // (Arabic clitics make them distinct tokens: موقعنا ≠ موقع).
 //
 // Deliberately EXCLUDES over-broad tokens that collide with unrelated lines:
-//  - bare «رقم» (matches «رقم الطلب» = order number), bare «موقع» («موقعنا
-//    الإلكتروني» = website) — keep the possessive «موقعنا» (physical location).
+//  - bare «رقم» (matches «رقم الطلب» = order number).
 //  - «جوال»/«موبايل»/«mobile» — these are PRODUCT words (a phone-accessory line
 //    «حامل جوال» would be proposed as a phone-field duplicate). Keep «هاتف».
 //  - «مواعيد» — appears in delivery prose («مواعيد التوصيل خلال ٣ أيام»). Keep
 //    «دوام»/«ساعات» which specifically name business hours.
 // Fewer false proposals in the sheet; the merchant still confirms every one.
 const FIELD_LABELS: Record<StructuredFieldKind, string[]> = {
-  address: ['عنوان', 'عنواننا', 'موقعنا', 'address', 'location'],
+  // «موقع» is AMBIGUOUS, not over-broad: «الموقع: الرياض، حي كذا» is the shop's
+  // place, «الموقع الإلكتروني» is the website. It was excluded outright until
+  // 2026-08-03, which made this matcher a no-op on the commonest way merchants
+  // actually write their address — «📍 الموقع:» — so the cleanup proposed
+  // nothing and the stale line survived (eval #720). It is admitted here and
+  // disambiguated per line by WEBSITE_MARKERS below.
+  address: ['عنوان', 'عنواننا', 'موقع', 'موقعنا', 'address', 'location'],
   phone: ['هاتف', 'هاتفنا', 'رقمنا', 'للتواصل', 'phone', 'tel'],
   hours: ['دوام', 'دوامنا', 'اوقات', 'ساعات', 'نفتح', 'hours', 'open'],
 };
+
+/**
+ * Labels that name the field only when nothing else on the line contradicts
+ * them. Unambiguous labels («عنوان», «موقعنا») are never subjected to this.
+ */
+const AMBIGUOUS_LABELS: Record<StructuredFieldKind, string[]> = {
+  address: ['موقع'],
+  phone: [],
+  hours: [],
+};
+
+/**
+ * Evidence that a line is about the WEBSITE rather than the shop's location.
+ * Note `comparable()` folds «.» and «/» to spaces, so a URL arrives as the
+ * tokens it is made of — hence `www` / `http` / `com` rather than a URL regex.
+ * Alef normalization maps «إلكتروني» → «الكتروني», so one token covers both.
+ */
+const WEBSITE_MARKERS = ['الكتروني', 'website', 'www', 'http', 'https', 'com'];
 
 /**
  * Pure. Returns KB lines that duplicate a CONFIRMED structured field and are
@@ -173,6 +196,12 @@ export function matchStructuredFieldLinesInKb(
     phone: FIELD_LABELS.phone.map((l) => comparable(l).trim()).filter(Boolean),
     hours: FIELD_LABELS.hours.map((l) => comparable(l).trim()).filter(Boolean),
   };
+  const ambiguousTokens: Record<StructuredFieldKind, Set<string>> = {
+    address: new Set(AMBIGUOUS_LABELS.address.map((l) => comparable(l).trim())),
+    phone: new Set(AMBIGUOUS_LABELS.phone.map((l) => comparable(l).trim())),
+    hours: new Set(AMBIGUOUS_LABELS.hours.map((l) => comparable(l).trim())),
+  };
+  const websiteTokens = WEBSITE_MARKERS.map((t) => comparable(t).trim()).filter(Boolean);
 
   const lines = kbText.split('\n');
   const out: StructuredFieldLineMatch[] = [];
@@ -181,9 +210,17 @@ export function matchStructuredFieldLinesInKb(
     const paddedLine = comparable(line);
     if (!paddedLine) return;
 
+    // «الموقع الإلكتروني: example.com» names a website, not a place. An
+    // ambiguous label on such a line is NOT address evidence; an explicit one
+    // («عنواننا») still is.
+    const looksLikeWebsite = websiteTokens.some((t) => containsStandalone(paddedLine, t));
+
     const fields: StructuredFieldKind[] = [];
     for (const kind of kinds) {
-      const hasLabel = labelTokens[kind].some((t) => containsStandalone(paddedLine, t));
+      const hasLabel = labelTokens[kind].some((t) => {
+        if (!containsStandalone(paddedLine, t)) return false;
+        return !(looksLikeWebsite && ambiguousTokens[kind].has(t));
+      });
       if (!hasLabel) continue;
       // A phone/hours claim is numeric; an address usually is not.
       if ((kind === 'phone' || kind === 'hours') && !/\d/.test(paddedLine)) continue;

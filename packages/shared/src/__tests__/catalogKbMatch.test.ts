@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { matchCatalogLinesInKb, matchStructuredFieldLinesInKb, removeKbLines } from '../catalogKbMatch';
-import { presentFieldsFromProfile } from '../index';
+import { presentFieldsFromProfile, hasFieldLinesToClean } from '../index';
 
 /** Real merchant shape: a price wall with headers, bullets, emoji and prose. */
 const MOTO_KB = [
@@ -132,6 +132,51 @@ describe('matchStructuredFieldLinesInKb (the #720 fix)', () => {
     expect(cleaned).not.toContain('العزيزية');
     expect(cleaned).toContain('نوصّل لكل العناوين'); // delivery prose kept
   });
+
+  // ── «الموقع» — the label this matcher was blind to ────────────────────────
+  //
+  // Everything above uses «العنوان». The moto fixture — and, from the 07-23
+  // measurement, most merchants — write «📍 الموقع:». «موقع» was excluded from
+  // the label list because it collides with «الموقع الإلكتروني» (website), so
+  // the matcher proposed NOTHING for the very line #720 is about: the feature
+  // was a no-op wherever it mattered most. It is admitted now and separated
+  // from the website by evidence ON THE LINE, not by dropping the label.
+  describe('«الموقع» is the address label merchants actually use', () => {
+    // The line the moto fixture carried while #720 was open. It is no longer in
+    // seedData.ts — that fixture now models the merchant who ACCEPTED this
+    // proposal — so the shape is pinned here, where the proposing is tested.
+    const REAL_LINE = '📍 الموقع: الرياض، حي العزيزية، طريق الحائر';
+
+    it('proposes the real fixture line — the exact miss that made C-F1 a no-op', () => {
+      const matches = matchStructuredFieldLinesInKb(REAL_LINE, { address: true });
+      expect(matches).toHaveLength(1);
+      expect(matches[0].fields).toEqual(['address']);
+    });
+
+    it.each([
+      ['🌐 الموقع الإلكتروني: https://majd-moto.com', 'the ال-prefixed website phrase'],
+      ['الموقع الالكتروني: www.majd-moto.com', 'the unhamzated spelling'],
+      ['موقع الشركة: majd-moto.com', 'a bare domain with no «إلكتروني» at all'],
+    ])('does NOT propose %s (%s)', (line) => {
+      expect(matchStructuredFieldLinesInKb(line, { address: true })).toEqual([]);
+    });
+
+    it('an UNAMBIGUOUS label still wins on a line that also carries a URL', () => {
+      // «عنواننا» names the place outright, so the website evidence does not
+      // veto it. Field lines reach the sheet UNCHECKED (D-038) and the merchant
+      // decides — proposing is not removing.
+      const line = 'عنواننا: حي العزيزية — وللطلب www.majd-moto.com';
+      expect(matchStructuredFieldLinesInKb(line, { address: true })).toHaveLength(1);
+    });
+
+    it('«موقعنا» (the possessive) keeps working — it was never the ambiguous one', () => {
+      expect(matchStructuredFieldLinesInKb('موقعنا: حي العزيزية', { address: true })).toHaveLength(1);
+    });
+
+    it('proposes nothing when the address field is not confirmed', () => {
+      expect(matchStructuredFieldLinesInKb(REAL_LINE, { phone: true })).toEqual([]);
+    });
+  });
 });
 
 describe('presentFieldsFromProfile (guards the container-unwrap regression)', () => {
@@ -170,6 +215,46 @@ describe('presentFieldsFromProfile (guards the container-unwrap regression)', ()
   it('handles null/undefined', () => {
     expect(presentFieldsFromProfile(null)).toEqual({ address: false, phone: false, hours: false });
     expect(presentFieldsFromProfile(undefined)).toEqual({ address: false, phone: false, hours: false });
+  });
+});
+
+/**
+ * The single question both cleanup triggers ask — the fact-save in `/business`
+ * (C-F1, the #720 fix) and the post-import pass in CatalogManager. It exists as
+ * one function precisely so those two cannot drift into disagreeing about when
+ * the offer appears; that drift is what left the cleanup unreachable from the
+ * place the conflict is actually created.
+ */
+describe('hasFieldLinesToClean (the shared cleanup trigger)', () => {
+  // The moto page as it was when #720 was filed: the merchant confirms النسيم
+  // in /business while this line still sits in their Business Info.
+  const STALE = '📍 الموقع: الرياض، حي العزيزية، طريق الحائر';
+  const CONFIRMED = { merchant: { address: 'الرياض، حي النسيم، طريق الدائري الشرقي' } };
+
+  it('offers the cleanup for the address the merchant just confirmed', () => {
+    expect(hasFieldLinesToClean(STALE, CONFIRMED)).toBe(true);
+  });
+
+  it('stays silent when the field is NOT confirmed — nothing outranks the narrative yet', () => {
+    expect(hasFieldLinesToClean(STALE, { merchant: {} })).toBe(false);
+  });
+
+  it('stays silent on an empty or whitespace-only Business Info', () => {
+    expect(hasFieldLinesToClean('', CONFIRMED)).toBe(false);
+    expect(hasFieldLinesToClean('   \n  ', CONFIRMED)).toBe(false);
+    expect(hasFieldLinesToClean(null, CONFIRMED)).toBe(false);
+    expect(hasFieldLinesToClean(undefined, CONFIRMED)).toBe(false);
+  });
+
+  it('stays silent when the KB says nothing about the confirmed field', () => {
+    expect(hasFieldLinesToClean('نبيع قطع غيار أصلية لجميع الموتوسيكلات', CONFIRMED)).toBe(false);
+  });
+
+  it('reads the {merchant,suggestions} CONTAINER — an UNCONFIRMED suggestion must not trigger it', () => {
+    // Reading the profile flat (or off `suggestions`) makes the feature fire on
+    // data the merchant never confirmed — the inverse of the 07-23 bug, and it
+    // would propose deleting a line backed by nothing more authoritative.
+    expect(hasFieldLinesToClean(STALE, { merchant: {}, suggestions: { address: 'حي النسيم' } })).toBe(false);
   });
 });
 
