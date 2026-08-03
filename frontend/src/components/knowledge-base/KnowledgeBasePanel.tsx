@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
+import { useQuery } from '@tanstack/react-query';
 import { X, Save, Check, FileText, Eye, MessageCircleQuestion, Lightbulb, ClipboardPaste } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui';
+import { Button, InfoPopover } from '@/components/ui';
 import { useTranslations } from 'next-intl';
-import { pagesApi } from '@/lib/api';
+import { pagesApi, factCollectionsApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
 import { writeCatalogImportDraft } from '@/lib/catalogImportDraft';
+import { useDebounce } from '@/hooks/useDebounce';
+import { captureError } from '@/lib/sentryHelpers';
+import { detectCatalogLikePatterns } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
-import type { KnowledgeSection, SectionId, CustomSectionId, KbGap, KbWarnings } from './types';
+import type { KnowledgeSection, SectionId, CustomSectionId, KbGap, KbWarnings, SaveKbOutcome } from './types';
 import { isCustomSection, MAX_CUSTOM_SECTIONS } from './types';
 import { parseKnowledgeBase, serializeSections, getTotalCharCount } from './knowledgeBaseParser';
 import { KnowledgeBaseSections } from './KnowledgeBaseSections';
@@ -20,7 +24,7 @@ const MAX_LENGTH = 16000;
 
 interface KnowledgeBasePanelProps {
   page: Page;
-  onSave: (knowledgeBase: string) => Promise<KbWarnings | undefined | void>;
+  onSave: (knowledgeBase: string) => Promise<SaveKbOutcome | undefined | void>;
   saving: boolean;
   saved: boolean;
   /** Rendered as a Cancel button in the footer when provided (modal host). */
@@ -71,6 +75,8 @@ export function KnowledgeBasePanel({
   const [gaps, setGaps] = useState<KbGap[]>([]);
   const [expandedGapId, setExpandedGapId] = useState<string | null>(null);
   const [kbWarnings, setKbWarnings] = useState<KbWarnings | null>(null);
+  // Live price-notice dismissal — per editing session, reset on page switch.
+  const [liveNoticeDismissed, setLiveNoticeDismissed] = useState(false);
 
   // Initialize from page data
   useEffect(() => {
@@ -96,12 +102,73 @@ export function KnowledgeBasePanel({
     setExpandedId(firstEmpty?.id || null);
   }, [page]);
 
+  // Reset the live-notice dismissal only when the merchant switches PAGES —
+  // keyed on page.id, NOT the page object: every save refetches the pages
+  // query and mints a new object, and a dismissed notice must not resurrect
+  // just because the merchant saved.
+  useEffect(() => {
+    setLiveNoticeDismissed(false);
+  }, [page.id]);
+
   // Fetch KB gaps for this page
   useEffect(() => {
     pagesApi.getKbGaps(page.id)
       .then((res) => setGaps(res.data?.data || []))
       .catch(() => { /* non-critical, silently ignore */ });
   }, [page.id]);
+
+  // Live catalog-pattern detection — the same shared detector the backend runs
+  // on save (`kbWarnings`), applied while typing so the merchant hears "exact
+  // prices live in your lists" BEFORE saving, not after. Debounced: detection
+  // is cheap regex work, but there is no reason to run it per keystroke.
+  const currentText = useMemo(
+    () => (rawMode ? rawText : serializeSections(sections)),
+    [rawMode, rawText, sections],
+  );
+  const debouncedText = useDebounce(currentText, 400);
+  const liveDetection = useMemo(() => detectCatalogLikePatterns(debouncedText), [debouncedText]);
+
+  // "Does this merchant have a structured home for prices?" — catalog import
+  // (canary-gated) or existing fact collections. The collections probe only
+  // fires when detection is live AND the catalog path is closed, so ordinary
+  // editing adds zero requests; on /business the query key is shared with
+  // BusinessListsSection, so it is served from the React Query cache anyway.
+  const { data: listCollections, isError: probeFailed, error: probeError } = useQuery({
+    queryKey: ['fact-collections', page.id],
+    queryFn: () => factCollectionsApi.list(page.id).then((r) => r.data.data),
+    enabled: liveDetection.hasCatalog && !canImportToCatalog,
+    staleTime: 60_000,
+  });
+  // A failed probe degrades gracefully (the merchant falls back to the
+  // post-save banner) but must not degrade INVISIBLY: a persistent failure
+  // means lists merchants never see the live notice, and nothing else would
+  // report it. Same tag as BusinessListsSection's load of this query.
+  useEffect(() => {
+    if (probeFailed) {
+      captureError(probeError, 'Fact-collections probe for the live KB notice failed', {
+        tags: { action: 'load-fact-collections' },
+        extra: { pageId: page.id },
+      });
+    }
+  }, [probeFailed, probeError, page.id]);
+  const listsExist = (listCollections?.length ?? 0) > 0;
+  const hasAlternativeHome = canImportToCatalog || listsExist;
+
+  // Owner ruling (2026-08-03): the live notice shows ONLY when the merchant
+  // has somewhere better to put the prices. Everyone else keeps the existing
+  // post-save "coming soon" banner untouched.
+  const showLiveNotice = liveDetection.hasCatalog && hasAlternativeHome && !liveNoticeDismissed;
+
+  // One banner slot, one owner. A save that lands before the debounce or the
+  // collections probe resolves sees hasAlternativeHome=false and sets the
+  // post-save state; once live territory is established the stale post-save
+  // state must go, or it shows the misleading «coming soon» copy — and shadows
+  // the live notice's dismiss button (banner surviving its own dismiss).
+  useEffect(() => {
+    if (liveDetection.hasCatalog && hasAlternativeHome) {
+      setKbWarnings(null);
+    }
+  }, [liveDetection.hasCatalog, hasAlternativeHome]);
 
   // Handle section content change
   const handleSectionChange = useCallback((sectionId: SectionId, content: string) => {
@@ -152,28 +219,37 @@ export function KnowledgeBasePanel({
 
   // Save handler — captures any catalog-detection warnings returned by the
   // backend so the inline banner can prompt the merchant to restructure.
+  // When the merchant has a structured home (live notice territory) the
+  // post-save banner is suppressed: the live notice already said it, and
+  // resurrecting a dismissed notice with the older "coming soon" copy would
+  // both nag and mislead.
   const handleSave = useCallback(async () => {
-    const text = rawMode ? rawText : serializeSections(sections);
     setKbWarnings(null);
-    const result = await onSave(text);
-    if (result && typeof result === 'object' && 'hasCatalog' in result && result.hasCatalog) {
-      setKbWarnings(result);
+    const result = await onSave(currentText);
+    if (result && result.ok && result.kbWarnings?.hasCatalog && !hasAlternativeHome) {
+      setKbWarnings(result.kbWarnings);
     }
-  }, [rawMode, rawText, sections, onSave]);
+  }, [currentText, onSave, hasAlternativeHome]);
 
-  // Warning-banner CTA: hand the CURRENT text (the banner only shows post-save,
-  // so it equals the saved KB) to the import sheet via the sessionStorage
-  // draft — a 16k paste doesn't fit in a query param.
-  const handleMoveToCatalog = useCallback(() => {
-    const text = rawMode ? rawText : serializeSections(sections);
-    writeCatalogImportDraft({ pageId: page.id, text });
+  // Warning-banner CTA: persist the editor text FIRST, then hand it to the
+  // import sheet via the sessionStorage draft (a 16k paste doesn't fit in a
+  // query param). The save is not optional: the live notice lets this CTA
+  // fire mid-edit, the handoff closes the editor, and the post-import cleanup
+  // sheet matches lines against the SAVED KB — skipping the save would
+  // silently discard everything typed since the last save.
+  const handleMoveToCatalog = useCallback(async () => {
+    const result = await onSave(currentText);
+    // Save failed (the host already toasted): stay in the editor with the
+    // text intact rather than handing off work that was never persisted.
+    if (result && !result.ok) return;
+    writeCatalogImportDraft({ pageId: page.id, text: currentText });
     const url = `/business?page=${page.id}&import=1`;
     if (onImportNavigate) {
       onImportNavigate(url);
     } else {
       router.push(url);
     }
-  }, [rawMode, rawText, sections, page.id, onImportNavigate, router]);
+  }, [currentText, onSave, page.id, onImportNavigate, router]);
 
   // Gap approved: append Q&A to "notes" section
   const handleGapApproved = useCallback((gapId: string, answer: string) => {
@@ -212,10 +288,25 @@ export function KnowledgeBasePanel({
   return (
     <>
       <div className={bodyClassName}>
-        {/* Description */}
-        <p className="text-xs sm:text-sm text-surface-500 mb-2 text-start landscape:hidden">
-          {tKb('description')}
-        </p>
+        {/* Description — what the free text is FOR, with an InfoPopover for the
+            fuller role split. The structured-home sentence only renders for
+            merchants who actually have one (owner ruling 2026-08-03). */}
+        <div className="flex items-start gap-1.5 mb-2 landscape:hidden">
+          <p className="text-xs sm:text-sm text-surface-500 text-start">
+            {tKb('description')}
+            {hasAlternativeHome && (
+              <> {tKb('descriptionStructuredHint')}</>
+            )}
+          </p>
+          <InfoPopover label={tKb('freeTextInfo.title')} panelWidth="md">
+            <div className="space-y-1.5 text-start">
+              <p className="font-medium">{tKb('freeTextInfo.title')}</p>
+              <p>{tKb('freeTextInfo.what')}</p>
+              {hasAlternativeHome && <p>{tKb('freeTextInfo.structured')}</p>}
+              <p>{tKb('freeTextInfo.why')}</p>
+            </div>
+          </InfoPopover>
+        </div>
 
         {/* Facebook import banner */}
         {showFacebookBanner && (
@@ -266,29 +357,36 @@ export function KnowledgeBasePanel({
           </div>
         )}
 
-        {/* Catalog-detection warning — appears after save when raw KB looks
-            like a price list or course catalog. Non-blocking; merchant can
-            dismiss and keep the current text. */}
-        {kbWarnings && kbWarnings.hasCatalog && (
+        {/* Catalog-detection notice. Two variants, one slot:
+            - LIVE (pre-save, while typing) — only for merchants with a
+              structured home for prices (catalog import or existing lists);
+              present-tense copy, CTA when the import path is open.
+            - POST-SAVE — the pre-existing backend `kbWarnings` banner, kept
+              unchanged for merchants without an alternative ("coming soon").
+            Non-blocking in both shapes; dismiss keeps the current text. */}
+        {(showLiveNotice || (kbWarnings && kbWarnings.hasCatalog)) && (
           <div className="flex items-start gap-2.5 p-3 mb-3 rounded-xl alert-warning border" role="status" aria-live="polite">
             <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
             <div className="flex-1 text-xs leading-relaxed">
               <p className="font-medium mb-1">
-                {kbWarnings.reasons.includes('course_catalog')
+                {(showLiveNotice ? liveDetection.reasons : kbWarnings?.reasons ?? []).includes('course_catalog')
                   ? tKb('catalogWarning.courseCatalogTitle')
                   : tKb('catalogWarning.priceListTitle')}
               </p>
               <p>
-                {tKb(canImportToCatalog ? 'catalogWarning.bodyWithCta' : 'catalogWarning.body', {
-                  priceCount: kbWarnings.priceCount,
-                })}
+                {showLiveNotice
+                  ? tKb(canImportToCatalog ? 'catalogWarning.liveBodyWithCta' : 'catalogWarning.liveBody', {
+                      priceCount: liveDetection.priceCount,
+                    })
+                  : tKb('catalogWarning.body', { priceCount: kbWarnings?.priceCount ?? 0 })}
               </p>
-              {canImportToCatalog && (
+              {showLiveNotice && canImportToCatalog && (
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   onClick={handleMoveToCatalog}
+                  disabled={saving}
                   className="mt-2"
                 >
                   <ClipboardPaste className="w-3.5 h-3.5 me-1.5" aria-hidden="true" />
@@ -298,7 +396,9 @@ export function KnowledgeBasePanel({
             </div>
             <button
               type="button"
-              onClick={() => setKbWarnings(null)}
+              // One click dismisses the SLOT: clearing only the visible
+              // variant would let the other one un-shadow behind it.
+              onClick={() => { setLiveNoticeDismissed(true); setKbWarnings(null); }}
               className="flex-shrink-0 p-1 -m-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40"
               aria-label={tc('dismiss')}
             >

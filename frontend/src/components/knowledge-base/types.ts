@@ -41,6 +41,17 @@ export interface KbWarnings {
   courseKeywordCount: number;
 }
 
+/**
+ * Result of a KB save as seen by the editor panel, discriminated on `ok`.
+ * Flows that continue PAST the save (the live-notice catalog CTA persists the
+ * editor text before handing off to the import sheet) must tell a failed save
+ * apart from a successful one with no warnings — both used to resolve
+ * `undefined`, which made "save, then proceed" impossible to gate.
+ */
+export type SaveKbOutcome =
+  | { ok: true; kbWarnings?: KbWarnings }
+  | { ok: false };
+
 export interface KnowledgeSection {
   id: SectionId;
   content: string;

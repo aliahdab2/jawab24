@@ -7,13 +7,13 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import type { Page } from '@jawab24/shared';
-import type { KbWarnings } from './types';
+import type { SaveKbOutcome } from './types';
 import { KnowledgeBasePanel } from './KnowledgeBasePanel';
 
 interface KnowledgeBaseModalProps {
   page: Page;
   onClose: () => void;
-  onSave: (knowledgeBase: string) => Promise<KbWarnings | undefined | void>;
+  onSave: (knowledgeBase: string) => Promise<SaveKbOutcome | undefined | void>;
   saving: boolean;
   saved: boolean;
 }

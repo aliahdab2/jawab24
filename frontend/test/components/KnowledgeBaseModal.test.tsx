@@ -1,15 +1,27 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render as rtlRender, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { KnowledgeBaseModal } from '@/components/knowledge-base/KnowledgeBaseModal';
 import type { Page } from '@jawab24/shared';
 
 // Mock non-essential dependencies
 vi.mock('@/lib/api', () => ({
   pagesApi: { getKbGaps: vi.fn().mockResolvedValue({ data: { data: [] } }) },
+  factCollectionsApi: { list: vi.fn().mockResolvedValue({ data: { data: [] } }) },
 }));
 
 vi.mock('@/hooks/useEscapeKey', () => ({ useEscapeKey: vi.fn() }));
 vi.mock('@/hooks/useBodyScrollLock', () => ({ useBodyScrollLock: vi.fn() }));
+
+// The panel now consults React Query (fact-collections probe for the live
+// price notice), so every render needs a client.
+const render = (ui: React.ReactElement) =>
+  rtlRender(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      {ui}
+    </QueryClientProvider>,
+  );
 
 const makePage = (knowledgeBase: string): Page =>
   ({ id: 'p1', name: 'Test Page', knowledgeBase, suggestedKnowledgeBase: '' }) as unknown as Page;

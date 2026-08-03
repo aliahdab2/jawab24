@@ -139,6 +139,14 @@ describe('normalizeArabicIndic', () => {
   it('leaves non-digit characters unchanged', () => {
     expect(normalizeArabicIndic('رقمي ٠٩٣٥')).toBe('رقمي 0935');
   });
+
+  it('converts Extended Arabic-Indic (Persian/Urdu) digits to ASCII', () => {
+    expect(normalizeArabicIndic('۰۱۲۳۴۵۶۷۸۹')).toBe('0123456789');
+  });
+
+  it('converts mixed Arabic-Indic and Extended digits in one string', () => {
+    expect(normalizeArabicIndic('السعر ۱۵٠٠ ريال')).toBe('السعر 1500 ريال');
+  });
 });
 
 describe('isArabicPhone', () => {
