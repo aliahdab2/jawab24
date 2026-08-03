@@ -121,7 +121,7 @@ test.describe('Pages Page', () => {
 
     // Page header should show "My Pages"
     await expect(
-      page.locator('h1').filter({ hasText: t('pages.title') }).first()
+      page.locator('h1').filter({ hasText: t('pages.titleChannels') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Page name should be visible
@@ -167,7 +167,7 @@ test.describe('Pages Page', () => {
     await page.goto('/en/pages');
 
     await expect(
-      page.locator('h1').filter({ hasText: t('pages.title') }).first()
+      page.locator('h1').filter({ hasText: t('pages.titleChannels') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Should not crash — page should have content
@@ -324,7 +324,7 @@ test.describe('Pages Page', () => {
     await page.goto('/en/pages');
 
     await expect(
-      page.locator('h1').filter({ hasText: t('pages.title') }).first()
+      page.locator('h1').filter({ hasText: t('pages.titleChannels') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Give the auto-sync useEffect time to fire and resolve the toast queue.
@@ -382,7 +382,7 @@ test.describe('Pages Page', () => {
     await page.goto('/en/pages');
 
     await expect(
-      page.locator('h1').filter({ hasText: t('pages.title') }).first()
+      page.locator('h1').filter({ hasText: t('pages.titleChannels') }).first()
     ).toBeVisible({ timeout: 15000 });
 
     // Switch CTA label uses simple {workspaceName} interpolation (no plural),

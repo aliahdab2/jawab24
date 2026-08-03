@@ -206,7 +206,7 @@ test.describe('Mobile Navigation', () => {
     const dialog = page.getByRole('dialog');
 
     // The overlay surfaces everything NOT already reachable from the bottom nav.
-    await expect(dialog.getByRole('button', { name: t('nav.pages'), exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(dialog.getByRole('button', { name: t('nav.channels'), exact: true })).toBeVisible({ timeout: 5000 });
     await expect(dialog.getByRole('button', { name: t('nav.leads'), exact: true })).toBeVisible();
     // Team is workspace owner/admin-only; the default mock user is an owner.
     await expect(dialog.getByRole('button', { name: t('nav.team'), exact: true })).toBeVisible();

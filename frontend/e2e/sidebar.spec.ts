@@ -137,7 +137,7 @@ test.describe('Sidebar', () => {
     await gotoWithSidebar(page);
 
     await expect(page.getByRole('link', { name: t('nav.dashboard') }).first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('link', { name: t('nav.pages') }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: t('nav.channels') }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: t('nav.comments') }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: t('nav.messages') }).first()).toBeVisible();
     // Team is workspace owner/admin-only; the default mock user is an owner.
