@@ -397,10 +397,13 @@ describe('BusinessListsSection', () => {
     // with a count, said once — NOT repeated inside each row.
     expect(screen.getByText('حي الرمال')).toBeInTheDocument();
     expect(screen.getByText('تلة الريح')).toBeInTheDocument();
-    expect(screen.getByText('(2)')).toBeInTheDocument();
+    expect(screen.getByText('حي الرمال').nextElementSibling?.textContent).toBe('2');
     const rowBtn = screen.getByText('صيدلية الفيروز').closest('button');
     expect(rowBtn?.textContent).not.toContain('المنطقة');
     expect(rowBtn?.textContent).not.toContain('تلة الريح');
+    // Name-only rows compress into chips: no full-row «تعديل» label, the
+    // pencil icon alone marks editability.
+    expect(rowBtn?.textContent).not.toContain('تعديل');
     // Each group carries its own prefilled add action.
     const groupAdds = screen.getAllByRole('button', { name: /Add item — / });
     expect(groupAdds).toHaveLength(2);

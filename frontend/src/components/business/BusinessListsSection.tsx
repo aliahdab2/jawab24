@@ -466,11 +466,11 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                   <div>
                     {keyGroups.map((kg) => (
                       <div key={kg.value ?? '__missing__'}>
-                        <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/40 border-y border-theme-border/60 first:border-t-0">
-                          <span className="text-xs font-bold text-foreground break-words" dir="auto">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-muted/60 border-y border-theme-border/60 border-s-[3px] border-s-brand-500 first:border-t-0">
+                          <span className="text-sm font-bold text-foreground break-words" dir="auto">
                             {kg.display ?? t('lists.missingKeyGroup', { label: collection.keyAttr ?? '' })}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">({kg.rows.length})</span>
+                          <span className="min-w-[22px] text-center rounded-full bg-card border border-theme-border px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">{kg.rows.length}</span>
                           {kg.display && collection.keyAttr && (
                             <button
                               type="button"
@@ -487,9 +487,33 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                             </button>
                           )}
                         </div>
-                        <ul className="divide-y divide-theme-border/60">
-                          {kg.rows.map((entry) => directoryRow(syntheticGroup, section, entry.row, false, !!kg.display))}
-                        </ul>
+                        {/* Name-only rows (no price, no attributes left once the
+                            header said the key) compress into wrapped chips —
+                            224 pharmacies must not cost 224 full-width rows.
+                            One row carrying more detail keeps the whole group
+                            on full rows, so a group never mixes densities. */}
+                        {kg.rows.every((entry) =>
+                          rowDisplayAttributes(section, entry.row, { keepKey: !kg.display }).length === 0 && !entry.row.price,
+                        ) ? (
+                          <ul className="flex flex-wrap gap-2 px-4 py-3">
+                            {kg.rows.map((entry) => (
+                              <li key={entry.row.id} className="list-none">
+                                <button
+                                  type="button"
+                                  onClick={() => openEntity(syntheticGroup, { collection: section.collection, row: entry.row })}
+                                  className="min-h-[36px] inline-flex items-center gap-1.5 rounded-full border border-theme-border bg-card px-3 py-1 text-sm text-foreground hover:bg-surface-100 active:bg-surface-200 transition-colors"
+                                >
+                                  <span dir="auto" className="break-words text-start">{entry.row.name}</span>
+                                  <Pencil className="w-3 h-3 text-icon-muted flex-shrink-0" aria-hidden="true" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <ul className="divide-y divide-theme-border/60">
+                            {kg.rows.map((entry) => directoryRow(syntheticGroup, section, entry.row, false, !!kg.display))}
+                          </ul>
+                        )}
                       </div>
                     ))}
                     {expanded && expiredRows.length > 0 && (
