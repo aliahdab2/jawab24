@@ -671,10 +671,15 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                   );
                 };
                 const soleBase = blocks.filter((b) => b.base).length === 1;
-                // The explanatory sentence appears once per card — three empty
-                // tiers repeating «لا مواعيد معلنة بعد» was round-6 point 6;
-                // later tiers keep only the compact add action.
-                let gapHintShown = false;
+                // The explanatory sentence appears once per card (three empty
+                // tiers repeating it was round-6 point 6) — and ONLY on cards
+                // with no announced dates AT ALL: on a card where another tier
+                // has dates, a tier's absence is already visible by contrast,
+                // and the card badge counts the announced sessions anyway.
+                const cardHasLiveSessions =
+                  blocks.some((b) => b.sessions.some((r) => !isExpired(r.row))) ||
+                  orphans.some((r) => !isExpired(r.row));
+                let gapHintShown = cardHasLiveSessions;
                 return (
                   <>
                     {blocks.map((block, bi) => {
