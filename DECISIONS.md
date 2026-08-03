@@ -664,6 +664,25 @@ sale) is the same defect and is expected to be fixed the same way.
 
 ---
 
+## D-056 · The business surface opens to the founder-team workspace ahead of GA
+
+**Decided:** 2026-08-03 · **Status:** Active
+
+`isCatalogVisible` (frontend/src/lib/featureFlags.ts) = platform admin **OR** member of
+the founder workspace `a0005407-92bf-473e-9368-013f14c57a7d` (owner ruling: «لفريق
+وركسبيسي بس»). The /business page, its nav entry and the KB→catalog import CTA become
+visible to the founder's own team for production dogfooding; every other merchant stays
+gated exactly as before. Backend authz is unchanged — catalog/fact writes remain auth +
+workspace-admin gated server-side; the flag only reveals UI. **GA remains a one-line
+deletion of the workspace allowlist.** Widened from the platform-admin canary
+(2026-07-11 ruling «keep it dark, but admin so I can test») as the next step of the same
+rollout path; pinned by `featureFlags.catalogGate.test.ts` (admin passes, founder-team
+member passes, everyone else — including null user / missing workspaces — stays gated).
+Shipped in #582 alongside the G1b editor polish marathon. Numbered D-056 to fill the
+gap #612 left when it recorded D-057 directly after D-055.
+
+---
+
 ## D-057 · A dated fact row's START date owns its visibility; the end date is descriptive
 
 Owner ruling, 2026-07-31 — «تاريخ النهاية لا يجب أن نعتمد عليه». Implemented in
