@@ -339,6 +339,41 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
     );
   };
 
+  /** Tri-state completeness control (D-038), compact enough to sit inline in
+   *  a card header or a block row. The ASK text is the caller's job — this is
+   *  only the answer/state affordance. */
+  const completenessControl = (collection: FactCollectionWithRows) =>
+    collection.isComplete === null ? (
+      <span className="flex items-center gap-2 flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => setCompleteness(collection, true)}
+          className="min-h-[32px] rounded-full border border-theme-border bg-card px-3 text-xs font-medium text-foreground hover:bg-surface-100"
+        >
+          {t('lists.completenessYes')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setCompleteness(collection, false)}
+          className="min-h-[32px] rounded-full border border-theme-border bg-card px-3 text-xs font-medium text-muted-foreground hover:bg-surface-100"
+        >
+          {t('lists.completenessNo')}
+        </button>
+      </span>
+    ) : (
+      <span className="text-xs text-muted-foreground">
+        {collection.isComplete ? t('lists.completenessConfirmed') : t('lists.completenessPartial')}
+        {' '}
+        <button
+          type="button"
+          onClick={() => setCompleteness(collection, null)}
+          className="text-brand-600 hover:underline underline-offset-2"
+        >
+          {t('lists.completenessReset')}
+        </button>
+      </span>
+    );
+
   /** A DIRECTORY line (contact-list pattern): bold name, muted labelled
    *  detail beneath, price at the end when the list prices things. */
   const directoryRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, dropLabel: string | null = null) => {
@@ -381,55 +416,28 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
         </div>
       </div>
 
-      {/* Per-list controls: the completeness word (D-038, tri-state) belongs to
-          the LIST, not to any one card — it changes what customers are TOLD
-          about absence, so the question names that consequence. */}
-      <div className="mt-3 rounded-xl border border-theme-border bg-muted/40 divide-y divide-theme-border/60">
-        {collections.map((collection) => (
-          <div key={collection.id} className="px-3 py-2.5">
-            {collection.isComplete === null ? (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <span className="min-w-0">
-                  <span className="block text-xs font-semibold text-foreground">{collection.label}</span>
-                  <span className="block text-xs text-muted-foreground mt-0.5">{t('lists.completenessAsk')}</span>
-                  <span className="block text-[11px] text-muted-foreground/80 mt-0.5">{t('lists.completenessHint')}</span>
-                </span>
-                <span className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setCompleteness(collection, true)}
-                    className="min-h-[32px] rounded-full border border-theme-border bg-card px-3 text-xs font-medium text-foreground hover:bg-surface-100"
-                  >
-                    {t('lists.completenessYes')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCompleteness(collection, false)}
-                    className="min-h-[32px] rounded-full border border-theme-border bg-card px-3 text-xs font-medium text-muted-foreground hover:bg-surface-100"
-                  >
-                    {t('lists.completenessNo')}
-                  </button>
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-xs font-semibold text-foreground">{collection.label}</span>
-                <span className="text-xs text-muted-foreground">
-                  {collection.isComplete ? t('lists.completenessConfirmed') : t('lists.completenessPartial')}
-                  {' '}
-                  <button
-                    type="button"
-                    onClick={() => setCompleteness(collection, null)}
-                    className="text-brand-600 hover:underline underline-offset-2"
-                  >
-                    {t('lists.completenessReset')}
-                  </button>
-                </span>
-              </div>
-            )}
+      {/* The completeness word (D-038, tri-state) belongs to the LIST — it
+          changes what customers are TOLD about absence. On directory pages the
+          control lives inside each list's own card (see below); the stacked
+          block here serves only the entity-card layout, where cards are per
+          ENTITY and per-LIST controls have no card to live in. The question +
+          consequence hint are said ONCE for the whole block, not per list. */}
+      {aggregates && (
+        <div className="mt-3 rounded-xl border border-theme-border bg-muted/40">
+          <div className="px-3 pt-2.5 pb-2 border-b border-theme-border/60">
+            <span className="block text-xs font-semibold text-foreground">{t('lists.completenessAsk')}</span>
+            <span className="block text-[11px] text-muted-foreground/80 mt-0.5">{t('lists.completenessHint')}</span>
           </div>
-        ))}
-      </div>
+          <div className="divide-y divide-theme-border/60">
+            {collections.map((collection) => (
+              <div key={collection.id} className="px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-foreground" dir="auto">{collection.label}</span>
+                {completenessControl(collection)}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* One card per entity — the name appears exactly once; inside, one
           labelled section per list so a price and a session can't be
@@ -447,9 +455,27 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           const expiredRows = section.rows.filter((r) => isExpired(r.row));
           const expanded = !!showExpired[collection.id];
           return (
-            <div key={collection.id} className="rounded-xl border border-theme-border overflow-hidden">
-              <div className="px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30">
-                <h3 className="text-[15px] font-bold text-foreground" dir="auto">{collection.label}</h3>
+            // NO overflow-hidden on this card — it would trap the sticky area
+            // headers inside it instead of letting them stick to the page's
+            // scroll container.
+            <div key={collection.id} className="rounded-xl border border-theme-border">
+              <div className="px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30 rounded-t-xl">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="text-[15px] font-bold text-foreground" dir="auto">{collection.label}</h3>
+                  {collection.isComplete !== null && completenessControl(collection)}
+                </div>
+                {/* The completeness ASK lives with its list (owner: the three
+                    stacked question blocks pushed all content down) — and
+                    disappears once answered, leaving only the state chip. */}
+                {collection.isComplete === null && (
+                  <div className="mt-1.5 flex items-center justify-between gap-2 flex-wrap">
+                    <span className="min-w-0">
+                      <span className="block text-xs text-muted-foreground">{t('lists.completenessAsk')}</span>
+                      <span className="block text-[11px] text-muted-foreground/80 mt-0.5">{t('lists.completenessHint')}</span>
+                    </span>
+                    {completenessControl(collection)}
+                  </div>
+                )}
               </div>
               {(() => {
                 // Grouped by the list's KEY value (the merchant's search axis —
@@ -472,11 +498,19 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                   <div>
                     {keyGroups.map((kg) => (
                       <div key={kg.value ?? '__missing__'}>
-                        <div className="flex items-center gap-2 px-4 py-2 bg-muted/60 border-y border-theme-border/60 border-s-[3px] border-s-brand-500 first:border-t-0">
-                          <span className="text-sm font-bold text-foreground break-words" dir="auto">
+                        {/* sticky: on a 224-row directory the reader must
+                            always know which area they are inside. The offset
+                            mirrors the mobile top bar (fixed, h-14 sm:h-16,
+                            landscape h-10, hidden from lg) — top-0 alone pins
+                            the header BEHIND that bar. Solid bg (not /60) so
+                            scrolled rows don't ghost through. The value sits
+                            in a FILLED brand pill — items are outlined chips,
+                            the header is filled: unmistakably a heading. */}
+                        <div className="sticky top-14 sm:top-16 max-lg:landscape:top-10 lg:top-0 z-10 flex items-center gap-2 px-4 py-2 bg-surface-100 border-y border-theme-border/60 border-s-[3px] border-s-brand-500 first:border-t-0">
+                          <span className="rounded-full bg-brand-600 text-white text-[15px] font-bold px-3.5 py-1 break-words" dir="auto">
                             {kg.display ?? t('lists.missingKeyGroup', { label: partitionLabel ?? '' })}
                           </span>
-                          <span className="min-w-[22px] text-center rounded-full bg-card border border-theme-border px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">{kg.rows.length}</span>
+                          <span className="min-w-[24px] text-center rounded-full bg-card border border-theme-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">{kg.rows.length}</span>
                           {kg.display && partitionLabel && (
                             <button
                               type="button"
