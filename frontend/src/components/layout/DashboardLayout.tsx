@@ -5,7 +5,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Sidebar, getNavigationGroups, resolveNavKey } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useWorkspaceRole } from '@/hooks';
+import { useWorkspaceRole, useWorkspacesRefresh } from '@/hooks';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui';
@@ -73,6 +73,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   // Workspace role (owner/admin) gates the Team tile in the More overlay —
   // distinct from the platform `isAdmin` super-admin flag.
   const { isAdmin: canManageTeam } = useWorkspaceRole();
+  // Standing sessions never re-run login, so the persisted workspace list —
+  // which workspace-membership gates like isCatalogVisible read — would stay
+  // frozen at its login-time snapshot without this background refresh.
+  useWorkspacesRefresh();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isOnboardingVisible = useUIStore((s) => s.isOnboardingVisible);
   const unreadComments = useUIStore((s) => s.unreadComments);
