@@ -497,19 +497,23 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                             header said the key) compress into wrapped chips —
                             224 pharmacies must not cost 224 full-width rows.
                             One row carrying more detail keeps the whole group
-                            on full rows, so a group never mixes densities. */}
+                            on full rows, so a group never mixes densities.
+                            Narrow screens use a 2-column grid — long Arabic
+                            names made free pills fall one per line on mobile;
+                            from sm: the pills flow freely. */}
                         {kg.rows.every((entry) =>
                           rowDisplayAttributes(section, entry.row, kg.display && partitionLabel ? { keepKey: false, dropLabels: [partitionLabel] } : { keepKey: true }).length === 0 && !entry.row.price,
                         ) ? (
-                          <ul className="flex flex-wrap gap-2 px-4 py-3">
+                          <ul className="grid grid-cols-2 gap-2 px-4 py-3 sm:flex sm:flex-wrap">
                             {kg.rows.map((entry) => (
-                              <li key={entry.row.id} className="list-none">
+                              <li key={entry.row.id} className="list-none min-w-0">
                                 <button
                                   type="button"
                                   onClick={() => openEntity(syntheticGroup, { collection: section.collection, row: entry.row })}
-                                  className="min-h-[36px] inline-flex items-center gap-1.5 rounded-full border border-theme-border bg-card px-3 py-1 text-sm text-foreground hover:bg-surface-100 active:bg-surface-200 transition-colors"
+                                  title={entry.row.name}
+                                  className="w-full sm:w-auto min-w-0 min-h-[36px] inline-flex items-center justify-between sm:justify-start gap-1.5 rounded-full border border-theme-border bg-card px-3 py-1 text-sm text-foreground hover:bg-surface-100 active:bg-surface-200 transition-colors"
                                 >
-                                  <span dir="auto" className="break-words text-start">{entry.row.name}</span>
+                                  <span dir="auto" className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap sm:whitespace-normal sm:break-words text-start">{entry.row.name}</span>
                                   <Pencil className="w-3 h-3 text-icon-muted flex-shrink-0" aria-hidden="true" />
                                 </button>
                               </li>
