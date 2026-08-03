@@ -73,7 +73,7 @@ function ReadinessRing({ percent }: { percent: number }) {
 }
 
 /**
- * «عمّ يستطيع جواب أن يجيب؟» — the top-of-page readiness summary (B1).
+ * «ما الذي يستطيع «جواب» الإجابة عنه؟» — the top-of-page readiness summary (B1).
  * Green chips = Jawab holds this info; amber = customers may ask and get no
  * answer. Coverage comes from `computeReadiness` — the same module, and the same
  * per-field rules, the fact rows badge themselves from, so the ring and the
