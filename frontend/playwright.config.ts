@@ -73,24 +73,29 @@ export default defineConfig({
       NEXT_PUBLIC_API_URL: 'http://localhost:4999/api',
       // Stable test secret so /api/revalidate has a known shared key during E2E.
       REVALIDATE_SECRET: process.env.REVALIDATE_SECRET || 'e2e-revalidate-secret',
-      // WhatsApp OFF, pinned rather than inherited — same reason test/setup.ts pins
-      // it for the unit suite. `isWhatsAppEnabled()` is
-      // `!!NEXT_PUBLIC_FB_APP_ID && !!NEXT_PUBLIC_WHATSAPP_CONFIG_ID`, and when it
-      // flips true the nav/page title renames "My Pages" → "Channels", so six specs
-      // that assert the former label go red. That happened on 2026-07-29 the moment
-      // those vars were added to .env.local for an Android build: the suite had been
-      // green only because the ambient environment happened to lack them.
+      // WhatsApp ON, pinned rather than inherited (dummy non-empty values —
+      // `isWhatsAppEnabled()` is `!!NEXT_PUBLIC_FB_APP_ID &&
+      // !!NEXT_PUBLIC_WHATSAPP_CONFIG_ID`; no request ever reaches Meta in E2E).
+      // The old KNOWN GAP is RESOLVED as of 2026-08-03: WhatsApp went GA
+      // 2026-07-26 with no canary flag set, so every real user sees the
+      // "Channels" nav label and page title — the suite now asserts what prod
+      // renders (nav.channels / pages.titleChannels in six specs across
+      // pages/sidebar/mobile-nav). The pre-GA "My Pages" pin caused a
+      // pre-deploy false red on 2026-08-03: the standalone build bakes
+      // NEXT_PUBLIC_* at BUILD time from .env.local (WhatsApp vars present
+      // since 07-29), so the app rendered "Channels" while specs asserted the
+      // pinned-OFF label — this env block cannot un-bake an existing build.
       //
-      // KNOWN GAP, deliberately left: prod runs with WhatsApp ON, so these specs now
-      // assert a label real users may not see. Pinning makes the suite deterministic;
-      // deciding whether E2E should instead mirror prod (assert "Channels", flags on)
-      // depends on NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY and is a product call.
-      //
-      // Note this only bites when Playwright STARTS the server. Locally
-      // `reuseExistingServer` is true, so a dev server already on :3001 keeps its own
-      // env — check `lsof -iTCP:3001` before trusting a local run.
-      NEXT_PUBLIC_FB_APP_ID: '',
-      NEXT_PUBLIC_WHATSAPP_CONFIG_ID: '',
+      // Two standing caveats:
+      // - A standalone build made WITHOUT the WhatsApp vars would flip the
+      //   label back and fail the six specs — deploy builds always carry them
+      //   post-GA, so that build is the misconfiguration, not the specs.
+      // - This env only applies when Playwright STARTS the server. Locally
+      //   `reuseExistingServer` is true, so a dev server already on :3001
+      //   keeps its own env — check `lsof -iTCP:3001` before trusting a
+      //   local run.
+      NEXT_PUBLIC_FB_APP_ID: 'e2e-dummy-fb-app-id',
+      NEXT_PUBLIC_WHATSAPP_CONFIG_ID: 'e2e-dummy-whatsapp-config',
     },
   },
 });

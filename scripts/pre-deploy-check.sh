@@ -792,13 +792,29 @@ rm -rf frontend/test-results frontend/playwright-report frontend/blob-report
 # or dev mode), rebuild with standalone output. Clean .next first — partial/dev artifacts
 # cause Next 15 incremental builds to "compile successfully" then fail page data collection
 # with PageNotFoundError on otherwise-valid pages.
+#
+# The WhatsApp vars are PINNED (dummy non-empty = feature visible) so the E2E build
+# is deterministic instead of inheriting whatever .env.local holds. NEXT_PUBLIC_*
+# is baked into the client bundle at BUILD time — the playwright.config.ts env
+# block cannot change an already-built bundle. WhatsApp is GA (2026-07-26), the
+# specs assert the GA labels ("Channels"), so an OFF build fails six specs; see
+# the matching pins in frontend/playwright.config.ts (they cover the dev-server
+# path the same way).
+build_e2e_frontend() {
+    (cd frontend && CI=true \
+        NEXT_PUBLIC_API_URL=http://localhost:4999/api \
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} \
+        NEXT_PUBLIC_FB_APP_ID=e2e-dummy-fb-app-id \
+        NEXT_PUBLIC_WHATSAPP_CONFIG_ID=e2e-dummy-whatsapp-config \
+        npx next build)
+}
 if [ ! -d "frontend/.next" ] || [ ! -d "frontend/.next/standalone" ]; then
     echo "   ⚠️  No standalone .next build found, building for E2E..."
     rm -rf frontend/.next frontend/node_modules/.cache
-    if ! (cd frontend && CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build) > /dev/null 2>&1; then
+    if ! build_e2e_frontend > /dev/null 2>&1; then
         echo -e "${RED}   ❌ E2E build failed — retrying with clean cache${NC}"
         rm -rf frontend/.next frontend/node_modules/.cache
-        if ! (cd frontend && CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build); then
+        if ! build_e2e_frontend; then
             exit 1
         fi
     fi
