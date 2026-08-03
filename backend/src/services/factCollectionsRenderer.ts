@@ -33,6 +33,7 @@
  */
 
 /** Mirror of the drizzle row shapes, decoupled so this module stays pure. */
+import { isRowLive } from '@jawab24/shared';
 import { formatPromptPrice } from '../utils/price';
 
 export interface FactCollectionForPrompt {
@@ -76,16 +77,19 @@ export function renderFactCollectionBlock(
         displayRows?: FactRowForPrompt[];
     },
 ): string | undefined {
-    // Expired rows vanish from the prompt entirely (catalog endsAt precedent —
-    // the v38 stale-date class is killed by dates, not by model judgement).
-    const live = rows.filter(r => !r.endsAt || r.endsAt >= todayIso);
+    // Expired rows vanish from the prompt entirely — the v38 stale-date class is
+    // killed by dates, not by model judgement. `isRowLive` (@jawab24/shared) is
+    // the ONE definition of "expired"; the SQL pre-filter and the merchant editor
+    // key off the same function. Do not inline the comparison here.
+    const live = rows.filter(r => isRowLive(r, todayIso));
     if (live.length === 0) return undefined;
 
     // Gating may legitimately leave NOTHING to print. That is not an empty block:
     // the coverage statement (which enumerates the key values) still renders, so the
     // model can name the areas it covers even when it holds no row detail — the
     // recoverable failure, chosen over the unrecoverable one.
-    const display = (opts?.displayRows ?? live).filter(r => !r.endsAt || r.endsAt >= todayIso);
+    // `live` is already filtered; only a caller-supplied subset needs re-checking.
+    const display = opts?.displayRows ? opts.displayRows.filter(r => isRowLive(r, todayIso)) : live;
 
     const anyPrice = display.some(r => r.price !== null);
 

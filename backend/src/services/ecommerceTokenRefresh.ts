@@ -100,11 +100,16 @@ export async function refreshAccessToken(storeId: string, cfg: TokenRefreshConfi
             access_token: string;
             refresh_token: string;
             expires_in: number;
+            // Zid only: the second credential (sent as `Authorization: Bearer` on API
+            // calls). Unknown whether Zid rotates it on refresh — parse it if present,
+            // and updateStoreTokens only overwrites the stored pair when supplied.
+            Authorization?: string;
         };
 
         await updateStoreTokens(storeId, {
             accessToken: data.access_token,
             refreshToken: data.refresh_token,
+            authorizationToken: data.Authorization,
             tokenExpiresAt: new Date(Date.now() + data.expires_in * 1000),
         });
     } finally {
@@ -136,11 +141,30 @@ export async function ensureValidToken(storeId: string, cfg: TokenRefreshConfig)
  * are non-expiring and resolved via its own (different) path.
  */
 export async function resolveStoreAccessToken(storeId: string, cfg: TokenRefreshConfig): Promise<string | null> {
+    const pair = await resolveStoreCredentialPair(storeId, cfg);
+    return pair?.accessToken ?? null;
+}
+
+/**
+ * Like `resolveStoreAccessToken`, but also returns the store's decrypted Zid
+ * `Authorization` token when present. Zid API calls need BOTH credentials
+ * (access token as X-Manager-Token + this as `Authorization: Bearer`); Salla
+ * callers can keep using `resolveStoreAccessToken`, which delegates here.
+ */
+export async function resolveStoreCredentialPair(
+    storeId: string,
+    cfg: TokenRefreshConfig,
+): Promise<{ accessToken: string; authorizationToken?: string } | null> {
     await ensureValidToken(storeId, cfg);
     const store = await getStoreById(storeId);
     if (!store || !store.isActive) return null;
     if (!store.accessToken || !store.accessTokenIv) return null;
-    return decrypt(store.accessToken, store.accessTokenIv);
+    return {
+        accessToken: decrypt(store.accessToken, store.accessTokenIv),
+        authorizationToken: store.authorizationToken && store.authorizationTokenIv
+            ? decrypt(store.authorizationToken, store.authorizationTokenIv)
+            : undefined,
+    };
 }
 
 /**

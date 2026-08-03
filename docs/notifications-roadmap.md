@@ -129,25 +129,36 @@ CREATE TABLE notification_preferences (
 | Page Disconnected | Facebook API error (token expired) | Push + In-App | ✅ live — but **not** fired on the Facebook-revoked path (see below) |
 | New Lead | Lead captured (customer shared a phone) — first time per sender only | Push (gated by per-user `newLeadAlertsEnabled`) + In-App | ✅ live |
 | Subscription Expiring | 3 days before expiry (cron) | Push + In-App | ❌ **NOT IMPLEMENTED** |
-| Trial Ending | N days before `trial_ends_at` (cron) | Push + In-App | ❌ **NOT IMPLEMENTED** |
+| Trial Ending | 3 days before `trial_ends_at` (daily cron) | Push + In-App + **Email** | ✅ live — `services/trialReminders.ts` |
 
-> ⚠️ **Lifecycle notifications do not exist.** `subscription_expiring` and `trial_ending`
-> are declared in `services/notifications.ts` **with finished bilingual templates**, and the
-> frontend already renders and deep-links both — but the only caller anywhere in the repo is
-> the demo seeder (`plugins/demo/seedData.ts`). **No cron queries `subscriptions.trial_ends_at`.**
-> Trial expiry itself is lazy, evaluated on read (`services/subscriptions.ts` flips
-> `trialing → past_due` when someone fetches the subscription), and the sole merchant-facing
-> signal is `auto_reply_paused_billing` — fired *reactively* on the next inbound message
-> **after** expiry, i.e. only once a real customer has already gone unanswered. A merchant
-> whose customers happen not to write is never told at all.
+> ✅ **Trial Ending shipped 2026-07-31.** `runTrialEndingReminders()` runs once a day (registered
+> in `index.ts` beside the lead digest, first run 7 min after boot). It selects `trialing`
+> subscriptions whose `trial_ends_at` falls in the next 3 days, sends the `trial_ending` in-app
+> notification (which the frontend already deep-links to `/pricing`) plus a bilingual reminder
+> email, then stamps `subscriptions.trial_ending_notified_at`.
 >
-> Measured impact (prod, 2026-07-31): **30 of 52 `trialing` subscriptions were already past
-> `trial_ends_at`, and all 30 had sent zero replies in the preceding 14 days** — silent churn.
+> Three properties worth knowing before changing it:
+> - **One reminder per trial, not per day.** The stamp is the whole idempotency mechanism; the
+>   query skips stamped rows. Remove it and the daily cadence warns each merchant three times.
+> - **No backfill, by design (owner's ruling).** The window bound is `trial_ends_at > now`, so an
+>   already-expired trial is never in the result set. Relaxing that bound would have emailed all
+>   30 silently-expired trials at once.
+> - **Email is the second channel and best-effort.** A failed send is captured but not retried,
+>   because retrying it tomorrow would re-send the bell row too. A failed *in-app* notification
+>   is the retryable case: the row stays un-stamped.
 >
-> Everything needed already exists; only the scheduled job is missing. `daysLeft` is computed
-> in `services/admin/health.ts`, and `services/whatsappTokenHealth.ts` is the cron shape to
-> copy (periodic sweep warning N days ahead of a clock-based expiry). Dedup per milestone with
-> the house Redis `SET NX` pattern used in `services/subscriptions.ts`.
+> ⚠️ **`subscription_expiring` (paid renewals) is still missing** — it has finished bilingual
+> templates in `services/notifications.ts` and frontend deep-linking, but the only caller is the
+> demo seeder (`plugins/demo/seedData.ts`). Paid-subscription expiry remains lazy, evaluated on
+> read (`services/subscriptions.ts` flips status when someone fetches the subscription), and the
+> sole merchant-facing signal is `auto_reply_paused_billing` — fired *reactively* on the next
+> inbound message **after** expiry, i.e. only once a real customer has already gone unanswered.
+>
+> Measured impact that motivated the trial job (prod, 2026-07-31): **30 of 52 `trialing`
+> subscriptions were already past `trial_ends_at`, and all 30 had sent zero replies in the
+> preceding 14 days** — silent churn. Those 30 were deliberately NOT warned retroactively.
+>
+> `services/trialReminders.ts` is now the shape to copy for `subscription_expiring`.
 >
 > ⚠️ Do **not** conflate this with `auto_reply_disabled_reason = 'trial_block'`, which is the
 > per-channel anti-abuse ledger applied at *connect* time and has nothing to do with a

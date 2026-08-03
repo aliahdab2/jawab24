@@ -6,7 +6,7 @@ import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared
 import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
-import { PIPELINE_FIELDS } from './pipelineFields';
+import { PIPELINE_FIELDS, overlayWorkspaceFields } from './pipelineFields';
 import { coerceMultiLang } from './multiLangTranslation';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
@@ -39,17 +39,6 @@ const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
     ar: t('defaultAway', 'ar'),
     en: t('defaultAway', 'en'),
 };
-
-/**
- * Pipeline fields served from the workspace store on legacy reads (D-026).
- *
- * `aiModel` is deliberately EXCLUDED: the admin model override writes the
- * legacy `settings` table directly (services/admin/users.ts) and the pipeline
- * resolves the model from that same table via aiModelResolver — so for
- * `aiModel` the LEGACY store is authoritative and the workspace copy can be
- * stale. Overlaying it would misreport the model actually in use.
- */
-const OVERLAY_FIELDS = PIPELINE_FIELDS.filter(f => f !== 'aiModel');
 
 export class SettingsService {
     /**
@@ -122,12 +111,11 @@ export class SettingsService {
             if (!workspaceId) return result;
 
             const workspaceSettings = await workspaceSettingsService.getSettings(workspaceId);
-            const workspaceRecord = workspaceSettings as unknown as Record<string, unknown>;
-            const overlaid = { ...result } as Record<string, unknown>;
-            for (const field of OVERLAY_FIELDS) {
-                const value = workspaceRecord[field];
-                if (value !== undefined) overlaid[field] = value;
-            }
+            // aiModel is excluded from the overlay — see WORKSPACE_OVERLAY_FIELDS.
+            const overlaid = overlayWorkspaceFields(
+                result as unknown as Record<string, unknown>,
+                workspaceSettings as unknown as Record<string, unknown>,
+            );
             // The workspace store can hold *Multi values copied verbatim from the
             // legacy row (drift-heal/backfill), including the double-encoded-string
             // shape — normalize AFTER overlaying so a string never reaches clients

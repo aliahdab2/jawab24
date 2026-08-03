@@ -23,13 +23,43 @@ export interface GeoCheckResult {
     timedOut: boolean;
 }
 
-const GEO_CACHE_KEY = 'jawab24_geo_check';
+/** Exported so tests seed/inspect the real key instead of retyping the literal. */
+export const GEO_CACHE_KEY = 'jawab24_geo_check';
 const GEO_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 interface CachedGeoData {
     sanctioned: boolean;
     country?: string;
     timestamp: number;
+}
+
+/**
+ * DEV OVERRIDE: simulate a blocked jurisdiction from the browser console.
+ *
+ *   localStorage.setItem('SIMULATE_SANCTIONS', 'true')  → blocked, country unknown
+ *   localStorage.setItem('SIMULATE_SANCTIONS', 'SY')    → blocked, resolved as Syria
+ *
+ * The country form exists because the region-specific copy (Sham Cash for
+ * Syria) is invisible without one — a bare `true` reproduces the fail-closed
+ * path where we block without ever resolving a country, which is a real state
+ * but not the one you want when checking that copy.
+ *
+ * The simulated verdict is deliberately NEVER written to the geo cache. Doing
+ * so leaves a real `sanctioned: true` entry behind that keeps blocking for the
+ * full 24h TTL after the flag is removed, with nothing left on screen to
+ * explain why. Every reader consults this function directly instead, so
+ * clearing the flag ends the simulation immediately.
+ */
+function readSimulatedSanctions(): { active: boolean; country?: string } {
+    if (typeof window === 'undefined') return { active: false };
+    const raw = window.localStorage.getItem('SIMULATE_SANCTIONS');
+    if (!raw) return { active: false };
+    if (raw === 'true') return { active: true };
+    // Anything else is only honoured as an ISO-3166 alpha-2 code, so a stray
+    // 'false' or '0' left in storage cannot silently block a real user.
+    return /^[A-Za-z]{2}$/.test(raw)
+        ? { active: true, country: raw.toUpperCase() }
+        : { active: false };
 }
 
 /**
@@ -103,6 +133,17 @@ function cacheGeoCheck(sanctioned: boolean, country?: string): void {
  * @returns Promise<GeoCheckResult>
  */
 export async function isUserSanctionedNonBlocking(timeoutMs: number = 2000): Promise<GeoCheckResult> {
+    // DEV OVERRIDE first — an explicit simulation must outrank a cached verdict.
+    // Checking the cache before the flag meant that setting SIMULATE_SANCTIONS
+    // after any normal page view did nothing here for up to 24h: the earlier
+    // "not sanctioned" entry was returned and the flag silently ignored, so the
+    // sanctioned UI looked broken when it was merely never asked to render.
+    const simulated = readSimulatedSanctions();
+    if (simulated.active) {
+        console.warn('Simulating Sanctions Mode Active');
+        return { sanctioned: true, country: simulated.country, cached: false, timedOut: false };
+    }
+
     // Check cache first
     const cached = getCachedGeoCheck();
     if (cached) {
@@ -110,14 +151,6 @@ export async function isUserSanctionedNonBlocking(timeoutMs: number = 2000): Pro
     }
 
     try {
-        // DEV OVERRIDE: Allow simulating sanctions via localStorage
-        if (typeof window !== 'undefined' && window.localStorage.getItem('SIMULATE_SANCTIONS') === 'true') {
-            console.warn('Simulating Sanctions Mode Active');
-            const result = { sanctioned: true, cached: false, timedOut: false };
-            cacheGeoCheck(true);
-            return result;
-        }
-
         // Get API URL from environment (required for mobile where origin is localhost)
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
         
@@ -180,7 +213,8 @@ export async function isUserSanctionedNonBlocking(timeoutMs: number = 2000): Pro
 export async function isUserSanctioned(): Promise<boolean> {
     try {
         // DEV OVERRIDE
-        if (typeof window !== 'undefined' && window.localStorage.getItem('SIMULATE_SANCTIONS') === 'true') {
+        const simulated = readSimulatedSanctions();
+        if (simulated.active) {
             console.warn('Simulating Sanctions Mode Active');
             return true;
         }
@@ -216,8 +250,45 @@ export async function isUserSanctioned(): Promise<boolean> {
 }
 
 /**
+ * Country code from the cached geo check, without issuing a request.
+ *
+ * The sanctioned UI only renders after `isUserSanctioned()` /
+ * `isUserSanctionedNonBlocking()` has resolved, and both write the country into
+ * the same cache — so by the time a notice is on screen the country is already
+ * known locally. Reading it here keeps the region-specific copy off the
+ * per-render network path and avoids prop-drilling the country through three
+ * unrelated call sites (pricing, scale, checkout).
+ *
+ * Returns undefined when the country is genuinely unknown — including the
+ * fail-closed case where `isUserSanctioned()` blocked without ever reaching the
+ * API. Callers must treat undefined as "no region-specific copy", never as a
+ * guess.
+ */
+export function getCachedGeoCountry(): string | undefined {
+    // The simulation is never persisted (see readSimulatedSanctions), so it has
+    // to be consulted here or `SIMULATE_SANCTIONS=SY` would block without ever
+    // showing the Syria-specific copy it exists to exercise.
+    const simulated = readSimulatedSanctions();
+    if (simulated.active) return simulated.country;
+
+    return getCachedGeoCheck()?.country;
+}
+
+/**
+ * Whether a blocked region has a local payment rail we can point the merchant
+ * at. Stripe cannot process the charge, but that is not the same as "no way to
+ * pay" — Syria has Sham Cash (شام كاش), arranged manually through support.
+ *
+ * Shared by both sanctioned surfaces (the pricing card fallback and the
+ * checkout notice) so the country list lives in exactly one place.
+ */
+export function hasLocalPaymentAlternative(country?: string): boolean {
+    return country?.toUpperCase() === 'SY';
+}
+
+/**
  * Get the user's country code (if available)
- * 
+ *
  * @returns Promise<string | undefined> - ISO country code or undefined
  */
 export async function getUserCountry(): Promise<string | undefined> {

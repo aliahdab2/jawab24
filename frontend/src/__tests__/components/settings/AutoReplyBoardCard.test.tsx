@@ -2,54 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AutoReplyBoardCard } from '@/components/settings/AutoReplyBoardCard';
 import type { SettingsState } from '@/components/settings/types';
+import { makeSettings as makeSharedSettings } from '../../testUtils/settingsFactory';
+import { intlState } from '../../testUtils/intlState';
 
-vi.mock('@/components/ui', () => ({
-  Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
-    <div className={className}>{children}</div>
-  ),
-  Toggle: ({ enabled, onChange, 'aria-label': ariaLabel }: { enabled: boolean; onChange: (v: boolean) => void; 'aria-label'?: string }) => (
-    <button aria-label={ariaLabel} onClick={() => onChange(!enabled)}>{enabled ? 'ON' : 'OFF'}</button>
-  ),
-  InputFieldWrapper: ({ children, trailing }: { children: React.ReactNode; trailing?: React.ReactNode }) => (
-    <div>{children}{trailing}</div>
-  ),
-  CharCounter: ({ value, max }: { value: number; max: number }) => <span>{value}/{max}</span>,
-}));
+vi.mock('@/components/ui', () => import('../../testUtils/uiMocks'));
 
-function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {
-  return {
-    dashboardLanguage: 'ar',
-    defaultReplyLanguage: 'ar',
-    autoDetectLanguage: true,
-    aiEnabled: true,
-    aiModel: 'gpt-4o-mini',
-    notificationsEnabled: false,
-    newLeadAlertsEnabled: false,
-    pushNotifications: false,
-    commentReplyMode: 'dual',
-    commentsAutoReply: true,
-    messagesAutoReply: true,
-    businessHoursOnly: false,
-    businessHoursStart: '09:00',
-    businessHoursEnd: '17:00',
-    timezone: 'UTC',
-    awayMessageMulti: {},
-    greetingMessageMulti: {},
-    dualReplyNudgeMulti: {},
-    awayMessage: '',
-    greetingMessage: '',
-    replyDelay: 0,
-    dualReplyNudge: '',
-    brandVoiceNotesMulti: {},
-    replyStyle: 'professional',
-    brandVoiceNotes: '',
-    holdLowConfidence: false,
-    commentEscalationMinutes: 30,
-    messageEscalationMinutes: 30,
-    handoffPauseDurationMinutes: 60,
-    ...overrides,
-  };
-}
+const makeSettings = (overrides: Partial<SettingsState> = {}): SettingsState =>
+  makeSharedSettings({ dashboardLanguage: 'ar', ...overrides });
 
 // D-029 board: three rows = every mechanism that replies in the merchant's name.
 describe('AutoReplyBoardCard — the three-row board', () => {
@@ -182,8 +141,8 @@ describe('AutoReplyBoardCard — dual-reply nudge dir', () => {
   const getNudgeInput = () => screen.getByLabelText('Short comment reply') as HTMLInputElement;
 
   it('uses locale rtl when auto-translated (input visually empty) in Arabic UI', () => {
+    intlState.locale = 'ar';
     const settings = makeSettings({
-      dashboardLanguage: 'ar',
       dualReplyNudgeMulti: {
         ar: 'أرسلنا لك التفاصيل برسالة خاصة',
         en: 'Details sent via private message',
@@ -198,8 +157,8 @@ describe('AutoReplyBoardCard — dual-reply nudge dir', () => {
   });
 
   it('uses locale ltr when auto-translated in English UI', () => {
+    intlState.locale = 'en';
     const settings = makeSettings({
-      dashboardLanguage: 'en',
       dualReplyNudgeMulti: {
         ar: 'أرسلنا لك التفاصيل برسالة خاصة',
         en: 'Details sent via private message',
@@ -212,8 +171,8 @@ describe('AutoReplyBoardCard — dual-reply nudge dir', () => {
   });
 
   it('uses dir="auto" when the current language is the source (real value rendered)', () => {
+    intlState.locale = 'ar';
     const settings = makeSettings({
-      dashboardLanguage: 'ar',
       dualReplyNudgeMulti: {
         ar: 'نص خاص بالعميل',
         sourceLang: 'ar',
@@ -227,8 +186,8 @@ describe('AutoReplyBoardCard — dual-reply nudge dir', () => {
   });
 
   it('uses locale rtl when entry is empty in Arabic UI (no stored value)', () => {
+    intlState.locale = 'ar';
     const settings = makeSettings({
-      dashboardLanguage: 'ar',
       dualReplyNudgeMulti: {},
     });
 

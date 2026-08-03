@@ -16,7 +16,7 @@ import { BusinessHoursSheet } from '@/components/business/BusinessHoursSheet';
 import { KnowledgeBasePanel } from '@/components/knowledge-base/KnowledgeBasePanel';
 import { api, pagesApi, catalogApi, type CatalogVerticalInfo } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
-import { unwrapBusinessProfile, type BusinessProfile } from '@jawab24/shared';
+import { unwrapBusinessProfile, whatsappNumbers, type BusinessProfile } from '@jawab24/shared';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
@@ -137,6 +137,11 @@ function BusinessPageInner() {
   const [editingFact, setEditingFact] = useState<EditableFactKey | null>(null);
   const [editingHours, setEditingHours] = useState(false);
   const [savingFact, setSavingFact] = useState(false);
+  // Rendered INSIDE the open sheet: a failure toast would sit under the
+  // sheet's z-50 overlay (toasts are capped at z-45 so they can never block a
+  // modal footer again), so the sheet itself must carry the error.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  useEffect(() => { setSaveError(null); }, [editingFact, editingHours]);
 
   /** Current confirmed value for a fact, as the sheet's single text field. */
   const factValue = (key: EditableFactKey): string => {
@@ -168,6 +173,7 @@ function BusinessPageInner() {
     const patch = mutate({ ...merchant });
 
     setSavingFact(true);
+    setSaveError(null);
     try {
       await api.put(`/pages/${selectedPage.id}`, { businessProfile: patch });
       // Refetch so the readiness chips + rows reflect the new confirmed value.
@@ -176,23 +182,33 @@ function BusinessPageInner() {
       toast.success(tPages('savedStatus'));
     } catch (error) {
       captureError(error, 'Failed to save business fact', { tags: { action: 'save-business-fact' } });
-      toast.error(tPages('saveFailed'));
+      setSaveError(tPages('saveFailed'));
     } finally {
       setSavingFact(false);
     }
   };
 
-  const saveFact = (key: EditableFactKey, raw: string, whatsapp?: string) => {
+  const saveFact = (key: EditableFactKey, raw: string, whatsapp?: string[]) => {
     const value = raw.trim();
     return saveProfile((patch) => {
       switch (key) {
         case 'address': patch.address = value || undefined; break;
-        case 'phone':
+        case 'phone': {
+          // A stored WhatsApp mark on a number NOT among the listed phones
+          // (legacy/imported data) is invisible to the sheet — carry it
+          // through the save instead of silently dropping it.
+          const prevPhones = (patch.phones ?? []).filter((p): p is string => !!p?.trim()).map((p) => p.trim());
+          const orphans = whatsappNumbers(patch).filter((n) => !prevPhones.includes(n));
           patch.phones = value ? value.split(/[,،]/).map((p) => p.trim()).filter(Boolean) : undefined;
-          // The WhatsApp mark rides with the numbers it belongs to. Spread the
-          // existing container: `channels` also holds `preferred`.
-          patch.channels = { ...patch.channels, whatsapp: whatsapp?.trim() || undefined };
+          // The WhatsApp marks ride with the numbers they belong to — any
+          // subset of the listed numbers (stored as an array; legacy rows may
+          // still hold a single string, normalized on read by
+          // `whatsappNumbers`). Spread the existing container: `channels`
+          // also holds `preferred`.
+          const marked = [...orphans, ...(whatsapp ?? [])];
+          patch.channels = { ...patch.channels, whatsapp: marked.length ? marked : undefined };
           break;
+        }
         case 'website': patch.website = value || undefined; break;
         case 'delivery': patch.policies = { ...patch.policies, shipping: value || undefined }; break;
         case 'payment': patch.policies = { ...patch.policies, payment: value || undefined }; break;
@@ -360,6 +376,7 @@ function BusinessPageInner() {
         <BusinessHoursSheet
           initialHours={unwrapBusinessProfile(selectedPage.businessProfile).merchant?.hours}
           saving={savingFact}
+          saveError={saveError}
           onSave={saveHours}
           onClose={() => setEditingHours(false)}
         />
@@ -378,6 +395,7 @@ function BusinessPageInner() {
           // so adding a store-answerable policy row never leaves this hint behind.
           storeAnswered={!!selectedPage.storeAnswersPolicies && isStorePolicyKey(editingFact)}
           saving={savingFact}
+          saveError={saveError}
           onSave={(value, whatsapp) => saveFact(editingFact, value, whatsapp)}
           onClose={() => setEditingFact(null)}
         />

@@ -29,8 +29,10 @@
     "jsdom": {
       "ws": "^8.21.0"
     },
-    "next-intl": {
-      "next": "16.2.3"
+    "uuid": "^11.1.1",
+    "sharp": "^0.35.3",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
     }
   },
   "scripts": {
@@ -46,6 +48,7 @@
     "test:ecommerce": "npx tsx scripts/ecommerce-integration-test.ts",
     "test:ecommerce:shopify": "PLATFORM=shopify npx tsx scripts/ecommerce-integration-test.ts",
     "test:ecommerce:salla": "PLATFORM=salla npx tsx scripts/ecommerce-integration-test.ts",
+    "test:ecommerce:zid": "PLATFORM=zid npx tsx scripts/ecommerce-integration-test.ts",
     "perf:benchmark": "node scripts/perf-benchmark.js",
     "postinstall": "npm run build --workspace=@jawab24/shared",
     "prepare": "husky"

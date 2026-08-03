@@ -1,29 +1,29 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { detectLanguage, isLowSignalLatinToken } from '../../src/utils/language';
+import { detectLanguage, isLowSignalLatinToken, resolveDmLanguageHint } from '../../src/utils/language';
 
 /**
- * Pins the DM language gate in services/reply/generator.ts:
- *
- *     const isLowConfidenceLatin = msgLang === 'en' && msgConfidence < 0.6;
- *     const deferToHistory = isLowConfidenceLatin && hasPriorHistory;
+ * Pins the DM language gate — `resolveDmLanguageHint` in
+ * packages/shared/src/language/detector.ts (re-exported via utils/language),
+ * the single choke point shared by generateForMessage (production) and
+ * generateForPlayground (eval/test tool).
  *
  * It decides whether the customer's current message sets the reply language or
- * whether the ai-worker's history-first chain does.
+ * whether the ai-worker's history-first chain does (hint `undefined` = defer).
  *
  * WHY THIS SUITE EXISTS: on 2026-07-29 that gate was replaced with
  * `isLowSignalLatinToken` — which looked strictly better, since it adds
  * ASCII-only and <=3 words on top of the same confidence floor — and the change
  * was REVERTED after end-to-end probing. These tests encode both halves of the
- * trade-off so the swap is not attempted a third time.
+ * trade-off so the swap is not attempted a third time. (This file previously
+ * re-implemented the gate expression inline; it now calls the production
+ * helper directly, so it can no longer drift from what ships.)
  *
- * Read `gate()` below as the production expression; every assertion is against
- * the real detector at prod parity (LANG_ENGINE=tinyld).
+ * Every assertion runs against the real detector at prod parity
+ * (LANG_ENGINE=tinyld).
  */
 
-const gate = (text: string): boolean => {
-    const { language, confidence } = detectLanguage(text);
-    return language === 'en' && confidence < 0.6;
-};
+/** True when the production helper defers to the thread anchor (no hint sent). */
+const gate = (text: string): boolean => resolveDmLanguageHint(text, true) === undefined;
 
 afterEach(() => {
     delete process.env.LANG_ENGINE;
@@ -113,5 +113,28 @@ describe('the DM defer-to-history gate — its known blind spot', () => {
         expect(gate('How much is the price')).toBe(false);
         expect(gate('The price is too much')).toBe(false);
         expect(gate('كم سعر التوصيل؟')).toBe(false);
+    });
+});
+
+describe('resolveDmLanguageHint — the hint values both reply paths send', () => {
+    it('sends no hint for a Latin-floor message on a thread with history (the playground-drift regression)', () => {
+        process.env.LANG_ENGINE = 'tinyld';
+        // The exact shape that exposed the drift: a bare Latin-script name
+        // mid-Arabic-thread. Production deferred (Arabic reply); the playground
+        // asserted 'en' and replied in English until both paths shared this helper.
+        expect(resolveDmLanguageHint('Weaam Aldoukha', true)).toBeUndefined();
+        expect(resolveDmLanguageHint('ICDL', true)).toBeUndefined();
+    });
+
+    it('keeps the en floor as the default when there is no history to defer to', () => {
+        process.env.LANG_ENGINE = 'tinyld';
+        expect(resolveDmLanguageHint('Weaam Aldoukha', false)).toBe('en');
+        expect(resolveDmLanguageHint('ok', false)).toBe('en');
+    });
+
+    it('passes confident reads through regardless of history', () => {
+        process.env.LANG_ENGINE = 'tinyld';
+        expect(resolveDmLanguageHint('كم سعر التوصيل؟', true)).toBe('ar');
+        expect(resolveDmLanguageHint('How much is the price', true)).toBe('en');
     });
 });

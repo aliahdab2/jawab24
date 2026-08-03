@@ -27,6 +27,7 @@ export { useWorkspaceRole } from './useWorkspaceRole';
 export { useOwnerGate } from './useOwnerGate';
 export { useHintDisplay } from './useHintDisplay';
 export { useTextareaAutoResize } from './useTextareaAutoResize';
+export { useMultilingualSettingsField } from './useMultilingualSettingsField';
 export { useClampOverflow } from './useClampOverflow';
 export { usePostReplySetup, type PostReplySetup } from './usePostReplySetup';
 export { useOpenOnQueryParam } from './useOpenOnQueryParam';

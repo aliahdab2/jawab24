@@ -15,6 +15,8 @@ interface AiUsageWarningBannerProps {
     resetsAt?: string;
     /** Plan slug — used to hide the top-up CTA for Free users (must subscribe first). */
     planSlug?: string;
+    /** Billing rail — 'shopify' hides the Stripe top-up CTA (D-G). */
+    paymentMethod?: string;
     /** Current user's email — pre-fills the WhatsApp message in the top-up modal. */
     userEmail?: string;
     /**
@@ -46,7 +48,7 @@ interface AiUsageWarningBannerProps {
  * The warning/top-up states can be swipe-dismissed (drag horizontally past
  * ~100px). The critical state is pinned — there's no gesture to hide it.
  */
-export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail, topupBalance }: AiUsageWarningBannerProps) {
+export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, paymentMethod, userEmail, topupBalance }: AiUsageWarningBannerProps) {
     const tSub = useTranslations('subscription');
     const locale = useLocale();
 
@@ -250,6 +252,7 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
                         wrap them in an outer isIOSNative() check here. */}
                     <BuyTopUpCTA
                         planSlug={planSlug}
+                        paymentMethod={paymentMethod}
                         userEmail={userEmail}
                         variant="primary"
                         size="sm"

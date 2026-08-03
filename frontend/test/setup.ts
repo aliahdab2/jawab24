@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom';
-import { vi } from 'vitest';
+import { vi, beforeEach } from 'vitest';
 import { cloneElement, isValidElement, type ReactNode } from 'react';
+import { intlState } from '../src/__tests__/testUtils/intlState';
 
 // Setup environment variables for tests
 process.env.NEXT_PUBLIC_FB_APP_ID = 'test-fb-app-id-123456';
@@ -141,9 +142,14 @@ vi.mock('next-intl', () => ({
     };
     return t;
   },
-  useLocale: () => 'en',
+  // Mutable so tests can simulate a non-default page language (see intlState).
+  useLocale: () => intlState.locale,
   NextIntlClientProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
+
+beforeEach(() => {
+  intlState.locale = 'en';
+});
 
 // Mock window.matchMedia for responsive tests
 Object.defineProperty(window, 'matchMedia', {

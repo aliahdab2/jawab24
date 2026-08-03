@@ -120,6 +120,10 @@ echo "🐳 Step 4: Testing Docker Builds..."
 echo "-----------------------------------"
 
 echo "Building all Docker images..."
+# The frontend image refuses to build without a publishable key (a missing one
+# is inlined as `undefined` and ships a checkout with no card form). This is a
+# build smoke test, not a release image, so a placeholder is enough.
+export NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder}"
 run_step docker-compose build --parallel 2>/dev/null
 check_result "Docker Build"
 

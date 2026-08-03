@@ -516,3 +516,188 @@ engine's date machinery (`startsAt`/`endsAt`, query-time expiry exclusion,
 fully valid for product merchants (posts-scan, post-reply mining, store sync); B0.5's
 question ("0 → confirmed on a phone in <5 min") is answered on the fact-row review
 surface instead, and the catalog flow gets its pilot with a PRODUCT merchant later.
+
+## D-053 · Zid is rebuilt against the docs-verified contract (dual-token auth, /v1/managers endpoints, Basic-auth webhooks); D-020's live round-trip gate still stands
+
+Engineering ruling, 2026-08-01 (owner directed "rebuild now, validate when the Partner
+account exists"; contract verified against docs.zid.sa the same day — branch
+`feat/zid-rebuild`).
+
+**What changed.** The D-020 defects are fixed at the root, not patched:
+
+- **Dual-token auth.** Zid's token response carries TWO credentials: `access_token`
+  (sent as `X-Manager-Token`) and `Authorization` (sent as `Authorization: Bearer`).
+  The second one is now persisted in dedicated encrypted columns
+  (`authorization_token`/`_iv` on `ecommerce_stores` AND `pending_ecommerce_installs`,
+  migration `0146`) — rejected alternatives: plaintext in `platformData` jsonb (breaks
+  the crypto invariant) and a JSON blob inside the accessToken ciphertext (breaks every
+  shared decrypt path). Shared plumbing (`OAuthTokenResponse`, `createStore`,
+  `updateStoreTokens`, pending installs, claim ctx, token refresher,
+  `ecommerceApiGet extraHeaders`) widened with OPTIONAL fields only — Salla/Shopify
+  behavior unchanged.
+- **Basic-auth webhooks replace the invented HMAC.** Zid authenticates deliveries with
+  the `username`/`password` pair set at subscription time (`Authorization: Basic …`);
+  there is no `x-zid-signature`. Verification is timing-safe
+  (`utils/basicAuthVerify.ts`); `ZID_WEBHOOK_SECRET` is reused as the password with a
+  fixed code-constant username, so the env surface barely changes. New `ZID_APP_ID`
+  env (the subscription body's `original_id`) is prod-required alongside the secret.
+- **Real endpoints + events.** `/v1/managers/account/profile`,
+  `/v1/managers/store/orders`, `/v1/products/` (dual headers + `Role: Manager`);
+  events `product.create/update/publish/delete`, `order.create`,
+  `order.status.update` (status code `indelivery` → shipped, `delivered` → delivered).
+  Uninstall = the Partner-Dashboard-configured `app.market.application.uninstall`.
+  Dead `ZID_SCOPES`/`SALLA_SCOPES` env vars removed. Product cap now derives from
+  `PRODUCT_SAFETY_CAP` (the silent 300-product truncation is gone).
+
+**What this does NOT change.** D-020's gate is untouched: Zid stays dark
+(`ZID_CLIENT_ID` unset in prod, `coming_soon` badge on the integrations page) until a
+REAL dev-store round-trip passes. Payload-shape parsers are explicitly `[provisional]`
+(tests carry the marker in describe titles) because no live capture exists yet — the
+webhook delivery envelope, products/profile envelopes, orders search params, and
+refresh rotation of the `Authorization` token are all confirmed during live validation
+(checklist in `docs/integrations/zid.md`), which is blocked on the founder's Zid
+Partner signup (partnership agreement + dev store).
+
+## D-054 · Shopify billing = App Pricing mirrored by verify-and-reconcile — one sync choke point, no webhook dependency, no Stripe beside it
+
+Engineering ruling, 2026-08-01 (implements the owner's 2026-08-01 decision that the
+public Shopify listing uses Shopify App Pricing — Shopify forbids off-platform billing
+for listed apps; branch `feat/shopify-billing`). Condensed from design rulings D-A…D-J
+in `~/.claude/plans/make-a-worktree-and-calm-avalanche.md` §Track 2.
+
+**The shape.** Shopify owns the money and delivers NO webhook for App Pricing
+enrollments (post-2026-04-28 apps). Our side therefore MIRRORS, never listens:
+`syncShopifyBilling(shopDomain)` (services/shopifyBilling.ts) is the single idempotent
+choke point that asks the Admin API (`currentAppInstallation.activeSubscriptions`) what
+is true and reconciles the local row. Three triggers, all funneling into it: the
+configured billing **return endpoint** (`GET /shopify/billing/return` — `shop`/
+`plan_handle` query params are UNTRUSTED triggers, nothing activates from them), the
+**post-claim hook** (installs claimed at login), and the **6-hourly reconciler** (the
+authority of last resort; also flags orphaned live mirrors whose store row vanished).
+
+**Rulings.**
+- Discriminator: `subscriptions.payment_method='shopify'` + AppSubscription GID in
+  `external_subscription_id` + new `shopify_shop_domain` column (migration 0147).
+  Uniqueness = ONE NON-CANCELED shopify mirror per shop (partial index; canceled rows
+  excluded so an uninstalled shop stays adoptable by another workspace — a full-scope
+  unique index would deadlock that forever). CHECK: a shopify row must carry its domain.
+- Plan identity: App Pricing plan HANDLES are our plan slugs verbatim; the Admin API's
+  display name maps through `config/shopifyBilling.ts`. Unknown handle/name → NO
+  activation, loud Sentry (never guess a paying merchant onto a plan).
+- Entitlement subject: the WORKSPACE OWNER (the `hasWhatsAppPlanAccess` pattern), not
+  the member who connected the store.
+- Expiry is reconcile-driven; the manual-midnight rule (D-023) does NOT apply
+  ('shopify' ≠ 'manual'); the 3-day past_due grace absorbs a late sweep; a shopify
+  lazy-expiry Sentry canary sits beside the Stripe one.
+- Uninstall webhook cancels the local mirror (closes the D-023-class hole where a paid
+  local sub outlived the app), keyed by shop domain so it works regardless of store-row
+  state; `gdpr/shop/redact` repeats the cancel as a second provably-post-uninstall
+  signal (idempotent — covers a missed uninstall delivery). Trials mirror Shopify's
+  clock (trialDays) and bypass the Stripe trial ledger.
+- No Stripe beside Shopify — on EVERY Stripe surface, server-side: checkout session,
+  subscription intent, change-plan, top-up intent, cancel-subscription, and billing
+  portal all reject shopify-billed accounts with 400 `SHOPIFY_BILLED` (a hidden CTA is
+  never the enforcement). The top-up CTA is hidden and the pricing page routes plan
+  management to the admin deep link
+  (`admin.shopify.com/store/{store}/charges/{app_handle}/pricing_plans`,
+  `SHOPIFY_APP_HANDLE` env). A CANCELED mirror is exempt everywhere — the backend guard
+  and the frontend signals alike (suppressed at the `getUsageSummary` choke point) — so
+  a merchant who uninstalled the app can come back through Stripe.
+- Adoption refusals (all Sentry + stand down, a human decides): over a LIVE
+  stripe/manual/paypal row (double-billing risk), and over a live shopify mirror for a
+  DIFFERENT shop — two active stores on one workspace would otherwise ping-pong the
+  mirror and reset the quota window every sync. The Stripe rail carries the symmetric
+  guard: `adoptStripeSubscription` never overwrites a live shopify mirror.
+- Store-connect plan-gating is deliberately DEFERRED: gating connect on a plan would
+  break the reviewer-walked install funnel; revisit after listing approval.
+
+**Verify-first caveat (V3).** Whether `activeSubscriptions` reflects App Pricing
+enrollments is unverified until the dev-store dogfood; the fork is isolated inside
+`fetchShopifyActiveSubscription` — if it proves wrong, its internals swap to the
+Partner API with zero caller changes.
+
+---
+
+## D-055 · A guard may withhold an answer; it must never invent a different one
+
+Engineering ruling, 2026-08-02 (PR #604, branch `fix/check6-exhausted-strip-hold`).
+
+**The rule.** When a reply-path guard rejects the model's output, its only sanctioned
+outcomes are *send less* or *send nothing*. Substituting text the guard authored is
+forbidden. A guard knows what is wrong with a reply; it does not know what the customer
+asked, so anything it writes is a non-answer that also blocks the retry from being
+different.
+
+**The evidence.** Check 6 (`stripSelfIdentification`) used to swap a random
+`SELF_ID_FALLBACKS` identity line in whenever stripping left <10 useful characters.
+Every line in that pool answers "who am I talking to?", so on the Jawab24 support page
+(prod, 2026-08-01) «موقعكم الالكتروني» was asked four times and deflected four times
+with «معك أحد أعضاء الفريق…». Two more prospects hit it the same day. The pool is
+deleted: an exhausted strip returns an EMPTY reply plus
+`self_identification_exhausted`, and both pipelines flag the row
+(`held_self_identification`) so the merchant answers personally.
+
+**Three consequences, each learned the hard way in review of the first attempt:**
+
+1. **An empty reply is not self-describing — never branch on `!reply` alone.** On the
+   worker→backend boundary `reply: ''` means three different things: intentional
+   silence (OFFENSIVE / SPAM_OR_IRRELEVANT), a deliverable HOLD (this flag), or a
+   generation failure. `openai.ts`'s empty-reply guard is the SINGLE arbiter and must
+   consult `isHeldEmptyReply(flags)`. The first attempt shipped without it: the guard
+   threw `AiEmptyReplyError` before the flag crossed the wire, so both pipelines' hold
+   branches were unreachable on the default-model path — i.e. all of production — and
+   the fix was inert while its tests, and the eval, were green. **A new flag is only
+   real once a test crosses the boundary it must survive.**
+2. **Withholding is not "replied".** A withheld row is flagged (`flagMessage` /
+   `flagComment`), never `markAsReplied('')`: a false `replied`/`repliedAt` reports a
+   response time for a customer who never got one. This also declines to store a draft
+   — the pre-strip text IS the automation reveal, and the held-reply UI pre-fills the
+   merchant's composer from `aiOriginalReply`, which would leave the forbidden line one
+   tap from the customer.
+3. **Withholding OUR reply must not discard THEIR data.** Lead capture lives on the
+   send path, so every early return has to carry it explicitly or the customer's phone
+   number is lost outright.
+
+**Scope.** The rule binds every reply-path guard, not just Check 6. The price guard
+(eval #544 — a correct SYP redenomination replaced by «تواصل معنا» at the moment of
+sale) is the same defect and is expected to be fixed the same way.
+
+---
+
+## D-057 · A dated fact row's START date owns its visibility; the end date is descriptive
+
+Owner ruling, 2026-07-31 — «تاريخ النهاية لا يجب أن نعتمد عليه». Implemented in
+PR "feat(facts): start-date visibility rule" (branch `feat/fact-start-date-engine`).
+
+**The rule.** A `fact_rows` row that carries a `starts_at` leaves the prompt the day
+AFTER that date. Its `ends_at` is not consulted. A row with no `starts_at` keeps the
+old behaviour: it lives forever unless an `ends_at` has passed. `ends_at` remains
+printed for the customer — it stopped governing visibility, it did not stop being
+shown.
+
+**Why.** An announced cohort that has already begun is stale the moment it starts,
+whatever its end date claims. The merchant announces «تبدأ الدورة ١ سبتمبر»; on
+2 September that row is no longer an offer, it is a record. Keying visibility on the
+end date kept it in the prompt for the whole run of the course, which is precisely the
+v38 stale-date class the dated columns exist to kill.
+
+**Scope — this DIVERGES from `catalog_items`,** which keeps the end-date rule. The
+divergence is deliberate: a catalog item is a thing you can still buy until it expires;
+a dated fact row is an announcement that goes stale at its start.
+
+**One definition, three consumers.** The rule is `isRowLive` in
+`@jawab24/shared/factSchedule` — imported by the backend renderer and by the merchant
+editor. The third consumer is the SQL `WHERE` clause in
+`buildFactCollectionsContext`, which cannot import it, so the two are pinned by the
+contract test *"isRowLive — SQL and TS agree over the full date matrix"* in
+`backend/test/integration/factCollections.test.ts`. That test was verified to FAIL when
+the SQL is reverted to the old rule. **Do not add a fourth hand-written copy.**
+
+**Deploy safety.** Behaviour is unchanged for every row that exists today: the
+one-date-field editor wrote `starts_at === ends_at`, and for that shape — and for
+undated rows — the old and new rules agree exactly. This is pinned by executable tests
+(`packages/shared/src/__tests__/factSchedule.test.ts`) rather than asserted in a PR
+body, and by a renderer-level byte-identical case. The divergent shape
+(`starts_at !== ends_at`) is only reachable once an editor can author it, which is a
+LATER PR — deliberately not this one, so this change is provably inert on deploy and
+safely revertible.

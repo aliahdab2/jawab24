@@ -1,14 +1,18 @@
 /**
- * Repro + regression test for the flag_meta storage shape.
+ * Regression test for the flag_meta storage shape.
  *
  * Bug context: a deploy on 2026-04-21 began storing flag_meta as a JSON STRING
  * scalar instead of a JSON OBJECT (e.g. `"\"{\\\"dm_failed\\\":...}\""` instead
  * of `{"dm_failed":...}`). Symptom in prod: `jsonb_typeof(flag_meta) = 'string'`
  * for every dm_failed write since the deploy, breaking every `flag_meta ? 'key'`
- * query the UI / analytics rely on.
+ * query the UI / analytics rely on. Root cause: drizzle-orm 0.29 pre-stringifies
+ * jsonb and postgres-js serializes again (drizzle-orm#724).
  *
- * This test pins the contract: when commentsService.updateComment writes a JS
- * object to flagMeta, Postgres must store it as a jsonb object, not a string.
+ * These tests were `it.fails` (documented-broken) until 2026-08-01, when
+ * src/db/jsonbColumn.ts fixed the write path and migration 0148 repaired the
+ * stored rows. They now pin the correct contract: a JS object written to a
+ * jsonb column must be stored as a jsonb object, not a string. See also
+ * jsonbRoundTrip.test.ts (messages side + legacy readback + backfill shape).
  */
 import { describe, it, expect } from 'vitest';
 import { sql } from 'drizzle-orm';
@@ -20,7 +24,7 @@ import { comments } from '../../src/db/schema';
 import { eq } from 'drizzle-orm';
 
 describe('flag_meta storage shape (regression for 2026-04-21 stringification bug)', () => {
-    it.fails('updateComment stores flagMeta as a jsonb object, not a string scalar', async () => {
+    it('updateComment stores flagMeta as a jsonb object, not a string scalar', async () => {
         const user = await createTestUser();
         const workspace = await createTestWorkspace(user.id);
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
@@ -65,7 +69,7 @@ describe('flag_meta storage shape (regression for 2026-04-21 stringification bug
         expect(row.bucket).toBe('customer_refused');
     });
 
-    it.fails('isolates: direct Drizzle .update() — does it stringify too?', async () => {
+    it('isolates: direct Drizzle .update() — does it stringify too?', async () => {
         const user = await createTestUser();
         const workspace = await createTestWorkspace(user.id);
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
@@ -85,7 +89,7 @@ describe('flag_meta storage shape (regression for 2026-04-21 stringification bug
         expect(result[0].shape).toBe('object');
     });
 
-    it.fails('compare: jsonb column WITH $type<> annotation (messageTags) works correctly', async () => {
+    it('compare: jsonb column WITH $type<> annotation (messageTags) works correctly', async () => {
         const user = await createTestUser();
         const workspace = await createTestWorkspace(user.id);
         const page = await createTestPage(user.id, { workspaceId: workspace.id });

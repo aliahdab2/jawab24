@@ -23,3 +23,31 @@ export const db = drizzle(client, {
     schema,
     logger: !isProduction,
 });
+
+// drizzle-orm >=0.30 replaces the client's date/timestamp/json SERIALIZERS with identity
+// functions (drizzle(client) mutates client.options.serializers) so that its column
+// mappers control all value conversion. Column-bound writes are unaffected — but a raw
+// sql`...${someDate}` / db.execute fragment bypasses column mappers, and the identity
+// serializer then feeds a bare Date/Object/Array to the wire encoder, which throws
+// ERR_INVALID_ARG_TYPE (postgres-js Bind → bytes.str). This restores 0.29-era behavior
+// for raw params while passing drizzle's pre-stringified column values through untouched.
+// Parsers are deliberately NOT restored: drizzle's transparent parsers +
+// mapFromDriverValue own the read direction (incl. timezone handling).
+// Must run AFTER drizzle(client) — construct() overwrites these entries. Any other
+// drizzle(client) instance (e.g. the integration-test client) needs the same call.
+// Deliberate SUBSET of the OIDs drizzle nulls: time (1083) and the array OIDs
+// (1182/1185/1115/1231) stay identity because the schema has no time or
+// date/numeric-array columns — add them here if such a column ever appears.
+export function restoreRawParamSerializers(pgClient: ReturnType<typeof postgres>): void {
+    // OIDs: 1184 timestamptz, 1114 timestamp, 1082 date.
+    for (const oid of [1184, 1114, 1082]) {
+        pgClient.options.serializers[oid] = (value: unknown) =>
+            value instanceof Date ? value.toISOString() : value;
+    }
+    // OIDs: 114 json, 3802 jsonb.
+    for (const oid of [114, 3802]) {
+        pgClient.options.serializers[oid] = (value: unknown) =>
+            typeof value === 'string' ? value : JSON.stringify(value);
+    }
+}
+restoreRawParamSerializers(client);

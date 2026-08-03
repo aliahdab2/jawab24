@@ -3,6 +3,7 @@ import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { isIOSNative } from '@/lib/capacitor';
 import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
+import { LocalPaymentAlternativeNote } from '@/components/billing/LocalPaymentAlternativeNote';
 
 /**
  * PaymentsUnavailableNotice Component
@@ -27,9 +28,11 @@ export function PaymentsUnavailableNotice() {
         return null;
     }
 
+    // Translated, and it names payment explicitly — support answers one number
+    // from several entry points and needs to know which one this came from.
     const whatsappMessage = userEmail
-        ? `Hi! I'd like to upgrade my Jawab24 account.\nEmail: ${userEmail}`
-        : `Hi! I'd like to upgrade my Jawab24 account.`;
+        ? `${t('unavailable.whatsappMessageCheckout')}\n${t('unavailable.whatsappEmailLine', { email: userEmail })}`
+        : t('unavailable.whatsappMessageCheckout');
     const whatsappUrl = buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, whatsappMessage);
 
     return (
@@ -45,7 +48,9 @@ export function PaymentsUnavailableNotice() {
                     <p className="text-muted-foreground text-sm leading-relaxed mb-4">
                         {t('unavailable.message')}
                     </p>
-                    
+
+                    <LocalPaymentAlternativeNote className="text-foreground text-sm leading-relaxed mb-4 font-medium" />
+
                     {/* WhatsApp Contact Button - Pre-fills user's email */}
                     <a
                         href={whatsappUrl}

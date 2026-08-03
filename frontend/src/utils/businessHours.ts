@@ -1,4 +1,4 @@
-import { canonicalizeHoursEntry } from '@jawab24/shared';
+import { canonicalizeHoursEntry, SHORT_DAY_KEYS, LONG_DAY_KEYS } from '@jawab24/shared';
 
 /**
  * Week model for the working-hours editor.
@@ -16,7 +16,9 @@ import { canonicalizeHoursEntry } from '@jawab24/shared';
  * ("HH:MM-HH:MM" / "closed" / "all day").
  */
 
-export const DAY_KEYS = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
+// Saturday-first — the single source of truth for week order lives in
+// @jawab24/shared (CLDR ar-SY/ar-EG week data; see businessHours.ts there).
+export const DAY_KEYS = SHORT_DAY_KEYS;
 export type DayKey = typeof DAY_KEYS[number];
 
 /** Default working week for the region: Friday off. */
@@ -24,17 +26,11 @@ export const DEFAULT_OPEN_DAYS: readonly DayKey[] = ['sat', 'sun', 'mon', 'tue',
 
 export const DEFAULT_RANGE: TimeRange = { from: '09:00', to: '17:00' };
 
-/** Long day keys are an accepted storage form (see shared LONG_DAY_KEYS), and
- *  they are NOT `${short}day` — "sat" → "saturday", not "satday". */
-const LONG_BY_SHORT: Record<DayKey, string> = {
-  sat: 'saturday',
-  sun: 'sunday',
-  mon: 'monday',
-  tue: 'tuesday',
-  wed: 'wednesday',
-  thu: 'thursday',
-  fri: 'friday',
-};
+/** Long day keys are an accepted storage form. Derived from the aligned
+ *  shared arrays so the mapping can never drift. */
+const LONG_BY_SHORT = Object.fromEntries(
+  SHORT_DAY_KEYS.map((k, i) => [k, LONG_DAY_KEYS[i]]),
+) as Record<DayKey, string>;
 
 export interface TimeRange { from: string; to: string }
 
@@ -177,7 +173,12 @@ export function nextPeriodDefault(ranges: TimeRange[]): TimeRange {
   if (ranges.length === 0) return { ...DEFAULT_RANGE };
   const iv = toIntervals(ranges);
   const lastEnd = iv[iv.length - 1].end;
-  const start = Math.min(lastEnd + 60, 22 * 60);
+  // An hour after the last close, but the late-evening clamp must never pull
+  // the start BEFORE that close: min(lastEnd+60, 22:00) alone put the new
+  // period INSIDE any day closing after 22:00 (09:00-23:00 → 22:00-23:59 =
+  // instant overlap, and the "add period" tap dead-ended on the overlap
+  // gate). Adjacent-to-close is valid — only true overlaps are refused.
+  const start = Math.min(lastEnd + 60, Math.max(22 * 60, lastEnd), 23 * 60 + 58);
   const end = Math.min(start + 180, 23 * 60 + 59);
   return { from: toClock(start), to: toClock(end) };
 }

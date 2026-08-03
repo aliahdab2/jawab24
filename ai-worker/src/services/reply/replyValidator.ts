@@ -273,33 +273,57 @@ export function isCommentTooLong(reply: string, channel: 'comment' | 'dm'): bool
 }
 
 /**
- * Fallback pool for Check 6 — used only when stripping leaves nothing useful.
- * A single fixed string here was itself a repetition source in prod (the same
- * line reached customers on 3 different pages verbatim, found 2026-07-24), so
- * the rare fallback path draws from a small pool instead. Neutral light register
- * on purpose: this code path cannot know the customer's dialect.
+ * Check 6 exhausted the reply: every sentence was reveal talk, so `reply` comes
+ * back EMPTY and this flag rides the flags array as the cross-service HOLD
+ * signal (backend `HOLD_REPLY_FLAGS` → `held_self_identification`).
+ *
+ * Exported because an empty reply is NOT self-describing on the wire — it means
+ * three different things (see {@link isHeldEmptyReply}) and every consumer that
+ * branches on emptiness must consult this flag to tell them apart.
  */
-// Channel-neutral wording on purpose ("الفريق", never "الصفحة"): this same code path
-// serves Facebook, Instagram, and WhatsApp — "page team" only makes sense on the first two.
-export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
-    ar: [
-        'أنا من الفريق هنا، كيف أقدر أساعدك؟',
-        'معك أحد أعضاء الفريق — تفضل، كيف نخدمك؟',
-        'أنا من فريق خدمة العملاء عندنا، تفضل بسؤالك.',
-        'الفريق في خدمتك — اسأل ما تحتاج.',
-    ],
-    en: [
-        'I\'m part of the team here. How can I help you?',
-        'You\'re chatting with our team — what can I do for you?',
-        'I\'m with the team here, happy to help.',
-        'Team member here — what would you like to know?',
-    ],
-};
+export const SELF_ID_EXHAUSTED_FLAG = 'self_identification_exhausted';
+
+/**
+ * True when an empty reply is a deliverable HOLD rather than a generation
+ * failure.
+ *
+ * `reply: ''` carries three distinct meanings across the worker→backend
+ * boundary, and only the third is an error:
+ *   1. INTENTIONAL — OFFENSIVE / SPAM_OR_IRRELEVANT: the prompt asks for it.
+ *   2. HELD — Check 6 stripped the entire reply (this predicate). The backend
+ *      flags the row for merchant review; nothing is sent, nothing is retried.
+ *   3. FAILURE — anything else (truncation at the model cap, broken JSON).
+ *      Throws `AiEmptyReplyError`.
+ *
+ * The empty-reply guard in openai.ts is the single arbiter between the three;
+ * this predicate exists so meaning 2 is decided HERE, next to the code that
+ * produces it, instead of being re-derived at each call site.
+ */
+export function isHeldEmptyReply(flags: readonly string[] | undefined): boolean {
+    return !!flags?.includes(SELF_ID_EXHAUSTED_FLAG);
+}
+
+/**
+ * True when the page itself IS the platform brand — Jawab24's own support
+ * page — so brand mentions in a reply are the page talking about its own
+ * product, not the assistant leaking the tool a merchant uses. Keyed on the
+ * page name (works for any vendor-owned FB/IG/WhatsApp surface) rather than a
+ * page-id allowlist, so it needs no per-environment configuration and the
+ * demo/eval fixture qualifies the same way production does.
+ */
+export function isOwnBrandPage(pageName?: string): boolean {
+    if (!pageName) return false;
+    return /jawab\s?24|جواب\s?(?:24|٢٤)/i.test(pageName);
+}
 
 /**
  * Check 6 — the bot must never reveal it's automated. Strips only the offending
- * sentence(s) and keeps the rest; falls back to a pooled reply (in fallbackLang)
- * only if fewer than 10 useful characters remain.
+ * sentence(s) and keeps the rest; if fewer than 10 useful characters remain the
+ * strip is EXHAUSTED and the reply comes back empty — the validator never
+ * invents text (no canned fallback: a substituted identity line answered "who
+ * are you?" whatever the customer asked — prod, 2026-08-01). validateReply
+ * raises `self_identification_exhausted` on that case and the backend holds
+ * the message for merchant review instead of sending.
  *
  * Two vocabulary classes (v59):
  * - Lexically DECISIVE strings, stripped unconditionally: the platform brand,
@@ -319,6 +343,15 @@ export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
  *   re-creates a #236-style swap — but every swap is flagged, needs-attention,
  *   and cache-blocked, so it is seen, not silent.
  *
+ * Own-brand exemption (`ownBrandPage`): on the vendor's OWN page the brand IS
+ * the business, so the brand needles and the flag-gated AI vocabulary are
+ * product talk there — «موقعنا jawab24.com» is the answer to "what's your
+ * website?", not a leak. Pre-exemption, Check 6 stripped exactly that sentence
+ * and swapped in canned identity lines, so the Jawab24 support page dodged
+ * every website/app-link question with identity statements (prod, 2026-08-01).
+ * The first-person tripwires and "chatbot"/"bot" stay active on every page —
+ * even our own page speaks as a «موظف ذكي», never as a bot.
+ *
  * Returns `stripped` so the caller records the swap as
  * `self_identification_stripped` — DELIBERATELY merchant-visible (flag_reason
  * chip + needs-attention): a substituted reply is exactly what a merchant
@@ -327,25 +360,35 @@ export const SELF_ID_FALLBACKS: Record<'ar' | 'en', readonly string[]> = {
  */
 export function stripSelfIdentification(
     reply: string,
-    fallbackLang: string,
     selfReported = false,
+    ownBrandPage = false,
 ): { reply: string; stripped: boolean } {
     if (!reply) {
         return { reply, stripped: false };
     }
-    // Lexically DECISIVE reveals — strings with no legitimate product reading:
-    // the platform brand, "chatbot", English "bot" OUTSIDE "robot" ((?<!ro)),
-    // and literal first-person claims («أنا روبوت», "I'm a bot") which are
-    // decisive regardless of the flag. Deliberately NOT here (#495 review):
+    // Lexically DECISIVE reveals on EVERY page — strings with no legitimate
+    // product reading: "chatbot", English "bot" OUTSIDE "robot" ((?<!ro)), and
+    // literal first-person claims («أنا روبوت», "I'm a bot") which are decisive
+    // regardless of the flag. Deliberately NOT here (#495 review):
     // روبوت / "robot" are PRODUCTS (robot vacuums, robot toys) and bare بوت is
     // a winter BOOT — those live in the flag-gated set below. (The old
     // /\bبوت\b/ branch was dead anyway: ASCII \b never matches around Arabic.)
-    const botWords = /(?<!ro)bot\b|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24|(?:أنا|انا) (?:روبوت|بوت|ذكاء اصطناعي)|I(?:['’]m| am) (?:a |an )?(?:bot|robot|AI)\b/i;
+    const universalReveals = /(?<!ro)bot\b|chat\s*bot|(?:أنا|انا) (?:روبوت|بوت|ذكاء اصطناعي)|I(?:['’]m| am) (?:a |an )?(?:bot|robot|AI)\b/i;
+    // The platform brand is decisive ONLY on a merchant's page — a reply naming
+    // Jawab24 there means the assistant leaked the tool behind the page. On the
+    // vendor's own page (ownBrandPage) the brand is the business and these are
+    // skipped. «جواب24» (Arabic + ASCII digits, no space) was missing from the
+    // original needle and reached customers on merchant pages — now covered.
+    const brandReveals = /jawab\s?24|جواب\s?(?:24|٢٤)/i;
     // Ambiguous vocabulary — ordinary product language until the model's own
-    // report says the reply identifies ITSELF as automated.
+    // report says the reply identifies ITSELF as automated. Skipped on the
+    // vendor's own page: there the product IS the automation, so even a
+    // self-reported "جواب24 منصة ذكاء اصطناعي" is a correct product description.
     const aiWords = /ذكاء (?:ال)?[اإ]صطناعي|artificial intelligence|روبوت/i;
     const offending = (text: string): boolean =>
-        botWords.test(text) || (selfReported && aiWords.test(text));
+        universalReveals.test(text)
+        || (!ownBrandPage && brandReveals.test(text))
+        || (!ownBrandPage && selfReported && aiWords.test(text));
     if (!offending(reply)) {
         return { reply, stripped: false };
     }
@@ -367,8 +410,14 @@ export function stripSelfIdentification(
     }
     const filtered = kept.join('').trim();
     if (filtered.length < 10) {
-        const pool = SELF_ID_FALLBACKS[fallbackLang === 'ar' ? 'ar' : 'en'];
-        return { reply: pool[Math.floor(Math.random() * pool.length)], stripped: true };
+        // Exhausted: the ENTIRE reply was reveal talk. The old contract swapped
+        // in a canned SELF_ID_FALLBACKS identity line here — which answered
+        // "who are you?" regardless of what the customer actually asked, and
+        // repeated verbatim on retry (prod, Jawab24 page, 2026-08-01:
+        // «موقعكم الالكتروني» ×4 → «معك أحد أعضاء الفريق…»). The validator must
+        // never invent text: return empty and let the backend HOLD the message
+        // for merchant review (validateReply raises self_identification_exhausted).
+        return { reply: '', stripped: true };
     }
     return { reply: filtered, stripped: true };
 }
@@ -490,10 +539,33 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // (the silence is how #236 hid for months).
     const selfReported = flags.includes('self_identified_as_automation');
     const { reply: finalReply, stripped } = stripSelfIdentification(
-        reply, parsed.language || request.language || 'ar', selfReported,
+        reply, selfReported,
+        isOwnBrandPage(request.context?.pageName),
     );
     if (stripped && !flags.includes('self_identification_stripped')) {
         flags.push('self_identification_stripped');
+    }
+    // Exhausted strip: the whole reply was reveal talk and nothing survived.
+    // The empty reply + this flag are the cross-service HOLD signal — the
+    // backend holds the message for merchant review (held_self_identification)
+    // instead of sending; the validator never substitutes invented text.
+    if (stripped && finalReply === '' && !flags.includes(SELF_ID_EXHAUSTED_FLAG)) {
+        flags.push(SELF_ID_EXHAUSTED_FLAG);
+        // Canonical emit site for this event — validateReply is the ONE function
+        // all three generation paths (default model, provider abstraction, tool
+        // loop) share, so logging here can't drift per-path. The pre-strip reply
+        // is the only record of what the model actually said: it is deliberately
+        // NOT stored on the row (it is the automation reveal itself — surfacing
+        // it in the merchant's composer would put the forbidden text one tap
+        // from the customer), so without this line the failure is undiagnosable.
+        console.log(JSON.stringify({
+            event: 'self_identification_exhausted',
+            pipeline: request.context?.pipeline,
+            intent: parsed.intent,
+            selfReported,
+            ownBrandPage: isOwnBrandPage(request.context?.pageName),
+            strippedReply: reply.slice(0, 300),
+        }));
     }
 
     return {

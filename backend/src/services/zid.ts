@@ -1,39 +1,57 @@
 /**
- * Zid e-commerce service — OAuth, REST API, product sync, webhook verification.
+ * Zid e-commerce service — OAuth, Merchant API, product sync, webhook registration.
  *
- * Key differences from Salla/Shopify:
- * - Auth header is X-MANAGER-TOKEN (NOT Authorization: Bearer)
- * - Token expiry: 1 year (rare refresh needed)
- * - No shop domain input — Zid authenticates merchant directly
- * - Products API: GET https://api.zid.sa/v1/products
- * - Webhooks registered via API call after OAuth claim
- * - Webhook HMAC uses hex SHA256 digest (header: X-ZID-SIGNATURE)
+ * Contract verified against docs.zid.sa (2026-08-01) — the previous implementation
+ * was built on an assumed contract and never round-tripped a real store (D-020).
+ * Key facts:
+ * - DUAL-HEADER auth on every Merchant API call:
+ *     `Authorization: Bearer <authorization token>`  (the token response's `Authorization` field)
+ *     `X-Manager-Token: <access token>`              (the token response's `access_token` field)
+ *   Products endpoints additionally want `Role: Manager`.
+ * - OAuth: https://oauth.zid.sa/oauth/{authorize,token}; token lifetime ~1 year.
+ * - Endpoints live under https://api.zid.sa — store profile is
+ *   /v1/managers/account/profile, orders are /v1/managers/store/orders,
+ *   products are /v1/products/ (not under /managers, but still Manager-role).
+ * - Webhooks: POST /v1/managers/webhooks {event, target_url, original_id,
+ *   username?, password?}; deliveries carry `Authorization: Basic …` (NO HMAC).
+ *
+ * PROVISIONAL parsers: response/payload field shapes not yet confirmed against a
+ * live dev store are read shape-tolerantly and marked with [provisional] — the
+ * live-validation phase (docs/integrations/zid.md) finalizes them from captures.
  */
 import { tracedExternalCall } from '../utils/tracing';
 import { config } from '../config';
-import { decrypt } from './ecommerceCrypto';
 import { captureError } from '../utils/sentryHelpers';
 import {
     getStoreById,
     replaceProductsAndRebuildSummary,
     applySyncedStoreInfo,
+    PRODUCT_SAFETY_CAP,
     type WebhookRegistrationResult,
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
-import { verifyHexHmac } from '../utils/hmacVerify';
+import { verifyBasicAuthHeader } from '../utils/basicAuthVerify';
 import { ecommerceApiGet } from '../utils/httpRetry';
 import {
     refreshAccessToken as sharedRefreshAccessToken,
     ensureValidToken as sharedEnsureValidToken,
-    resolveStoreAccessToken,
+    resolveStoreCredentialPair,
     getStoresNeedingTokenRefresh as sharedGetStoresNeedingTokenRefresh,
     refreshExpiringTokens as sharedRefreshExpiringTokens,
     type TokenRefreshConfig,
 } from './ecommerceTokenRefresh';
 
-const MAX_PRODUCTS_PER_PAGE = 50;
-const MAX_PAGES_TO_FETCH = 6; // 300 products max
+const PRODUCTS_PAGE_SIZE = 100;
+// Derived from the shared product cap (like Salla) — never a silent hard truncation.
+const MAX_PRODUCT_PAGES_TO_FETCH = Math.ceil(PRODUCT_SAFETY_CAP / PRODUCTS_PAGE_SIZE);
+// lookupOrder scans recent orders client-side until a search/filter param is
+// confirmed against a live store [provisional — see findOrderByCode].
+const ORDERS_PAGE_SIZE = 100;
+const MAX_ORDER_PAGES_TO_SCAN = 3;
 const ERROR_TEXT_MAX_LENGTH = 200;
+
+/** Fixed username for the Basic-auth pair on webhook subscriptions (password = ZID_WEBHOOK_SECRET). */
+export const ZID_WEBHOOK_BASIC_USER = 'jawab24';
 
 const ZID_TOKEN_REFRESH_CONFIG: TokenRefreshConfig = {
     platform: 'zid',
@@ -41,6 +59,16 @@ const ZID_TOKEN_REFRESH_CONFIG: TokenRefreshConfig = {
     get clientId() { return config.zid.clientId; },
     get clientSecret() { return config.zid.clientSecret; },
 };
+
+/**
+ * The two credentials every Zid Merchant API call needs.
+ * `managerToken` = OAuth `access_token` → sent as `X-Manager-Token`.
+ * `authorizationToken` = OAuth `Authorization` field → sent as `Authorization: Bearer`.
+ */
+export interface ZidCredentials {
+    managerToken: string;
+    authorizationToken: string;
+}
 
 // --- OAuth ---
 
@@ -59,6 +87,8 @@ export function buildAuthUrl(state: string): string {
 
 export interface ZidTokenResponse {
     accessToken: string;
+    /** Zid's second credential (`Authorization` field) — required for all API calls. */
+    authorizationToken: string;
     refreshToken: string;
     expiresIn: number; // seconds — typically 1 year
 }
@@ -67,17 +97,20 @@ export async function exchangeCodeForToken(code: string): Promise<ZidTokenRespon
     const { clientId, clientSecret, hostName } = config.zid;
     const redirectUri = `https://${hostName}/zid/auth/callback`;
 
+    // application/x-www-form-urlencoded per RFC 6749 (Salla rejected JSON with
+    // "POST body can not be empty" — same class of endpoint; confirmed live for
+    // the refresh grant via the shared refresher, which already sends form data).
     const response = await tracedExternalCall('zid', 'exchangeCodeForToken', () =>
         fetch('https://oauth.zid.sa/oauth/token', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
                 grant_type: 'authorization_code',
                 client_id: clientId,
                 client_secret: clientSecret,
                 code,
                 redirect_uri: redirectUri,
-            }),
+            }).toString(),
         }),
     );
 
@@ -90,35 +123,52 @@ export async function exchangeCodeForToken(code: string): Promise<ZidTokenRespon
         access_token: string;
         refresh_token: string;
         expires_in: number;
+        Authorization?: string;
+        authorization?: string;
     };
+
+    // The docs name the field `Authorization` — read both casings defensively.
+    const authorizationToken = data.Authorization ?? data.authorization;
+    if (!authorizationToken) {
+        // Without it every Merchant API call 401s later with no obvious cause —
+        // fail fast at the exchange with a diagnosable error instead.
+        throw new Error('Zid token exchange succeeded but response has no Authorization token field');
+    }
 
     return {
         accessToken: data.access_token,
+        authorizationToken,
         refreshToken: data.refresh_token,
         expiresIn: data.expires_in,
     };
 }
 
-// --- Token Refresh (distributed lock — refresh tokens may be single-use) ---
+// --- Webhook Verification (Basic auth — Zid sends NO HMAC signature) ---
 
-// --- Webhook Verification ---
-
-export function verifyWebhookHmac(body: string, signature: string): boolean {
-    return verifyHexHmac(body, signature, config.zid.webhookSecret);
+/**
+ * Verify a webhook delivery's `Authorization` header against the Basic-auth pair
+ * our subscriptions were registered with (username jawab24 / password =
+ * ZID_WEBHOOK_SECRET). Timing-safe. Fails closed on missing header/secret.
+ */
+export function verifyWebhookBasicAuth(authorizationHeader: string | undefined): boolean {
+    return verifyBasicAuthHeader(authorizationHeader, ZID_WEBHOOK_BASIC_USER, config.zid.webhookSecret);
 }
 
 // --- Webhook Registration ---
 
+// Verified event slugs (docs.zid.sa "Supported Webhook Events", 2026-08-01).
+// Deliberately excluded: order.payment_status.update (no consumer yet),
+// abandoned_cart.created/.completed (phase-2 power feature), customer.*/category.*.
+// App lifecycle (app.market.application.install/uninstall) is configured in the
+// Zid Partner Dashboard — it is NOT registered through /v1/managers/webhooks,
+// so it must not appear in this list (webhookTopicDrift asserts the adapter copy).
 export const ZID_WEBHOOK_EVENTS = [
-    'product.created',
-    'product.updated',
-    'product.deleted',
-    'app.uninstalled',
-    // Order lifecycle — for customer notifications
-    'order.created',
-    'order.updated',
-    'order.shipped',
-    'order.delivered',
+    'product.create',
+    'product.update',
+    'product.publish',
+    'product.delete',
+    'order.create',
+    'order.status.update',
 ] as const;
 
 export type ZidWebhookEvent = typeof ZID_WEBHOOK_EVENTS[number];
@@ -131,25 +181,42 @@ export function isOrderEvent(event: string): boolean {
     return event.startsWith('order.');
 }
 
-export async function registerWebhooks(accessToken: string): Promise<WebhookRegistrationResult> {
+/**
+ * Subscribe all Zid webhooks for a store via POST /v1/managers/webhooks.
+ *
+ * Each subscription's target_url embeds routing hints (`e` = event, `sid` = our
+ * store UUID) because the delivery envelope is not yet confirmed to carry either
+ * — the handler resolves store/event from the query string first, then falls
+ * back to body fields [provisional — live captures may simplify this].
+ */
+export async function registerWebhooks(creds: ZidCredentials, storeId: string): Promise<WebhookRegistrationResult> {
     // Topics subscribed in parallel — see services/salla.ts for rationale.
-    const webhookUrl = `https://${config.zid.hostName}/zid/webhooks`;
     const registered: string[] = [];
     const failed: Array<{ topic: string; status?: number; error?: string }> = [];
 
-    const results = await Promise.allSettled(ZID_WEBHOOK_EVENTS.map(event =>
-        tracedExternalCall('zid', 'registerWebhook', () =>
-            fetch('https://api.zid.sa/v1/webhooks', {
+    const results = await Promise.allSettled(ZID_WEBHOOK_EVENTS.map(event => {
+        const targetUrl = `https://${config.zid.hostName}/zid/webhooks?e=${encodeURIComponent(event)}&sid=${encodeURIComponent(storeId)}`;
+        return tracedExternalCall('zid', 'registerWebhook', () =>
+            fetch('https://api.zid.sa/v1/managers/webhooks', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-MANAGER-TOKEN': accessToken,
+                    'Authorization': `Bearer ${creds.authorizationToken}`,
+                    'X-Manager-Token': creds.managerToken,
                     'Accept': 'application/json',
                 },
-                body: JSON.stringify({ event, url: webhookUrl }),
+                body: JSON.stringify({
+                    event,
+                    target_url: targetUrl,
+                    original_id: config.zid.appId,
+                    // Zid authenticates deliveries with this pair (Basic auth) —
+                    // there is no signature header to verify instead.
+                    username: ZID_WEBHOOK_BASIC_USER,
+                    password: config.zid.webhookSecret,
+                }),
             }).then(async response => ({ event, response, body: response.ok ? '' : await response.text() })),
-        ),
-    ));
+        );
+    }));
 
     for (let i = 0; i < results.length; i++) {
         const event = ZID_WEBHOOK_EVENTS[i];
@@ -163,8 +230,9 @@ export async function registerWebhooks(accessToken: string): Promise<WebhookRegi
         const { response, body } = result.value;
         if (response.ok) {
             registered.push(event);
-        } else if (response.status === 409) {
-            // 409 = webhook already exists, treat as success (mirrors Shopify 422 / Salla 422)
+        } else if (response.status === 409 || response.status === 422) {
+            // Already-exists — treat as success (Salla 422 precedent;
+            // Zid's exact duplicate status is unconfirmed, both tolerated).
             registered.push(event);
         } else {
             failed.push({ topic: event, status: response.status, error: body.slice(0, ERROR_TEXT_MAX_LENGTH) });
@@ -179,139 +247,209 @@ export async function registerWebhooks(accessToken: string): Promise<WebhookRegi
     return { registered, failed, lastAttempt: new Date().toISOString() };
 }
 
-// --- REST API Helper ---
+// --- Merchant API helper (dual-header auth) ---
 
-function zidApiGet<T = unknown>(url: string, accessToken: string): Promise<T> {
+function zidApiGet<T = unknown>(url: string, creds: ZidCredentials, extraHeaders?: Record<string, string>): Promise<T> {
     return ecommerceApiGet<T>(url, {
         platform: 'zid',
-        authHeaderName: 'X-MANAGER-TOKEN',
-        authHeaderValue: accessToken,
+        authHeaderValue: `Bearer ${creds.authorizationToken}`,
+        extraHeaders: {
+            'X-Manager-Token': creds.managerToken,
+            ...extraHeaders,
+        },
     });
 }
 
 // --- Store Info ---
 
-export async function fetchStoreInfo(accessToken: string) {
-    const data = await zidApiGet<{
-        store: {
-            id: string | number;
-            name: string;
-            email: string;
-            currency: string;
-            domain: string;
-        };
-    }>('https://api.zid.sa/v1/store/info', accessToken);
+/**
+ * Fetch the manager profile and map it to the shared OAuthStoreInfo shape.
+ * storeDomain = hostname of the store URL (the unique (platform, storeDomain)
+ * key), falling back to the numeric store id; merchantId = String(store.id)
+ * (the webhook fallback key). Envelope read shape-tolerantly [provisional].
+ */
+export async function fetchStoreInfo(creds: ZidCredentials) {
+    const data = await zidApiGet<Record<string, unknown>>(
+        'https://api.zid.sa/v1/managers/account/profile',
+        creds,
+    );
 
-    const s = data.store;
+    // Docs show the profile under `user`, with the store object nested — but the
+    // exact nesting is unconfirmed. Try the plausible shapes in order.
+    const user = (data.user ?? data) as Record<string, unknown>;
+    const store = (user.store ?? data.store) as {
+        id?: string | number;
+        title?: string;
+        name?: string;
+        email?: string;
+        currency?: string;
+        url?: string;
+        domain?: string;
+    } | undefined;
+
+    if (!store || store.id === undefined || store.id === null) {
+        throw new Error('Zid profile response has no store object — cannot resolve store identity');
+    }
+
+    const rawUrl = store.url || store.domain || '';
+    let storeDomain = String(store.id);
+    if (rawUrl) {
+        try {
+            storeDomain = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`).hostname;
+        } catch {
+            storeDomain = rawUrl.replace(/^https?:\/\//, '').replace(/\/.*$/, '') || storeDomain;
+        }
+    }
+
+    const email = (store.email ?? (user.email as string | undefined));
+
     return {
-        storeName: s.name,
-        storeEmail: s.email,
-        storeCurrency: s.currency,
-        storeDomain: s.domain,
-        merchantId: String(s.id),
+        storeName: store.title || store.name || undefined,
+        storeEmail: typeof email === 'string' ? email : undefined,
+        storeCurrency: store.currency || undefined,
+        storeDomain,
+        merchantId: String(store.id),
     };
 }
 
 // --- Products (REST, page-based) ---
 
+/** [provisional] Field shapes pending live captures — read tolerantly. */
 interface ZidProduct {
-    id: string;
-    name: string;
-    description?: string; // May be HTML — stripped before storage
-    status: string; // 'active' | 'inactive' | 'out_of_stock'
-    price: number;
+    id: string | number;
+    // Zid product names may be multilingual objects ({ar, en}) or plain strings.
+    name: string | { ar?: string; en?: string };
+    description?: string | { ar?: string; en?: string }; // May be HTML — stripped before storage
+    status?: string;
+    price?: number;
+    sale_price?: number | null;
     currency?: string;
-    quantity: number | null;
+    quantity?: number | null;
     sku?: string | null;
+    html_url?: string;
+    slug?: string | null;
     handle?: string | null;
-    images?: Array<{ url: string }>;
-    categories?: Array<{ name: string }>;
+    images?: Array<{ url?: string; image?: { full_size?: string } }>;
+    categories?: Array<{ name?: string | { ar?: string; en?: string } }>;
+    has_options?: boolean;
     has_variants?: boolean;
     options?: Array<{
-        name: string;
-        values: Array<{ name: string }>;
+        name?: string | { ar?: string; en?: string };
+        values?: Array<{ name?: string | { ar?: string; en?: string } }>;
     }>;
 }
 
 interface ZidProductsResponse {
-    store_products: ZidProduct[];
-    meta?: {
-        current_page: number;
-        last_page: number;
-        per_page: number;
-        total: number;
-    };
+    // Envelope key unconfirmed — docs suggest a paginated list; tolerate the
+    // plausible keys [provisional].
+    results?: ZidProduct[];
+    store_products?: ZidProduct[];
+    products?: ZidProduct[];
+    count?: number;
+    next?: string | null;
 }
 
-function mapZidStatus(status: string): string {
+/** Prefer Arabic for multilingual fields (Jawab24's market), fall back to English. */
+function localizedText(value?: string | { ar?: string; en?: string } | null): string {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    return value.ar || value.en || '';
+}
+
+function extractProducts(data: ZidProductsResponse): ZidProduct[] {
+    return data.results ?? data.store_products ?? data.products ?? [];
+}
+
+function mapZidStatus(status?: string): string {
     switch (status) {
-        case 'active': return 'active';
-        case 'inactive': return 'hidden';
+        case 'active':
+        case 'published': return 'active';
+        case 'inactive':
+        case 'draft': return 'hidden';
         case 'out_of_stock': return 'out_of_stock';
-        default: return status;
+        default: return status || 'active';
     }
 }
 
 function buildZidVariantSummary(options: ZidProduct['options']): string {
     if (!options || options.length === 0) return '';
     return options
-        .map(opt => `${opt.name}: ${opt.values.map(v => v.name).join(', ')}`)
+        .map(opt => `${localizedText(opt.name)}: ${(opt.values || []).map(v => localizedText(v.name)).join(', ')}`)
         .join(' | ');
 }
 
-async function fetchAllProducts(accessToken: string): Promise<ZidProduct[]> {
+function productImageUrl(p: ZidProduct): string | null {
+    const first = p.images?.[0];
+    return first?.url || first?.image?.full_size || null;
+}
+
+async function fetchAllProducts(creds: ZidCredentials): Promise<ZidProduct[]> {
     const allProducts: ZidProduct[] = [];
     let page = 1;
 
-    while (page <= MAX_PAGES_TO_FETCH) {
+    while (page <= MAX_PRODUCT_PAGES_TO_FETCH) {
         const data = await zidApiGet<ZidProductsResponse>(
-            `https://api.zid.sa/v1/products?per_page=${MAX_PRODUCTS_PER_PAGE}&page=${page}`,
-            accessToken,
+            `https://api.zid.sa/v1/products/?page_size=${PRODUCTS_PAGE_SIZE}&page=${page}`,
+            creds,
+            { 'Role': 'Manager' },
         );
 
-        const products = data.store_products || [];
+        const products = extractProducts(data);
         allProducts.push(...products);
 
-        const lastPage = data.meta?.last_page ?? 1;
-        if (page >= lastPage || products.length === 0) break;
+        if (products.length < PRODUCTS_PAGE_SIZE || data.next === null) break;
         page++;
     }
 
     return allProducts;
 }
 
+/** Resolve the decrypted credential pair for an active Zid store, or null. */
+async function resolveZidCredentials(storeId: string): Promise<ZidCredentials | null> {
+    const pair = await resolveStoreCredentialPair(storeId, ZID_TOKEN_REFRESH_CONFIG);
+    if (!pair) return null;
+    if (!pair.authorizationToken) {
+        // A Zid store without the second credential predates the dual-token flow
+        // (or the exchange failed to persist it) — every API call would 401.
+        throw new Error(`Zid store ${storeId} has no Authorization token — merchant must reconnect`);
+    }
+    return { managerToken: pair.accessToken, authorizationToken: pair.authorizationToken };
+}
+
 export async function syncProducts(storeId: string) {
-    await sharedEnsureValidToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
+    const creds = await resolveZidCredentials(storeId);
+    if (!creds) throw new Error('Store not found');
 
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
 
-    const accessToken = decrypt(store.accessToken, store.accessTokenIv);
-    const products = await fetchAllProducts(accessToken);
+    const products = await fetchAllProducts(creds);
     const currency = store.storeCurrency || 'SAR';
 
     const mapped = products
         .filter(p => p.status !== 'deleted')
         .map(p => {
-            const priceRange = `${p.price} ${p.currency || currency}`;
+            const price = p.sale_price ?? p.price;
+            const priceRange = price !== undefined && price !== null ? `${price} ${p.currency || currency}` : '';
             const variantSummary = buildZidVariantSummary(p.options);
-            const category = p.categories?.[0]?.name || null;
+            const category = localizedText(p.categories?.[0]?.name) || null;
+            const description = localizedText(p.description);
 
             return {
                 platformProductId: String(p.id),
-                handle: p.handle || null,
-                title: p.name,
-                description: p.description ? stripHtml(p.description) : null,
+                handle: p.slug || p.handle || null,
+                title: localizedText(p.name),
+                description: description ? stripHtml(description) : null,
                 productType: category,
                 vendor: null as string | null,
                 status: mapZidStatus(p.status),
                 priceRange,
                 currency: p.currency || currency,
                 totalInventory: p.quantity ?? 0,
-                hasVariants: p.has_variants || (p.options?.length ?? 0) > 0,
+                hasVariants: p.has_variants || p.has_options || (p.options?.length ?? 0) > 0,
                 variantSummary: variantSummary || null,
                 tags: null as string | null,
-                imageUrl: p.images?.[0]?.url || null,
+                imageUrl: productImageUrl(p),
             };
         });
 
@@ -319,16 +457,12 @@ export async function syncProducts(storeId: string) {
 }
 
 export async function fullSync(storeId: string) {
-    await sharedEnsureValidToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
-
-    const store = await getStoreById(storeId);
-    if (!store) throw new Error('Store not found');
-
-    const accessToken = decrypt(store.accessToken, store.accessTokenIv);
+    const creds = await resolveZidCredentials(storeId);
+    if (!creds) throw new Error('Store not found');
 
     // platformData is merged, not replaced — a full sync must not wipe
     // webhookStatus/tokenHealth written by other flows.
-    const storeInfo = await fetchStoreInfo(accessToken);
+    const storeInfo = await fetchStoreInfo(creds);
     await applySyncedStoreInfo(storeId, {
         storeName: storeInfo.storeName,
         storeEmail: storeInfo.storeEmail,
@@ -360,114 +494,160 @@ export async function getStoresNeedingTokenRefresh() {
     return sharedGetStoresNeedingTokenRefresh('zid');
 }
 
+// --- Phone normalization ---
+
+/**
+ * Normalize a Zid customer mobile to E.164-ish (+9665…).
+ *
+ * Verified: the orders list returns `customer.mobile` as a FULL international
+ * number WITHOUT the leading `+` (e.g. "966591555966") — unlike Salla's split
+ * mobile + mobile_code pair, so this stays Zid-local (composeSallaPhone's logic
+ * genuinely differs; lift a shared helper only if a third shape appears).
+ * Used by the webhook controller AND the order agent tools — single source.
+ */
+export function normalizeZidPhone(mobile?: string | number | null): string | undefined {
+    if (mobile === undefined || mobile === null) return undefined;
+    const raw = String(mobile).trim();
+    if (!raw) return undefined;
+    return raw.startsWith('+') ? raw : `+${raw}`;
+}
+
 // --- E-Commerce Agent Tools (read-only order/inventory) ---
 
 import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/shared';
 
-async function resolveStoreCredentials(storeId: string): Promise<string | null> {
-    return resolveStoreAccessToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
-}
+// --- Zid Order Response Types (orders list — verified fields, tolerant extras) ---
 
-// --- Zid Order Response Types ---
-
-interface ZidOrderItem {
-    name: string;
-    quantity: number;
-    price: number;
-    currency: string;
+interface ZidOrderProduct {
+    name?: string | { ar?: string; en?: string };
+    quantity?: number;
+    price?: number | string;
+    total?: number | string;
 }
 
 interface ZidOrder {
-    id: string;
-    order_id?: string;
-    reference_id?: string;
-    status: string;
-    payment_method?: string;
-    total_amount: number;
-    currency: string;
-    customer_name?: string;
-    customer_phone?: string;
-    shipping_city?: string;
+    id: number | string;
+    /** Order reference shown to the customer (e.g. on the confirmation page). */
+    code?: string | number;
+    invoice_number?: number | string;
+    order_status?: { name?: string; code?: string };
+    /** [provisional] Some responses may carry a flat status string instead. */
+    status?: string;
+    payment_status?: string;
+    order_total?: string | number;
+    order_total_string?: string;
+    currency_code?: string;
+    customer?: {
+        id?: number | string;
+        name?: string;
+        email?: string;
+        mobile?: string | number;
+    };
     created_at?: string;
-    items?: ZidOrderItem[];
+    products?: ZidOrderProduct[];
+    shipping_method_code?: string;
+    // Tracking fields unconfirmed for Zid [provisional] — read tolerantly.
     tracking_number?: string;
-    courier_name?: string;
     tracking_url?: string;
+    courier_name?: string;
+    shipping?: { tracking_number?: string; tracking_url?: string; courier?: string };
 }
 
 interface ZidOrdersResponse {
-    orders: ZidOrder[];
+    orders?: ZidOrder[];
 }
 
-interface ZidOrderDetailResponse {
-    order: ZidOrder;
+function zidOrderNumber(order: ZidOrder): string {
+    if (order.code !== undefined && order.code !== null) return String(order.code);
+    return String(order.id);
+}
+
+function zidOrderStatusCode(order: ZidOrder): string {
+    return order.order_status?.code || order.status || '';
+}
+
+/**
+ * Find an order by its customer-facing number (code) or internal id.
+ *
+ * [provisional] No search/filter query param for /v1/managers/store/orders is
+ * confirmed yet, so this scans the most recent pages client-side. The live
+ * validation phase resolves the real filter (incl. whether search indexes the
+ * customer phone — .planning/ECOMMERCE_POWER_FEATURES_PLAN.md open question #3)
+ * and this helper is the single seam to swap it into.
+ */
+async function findOrderByCode(creds: ZidCredentials, orderNumber: string): Promise<ZidOrder | null> {
+    const needle = orderNumber.trim().replace(/^#/, '');
+
+    for (let page = 1; page <= MAX_ORDER_PAGES_TO_SCAN; page++) {
+        const data = await zidApiGet<ZidOrdersResponse>(
+            `https://api.zid.sa/v1/managers/store/orders?page=${page}&per_page=${ORDERS_PAGE_SIZE}&payload_type=default`,
+            creds,
+        );
+        const orders = data.orders || [];
+        const match = orders.find(o =>
+            String(o.code ?? '') === needle ||
+            String(o.id) === needle ||
+            String(o.invoice_number ?? '') === needle,
+        );
+        if (match) return match;
+        if (orders.length < ORDERS_PAGE_SIZE) break;
+    }
+
+    return null;
 }
 
 export async function lookupOrder(storeId: string, orderNumber: string): Promise<OrderInfoFull | null> {
-    const accessToken = await resolveStoreCredentials(storeId);
-    if (!accessToken) return null;
+    const creds = await resolveZidCredentials(storeId);
+    if (!creds) return null;
 
-    const data = await zidApiGet<ZidOrdersResponse>(
-        `https://api.zid.sa/v1/orders?search=${encodeURIComponent(orderNumber)}`,
-        accessToken,
-    );
-
-    const order = data.orders?.[0];
+    const order = await findOrderByCode(creds, orderNumber);
     if (!order) return null;
 
     return mapZidOrderToOrderInfo(order);
 }
 
 export async function getShipmentTracking(storeId: string, orderNumber: string): Promise<ShipmentInfoFull | null> {
-    const accessToken = await resolveStoreCredentials(storeId);
-    if (!accessToken) return null;
+    const creds = await resolveZidCredentials(storeId);
+    if (!creds) return null;
 
-    const searchData = await zidApiGet<ZidOrdersResponse>(
-        `https://api.zid.sa/v1/orders?search=${encodeURIComponent(orderNumber)}`,
-        accessToken,
-    );
-
-    const orderSummary = searchData.orders?.[0];
-    if (!orderSummary) return null;
-
-    const detailData = await zidApiGet<ZidOrderDetailResponse>(
-        `https://api.zid.sa/v1/orders/${orderSummary.id}`,
-        accessToken,
-    );
-
-    const order = detailData.order;
+    const order = await findOrderByCode(creds, orderNumber);
+    if (!order) return null;
 
     return {
-        orderNumber: order.reference_id || order.order_id || order.id,
-        customerFirstName: order.customer_name?.split(' ')[0] || '',
-        customerPhone: order.customer_phone || undefined,
-        status: mapZidOrderStatus(order.status),
-        trackingNumber: order.tracking_number || undefined,
-        courierName: order.courier_name || undefined,
-        trackingUrl: order.tracking_url || undefined,
+        orderNumber: zidOrderNumber(order),
+        customerFirstName: order.customer?.name?.split(' ')[0] || '',
+        customerPhone: normalizeZidPhone(order.customer?.mobile),
+        status: mapZidOrderStatus(zidOrderStatusCode(order)),
+        trackingNumber: order.tracking_number || order.shipping?.tracking_number || undefined,
+        courierName: order.courier_name || order.shipping?.courier || undefined,
+        trackingUrl: order.tracking_url || order.shipping?.tracking_url || undefined,
         estimatedDelivery: undefined,
-        shippingCity: order.shipping_city || undefined,
+        shippingCity: undefined,
     };
 }
 
 export async function checkInventory(storeId: string, productName: string, variant?: string): Promise<InventoryInfo | null> {
-    const accessToken = await resolveStoreCredentials(storeId);
-    if (!accessToken) return null;
+    const creds = await resolveZidCredentials(storeId);
+    if (!creds) return null;
 
+    // [provisional] No confirmed product-search param — fetch the first page and
+    // match client-side (same seam as findOrderByCode for the live-validation swap).
     const data = await zidApiGet<ZidProductsResponse>(
-        `https://api.zid.sa/v1/products?search=${encodeURIComponent(productName)}&per_page=5`,
-        accessToken,
+        `https://api.zid.sa/v1/products/?page_size=${PRODUCTS_PAGE_SIZE}&page=1`,
+        creds,
+        { 'Role': 'Manager' },
     );
 
-    const products = (data.store_products || []).filter(p => p.status !== 'deleted');
+    const products = extractProducts(data).filter(p => p.status !== 'deleted');
     if (products.length === 0) return null;
 
     const lowerQuery = productName.toLowerCase();
-    const bestMatch = products.find(p => p.name.toLowerCase().includes(lowerQuery)) || products[0];
+    const bestMatch = products.find(p => localizedText(p.name).toLowerCase().includes(lowerQuery)) || null;
+    if (!bestMatch) return null;
 
     const allVariants = (bestMatch.options || []).flatMap(opt =>
-        opt.values.map(v => ({
-            name: `${opt.name}: ${v.name}`,
+        (opt.values || []).map(v => ({
+            name: `${localizedText(opt.name)}: ${localizedText(v.name)}`,
             available: (bestMatch.quantity ?? 0) > 0,
             quantity: bestMatch.quantity ?? 0,
         }))
@@ -481,54 +661,67 @@ export async function checkInventory(storeId: string, productName: string, varia
 
     const store = await getStoreById(storeId);
     const storeDomain = store?.storeDomain || null;
-
     const currency = bestMatch.currency || store?.storeCurrency || 'SAR';
+    const price = bestMatch.sale_price ?? bestMatch.price;
+    const handle = bestMatch.slug || bestMatch.handle;
+
+    const variants = filteredVariants.length > 0 ? filteredVariants : allVariants;
 
     return {
-        productName: bestMatch.name,
+        productName: localizedText(bestMatch.name),
         available: (bestMatch.quantity ?? 0) > 0,
         quantity: bestMatch.quantity ?? 0,
-        variants: (filteredVariants.length > 0 ? filteredVariants : allVariants).length > 0
-            ? (filteredVariants.length > 0 ? filteredVariants : allVariants)
-            : undefined,
-        price: `${bestMatch.price} ${currency}`,
+        variants: variants.length > 0 ? variants : undefined,
+        // InventoryInfo.price is optional — omit it entirely when Zid provides no
+        // price rather than handing the AI an empty "price:" field.
+        price: price !== undefined && price !== null ? `${price} ${currency}` : undefined,
         currency,
-        productUrl: bestMatch.handle && storeDomain
-            ? `https://${storeDomain}/products/${bestMatch.handle}`
-            : undefined,
+        productUrl: bestMatch.html_url || (handle && storeDomain
+            ? `https://${storeDomain}/products/${handle}`
+            : undefined),
     };
 }
 
 // --- Mapping helpers ---
 
 function mapZidOrderToOrderInfo(order: ZidOrder): OrderInfoFull {
+    const currency = order.currency_code || 'SAR';
     return {
-        orderNumber: order.reference_id || order.order_id || order.id,
-        customerFirstName: order.customer_name?.split(' ')[0] || '',
-        customerPhone: order.customer_phone || undefined,
-        status: mapZidOrderStatus(order.status),
+        orderNumber: zidOrderNumber(order),
+        customerFirstName: order.customer?.name?.split(' ')[0] || '',
+        customerPhone: normalizeZidPhone(order.customer?.mobile),
+        status: mapZidOrderStatus(zidOrderStatusCode(order)),
         orderDate: order.created_at || '',
-        items: (order.items || []).map(item => ({
-            name: item.name,
-            quantity: item.quantity,
-            price: `${item.price} ${item.currency}`,
+        items: (order.products || []).map(item => ({
+            name: localizedText(item.name),
+            quantity: item.quantity ?? 1,
+            price: item.price !== undefined && item.price !== null ? `${item.price} ${currency}` : '',
         })),
-        totalAmount: String(order.total_amount),
-        currency: order.currency,
-        paymentStatus: order.status === 'refunded' ? 'refunded' : 'paid',
-        shippingCity: order.shipping_city || undefined,
+        totalAmount: order.order_total_string || String(order.order_total ?? ''),
+        currency,
+        // Never fabricate a payment state — 'unknown' until Zid's field is confirmed.
+        paymentStatus: order.payment_status || 'unknown',
+        shippingCity: undefined,
     };
 }
 
-function mapZidOrderStatus(status: string): string {
+/**
+ * Map Zid order status codes to the shared vocabulary.
+ * Verified codes (orders list filter enum): new, preparing, ready, indelivery,
+ * delivered, canceled. Webhook conditions doc also shows camelCase `inDelivery`
+ * and `cancelled` — normalized via toLowerCase + both spellings.
+ */
+export function mapZidOrderStatus(status: string): string {
     const map: Record<string, string> = {
-        'pending': 'pending',
-        'confirmed': 'processing',
-        'processing': 'processing',
-        'shipped': 'shipped',
+        'new': 'pending',
+        'preparing': 'processing',
+        'ready': 'processing',
+        'indelivery': 'shipped',
         'delivered': 'delivered',
+        'canceled': 'cancelled',
         'cancelled': 'cancelled',
         'refunded': 'refunded',
     };
-    return map[status] || status;
+    const normalized = status.toLowerCase();
+    return map[normalized] || status;
 }

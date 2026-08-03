@@ -229,51 +229,256 @@ describe('Shopify Service', () => {
         });
     });
 
-    // --- registerWebhooks ---
+    // --- registerWebhooks (GraphQL list-then-upsert) ---
 
     describe('registerWebhooks', () => {
-        it('should register all 8 webhooks including product and order events', async () => {
-            mockFetch.mockResolvedValue({ ok: true });
+        const GRAPHQL_URL = `https://test-store.myshopify.com/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+        const WEBHOOK_BASE = 'https://jawab24.com/shopify/webhooks';
 
-            await registerWebhooks('test-store.myshopify.com', 'token123');
+        // REST-style topic → { GraphQL enum, delivery address } — mirrors the
+        // service's SHOPIFY_WEBHOOK_TOPIC_DEFS; a drift here is a real topic change.
+        const TOPIC_MAP: Array<{ topic: string; gqlTopic: string; address: string }> = [
+            { topic: 'app/uninstalled', gqlTopic: 'APP_UNINSTALLED', address: `${WEBHOOK_BASE}/uninstall` },
+            { topic: 'products/create', gqlTopic: 'PRODUCTS_CREATE', address: `${WEBHOOK_BASE}/products-update` },
+            { topic: 'products/update', gqlTopic: 'PRODUCTS_UPDATE', address: `${WEBHOOK_BASE}/products-update` },
+            { topic: 'products/delete', gqlTopic: 'PRODUCTS_DELETE', address: `${WEBHOOK_BASE}/products-update` },
+            { topic: 'orders/create', gqlTopic: 'ORDERS_CREATE', address: `${WEBHOOK_BASE}/orders` },
+            { topic: 'orders/fulfilled', gqlTopic: 'ORDERS_FULFILLED', address: `${WEBHOOK_BASE}/orders` },
+            { topic: 'orders/cancelled', gqlTopic: 'ORDERS_CANCELLED', address: `${WEBHOOK_BASE}/orders` },
+            { topic: 'fulfillments/update', gqlTopic: 'FULFILLMENTS_UPDATE', address: `${WEBHOOK_BASE}/fulfillments` },
+        ];
 
-            expect(mockFetch).toHaveBeenCalledTimes(8);
-            const url = `https://test-store.myshopify.com/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`;
-            const opts = { method: 'POST' };
-            // Product events
-            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('app/uninstalled') }));
-            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/create') }));
-            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/update') }));
-            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/delete') }));
-            // Order events — for customer notifications
-            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/create') }));
-            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/fulfilled') }));
-            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/cancelled') }));
-            // Delivery — fulfillments/update carries shipment_status (orders/* never does)
-            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('fulfillments/update') }));
-        });
+        const gqlResponse = (payload: unknown) => ({ ok: true, status: 200, json: async () => payload });
 
-        it('should not throw on 422 (already exists)', async () => {
-            mockFetch.mockResolvedValue({
-                ok: false,
-                status: 422,
-                text: async () => 'already exists',
+        const listResponse = (edges: Array<{ id: string; gqlTopic: string; callbackUrl: string }>) =>
+            gqlResponse({
+                data: {
+                    webhookSubscriptions: {
+                        edges: edges.map(e => ({
+                            node: {
+                                id: e.id,
+                                topic: e.gqlTopic,
+                                endpoint: { __typename: 'WebhookHttpEndpoint', callbackUrl: e.callbackUrl },
+                            },
+                        })),
+                    },
+                },
             });
 
-            // Should not throw
-            await registerWebhooks('test-store.myshopify.com', 'token123');
+        const createSuccess = gqlResponse({
+            data: { webhookSubscriptionCreate: { webhookSubscription: { id: 'gid://shopify/WebhookSubscription/1' }, userErrors: [] } },
+        });
+        const updateSuccess = gqlResponse({
+            data: { webhookSubscriptionUpdate: { webhookSubscription: { id: 'gid://shopify/WebhookSubscription/1' }, userErrors: [] } },
         });
 
-        it('should log error on non-422 failure but not throw', async () => {
+        /** Parsed bodies of every GraphQL call made so far */
+        const sentBodies = () => mockFetch.mock.calls.map(([, opts]) => JSON.parse((opts as { body: string }).body));
+        const isListCall = (body: { query: string }) => body.query.includes('query webhookSubscriptions');
+        const createCalls = () => sentBodies().filter(b => b.query.includes('webhookSubscriptionCreate'));
+        const updateCalls = () => sentBodies().filter(b => b.query.includes('webhookSubscriptionUpdate'));
+
+        it('creates all 8 subscriptions via GraphQL when none exist, in topic order', async () => {
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) return listResponse([]);
+                return createSuccess;
+            });
+
+            const result = await registerWebhooks('test-store.myshopify.com', 'token123');
+
+            // 1 list query + 8 creates, all against the GraphQL endpoint
+            expect(mockFetch).toHaveBeenCalledTimes(9);
+            for (const [url] of mockFetch.mock.calls) {
+                expect(url).toBe(GRAPHQL_URL);
+            }
+            expect(updateCalls()).toHaveLength(0);
+            const creates = createCalls();
+            for (const { gqlTopic, address } of TOPIC_MAP) {
+                const call = creates.find(c => c.variables.topic === gqlTopic);
+                expect(call, `missing create for ${gqlTopic}`).toBeDefined();
+                expect(call.variables.webhookSubscription).toEqual({ callbackUrl: address, format: 'JSON' });
+            }
+            // Contract: REST-style topic names in registration order, empty failed, ISO timestamp
+            expect(result.registered).toEqual(TOPIC_MAP.map(t => t.topic));
+            expect(result.failed).toEqual([]);
+            expect(new Date(result.lastAttempt).toISOString()).toBe(result.lastAttempt);
+        });
+
+        it('issues no mutations when every subscription already points at the right URL', async () => {
+            mockFetch.mockResolvedValue(listResponse(
+                TOPIC_MAP.map((t, i) => ({ id: `gid://shopify/WebhookSubscription/${i}`, gqlTopic: t.gqlTopic, callbackUrl: t.address })),
+            ));
+
+            const result = await registerWebhooks('test-store.myshopify.com', 'token123');
+
+            expect(mockFetch).toHaveBeenCalledTimes(1);
+            expect(result.registered).toEqual(TOPIC_MAP.map(t => t.topic));
+            expect(result.failed).toEqual([]);
+        });
+
+        it('updates the existing subscription in place when its callback URL drifted (stale-URL fix)', async () => {
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) {
+                    return listResponse([{
+                        id: 'gid://shopify/WebhookSubscription/99',
+                        gqlTopic: 'ORDERS_CREATE',
+                        callbackUrl: 'https://stale-tunnel.ngrok.io/shopify/webhooks/orders',
+                    }]);
+                }
+                if (body.query.includes('webhookSubscriptionUpdate')) return updateSuccess;
+                return createSuccess;
+            });
+
+            const result = await registerWebhooks('test-store.myshopify.com', 'token123');
+
+            const updates = updateCalls();
+            expect(updates).toHaveLength(1);
+            expect(updates[0].variables).toEqual({
+                id: 'gid://shopify/WebhookSubscription/99',
+                webhookSubscription: { callbackUrl: `${WEBHOOK_BASE}/orders` },
+            });
+            // The drifted topic is NOT re-created — the other 7 are
+            const creates = createCalls();
+            expect(creates).toHaveLength(7);
+            expect(creates.some(c => c.variables.topic === 'ORDERS_CREATE')).toBe(false);
+            expect(result.registered).toEqual(TOPIC_MAP.map(t => t.topic));
+            expect(result.failed).toEqual([]);
+        });
+
+        it('prefers the URL-matching subscription over a stale REST-era duplicate of the same topic', async () => {
+            // The REST era could leave TWO subscriptions on one topic (a changed
+            // address POSTed a second subscription; 422 only fired on exact
+            // topic+address match). Updating the stale twin would collide with
+            // the matching one — the matching one must win and the topic skip.
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) {
+                    return listResponse([
+                        { id: 'gid://shopify/WebhookSubscription/10', gqlTopic: 'ORDERS_CREATE', callbackUrl: 'https://stale-tunnel.ngrok.io/shopify/webhooks/orders' },
+                        { id: 'gid://shopify/WebhookSubscription/11', gqlTopic: 'ORDERS_CREATE', callbackUrl: `${WEBHOOK_BASE}/orders` },
+                    ]);
+                }
+                return createSuccess;
+            });
+
+            const result = await registerWebhooks('test-store.myshopify.com', 'token123');
+
+            expect(updateCalls()).toHaveLength(0);
+            expect(createCalls().some(c => c.variables.topic === 'ORDERS_CREATE')).toBe(false);
+            expect(result.registered).toContain('orders/create');
+            expect(result.failed).toEqual([]);
+        });
+
+        it('reports a per-topic failure on userErrors without failing the batch', async () => {
             mockCaptureError.mockClear();
-            mockFetch.mockResolvedValue({
-                ok: false,
-                status: 500,
-                text: async () => 'server error',
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) return listResponse([]);
+                if (body.variables.topic === 'PRODUCTS_UPDATE') {
+                    return gqlResponse({
+                        data: { webhookSubscriptionCreate: { webhookSubscription: null, userErrors: [{ field: ['topic'], message: 'Topic not allowed' }] } },
+                    });
+                }
+                return createSuccess;
+            });
+
+            const result = await registerWebhooks('test-store.myshopify.com', 'token123');
+
+            expect(result.failed).toEqual([{ topic: 'products/update', error: 'Topic not allowed' }]);
+            expect(result.registered).toEqual(TOPIC_MAP.filter(t => t.topic !== 'products/update').map(t => t.topic));
+            expect(mockCaptureError).toHaveBeenCalledTimes(1);
+        });
+
+        it('retries a THROTTLED mutation and succeeds', async () => {
+            vi.useFakeTimers();
+            let fulfillmentsAttempts = 0;
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) return listResponse([]);
+                if (body.variables.topic === 'FULFILLMENTS_UPDATE' && ++fulfillmentsAttempts === 1) {
+                    return gqlResponse({
+                        errors: [{ message: 'Throttled', extensions: { code: 'THROTTLED' } }],
+                        extensions: { cost: { requestedQueryCost: 10, throttleStatus: { currentlyAvailable: 0, restoreRate: 50 } } },
+                    });
+                }
+                return createSuccess;
+            });
+
+            const promise = registerWebhooks('test-store.myshopify.com', 'token123');
+            await vi.runAllTimersAsync();
+            const result = await promise;
+            vi.useRealTimers();
+
+            expect(fulfillmentsAttempts).toBe(2);
+            expect(result.registered).toEqual(TOPIC_MAP.map(t => t.topic));
+            expect(result.failed).toEqual([]);
+        });
+
+        it('throws when the subscription list query fails (callers persist failed-all + enqueue retry)', async () => {
+            mockFetch.mockResolvedValue({ ok: false, status: 400, json: async () => ({}) });
+
+            await expect(registerWebhooks('test-store.myshopify.com', 'token123'))
+                .rejects.toThrow('Shopify GraphQL HTTP error: 400');
+        });
+
+        it('names the page-overflow condition loudly instead of colliding silently', async () => {
+            // >100 subscriptions pushes the URL-matching twin onto an unseen
+            // page 2, degenerating the upsert into the unhealable "address
+            // already taken" loop. The guard can't see page 2 either — but it
+            // makes the failure one Sentry search away instead of a mystery.
+            mockCaptureError.mockClear();
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) {
+                    const full = listResponse([]);
+                    const payload = await full.json() as { data: { webhookSubscriptions: Record<string, unknown> } };
+                    payload.data.webhookSubscriptions.pageInfo = { hasNextPage: true };
+                    return gqlResponse(payload);
+                }
+                return createSuccess;
             });
 
             await registerWebhooks('test-store.myshopify.com', 'token123');
-            expect(mockCaptureError).toHaveBeenCalled();
+
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                expect.stringContaining('shopify_webhook_list_overflow'),
+                expect.objectContaining({ level: 'warning' }),
+            );
+        });
+
+        it('prefers an HTTP twin over a non-HTTP subscription when healing drift', async () => {
+            // An EventBridge/PubSub subscription (created out-of-band on the
+            // same app credentials) has no callbackUrl and cannot take one —
+            // updating it would loop on userErrors forever. The HTTP twin,
+            // even stale, is the one that can be healed.
+            mockFetch.mockImplementation(async (_url: string, opts: { body: string }) => {
+                const body = JSON.parse(opts.body);
+                if (isListCall(body)) {
+                    return gqlResponse({
+                        data: {
+                            webhookSubscriptions: {
+                                edges: [
+                                    // Non-HTTP first so naive first-wins would pick it
+                                    { node: { id: 'gid://shopify/WebhookSubscription/20', topic: 'ORDERS_CREATE', endpoint: { __typename: 'WebhookEventBridgeEndpoint' } } },
+                                    { node: { id: 'gid://shopify/WebhookSubscription/21', topic: 'ORDERS_CREATE', endpoint: { __typename: 'WebhookHttpEndpoint', callbackUrl: 'https://stale-tunnel.ngrok.io/shopify/webhooks/orders' } } },
+                                ],
+                            },
+                        },
+                    });
+                }
+                if (body.query.includes('webhookSubscriptionUpdate')) return updateSuccess;
+                return createSuccess;
+            });
+
+            const result = await registerWebhooks('test-store.myshopify.com', 'token123');
+
+            const updates = updateCalls();
+            expect(updates).toHaveLength(1);
+            expect(updates[0].variables.id).toBe('gid://shopify/WebhookSubscription/21');
+            expect(result.failed).toEqual([]);
         });
     });
 

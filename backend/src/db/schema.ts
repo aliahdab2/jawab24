@@ -1,4 +1,7 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, numeric, date, check, customType, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, index, uniqueIndex, real, numeric, date, check, customType, type AnyPgColumn } from 'drizzle-orm/pg-core';
+// Fixed jsonb column type — drizzle 0.29's own `jsonb` double-encodes through
+// postgres-js and stores jsonb *strings* (see jsonbColumn.ts for the full story).
+import { jsonb } from './jsonbColumn';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL, PLACEHOLDER_TIMEZONE } from '@jawab24/shared';
 import type { LeadStagesConfig, LeadCustomFieldDef } from '@jawab24/shared';
@@ -821,16 +824,27 @@ export const subscriptions = pgTable('subscriptions', {
 
     // Trial info
     trialEndsAt: timestamp('trial_ends_at'),
+    // Stamped by the trial-ending reminder cron (services/trialReminders.ts) once
+    // the merchant has been warned, so the daily run never warns twice for the
+    // same trial. NULL = not yet warned. Written only after the in-app
+    // notification lands; see the service for the retry semantics.
+    trialEndingNotifiedAt: timestamp('trial_ending_notified_at'),
 
     // Billing period
     currentPeriodStart: timestamp('current_period_start').defaultNow(),
     currentPeriodEnd: timestamp('current_period_end'),
 
     // Payment info (for Stripe integration)
-    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID
-    paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual'
+    externalSubscriptionId: varchar('external_subscription_id', { length: 255 }), // Stripe Subscription ID / Shopify AppSubscription GID
+    paymentMethod: varchar('payment_method', { length: 50 }), // 'stripe', 'paypal', 'manual', 'shopify'
     stripeCustomerId: varchar('stripe_customer_id', { length: 255 }), // Stripe Customer ID
     stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }), // For tracking
+    // Shopify App Pricing (managed billing): the *.myshopify.com domain whose app
+    // subscription this row mirrors. Required when payment_method='shopify' (CHECK
+    // below), unique among shopify rows (partial index) so one shop can never bill
+    // two workspaces. Lives here — NOT on ecommerce_stores — so the paid state
+    // survives GDPR shop/redact deleting the store row.
+    shopifyShopDomain: varchar('shopify_shop_domain', { length: 255 }),
     cancelAtPeriodEnd: boolean('cancel_at_period_end').default(false), // Cancel at period end flag
 
     // Cancellation
@@ -844,6 +858,22 @@ export const subscriptions = pgTable('subscriptions', {
         userIdIdx: index('idx_subscriptions_user_id').on(table.userId),
         statusIdx: index('idx_subscriptions_status').on(table.status),
         planIdIdx: index('idx_subscriptions_plan_id').on(table.planId),
+        // One NON-CANCELED local mirror per shop (same conditional-constraint
+        // pattern as topup_purchases). Canceled rows are excluded on purpose:
+        // they keep their domain for audit, and a shop that uninstalled from
+        // workspace A must stay adoptable by workspace B — a full-scope unique
+        // index would deadlock that adoption forever, unhealably.
+        // NOTE: drizzle-kit 0.x drops .where() when generating SQL — the real
+        // partial index lives in migration 0147 (hand-amended, 0108 precedent).
+        shopifyShopDomainUnique: uniqueIndex('idx_subscriptions_shopify_shop_domain')
+            .on(table.shopifyShopDomain)
+            .where(sql`${table.paymentMethod} = 'shopify' AND ${table.status} IS DISTINCT FROM 'canceled'`),
+        // A shopify-billed row without its shop domain is unreconcilable — the
+        // 6h sweep and the uninstall cancel both resolve rows by this column.
+        shopifyDomainRequiredCheck: check(
+            'subscriptions_shopify_domain_required',
+            sql`${table.paymentMethod} IS DISTINCT FROM 'shopify' OR ${table.shopifyShopDomain} IS NOT NULL`
+        ),
     };
 });
 
@@ -1083,6 +1113,10 @@ export const pendingEcommerceInstalls = pgTable('pending_ecommerce_installs', {
     accessTokenIv: varchar('access_token_iv', { length: 64 }).notNull(),
     refreshToken: text('refresh_token'),                // AES-256-GCM encrypted; null for Shopify (offline tokens never expire)
     refreshTokenIv: varchar('refresh_token_iv', { length: 64 }),
+    // Zid dual-header auth: companion `Authorization` Bearer token to access_token
+    // (which Zid sends as X-Manager-Token). AES-256-GCM encrypted. Null for Shopify/Salla.
+    authorizationToken: text('authorization_token'),
+    authorizationTokenIv: varchar('authorization_token_iv', { length: 64 }),
     tokenExpiresAt: timestamp('token_expires_at'),      // Salla 14d / Zid ~1y; null for Shopify
     scopes: text('scopes'),
     // Salla Easy Mode: the app.store.authorize webhook delivers tokens server-to-server
@@ -1116,6 +1150,10 @@ export const ecommerceStores = pgTable('ecommerce_stores', {
     accessTokenIv: varchar('access_token_iv', { length: 64 }).notNull(),
     refreshToken: text('refresh_token'),                     // nullable — Shopify never expires, Salla/Zid need refresh
     refreshTokenIv: varchar('refresh_token_iv', { length: 64 }),
+    // Zid dual-header auth: companion `Authorization` Bearer token to access_token
+    // (which Zid sends as X-Manager-Token). AES-256-GCM encrypted. Null for Shopify/Salla.
+    authorizationToken: text('authorization_token'),
+    authorizationTokenIv: varchar('authorization_token_iv', { length: 64 }),
     tokenExpiresAt: timestamp('token_expires_at'),           // null = never expires (Shopify)
 
     // Store info (synced from platform)
@@ -1320,9 +1358,20 @@ export const factRows = pgTable('fact_rows', {
     // that disqualified catalog_items as the home for lists).
     price: numeric('price', { precision: 12, scale: 2 }),
     currency: varchar('currency', { length: 30 }), // widened 0144: CurrencyInput truncates at 30, and «ل.س بالعملة القديمة» must fit
-    // Optional validity window — same self-expiry semantics as catalog_items:
-    // a passed endsAt EXCLUDES the row from the prompt while the merchant UI
-    // keeps it (the v38 stale-date class, killed by dates not by memory).
+    // Optional validity window. Self-expiry kills the v38 stale-date class by
+    // dates, not by model memory — but note this DIVERGES from catalog_items:
+    //
+    //   THE START DATE OWNS VISIBILITY (owner ruling 2026-07-31, D-057).
+    //   A row with a startsAt leaves the prompt the day AFTER it starts, because
+    //   an announced cohort that has already begun is stale whatever its endsAt
+    //   claims. endsAt is DESCRIPTIVE — printed for the customer — and gates only
+    //   rows that carry no startsAt.
+    //
+    // The rule lives in ONE place: `isRowLive` in @jawab24/shared/factSchedule.
+    // The merchant UI keeps expired rows with an "Ended" badge, computed from the
+    // same function. Real columns (not attributes JSONB) because the prompt-build
+    // query pre-filters at SQL level — see the lockstep note in
+    // services/factCollections.ts buildFactCollectionsContext.
     startsAt: isoDateString('starts_at'),
     endsAt: isoDateString('ends_at'),
     isAvailable: boolean('is_available').notNull().default(true),

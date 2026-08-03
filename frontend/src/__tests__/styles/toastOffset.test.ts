@@ -28,9 +28,19 @@ const appTsx = readFileSync(
  *  4. The toast silently drifting back to a top/center position.
  */
 describe('toast safe-area offset — single source of truth', () => {
-  it('declares --toast-offset-bottom exactly once', () => {
+  // Exactly TWO declarations: the nav-clearing base, and the ≥lg override
+  // that returns to a plain corner offset once the bottom nav is gone. The
+  // override must live behind the nav's own breakpoint (1024px) — sonner's
+  // built-in mobile query switches at 600px, which left the 601–1023px band
+  // with toasts painted over the still-visible nav.
+  it('declares --toast-offset-bottom exactly twice: base + ≥lg override', () => {
     const declarations = css.match(/--toast-offset-bottom:/g) ?? [];
-    expect(declarations).toHaveLength(1);
+    expect(declarations).toHaveLength(2);
+    const lgOverride = css.match(
+      /@media \(min-width: 1024px\)\s*\{\s*:root\s*\{\s*--toast-offset-bottom:\s*([^;]+);/,
+    );
+    expect(lgOverride).not.toBeNull();
+    expect((lgOverride as RegExpMatchArray)[1].trim()).toBe('16px');
   });
 
   it('--toast-offset-bottom clears the bottom nav and tracks the gesture inset', () => {
@@ -42,6 +52,17 @@ describe('toast safe-area offset — single source of truth', () => {
     // orientations (4rem portrait / 3rem landscape) instead of a hard-coded px.
     expect(value).toContain('var(--sai-bottom)');
     expect(value).toContain('var(--nav-bottom-height)');
+  });
+
+  // A toast must never paint over an open modal's footer and block Save —
+  // sonner ships z-index 999999999. The cap keeps toasts above the app chrome
+  // (nav z-40) but under every modal tier (z-50+).
+  it('caps the sonner z-index between the nav (40) and the modal tier (50)', () => {
+    const block = css.match(/html \[data-sonner-toaster\]\s*\{[^}]*z-index:\s*(\d+)/);
+    expect(block).not.toBeNull();
+    const z = Number((block as RegExpMatchArray)[1]);
+    expect(z).toBeGreaterThan(40);
+    expect(z).toBeLessThan(50);
   });
 
   it('.is-native sonner override targets the bottom position and reads the token', () => {
@@ -58,11 +79,16 @@ describe('toast safe-area offset — single source of truth', () => {
 
   it('Toaster mobileOffset reads the bottom token (no hard-coded value)', () => {
     expect(appTsx).toMatch(/mobileOffset=\{\{\s*bottom:\s*['"]var\(--toast-offset-bottom\)['"]\s*\}\}/);
+    // The desktop prop reads the SAME token — the 601–1023px band is "desktop"
+    // to sonner but still shows the bottom nav, so a hard-coded 16px here
+    // parked toasts on top of the nav and of modal footers.
+    expect(appTsx).toMatch(/(?<!mobile)offset=\{\{\s*bottom:\s*['"]var\(--toast-offset-bottom\)['"]\s*\}\}/i);
     const toasterBlock = appTsx.match(/<Toaster[\s\S]*?\/>/);
     expect(toasterBlock).not.toBeNull();
     const block = (toasterBlock as RegExpMatchArray)[0];
     // Negative guard: no inline calc — same drift trap.
     expect(block).not.toMatch(/calc\s*\(/);
+    expect(block).not.toMatch(/bottom:\s*['"]\d+px['"]/);
   });
 
   it('Toaster anchors to the bottom corner, mirrored for RTL', () => {

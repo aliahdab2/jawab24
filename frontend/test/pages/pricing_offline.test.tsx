@@ -11,7 +11,8 @@ vi.mock('@/lib/api', () => ({
     },
 }));
 
-vi.mock('@/utils/geoCheck', () => ({
+vi.mock('@/utils/geoCheck', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/utils/geoCheck')>()),
     isUserSanctionedNonBlocking: vi.fn().mockResolvedValue({ sanctioned: false, cached: false, timedOut: true }),
     isUserSanctioned: vi.fn(),
 }));

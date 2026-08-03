@@ -62,34 +62,16 @@ vi.mock('@/components/layout/DashboardLayout', () => ({
     DashboardLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-vi.mock('@/components/ui', () => ({
-    Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+vi.mock('@/components/ui', async () => ({
+    ...(await import('../testUtils/uiMocks')),
+    // Page-level components the shared card mocks don't cover.
     Button: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => (
         <button onClick={onClick}>{children}</button>
-    ),
-    Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-    Toggle: ({ enabled, onChange }: { enabled: boolean; onChange: (val: boolean) => void }) => (
-        <button onClick={() => onChange(!enabled)}>{enabled ? 'ON' : 'OFF'}</button>
     ),
     PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
     PageSkeleton: () => <div data-testid="page-skeleton">Loading...</div>,
     Modal: ({ children, isOpen }: { children: React.ReactNode; isOpen: boolean }) => (
         isOpen ? <div data-testid="modal">{children}</div> : null
-    ),
-    Select: ({ value, onChange, options }: { value: string; onChange: (val: string) => void; options: { value: string; label: string }[] }) => (
-        <select value={value} onChange={(e) => onChange(e.target.value)}>
-            {options.map((o: { value: string; label: string }) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-    ),
-    InputFieldWrapper: ({ children, trailing }: { children: React.ReactNode; trailing?: React.ReactNode }) => (
-        <div>{children}{trailing}</div>
-    ),
-    CharCounter: ({ value, max }: { value: string | number; max: number }) => {
-        const len = typeof value === 'string' ? value.length : value;
-        return <span>{len}/{max}</span>;
-    },
-    InfoPopover: ({ label, children }: { label: string; children: React.ReactNode }) => (
-        <button type="button" aria-label={label}>{children}</button>
     ),
 }));
 

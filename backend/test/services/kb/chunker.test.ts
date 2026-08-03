@@ -184,6 +184,24 @@ describe('ChunkerService', () => {
             expect(hoursChunk!.contentOriginal).toContain('16:00-22:00');
         });
 
+        it('renders the hours chunk in Saturday-first week order, not insertion order', () => {
+            const profile = {
+                hours: {
+                    mon: ['09:00-18:00'],
+                    sat: ['10:00-14:00'],
+                    fri: ['closed'],
+                    sun: ['09:00-18:00'],
+                },
+            };
+            const chunks = chunkBusinessProfile(profile);
+            const content = chunks.find(c => c.type === 'hours')!.contentOriginal;
+            const lines = content.split('\n');
+            expect(lines[0]).toContain('السبت');
+            expect(lines[1]).toContain('الأحد');
+            expect(lines[2]).toContain('الإثنين');
+            expect(lines[3]).toContain('الجمعة');
+        });
+
         it('creates location chunk from address', () => {
             const profile = {
                 address: 'Dubai Marina',

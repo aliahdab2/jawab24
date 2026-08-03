@@ -4,7 +4,9 @@
 >
 > **When to run:** Before app store submission. Re-run after every Shopify-touching code change before re-submission.
 >
-> **Companion plans:** `SALLA_TEST_PLAN.md` and `ZID_TEST_PLAN.md` (to be created — most cases mirror this doc).
+> **Companion plans:** `ZID_TEST_PLAN.md` (live-validation run-book, created 2026-08-01) and `SALLA_TEST_PLAN.md` (to be created — most cases mirror this doc).
+>
+> **Evidence discipline:** log evidence per test (screenshot, log line, DB query). Save any webhook delivery or API response that SURPRISES you (headers + body, verbatim) to `shopify_live_payloads.jsonl` — the Salla/Zid capture convention. §O-0's GraphiQL result and §Q's captures are mandatory evidence, not optional.
 
 ---
 
@@ -16,7 +18,7 @@ Confirm before you start. If any item is ❌, fix that first; the rest of the pl
 |---|------|---------------|:--:|
 | P-1 | Shopify dev store exists | `demo-electronics.myshopify.com` admin loads | ☐ |
 | P-2 | Shopify Partners app `Jawab24-Dev` configured with current ngrok URL | Check Partners → App setup → URLs | ☐ |
-| P-3 | Backend running on `localhost:3000` with dev `.env` | `curl http://localhost:3000/health` returns OK | ☐ |
+| P-3 | Backend running locally with dev `.env` — ⚠️ on this machine the backend runs on **3100** (3000 is frequently taken by an unrelated dev server; `lsof -iTCP:3000 -sTCP:LISTEN` to check, never kill what you find; the `/shopify-dev` skill handles ports) | `curl http://localhost:3100/health` returns OK | ☐ |
 | P-4 | ngrok tunnel active to backend | `https://<ngrok>.ngrok-free.dev/health` returns OK | ☐ |
 | P-5 | Frontend running on `localhost:3001` | Browser opens dashboard, can log in | ☐ |
 | P-6 | At least one Facebook test page connected with valid token | Pages page lists at least one entry | ☐ |
@@ -218,14 +220,14 @@ For each test, send the listed message as a real DM to the linked FB test page a
 
 ## E. Order Webhooks → SMS Notifications
 
-> Requires P-7 (test phone number with SMS receive). All these check that `customer_notifications_log` rows are created with status `delivered` and an actual SMS lands.
+> Requires P-7 (test phone number with SMS receive). All these check that `customer_notifications_log` rows are created with status `sent` (the enum is pending/sent/failed/cancelled — there is no `delivered` status) and an actual SMS lands.
 
 ### E-1. New order → order_confirmed SMS
 **Steps:** Place a test order on the dev store with the test phone number.
 
 **Expected:**
 - `orders/create` webhook received
-- A row in `customer_notifications_log` with `notificationType='order_confirmed'`, `status='delivered'`
+- A row in `customer_notifications_log` with `notificationType='order_confirmed'`, `status='sent'`
 - SMS arrives within 30s
 
 ### E-2. Order fulfilled → order_shipped SMS
@@ -506,13 +508,121 @@ After everything else passes:
 
 ---
 
+## O. Billing — Shopify App Pricing (D-054)
+
+Prereqs: App Pricing plans configured with **handles = plan slugs** (starter/business/pro),
+a private **$0 test plan**, redirection URL `https://<host>/shopify/billing/return`,
+`SHOPIFY_APP_HANDLE` set. Dev-store charges are free within the same Partner org.
+
+> ⚠️ The $0 test plan's **display name must lowercase to a billable slug** (e.g. name
+> it `Starter`, handle `starter-test`) — activation resolves the AppSubscription's
+> NAME through `mapShopifyPlanToSlug` (`syncShopifyBilling` reads `appSub.name`, not
+> the handle), so a plan named "Test $0" can never activate a mirror (fail-loud by
+> design) and O-1 would fail before it starts. O-8 covers the unknown-name path
+> deliberately.
+
+**O-0 (V3 gate, run FIRST).** After selecting the $0 plan, query
+`currentAppInstallation { activeSubscriptions { id name status } }` with the store token
+(GraphiQL). If App Pricing enrollments do NOT appear here, STOP — swap
+`fetchShopifyActiveSubscription` internals to the Partner API before running O-1…O-7.
+
+| ID | Test | Expected |
+|----|------|----------|
+| O-1 | Select the $0 test plan in Shopify → approve → land back on jawab24.com | `GET /shopify/billing/return` hit; local row: `payment_method='shopify'`, GID in `external_subscription_id`, `shopify_shop_domain` set, status `active` (or `trialing` if the plan has trial days), usage window initialized, subject = workspace OWNER |
+| O-2 | Upgrade to a higher plan inside Shopify admin | Next sync (return hit or ≤6h reconcile) moves `plan_id` to the new slug; period advances contiguously; NO duplicate row |
+| O-3 | Cancel the subscription inside Shopify admin (app stays installed) | Reconciler pauses the local mirror (`status='paused'`); replies blocked; re-selecting a plan reactivates through the same sync |
+| O-4 | Uninstall the app while the subscription is live | `webhookUninstall` cancels the local mirror (`status='canceled'`, `cancel_reason='shopify_app_uninstalled'`) AND deactivates the store — no paid local sub outlives the app |
+| O-5 | Reinstall + re-select a plan on the same workspace | Same row re-adopted (update, not insert); no unique-index collision |
+| O-6 | Select a plan, then KILL the browser before the return redirect | Row still adopted by the reconciler within 6h (or run `reconcileShopifyBilling` manually) — the return endpoint must not be a single point of failure |
+| O-7 | While shopify-billed: open /pricing, /checkout, top-up CTA | Pricing shows the "managed in Shopify" banner + deep link; plan clicks route to Shopify admin; `/checkout` bounces (`SHOPIFY_BILLED`); top-up CTA hidden; `POST /payment/create-subscription-intent` returns 400 `SHOPIFY_BILLED` |
+| O-8 | Plan with an unknown handle (create a `qa-temp` plan) | NO activation; Sentry `unknown plan` event; merchant stays on previous state (fail-loud, never guess) |
+| O-9 | Stripe-paying user installs the app on the same workspace and picks a plan | Adoption REFUSED (D-H); Sentry collision warning; Stripe row untouched — a human resolves |
+
+---
+
+## Q. Real-Traffic Soak & Robustness
+
+> Named §Q (not §P) to avoid colliding with the Pre-flight P-* IDs. Run AFTER A–L are
+> green. The unit suites prove the logic; this section proves the integration under the
+> traffic shapes production actually sees — sustained live AI replies, webhook bursts,
+> API throttling, delivery outages, and reconciler failures. Mirrors
+> `ZID_TEST_PLAN.md` §I so both platforms carry the same robustness bar.
+
+### Q-1. Live DM soak (real AI traffic)
+**Steps:** Over ~1 hour, send ≥30 real DMs to the linked FB test page mixing: Arabic
+dialects + فصحى + English, product questions (in and out of catalog), order lookups with
+verification, follow-ups, and rapid-fire consecutive messages.
+
+**Expected:**
+- Every reply grounded: prices only from the synced catalog, "let me check" on unknowns
+  (the two-tier price guard never lets an unverified number through)
+- Consolidation merges rapid-fire messages — no double replies
+- Phase 6.5 counters coherent for the window (`scripts/phase6_5_breakdown.ts`):
+  `attempts == returns`, `returns − logged` explained only by cache hits / refusals;
+  **zero** `failed_before_log:*:AiWorkerUnreachable`
+- Latency read from the pipeline stage laps, not eyeballed (Rule 17: they log at
+  `debug` — run the soak with `LOG_LEVEL=debug` locally or the timings are dark):
+  cache hits in ms, misses inside the 2–4s OpenAI band
+
+### Q-2. Webhook burst / dedupe under fire
+**Steps:** Re-deliver the same `orders/create` webhook 10× within ~5s (Partners "Send
+test notification" or curl-replay with a valid HMAC), interleaved with 2 distinct real
+orders.
+
+**Expected:** Exactly 1 `customer_notifications_log` row + 1 SMS per DISTINCT order
+(dedupe key `(store, type, platform_event_id)`); replays all 200; zero duplicate SMS.
+
+### Q-3. Product-update storm → live THROTTLED path
+**Steps:** Bulk-edit ~50 products in the Shopify admin (bulk editor) so per-product
+webhooks + syncs land together; watch backend logs for cost-based `THROTTLED`
+(HTTP 200 + `errors[].extensions.code`).
+
+**Expected:**
+- The throttle-retry path runs FOR REAL (backoff derived from
+  `extensions.cost.throttleStatus`) — until now it has only ever run against mocks
+- Sync converges: final `ecommerce_products` state matches the admin exactly
+  (spot-check 5), no rows lost to truncation, no crash-looping worker
+
+### Q-4. Delivery-outage window (Shopify's retry policy, observed)
+**Steps:** Stop the backend (ngrok up → 502s) for ~10 minutes; during the window place
+1 real order and edit 2 products; restart; wait.
+
+**Expected/Capture:**
+- Shopify redelivers on its documented retry schedule — record the actual gaps seen in
+  the ngrok inspector (evidence for how long an outage is survivable)
+- After restart, every missed event eventually lands and processes exactly once
+- `webhookHealth` never degrades to the point of Shopify cancelling subscriptions
+  during a short outage; if it does, the reregister endpoint + retry worker heal it
+  (this is the first live exercise of that code path — flagged in Open follow-ups)
+
+### Q-5. Billing reconciler failure injection (needs §O prereqs)
+**Steps:** With ≥2 shopify-billed stores in the dev DB (the $0-plan mirror + a
+synthetic second row), revoke/corrupt ONE store's token, then run
+`reconcileShopifyBilling` manually.
+
+**Expected:**
+- The failing store produces ONE aggregated sweep-error Sentry event (fingerprinted,
+  not a spam storm) — and the OTHER store is still processed (a bad store must not
+  abort the sweep)
+- Delete the synthetic store row (keep its mirror) and re-run: the orphaned live
+  mirror is Sentry-flagged, not silently skipped
+- Restore state afterwards (delete synthetic rows; note it in the run log)
+
+### Q-6. Sustained-connection sanity after the soak
+**Steps:** After Q-1–Q-4, run the §B-2 manual sync and one §D DM case again.
+
+**Expected:** Everything still green — the soak left no poisoned state (stuck BullMQ
+jobs, stale locks, half-written product rows).
+
+---
+
 ## How to use this doc
 
 1. Open in a markdown editor that supports task lists, OR copy each section into a Notion/Linear ticket
 2. Run sections **in order** — many depend on prior sections
 3. For each test ID: pass / fail / blocked — log evidence (screenshot, log line, DB query)
 4. **For every failure, open a bug ticket and link the test ID** so resubmission can prove the regression is fixed
-5. Don't proceed to App Store submission until **A through L are all green**. M and N can be partial if non-blocking.
+5. Don't proceed to App Store submission until **A through L plus O are all green**. M and N can be partial if non-blocking. **§Q must be green before the listing goes live to real merchants** (submission can proceed in parallel with fixing non-blocking §Q findings — reviewers generate little traffic; launch marketing generates a lot).
 
 ---
 
@@ -522,6 +632,8 @@ After everything else passes:
 |------|--------|
 | 2026-04-25 | Initial test plan covering Steps 1 + 2 + existing Shopify integration (OAuth, sync, page linking, agent tools, order webhooks, GDPR, security). |
 | 2026-04-25 | Dogfood session executed Sections A + B; surfaced 5 install/sync bugs. A-1.3 + A-1.4 closed in commit `723872b9`. A-1.5, A-1.9, B-3.1 closed in commit `b5ff88d2`. Backend now exposes `webhookHealth` field + `POST /shopify/store/webhooks/reregister`. Frontend banner + Try-again CTA shipped in `ff2d6324`; controller decrypt-in-trycatch hardening in `1c3eef8e`. |
+| 2026-08-01 | Added §O (App Pricing billing, D-054) with the V3 gate O-0; submission gate widened to A–L + O. |
+| 2026-08-01 | Added §Q (real-traffic soak & robustness: live DM soak with Phase 6.5 counter coherence, webhook burst/dedupe, live THROTTLED exercise, delivery-outage window, reconciler failure injection); evidence-discipline note (`shopify_live_payloads.jsonl`); P-3 port drift fixed (3100, not 3000); launch gate = §Q green. Companion `ZID_TEST_PLAN.md` created. |
 
 ## Resolved bugs
 
@@ -542,5 +654,5 @@ Surfaced during this session, not blockers for Shopify App Store submission but 
 
 - **Salla + Zid have the same install/observability gaps** — fire-and-forget webhook registration, no retry, no observability tags. Bringing them up to parity is ~1.5 hr; tracked separately.
 - **Live exercise of the new failure-recovery code paths** — the retry worker, persist-on-throw, and `/store/webhooks/reregister` endpoint have only been tested with mocks. Section 4 of `.planning/SHOPIFY_LAUNCH_VALIDATION.md` covers the exercise plan.
-- **Demo seed writes `platform_data` as a JSONB string instead of an object** — caused "cannot set path in scalar" during DB-level state injection. Not user-visible but the next dev hits the same wall.
+- **Demo seed writes `platform_data` as a JSONB string instead of an object** — caused "cannot set path in scalar" during DB-level state injection. Likely CLOSED by PR #596 (jsonbColumn.ts + migration 0148 re-encode all drizzle jsonb columns as real objects) — verify on the next demo-seed run, then strike this.
 - **No Playwright test for the connected-store card webhook-health states** — backend regression covers the field, frontend is uncovered.

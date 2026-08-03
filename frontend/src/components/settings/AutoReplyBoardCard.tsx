@@ -3,6 +3,7 @@ import Link from 'next/link';
 import clsx from 'clsx';
 import { Card, Toggle, InputFieldWrapper, CharCounter } from '@/components/ui';
 import { useTextareaAutoResize } from '@/hooks/useTextareaAutoResize';
+import { useMultilingualSettingsField } from '@/hooks/useMultilingualSettingsField';
 import { ArrowLeft } from 'lucide-react';
 import { PostReplyIcon } from '@/utils/postReply';
 import { SmartReplyIcon } from '@/utils/smartReply';
@@ -54,12 +55,12 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
     setSettings(next);
   };
 
-  const dualNudgeInput = settings.dualReplyNudgeMulti?.[settings.dashboardLanguage] || '';
+  const dualNudgeField = useMultilingualSettingsField(settings.dualReplyNudgeMulti);
+  const dualNudgeInput = dualNudgeField.value;
   // Auto-translated entries blank the input (the stored text becomes the placeholder),
   // so the textarea is visually empty even though dualNudgeInput is set. Direction must
   // be based on the actually-rendered value, not the stored value.
-  const dualNudgeSourceLang = settings.dualReplyNudgeMulti?.sourceLang;
-  const dualNudgeIsAutoTranslated = !!(dualNudgeSourceLang && dualNudgeSourceLang !== 'manual' && dualNudgeSourceLang !== settings.dashboardLanguage);
+  const dualNudgeIsAutoTranslated = dualNudgeField.isAutoTranslated;
   const dualNudgeRenderedValue = dualNudgeIsAutoTranslated ? '' : dualNudgeInput;
 
   // Grow the nudge textarea to fit its content so the full message is always
@@ -236,20 +237,11 @@ export function AutoReplyBoardCard({ settings, setSettings, fieldErrors }: Setti
                   aria-label={t('dualReplyConfigTitle.improved')}
                   value={dualNudgeRenderedValue}
                   onChange={(e) => {
-                    const value = e.target.value.slice(0, 80);
-                    const currentLang = settings.dashboardLanguage;
-                    setSettings({
-                      ...settings,
-                      dualReplyNudgeMulti: {
-                        ...settings.dualReplyNudgeMulti,
-                        [currentLang]: value,
-                        sourceLang: currentLang,
-                      },
-                    });
+                    setSettings({ ...settings, dualReplyNudgeMulti: dualNudgeField.withValue(e.target.value.slice(0, 80)) });
                   }}
                   onInput={dualNudgeAutoResize}
                   placeholder={dualNudgeIsAutoTranslated && dualNudgeInput ? dualNudgeInput : t('publicReplyPlaceholder')}
-                  dir={dualNudgeRenderedValue ? 'auto' : getLocaleDirection(settings.dashboardLanguage)}
+                  dir={dualNudgeRenderedValue ? 'auto' : getLocaleDirection(locale)}
                   maxLength={80}
                   rows={2}
                   className={clsx(

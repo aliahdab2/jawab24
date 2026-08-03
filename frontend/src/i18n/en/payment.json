@@ -27,6 +27,10 @@
     "message": "Due to regulatory requirements, payment processing is not available in your geographic location at this time. Contact us via WhatsApp to arrange an alternative payment method.",
     "support": "We typically respond within a few hours during business hours.",
     "supportLink": "Contact Support",
-    "contactWhatsApp": "Contact us on WhatsApp"
+    "contactWhatsApp": "Contact us on WhatsApp",
+    "localAlternative": "Payment from inside Syria is possible via Sham Cash. Contact support for the details.",
+    "whatsappMessagePricing": "Hi, I have a question about Jawab24 pricing and payment.",
+    "whatsappMessageCheckout": "Hi, I'd like to complete my Jawab24 subscription and have a question about payment.",
+    "whatsappEmailLine": "Email: {email}"
   }
 }

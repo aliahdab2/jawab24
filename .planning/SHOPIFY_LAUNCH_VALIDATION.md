@@ -17,7 +17,7 @@
 | Frontend `webhookHealth` badge + Re-register button | ✅ **Shipped** (`ff2d6324`) — see `frontend/src/pages/integrations.tsx:226-250`. Pending/failed banners + Re-register button + i18n + accessibility | High — code shipped, needs live state verification |
 | Shopify mandatory-webhook compliance (GDPR + uninstall) | Existing tests pass; no live verification | Medium |
 | Sentry observability on webhook handlers | ✅ **Shipped**. `wrapWebhook` helper at `backend/src/controllers/shopify.ts:19-36` tags every 5xx with `service: shopify, webhook: <name>` | High |
-| Order webhook coverage (orders/create, orders/updated, orders/fulfilled) | ✅ **Shipped**. See `backend/src/services/shopify.ts:105-112` | High |
+| Order webhook coverage (orders/create, orders/fulfilled, orders/cancelled + fulfillments/update for delivery) | ✅ **Shipped**. See `SHOPIFY_WEBHOOK_TOPIC_DEFS` in `backend/src/services/shopify.ts` | High |
 
 **Verdict for App Store submission (2026-05-19):** **Code-ready.** Submission is now gated on (a) live dogfood pass of Sections 3–6 against a real Shopify dev store, (b) privacy policy update covering Salla + Shopify processor disclosures, (c) listing assets + reviewer test-path doc.
 
@@ -86,7 +86,7 @@ Use a **fresh** dev store (`demo-electronics.myshopify.com` works if you reset i
    Expected: `"ok"`
 
 **Pass criteria:**
-- [ ] All 8 webhook topics in `registered` (`app/uninstalled`, `products/{create,update,delete}`, `orders/{create,updated,fulfilled,cancelled}`)
+- [ ] All 8 webhook topics in `registered` (`app/uninstalled`, `products/{create,update,delete}`, `orders/{create,fulfilled,cancelled}`, `fulfillments/update`)
 - [ ] `failed` is `[]`
 - [ ] `exhausted` is `null` or absent
 - [ ] API returns `webhookHealth: "ok"`

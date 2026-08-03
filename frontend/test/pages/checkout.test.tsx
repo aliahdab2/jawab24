@@ -61,7 +61,8 @@ vi.mock('@stripe/react-stripe-js', () => ({
 
 // These are the key mocks we control per-test
 const mockGeoCheck = vi.fn();
-vi.mock('@/utils/geoCheck', () => ({
+vi.mock('@/utils/geoCheck', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/geoCheck')>()),
   isUserSanctioned: () => mockGeoCheck(),
 }));
 

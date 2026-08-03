@@ -22,7 +22,8 @@ vi.mock('next/router', () => ({
 }));
 
 const mockToastError = vi.fn();
-vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => mockToastError(...a), success: vi.fn() } }));
+const mockToastInfo = vi.fn();
+vi.mock('sonner', () => ({ toast: { error: (...a: unknown[]) => mockToastError(...a), info: (...a: unknown[]) => mockToastInfo(...a), success: vi.fn() } }));
 
 const authState = { isAuthenticated: true };
 vi.mock('@/lib/store', () => ({ useAuthStore: () => ({ isAuthenticated: authState.isAuthenticated }) }));
@@ -160,5 +161,64 @@ describe('useSelectPlan — web unchanged', () => {
 
         expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/checkout?planId=plan_biz'));
         expect(mockApiPost).not.toHaveBeenCalled();
+    });
+});
+
+describe('useSelectPlan — Shopify-billed workspace (D-G)', () => {
+    // Shopify forbids off-platform billing for App Store installs: every plan
+    // click must route to the Shopify admin deep link, never into any Stripe
+    // path (hosted checkout, /checkout, in-place changePlan).
+    const shopifyUsage = (over: Record<string, unknown> = {}) => ({
+        subscription: {
+            plan: { slug: 'business' },
+            status: 'active',
+            paymentMethod: 'shopify',
+            shopifyManageUrl: 'https://admin.shopify.com/store/test/charges/jawab24/pricing_plans',
+            ...over,
+        },
+    } as unknown as UsageSummary);
+
+    it('routes plan clicks to the Shopify admin deep link — no Stripe path runs', async () => {
+        nativeState.native = false;
+        const { result } = render(shopifyUsage());
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockOpenExternalUrl).toHaveBeenCalledWith('https://admin.shopify.com/store/test/charges/jawab24/pricing_plans');
+        expect(mockApiPost).not.toHaveBeenCalled();
+        expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('guards the NATIVE hosted-checkout path too', async () => {
+        nativeState.native = true;
+        const { result } = render(shopifyUsage());
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockApiPost).not.toHaveBeenCalled();
+        expect(mockOpenExternalUrl).toHaveBeenCalledWith('https://admin.shopify.com/store/test/charges/jawab24/pricing_plans');
+    });
+
+    it('falls back to an informational toast when no manage URL is configured', async () => {
+        nativeState.native = false;
+        const { result } = render(shopifyUsage({ shopifyManageUrl: undefined }));
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        expect(mockToastInfo).toHaveBeenCalled();
+        expect(mockApiPost).not.toHaveBeenCalled();
+        expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('does NOT guard when paymentMethod is absent — normal Stripe flow proceeds', async () => {
+        nativeState.native = false;
+        const { result } = render({
+            subscription: { plan: { slug: 'starter' }, status: 'trialing' },
+        } as unknown as UsageSummary);
+
+        await act(() => result.current.handleSelectPlan('plan_biz'));
+
+        // trial (no Stripe customer) → routed to /checkout
+        expect(mockPush).toHaveBeenCalledWith('/checkout?planId=plan_biz&interval=month');
     });
 });

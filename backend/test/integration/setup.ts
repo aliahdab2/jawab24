@@ -37,9 +37,21 @@ process.env.ECOMMERCE_TOKEN_ENCRYPTION_KEY =
 process.env.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_integration_dummy';
 process.env.STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_integration_test_secret';
 
+// OpenAI calls are mocked in every integration test, but client CONSTRUCTION
+// (leadExtractor.getClient) throws without a key. On the main checkout this was
+// masked by backend/.env; a fresh worktree has no .env and the extraction path
+// silently degraded to extraction_status='pending' (hermeticity gap, found
+// during the drizzle 0.45 upgrade).
+process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'sk-test-integration-dummy';
+
 // Dedicated connection for integration test helpers (direct DB reads/writes in assertions).
 const testClient = postgres(connectionString, { prepare: false, max: 3 });
 export const testDb = drizzle(testClient, { schema });
+// drizzle(client) replaces date/timestamp serializers with identity fns — raw sql
+// fragments with Date params would crash. Same restoration the app client gets.
+// Dynamic import: a static one would hoist above the DATABASE_URL assignment.
+const { restoreRawParamSerializers } = await import('../../src/db');
+restoreRawParamSerializers(testClient);
 
 beforeEach(async () => {
     // Truncate all tables that integration tests touch (CASCADE handles FK deps).
