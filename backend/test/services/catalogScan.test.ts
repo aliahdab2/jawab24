@@ -113,17 +113,19 @@ function mockPosts(posts: unknown[], failed = false) {
 
 const extractorInput = () => vi.mocked(catalogExtractor.extract).mock.calls[0][0] as string;
 
-describe('catalogScanService.scanPage', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        state.pageRow = dealerPage();
-        state.catalogRows = [];
-        state.fbReplyRows = [];
-        state.igReplyRows = [];
-        state.updates = [];
-        vi.mocked(catalogExtractor.extract).mockResolvedValue(okExtraction as never);
-    });
+// One reset for all three suites — the fixture state is identical everywhere,
+// and three hand-copied beforeEach blocks is exactly how one of them drifts.
+beforeEach(() => {
+    vi.clearAllMocks();
+    state.pageRow = dealerPage();
+    state.catalogRows = [];
+    state.fbReplyRows = [];
+    state.igReplyRows = [];
+    state.updates = [];
+    vi.mocked(catalogExtractor.extract).mockResolvedValue(okExtraction as never);
+});
 
+describe('catalogScanService.scanPage', () => {
     it('returns null for a page outside the workspace (controller → 404)', async () => {
         state.pageRow = undefined;
         expect(await catalogScanService.scanPage(WS, PAGE, CTX)).toBeNull();
@@ -277,16 +279,6 @@ describe('catalogScanService.scanPage', () => {
 });
 
 describe('scanPage — configured Post Replies (the merged source, D-059)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        state.pageRow = dealerPage();
-        state.catalogRows = [];
-        state.fbReplyRows = [];
-        state.igReplyRows = [];
-        state.updates = [];
-        vi.mocked(catalogExtractor.extract).mockResolvedValue(okExtraction as never);
-    });
-
     it('merges a fresh post with ITS configured reply into one block — and spends no image budget on it', async () => {
         vi.mocked(axios.get).mockResolvedValue({ data: new ArrayBuffer(8), headers: { 'content-type': 'image/jpeg' } } as never);
         vi.mocked(extractFromImage).mockResolvedValue({ text: 'x', method: 'gpt-vision' } as never);
@@ -396,16 +388,6 @@ describe('scanPage — configured Post Replies (the merged source, D-059)', () =
 });
 
 describe('scanPage — Graph failure honesty (the "up to date" masking regression)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        state.pageRow = dealerPage();
-        state.catalogRows = [];
-        state.fbReplyRows = [];
-        state.igReplyRows = [];
-        state.updates = [];
-        vi.mocked(catalogExtractor.extract).mockResolvedValue(okExtraction as never);
-    });
-
     // THE regression this suite exists for: getPagePosts is fail-soft (an API
     // error returns an empty page), and the old scan read that emptiness as
     // "no new posts → all up to date" — telling the merchant to go post
