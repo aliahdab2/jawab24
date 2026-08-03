@@ -720,3 +720,56 @@ body, and by a renderer-level byte-identical case. The divergent shape
 (`starts_at !== ends_at`) is only reachable once an editor can author it, which is a
 LATER PR — deliberately not this one, so this change is provably inert on deploy and
 safely revertible.
+
+---
+
+## D-058 · A confirmed fact retires the line that contradicts it — at the moment of confirming, not at the next catalog import
+
+**Decided:** 2026-08-03 · **Status:** Active · Closes the C-FINAL item (owner ruling
+2026-07-26: «but i want this issue to be solved at the end»)
+
+**The defect (eval #720).** A merchant confirms «حي النسيم» in `/business` while their
+Business Info still reads «📍 الموقع: … حي العزيزية». Asked «وين موقعكم؟», the assistant
+answered the STALE address at **high confidence** — the worst shape a wrong answer takes:
+specific, actionable, and unflagged.
+
+**Prompts cannot arbitrate this, and the reason is mechanical — not a matter of wording.**
+The BUSINESS_INFO block's conflict sentence is outranked by five rules in
+`STATIC_SYSTEM_PREFIX` that name `<business_knowledge>` the only factual source, including
+the MANDATORY FINAL SELF-CHECK which orders the model to REMOVE any claim absent from it.
+So the model deletes النسيم and keeps العزيزية — correctly, by its instructions. Two
+attempts (explicit conflict wording, then bilingual field labels) died on this. A third is
+possible only as surgery on the shared prefix plus a `PROMPT_VERSION` bump, which retires
+the entire semantic reply cache (Rule 17.1). **Do not re-propose a block-wording fix.**
+
+**The ruling: the contradicting line must never reach the model.** The cleanup machinery
+(`matchStructuredFieldLinesInKb` → `POST /pages/:id/kb/cleanup` → `KbCleanupSheet`) shipped
+in Phase C but hung off ONE trigger — after a catalog import. A merchant who never imports
+was never offered it, so the stale line survived forever. The trigger now also fires where
+the conflict is actually created: **after a fact save succeeds in `/business`**. Confirming
+a fact is precisely when to ask about the line that disagrees with it. D-038 discipline is
+unchanged — field lines arrive UNCHECKED, the merchant confirms, nothing is auto-deleted.
+
+**Two things this exposed, both load-bearing:**
+
+1. **The matcher was blind to the label merchants actually use.** «موقع» had been excluded
+   outright because «الموقع الإلكتروني» means *website*, so `📍 الموقع:` matched nothing —
+   the feature would have shipped as a NO-OP on the very line it exists for. The label is
+   admitted and disambiguated per line by website evidence (`الكتروني`/`www`/`http`/`com`);
+   unambiguous labels («عنواننا») are never subject to that veto. **An exclusion that makes
+   a feature silently propose nothing is worse than the false positive it prevents** — the
+   sheet only ever proposes, and every proposal is confirmed by a human.
+2. **Both triggers now share one predicate** (`hasFieldLinesToClean`). Two call sites
+   spelling out the same question is how one of them ends up never firing — which is the
+   whole of this bug.
+
+**The eval stops testing the unfixable.** #720 as written pinned the prompt path, so it was
+red forever, and a permanently-red test trains people to ignore red. The moto fixture now
+models the merchant who ACCEPTED the cleanup: no address in the KB, so #720 asks the honest
+remaining question — is the confirmed field answered from at all? The *conflict* is pinned
+one layer down, in `catalogKbMatch.test.ts`, which asserts the matcher PROPOSES that exact
+line. The catalog conflicts (#717–#719) are untouched — they test a path that DOES work.
+
+**Still open (C-F2):** ~7 live pages measured 07-23 already hold a disagreement. They do not
+self-heal — this fires on the next fact edit. A read-only report, then a per-merchant
+decision. **Never auto-delete a merchant's Business Info line from a script.**

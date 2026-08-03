@@ -277,8 +277,6 @@ export const DEMO_PAGES = [
         name: 'معرض المجد للموتوسيكلات',
         suggestedKnowledgeBase: `🏍️ معرض المجد للموتوسيكلات وقطع الغيار
 
-📍 الموقع: الرياض، حي العزيزية، طريق الحائر
-
 📞 للتواصل: 0114567890
 
 ⏰ أوقات الدوام:
@@ -291,12 +289,23 @@ export const DEMO_PAGES = [
 حامل جوال للمقود متوفر بسعر 35 ريال.`,
         autoReplyEnabled: true,
         instagramUsername: null,
-        // Cat 67, second conflict axis: the KB text above still carries the OLD
-        // address (حي العزيزية — the shop moved) while the merchant-confirmed
-        // field below carries the CURRENT one. Case 411 asserted "structured
-        // beats stale KB" for years but its own comment admitted it only ever
-        // tested the AGREEING case; this fixture finally makes them DISAGREE so
-        // the precedence is proven, not assumed. Don't "fix" the mismatch.
+        // Cat 67: the address now lives ONLY here, in the merchant-confirmed
+        // field — the KB text above carries no address line at all.
+        //
+        // It used to carry a stale one (حي العزيزية — the shop moved) to prove
+        // "structured beats stale KB". It does not: the model keeps the KB value
+        // because STATIC_SYSTEM_PREFIX names <business_knowledge> the only
+        // factual source and its final self-check strips anything absent from
+        // it. Two prompt attempts failed on that; the ruling (C-FINAL) is that
+        // the contradicting line must never REACH the model, which is what the
+        // cleanup offer now does at the moment a fact is confirmed.
+        //
+        // So this fixture models the merchant who accepted that offer, and #720
+        // asks the honest question that remains: with no address in the KB, is
+        // the confirmed field used at all? The conflict itself is pinned one
+        // layer down, where it is actually resolved — catalogKbMatch.test.ts
+        // asserts the matcher PROPOSES that exact «📍 الموقع:» line.
+        // The PRODUCT conflicts (زيت 18 vs 22, حامل جوال) stay — #717–#719 need them.
         businessProfile: {
             merchant: {
                 address: 'الرياض، حي النسيم، طريق الدائري الشرقي',

@@ -2,6 +2,7 @@
 
 import type { MerchantProvenanceMap } from './businessProfileMerge';
 import type { PresentFields } from './catalogKbMatch';
+import { matchStructuredFieldLinesInKb } from './catalogKbMatch';
 
 // --- Validation schemas (single source of truth across backend + frontend) ---
 export { UpdateSettingsSchema, type UpdateSettingsInput } from './schemas/settings';
@@ -336,6 +337,24 @@ export function presentFieldsFromProfile(stored: StoredBusinessProfile): Present
     phone: !!merchant.phones?.some((p) => p?.trim()),
     hours: !!merchant.hours && Object.values(merchant.hours).some((v) => Array.isArray(v) && v.length > 0),
   };
+}
+
+/**
+ * Is there a Business Info line that duplicates a CONFIRMED structured field,
+ * i.e. is the cleanup offer worth showing at all?
+ *
+ * Both triggers ask this exact question — the fact-save in `/business` (C-F1)
+ * and the post-import pass in `CatalogManager` — so it lives here rather than
+ * being spelled out at each call site: the two drifting apart is how one of
+ * them ends up never firing. Answering `false` costs nothing; the sheet is
+ * only ever an OFFER and every line reaches it unchecked (D-038).
+ */
+export function hasFieldLinesToClean(
+  kbText: string | null | undefined,
+  stored: StoredBusinessProfile,
+): boolean {
+  if (!kbText?.trim()) return false;
+  return matchStructuredFieldLinesInKb(kbText, presentFieldsFromProfile(stored)).length > 0;
 }
 
 // --- Page Types ---

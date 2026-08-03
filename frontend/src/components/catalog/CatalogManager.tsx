@@ -11,7 +11,7 @@ import { Button, EmptyState, Select, Skeleton, ConfirmationModal } from '@/compo
 import { catalogApi, type CatalogItemInput, type CatalogVerticalInfo } from '@/lib/api';
 import {
   CATALOG_VERTICALS, CATALOG_VERTICAL_DEFAULT_TYPE, MAX_CATALOG_ITEMS_PER_PAGE,
-  matchCatalogLinesInKb, matchStructuredFieldLinesInKb, presentFieldsFromProfile,
+  matchCatalogLinesInKb, hasFieldLinesToClean,
   type CatalogItem, type CatalogVertical, type Page, type PostsScanBlocker,
 } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
@@ -410,9 +410,10 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
                 // refetch) instead of a second parallel GET — fetchQuery dedupes
                 // the in-flight request and populates the cache once.
                 const fresh = (await queryClient.fetchQuery({ queryKey, queryFn: () => catalogApi.list(pageId).then((r) => r.data) }))?.data ?? [];
-                const present = presentFieldsFromProfile(page?.businessProfile);
                 const hasProductLines = matchCatalogLinesInKb(kb, fresh).length > 0;
-                const hasFieldLines = matchStructuredFieldLinesInKb(kb, present).length > 0;
+                // Same predicate the fact-save trigger uses (shared, so the two
+                // entry points cannot drift into disagreeing about when to ask).
+                const hasFieldLines = hasFieldLinesToClean(kb, page?.businessProfile);
                 if (hasProductLines || hasFieldLines) {
                   setCleanupImportCount(count);
                   setCleanupItems(fresh);

@@ -16,7 +16,11 @@ import { BusinessHoursSheet } from '@/components/business/BusinessHoursSheet';
 import { KnowledgeBasePanel } from '@/components/knowledge-base/KnowledgeBasePanel';
 import { api, pagesApi, catalogApi, type CatalogVerticalInfo } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
-import { unwrapBusinessProfile, whatsappNumbers, type BusinessProfile } from '@jawab24/shared';
+import { KbCleanupSheet } from '@/components/catalog/KbCleanupSheet';
+import {
+  unwrapBusinessProfile, whatsappNumbers, hasFieldLinesToClean,
+  type BusinessProfile, type StoredBusinessProfile,
+} from '@jawab24/shared';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
@@ -141,6 +145,14 @@ function BusinessPageInner() {
   // sheet's z-50 overlay (toasts are capped at z-45 so they can never block a
   // modal footer again), so the sheet itself must carry the error.
   const [saveError, setSaveError] = useState<string | null>(null);
+  /**
+   * C-F1 — the offer to remove Business Info lines that contradict a fact the
+   * merchant just confirmed. Held as a SNAPSHOT (the KB text + the profile as
+   * saved) rather than read from `selectedPage` at render time: the save
+   * invalidates ['pages'], and a refetch landing while the sheet is open would
+   * otherwise swap the text under the proposals the merchant is reviewing.
+   */
+  const [fieldCleanup, setFieldCleanup] = useState<{ kbText: string; profile: StoredBusinessProfile } | null>(null);
   useEffect(() => { setSaveError(null); }, [editingFact, editingHours]);
 
   /** Current confirmed value for a fact, as the sheet's single text field. */
@@ -180,6 +192,31 @@ function BusinessPageInner() {
       await queryClient.invalidateQueries({ queryKey: ['pages'] });
       onDone();
       toast.success(tPages('savedStatus'));
+
+      // C-F1 (#720): confirming a fact is exactly when to offer removing the
+      // Business Info line that contradicts it. Until this existed the cleanup
+      // was only reachable after a catalog import, so a merchant who never
+      // imports kept answering customers from the stale line forever.
+      //
+      // The save is already committed and its toast has fired — this is a
+      // strictly additive follow-up, so any failure here must not look like a
+      // failed save. Nothing is removed without explicit confirmation (D-038);
+      // field lines reach the sheet UNCHECKED.
+      try {
+        const kbText = selectedPage.knowledgeBase ?? '';
+        // `patch` is the merchant half; wrap it as the container the unwrapper
+        // expects. Reading a flat profile yields an empty `merchant` and the
+        // feature silently never fires — the bug the 07-23 browser pass caught.
+        const profile: StoredBusinessProfile = { merchant: patch };
+        if (hasFieldLinesToClean(kbText, profile)) {
+          setFieldCleanup({ kbText, profile });
+        }
+      } catch (error) {
+        captureError(error, 'KB field-cleanup offer detection failed', {
+          tags: { action: 'kb-cleanup-offer' },
+          extra: { pageId: selectedPage.id },
+        });
+      }
     } catch (error) {
       captureError(error, 'Failed to save business fact', { tags: { action: 'save-business-fact' } });
       setSaveError(tPages('saveFailed'));
@@ -398,6 +435,25 @@ function BusinessPageInner() {
           saveError={saveError}
           onSave={(value, whatsapp) => saveFact(editingFact, value, whatsapp)}
           onClose={() => setEditingFact(null)}
+        />
+      )}
+
+      {/* C-F1 (#720). `items={[]}`: this pass is about FIELD lines only — the
+          product matcher has nothing to match and returns [] immediately. */}
+      {fieldCleanup && selectedPage && (
+        <KbCleanupSheet
+          pageId={selectedPage.id}
+          kbText={fieldCleanup.kbText}
+          items={[]}
+          profile={fieldCleanup.profile}
+          onClose={() => setFieldCleanup(null)}
+          onDone={(removed) => {
+            setFieldCleanup(null);
+            // The KB text changed on the server — refetch so the Business Info
+            // editor below does not keep showing the line that was just removed.
+            void queryClient.invalidateQueries({ queryKey: ['pages'] });
+            if (removed > 0) toast.success(tCatalog('cleanup.toastDone', { count: removed }));
+          }}
         />
       )}
     </>
