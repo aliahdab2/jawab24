@@ -4,12 +4,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { CatalogItemInput } from '@/lib/api';
 import { CatalogImportSheet } from './CatalogImportSheet';
 
-const { extract, batchCreate, scanPosts, scanPostReplies, update } = vi.hoisted(() => ({
-  extract: vi.fn(), batchCreate: vi.fn(), scanPosts: vi.fn(), scanPostReplies: vi.fn(), update: vi.fn(),
+const { extract, batchCreate, scanPage, update } = vi.hoisted(() => ({
+  extract: vi.fn(), batchCreate: vi.fn(), scanPage: vi.fn(), update: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  catalogApi: { extract, batchCreate, scanPosts, scanPostReplies, update },
+  catalogApi: { extract, batchCreate, scanPage, update },
   kbApi: { extractText: vi.fn() }, // FileUploadButton dependency
 }));
 
@@ -208,42 +208,86 @@ describe('CatalogImportSheet', () => {
     expect(onDone).toHaveBeenCalledWith(1, 'دورة ميكانيك متقدمة', 0);
   });
 
-  describe('scan mode', () => {
-    function scanResponse(items: CatalogItemInput[], meta: Partial<{ postsScanned: number; upToDate: boolean }> = {}) {
-      return { data: { items, dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, postsScanned: 1, upToDate: false, ...meta } };
+  describe('scan mode (unified page scan, D-059)', () => {
+    function scanResponse(
+      items: CatalogItemInput[],
+      meta: Partial<{ postsScanned: number; repliesScanned: number; upToDate: boolean; postsUnavailable: string | null; truncated: boolean }> = {},
+    ) {
+      return {
+        data: {
+          items, dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false,
+          postsScanned: 1, repliesScanned: 0, upToDate: false, postsUnavailable: null, ...meta,
+        },
+      };
     }
 
     it('fires the scan on mount (exactly once) and lands in review', async () => {
-      scanPosts.mockResolvedValue(scanResponse([proposal({ name: 'كيا ريو 2018', type: 'vehicle', price: null, currency: null })]));
+      scanPage.mockResolvedValue(scanResponse([proposal({ name: 'كيا ريو 2018', type: 'vehicle', price: null, currency: null })]));
       renderSheet({ mode: 'scan' });
 
-      expect(screen.getByText('Products from your posts')).toBeInTheDocument();
+      expect(screen.getByText('Products from your page')).toBeInTheDocument();
       expect(await screen.findByText('كيا ريو 2018')).toBeInTheDocument();
-      expect(scanPosts).toHaveBeenCalledTimes(1);
-      expect(scanPosts).toHaveBeenCalledWith('p1');
+      expect(scanPage).toHaveBeenCalledTimes(1);
+      expect(scanPage).toHaveBeenCalledWith('p1');
       // No input step in scan mode → no Back button in the review footer.
       expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument();
     });
 
-    it('shows the up-to-date state when no new posts exist since the last scan', async () => {
-      scanPosts.mockResolvedValue(scanResponse([], { postsScanned: 0, upToDate: true }));
+    it('tells the merchant what the scan actually read (posts + Post Replies counts)', async () => {
+      scanPage.mockResolvedValue(scanResponse([proposal()], { postsScanned: 3, repliesScanned: 2 }));
+      renderSheet({ mode: 'scan' });
+      expect(await screen.findByText('Scanned: 3 posts · 2 Post Replies')).toBeInTheDocument();
+    });
+
+    // Input truncation is no longer silent (D-059 review): when the scan
+    // couldn't fit everything, the note must say so in scan terms — the paste
+    // copy ("import the rest") is advice a scan can't follow.
+    it('a truncated scan shows the scan-specific note, not the paste-import one', async () => {
+      scanPage.mockResolvedValue(scanResponse([proposal()], { postsScanned: 5, repliesScanned: 2, truncated: true }));
+      renderSheet({ mode: 'scan' });
+
+      expect(await screen.findByText(/more content than one scan can read/)).toBeInTheDocument();
+      expect(screen.queryByText(/Your list is long/)).not.toBeInTheDocument();
+    });
+
+    it('shows the up-to-date state when nothing new exists since the last scan', async () => {
+      scanPage.mockResolvedValue(scanResponse([], { postsScanned: 0, upToDate: true }));
       renderSheet({ mode: 'scan' });
       expect(await screen.findByText('You’re up to date')).toBeInTheDocument();
     });
 
+    // The masking regression: a Graph failure used to surface as "up to date".
+    // Now it must arrive as an explicit degraded notice, with the replies still scanned.
+    it('a Graph failure shows the honest degraded notice, never "up to date"', async () => {
+      scanPage.mockResolvedValue(scanResponse([proposal()], { postsScanned: 0, repliesScanned: 4, postsUnavailable: 'graph_error' }));
+      renderSheet({ mode: 'scan' });
+
+      expect(await screen.findByText(/We couldn’t read your posts from Facebook this time/)).toBeInTheDocument();
+      expect(screen.queryByText('You’re up to date')).not.toBeInTheDocument();
+    });
+
+    it('a replies-only scan with nothing found says so — without claiming the posts were read', async () => {
+      scanPage.mockResolvedValue(scanResponse([], { postsScanned: 0, repliesScanned: 2, postsUnavailable: 'disconnected' }));
+      renderSheet({ mode: 'scan' });
+
+      expect(await screen.findByText('No products found in your Post Replies')).toBeInTheDocument();
+      expect(screen.getByText(/Reconnect it to read its posts/)).toBeInTheDocument();
+      expect(screen.queryByText('No products found in your recent posts')).not.toBeInTheDocument();
+    });
+
     it('closes with an error toast when the scan fails (nothing typed, nothing lost)', async () => {
-      scanPosts.mockRejectedValue(new Error('boom'));
+      scanPage.mockRejectedValue(new Error('boom'));
       const { onClose } = renderSheet({ mode: 'scan' });
       await waitFor(() => expect(onClose).toHaveBeenCalled());
       const { toast } = await import('sonner');
       expect(toast.error).toHaveBeenCalled();
     });
 
-    // CatalogManager hides the action for a page with no Facebook connection, so
-    // this 409 means the token died between render and click. "Try again" would
+    // CatalogManager hides the action for a page with nothing scannable, so this
+    // 409 means the state changed between render and click. "Try again" would
     // be false advice — retrying cannot succeed until the page is reconnected.
     it('names the disconnection on 409 PAGE_DISCONNECTED instead of saying "try again"', async () => {
-      scanPosts.mockRejectedValue({ response: { status: 409, data: { code: 'PAGE_DISCONNECTED' } } });
+      scanPage.mockRejectedValue({ response: { status: 409, data: { code: 'PAGE_DISCONNECTED' } } });
       const { onClose } = renderSheet({ mode: 'scan' });
       await waitFor(() => expect(onClose).toHaveBeenCalled());
       const { toast } = await import('sonner');
@@ -351,36 +395,4 @@ describe('CatalogImportSheet', () => {
     });
   });
 
-  describe('post-replies scan mode', () => {
-    function replyScanResponse(items: CatalogItemInput[], meta: Partial<{ repliesScanned: number; noPostReplies: boolean }> = {}) {
-      return { data: { items, dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, repliesScanned: 5, noPostReplies: false, ...meta } };
-    }
-
-    it('fires the post-reply scan on mount (exactly once) and lands in review', async () => {
-      scanPostReplies.mockResolvedValue(replyScanResponse([proposal()]));
-      renderSheet({ mode: 'scanReplies' });
-
-      expect(screen.getByText('Products from your post replies')).toBeInTheDocument();
-      expect(await screen.findByText('دورة ICDL')).toBeInTheDocument();
-      expect(scanPostReplies).toHaveBeenCalledTimes(1);
-      expect(scanPostReplies).toHaveBeenCalledWith('p1');
-    });
-
-    it('presence gate: noPostReplies shows the explainer in place and notifies the host', async () => {
-      scanPostReplies.mockResolvedValue(replyScanResponse([], { noPostReplies: true }));
-      const onNoPostReplies = vi.fn();
-      renderSheet({ mode: 'scanReplies', onNoPostReplies });
-
-      expect(await screen.findByText('This page has no Post Replies yet')).toBeInTheDocument();
-      expect(onNoPostReplies).toHaveBeenCalledTimes(1);
-    });
-
-    it('closes with an error toast when the reply scan fails', async () => {
-      scanPostReplies.mockRejectedValue(new Error('boom'));
-      const { onClose } = renderSheet({ mode: 'scanReplies' });
-      await waitFor(() => expect(onClose).toHaveBeenCalled());
-      const { toast } = await import('sonner');
-      expect(toast.error).toHaveBeenCalled();
-    });
-  });
 });

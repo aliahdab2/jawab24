@@ -166,12 +166,12 @@ describe('catalogExtractor', () => {
             expect(prompt).toContain('Input:\nsome list');
         });
 
-        it('injects the posts framing (skip promos, emit priceless promoted items)', async () => {
+        it('injects the page framing (skip promos, emit priceless promoted items)', async () => {
             mockReply({ items: [] });
-            await catalogExtractor.extract('POST (2026-07-01):\nvisit us!', { ...CTX, source: 'posts' });
+            await catalogExtractor.extract('POST (2026-07-01):\nvisit us!', { ...CTX, source: 'page' });
 
             const prompt = openaiCreateMock.mock.calls[0][0].messages[0].content as string;
-            expect(prompt).toContain('recent Facebook posts');
+            expect(prompt).toContain("merchant's own Facebook page");
             expect(prompt).toContain('"price": null');
         });
 
@@ -276,13 +276,13 @@ describe('catalogExtractor', () => {
     describe('source framing', () => {
         const promptSent = () => openaiCreateMock.mock.calls[0][0].messages[0].content as string;
 
-        it('source "post_reply" adds the auto-reply framing hint', async () => {
+        it('source "page" adds the configured-reply framing hint', async () => {
             mockReply({ items: [] });
-            await catalogExtractor.extract('POST REPLY (2026-07-24):\nREPLY: الكلفة 25 ألف', { ...CTX, source: 'post_reply' });
+            await catalogExtractor.extract('POST REPLY (2026-07-24):\nREPLY: الكلفة 25 ألف', { ...CTX, source: 'page' });
             const prompt = promptSent();
             expect(prompt).toContain('configured Post Reply auto-replies');
             // it must instruct extracting the stated price and skipping bare CTAs
-            expect(prompt).toContain('Extract the offering(s) and the exact price(s) stated');
+            expect(prompt).toContain('extract the offering with the exact price(s) stated');
         });
 
         it('paste (no source) does NOT include the post_reply framing — the hint is opt-in', async () => {

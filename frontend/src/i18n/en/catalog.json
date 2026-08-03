@@ -8,7 +8,7 @@
   "editItem": "Edit item",
   "empty": {
     "title": "Add what you sell",
-    "body": "Your posts already show what you sell. Let Jawab find your products — then add your prices, and it answers your customers with the exact details.",
+    "body": "Your posts already show what you sell — and the prices often live in the Post Replies you set up on them. Let Jawab collect your products from them, then complete the prices, and it answers your customers with the exact details.",
     "bodyNoScan": "Add what you sell with its prices, and Jawab answers your customers with the exact details.",
     "cta": "Add manually",
     "or": "or:"
@@ -160,31 +160,27 @@
     "toastSaveError": "Couldn’t save the changes. Please try again."
   },
   "scan": {
-    "cta": "Find products in your posts",
-    "title": "Products from your posts",
+    "cta": "Extract your products from your page",
+    "title": "Products from your page",
     "pricePlaceholder": "Price",
-    "scanning": "Reading your recent posts…",
-    "reviewHint": "{count, plural, one {We found # item in your posts. Review it, add the price, then save.} other {We found # items in your posts. Review them, add the prices, then save.}}",
+    "scanning": "Reading your recent posts and configured Post Replies…",
+    "reviewHint": "{count, plural, one {We found # item on your page. Review it, add the price, then save.} other {We found # items on your page. Review them, add the prices, then save.}}",
+    "scannedNote": "Scanned: {posts, plural, =0 {no new posts} one {# post} other {# posts}} · {replies, plural, =0 {no Post Replies} one {# Post Reply} other {# Post Replies}}",
     "pricelessNote": "{count, plural, one {# item has no price yet — Jawab can only say “ask us” until you add it.} other {# items have no price yet — Jawab can only say “ask us” until you add them.}}",
     "pricePrivacy": "Your prices stay private — they’re only sent inside replies and messages, never posted publicly.",
     "emptyResult": "No products found in your recent posts",
+    "emptyResultReplies": "No products found in your Post Replies",
     "emptyResultHint": "You can import a price list or add items manually instead.",
     "upToDate": "You’re up to date",
-    "upToDateHint": "No new posts since the last scan. Post something new, or add items manually.",
+    "upToDateHint": "No new posts since the last scan, and no Post Replies configured. Post something new, or add items manually.",
+    "truncatedNote": "Your page has more content than one scan can read — your Post Replies and newest posts came first, so some older content may be missing. You can import a price list or add items manually.",
+    "postsUnreadableError": "We couldn’t read your posts from Facebook this time, so only your configured Post Replies were scanned. Try again later to read the posts.",
+    "postsUnreadableDisconnected": "This page isn’t connected to Facebook right now, so only your configured Post Replies were scanned. Reconnect it to read its posts.",
+    "postsUnreadableNoFacebook": "Only your configured Post Replies were scanned — this page has no Facebook posts.",
     "toastError": "Couldn’t read your posts. Please try again.",
     "unavailableNoFacebook": "“{page}” isn’t a Facebook page — reading posts works on Facebook pages only.",
     "unavailableDisconnected": "Reconnect “{page}” to Facebook to read its posts.",
     "toastDisconnected": "This page isn’t connected to Facebook, so its posts can’t be read."
-  },
-  "replyScan": {
-    "cta": "Import from your post replies",
-    "title": "Products from your post replies",
-    "scanning": "Reading your post replies…",
-    "reviewHint": "{count, plural, one {We found # item in your post replies. Review it, then save.} other {We found # items in your post replies. Review them, then save.}}",
-    "emptyResult": "No products found in your post replies",
-    "emptyResultHint": "You can import a price list or add items manually instead.",
-    "noReplies": "This page has no Post Replies yet",
-    "noRepliesHint": "Post Replies are the automatic replies you set up on individual posts. Once you configure some, Jawab can read products and prices from them."
   },
   "cleanup": {
     "title": "Tidy up your Business Info",

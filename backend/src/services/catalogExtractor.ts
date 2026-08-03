@@ -42,13 +42,13 @@ export interface CatalogExtractionCtx {
     /** Page's business vertical — biases the default item type when a row is
      *  ambiguous ('other' adds nothing and is treated as absent). */
     vertical?: CatalogVertical;
-    /** Where the text came from. 'posts' (the page scan) adds framing so
-     *  promo captions/contests are skipped but the promoted offering — usually
-     *  priceless by design ("comment for the price") — is still emitted.
-     *  'post_reply' (the Post Reply scan) frames the input as the merchant's own
-     *  configured auto-replies — the highest-intent, merchant-authored answers,
-     *  and the place the withheld price actually lives. */
-    source?: 'paste' | 'posts' | 'post_reply';
+    /** Where the text came from. 'page' (the unified page scan, D-059) adds
+     *  framing for BOTH content kinds it carries: the page's recent posts
+     *  (promo captions/contests are skipped but the promoted offering — usually
+     *  priceless by design, "comment for the price" — is still emitted) and the
+     *  merchant's own configured Post Reply auto-replies — the highest-intent,
+     *  merchant-authored answers, and the place the withheld price actually lives. */
+    source?: 'paste' | 'page';
 }
 
 /** Raw JSON shape the model is asked to return (pre-validation). */
@@ -108,11 +108,8 @@ export class CatalogExtractor {
         if (ctx.vertical && ctx.vertical !== 'other') {
             hints.push(`- This merchant's business vertical is "${ctx.vertical}". When an offering's "type" is ambiguous, prefer "${CATALOG_VERTICAL_DEFAULT_TYPE[ctx.vertical]}".`);
         }
-        if (ctx.source === 'posts') {
-            hints.push('- The input is a series of the merchant\'s recent Facebook posts (each may include text read from its images). Contest announcements, greetings, and engagement bait ("comment/DM for the price") are NOT offerings — but the specific product/course/vehicle a post promotes IS one. Posts often withhold the price on purpose: emit such items with "price": null, never invent one.');
-        }
-        if (ctx.source === 'post_reply') {
-            hints.push('- The input is the merchant\'s own configured Post Reply auto-replies — the private message they send to a customer who comments on a specific post — each shown with the post it belongs to. These are the merchant\'s authoritative answers to customers, and usually the place the post\'s withheld price is actually stated. Extract the offering(s) and the exact price(s) stated. A reply that is only a greeting, a phone number, an address, or "visit us to register" with NO offering is NOT an item — skip it. Prices here are frequently limited-time offers ("سعر العرض", "فترة العرض"): extract the price exactly as written, do not annotate it as an offer and do not invent an expiry.');
+        if (ctx.source === 'page') {
+            hints.push('- The input is read from the merchant\'s own Facebook page: recent posts (each may include text read from its images), and the merchant\'s configured Post Reply auto-replies — the private message they send to a customer who comments on a specific post. A reply appears either inline in its post\'s block (a "CONFIGURED REPLY:" line) or as a standalone "POST REPLY" block paired with the post it belongs to. Contest announcements, greetings, and engagement bait ("comment/DM for the price") are NOT offerings — but the specific product/course/vehicle a post promotes IS one. The configured reply is the merchant\'s authoritative answer and usually states the price the post withholds: extract the offering with the exact price(s) stated there. Prices in replies are frequently limited-time offers ("سعر العرض", "فترة العرض"): extract the price exactly as written, do not annotate it as an offer and do not invent an expiry. A post with no reply often withholds the price on purpose: emit such items with "price": null, never invent one. A reply that is only a greeting, a phone number, an address, or "visit us to register" with NO offering is NOT an item — skip it.');
         }
         if (hints.length === 0) return CATALOG_EXTRACTION_PROMPT;
         return CATALOG_EXTRACTION_PROMPT.replace('\nInput:\n', `${hints.join('\n')}\n\nInput:\n`);

@@ -1040,20 +1040,28 @@ mode `dual`) exists only in the workspace store while the legacy columns default
 > **Native catalog (Stage 2 v2, admin canary):** a store-less page CAN
 > still get a `<product_catalog>` block — merchant-entered items from the
 > `/catalog` page (`catalog_items` table). Entry points, easiest first:
-> **posts scan** (`POST /pages/:id/catalog/scan-posts` — reads the page's
-> recent FB posts incl. full-res attachment images via Vision, extracts
-> proposals; a per-page bookmark `pages.catalog_scan_last_post_time` makes
-> re-scans propose only NEW posts, and the bookmark only advances when the
-> AI call succeeded), **post-reply scan** (`POST /pages/:id/catalog/scan-post-replies`
-> — reads the merchant's configured Post Reply auto-replies on BOTH channels
-> (`posts.trigger_reply` + `instagram_media.trigger_reply`, DB-only: no Graph/Vision,
-> works even on a dead token), the place the price a post
-> withholds actually lives; presence-gated (`noPostReplies` when none on either
-> channel — an IG-only page is not mis-signalled) so it surfaces
-> only for merchants who use Post Reply — concentrated in the courses/training
-> vertical; each reply paired with its post text for product context; see D-038 —
-> proposes into the same review sheet via «استورد من ردود منشوراتك» in the
-> catalog manager, live since B0 wired the reconcile review),
+> **the unified page scan** (`POST /pages/:id/catalog/scan-posts`, D-059 —
+> ONE scan that reads the page's recent FB posts (incl. full-res attachment
+> images via Vision) AND the merchant's configured Post Reply auto-replies
+> on BOTH channels (`posts.trigger_reply` + `instagram_media.trigger_reply`,
+> DB-only: no Graph/Vision, works even on a dead token). A fresh post whose
+> configured reply is attached becomes ONE complete proposal — name from the
+> post, price from the reply — and spends no Vision budget when the post has
+> its own text; replies are scanned AGELESS (no window, no bookmark — the
+> review sheet's reconcile absorbs re-proposals). A per-page bookmark
+> `pages.catalog_scan_last_post_time` makes re-scans propose only NEW posts,
+> and it only advances when the posts were actually read AND the AI call
+> succeeded. Degrades honestly: a blocked page (WhatsApp-only / dead token)
+> with replies still scans replies-only, and a transient Graph failure comes
+> back as `postsUnavailable: 'graph_error'` — NEVER as «up to date» (the
+> fail-soft masking bug); only a page with neither source 409s. The review
+> shows what was read («قرأنا: N منشور · M ردّ بوست» — counting only what
+> actually reached the extractor: standalone reply blocks lead the 16k
+> input so a heavy OCR window can't silently crowd them out, and dropped
+> input raises `truncated`). UI entry: «استخراج منتجاتك من صفحتك» — the
+> «استورد من ردود منشوراتك» button is REMOVED, merged into this scan;
+> `/catalog/scan-post-replies` remains as a deprecated ALIAS of the same
+> unified scan because app builds ≤2.0.23 still ship that button),
 > **bulk import** (paste a price list / upload a file →
 > extract proposals), and manual add. All paths land in one review sheet
 > shaped as a PRICE-COMPLETION step: merchants deliberately keep prices out

@@ -199,14 +199,12 @@ export const catalogApi = {
   // reviewed rows are saved all-or-nothing via batchCreate.
   extract: (pageId: string, text: string) =>
     api.post<CatalogExtractResponse>(`/pages/${pageId}/catalog/extract`, { text }, { timeout: LONG_RUNNING_TIMEOUT }),
-  // Posts scan: reads the page's recent FB posts (text + images) server-side and
-  // returns PROPOSALS in the same shape as extract — same review-then-batch flow.
-  scanPosts: (pageId: string) =>
+  // Page scan (D-059): reads the page's recent FB posts (text + images) AND its
+  // configured Post Reply auto-replies server-side and returns PROPOSALS in the
+  // same shape as extract — same review-then-batch flow. Replies come from our
+  // own DB, so the scan still works (replies-only) on a dead token.
+  scanPage: (pageId: string) =>
     api.post<CatalogScanResponse>(`/pages/${pageId}/catalog/scan-posts`, {}, { timeout: LONG_RUNNING_TIMEOUT }),
-  // Post-replies scan: reads the page's configured Post Reply auto-replies
-  // (DB-only, works on a dead token) into the same review-then-batch flow.
-  scanPostReplies: (pageId: string) =>
-    api.post<CatalogReplyScanResponse>(`/pages/${pageId}/catalog/scan-post-replies`, {}, { timeout: LONG_RUNNING_TIMEOUT }),
   batchCreate: (pageId: string, items: CatalogItemInput[]) =>
     api.post<{ data: CatalogItem[] }>(`/pages/${pageId}/catalog/batch`, { items }),
 };
@@ -284,20 +282,19 @@ export interface CatalogVerticalInfo {
   source: CatalogVerticalSource;
 }
 
-/** POST /catalog/scan-posts response — extract's shape plus scan telemetry. */
+/** POST /catalog/scan-posts response — extract's shape plus scan telemetry
+ *  (D-059: one scan covers recent posts + configured Post Replies). */
 export interface CatalogScanResponse extends CatalogExtractResponse {
-  /** Posts read in this scan (0 = nothing new since the last scan). */
+  /** Posts read in this scan. */
   postsScanned: number;
-  /** True when no new posts existed since the last scan. */
-  upToDate: boolean;
-}
-
-/** POST /catalog/scan-post-replies response — extract's shape plus the presence gate. */
-export interface CatalogReplyScanResponse extends CatalogExtractResponse {
-  /** Post Reply configs fed to the extractor. */
+  /** Configured Post Reply rows fed to the extractor. */
   repliesScanned: number;
-  /** The page has NO Post Reply configured — hide the action, nothing to scan. */
-  noPostReplies: boolean;
+  /** Posts were readable and nothing new existed anywhere — an honest no-op.
+   *  Never true when the posts could not be read (see postsUnavailable). */
+  upToDate: boolean;
+  /** Why the POSTS were not read ('noFacebook' | 'disconnected' | 'graph_error');
+   *  the configured replies may still have been scanned. null = read normally. */
+  postsUnavailable: 'noFacebook' | 'disconnected' | 'graph_error' | null;
 }
 
 /** POST /catalog/extract response. Prices come back as numbers (already

@@ -5,13 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CatalogItem, Page } from '@jawab24/shared';
 import { CatalogManager } from './CatalogManager';
 
-const { list, create, update, remove, extract, batchCreate, scanPosts, scanPostReplies, setVertical } = vi.hoisted(() => ({
+const { list, create, update, remove, extract, batchCreate, scanPage, setVertical } = vi.hoisted(() => ({
   list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(),
-  extract: vi.fn(), batchCreate: vi.fn(), scanPosts: vi.fn(), scanPostReplies: vi.fn(), setVertical: vi.fn(),
+  extract: vi.fn(), batchCreate: vi.fn(), scanPage: vi.fn(), setVertical: vi.fn(),
 }));
 
 vi.mock('@/lib/api', () => ({
-  catalogApi: { list, create, update, remove, extract, batchCreate, scanPosts, scanPostReplies, setVertical },
+  catalogApi: { list, create, update, remove, extract, batchCreate, scanPage, setVertical },
   kbApi: { extractText: vi.fn() }, // FileUploadButton (inside the import sheet)
 }));
 
@@ -58,7 +58,7 @@ beforeEach(() => {
 describe('CatalogManager', () => {
   it('shows the empty state: ONE primary scan action, manual paths as footnotes', async () => {
     renderManager();
-    expect(await screen.findByRole('button', { name: /Find products in your posts/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Extract your products from your page/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add manually' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Import a list' })).toBeInTheDocument();
     // No mocked-up "example" row — a fake listing with a real price read as
@@ -118,7 +118,7 @@ describe('CatalogManager', () => {
   it('hides the business-type picker when Facebook already told us the type, shows it when guessing', async () => {
     list.mockResolvedValue(listData([], { effective: 'vehicles', source: 'facebook' }));
     const { unmount } = renderManager();
-    await screen.findByRole('button', { name: /Find products in your posts/ });
+    await screen.findByRole('button', { name: /Extract your products from your page/ });
     expect(screen.queryByLabelText('Business type')).not.toBeInTheDocument();
     unmount();
 
@@ -127,37 +127,49 @@ describe('CatalogManager', () => {
     expect(await screen.findByLabelText('Business type')).toBeInTheDocument();
   });
 
-  // The posts scan reads the page's Facebook posts through the Graph API, so a
-  // WhatsApp-only or token-less page can only ever get 409 PAGE_DISCONNECTED
-  // back ("Couldn't read your posts. Please try again." — advice that can never
-  // work). Prod 2026-07-27: 8 of one workspace's 10 pages were in that state.
-  describe('posts-scan availability', () => {
+  // The page scan reads Facebook posts through the Graph API AND the page's
+  // configured Post Replies from our own DB (D-059). So "posts unreadable"
+  // (WhatsApp-only / token-less) only kills the scan when the page ALSO has no
+  // Post Reply — otherwise it degrades to a replies-only scan. The true dead
+  // end used to answer 409 PAGE_DISCONNECTED ("Couldn't read your posts.
+  // Please try again." — advice that can never work). Prod 2026-07-27: 8 of
+  // one workspace's 10 pages were in that state.
+  describe('page-scan availability', () => {
     it('offers the scan on a Facebook-connected page and shows no blocker note', async () => {
       renderManager({ page: pageFixture() });
-      expect(await screen.findByRole('button', { name: /Find products in your posts/ })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /Extract your products from your page/ })).toBeInTheDocument();
       expect(screen.queryByText(/Reading posts works on Facebook pages only/)).not.toBeInTheDocument();
       expect(screen.queryByText(/Reconnect this page to Facebook/)).not.toBeInTheDocument();
     });
 
-    it('WhatsApp-only page: no scan action, import becomes the primary, reason given', async () => {
-      renderManager({ page: pageFixture({ facebookPageId: null }) });
+    it('WhatsApp-only page with no Post Reply: no scan action, import becomes the primary, reason given', async () => {
+      renderManager({ page: pageFixture({ facebookPageId: null, hasPostReplyTrigger: false }) });
       expect(await screen.findByRole('button', { name: 'Import a list' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /Find products in your posts/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Extract your products from your page/ })).not.toBeInTheDocument();
       expect(screen.getByText('“Moto” isn’t a Facebook page — reading posts works on Facebook pages only.')).toBeInTheDocument();
       // The one remaining path must still be reachable.
       expect(screen.getByRole('button', { name: 'Add manually' })).toBeInTheDocument();
     });
 
-    it('stops promising the posts pitch in the body when the scan cannot run', async () => {
-      renderManager({ page: pageFixture({ facebookPageId: null }) });
+    it('stops promising the posts pitch in the body when nothing can be scanned', async () => {
+      renderManager({ page: pageFixture({ facebookPageId: null, hasPostReplyTrigger: false }) });
       expect(await screen.findByText(/Add what you sell with its prices/)).toBeInTheDocument();
       expect(screen.queryByText(/Your posts already show what you sell/)).not.toBeInTheDocument();
     });
 
-    it('disconnected Facebook page: no scan action, reason names the reconnect', async () => {
-      renderManager({ page: pageFixture({ isConnected: false }) });
+    it('disconnected Facebook page with no Post Reply: no scan action, reason names the reconnect', async () => {
+      renderManager({ page: pageFixture({ isConnected: false, hasPostReplyTrigger: false }) });
       expect(await screen.findByRole('button', { name: 'Import a list' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /Find products in your posts/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Extract your products from your page/ })).not.toBeInTheDocument();
+      expect(screen.getByText('Reconnect “Moto” to Facebook to read its posts.')).toBeInTheDocument();
+    });
+
+    // The merged source keeps a blocked page scannable: its configured replies
+    // live in our DB (no token needed), so the scan is OFFERED and the blocker
+    // line stays as the honest "posts won't be read" heads-up.
+    it('a blocked page WITH Post Replies keeps the scan (replies-only), with the posts reason still shown', async () => {
+      renderManager({ page: pageFixture({ isConnected: false, hasPostReplyTrigger: true }) });
+      expect(await screen.findByRole('button', { name: /Extract your products from your page/ })).toBeEnabled();
       expect(screen.getByText('Reconnect “Moto” to Facebook to read its posts.')).toBeInTheDocument();
     });
 
@@ -172,7 +184,7 @@ describe('CatalogManager', () => {
       ['a WhatsApp-only page', { facebookPageId: null }],
       ['a token-less Facebook page', { isConnected: false }],
     ])('names the page in the reason — %s', async (_case, overrides) => {
-      renderManager({ page: pageFixture({ ...overrides, name: 'مفروشات القباني' }) });
+      renderManager({ page: pageFixture({ ...overrides, hasPostReplyTrigger: false, name: 'مفروشات القباني' }) });
       await screen.findByRole('button', { name: 'Import a list' });
 
       const reason = screen.getByText(/مفروشات القباني/);
@@ -186,10 +198,10 @@ describe('CatalogManager', () => {
     // shown — a title attribute alone is invisible on touch.
     it('disables the toolbar scan and shows why, instead of removing it', async () => {
       list.mockResolvedValue(listData([item()]));
-      renderManager({ page: pageFixture({ facebookPageId: null }) });
+      renderManager({ page: pageFixture({ facebookPageId: null, hasPostReplyTrigger: false }) });
       expect(await screen.findByText('دبل صدمات NJT')).toBeInTheDocument();
 
-      const scan = screen.getByRole('button', { name: /Find products in your posts/ });
+      const scan = screen.getByRole('button', { name: /Extract your products from your page/ });
       expect(scan).toBeDisabled();
       expect(screen.getByText('“Moto” isn’t a Facebook page — reading posts works on Facebook pages only.')).toBeInTheDocument();
       // The paths that DO work on a WhatsApp-only page stay enabled.
@@ -198,21 +210,7 @@ describe('CatalogManager', () => {
 
     it('a host that passes no page keeps the scan offered — impossibility unproven', async () => {
       renderManager();
-      expect(await screen.findByRole('button', { name: /Find products in your posts/ })).toBeInTheDocument();
-    });
-
-    // Same dead-end class: hasPostReplyTrigger already says whether ANY Post
-    // Reply exists, so don't spend a click learning it from the scan's own
-    // noPostReplies answer.
-    it('withholds the post-replies import when the page has no Post Reply configured', async () => {
-      renderManager({ page: pageFixture({ hasPostReplyTrigger: false }) });
-      await screen.findByRole('button', { name: /Find products in your posts/ });
-      expect(screen.queryByRole('button', { name: 'Import from your post replies' })).not.toBeInTheDocument();
-    });
-
-    it('offers the post-replies import when the page has one', async () => {
-      renderManager({ page: pageFixture({ hasPostReplyTrigger: true }) });
-      expect(await screen.findByRole('button', { name: 'Import from your post replies' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /Extract your products from your page/ })).toBeInTheDocument();
     });
   });
 
@@ -262,11 +260,11 @@ describe('CatalogManager', () => {
   });
 
   it('opens the scan review from the primary action', async () => {
-    scanPosts.mockResolvedValue({ data: { items: [], dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, postsScanned: 0, upToDate: true } });
+    scanPage.mockResolvedValue({ data: { items: [], dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, postsScanned: 0, repliesScanned: 0, upToDate: true, postsUnavailable: null } });
     renderManager();
-    fireEvent.click(await screen.findByRole('button', { name: /Find products in your posts/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Extract your products from your page/ }));
     expect(await screen.findByText('You’re up to date')).toBeInTheDocument();
-    expect(scanPosts).toHaveBeenCalledWith('p1');
+    expect(scanPage).toHaveBeenCalledWith('p1');
   });
 
   it('shapes a fresh item by the page vertical: dealer gets Vehicle preselected, vehicle chips, no date pickers', async () => {
@@ -352,22 +350,6 @@ describe('CatalogManager', () => {
     renderManager({ importRequested: true, importInitialText: 'قص شعر ٥٠ ريال' });
     expect(await screen.findByText('Import your products & services')).toBeInTheDocument();
     expect(screen.getByLabelText('Your list')).toHaveValue('قص شعر ٥٠ ريال');
-  });
-
-  it('offers the post-replies import and stops offering it once the scan reports none exist', async () => {
-    list.mockResolvedValue(listData([item()]));
-    scanPostReplies.mockResolvedValue({
-      data: { items: [], dropped: 0, overflow: 0, remainingCapacity: 300, truncated: false, repliesScanned: 0, noPostReplies: true },
-    });
-    renderManager();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Import from your post replies' }));
-    expect(await screen.findByText('This page has no Post Replies yet')).toBeInTheDocument();
-
-    // Presence gate closed — the dead end isn't offered again after closing.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0]);
-    await waitFor(() =>
-      expect(screen.queryByRole('button', { name: 'Import from your post replies' })).not.toBeInTheDocument());
   });
 
   // Phase C: after an import, CatalogManager's onDone decides whether to offer

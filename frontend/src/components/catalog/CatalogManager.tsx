@@ -4,7 +4,6 @@ import { useTranslations } from 'next-intl';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ClipboardPaste, Plus, ScanSearch, Tag } from 'lucide-react';
-import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { postsScanBlockerForPage } from '@/utils/page';
 import { AxiosError } from 'axios';
 import { Button, EmptyState, Select, Skeleton, ConfirmationModal } from '@/components/ui';
@@ -53,13 +52,9 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [deleting, setDeleting] = useState<CatalogItem | null>(null);
-  /** Which entry to the review flow is open: paste/upload import, the posts
-   *  scan, or the Post Reply scan. */
-  const [sheetMode, setSheetMode] = useState<'paste' | 'scan' | 'scanReplies' | null>(null);
-  /** Presence gate (learned from the scan itself): once a scan reports the page
-   *  has no Post Reply configured, stop offering the action for the rest of the
-   *  mount. `hasPostReplyTrigger` below closes the same gate BEFORE the click. */
-  const [postRepliesAbsent, setPostRepliesAbsent] = useState(false);
+  /** Which entry to the review flow is open: paste/upload import or the page
+   *  scan (posts + configured Post Replies, D-059). */
+  const [sheetMode, setSheetMode] = useState<'paste' | 'scan' | null>(null);
   /** Prefilled question for the post-save "try it" moment (null = modal closed). */
   const [tryItQuestion, setTryItQuestion] = useState<string | null>(null);
   /** Phase C: fresh items to offer KB cleanup against (null = sheet closed). */
@@ -221,19 +216,24 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
     </div>
   );
 
-  // Don't offer an import path that cannot work on this page. Both gates read
+  // Don't offer an import path that cannot work on this page. The gate reads
   // data the pages query already carries, so the dead end is closed before the
   // click rather than explained after it (the scan answered 409 PAGE_DISCONNECTED
   // on every WhatsApp-only or token-less page, surfaced as "please try again").
   // A host that passes no `page` keeps the unguarded behaviour — we can't prove
   // the action is impossible without it.
+  //
+  // Posts unreadable ≠ nothing to scan (D-059): the page scan also reads the
+  // merchant's configured Post Replies from our own DB, so a blocked page that
+  // HAS them still scans (replies-only — the sheet explains the degradation).
+  // Only a blocked page with no Post Reply either is a true dead end.
   const scanBlocker: PostsScanBlocker | null = page ? postsScanBlockerForPage(page) : null;
   const canScanPosts = scanBlocker === null;
-  const canScanReplies = !postRepliesAbsent && page?.hasPostReplyTrigger !== false;
+  const canScan = canScanPosts || page?.hasPostReplyTrigger === true;
 
   /**
-   * The reason, NAMING the page it applies to. Built once and reused by all three
-   * places that show it (empty state, the toolbar's disabled-button tooltip, the
+   * The reason, NAMING the page it applies to. Built once and reused by every
+   * place that shows it (empty state, the toolbar's disabled-button tooltip, the
    * toolbar line) so they cannot drift apart.
    *
    * The name is not decoration: /business shows one page at a time behind a
@@ -254,15 +254,15 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
               price read as live data (to merchants and to a prior UX review),
               and the scan flow shows the real row shape during review anyway. */}
           <h3 className="text-base font-semibold text-foreground">{t('empty.title')}</h3>
-          {/* The default body pitches the posts scan; don't promise it on a page
-              whose posts we cannot read. */}
+          {/* The default body pitches the page scan; don't promise it on a page
+              with nothing scannable (no readable posts AND no Post Reply). */}
           <p className="text-sm text-muted-foreground mt-1 mb-5 max-w-md mx-auto">
-            {t(canScanPosts ? 'empty.body' : 'empty.bodyNoScan')}
+            {t(canScan ? 'empty.body' : 'empty.bodyNoScan')}
           </p>
-          {/* ONE decision. Normally that's the scan; on a page whose posts we
-              cannot read it's the paste import, so the empty state still leads
-              with something that works instead of a button that always fails. */}
-          {canScanPosts ? (
+          {/* ONE decision. Normally that's the scan; on a page with nothing to
+              scan it's the paste import, so the empty state still leads with
+              something that works instead of a button that always fails. */}
+          {canScan ? (
             <Button variant="primary" onClick={() => setSheetMode('scan')}>
               <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
               {t('scan.cta')}
@@ -275,18 +275,10 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
           )}
           <div className="flex flex-wrap items-center justify-center gap-1 mt-3 text-sm text-muted-foreground">
             <span>{t('empty.or')}</span>
-            {canScanPosts && (
+            {canScan && (
               <>
                 <button type="button" onClick={() => setSheetMode('paste')} className="underline underline-offset-2 hover:text-foreground transition-colors">
                   {t('import.cta')}
-                </button>
-                <span aria-hidden="true">·</span>
-              </>
-            )}
-            {canScanReplies && (
-              <>
-                <button type="button" onClick={() => setSheetMode('scanReplies')} className="underline underline-offset-2 hover:text-foreground transition-colors">
-                  {t('replyScan.cta')}
                 </button>
                 <span aria-hidden="true">·</span>
               </>
@@ -320,18 +312,12 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
                 variant="secondary"
                 size="sm"
                 onClick={() => setSheetMode('scan')}
-                disabled={!canScanPosts || items.length >= MAX_CATALOG_ITEMS_PER_PAGE}
-                title={scanBlockedReason ?? undefined}
+                disabled={!canScan || items.length >= MAX_CATALOG_ITEMS_PER_PAGE}
+                title={!canScan ? scanBlockedReason ?? undefined : undefined}
               >
                 <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
                 {t('scan.cta')}
               </Button>
-              {canScanReplies && (
-                <Button variant="secondary" size="sm" onClick={() => setSheetMode('scanReplies')} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
-                  <PostReplyIcon className={`w-4 h-4 me-1.5 ${postReplyIconClass}`} aria-hidden="true" />
-                  {t('replyScan.cta')}
-                </Button>
-              )}
               <Button variant="secondary" size="sm" onClick={() => setSheetMode('paste')} disabled={items.length >= MAX_CATALOG_ITEMS_PER_PAGE}>
                 <ClipboardPaste className="w-4 h-4 me-1.5" aria-hidden="true" />
                 {t('import.cta')}
@@ -388,7 +374,6 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
           vertical={vertical?.effective}
           defaultCurrency={lastCurrency}
           initialText={importRequested ? importInitialText : undefined}
-          onNoPostReplies={() => setPostRepliesAbsent(true)}
           onDone={async (count, firstItemName, updatedCount) => {
             invalidate();
             setSheetMode(null);
