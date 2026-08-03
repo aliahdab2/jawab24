@@ -1,0 +1,446 @@
+import { normalizeArabic } from '@jawab24/shared';
+import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
+import { SUPPORTED_LOCALES } from './locale';
+import type { FactListGroup, GroupedRow } from './factListGrouping';
+
+/**
+ * Presentation layout for one entity card: the group's rows bucketed by the
+ * collection they belong to, with the display metadata the card needs.
+ * Pure functions only — the data model (two separate collections, measured
+ * gating/expiry semantics) is untouched; this is how the editor SHOWS it.
+ */
+export interface FactListSection {
+  collection: FactCollectionWithRows;
+  rows: GroupedRow[];
+  /** Attribute labels in first-seen order across the section's rows, with the
+   *  collection's key attribute excluded (the card title already names the
+   *  entity). Rows are RAGGED — label order varies row to row on real data —
+   *  so display must sort by this list, never by a row's array order. */
+  labelOrder: string[];
+  /** Pairs carried identically by EVERY row of the section (and the section
+   *  has ≥ 2 rows) — hoisted into the section header so «المستوى: مبتدئ» is
+   *  said once, not once per row. An exact-equality fold: a hoisted pair can
+   *  never be false, only redundant. */
+  shared: { label: string; value: string }[];
+}
+
+/** Bucket a card's rows by collection, in the page's collection order (stable
+ *  across cards). Collections with no rows in this group yield no section. */
+export function sectionizeGroup(
+  group: FactListGroup,
+  collections: FactCollectionWithRows[],
+): FactListSection[] {
+  const sections: FactListSection[] = [];
+  for (const collection of collections) {
+    const rows = group.rows.filter((r) => r.collection.id === collection.id);
+    if (rows.length === 0) continue;
+
+    const labelOrder: string[] = [];
+    for (const { row } of rows) {
+      for (const a of row.attributes ?? []) {
+        if (collection.keyAttr && a.label === collection.keyAttr) continue;
+        if (!labelOrder.includes(a.label)) labelOrder.push(a.label);
+      }
+    }
+
+    const shared: { label: string; value: string }[] = [];
+    if (rows.length >= 2) {
+      for (const label of labelOrder) {
+        const values = rows.map(({ row }) =>
+          row.attributes?.find((a) => a.label === label)?.value.trim() ?? null,
+        );
+        const first = values[0];
+        if (first === null || values.some((v) => v !== first)) continue;
+        // Guard: hoisting must not leave any row with nothing to show —
+        // a row whose ONLY content is this pair keeps it inline.
+        const wouldBlank = rows.some(({ row }) => {
+          const rest = (row.attributes ?? []).filter(
+            (a) =>
+              a.label !== label &&
+              !(collection.keyAttr && a.label === collection.keyAttr) &&
+              !shared.some((s) => s.label === a.label),
+          );
+          return rest.length === 0 && !row.price && !row.startsAt;
+        });
+        if (wouldBlank) continue;
+        shared.push({ label, value: first });
+      }
+    }
+
+    sections.push({ collection, rows, labelOrder, shared });
+  }
+  return sections;
+}
+
+/** The attribute pairs a row displays inside its section: hoisted pairs
+ *  dropped, the rest ordered by the section's labelOrder (labels the section
+ *  has never seen are appended, stable). The collection's KEY attribute is
+ *  dropped by default — an entity card's title already names the entity — but
+ *  KEPT (first) in directory mode, where the card titles the LIST and the key
+ *  value (the pharmacy's area) is the row's most useful fact. */
+export function rowDisplayAttributes(
+  section: FactListSection,
+  row: FactRowDto,
+  opts?: { keepKey?: boolean; dropLabels?: string[] },
+): { label: string; value: string }[] {
+  const { collection, labelOrder, shared } = section;
+  const kept = (row.attributes ?? []).filter(
+    (a) =>
+      !(collection.keyAttr && a.label === collection.keyAttr) &&
+      !opts?.dropLabels?.includes(a.label) &&
+      !shared.some((s) => s.label === a.label && s.value === a.value.trim()),
+  );
+  const sorted = kept
+    .slice()
+    .sort((a, b) => {
+      const ia = labelOrder.indexOf(a.label);
+      const ib = labelOrder.indexOf(b.label);
+      return (ia === -1 ? labelOrder.length : ia) - (ib === -1 ? labelOrder.length : ib);
+    });
+  if (opts?.keepKey && collection.keyAttr) {
+    const key = (row.attributes ?? []).find((a) => a.label === collection.keyAttr);
+    if (key) return [key, ...sorted];
+  }
+  return sorted;
+}
+
+/** One key-value bucket of a directory section: the bucket's display spelling
+ *  (first raw occurrence) and its rows. `value === null` is the missing-key
+ *  bucket, always rendered LAST. */
+export interface SectionKeyGroup {
+  value: string | null;
+  display: string | null;
+  rows: GroupedRow[];
+}
+
+/**
+ * Group a directory section's rows by the collection's KEY attribute value —
+ * the axis the merchant thinks in («which pharmacies are in area X»), and the
+ * SAME axis reply-time row gating matches the customer's message against, so
+ * the editor shows the data the way the engine reads it. Purely data-driven,
+ * no vocabulary: the headers are the merchant's own key values.
+ *
+ * Returns null (render flat, unchanged) unless the collection HAS a key AND at
+ * least one key value is shared by two rows — when every value is unique a
+ * header per row is noise, not structure. Key values match through the shared
+ * normalizer (spacing/hamza variants are one area), display keeps the first
+ * raw spelling. Rows missing the key value land in a trailing null bucket so
+ * the gap is VISIBLE — the same rows silently suppress reply-time gating
+ * (factCollections.ts rowsMissingKey guard), so surfacing them is the nudge
+ * that gets the data fixed.
+ */
+/**
+ * The label a directory section partitions by: the collection's key attribute
+ * when it has one, otherwise DISCOVERED from the data — the attribute carried
+ * with a value by EVERY row (a partition must cover the list), with ≥2
+ * distinct values, at least one of them shared (otherwise nothing
+ * compresses), picking the fewest-distinct-values candidate (max
+ * compression), ties first-seen. Purely data-driven, no vocabulary: on the
+ * pilot's size list this elects «السلسلة» (عادي/جامبو) with nothing naming it
+ * anywhere in code.
+ */
+export function sectionPartitionLabel(section: FactListSection): string | null {
+  const { collection } = section;
+  if (collection.keyAttr) return collection.keyAttr;
+  const rows = section.rows;
+  if (rows.length < 3) return null;
+  let best: { label: string; distinct: number } | null = null;
+  for (const label of section.labelOrder) {
+    const values = rows.map(
+      ({ row }) => row.attributes?.find((a) => norm(a.label) === norm(label))?.value.trim() || null,
+    );
+    if (values.some((v) => v === null)) continue;
+    const counts = new Map<string, number>();
+    for (const v of values as string[]) counts.set(norm(v), (counts.get(norm(v)) ?? 0) + 1);
+    if (counts.size < 2) continue;
+    if (![...counts.values()].some((n) => n >= 2)) continue;
+    if (!best || counts.size < best.distinct) best = { label, distinct: counts.size };
+  }
+  return best?.label ?? null;
+}
+
+export function sectionKeyGroups(
+  section: FactListSection,
+  rows: GroupedRow[],
+  partitionLabel?: string | null,
+): SectionKeyGroup[] | null {
+  const keyAttr = partitionLabel !== undefined ? partitionLabel : section.collection.keyAttr;
+  if (!keyAttr) return null;
+  const keyLabel = norm(keyAttr);
+  const buckets = new Map<string, SectionKeyGroup>();
+  const order: SectionKeyGroup[] = [];
+  const missing: SectionKeyGroup = { value: null, display: null, rows: [] };
+  for (const entry of rows) {
+    const raw = entry.row.attributes
+      ?.find((a) => norm(a.label) === keyLabel)
+      ?.value.trim();
+    if (!raw) {
+      missing.rows.push(entry);
+      continue;
+    }
+    const id = norm(raw);
+    let bucket = buckets.get(id);
+    if (!bucket) {
+      bucket = { value: id, display: raw, rows: [] };
+      buckets.set(id, bucket);
+      order.push(bucket);
+    }
+    bucket.rows.push(entry);
+  }
+  if (!order.some((b) => b.rows.length >= 2)) return null;
+  if (missing.rows.length > 0) order.push(missing);
+  return order;
+}
+
+/** UNION of attribute labels across ALL of a collection's rows, first-seen
+ *  order. The row sheet previously sampled rows[0], and 22 of the pilot's 46
+ *  price rows carry attributes = null — a merchant adding a row would get a
+ *  form with no attribute fields at all. */
+export function collectionAttributeLabels(collection: FactCollectionWithRows): string[] {
+  const labels: string[] = [];
+  for (const row of collection.rows) {
+    for (const a of row.attributes ?? []) {
+      if (!labels.includes(a.label)) labels.push(a.label);
+    }
+  }
+  return labels;
+}
+
+// ---------------------------------------------------------------------------
+// Entity form unit (G1b slice 3b) — the merchant edits ONE item on ONE screen
+// ---------------------------------------------------------------------------
+
+const norm = (text: string): string =>
+  normalizeArabic(text, { normalizeTaaMarbuta: true }).toLowerCase().trim();
+
+/** A collection is "dated" when any of its rows carries a start date — that is
+ *  what makes it a schedule-like list whose rows self-expire. Derived from the
+ *  merchant's own data, never from vocabulary. */
+export function isDatedCollection(collection: FactCollectionWithRows): boolean {
+  return collection.rows.some((r) => r.startsAt !== null);
+}
+
+/**
+ * The label that splits one entity into tiers ACROSS collections («المستوى»
+ * on the pilot): it must appear in at least two different collections with
+ * textually intersecting values, never be any collection's key attribute, and
+ * have more than one distinct value page-wide (a constant cannot split
+ * anything). Free-text labels («ملاحظة») self-exclude — two lists never carry
+ * the same sentence. Ties break on total carrying rows, then first-seen.
+ */
+export function discoverFaceLabel(collections: FactCollectionWithRows[]): string | null {
+  const keyAttrs = new Set(
+    collections.flatMap((c) => (c.keyAttr ? [norm(c.keyAttr)] : [])),
+  );
+  /** label → collectionId → set of normalized values */
+  const byLabel = new Map<string, Map<string, Set<string>>>();
+  const firstSeen: string[] = [];
+  const rowCount = new Map<string, number>();
+
+  for (const c of collections) {
+    for (const row of c.rows) {
+      for (const a of row.attributes ?? []) {
+        if (keyAttrs.has(norm(a.label))) continue;
+        if (!byLabel.has(a.label)) {
+          byLabel.set(a.label, new Map());
+          firstSeen.push(a.label);
+        }
+        const per = byLabel.get(a.label) as Map<string, Set<string>>;
+        if (!per.has(c.id)) per.set(c.id, new Set());
+        (per.get(c.id) as Set<string>).add(norm(a.value));
+        rowCount.set(a.label, (rowCount.get(a.label) ?? 0) + 1);
+      }
+    }
+  }
+
+  let best: { label: string; pairs: number; rows: number } | null = null;
+  for (const label of firstSeen) {
+    const per = byLabel.get(label) as Map<string, Set<string>>;
+    if (per.size < 2) continue;
+    const all = new Set([...per.values()].flatMap((s) => [...s]));
+    if (all.size < 2) continue;
+    const sets = [...per.values()];
+    let pairs = 0;
+    for (let i = 0; i < sets.length; i++) {
+      for (let j = i + 1; j < sets.length; j++) {
+        if ([...sets[i]].some((v) => sets[j].has(v))) pairs += 1;
+      }
+    }
+    if (pairs === 0) continue;
+    const rows = rowCount.get(label) ?? 0;
+    if (!best || pairs > best.pairs || (pairs === best.pairs && rows > best.rows)) {
+      best = { label, pairs, rows };
+    }
+  }
+  return best?.label ?? null;
+}
+
+/** Everything one edit screen holds: the permanent (undated) row carrying
+ *  price/description, plus the dated session rows that belong to it. */
+export interface FactEntityUnit {
+  title: string;
+  faceLabel: string | null;
+  /** The tier value this unit is scoped to (raw form), when the card has
+   *  several permanent rows distinguished by the face label. */
+  faceValue: string | null;
+  base: GroupedRow | null;
+  sessions: GroupedRow[];
+  /** Where a NEW session row is created — the first dated collection. */
+  sessionCollection: FactCollectionWithRows | null;
+}
+
+const rowFaceValue = (row: FactRowDto, faceLabel: string | null): string | null => {
+  if (!faceLabel) return null;
+  return row.attributes?.find((a) => norm(a.label) === norm(faceLabel))?.value ?? null;
+};
+
+/**
+ * Build the unit for the row the merchant tapped.
+ *
+ * The face value SPLITS only when it has to: with zero or one permanent row in
+ * the card there is no ambiguity and every session belongs to it (the real
+ * «دورة الأظافر» case — price row with no attributes, slot carrying a level).
+ * With several permanent rows (price tiers), sessions attach by normalized
+ * face equality, and a session missing the face value attaches to nothing
+ * rather than guessing a tier it never named.
+ */
+export function buildEntityUnit(
+  group: FactListGroup,
+  collections: FactCollectionWithRows[],
+  faceLabel: string | null,
+  opened: GroupedRow,
+): FactEntityUnit {
+  const datedIds = new Set(collections.filter(isDatedCollection).map((c) => c.id));
+  const bases = group.rows.filter((r) => !datedIds.has(r.collection.id));
+  const sessions = group.rows.filter((r) => datedIds.has(r.collection.id));
+  const sessionCollection = collections.find(isDatedCollection) ?? null;
+
+  if (bases.length <= 1) {
+    return {
+      title: group.title,
+      faceLabel,
+      faceValue: rowFaceValue((bases[0] ?? opened).row, faceLabel),
+      base: bases[0] ?? null,
+      sessions,
+      sessionCollection,
+    };
+  }
+
+  const openedFace = rowFaceValue(opened.row, faceLabel);
+  const sameFace = (row: FactRowDto): boolean => {
+    const v = rowFaceValue(row, faceLabel);
+    if (openedFace === null || v === null) return openedFace === v;
+    return norm(v) === norm(openedFace);
+  };
+  const base = datedIds.has(opened.collection.id)
+    ? bases.find((b) => sameFace(b.row)) ?? null
+    : opened;
+  return {
+    title: group.title,
+    faceLabel,
+    faceValue: openedFace ?? (base ? rowFaceValue(base.row, faceLabel) : null),
+    base,
+    sessions: sessions.filter((s) => sameFace(s.row)),
+    sessionCollection,
+  };
+}
+
+/** One visual block inside an entity card: a permanent row (the tier line —
+ *  its face value and price) with the dated session rows that belong to it
+ *  nested directly underneath. The owner's model, applied to the CARD too:
+ *  «المواعيد لازم تكون مع الدورة وسعرها، مش منفصلين». */
+export interface FactTierBlock {
+  base: GroupedRow | null;
+  sessions: GroupedRow[];
+}
+
+/**
+ * Arrange a card's rows as tier blocks using the same matching as the entity
+ * form (single source of truth for "which dates belong to which price"):
+ * zero/one permanent row owns every session; several split by normalized face
+ * equality, and sessions claiming no tier are returned as orphans rather than
+ * guessed onto one.
+ */
+export function buildTierBlocks(
+  group: FactListGroup,
+  collections: FactCollectionWithRows[],
+  faceLabel: string | null,
+): { blocks: FactTierBlock[]; orphans: GroupedRow[] } {
+  const datedIds = new Set(collections.filter(isDatedCollection).map((c) => c.id));
+  const bases = group.rows.filter((r) => !datedIds.has(r.collection.id));
+  const sessions = group.rows.filter((r) => datedIds.has(r.collection.id));
+
+  if (bases.length === 0) {
+    return { blocks: sessions.length ? [{ base: null, sessions }] : [], orphans: [] };
+  }
+  if (bases.length === 1) {
+    return { blocks: [{ base: bases[0], sessions }], orphans: [] };
+  }
+
+  const faceOf = (r: GroupedRow): string | null => {
+    const v = rowFaceValue(r.row, faceLabel);
+    return v === null ? null : norm(v);
+  };
+  const blocks = bases.map((base) => ({ base, sessions: [] as GroupedRow[] }));
+  const orphans: GroupedRow[] = [];
+  for (const s of sessions) {
+    const f = faceOf(s);
+    const home = f === null ? undefined : blocks.find((b) => faceOf(b.base as GroupedRow) === f);
+    if (home) home.sessions.push(s);
+    else orphans.push(s);
+  }
+  return { blocks, orphans };
+}
+
+// ---------------------------------------------------------------------------
+// Session chip adornment (UX round 5, point 3) — days and times get an icon
+// ---------------------------------------------------------------------------
+
+/** Weekday names GENERATED from the platform's own locale data (Intl) for
+ *  every supported app locale — never a hand-maintained word list. Folded
+ *  through the shared normalizer so merchant spelling variants (الإثنين vs
+ *  الاثنين, stray tashkeel) still match. */
+const WEEKDAY_NAMES: Set<string> = (() => {
+  const names = new Set<string>();
+  for (const locale of SUPPORTED_LOCALES) {
+    for (const width of ['long', 'short'] as const) {
+      const fmt = new Intl.DateTimeFormat(locale, { weekday: width, timeZone: 'UTC' });
+      for (let d = 0; d < 7; d++) {
+        // 2024-01-07 was a Sunday; +d walks one full week.
+        names.add(norm(fmt.format(new Date(Date.UTC(2024, 0, 7 + d)))));
+      }
+    }
+  }
+  return names;
+})();
+
+const HAS_ARABIC_RE = /[؀-ۿ]/;
+/** Digits (post-normalization) plus bare separators — a value made ONLY of
+ *  these is time-shaped («1-3», «10:00», «٤–٦»). Any word drops to 'other'. */
+const TIME_SHAPE_RE = /^(?=.*\d)[\d\s:.\-–—~/]+$/;
+
+export type SessionValueKind = 'weekday' | 'time' | 'other';
+
+/**
+ * Best-effort adornment classifier for session values: 'weekday' when the
+ * value carries a platform-known day name (Arabic tokens also match with a
+ * fused prefix — «والثلاثاء»), 'time' when the value is purely digits and
+ * separators. Everything uncertain is 'other' and renders unadorned — the
+ * classifier only ever ADDS an icon, so a miss is cosmetic, never wrong.
+ */
+export function sessionValueKind(value: string): SessionValueKind {
+  const n = norm(value);
+  if (!n) return 'other';
+  const tokens = n.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  for (const token of tokens) {
+    if (WEEKDAY_NAMES.has(token)) return 'weekday';
+    // Arabic proclitics (و، ب، ف، ال…) fuse onto the word — endsWith catches
+    // them; restricted to Arabic tokens so English substrings can't false-hit.
+    if (HAS_ARABIC_RE.test(token)) {
+      for (const name of WEEKDAY_NAMES) {
+        if (name.length >= 4 && token.endsWith(name)) return 'weekday';
+      }
+    }
+  }
+  return TIME_SHAPE_RE.test(n) ? 'time' : 'other';
+}

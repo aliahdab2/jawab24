@@ -1,19 +1,39 @@
 import React, { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { X, Check, Trash2 } from 'lucide-react';
-import { DetailSheet, Button } from '@/components/ui';
+import { X, Check, Trash2, Plus } from 'lucide-react';
+import { DetailSheet, Button, InfoPopover } from '@/components/ui';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { formatCatalogPrice } from '@/utils/priceFormat';
 import type { FactRowDto } from '@/lib/api';
 
+/** Attributes per row are capped so a merchant can't balloon the prompt block
+ *  one field at a time — 12 is far above any real row (max seen: 4). */
+const MAX_ATTRS = 12;
+
+interface AttrField {
+  label: string;
+  value: string;
+  /** true = authored in this sheet session (label editable, removable);
+   *  false = part of the list's existing shape (label fixed). */
+  added: boolean;
+}
+
 interface ListRowSheetProps {
   /** null = adding a new row to the collection. */
   row: FactRowDto | null;
+  /** Prefill for a NEW row (ignored when editing): adding from an entity card
+   *  carries the card's name and its known key value, so the merchant only
+   *  types what is actually new (the date, the price). */
+  initial?: { name?: string; attributes?: { label: string; value: string }[] };
   /** Collection label — the sheet subtitle, so the merchant knows which list
    *  they are editing («مواعيد الدورات المعلنة»). */
   collectionLabel: string;
-  /** The collection's attribute schema (labels of the first row) — a NEW row
-   *  starts with these labels and empty values, keeping rows in one shape. */
+  /** The collection's key attribute. A merchant-added field must not reuse it:
+   *  the reply-time matcher gates rows by this label, and a duplicate would
+   *  make one row carry two competing key values. */
+  keyAttr: string | null;
+  /** The collection's attribute schema — the UNION of labels across all rows
+   *  (never rows[0]: 22 of the pilot's 46 price rows have no attributes). */
   attributeLabels: string[];
   /** Whether this row may be deleted (the LAST row of a collection may not —
    *  an empty collection would silently drop its coverage boundary). */
@@ -32,28 +52,30 @@ interface ListRowSheetProps {
 }
 
 /**
- * Single-row bottom sheet for the fact-list editor (G1b slice 1).
+ * Single-row bottom sheet for the fact-list editor.
  *
- * Mobile-first per the binding B1 constraints: one screen of labelled fields,
- * 44px+ targets, `dir="auto"` on text inputs, built on DetailSheet (which owns
- * the keyboard offset — never hand-roll that). Deliberate slice-1 bounds:
+ * Mobile-first per the binding B1 constraints: labelled fields, 44px+ targets,
+ * `dir="auto"` on text inputs, built on DetailSheet (which owns the keyboard
+ * offset — never hand-roll that).
  *
- * - Attribute LABELS are fixed; only VALUES are editable. The labels («الأيام»,
- *   «الساعة», «المستوى») are the list's schema, set at extraction — letting a
- *   row rename them would fork rows out of their collection's shape. A NEW row
- *   inherits its labels from the collection's first row for the same reason.
- * - ONE date field. A cohort slot self-expires at its start (startsAt=endsAt —
- *   how every seeded row works), so the sheet exposes «تاريخ البدء» and writes
- *   both. The label says what expiry does; a merchant must not need to know
- *   the two-column mechanics. Rows with a differing endsAt (none exist today)
- *   round-trip untouched unless the date is edited.
- * - The key attribute (`keyAttr`) value IS editable — it is data like any
- *   other value; the matcher just reads it. The sheet marks it so the merchant
- *   knows customers find the row by that word.
+ * - Schema labels («الأيام», «الساعة», «المستوى») come from the list and stay
+ *   fixed; the merchant edits VALUES. New fields the merchant authors here
+ *   («الوصف», «المدة», «الوزن» — whatever their business needs) get an
+ *   editable label and join the list's shape on save. No vocabulary is
+ *   hardcoded; every business gets its own fields.
+ * - TWO date fields. The start date drives visibility (a dated row hides from
+ *   the AI the day after it starts — owner ruling 2026-07-31: the end date is
+ *   never load-bearing). The end date is optional and descriptive. Legacy rows
+ *   carry endsAt === startsAt from the one-field era; that artifact is shown
+ *   as an EMPTY end field, and saving writes exactly what the fields say.
+ * - The key attribute value IS editable — it is data like any other value;
+ *   the matcher just reads it.
  */
 export function ListRowSheet({
   row,
+  initial,
   collectionLabel,
+  keyAttr,
   attributeLabels,
   canDelete,
   saving,
@@ -64,50 +86,87 @@ export function ListRowSheet({
   const t = useTranslations('business');
   const tc = useTranslations('common');
 
-  const [name, setName] = useState(row?.name ?? '');
+  const [name, setName] = useState(row?.name ?? initial?.name ?? '');
   // "35000.00" → "35000": the merchant edits what they'd write, not the
   // numeric column's storage form.
   const [price, setPrice] = useState(row?.price ? formatCatalogPrice(row.price) : '');
   const [currency, setCurrency] = useState(row?.currency ?? '');
   const [date, setDate] = useState(row?.startsAt ?? '');
-  const [attrs, setAttrs] = useState<{ label: string; value: string }[]>(
-    () => row
-      ? (row.attributes ?? []).map((a) => ({ ...a }))
-      : attributeLabels.map((label) => ({ label, value: '' })),
+  // endsAt === startsAt is the one-field era's artifact, not merchant intent.
+  const [endDate, setEndDate] = useState(
+    row?.endsAt && row.endsAt !== row.startsAt ? row.endsAt : '',
   );
+  const [attrs, setAttrs] = useState<AttrField[]>(() => {
+    if (row) {
+      const own = (row.attributes ?? []).map((a) => ({ ...a, added: false }));
+      // Labels the list has that this row lacks render as empty fields, so a
+      // sparse row can gain them without "add field" ceremony.
+      const missing = attributeLabels
+        .filter((label) => !own.some((a) => a.label === label))
+        .map((label) => ({ label, value: '', added: false }));
+      return [...own, ...missing];
+    }
+    return attributeLabels.map((label) => ({
+      label,
+      value: initial?.attributes?.find((a) => a.label === label)?.value ?? '',
+      added: false,
+    }));
+  });
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEscapeKey(onClose, true);
 
+  /** A merchant-authored label collides when it duplicates the list's key
+   *  attribute or any other field in this sheet. */
+  const labelTaken = (label: string, index: number): boolean => {
+    const norm = label.trim();
+    if (!norm) return false;
+    if (keyAttr && norm === keyAttr.trim()) return true;
+    return attrs.some((a, i) => i !== index && a.label.trim() === norm);
+  };
+  const anyLabelTaken = attrs.some((a, i) => a.added && labelTaken(a.label, i));
+  const dateRangeInvalid = !!date && !!endDate && endDate < date;
+
+  const originalEnd = row?.endsAt && row.endsAt !== row.startsAt ? row.endsAt : '';
   const dirty =
     name.trim() !== (row?.name ?? '') ||
     price.trim() !== (row?.price ? formatCatalogPrice(row.price) : '') ||
     currency.trim() !== (row?.currency ?? '') ||
     date !== (row?.startsAt ?? '') ||
-    JSON.stringify(attrs.map((a) => a.value.trim())) !==
-      JSON.stringify((row?.attributes ?? []).map((a) => a.value.trim()));
+    endDate !== originalEnd ||
+    JSON.stringify(attrs.map((a) => [a.label.trim(), a.value.trim()])) !==
+      JSON.stringify([
+        ...(row?.attributes ?? []).map((a) => [a.label.trim(), a.value.trim()]),
+        ...(row
+          ? attributeLabels
+              .filter((label) => !(row.attributes ?? []).some((a) => a.label === label))
+              .map((label) => [label, ''])
+          : attributeLabels.map((label) => [
+              label,
+              initial?.attributes?.find((a) => a.label === label)?.value.trim() ?? '',
+            ])),
+      ]);
 
   const submit = () => {
-    if (saving || !name.trim()) return;
+    if (saving || !name.trim() || anyLabelTaken || dateRangeInvalid) return;
     const keptAttrs = attrs
-      .map((a) => ({ label: a.label, value: a.value.trim() }))
-      .filter((a) => a.value.length > 0);
+      .map((a) => ({ label: a.label.trim(), value: a.value.trim() }))
+      .filter((a) => a.label.length > 0 && a.value.length > 0);
     onSave({
       name: name.trim(),
       attributes: keptAttrs.length ? keptAttrs : null,
       price: price.trim() || null,
       currency: currency.trim() || null,
-      // One date drives BOTH columns, unconditionally — see the sheet doc
-      // comment. An earlier version preserved a differing endsAt, which let a
-      // date edit produce endsAt < startsAt (an instantly-expired row that
-      // silently vanishes from the prompt). The service guards the invariant
-      // too; the sheet just never constructs the case.
       startsAt: date || null,
-      endsAt: date || null,
+      // Exactly what the field says — the start date owns visibility, so an
+      // empty end simply stores null (no more silent endsAt=startsAt).
+      endsAt: endDate || null,
     });
   };
 
   const titleId = 'list-row-sheet-title';
+  const inputClass =
+    'w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500';
 
   return (
     <DetailSheet
@@ -120,7 +179,7 @@ export function ListRowSheet({
           <h2 id={titleId} className="text-base sm:text-lg font-semibold text-foreground truncate">
             {row ? t('lists.editRow') : t('lists.addRow')}
           </h2>
-          <p className="text-xs text-muted-foreground truncate">{collectionLabel}</p>
+          <p className="text-xs text-muted-foreground truncate" dir="auto">{collectionLabel}</p>
         </div>
         <button
           type="button"
@@ -145,25 +204,83 @@ export function ListRowSheet({
             onChange={(e) => setName(e.target.value)}
             dir={name ? 'auto' : undefined}
             autoFocus={!row}
-            className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className={inputClass}
           />
         </div>
 
         {attrs.map((a, i) => (
-          <div key={a.label + i}>
-            <label htmlFor={`list-row-attr-${i}`} className="block text-sm text-muted-foreground mb-1.5">
-              {a.label}
-            </label>
-            <input
-              id={`list-row-attr-${i}`}
-              type="text"
-              value={a.value}
-              onChange={(e) => setAttrs((prev) => prev.map((p, j) => (j === i ? { ...p, value: e.target.value } : p)))}
-              dir={a.value ? 'auto' : undefined}
-              className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
+          <div key={i}>
+            {a.added ? (
+              <div className="grid grid-cols-[1fr_1.5fr_auto] gap-2 items-start">
+                <div>
+                  <label htmlFor={`list-row-attr-label-${i}`} className="block text-sm text-muted-foreground mb-1.5">
+                    {t('lists.fieldLabel')}
+                  </label>
+                  <input
+                    id={`list-row-attr-label-${i}`}
+                    type="text"
+                    value={a.label}
+                    onChange={(e) => setAttrs((prev) => prev.map((p, j) => (j === i ? { ...p, label: e.target.value } : p)))}
+                    dir={a.label ? 'auto' : undefined}
+                    aria-invalid={labelTaken(a.label, i) || undefined}
+                    className={inputClass}
+                  />
+                  {labelTaken(a.label, i) && (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                      {t('lists.fieldLabelTaken')}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label htmlFor={`list-row-attr-${i}`} className="block text-sm text-muted-foreground mb-1.5">
+                    {t('lists.fieldValue')}
+                  </label>
+                  <input
+                    id={`list-row-attr-${i}`}
+                    type="text"
+                    value={a.value}
+                    onChange={(e) => setAttrs((prev) => prev.map((p, j) => (j === i ? { ...p, value: e.target.value } : p)))}
+                    dir={a.value ? 'auto' : undefined}
+                    className={inputClass}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAttrs((prev) => prev.filter((_, j) => j !== i))}
+                  aria-label={tc('delete')}
+                  className="mt-7 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
+                >
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <label htmlFor={`list-row-attr-${i}`} className="block text-sm text-muted-foreground mb-1.5" dir="auto">
+                  {a.label}
+                </label>
+                <input
+                  id={`list-row-attr-${i}`}
+                  type="text"
+                  value={a.value}
+                  onChange={(e) => setAttrs((prev) => prev.map((p, j) => (j === i ? { ...p, value: e.target.value } : p)))}
+                  dir={a.value ? 'auto' : undefined}
+                  className={inputClass}
+                />
+              </>
+            )}
           </div>
         ))}
+
+        {attrs.length < MAX_ATTRS && (
+          <button
+            type="button"
+            onClick={() => setAttrs((prev) => [...prev, { label: '', value: '', added: true }])}
+            className="min-h-[36px] inline-flex items-center gap-1 rounded-lg text-xs font-medium text-brand-600 hover:text-brand-700 px-2 -ms-2"
+          >
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+            {t('lists.addField')}
+          </button>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -177,7 +294,7 @@ export function ListRowSheet({
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               placeholder={t('lists.rowPriceOptional')}
-              className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className={inputClass}
             />
           </div>
           <div>
@@ -191,53 +308,73 @@ export function ListRowSheet({
               onChange={(e) => setCurrency(e.target.value)}
               dir={currency ? 'auto' : undefined}
               placeholder={t('lists.rowCurrencyPlaceholder')}
-              className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className={inputClass}
             />
           </div>
         </div>
 
-        <div>
-          <label htmlFor="list-row-date" className="block text-sm text-muted-foreground mb-1.5">
-            {t('lists.rowDate')}
-          </label>
-          <input
-            id="list-row-date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full min-h-[44px] rounded-xl border border-theme-border bg-card px-3 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-          {/* What expiry DOES, in the merchant's terms — the whole point of
-              dated rows. Shown always, not only when a date is set, so the
-              merchant learns the behaviour before relying on it. */}
-          <p className="mt-1.5 text-xs text-muted-foreground">{t('lists.rowDateHint')}</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <span className="flex items-center gap-1.5 mb-1.5">
+              <label htmlFor="list-row-date" className="text-sm text-muted-foreground">
+                {t('lists.rowDate')}
+              </label>
+              {/* What the dates DO, in the merchant's terms — one tap away
+                  instead of a standing paragraph (owner request). */}
+              <InfoPopover label={t('lists.rowDate')}>{t('lists.rowDateHint')}</InfoPopover>
+            </span>
+            <input
+              id="list-row-date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label htmlFor="list-row-end-date" className="block text-sm text-muted-foreground mb-1.5">
+              {t('lists.rowEndDate')}
+            </label>
+            <input
+              id="list-row-end-date"
+              type="date"
+              value={endDate}
+              min={date || undefined}
+              onChange={(e) => setEndDate(e.target.value)}
+              aria-invalid={dateRangeInvalid || undefined}
+              className={inputClass}
+            />
+          </div>
         </div>
+        {dateRangeInvalid && (
+          <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t('lists.dateRangeInvalid')}</p>
+        )}
+
+        {/* Destructive action at the END of the form, spatially far from Save
+            (round-6 expert point 5). Two-step confirm as before. */}
+        {row && canDelete && (
+          <section aria-label={t('lists.deleteRowAction')} className="danger-zone rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-sm danger-zone-text">{t('lists.deleteRowAction')}</span>
+            {confirmingDelete ? (
+              <Button variant="danger" size="sm" onClick={onDelete} loading={saving}>
+                {t('lists.deleteConfirm')}
+              </Button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(true)}
+                className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border danger-zone-btn px-3 text-sm font-semibold"
+              >
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
+                {tc('delete')}
+              </button>
+            )}
+          </section>
+        )}
       </div>
 
       {/* Footer */}
       <div className="flex-shrink-0 flex items-center gap-3 px-4 py-3 pb-safe-modal lg:pb-4 lg:px-5 border-t border-theme-border bg-card">
-        {row && canDelete && (
-          confirmingDelete ? (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={onDelete}
-              loading={saving}
-              className="max-sm:h-11"
-            >
-              {t('lists.deleteConfirm')}
-            </Button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(true)}
-              aria-label={tc('delete')}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-surface-500 hover:bg-surface-100 hover:text-red-600"
-            >
-              <Trash2 className="w-5 h-5" aria-hidden="true" />
-            </button>
-          )
-        )}
         <span className="flex-1" />
         <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
           {tc('cancel')}
@@ -246,7 +383,7 @@ export function ListRowSheet({
           size="sm"
           onClick={submit}
           loading={saving && !confirmingDelete}
-          disabled={!dirty || !name.trim()}
+          disabled={!dirty || !name.trim() || anyLabelTaken || dateRangeInvalid}
           icon={<Check className="w-4 h-4" />}
           className="max-sm:h-11 max-sm:px-6 max-sm:flex-1"
         >

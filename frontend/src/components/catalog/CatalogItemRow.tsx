@@ -51,7 +51,10 @@ export function CatalogItemRow({
   const outLabel = item.type === 'vehicle' ? t('availability.sold') : t('availability.out');
 
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+    // Mobile: TWO lines — the name owns the full first line (long Arabic
+    // product names were strangled to one word per line by the fixed-width
+    // controls), price/availability/actions sit beneath. From sm: one line.
+    <li className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-card p-3">
       {/* Reorder controls */}
       <div className="flex flex-col flex-shrink-0">
         <button type="button" onClick={() => onMove(item, 'up')} disabled={disabled || isFirst}
@@ -90,6 +93,24 @@ export function CatalogItemRow({
         )}
       </div>
 
+      {/* Availability — one tap, on the NAME line at the end (owner: the
+          toggle up top frees the second line for the information). */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <Toggle
+          size="sm"
+          enabled={item.isAvailable}
+          disabled={disabled}
+          onChange={(enabled) => onToggleAvailability(item, enabled)}
+          aria-label={t('inlineAvailability.toggleLabel', { name: item.name })}
+        />
+        <span className="text-[11px] font-semibold text-muted-foreground whitespace-nowrap text-start">
+          {item.isAvailable ? t('availability.in') : outLabel}
+        </span>
+      </div>
+
+      {/* Controls line: full-width second row on mobile (indented to align
+          under the name, past the reorder arrows), inline from sm. */}
+      <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 ps-7 sm:ps-0 flex-shrink-0">
       {/* Price — tap to edit in place */}
       {editingPrice ? (
         <input
@@ -126,20 +147,6 @@ export function CatalogItemRow({
         </button>
       )}
 
-      {/* Availability — one tap. */}
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <Toggle
-          size="sm"
-          enabled={item.isAvailable}
-          disabled={disabled}
-          onChange={(enabled) => onToggleAvailability(item, enabled)}
-          aria-label={t('inlineAvailability.toggleLabel', { name: item.name })}
-        />
-        <span className="text-[11px] font-semibold text-muted-foreground whitespace-nowrap w-12 text-start">
-          {item.isAvailable ? t('availability.in') : outLabel}
-        </span>
-      </div>
-
       {/* Edit / delete */}
       <div className="flex gap-1 flex-shrink-0">
         <button type="button" onClick={() => onEdit(item)} disabled={disabled} aria-label={t('actions.edit')}
@@ -150,6 +157,7 @@ export function CatalogItemRow({
           className="w-8 h-8 grid place-items-center rounded-lg border border-border text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-40 transition-colors">
           <Trash2 className="w-4 h-4" aria-hidden="true" />
         </button>
+      </div>
       </div>
     </li>
   );

@@ -87,6 +87,17 @@ export function isWhatsAppMarketable(): boolean {
  * stays auth + workspace-admin gated regardless; this flag only hides the UI.
  * Remaining rollout path: delete the gate at GA (catalog plan, Phase D).
  */
-export function isCatalogVisible(user: { isAdmin?: boolean } | null | undefined): boolean {
-  return user?.isAdmin === true;
+/** Workspaces the business surface is open to ahead of GA (owner ruling
+ *  2026-08-03: «لفريق وركسبيسي بس») — the founder's own team dogfoods the
+ *  page in production before all merchants get it. */
+const BUSINESS_SURFACE_WORKSPACE_IDS: ReadonlySet<string> = new Set([
+  'a0005407-92bf-473e-9368-013f14c57a7d', // Jawab24 founder workspace (prod)
+]);
+
+export function isCatalogVisible(
+  user: { isAdmin?: boolean } | null | undefined,
+  workspaceIds?: readonly string[],
+): boolean {
+  if (user?.isAdmin === true) return true;
+  return (workspaceIds ?? []).some((id) => BUSINESS_SURFACE_WORKSPACE_IDS.has(id));
 }

@@ -95,6 +95,9 @@ export class FactCollectionLimitError extends Error {
 export interface FactRowInput {
     name: string;
     attributes?: { label: string; value: string }[] | null;
+    /** Structured shadow of attribute values (round-7 write-back contract) —
+     *  never read by the prompt pipeline. */
+    structured?: import('@jawab24/shared').FactStructuredValues | null;
     price?: string | null;
     currency?: string | null;
     startsAt?: string | null;
@@ -458,6 +461,7 @@ class FactCollectionsService {
                 collectionId,
                 name: input.name,
                 attributes: input.attributes ?? null,
+                structured: input.structured ?? null,
                 price: input.price ?? null,
                 currency: input.currency ?? null,
                 startsAt: input.startsAt ?? null,
@@ -484,6 +488,7 @@ class FactCollectionsService {
         const set: Record<string, unknown> = { updatedAt: new Date() };
         if (patch.name !== undefined) set.name = patch.name;
         if (patch.attributes !== undefined) set.attributes = patch.attributes;
+        if (patch.structured !== undefined) set.structured = patch.structured;
         if (patch.price !== undefined) set.price = patch.price;
         if (patch.currency !== undefined) set.currency = patch.currency;
         if (patch.startsAt !== undefined) set.startsAt = patch.startsAt;
@@ -551,6 +556,131 @@ class FactCollectionsService {
         if (!deleted) return null;
         this.logger.info('fact row deleted', { pageId, collectionId, rowId });
         return deleted;
+    }
+
+    /**
+     * Atomic save for one ENTITY as the single-form editor sees it: row
+     * upserts and deletes that may span SEVERAL collections (the price row in
+     * one list, its session rows in another), applied in one transaction with
+     * one cache invalidation. Per-row endpoints would leave a half-saved
+     * course behind the first failure — unacceptable for a form whose whole
+     * point is that the merchant edits the item as one thing.
+     *
+     * All ownership is re-checked here: every referenced collection must
+     * belong to the page, and every referenced row to its stated collection.
+     * A miss aborts the WHOLE save (stale editor state must not partially
+     * apply). Guards preserved from the per-row paths: the merged date order,
+     * the per-collection row cap, and the last-row boundary rule (a collection
+     * may not be emptied through this endpoint either).
+     */
+    async saveEntityRows(
+        pageId: string,
+        input: {
+            upserts: Array<FactRowInput & { collectionId: string; rowId?: string }>;
+            deletes: Array<{ collectionId: string; rowId: string }>;
+        },
+    ) {
+        const touchedIds = [...new Set([
+            ...input.upserts.map(u => u.collectionId),
+            ...input.deletes.map(d => d.collectionId),
+        ])];
+        if (touchedIds.length === 0) return { upserted: [], deletedIds: [] };
+
+        const owned = await db
+            .select({ id: factCollections.id })
+            .from(factCollections)
+            .where(and(inArray(factCollections.id, touchedIds), eq(factCollections.pageId, pageId)));
+        if (owned.length !== touchedIds.length) return null;
+
+        for (const u of input.upserts) assertRowDateRange(u.startsAt ?? null, u.endsAt ?? null);
+
+        const result = await db.transaction(async (tx) => {
+            // Per-collection counts INSIDE the tx (same race rationale as addRow).
+            const counts = await tx
+                .select({
+                    collectionId: factRows.collectionId,
+                    count: sql<number>`count(*)::int`,
+                    maxSort: sql<number>`coalesce(max(${factRows.sortOrder}), -1)::int`,
+                })
+                .from(factRows)
+                .where(inArray(factRows.collectionId, touchedIds))
+                .groupBy(factRows.collectionId);
+            const byCollection = new Map(counts.map(c => [c.collectionId, { count: c.count, maxSort: c.maxSort }]));
+
+            for (const id of touchedIds) {
+                const state = byCollection.get(id) ?? { count: 0, maxSort: -1 };
+                const inserts = input.upserts.filter(u => u.collectionId === id && !u.rowId).length;
+                const removals = input.deletes.filter(d => d.collectionId === id).length;
+                const net = state.count + inserts - removals;
+                if (net <= 0) {
+                    throw new FactCollectionLimitError('Cannot delete the last row — delete the collection instead');
+                }
+                if (net > MAX_ROWS_PER_COLLECTION) {
+                    throw new FactCollectionLimitError(`At most ${MAX_ROWS_PER_COLLECTION} rows per collection`);
+                }
+            }
+
+            const deletedIds: string[] = [];
+            for (const d of input.deletes) {
+                const [row] = await tx
+                    .delete(factRows)
+                    .where(and(eq(factRows.id, d.rowId), eq(factRows.collectionId, d.collectionId)))
+                    .returning({ id: factRows.id });
+                if (!row) throw new FactCollectionLimitError('Row not found — reload and try again');
+                deletedIds.push(row.id);
+            }
+
+            const upserted = [];
+            for (const u of input.upserts) {
+                if (u.rowId) {
+                    const [row] = await tx
+                        .update(factRows)
+                        .set({
+                            name: u.name,
+                            attributes: u.attributes ?? null,
+                            structured: u.structured ?? null,
+                            price: u.price ?? null,
+                            currency: u.currency ?? null,
+                            startsAt: u.startsAt ?? null,
+                            endsAt: u.endsAt ?? null,
+                            isAvailable: u.isAvailable ?? true,
+                            updatedAt: new Date(),
+                        })
+                        .where(and(eq(factRows.id, u.rowId), eq(factRows.collectionId, u.collectionId)))
+                        .returning();
+                    if (!row) throw new FactCollectionLimitError('Row not found — reload and try again');
+                    upserted.push(row);
+                } else {
+                    const state = byCollection.get(u.collectionId) ?? { count: 0, maxSort: -1 };
+                    state.maxSort += 1;
+                    byCollection.set(u.collectionId, state);
+                    const [row] = await tx.insert(factRows).values({
+                        collectionId: u.collectionId,
+                        name: u.name,
+                        attributes: u.attributes ?? null,
+                        structured: u.structured ?? null,
+                        price: u.price ?? null,
+                        currency: u.currency ?? null,
+                        startsAt: u.startsAt ?? null,
+                        endsAt: u.endsAt ?? null,
+                        isAvailable: u.isAvailable ?? true,
+                        sortOrder: state.maxSort,
+                    }).returning();
+                    upserted.push(row);
+                }
+            }
+
+            await pagesService.invalidatePageCaches(pageId, tx);
+            return { upserted, deletedIds };
+        });
+
+        this.logger.info('fact entity saved', {
+            pageId,
+            collections: touchedIds.length,
+            upserts: input.upserts.length,
+            deletes: input.deletes.length,
+        });
+        return result;
     }
 }
 
