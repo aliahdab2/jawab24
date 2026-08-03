@@ -151,12 +151,25 @@ class FactCollectionsService {
         // would double the hot-path cost and could disagree about the rows.
         // Expired rows are filtered here to keep the payload small; the renderer
         // filters again so it stays honest when handed unfiltered rows.
+        //
+        // ⚠ This clause is the SQL expression of `isRowLive` (@jawab24/shared) —
+        // the start date owns visibility (D-057), and endsAt only gates rows with
+        // no start date. SQL cannot import the function, so the two are pinned by
+        // the "isRowLive — SQL and TS agree" contract test in
+        // backend/test/integration/factCollections.test.ts. Change one → that test
+        // fails until you change the other.
         const allRows = await db
             .select()
             .from(factRows)
             .where(and(
                 inArray(factRows.collectionId, collections.map(c => c.id)),
-                or(isNull(factRows.endsAt), sql`${factRows.endsAt} >= ${today}`),
+                or(
+                    sql`${factRows.startsAt} >= ${today}`,
+                    and(
+                        isNull(factRows.startsAt),
+                        or(isNull(factRows.endsAt), sql`${factRows.endsAt} >= ${today}`),
+                    ),
+                ),
             ))
             .orderBy(asc(factRows.sortOrder), asc(factRows.createdAt))
             .limit(MAX_COLLECTIONS_PER_PAGE * MAX_ROWS_PER_COLLECTION);
