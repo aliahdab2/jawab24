@@ -186,10 +186,11 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 433 total, defined inline below (docs/playground-edge-cases.md is
+// Test cases — 440 total, defined inline below (docs/playground-edge-cases.md is
 // the historical origin of the early categories, not the source of truth).
-// Latest additions: Cat 70 (purchase-turn price grounding), Cat 71 (lead-answer
-// continuity — الدمشقي prod replay, bare name answering our details request)
+// Latest additions: Cat 72 (own-brand Check 6 exemption), Cat 73 (few-shot data
+// leak — إجدابيا + Jawab24-page prod replays; v67 strips all price/plan data
+// from the static prompt)
 // ---------------------------------------------------------------------------
 
 /**
@@ -4598,9 +4599,16 @@ const TEST_CASES: TestCase[] = [
             // prices the pair at 28. Any other invented figure fails on the flag.
             replyNotContains: ['32', '٣٢'],
             flagsAbsent: ['price_not_in_kb'],
-            replyContainsAny: ['28', '٢٨'],
+            // Either quote the pair price, or advance the order (collect city/
+            // details — the fixture's own scripted flow gives the priced summary
+            // AFTER the customer sends details). Widened from a hard «28» when
+            // v67 removed the worked-total demo from Example 14: the reply often
+            // confirms the quantity and collects details without re-quoting. The
+            // hard pins stay the 32-ban + clean flag — the prod defect was a
+            // WRONG price, never a missing one.
+            replyContainsAny: ['28', '٢٨', 'المدينة', 'مدينتك', 'بيانات', 'رقمك'],
         },
-        notes: 'PROD replay (2026-07-23 12:22, invented «70 دينار» where the KB said 69). A purchase turn must quote the merchant\'s pair price, not multiply the unit price and not invent.',
+        notes: 'PROD replay (2026-07-23 12:22, invented «70 دينار» where the KB said 69). A purchase turn must never mis-multiply the unit price (32) or invent a figure; quoting the pair price and advancing the order to details are both acceptable shapes (v67).',
     },
 
     // 70.2 — GREEN GUARD, and the case that fails if Stage B over-reaches: a
@@ -4795,6 +4803,61 @@ const TEST_CASES: TestCase[] = [
             flagsAbsent: ['self_identification_stripped'],
         },
         notes: 'PROD replay («رابط البرنامج»): the app-link question must surface the Play Store or site link — both are in the fixture KB.',
+    },
+
+    // ─── Category 73: Few-Shot Data Leak (prompt v67) ───
+    // TWO independent prod leaks of few-shot example data, same class as the v63
+    // Example-4 verbatim reproduction:
+    // • متجر إجدابيا (2026-08-01, 3×): bare «السعر» answered with Jawab24's OWN
+    //   plan sheet («عندنا 3 باقات: المبتدئ – 15$ شهرياً…») — old Example 9's
+    //   illustrative data was our real pricing, and the page's own دينار prices
+    //   (15/39/79) coincided with it, so the copy also sailed through Check 1.
+    // • Jawab24 support page (2026-03-30, 8 replies): old Example 1's fictional
+    //   «باقة الورد – 150 ريال» sold as a real offering, with invented siblings
+    //   («باقة الفل – 250، باقة الياسمين – 350») completing the sheet.
+    // v67 removes ALL price/plan data from the static prompt (owner ruling —
+    // catalog-shaped name+price rows masquerade as the business's own offering,
+    // and Check 1 cannot flag a number the KB happens to contain). These cases
+    // ban the SHIPPED leak strings. '$' and «شهرياً» are banned outright on the
+    // incense page — it prices exclusively in دينار per-item, so either token
+    // can only come from a prompt-side sheet. The incense fixture is deliberately
+    // NOT given the prod page's 15/39/79 lines: recreating the coincidence was
+    // measured to degrade Cat 70's premises (#731 clarify-drift, #734's planted
+    // «79» becoming grounded), and the pin here is the banned strings, not the
+    // numbers. NOTE: the defect reproduced as a RATE at prod sampling (like
+    // #737), so a green run on the old prompt would not have proven absence —
+    // the value here is the standing pin.
+    {
+        id: 752, category: 73, categoryName: 'Few-Shot Data Leak', channel: 'dm',
+        message: 'السعر',
+        page: 'incense',
+        conversationHistory: [
+            { role: 'user', content: 'كم السعر' },
+            { role: 'assistant', content: 'عرض الصابونتين: صابونة الغار وصابونة الورد مع بعض بـ 62 دينار بدل 70. ارسل رقمك واسم المدينة لتوصيل سريع.' },
+        ],
+        expected: {
+            replyNotContains: ['المبتدئ', 'الاحترافية', 'باقة الورد', '$', 'شهرياً'],
+        },
+        notes: 'PROD replay shape (2026-08-01 08:59): a bundle offer already quoted in history (here the fixture\'s real الصابونتين 62 deal), customer follows up with a bare «السعر» — the exact turn that leaked the plan sheet. Any acceptable reply (re-quote the deal, itemize دينار prices, or ask which item) contains none of the banned strings.',
+    },
+    {
+        id: 753, category: 73, categoryName: 'Few-Shot Data Leak', channel: 'dm',
+        message: 'السعر',
+        page: 'incense',
+        expected: {
+            replyNotContains: ['المبتدئ', 'الاحترافية', 'باقة الورد', '$', 'شهرياً'],
+        },
+        notes: 'History-less control (prod also leaked on later bare «السعر» turns, 12:08/12:26). Example 11 behavior (clarify which item) and a price enumeration are both acceptable — the pin is only that no example-sheet string ever appears.',
+    },
+    {
+        id: 754, category: 73, categoryName: 'Few-Shot Data Leak', channel: 'dm',
+        message: 'شو الباقات المتوفرة عندكم؟',
+        page: 'support',
+        expected: {
+            replyContainsAny: ['jawab24.com', 'pricing', 'تجربة مجانية'],
+            replyNotContains: ['باقة الورد', 'باقة الفل', 'باقة الياسمين', '150 ريال', 'المبتدئ', 'الاحترافية'],
+        },
+        notes: 'PROD replay (2026-03-30, Jawab24 page): the plans question that produced the «باقة الورد – 150 ريال» sheet from old Example 1. The support fixture KB deliberately holds NO plan names or prices — only the pricing URL + free-trial line — so the reply must be built from THAT (URL or free-trial mention both count as grounded), and ANY plan enumeration on this fixture can only be prompt leakage. Routing to the URL specifically is pinned for direct website asks by #750; at temp 0 this question answers with the free-trial line and omits the URL — grounded, just terse.',
     },
 
 ];

@@ -1260,7 +1260,35 @@ export {
 // answers with the KB's contact numbers instead of course details (3/3) —
 // real, pre-existing, out of scope here. Pinned by eval Cat 71 (Lead-Answer
 // Continuity, #745–748 — prod replay incl. the recovery turn).
-export const PROMPT_VERSION = 'v66';
+// v67 (2026-08-03) — NO price or plan data may live in the static prompt (owner
+// ruling). Two independent prod leaks proved the class, not the instance:
+// (1) Example 9's illustrative data was our REAL plan sheet (Starter/Business/
+// Pro at $15/39/79) — متجر إجدابيا (2026-08-01, 3×) answered a bare «السعر» with
+// «عندنا 3 باقات: المبتدئ – 15$ شهرياً…»: a Libyan incense customer quoted OUR
+// SaaS tiers. Not a cache leak (cached=false, page-scoped keys); the page's own
+// prices (15/39/79 دينار) coincided with the example's numbers, which also let
+// the copy sail through Check 1 — all three numbers ARE in that KB. (2) Example
+// 1's fictional «باقة الورد - 150 ريال» — the Jawab24 support page (2026-03-30,
+// 8 replies) sold it as a real offering («عنا عدة باقات: باقة الورد – 150 ريال
+// • باقة الفل – 250 • باقة الياسمين – 350»), inventing two sibling plans to
+// complete the sheet. Same defect class as v63 (the example is the template the
+// model reaches for when the KB is thin or resonates), and catalog-shaped
+// name+price rows are its highest-harm form: they masquerade as the business's
+// own offering and Check 1 cannot flag a number the KB happens to contain.
+// Fix: every example's reply is now SELF-GROUNDING — no fact survives copying.
+// Ex 1 quotes distinctive fixture hours (9:30–7) instead of a price row; Ex 9
+// keeps the enumerate-ALL-then-stop DM shape on a colors list (price lists
+// explicitly follow the same shape, data from <business_knowledge>); Ex 14
+// keeps the dual-suffix lesson (علبتين = TWO) by echoing the customer's own
+// quantity and requesting order details — the multiplication contract already
+// lives in the PURCHASE_INTENT QUANTITY RULE and the price_math flag spec, and
+// v54's prod evidence shows the model totals correctly without a worked demo
+// (the old guard, not the model, was what nuked totals). Examples 7/12 (Riyadh
+// delivery scope, ٣-month duration) were swept in prod and have never leaked;
+// left as-is deliberately — non-price, and the honest-partial-match lesson
+// needs concrete data. Pinned by eval Cat 73 (752/753 incense prod replay,
+// 754 support-page plan question); Cat 68 re-run gates the Ex-14 change.
+export const PROMPT_VERSION = 'v67';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
