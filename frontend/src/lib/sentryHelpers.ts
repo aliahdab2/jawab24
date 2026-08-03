@@ -21,6 +21,18 @@ export function getBackendErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * HTTP status behind a failed request, when there is one.
+ *
+ * Pairs with getBackendErrorCode: together they make a Sentry event answer
+ * "which failure was this?" instead of grouping every axios rejection under one
+ * "Request failed with status code 409". Was written out inline at each call
+ * site; shared here so a new caller cannot forget it.
+ */
+export function getStatusCode(error: unknown): number | undefined {
+  return axios.isAxiosError(error) ? error.response?.status : undefined;
+}
+
 /** Errors that are expected during normal operation and should not be sent to Sentry. */
 const IGNORED_ERRORS = [
   'Session expired',

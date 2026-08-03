@@ -15,6 +15,10 @@ vi.mock('../../src/services/factCollections', async (importOriginal) => {
     return {
         FactCollectionLimitError: actual.FactCollectionLimitError,
         factCollectionsService: {
+            // The controller wires a request-scoped logger before every write
+            // (the service's logger was never wired, so its 8 log lines were
+            // no-ops in production). A mock without this throws on every write.
+            setLogger: vi.fn(),
             listCollectionsWithRows: vi.fn(),
             addRow: vi.fn(),
             updateRow: vi.fn(),
@@ -156,7 +160,7 @@ describe('Fact-collections routes — security + contract wiring', () => {
 
     it('DELETE row: maps the last-row guard to 409 LAST_ROW', async () => {
         vi.mocked(factCollectionsService.deleteRow).mockRejectedValue(
-            new FactCollectionLimitError('Cannot delete the last row — delete the collection instead'),
+            new FactCollectionLimitError('Cannot delete the last row — delete the collection instead', 'LAST_ROW'),
         );
         const res = await app.inject({
             method: 'DELETE',
@@ -177,5 +181,97 @@ describe('Fact-collections routes — security + contract wiring', () => {
             expect(res.statusCode).toBe(200);
         }
         expect(vi.mocked(factCollectionsService.setCompleteness).mock.calls.map(c => c[2])).toEqual([true, false, null]);
+    });
+
+    // ── Error contract ────────────────────────────────────────────────────────
+    // Every refusal used to arrive as one of two hand-picked literals: `LIMIT`
+    // covered five distinct conditions while `deleteRow` called the SAME
+    // last-row rule `LAST_ROW`, so one business rule had two names and the
+    // client could not tell "list is full" from "your editor is stale". The
+    // code now travels ON the error, which makes the two endpoints agree by
+    // construction rather than by review.
+    describe('error contract — one code per reason', () => {
+        it.each([
+            ['ROW_LIMIT', 'At most 500 rows per collection', 409],
+            ['LAST_ROW', 'A collection needs at least one row', 409],
+            // A bad date range is a MALFORMED BODY, not a state conflict.
+            ['DATE_ORDER', 'End date must not be before the start date', 400],
+        ] as const)('POST row surfaces %s as %i', async (code, message, status) => {
+            vi.mocked(factCollectionsService.addRow).mockRejectedValue(
+                new FactCollectionLimitError(message, code),
+            );
+            const res = await app.inject({
+                method: 'POST',
+                url: `/pages/${PAGE}/fact-collections/${COLL}/rows`,
+                payload: { name: 'دورة جديدة' },
+            });
+            expect(res.statusCode).toBe(status);
+            expect(JSON.parse(res.payload).code).toBe(code);
+        });
+
+        it('PATCH row: a merged-date violation is 400 DATE_ORDER, NOT a 500', async () => {
+            // Regression: updateRow had no catch at all, so the service's guard
+            // escaped to Fastify's default handler as a 500 — paging on-call for
+            // a client input error and telling the caller to retry a request
+            // that can never succeed.
+            vi.mocked(factCollectionsService.updateRow).mockRejectedValue(
+                new FactCollectionLimitError('End date must not be before the start date', 'DATE_ORDER'),
+            );
+            const res = await app.inject({
+                method: 'PATCH',
+                url: `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`,
+                payload: { endsAt: '2020-01-01' },
+            });
+            expect(res.statusCode).toBe(400);
+            expect(JSON.parse(res.payload).code).toBe('DATE_ORDER');
+        });
+
+        it('a missing row is STALE_ROW so the editor knows to reload, not retry', async () => {
+            vi.mocked(factCollectionsService.updateRow).mockResolvedValue(null as any);
+            const res = await app.inject({
+                method: 'PATCH',
+                url: `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`,
+                payload: { name: 'x' },
+            });
+            expect(res.statusCode).toBe(404);
+            expect(JSON.parse(res.payload).code).toBe('STALE_ROW');
+        });
+
+        it('404s carry a code so a client never string-matches English', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue(null as any);
+            const res = await app.inject({ method: 'GET', url: `/pages/${PAGE}/fact-collections` });
+            expect(res.statusCode).toBe(404);
+            expect(JSON.parse(res.payload).code).toBe('PAGE_NOT_FOUND');
+        });
+
+        it('a 400 body keeps `error` a STRING and puts field errors in `details`', async () => {
+            // This controller was the only one in the backend putting an ARRAY in
+            // `error`; every generic consumer assumes a string and would render
+            // "[object Object]". catalog.ts already uses the shape asserted here.
+            const res = await app.inject({
+                method: 'POST',
+                url: `/pages/${PAGE}/fact-collections/${COLL}/rows`,
+                payload: { price: 10 },
+            });
+            expect(res.statusCode).toBe(400);
+            const body = JSON.parse(res.payload);
+            expect(typeof body.error).toBe('string');
+            expect(body.code).toBe('VALIDATION');
+            expect(Array.isArray(body.details)).toBe(true);
+            expect(body.details[0]).toHaveProperty('field');
+        });
+    });
+
+    it('wires a request-scoped logger before every write', async () => {
+        // The service ships `setLogger` and 8 log lines; nothing ever called it,
+        // so the fact engine was silent in production. If this regresses, the
+        // silence returns and no test would otherwise notice.
+        vi.mocked(factCollectionsService.addRow).mockResolvedValue({ id: ROW } as any);
+        await app.inject({
+            method: 'POST',
+            url: `/pages/${PAGE}/fact-collections/${COLL}/rows`,
+            payload: { name: 'دورة' },
+        });
+        expect(vi.mocked(factCollectionsService.setLogger)).toHaveBeenCalled();
     });
 });

@@ -4,6 +4,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BusinessListsSection } from '@/components/business/BusinessListsSection';
 import { factCollectionsApi, type FactCollectionWithRows } from '@/lib/api';
+// Import the real copy rather than hardcoding it — a reworded key must not
+// silently turn this assertion into a no-op (project rule for E2E, same logic).
+import en from '@/i18n/en/business.json';
+import common from '@/i18n/en/common.json';
 
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>();
@@ -64,6 +68,18 @@ describe('BusinessListsSection', () => {
     const { container } = renderSection();
     await waitFor(() => expect(factCollectionsApi.list).toHaveBeenCalled());
     expect(container.querySelector('section')).toBeNull();
+  });
+
+  // A failed load must never be mistaken for an empty one: rendering null on
+  // error told the merchant "you have no lists" when their data was simply
+  // unreachable — and reported nothing, so nobody could see it happening.
+  it('shows an error state with a retry when the load FAILS — not the empty state', async () => {
+    vi.mocked(factCollectionsApi.list).mockRejectedValue(new Error('network down'));
+    renderSection();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(en.lists.loadFailed);
+    expect(screen.getByRole('button', { name: common.tryAgain })).toBeInTheDocument();
   });
 
   it('shows live rows directly and expired rows only behind the toggle', async () => {
