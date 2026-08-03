@@ -68,6 +68,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const { setLanguage } = useLanguage();
   const isRTL = isRTLLocale(locale);
   const { isAuthenticated, _hasHydrated, logout, user } = useAuthStore();
+  const workspaceIdList = useAuthStore((s) => s.workspaces ?? []).map((w) => w.id);
   const isAdmin = !!user?.isAdmin;
   // Workspace role (owner/admin) gates the Team tile in the More overlay —
   // distinct from the platform `isAdmin` super-admin flag.
@@ -86,10 +87,11 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   // those paths — derived from the same nav config the overlay uses, so
   // adding a nav entry can never silently miss this active-state check.
   const moreOverlayPaths = useMemo(
-    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(user) })
+    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(user, workspaceIdList) })
       .flatMap((g) => g.items.map((i) => i.href))
       .filter((href) => !BOTTOM_NAV_PATHS.includes(href)),
-    [isAdmin, canManageTeam, user],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- workspaceIdList is a fresh array each render; join() keeps the memo stable
+    [isAdmin, canManageTeam, user, workspaceIdList.join(',')],
   );
 
   // ESC key to close modals (logout confirmation takes priority)
@@ -470,7 +472,7 @@ function MobileMenuOverlay({
     router.replace(router.asPath);
   };
 
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(overlayUser) });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(overlayUser, (workspaces ?? []).map((w) => w.id)) });
   const menuItems = [
     ...navigationGroups
       .flatMap((group) => group.items)

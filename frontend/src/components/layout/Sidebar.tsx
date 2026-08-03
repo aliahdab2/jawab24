@@ -349,7 +349,8 @@ export const Sidebar = memo(function Sidebar() {
   const tAdmin = useTranslations('admin');
   const tAuth = useTranslations('auth');
   const isDemoUser = useIsDemoUser();
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(user) });
+  const workspaceIds = useAuthStore((s) => s.workspaces ?? []).map((w) => w.id);
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(user, workspaceIds) });
 
   const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing, isAdmin);
 

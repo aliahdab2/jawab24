@@ -45,8 +45,8 @@ function BusinessPageInner() {
   const tCatalog = useTranslations('catalog');
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { isAuthenticated, user, _hasHydrated } = useAuthStore();
-  const canSee = isCatalogVisible(user);
+  const { isAuthenticated, user, _hasHydrated, workspaces } = useAuthStore();
+  const canSee = isCatalogVisible(user, (workspaces ?? []).map((w) => w.id));
 
   // Platform-admin canary (same guard as /catalog): deep links fail closed —
   // anyone outside the allowlist is bounced to the dashboard. Wait for store
