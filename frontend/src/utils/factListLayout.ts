@@ -129,11 +129,42 @@ export interface SectionKeyGroup {
  * (factCollections.ts rowsMissingKey guard), so surfacing them is the nudge
  * that gets the data fixed.
  */
+/**
+ * The label a directory section partitions by: the collection's key attribute
+ * when it has one, otherwise DISCOVERED from the data — the attribute carried
+ * with a value by EVERY row (a partition must cover the list), with ≥2
+ * distinct values, at least one of them shared (otherwise nothing
+ * compresses), picking the fewest-distinct-values candidate (max
+ * compression), ties first-seen. Purely data-driven, no vocabulary: on the
+ * pilot's size list this elects «السلسلة» (عادي/جامبو) with nothing naming it
+ * anywhere in code.
+ */
+export function sectionPartitionLabel(section: FactListSection): string | null {
+  const { collection } = section;
+  if (collection.keyAttr) return collection.keyAttr;
+  const rows = section.rows;
+  if (rows.length < 3) return null;
+  let best: { label: string; distinct: number } | null = null;
+  for (const label of section.labelOrder) {
+    const values = rows.map(
+      ({ row }) => row.attributes?.find((a) => norm(a.label) === norm(label))?.value.trim() || null,
+    );
+    if (values.some((v) => v === null)) continue;
+    const counts = new Map<string, number>();
+    for (const v of values as string[]) counts.set(norm(v), (counts.get(norm(v)) ?? 0) + 1);
+    if (counts.size < 2) continue;
+    if (![...counts.values()].some((n) => n >= 2)) continue;
+    if (!best || counts.size < best.distinct) best = { label, distinct: counts.size };
+  }
+  return best?.label ?? null;
+}
+
 export function sectionKeyGroups(
   section: FactListSection,
   rows: GroupedRow[],
+  partitionLabel?: string | null,
 ): SectionKeyGroup[] | null {
-  const keyAttr = section.collection.keyAttr;
+  const keyAttr = partitionLabel !== undefined ? partitionLabel : section.collection.keyAttr;
   if (!keyAttr) return null;
   const keyLabel = norm(keyAttr);
   const buckets = new Map<string, SectionKeyGroup>();

@@ -11,7 +11,7 @@ import { groupFactCollections, rowKeyValue, type FactListGroup } from '@/utils/f
 import {
   sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels,
   discoverFaceLabel, buildEntityUnit, buildTierBlocks, isDatedCollection,
-  sessionValueKind, sectionKeyGroups, type FactListSection, type FactEntityUnit,
+  sessionValueKind, sectionKeyGroups, sectionPartitionLabel, type FactListSection, type FactEntityUnit,
 } from '@/utils/factListLayout';
 import { useLanguage } from '@/i18n/hooks';
 import { ListRowSheet } from './ListRowSheet';
@@ -341,25 +341,28 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
 
   /** A DIRECTORY line (contact-list pattern): bold name, muted labelled
    *  detail beneath, price at the end when the list prices things. */
-  const directoryRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, dropKey = false) => {
-    const pairs = rowDisplayAttributes(section, row, { keepKey: !dropKey });
+  const directoryRow = (group: FactListGroup, section: FactListSection, row: FactRowDto, expired: boolean, dropLabel: string | null = null) => {
+    const pairs = rowDisplayAttributes(
+      section, row,
+      dropLabel ? { keepKey: false, dropLabels: [dropLabel] } : { keepKey: true },
+    );
     return (
       <li key={row.id} className="list-none">
         <button
           type="button"
           onClick={() => openEntity(group, { collection: section.collection, row })}
-          className={`w-full min-h-[52px] flex items-center gap-3 px-4 py-2.5 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
+          className={`w-full min-h-[44px] flex items-center gap-3 px-4 py-2 text-start hover:bg-surface-100 active:bg-surface-200 transition-colors ${expired ? 'opacity-60 hover:opacity-100' : ''}`}
         >
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-semibold text-foreground break-words" dir="auto">{row.name}</span>
-              {expired && expiredBadge}
-            </span>
+          {/* ONE flowing line — name then muted detail; wraps only when it must.
+              The two-line row cost 13 size rows twice the height they need. */}
+          <span className="min-w-0 flex-1 flex items-baseline gap-x-2 gap-y-0.5 flex-wrap">
+            <span className="text-sm font-semibold text-foreground break-words" dir="auto">{row.name}</span>
             {pairs.length > 0 && (
-              <span className="block text-xs text-muted-foreground mt-0.5 break-words" dir="auto">
+              <span className="text-xs text-muted-foreground break-words" dir="auto">
                 {pairs.map((a) => `${a.label}: ${a.value}`).join(t('lists.listSeparator'))}
               </span>
             )}
+            {expired && expiredBadge}
           </span>
           {priceTag(row)}
           {editChip}
@@ -451,9 +454,12 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
               {(() => {
                 // Grouped by the list's KEY value (the merchant's search axis —
                 // «which pharmacies are in area X» — and the same axis the
-                // reply engine gates rows by). Falls back to the flat list
-                // whenever the data doesn't compress (no key / all unique).
-                const keyGroups = sectionKeyGroups(section, live);
+                // reply engine gates rows by). Keyless lists partition by the
+                // attribute the data itself elects (سلسلة عادي/جامبو on the
+                // size list). Falls back to the flat list whenever the data
+                // doesn't compress (no partition / all unique).
+                const partitionLabel = sectionPartitionLabel(section);
+                const keyGroups = sectionKeyGroups(section, live, partitionLabel);
                 if (!keyGroups) {
                   return (
                     <ul className="divide-y divide-theme-border/60">
@@ -468,16 +474,16 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                       <div key={kg.value ?? '__missing__'}>
                         <div className="flex items-center gap-2 px-4 py-2 bg-muted/60 border-y border-theme-border/60 border-s-[3px] border-s-brand-500 first:border-t-0">
                           <span className="text-sm font-bold text-foreground break-words" dir="auto">
-                            {kg.display ?? t('lists.missingKeyGroup', { label: collection.keyAttr ?? '' })}
+                            {kg.display ?? t('lists.missingKeyGroup', { label: partitionLabel ?? '' })}
                           </span>
                           <span className="min-w-[22px] text-center rounded-full bg-card border border-theme-border px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">{kg.rows.length}</span>
-                          {kg.display && collection.keyAttr && (
+                          {kg.display && partitionLabel && (
                             <button
                               type="button"
                               onClick={() => setEditing({
                                 collection,
                                 row: null,
-                                initial: { attributes: [{ label: collection.keyAttr as string, value: kg.display as string }] },
+                                initial: { attributes: [{ label: partitionLabel, value: kg.display as string }] },
                               })}
                               aria-label={`${t('lists.addItem')} — ${kg.display}`}
                               className="ms-auto min-h-[28px] inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700"
@@ -493,7 +499,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                             One row carrying more detail keeps the whole group
                             on full rows, so a group never mixes densities. */}
                         {kg.rows.every((entry) =>
-                          rowDisplayAttributes(section, entry.row, { keepKey: !kg.display }).length === 0 && !entry.row.price,
+                          rowDisplayAttributes(section, entry.row, kg.display && partitionLabel ? { keepKey: false, dropLabels: [partitionLabel] } : { keepKey: true }).length === 0 && !entry.row.price,
                         ) ? (
                           <ul className="flex flex-wrap gap-2 px-4 py-3">
                             {kg.rows.map((entry) => (
@@ -511,7 +517,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                           </ul>
                         ) : (
                           <ul className="divide-y divide-theme-border/60">
-                            {kg.rows.map((entry) => directoryRow(syntheticGroup, section, entry.row, false, !!kg.display))}
+                            {kg.rows.map((entry) => directoryRow(syntheticGroup, section, entry.row, false, kg.display ? partitionLabel : null))}
                           </ul>
                         )}
                       </div>

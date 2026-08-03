@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups } from './factListLayout';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel } from './factListLayout';
 import { groupFactCollections } from './factListGrouping';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -310,5 +310,53 @@ describe('sectionKeyGroups', () => {
     const groups = sectionKeyGroups(section, entries);
     expect(groups!.at(-1)!.value).toBeNull();
     expect(groups!.at(-1)!.rows.map((r) => r.row.name)).toEqual(['ج']);
+  });
+});
+
+describe('sectionPartitionLabel', () => {
+  const section = (keyAttr: string | null, rows: FactRowDto[]) => {
+    const collection = coll('مقاسات وأسعار', keyAttr, rows);
+    const group = { key: collection.id, title: collection.label, rows: rows.map((r) => ({ collection, row: r })) };
+    return sectionizeGroup(group, [collection])[0];
+  };
+
+  it('returns the key attribute when the collection has one', () => {
+    const s = section('المنطقة', [row('أ', { attributes: [{ label: 'المنطقة', value: 'الشرق' }] })]);
+    expect(sectionPartitionLabel(s)).toBe('المنطقة');
+  });
+
+  it('discovers the best-compressing attribute on a keyless list — السلسلة on the sizes shape', () => {
+    const s = section(null, [
+      row('رواء رقم 1', { attributes: [{ label: 'السلسلة', value: 'عادي' }, { label: 'الوزن', value: '2-4 كيلو' }], price: '45.00' }),
+      row('رواء رقم 2', { attributes: [{ label: 'السلسلة', value: 'عادي' }, { label: 'الوزن', value: '3-6 كيلو' }], price: '45.00' }),
+      row('رواء رقم 3', { attributes: [{ label: 'السلسلة', value: 'جامبو' }, { label: 'الوزن', value: '4-8 كيلو' }], price: '82.00' }),
+      row('رواء رقم 4', { attributes: [{ label: 'السلسلة', value: 'جامبو' }, { label: 'الوزن', value: '7-14 كيلو' }], price: '82.00' }),
+    ]);
+    // الوزن has 4 distinct values (no compression); السلسلة has 2 → elected.
+    expect(sectionPartitionLabel(s)).toBe('السلسلة');
+  });
+
+  it('returns null when an attribute is missing on any row — a partition must cover the list', () => {
+    const s = section(null, [
+      row('أ', { attributes: [{ label: 'السلسلة', value: 'عادي' }] }),
+      row('ب', { attributes: [{ label: 'السلسلة', value: 'عادي' }] }),
+      row('ج', { attributes: null }),
+    ]);
+    expect(sectionPartitionLabel(s)).toBeNull();
+  });
+
+  it('returns null when nothing repeats or only one value exists', () => {
+    const unique = section(null, [
+      row('أ', { attributes: [{ label: 'اللون', value: 'أحمر' }] }),
+      row('ب', { attributes: [{ label: 'اللون', value: 'أزرق' }] }),
+      row('ج', { attributes: [{ label: 'اللون', value: 'أخضر' }] }),
+    ]);
+    expect(sectionPartitionLabel(unique)).toBeNull();
+    const constant = section(null, [
+      row('أ', { attributes: [{ label: 'اللون', value: 'أحمر' }] }),
+      row('ب', { attributes: [{ label: 'اللون', value: 'أحمر' }] }),
+      row('ج', { attributes: [{ label: 'اللون', value: 'أحمر' }] }),
+    ]);
+    expect(sectionPartitionLabel(constant)).toBeNull();
   });
 });
