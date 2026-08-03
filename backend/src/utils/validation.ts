@@ -265,23 +265,75 @@ export type CatalogItemUpdateInput = z.infer<typeof CatalogItemUpdateSchema>;
  * hygiene — so a value that is valid in one structured store is valid in the
  * other and vice versa.
  */
-export const FactRowSchema = z.object({
+/** "HH:MM", 24-hour — exactly what `<input type="time">` emits. */
+const TimeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be HH:MM');
+
+/**
+ * Structured SHADOW of an attribute value (round-7 write-back contract). The
+ * attribute STRING stays the merchant-visible truth the AI quotes; the shadow
+ * is the machine form the editor generated it from. Keyed by attribute label,
+ * same cap as the attribute list itself.
+ */
+const StructuredFieldValue = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('weekdays'),
+        days: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+    }),
+    z.object({ kind: z.literal('timeRange'), start: TimeOfDay, end: TimeOfDay }),
+]);
+export const FactStructuredValuesInput = z
+    .record(z.string().trim().min(1).max(60), StructuredFieldValue)
+    .refine(v => Object.keys(v).length <= 12, { message: 'At most 12 structured fields' });
+
+const FactRowFields = {
     name: z.string().trim().min(1, 'Name is required').max(200),
     attributes: CatalogAttributesInput.optional().transform(v => v ?? null),
+    structured: FactStructuredValuesInput.nullable().optional().transform(v => (v && Object.keys(v).length ? v : null)),
     price: PriceInput.optional().transform(v => v ?? null),
     currency: CurrencyInput.optional().transform(v => v ?? null),
     startsAt: CatalogDateInput.optional().transform(v => v ?? null),
     endsAt: CatalogDateInput.optional().transform(v => v ?? null),
     isAvailable: z.boolean().default(true),
+};
+const factRowDateOrder = {
+    check: (row: { startsAt: string | null; endsAt: string | null }) =>
+        !row.startsAt || !row.endsAt || row.endsAt >= row.startsAt,
+    opts: { message: 'End date must not be before the start date', path: ['endsAt'] as (string | number)[] },
+};
+
+export const FactRowSchema = z.object(FactRowFields)
+    .refine(factRowDateOrder.check, factRowDateOrder.opts);
+
+/**
+ * One atomic save for a whole ENTITY (the single-form editor): row upserts and
+ * deletes across a page's collections, applied in one transaction so a failed
+ * session write can never strand a half-saved course. Caps sized to the form
+ * (an entity is one base row + a handful of sessions), far below the
+ * per-collection row cap the service enforces on top.
+ */
+export const FactEntitySaveSchema = z.object({
+    upserts: z.array(
+        z.object({
+            collectionId: z.string().uuid(),
+            /** present = update that row; absent = insert a new one. */
+            rowId: z.string().uuid().optional(),
+            ...FactRowFields,
+        }).refine(factRowDateOrder.check, factRowDateOrder.opts),
+    ).max(40).default([]),
+    deletes: z.array(z.object({
+        collectionId: z.string().uuid(),
+        rowId: z.string().uuid(),
+    })).max(40).default([]),
 }).refine(
-    (row) => !row.startsAt || !row.endsAt || row.endsAt >= row.startsAt,
-    { message: 'End date must not be before the start date', path: ['endsAt'] },
+    (body) => body.upserts.length + body.deletes.length > 0,
+    { message: 'At least one operation is required' },
 );
 
 /** PATCH body: any subset; explicit null clears a nullable field. */
 export const FactRowUpdateSchema = z.object({
     name: z.string().trim().min(1).max(200).optional(),
     attributes: CatalogAttributesInput.optional(),
+    structured: FactStructuredValuesInput.nullable().optional(),
     price: PriceInput.optional(),
     currency: CurrencyInput.optional(),
     startsAt: CatalogDateInput.optional(),
@@ -297,6 +349,7 @@ export const FactCompletenessSchema = z.object({
 });
 
 export type FactRowBodyInput = z.infer<typeof FactRowSchema>;
+export type FactEntitySaveBodyInput = z.infer<typeof FactEntitySaveSchema>;
 export type FactRowUpdateBodyInput = z.infer<typeof FactRowUpdateSchema>;
 
 /** POST /pages/:pageId/catalog/extract body. Min 10 keeps accidental fragments

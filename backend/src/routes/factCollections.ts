@@ -38,6 +38,10 @@ export default async function factCollectionsRoutes(fastify: FastifyInstance) {
             schema: { tags: ['FactCollections'], summary: 'Delete a row (the last row is protected)', security: auth },
         }, factCollectionsController.deleteRow.bind(factCollectionsController));
 
+        adminRoutes.put('/pages/:pageId/fact-entity', {
+            schema: { tags: ['FactCollections'], summary: 'Atomically save one entity (row upserts + deletes across collections)', security: auth },
+        }, factCollectionsController.saveEntity.bind(factCollectionsController));
+
         adminRoutes.patch('/pages/:pageId/fact-collections/:collectionId/completeness', {
             schema: { tags: ['FactCollections'], summary: "Set the merchant's completeness declaration (tri-state)", security: auth },
         }, factCollectionsController.setCompleteness.bind(factCollectionsController));

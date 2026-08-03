@@ -58,10 +58,10 @@ export function KnowledgeBasePanel({
   const tc = useTranslations('common');
   const tPages = useTranslations('pages');
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, workspaces } = useAuthStore();
   // Catalog canary gate (cosmetic — the catalog endpoints stay admin-gated
   // server-side). Outside the allowlist the banner keeps its pre-import shape.
-  const canImportToCatalog = isCatalogVisible(user) && !page.ecommerceStoreId;
+  const canImportToCatalog = isCatalogVisible(user, (workspaces ?? []).map((w) => w.id)) && !page.ecommerceStoreId;
 
   const [sections, setSections] = useState<KnowledgeSection[]>([]);
   const [expandedId, setExpandedId] = useState<SectionId | null>(null);

@@ -74,6 +74,12 @@ export {
 } from './timezone';
 export { normalizeArabic } from './utils/arabic-normalize';
 export type { NormalizeOptions } from './utils/arabic-normalize';
+export type {
+  FactWeekdaysValue,
+  FactTimeRangeValue,
+  FactStructuredFieldValue,
+  FactStructuredValues,
+} from './factSchedule';
 export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
 export { isSafeRedirectPath } from './utils/redirect';

@@ -24,6 +24,7 @@ vi.mock('../../src/services/factCollections', async (importOriginal) => {
             updateRow: vi.fn(),
             deleteRow: vi.fn(),
             setCompleteness: vi.fn(),
+            saveEntityRows: vi.fn(),
         },
     };
 });
@@ -61,6 +62,10 @@ const WRITES = [
     ['PATCH', `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`],
     ['DELETE', `/pages/${PAGE}/fact-collections/${COLL}/rows/${ROW}`],
     ['PATCH', `/pages/${PAGE}/fact-collections/${COLL}/completeness`],
+    // The entity endpoint is a WRITE like any other. It landed after this suite
+    // was written and was covered by neither the auth posture nor the error
+    // contract — the gap this list exists to make impossible.
+    ['PUT', `/pages/${PAGE}/fact-entity`],
 ] as const;
 
 describe('Fact-collections routes — security + contract wiring', () => {
@@ -244,6 +249,43 @@ describe('Fact-collections routes — security + contract wiring', () => {
             expect(JSON.parse(res.payload).code).toBe('PAGE_NOT_FOUND');
         });
 
+        // The entity endpoint arrived with the grouped-lists work, AFTER the codes
+        // above existed, and kept the old hand-written `409 LIMIT` for every
+        // refusal plus a bare `error` array on a bad body. One router answering
+        // the same rule two ways is exactly what carrying the code on the error
+        // was meant to end, so it is pinned per reason like the row endpoints.
+        it.each([
+            ['LAST_ROW', 'Cannot delete the last row — delete the collection instead', 409],
+            ['ROW_LIMIT', 'At most 500 rows per collection', 409],
+            // A row that vanished under a bulk save is GONE, not a conflict: the
+            // row endpoints answer 404 STALE_ROW for the identical condition.
+            ['STALE_ROW', 'Row not found — reload and try again', 404],
+        ] as const)('PUT entity surfaces %s as %i', async (code, message, status) => {
+            vi.mocked(factCollectionsService.saveEntityRows).mockRejectedValue(
+                new FactCollectionLimitError(message, code),
+            );
+            const res = await app.inject({
+                method: 'PUT',
+                url: `/pages/${PAGE}/fact-entity`,
+                payload: { upserts: [{ collectionId: COLL, name: 'دورة' }], deletes: [] },
+            });
+            expect(res.statusCode).toBe(status);
+            expect(JSON.parse(res.payload).code).toBe(code);
+        });
+
+        it('PUT entity: a 400 body keeps `error` a STRING and puts field errors in `details`', async () => {
+            const res = await app.inject({
+                method: 'PUT',
+                url: `/pages/${PAGE}/fact-entity`,
+                payload: { upserts: [], deletes: [] }, // refine(): at least one operation
+            });
+            expect(res.statusCode).toBe(400);
+            const body = JSON.parse(res.payload);
+            expect(typeof body.error).toBe('string');
+            expect(body.code).toBe('VALIDATION');
+            expect(Array.isArray(body.details)).toBe(true);
+        });
+
         it('a 400 body keeps `error` a STRING and puts field errors in `details`', async () => {
             // This controller was the only one in the backend putting an ARRAY in
             // `error`; every generic consumer assumes a string and would render
@@ -271,6 +313,16 @@ describe('Fact-collections routes — security + contract wiring', () => {
             method: 'POST',
             url: `/pages/${PAGE}/fact-collections/${COLL}/rows`,
             payload: { name: 'دورة' },
+        });
+        expect(vi.mocked(factCollectionsService.setLogger)).toHaveBeenCalled();
+    });
+
+    it('wires the logger on the entity write too — the one write that did not', async () => {
+        vi.mocked(factCollectionsService.saveEntityRows).mockResolvedValue({ upserted: [], deletedIds: [] } as any);
+        await app.inject({
+            method: 'PUT',
+            url: `/pages/${PAGE}/fact-entity`,
+            payload: { upserts: [{ collectionId: COLL, name: 'دورة' }], deletes: [] },
         });
         expect(vi.mocked(factCollectionsService.setLogger)).toHaveBeenCalled();
     });
