@@ -97,9 +97,17 @@ export function isArabicPhone(phone: string): boolean {
   return ARABIC_PREFIX_RE.test(phone);
 }
 
-/** Normalize Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) to ASCII before phone matching. */
+/**
+ * Normalize Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩, U+0660–0669) AND Extended
+ * Arabic-Indic digits (۰۱۲۳۴۵۶۷۸۹, U+06F0–06F9 — Persian/Urdu keyboards)
+ * to ASCII before matching. Both classes reach us in real customer and
+ * merchant text; treating only one is the digit-blindness bug class twice.
+ */
 export function normalizeArabicIndic(text: string): string {
-  return text.replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+  return text.replace(/[٠-٩۰-۹]/g, (d) => {
+    const i = '٠١٢٣٤٥٦٧٨٩'.indexOf(d);
+    return String(i !== -1 ? i : '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+  });
 }
 
 /** A phone number extracted from free text. */

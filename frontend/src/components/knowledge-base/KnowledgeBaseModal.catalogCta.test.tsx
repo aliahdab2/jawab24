@@ -7,11 +7,14 @@
  *   CTA only when the catalog import path is open.
  * - Everyone else keeps the pre-existing POST-SAVE "coming soon" banner,
  *   untouched, with no CTA.
+ * - The CTA PERSISTS the editor text before handing off (review H1): it can
+ *   fire mid-edit, the handoff closes the editor, and the cleanup sheet
+ *   matches against the SAVED KB — an unsaved draft would be silently lost.
  * The KB fixture uses Arabic-Indic digits on purpose — it pins the digit
  * normalization end to end (shared classifier → live banner).
  */
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Page } from '@jawab24/shared';
@@ -61,17 +64,24 @@ function page(overrides: Partial<Page> = {}): Page {
 }
 
 const WARNINGS = { hasCatalog: true, reasons: ['price_list'], priceCount: 3 };
+const SAVE_OK = { ok: true, kbWarnings: WARNINGS };
 
 function renderModal(p: Page = page()) {
-  const onSave = vi.fn().mockResolvedValue(WARNINGS);
+  const onSave = vi.fn().mockResolvedValue(SAVE_OK);
   const onClose = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  const { rerender } = render(
     <QueryClientProvider client={client}>
       <KnowledgeBaseModal page={p} onClose={onClose} onSave={onSave} saving={false} saved={false} />
     </QueryClientProvider>,
   );
-  return { onSave, onClose };
+  const rerenderWithPage = (next: Page) =>
+    rerender(
+      <QueryClientProvider client={client}>
+        <KnowledgeBaseModal page={next} onClose={onClose} onSave={onSave} saving={false} saved={false} />
+      </QueryClientProvider>,
+    );
+  return { onSave, onClose, rerenderWithPage };
 }
 
 async function save(onSave: ReturnType<typeof vi.fn>) {
@@ -109,11 +119,17 @@ describe('KnowledgeBaseModal — price notice gating', () => {
     expect(screen.getByText('Organize into Products & Services')).toBeInTheDocument();
   });
 
-  it('CTA hands off draft + navigation (admin, live notice)', async () => {
+  it('CTA persists the editor text, then hands off draft + navigation (admin, live notice)', async () => {
     authState.user = { isAdmin: true };
-    const { onClose } = renderModal();
+    const { onSave, onClose } = renderModal();
 
     fireEvent.click(await screen.findByText('Organize into Products & Services', undefined, { timeout: 2000 }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/business?page=page-1&import=1'));
+    // The save is NOT optional (review H1): the CTA fires mid-edit and the
+    // handoff closes the editor — skipping it discards unsaved KB edits.
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0][0]).toContain('عطر العود الملكي ٣٥٠٠ ل.س');
 
     const draft = JSON.parse(sessionStorage.getItem('jawab24:catalog-import-draft') ?? '{}');
     expect(draft.pageId).toBe('page-1');
@@ -121,7 +137,21 @@ describe('KnowledgeBaseModal — price notice gating', () => {
     // must survive verbatim; the extractor skips non-offering lines anyway.
     expect(draft.text).toContain('عطر العود الملكي ٣٥٠٠ ل.س');
     expect(onClose).toHaveBeenCalled();
-    expect(push).toHaveBeenCalledWith('/business?page=page-1&import=1');
+  });
+
+  it('CTA save failure: stays in the editor — no draft, no navigation, no close', async () => {
+    authState.user = { isAdmin: true };
+    const { onSave, onClose } = renderModal();
+    onSave.mockResolvedValue({ ok: false });
+
+    fireEvent.click(await screen.findByText('Organize into Products & Services', undefined, { timeout: 2000 }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(sessionStorage.getItem('jawab24:catalog-import-draft')).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    // The editor is still open with the notice intact.
+    expect(screen.getByText('This looks like a price list')).toBeInTheDocument();
   });
 
   it('existing fact collections open the live notice WITHOUT the CTA (lists copy)', async () => {
@@ -150,6 +180,46 @@ describe('KnowledgeBaseModal — price notice gating', () => {
     renderModal();
 
     await screen.findByText('This looks like a price list', undefined, { timeout: 2000 });
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+    expect(screen.queryByText('This looks like a price list')).not.toBeInTheDocument();
+  });
+
+  it('a dismissed notice survives a save — the pages refetch mints a new page object, same id (review M1)', async () => {
+    authState.user = { isAdmin: true };
+    const { onSave, rerenderWithPage } = renderModal();
+
+    await screen.findByText('This looks like a price list', undefined, { timeout: 2000 });
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+    expect(screen.queryByText('This looks like a price list')).not.toBeInTheDocument();
+
+    await save(onSave);
+    // Simulate the ['pages'] invalidation after save: a NEW object, same id.
+    rerenderWithPage(page());
+
+    // Give the debounce time to re-run detection against the "new" page.
+    await new Promise((r) => setTimeout(r, 600));
+    expect(screen.queryByText('This looks like a price list')).not.toBeInTheDocument();
+  });
+
+  it('save racing the collections probe: the post-save copy is replaced by the live copy, and ONE dismiss clears the slot (review M2)', async () => {
+    // The probe stays pending until we resolve it — models a save landing
+    // before the fact-collections request returns.
+    let resolveProbe: (v: { data: { data: Array<{ id: string; label: string; rows: never[] }> } }) => void;
+    listCollections.mockReturnValue(new Promise((r) => { resolveProbe = r; }));
+    const { onSave } = renderModal();
+
+    // Save while hasAlternativeHome is still (wrongly) false → post-save state.
+    await save(onSave);
+    expect(await screen.findByText('This looks like a price list')).toBeInTheDocument();
+    expect(screen.getByText(/Soon you'll be able to store these/)).toBeInTheDocument();
+
+    // The probe resolves: this merchant HAS lists → live territory. The stale
+    // post-save state must be dropped, not left shadowing the live notice.
+    await act(async () => { resolveProbe!({ data: { data: [{ id: 'col-1', label: 'أسعار', rows: [] }] } }); });
+    expect(await screen.findByText(/Exact prices belong in your lists/, undefined, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.queryByText(/Soon you'll be able to store these/)).not.toBeInTheDocument();
+
+    // One click dismisses the SLOT — the other variant must not un-shadow.
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
     expect(screen.queryByText('This looks like a price list')).not.toBeInTheDocument();
   });

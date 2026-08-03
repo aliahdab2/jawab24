@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 describe('useSaveKnowledgeBase', () => {
-  it('PUTs the KB text, returns kbWarnings, and notifies onSuccess on success', async () => {
+  it('PUTs the KB text, returns { ok: true, kbWarnings }, and notifies onSuccess on success', async () => {
     const warnings = { hasCatalog: true, reasons: ['price_list'], priceCount: 12, courseKeywordCount: 0 };
     mockPut.mockResolvedValue({ data: { kbWarnings: warnings } });
     const onSuccess = vi.fn();
@@ -37,7 +37,7 @@ describe('useSaveKnowledgeBase', () => {
     });
 
     expect(mockPut).toHaveBeenCalledWith('/pages/page-1', { knowledgeBase: 'new kb text' });
-    expect(returned).toEqual(warnings);
+    expect(returned).toEqual({ ok: true, kbWarnings: warnings });
     expect(onSuccess).toHaveBeenCalledWith('page-1', 'new kb text');
     expect(result.current.saved).toBe(true);
     expect(mockToastError).not.toHaveBeenCalled();
@@ -54,7 +54,9 @@ describe('useSaveKnowledgeBase', () => {
       returned = await result.current.saveKnowledgeBase('page-1', 'text');
     });
 
-    expect(returned).toBeUndefined();
+    // Failure is distinguishable from success-without-warnings (both used to
+    // be `undefined`) — the catalog CTA gates its handoff on this.
+    expect(returned).toEqual({ ok: false });
     expect(onSuccess).not.toHaveBeenCalled();
     expect(mockToastError).toHaveBeenCalledTimes(1);
     // Access-revoked is an expected authorization outcome, not an error to report to Sentry.
@@ -72,7 +74,7 @@ describe('useSaveKnowledgeBase', () => {
       returned = await result.current.saveKnowledgeBase('page-1', 'text');
     });
 
-    expect(returned).toBeUndefined();
+    expect(returned).toEqual({ ok: false });
     expect(mockCaptureError).toHaveBeenCalledTimes(1);
     expect(mockToastError).toHaveBeenCalledTimes(1);
   });

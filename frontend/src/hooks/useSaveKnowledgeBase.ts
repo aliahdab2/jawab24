@@ -4,11 +4,15 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import type { ApiError } from '@/lib/api-utils';
 import { captureError } from '@/lib/sentryHelpers';
-import type { KbWarnings } from '@/components/knowledge-base/types';
+import type { KbWarnings, SaveKbOutcome } from '@/components/knowledge-base/types';
 
 interface UseSaveKnowledgeBaseResult {
-  /** Persist KB text for a page. Resolves to kbWarnings on success, or undefined on failure / no warnings. */
-  saveKnowledgeBase: (pageId: string, text: string) => Promise<KbWarnings | undefined>;
+  /**
+   * Persist KB text for a page. Resolves `{ ok: true, kbWarnings? }` on
+   * success and `{ ok: false }` on failure (after toasting) — discriminated so
+   * callers that continue past the save (the catalog CTA) can stop on failure.
+   */
+  saveKnowledgeBase: (pageId: string, text: string) => Promise<SaveKbOutcome>;
   saving: boolean;
   saved: boolean;
   /** Clear the transient "saved" checkmark (e.g. when opening a different page's editor). */
@@ -31,7 +35,7 @@ export function useSaveKnowledgeBase(
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const saveKnowledgeBase = async (pageId: string, text: string): Promise<KbWarnings | undefined> => {
+  const saveKnowledgeBase = async (pageId: string, text: string): Promise<SaveKbOutcome> => {
     setSaving(true);
     setSaved(false);
     try {
@@ -42,7 +46,7 @@ export function useSaveKnowledgeBase(
       onSuccess?.(pageId, text);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-      return response.data.kbWarnings;
+      return { ok: true, kbWarnings: response.data.kbWarnings };
     } catch (error) {
       const apiError = error as ApiError;
       if (apiError.response?.status === 403 && apiError.response?.data?.code === 'WORKSPACE_ACCESS_DENIED') {
@@ -51,7 +55,7 @@ export function useSaveKnowledgeBase(
         captureError(error, 'Failed to save knowledge base', { tags: { action: 'save-kb' } });
         toast.error(t('saveFailed'));
       }
-      return undefined;
+      return { ok: false };
     } finally {
       setSaving(false);
     }
