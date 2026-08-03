@@ -20,6 +20,7 @@ import type { NextPageWithLayout } from './_app';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHero';
 import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings, getSarMonthlyEquivalent, formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import { PlanTabSelector } from '@/components/billing/PlanTabSelector';
 
 interface PricingPageProps {
@@ -518,6 +519,27 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 ) : null}
               </div>
             </div>
+
+            {/* Shopify-billed workspaces change plans inside Shopify admin (D-G).
+                The grid below stays browsable, but every select action routes to
+                the deep link (useSelectPlan guard) — say so up front. */}
+            {usage.subscription.paymentMethod === 'shopify' && (
+              <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-2 py-2.5 px-4 alert-violet border rounded-2xl text-sm">
+                <span className="font-medium">{tPricing('shopifyManagedBody')}</span>
+                {usage.subscription.shopifyManageUrl && (
+                  // openExternalUrl, not a raw anchor: on native the deep link
+                  // must open in the system browser / Custom Tab like every
+                  // other external billing surface (same path as useSelectPlan).
+                  <button
+                    type="button"
+                    onClick={() => { void openExternalUrl(usage.subscription.shopifyManageUrl!); }}
+                    className="font-bold underline underline-offset-2 whitespace-nowrap"
+                  >
+                    {tPricing('shopifyManagedCta')}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

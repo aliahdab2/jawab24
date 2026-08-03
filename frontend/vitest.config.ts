@@ -21,6 +21,9 @@ export default defineConfig({
       exclude: [
         'node_modules/',
         'test/',
+        // Shared test scaffolding (factories, ui mocks) — exercised BY tests,
+        // not product code, so it must not inflate src coverage numbers.
+        'src/__tests__/testUtils/',
         '**/*.d.ts',
         '**/*.config.*',
         '**/types/**',

@@ -11,35 +11,14 @@ vi.mock('@jawab24/shared', async (importOriginal) => ({
 }));
 import { BusinessHoursCard } from '@/components/settings/BusinessHoursCard';
 import type { SettingsState } from '@/components/settings/types';
+import { makeSettings as makeSharedSettings } from '../../testUtils/settingsFactory';
 
-vi.mock('@/components/ui', () => ({
-  Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  Toggle: ({ enabled, onChange, 'aria-label': label }: { enabled: boolean; onChange: (v: boolean) => void; 'aria-label'?: string }) => (
-    <button aria-label={label} onClick={() => onChange(!enabled)}>{enabled ? 'ON' : 'OFF'}</button>
-  ),
-  Select: ({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) => (
-    <select value={value} onChange={(e) => onChange(e.target.value)}>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  ),
-  InfoPopover: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
-  InputFieldWrapper: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  CharCounter: () => null,
-}));
+vi.mock('@/components/ui', () => import('../../testUtils/uiMocks'));
 
-vi.mock('next-intl', () => ({ useTranslations: () => (k: string) => k }));
+vi.mock('next-intl', () => ({ useTranslations: () => (k: string) => k, useLocale: () => 'en' }));
 
-function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {
-  return {
-    dashboardLanguage: 'en',
-    businessHoursOnly: false,
-    businessHoursStart: '09:00',
-    businessHoursEnd: '18:00',
-    timezone: PLACEHOLDER_TIMEZONE,
-    awayMessageMulti: {},
-    ...overrides,
-  } as unknown as SettingsState;
-}
+const makeSettings = (overrides: Partial<SettingsState> = {}): SettingsState =>
+  makeSharedSettings({ businessHoursEnd: '18:00', timezone: PLACEHOLDER_TIMEZONE, ...overrides });
 
 /**
  * The defect these pin: `settings.timezone` had no UI at all, so every merchant

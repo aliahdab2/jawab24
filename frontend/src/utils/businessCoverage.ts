@@ -1,4 +1,4 @@
-import { unwrapBusinessProfile } from '@jawab24/shared';
+import { unwrapBusinessProfile, whatsappNumbers } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
 
 /**
@@ -57,6 +57,18 @@ export function isStorePolicyKey(key: string): key is StorePolicyKey {
   return (STORE_POLICY_KEYS as readonly string[]).includes(key);
 }
 
+/**
+ * Is this fact part of the readiness score? Unscored facts (`phone`,
+ * `website`) must not badge themselves «ناقص» — the counter says they don't
+ * gate readiness, so an amber "missing" on the row would contradict it. The
+ * rows render unscored gaps as a neutral «اختياري» instead. Derived from
+ * `READINESS_AREAS` so adding an area to the score automatically upgrades its
+ * row badge — never a second hand-kept list.
+ */
+export function isScoredFactKey(key: BusinessFactKey): boolean {
+  return (READINESS_AREAS as readonly string[]).includes(key);
+}
+
 export interface BusinessFactValues {
   /** The stored week, unformatted — the row summarizes it with its own locale
    *  day labels. null when the merchant confirmed no working day. */
@@ -65,8 +77,9 @@ export interface BusinessFactValues {
   address: string | null;
   /** Non-blank contact numbers, in the merchant's order. */
   phones: string[];
-  /** The number that is also on WhatsApp, if the merchant named one. */
-  whatsapp: string | null;
+  /** The numbers that are also on WhatsApp — any subset of `phones` (legacy
+   *  single-string values are normalized to a one-entry list). */
+  whatsapp: string[];
   delivery: string | null;
   payment: string | null;
   website: string | null;
@@ -126,7 +139,7 @@ export function computeFactCoverage(page: Page): BusinessFactCoverage {
     // fact. Do not "unify" the two — they answer different questions.)
     address: text([merchant.address, merchant.city].filter((v) => v?.trim()).join('، ')),
     phones: (merchant.phones ?? []).filter((p): p is string => !!p?.trim()).map((p) => p.trim()),
-    whatsapp: text(merchant.channels?.whatsapp),
+    whatsapp: whatsappNumbers(merchant),
     delivery: text(merchant.policies?.shipping),
     payment: text(merchant.policies?.payment),
     website: text(merchant.website),

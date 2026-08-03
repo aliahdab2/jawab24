@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { TitleWithInfo } from './TitleWithInfo';
+import { useMultilingualSettingsField } from '@/hooks/useMultilingualSettingsField';
 import type { SettingsCardProps } from './types';
 
 interface BusinessHoursCardProps extends SettingsCardProps {
@@ -21,12 +22,15 @@ interface BusinessHoursCardProps extends SettingsCardProps {
 
 export function BusinessHoursCard({ settings, setSettings, currentTime }: BusinessHoursCardProps) {
   const t = useTranslations('settings');
+  const awayField = useMultilingualSettingsField(settings.awayMessageMulti);
+  const { currentLang } = awayField;
 
   const handleToggle = (enabled: boolean) => {
     const updates: Record<string, unknown> = { businessHoursOnly: enabled };
     if (enabled) {
+      // The page-locale t() and the page-locale key move together, so the seeded
+      // default is always stored under the language it is written in.
       const defaultMsg = t('awayMessageDefault');
-      const currentLang = settings.dashboardLanguage;
       if (!settings.awayMessageMulti?.[currentLang]) {
         updates.awayMessageMulti = {
           ...settings.awayMessageMulti,
@@ -54,10 +58,8 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
   const isActive = settings.businessHoursOnly && nowTime >= settings.businessHoursStart && nowTime < settings.businessHoursEnd;
 
   // Character limit for away messages (Messenger recommendation)
-  const currentLang = settings.dashboardLanguage;
-  const awayValue = settings.awayMessageMulti?.[currentLang] || '';
-  const sourceLang = settings.awayMessageMulti?.sourceLang;
-  const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+  const awayValue = awayField.value;
+  const isAutoTranslated = awayField.isAutoTranslated;
   const displayValue = isAutoTranslated ? '' : awayValue;
   const placeholder = isAutoTranslated && awayValue ? awayValue : t('awayMessagePlaceholder');
   const maxChars = MAX_TEMPLATE_MESSAGE_LENGTH;
@@ -229,15 +231,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               maxLength={maxChars}
               value={displayValue}
               onChange={(e) => {
-                const newValue = e.target.value;
-                setSettings({
-                  ...settings,
-                  awayMessageMulti: {
-                    ...settings.awayMessageMulti,
-                    [currentLang]: newValue,
-                    sourceLang: currentLang
-                  }
-                });
+                setSettings({ ...settings, awayMessageMulti: awayField.withValue(e.target.value) });
               }}
             />
           </InputFieldWrapper>

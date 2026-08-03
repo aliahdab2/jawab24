@@ -321,6 +321,89 @@ describe('OpenAI Service - Structured JSON Response', () => {
             .rejects.toBeInstanceOf(AiEmptyReplyError);
     });
 
+    describe('exhausted Check 6 strip crosses the wire as a HOLD, not a failure', () => {
+        // THE regression this suite exists for. `reply: ''` means three different
+        // things on this boundary and the empty-reply guard is the only arbiter.
+        // When the canned SELF_ID_FALLBACKS pool was deleted, an exhausted strip
+        // started returning empty — and the guard, which predates the pool, threw
+        // AiEmptyReplyError for it. That swallowed `self_identification_exhausted`
+        // before it reached the backend, so the hold branches in messageProcessor /
+        // commentProcessor were unreachable on the default-model path (all of prod)
+        // and every exhausted strip booked as a generic ai_empty_reply.
+        //
+        // These two tests pin the discrimination, not just the happy case: an
+        // empty reply WITH the flag must resolve, an empty reply WITHOUT it must
+        // still throw. Deleting either half of the guard fails one of them.
+        const allRevealCompletion = {
+            choices: [{
+                message: {
+                    content: JSON.stringify({
+                        reply: 'أنا روبوت أرد عليك تلقائياً.',
+                        intent: 'QUESTION',
+                        confidence: 'high',
+                        flags: [],
+                    }),
+                },
+                finish_reason: 'stop',
+            }],
+            usage: { total_tokens: 40, prompt_tokens: 30, completion_tokens: 10 },
+        };
+
+        it('resolves with an EMPTY reply + the exhausted flag — never throws', async () => {
+            vi.doMock('openai', () => ({
+                default: vi.fn().mockImplementation(() => ({
+                    chat: { completions: { create: vi.fn().mockResolvedValue(allRevealCompletion) } },
+                })),
+            }));
+            vi.doMock('../src/config', () => ({
+                config: {
+                    openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+                },
+            }));
+
+            const { OpenAIService: FreshService } = await import('../src/services/openai');
+            const service = new FreshService();
+            const result = await service.generateReply({ comment: 'موقعكم الالكتروني؟' });
+
+            expect(result.reply).toBe('');
+            expect(result.flags).toContain('self_identification_stripped');
+            expect(result.flags).toContain('self_identification_exhausted');
+        });
+
+        it('still throws for an empty reply that is NOT an exhausted strip', async () => {
+            vi.doMock('openai', () => ({
+                default: vi.fn().mockImplementation(() => ({
+                    chat: {
+                        completions: {
+                            create: vi.fn().mockResolvedValue({
+                                choices: [{
+                                    message: {
+                                        content: JSON.stringify({
+                                            reply: '', intent: 'QUESTION', confidence: 'high', flags: [],
+                                        }),
+                                    },
+                                    finish_reason: 'stop',
+                                }],
+                                usage: { total_tokens: 20 },
+                            }),
+                        },
+                    },
+                })),
+            }));
+            vi.doMock('../src/config', () => ({
+                config: {
+                    openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+                },
+            }));
+
+            const { OpenAIService: FreshService } = await import('../src/services/openai');
+            const { AiEmptyReplyError } = await import('../src/lib/errors');
+            const service = new FreshService();
+            await expect(service.generateReply({ comment: 'موقعكم الالكتروني؟' }))
+                .rejects.toBeInstanceOf(AiEmptyReplyError);
+        });
+    });
+
     describe('truncation retry (finish_reason length — July 2026 silent price-questions)', () => {
         // A long merchant KB script can push the reply past max_tokens: OpenAI cuts
         // the JSON mid-string and reports finish_reason 'length'. The service must

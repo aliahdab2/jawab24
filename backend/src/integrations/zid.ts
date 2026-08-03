@@ -6,15 +6,15 @@ import { config } from '../config';
 import * as Sentry from '@sentry/node';
 
 // Mirrors ZID_WEBHOOK_EVENTS in services/zid.ts. Tests assert these stay in sync.
+// app.market.application.install/uninstall are Partner-Dashboard-configured, not
+// API-registered, so they are deliberately absent from this list.
 const ZID_WEBHOOK_TOPICS = [
-    'product.created',
-    'product.updated',
-    'product.deleted',
-    'app.uninstalled',
-    'order.created',
-    'order.updated',
-    'order.shipped',
-    'order.delivered',
+    'product.create',
+    'product.update',
+    'product.publish',
+    'product.delete',
+    'order.create',
+    'order.status.update',
 ] as const;
 
 /**
@@ -24,10 +24,10 @@ const ZID_WEBHOOK_TOPICS = [
  * Delegates to services/zid.ts, services/ecommerce.ts, routes/zid.ts,
  * and workers/ecommerceSyncWorker.ts — no business logic lives here.
  *
- * API notes:
- * - Auth header: X-MANAGER-TOKEN (NOT Authorization: Bearer)
+ * API notes (verified against docs.zid.sa 2026-08-01 — see docs/integrations/zid.md):
+ * - DUAL-header auth: `Authorization: Bearer` + `X-Manager-Token` on every call
  * - Token expiry: ~1 year
- * - Webhooks registered via API call after OAuth claim
+ * - Webhooks registered via POST /v1/managers/webhooks; deliveries Basic-auth'd
  */
 export class ZidIntegration implements EcommerceIntegration {
     readonly name = 'zid';
@@ -82,7 +82,17 @@ export class ZidIntegration implements EcommerceIntegration {
                 result.value,
                 userId,
                 'zid',
-                async (_storeDomain: string, accessToken: string) => registerWebhooks(accessToken),
+                async (_storeDomain, accessToken, ctx) => {
+                    if (!ctx?.authorizationToken) {
+                        // Pending rows created before the dual-token rebuild can't call
+                        // the Zid API at all — the merchant must reconnect.
+                        throw new Error('Zid pending install has no Authorization token — reconnect required');
+                    }
+                    return registerWebhooks(
+                        { managerToken: accessToken, authorizationToken: ctx.authorizationToken },
+                        ctx.storeId,
+                    );
+                },
                 saveWebhookStatus,
             );
             if (store) {
@@ -145,7 +155,11 @@ export class ZidIntegration implements EcommerceIntegration {
     async registerWebhooks(store: StoreForWebhooks): Promise<WebhookRegistrationResult> {
         const { decrypt } = await import('../services/ecommerceCrypto');
         const { registerWebhooks } = await import('../services/zid');
-        const accessToken = decrypt(store.accessToken, store.accessTokenIv);
-        return registerWebhooks(accessToken);
+        const managerToken = decrypt(store.accessToken, store.accessTokenIv);
+        if (!store.authorizationToken || !store.authorizationTokenIv) {
+            throw new Error(`Zid store ${store.id} has no Authorization token — merchant must reconnect`);
+        }
+        const authorizationToken = decrypt(store.authorizationToken, store.authorizationTokenIv);
+        return registerWebhooks({ managerToken, authorizationToken }, store.id);
     }
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
+import Image from 'next/image';
 import Link from 'next/link';
 import type { GetStaticPaths, GetStaticProps } from 'next';
 import {
@@ -26,7 +27,7 @@ import {
   getBlogPost,
   type BlogPost,
 } from '@/data/blog-posts';
-import type { BlogFrontmatter } from '@/lib/blog';
+import type { BlogFrontmatter, ImageSize } from '@/lib/blog';
 
 /* ─── Types ───────────────────────────────────────────────────────── */
 
@@ -45,6 +46,7 @@ interface BlogPostPageProps {
   frontmatter: BlogFrontmatter;
   content: string;
   relatedPosts: RelatedPostMeta[];
+  imageSizes: Record<string, ImageSize>;
 }
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
@@ -228,6 +230,7 @@ export default function BlogPostPage({
   frontmatter,
   content,
   relatedPosts,
+  imageSizes,
 }: BlogPostPageProps) {
   const t = useTranslations('blog');
   const locale = useLocale();
@@ -390,6 +393,20 @@ export default function BlogPostPage({
                   const id = slugify(text);
                   return <h3 id={id} {...props}>{children}</h3>;
                 },
+                img: ({ src, alt }) => {
+                  const size = typeof src === 'string' ? imageSizes[src] : undefined;
+                  if (typeof src !== 'string' || !size) return null;
+                  return (
+                    <Image
+                      src={src}
+                      alt={alt ?? ''}
+                      width={size.width}
+                      height={size.height}
+                      sizes="(max-width: 768px) 100vw, 736px"
+                      className="my-8 w-full h-auto rounded-xl border border-theme-border shadow-sm"
+                    />
+                  );
+                },
               }}
             >
               {content}
@@ -454,7 +471,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
 export const getStaticProps: GetStaticProps<BlogPostPageProps> = async (ctx) => {
   const { getI18nProps } = await import('@/i18n/getMessages');
   const { PAGE_NAMESPACES } = await import('@/i18n/namespaces');
-  const { loadBlogPost } = await import('@/lib/blog');
+  const { loadBlogPost, extractImageSizes } = await import('@/lib/blog');
 
   const i18nProps = await getI18nProps(ctx, [...PAGE_NAMESPACES.blog]);
   const slug = ctx.params?.slug as string;
@@ -486,5 +503,14 @@ export const getStaticProps: GetStaticProps<BlogPostPageProps> = async (ctx) => 
     related.push(...remaining);
   }
 
-  return { props: { post, frontmatter, content, relatedPosts: related, ...i18nProps } };
+  return {
+    props: {
+      post,
+      frontmatter,
+      content,
+      relatedPosts: related,
+      imageSizes: extractImageSizes(content),
+      ...i18nProps,
+    },
+  };
 };

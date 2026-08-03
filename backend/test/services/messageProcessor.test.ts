@@ -5,6 +5,7 @@ import { messagesService } from '../../src/services/messages';
 import { invalidateWorkspaceStatsCache } from '../../src/services/pages';
 import { conversationsService } from '../../src/services/conversations';
 import { replyGenerator } from '../../src/services/reply/generator';
+import { leadExtractorService } from '../../src/services/leadExtractor';
 import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { redis } from '../../src/lib/redis';
@@ -103,6 +104,10 @@ vi.mock('../../src/db', () => ({
 }));
 vi.mock('../../src/lib/eventBus', () => ({
     publishSSEEvent: vi.fn(),
+}));
+
+vi.mock('../../src/services/leadExtractor', () => ({
+    leadExtractorService: { maybeCaptureLead: vi.fn().mockResolvedValue(undefined) },
 }));
 
 // --- Mock adapter factory ---
@@ -1886,6 +1891,62 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         );
     });
 
+    // messagesAutoReply=false is a standing merchant choice, not a schedule. The
+    // shipped default away text must never fire on this branch — off means off.
+    // (2026-08-01: a pharmacy with DMs off and no business hours told 37 customers
+    // «خارج أوقات العمل» — at 09:05, in copy the merchant never saw or wrote.)
+    it('stays SILENT when DM auto-reply is off and no away message was authored', async () => {
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: false, replyDelay: 0,
+        } as any);
+        vi.mocked(redis.set).mockResolvedValue('OK');
+        // allowDefault:false → nothing authored → null (pinned by workspaceSettings tests)
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue(null);
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'hello?', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Messages auto-reply disabled');
+        // The permanent-off branch must ask for authored-text-only…
+        expect(workspaceSettingsService.getAwayMessage).toHaveBeenCalledWith(
+            'test_workspace_id', expect.anything(), { allowDefault: false },
+        );
+        // …and with none configured, the customer hears nothing at all.
+        expect(adapter.sendAwayMessage).not.toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+    });
+
+    it('allows the default away text on the business-hours branch (temporary closure)', async () => {
+        // Toggle ON but outside the configured hours — the folded check is false
+        // while messagesAutoReply stays true. Here the default notice is accurate.
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, businessHoursOnly: true, replyDelay: 0,
+        } as any);
+        vi.mocked(redis.set).mockResolvedValue('OK');
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('نحن حالياً خارج أوقات العمل');
+
+        const adapter = webhookPreStoredAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'مرحبا', 'msg-1',
+        );
+
+        expect(workspaceSettingsService.getAwayMessage).toHaveBeenCalledWith(
+            'test_workspace_id', expect.anything(), { allowDefault: true },
+        );
+        expect(adapter.sendAwayMessage).toHaveBeenCalledWith(
+            expect.anything(), 'sender-1', 'نحن حالياً خارج أوقات العمل',
+        );
+    });
+
     it('does NOT spam the away message while the 24h cooldown is still held', async () => {
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
@@ -2276,6 +2337,65 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         expect(sendReply).not.toHaveBeenCalled();
         expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
         expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('withholds an exhausted self-identification strip — nothing sent, no retry, typing cleared', async () => {
+        // Check 6 strip-to-empty: the ai-worker returns an EMPTY reply with the
+        // exhausted flag instead of a canned SELF_ID_FALLBACKS identity line
+        // (which answered "who are you?" whatever the customer asked — prod,
+        // Jawab24 page, 2026-08-01). flagReason carries the joined ai flags
+        // verbatim (generator contract); the processor must flag the row and
+        // stop — NOT fall through to the "No reply generated" error path, whose
+        // success:false would re-enqueue and re-bill the same doomed generation.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'self_identification_stripped,self_identification_exhausted',
+            aiIntent: 'QUESTION',
+        } as any);
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
+
+        const result = await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'موقعكم الالكتروني', 'msg-1');
+
+        expect(result.success).toBe(true);
+        expect(sendReply).not.toHaveBeenCalled();
+        // Flagged for review under the specific reason — NOT markAsReplied('').
+        // Nothing was sent, so a replied/repliedAt row would report a response
+        // time for a customer who never got an answer; and the only draft
+        // available is the automation reveal itself, which must never become a
+        // one-tap send in the merchant's composer.
+        expect(messagesService.flagMessage).toHaveBeenCalledWith(
+            'msg-uuid', 'held_self_identification', 'QUESTION',
+        );
+        expect(messagesService.markAsReplied).not.toHaveBeenCalled();
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+        expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('still captures the customer lead when the reply is withheld', async () => {
+        // Withholding OUR reply must not discard THEIR data. The shared
+        // maybeCaptureLead call sits on the send path, downstream of the
+        // withhold return — so a customer who volunteers a phone number in the
+        // same message that trips Check 6 would otherwise be lost outright.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'self_identification_stripped,self_identification_exhausted',
+            aiIntent: 'QUESTION',
+        } as any);
+
+        const adapter = createMockAdapter({});
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'رقمي 0912345678', 'msg-1');
+
+        expect(leadExtractorService.maybeCaptureLead).toHaveBeenCalledWith(
+            expect.objectContaining({ sourceId: 'msg-uuid', sourceType: 'message', messageText: 'رقمي 0912345678' }),
+        );
     });
 
     it('clears typing_on with typing_off when the generator returns an empty reply', async () => {

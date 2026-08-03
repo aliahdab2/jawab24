@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canonicalizeHoursEntry, canonicalizeHoursWeek, isValidDayKey } from '../businessHours';
+import { canonicalizeHoursEntry, canonicalizeHoursWeek, isValidDayKey, dayOrderIndex, SHORT_DAY_KEYS, LONG_DAY_KEYS } from '../businessHours';
 
 describe('canonicalizeHoursEntry — strict canonical pass-through (idempotency)', () => {
     it('passes through already-canonical HH:MM-HH:MM', () => {
@@ -257,5 +257,32 @@ describe('isValidDayKey', () => {
         for (const k of ['funday', 'mondayyy', '', 'm', 'الأحد']) {
             expect(isValidDayKey(k)).toBe(false);
         }
+    });
+});
+
+// Week order is a product decision, not an implementation detail: our markets
+// start the week on Saturday with a Friday(+Saturday) weekend (CLDR
+// ar-SY/ar-EG/ar-LY). These pins keep anyone from "fixing" the arrays back to
+// ISO Monday-first or US Sunday-first.
+describe('Saturday-first week order (CLDR ar-SY)', () => {
+    it('SHORT_DAY_KEYS and LONG_DAY_KEYS enumerate sat→fri', () => {
+        expect([...SHORT_DAY_KEYS]).toEqual(['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri']);
+        expect([...LONG_DAY_KEYS]).toEqual(['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday']);
+    });
+
+    it('dayOrderIndex agrees for short and long keys, any case', () => {
+        expect(dayOrderIndex('sat')).toBe(0);
+        expect(dayOrderIndex('Saturday')).toBe(0);
+        expect(dayOrderIndex('SUN')).toBe(1);
+        expect(dayOrderIndex('sunday')).toBe(1);
+        expect(dayOrderIndex('thu')).toBe(5);
+        expect(dayOrderIndex('fri')).toBe(6);
+        expect(dayOrderIndex('friday')).toBe(6);
+    });
+
+    it('sorts unknown keys last instead of dropping them', () => {
+        expect(dayOrderIndex('funday')).toBe(SHORT_DAY_KEYS.length);
+        const sorted = ['funday', 'fri', 'sat'].sort((a, b) => dayOrderIndex(a) - dayOrderIndex(b));
+        expect(sorted).toEqual(['sat', 'fri', 'funday']);
     });
 });

@@ -72,6 +72,9 @@ describe.each(PLATFORMS)('webhookRetryWorker (%s)', (platform) => {
         mockGetStoreById.mockResolvedValue({
             id: 'store-1', isActive: true, storeDomain: 'shop.example',
             accessToken: 'enc', accessTokenIv: 'iv',
+            // Zid dual-header auth: the second credential must reach the adapter
+            // (null/undefined for Shopify/Salla rows — passed through either way).
+            authorizationToken: 'enc-auth', authorizationTokenIv: 'iv-auth',
         });
 
         await capturedProcessor!({ id: 'job-1', data: { storeId: 'store-1', platform } });
@@ -79,6 +82,7 @@ describe.each(PLATFORMS)('webhookRetryWorker (%s)', (platform) => {
         expect(mockRegistryGet).toHaveBeenCalledWith(platform);
         expect(adapterRegister).toHaveBeenCalledWith({
             id: 'store-1', storeDomain: 'shop.example', accessToken: 'enc', accessTokenIv: 'iv',
+            authorizationToken: 'enc-auth', authorizationTokenIv: 'iv-auth',
         });
         expect(mockSaveWebhookStatus).toHaveBeenCalledWith('store-1', expect.objectContaining({
             registered: ['t1', 't2'], failed: [],

@@ -13,7 +13,7 @@ import { resolveLanguageWithCertainty, resolveChannel } from './replyContext';
 import type { GenerateRequest } from './types';
 
 // Token budget constants (configurable via env vars for production tuning)
-export const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
+export const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~6,400 tokens for Arabic KBs (measured ~2.5 chars/token in prod, 2026-08-02) — static KB fallback limit (RAG bypasses this)
 export const MAX_INPUT_TOKENS = parseInt(process.env.MAX_INPUT_TOKENS || '24000', 10);  // Hard cap on total input tokens (system + history + user message)
 // Stage 2.6 structured BUSINESS_INFO block cap. A maxed-out profile (4 policies ×
 // 500 + address + phones + hours) can exceed this; the refusal directive is hoisted

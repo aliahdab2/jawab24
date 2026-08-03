@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import crypto from 'crypto';
 
 // --- Hoisted mocks ---
 
@@ -12,6 +11,7 @@ const {
     mockCaptureError,
     mockRedisSet,
     mockRedisDel,
+    mockDbWhere,
 } = vi.hoisted(() => ({
     mockGetStoreById: vi.fn(),
     mockUpdateStoreTokens: vi.fn(),
@@ -21,6 +21,7 @@ const {
     mockCaptureError: vi.fn(),
     mockRedisSet: vi.fn(),
     mockRedisDel: vi.fn(),
+    mockDbWhere: vi.fn(),
 }));
 
 // --- vi.mock() calls ---
@@ -30,10 +31,13 @@ vi.mock('../../src/config', () => ({
         zid: {
             clientId: 'test_zid_client_id',
             clientSecret: 'test_zid_secret',
+            appId: 'zid-app-777',
             hostName: 'jawab24.com',
             webhookSecret: 'test_webhook_secret',
-            scopes: 'store.info products.read webhooks.manage',
+            scopes: 'offline_access products.read orders.read webhooks.manage',
         },
+        // Read by the shared token refresher's store selector.
+        salla: { skipPullRefreshForEasyMode: false },
     },
 }));
 
@@ -41,34 +45,15 @@ vi.mock('../../src/utils/tracing', () => ({
     tracedExternalCall: vi.fn((_service, _op, fn) => fn()),
 }));
 
+// Only getStoresNeedingTokenRefresh touches the DB directly (via the shared refresher).
 vi.mock('../../src/db', () => ({
     db: {
         select: vi.fn().mockReturnValue({
             from: vi.fn().mockReturnValue({
-                where: vi.fn().mockResolvedValue([]),
-            }),
-        }),
-        update: vi.fn().mockReturnValue({
-            set: vi.fn().mockReturnValue({
-                where: vi.fn().mockResolvedValue(undefined),
+                where: (...args: unknown[]) => mockDbWhere(...args),
             }),
         }),
     },
-}));
-
-vi.mock('../../src/db/schema', () => ({
-    ecommerceStores: {
-        id: 'id',
-        platform: 'platform',
-        isActive: 'isActive',
-        tokenExpiresAt: 'tokenExpiresAt',
-    },
-}));
-
-vi.mock('drizzle-orm', () => ({
-    eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
-    and: vi.fn((...args) => ({ op: 'and', args })),
-    lt: vi.fn((field, value) => ({ field, value, op: 'lt' })),
 }));
 
 vi.mock('../../src/services/ecommerce', () => ({
@@ -77,6 +62,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     markStoreNeedsReauth: vi.fn().mockResolvedValue(undefined),
     replaceProductsAndRebuildSummary: (...args: unknown[]) => mockReplaceProductsAndRebuildSummary(...args),
     applySyncedStoreInfo: (...args: unknown[]) => mockApplySyncedStoreInfo(...args),
+    PRODUCT_SAFETY_CAP: 5000,
 }));
 
 vi.mock('../../src/services/ecommerceCrypto', () => ({
@@ -104,35 +90,47 @@ global.fetch = mockFetch;
 import {
     buildAuthUrl,
     exchangeCodeForToken,
-    refreshAccessToken,
-    ensureValidToken,
-    verifyWebhookHmac,
+    verifyWebhookBasicAuth,
+    ZID_WEBHOOK_BASIC_USER,
+    ZID_WEBHOOK_EVENTS,
     isProductEvent,
+    isOrderEvent,
     registerWebhooks,
     fetchStoreInfo,
     syncProducts,
     fullSync,
+    refreshAccessToken,
+    ensureValidToken,
     refreshExpiringTokens,
-    ZID_WEBHOOK_EVENTS,
+    getStoresNeedingTokenRefresh,
+    normalizeZidPhone,
+    mapZidOrderStatus,
     lookupOrder,
     getShipmentTracking,
     checkInventory,
+    type ZidCredentials,
 } from '../../src/services/zid';
 
 // --- Helpers ---
+
+const CREDS: ZidCredentials = { managerToken: 'manager_token', authorizationToken: 'auth_token' };
 
 function makeStore(overrides: Record<string, unknown> = {}) {
     return {
         id: 'store-1',
         platform: 'zid',
-        accessToken: 'enc_access_token',
-        accessTokenIv: 'access_iv',
-        refreshToken: 'enc_refresh_token',
-        refreshTokenIv: 'refresh_iv',
-        storeCurrency: 'SAR',
-        // ~1 year expiry from now
-        tokenExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         isActive: true,
+        accessToken: 'enc_access',
+        accessTokenIv: 'iv_access',
+        refreshToken: 'enc_refresh',
+        refreshTokenIv: 'iv_refresh',
+        authorizationToken: 'enc_auth',
+        authorizationTokenIv: 'iv_auth',
+        storeCurrency: 'SAR',
+        storeDomain: 'demo.zid.store',
+        // ~10 months out — never triggers the 24h refresh window
+        tokenExpiresAt: new Date(Date.now() + 300 * 24 * 60 * 60 * 1000),
+        platformData: {},
         ...overrides,
     };
 }
@@ -146,7 +144,7 @@ function makeZidProduct(overrides: Record<string, unknown> = {}) {
         currency: 'SAR',
         quantity: 20,
         sku: 'SKU-001',
-        handle: 'test-product',
+        slug: 'test-product',
         images: [{ url: 'https://cdn.zid.sa/image.jpg' }],
         categories: [{ name: 'Electronics' }],
         has_variants: false,
@@ -155,26 +153,45 @@ function makeZidProduct(overrides: Record<string, unknown> = {}) {
     };
 }
 
-function buildValidHexHmac(body: string): string {
-    return crypto
-        .createHmac('sha256', 'test_webhook_secret')
-        .update(body, 'utf8')
-        .digest('hex');
+function jsonResponse(body: unknown, status = 200) {
+    return {
+        ok: status >= 200 && status < 300,
+        status,
+        headers: new Headers(),
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+    };
+}
+
+/** Assert a fetch call carried the dual Zid credentials. */
+function expectDualHeaders(call: [string, RequestInit], extra: Record<string, string> = {}) {
+    const headers = call[1].headers as Record<string, string>;
+    expect(headers['Authorization']).toBe('Bearer auth_token');
+    expect(headers['X-Manager-Token']).toBe('manager_token');
+    for (const [k, v] of Object.entries(extra)) {
+        expect(headers[k]).toBe(v);
+    }
+}
+
+function validBasicHeader(user = ZID_WEBHOOK_BASIC_USER, pass = 'test_webhook_secret') {
+    return `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`;
 }
 
 describe('Zid Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.useFakeTimers({ shouldAdvanceTime: true });
-        mockDecrypt.mockReturnValue('decrypted_token');
+        mockDecrypt.mockImplementation((cipher: unknown) => ({
+            enc_access: 'manager_token',
+            enc_auth: 'auth_token',
+            enc_refresh: 'refresh_plain',
+        }[cipher as string] ?? `dec:${String(cipher)}`));
+        mockGetStoreById.mockResolvedValue(makeStore());
         mockUpdateStoreTokens.mockResolvedValue(undefined);
         mockReplaceProductsAndRebuildSummary.mockResolvedValue({ productCount: 0 });
+        mockApplySyncedStoreInfo.mockResolvedValue(undefined);
         mockRedisSet.mockResolvedValue('OK');
         mockRedisDel.mockResolvedValue(1);
-    });
-
-    afterEach(() => {
-        vi.useRealTimers();
+        mockDbWhere.mockResolvedValue([]);
     });
 
     // ============================================================
@@ -187,7 +204,7 @@ describe('Zid Service', () => {
 
             expect(url).toContain('https://oauth.zid.sa/oauth/authorize');
             expect(url).toContain('client_id=test_zid_client_id');
-            expect(url).toContain(`scope=${encodeURIComponent('store.info products.read webhooks.manage')}`);
+            expect(url).toContain(`scope=${encodeURIComponent('offline_access products.read orders.read webhooks.manage')}`);
             expect(url).toContain('response_type=code');
             expect(url).toContain('state=state_abc123');
             expect(url).toContain(encodeURIComponent('https://jawab24.com/zid/auth/callback'));
@@ -198,56 +215,69 @@ describe('Zid Service', () => {
             const redirectParam = url.split('redirect_uri=')[1].split('&')[0];
             expect(redirectParam).toBe(encodeURIComponent('https://jawab24.com/zid/auth/callback'));
         });
-
-        it('includes state for CSRF protection', () => {
-            const state = 'random_csrf_state_xyz';
-            const url = buildAuthUrl(state);
-            expect(url).toContain(`state=${state}`);
-        });
     });
 
     // ============================================================
-    // OAuth — exchangeCodeForToken
+    // OAuth — exchangeCodeForToken (form-urlencoded, dual credentials)
     // ============================================================
 
     describe('exchangeCodeForToken', () => {
-        it('exchanges authorization code for tokens', async () => {
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    access_token: 'zid_access_123',
-                    refresh_token: 'zid_refresh_456',
-                    expires_in: 31536000, // ~1 year
-                }),
-            });
+        it('posts application/x-www-form-urlencoded to the oauth token endpoint and returns all four fields', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                access_token: 'zid_manager_123',
+                refresh_token: 'zid_refresh_456',
+                expires_in: 31536000, // ~1 year
+                Authorization: 'zid_auth_jwt_789',
+            }));
 
             const result = await exchangeCodeForToken('auth_code_abc');
 
             expect(result).toEqual({
-                accessToken: 'zid_access_123',
+                accessToken: 'zid_manager_123',
+                authorizationToken: 'zid_auth_jwt_789',
                 refreshToken: 'zid_refresh_456',
                 expiresIn: 31536000,
             });
 
-            expect(mockFetch).toHaveBeenCalledWith(
-                'https://oauth.zid.sa/oauth/token',
-                expect.objectContaining({
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                }),
-            );
+            const [url, opts] = mockFetch.mock.calls[0] as [string, RequestInit];
+            expect(url).toBe('https://oauth.zid.sa/oauth/token');
+            expect(opts.method).toBe('POST');
+            expect(opts.headers).toEqual({ 'Content-Type': 'application/x-www-form-urlencoded' });
 
-            const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-            expect(body).toEqual({
-                grant_type: 'authorization_code',
-                client_id: 'test_zid_client_id',
-                client_secret: 'test_zid_secret',
-                code: 'auth_code_abc',
-                redirect_uri: 'https://jawab24.com/zid/auth/callback',
-            });
+            // URLSearchParams body — NOT JSON (RFC 6749 token endpoint).
+            const params = new URLSearchParams(opts.body as string);
+            expect(params.get('grant_type')).toBe('authorization_code');
+            expect(params.get('client_id')).toBe('test_zid_client_id');
+            expect(params.get('client_secret')).toBe('test_zid_secret');
+            expect(params.get('code')).toBe('auth_code_abc');
+            expect(params.get('redirect_uri')).toBe('https://jawab24.com/zid/auth/callback');
         });
 
-        it('throws on failed token exchange', async () => {
+        it('accepts a lowercase `authorization` field (defensive casing)', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                access_token: 'a',
+                refresh_token: 'r',
+                expires_in: 100,
+                authorization: 'lowercase_auth_token',
+            }));
+
+            const result = await exchangeCodeForToken('code');
+            expect(result.authorizationToken).toBe('lowercase_auth_token');
+        });
+
+        it('THROWS when the response has no Authorization token field (fail fast, not a silent 401 later)', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                access_token: 'a',
+                refresh_token: 'r',
+                expires_in: 100,
+            }));
+
+            await expect(exchangeCodeForToken('code')).rejects.toThrow(
+                'no Authorization token field',
+            );
+        });
+
+        it('throws on failed token exchange with status and body', async () => {
             mockFetch.mockResolvedValueOnce({
                 ok: false,
                 status: 400,
@@ -258,328 +288,267 @@ describe('Zid Service', () => {
                 'Zid token exchange failed: 400 invalid_grant',
             );
         });
+    });
 
-        it('throws on server error', async () => {
-            mockFetch.mockResolvedValueOnce({
-                ok: false,
-                status: 500,
-                text: async () => 'Internal Server Error',
-            });
+    // ============================================================
+    // Webhook verification — HTTP Basic auth (NO HMAC)
+    // ============================================================
 
-            await expect(exchangeCodeForToken('code')).rejects.toThrow(
-                'Zid token exchange failed: 500 Internal Server Error',
-            );
+    describe('verifyWebhookBasicAuth', () => {
+        it('accepts the exact Basic header for jawab24:<webhookSecret>', () => {
+            expect(verifyWebhookBasicAuth(validBasicHeader())).toBe(true);
+        });
+
+        it('rejects a wrong password', () => {
+            expect(verifyWebhookBasicAuth(validBasicHeader(ZID_WEBHOOK_BASIC_USER, 'wrong_secret_00'))).toBe(false);
+        });
+
+        it('rejects a wrong username', () => {
+            expect(verifyWebhookBasicAuth(validBasicHeader('intruder'))).toBe(false);
+        });
+
+        it('rejects a missing header (fails closed)', () => {
+            expect(verifyWebhookBasicAuth(undefined)).toBe(false);
+            expect(verifyWebhookBasicAuth('')).toBe(false);
         });
     });
 
     // ============================================================
-    // Token Refresh
-    // ============================================================
-
-    describe('refreshAccessToken', () => {
-        it('skips refresh if Redis lock is already held', async () => {
-            mockRedisSet.mockResolvedValueOnce(null); // lock not acquired
-            mockGetStoreById.mockResolvedValue(makeStore());
-
-            await refreshAccessToken('store-1');
-
-            expect(mockFetch).not.toHaveBeenCalled();
-            expect(mockUpdateStoreTokens).not.toHaveBeenCalled();
-        });
-
-        it('skips refresh if token expires more than 24h from now', async () => {
-            mockRedisSet.mockResolvedValueOnce('OK');
-            mockGetStoreById.mockResolvedValue(
-                makeStore({ tokenExpiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000) }),
-            );
-
-            await refreshAccessToken('store-1');
-
-            expect(mockFetch).not.toHaveBeenCalled();
-        });
-
-        it('refreshes token when close to expiry', async () => {
-            mockRedisSet.mockResolvedValueOnce('OK');
-            mockGetStoreById.mockResolvedValue(
-                makeStore({ tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000) }), // 30 min
-            );
-            mockDecrypt.mockReturnValue('plain_refresh_token');
-
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    access_token: 'new_access',
-                    refresh_token: 'new_refresh',
-                    expires_in: 31536000,
-                }),
-            });
-
-            await refreshAccessToken('store-1');
-
-            expect(mockFetch).toHaveBeenCalledWith(
-                'https://oauth.zid.sa/oauth/token',
-                expect.objectContaining({ method: 'POST' }),
-            );
-
-            const body = Object.fromEntries(
-                new URLSearchParams(mockFetch.mock.calls[0][1].body),
-            );
-            expect(body.grant_type).toBe('refresh_token');
-            expect(body.refresh_token).toBe('plain_refresh_token');
-
-            expect(mockUpdateStoreTokens).toHaveBeenCalledWith(
-                'store-1',
-                expect.objectContaining({
-                    accessToken: 'new_access',
-                    refreshToken: 'new_refresh',
-                }),
-            );
-        });
-
-        it('always releases the Redis lock even on error', async () => {
-            mockRedisSet.mockResolvedValueOnce('OK');
-            mockGetStoreById.mockResolvedValue(
-                makeStore({ tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000) }),
-            );
-            mockDecrypt.mockReturnValue('plain_refresh_token');
-            mockFetch.mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'Service Unavailable' });
-
-            await expect(refreshAccessToken('store-1')).rejects.toThrow('Zid token refresh failed');
-            expect(mockRedisDel).toHaveBeenCalledWith('zid:token_refresh:store-1');
-        });
-    });
-
-    describe('ensureValidToken', () => {
-        it('does not refresh when token has no expiry set', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore({ tokenExpiresAt: null }));
-
-            await ensureValidToken('store-1');
-
-            expect(mockFetch).not.toHaveBeenCalled();
-        });
-
-        it('does not refresh when token expires well in the future', async () => {
-            mockGetStoreById.mockResolvedValue(
-                makeStore({ tokenExpiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000) }),
-            );
-
-            await ensureValidToken('store-1');
-
-            expect(mockFetch).not.toHaveBeenCalled();
-        });
-    });
-
-    // ============================================================
-    // Webhook HMAC Verification
-    // ============================================================
-
-    describe('verifyWebhookHmac', () => {
-        it('returns true for a valid hex HMAC', () => {
-            const body = '{"event":"product.created","store_id":"my-store.com"}';
-            const signature = buildValidHexHmac(body);
-
-            expect(verifyWebhookHmac(body, signature)).toBe(true);
-        });
-
-        it('returns false for an invalid HMAC', () => {
-            const body = '{"event":"product.created","store_id":"my-store.com"}';
-            expect(verifyWebhookHmac(body, 'deadbeef1234567890')).toBe(false);
-        });
-
-        it('returns false for mismatched body content', () => {
-            const body = '{"event":"product.created"}';
-            const signature = buildValidHexHmac('{"event":"product.deleted"}');
-            expect(verifyWebhookHmac(body, signature)).toBe(false);
-        });
-
-        it('returns false for different length buffers', () => {
-            expect(verifyWebhookHmac('body', 'short')).toBe(false);
-        });
-
-        it('uses hex digest (not base64)', () => {
-            const body = '{"test":true}';
-            const hexHmac = crypto
-                .createHmac('sha256', 'test_webhook_secret')
-                .update(body, 'utf8')
-                .digest('hex');
-            const base64Hmac = crypto
-                .createHmac('sha256', 'test_webhook_secret')
-                .update(body, 'utf8')
-                .digest('base64');
-
-            expect(verifyWebhookHmac(body, hexHmac)).toBe(true);
-            expect(verifyWebhookHmac(body, base64Hmac)).toBe(false);
-        });
-    });
-
-    // ============================================================
-    // isProductEvent
-    // ============================================================
-
-    describe('isProductEvent', () => {
-        it.each(['product.created', 'product.updated', 'product.deleted'])(
-            'returns true for %s',
-            (event) => {
-                expect(isProductEvent(event)).toBe(true);
-            },
-        );
-
-        it('returns false for non-product events', () => {
-            expect(isProductEvent('app.uninstalled')).toBe(false);
-            expect(isProductEvent('order.created')).toBe(false);
-            expect(isProductEvent('')).toBe(false);
-        });
-    });
-
-    // ============================================================
-    // ZID_WEBHOOK_EVENTS constant
+    // Event constants + predicates
     // ============================================================
 
     describe('ZID_WEBHOOK_EVENTS', () => {
-        it('includes all required events', () => {
-            expect(ZID_WEBHOOK_EVENTS).toContain('product.created');
-            expect(ZID_WEBHOOK_EVENTS).toContain('product.updated');
-            expect(ZID_WEBHOOK_EVENTS).toContain('product.deleted');
-            expect(ZID_WEBHOOK_EVENTS).toContain('app.uninstalled');
+        it('contains exactly the verified subscription slugs', () => {
+            expect([...ZID_WEBHOOK_EVENTS]).toEqual([
+                'product.create',
+                'product.update',
+                'product.publish',
+                'product.delete',
+                'order.create',
+                'order.status.update',
+            ]);
+        });
+
+        it('does NOT contain app lifecycle events (Partner-Dashboard-configured, not API-registered)', () => {
+            expect(ZID_WEBHOOK_EVENTS).not.toContain('app.market.application.install');
+            expect(ZID_WEBHOOK_EVENTS).not.toContain('app.market.application.uninstall');
+        });
+    });
+
+    describe('isProductEvent / isOrderEvent', () => {
+        it.each(['product.create', 'product.update', 'product.publish', 'product.delete'])(
+            'isProductEvent(%s) is true',
+            (event) => {
+                expect(isProductEvent(event)).toBe(true);
+                expect(isOrderEvent(event)).toBe(false);
+            },
+        );
+
+        it.each(['order.create', 'order.status.update'])('isOrderEvent(%s) is true', (event) => {
+            expect(isOrderEvent(event)).toBe(true);
+            expect(isProductEvent(event)).toBe(false);
+        });
+
+        it('both are false for unrelated events', () => {
+            for (const event of ['app.market.application.uninstall', 'customer.create', '']) {
+                expect(isProductEvent(event)).toBe(false);
+                expect(isOrderEvent(event)).toBe(false);
+            }
         });
     });
 
     // ============================================================
-    // registerWebhooks
+    // registerWebhooks — POST /v1/managers/webhooks, dual headers,
+    // Basic-auth pair in body, routing hints in target_url
     // ============================================================
 
     describe('registerWebhooks', () => {
-        it('registers all webhook events', async () => {
-            mockFetch.mockResolvedValue({ ok: true, text: async () => '' });
+        it('registers every event with dual headers and the full subscription body', async () => {
+            mockFetch.mockResolvedValue(jsonResponse({}));
 
-            await registerWebhooks('access_token_xyz');
+            const result = await registerWebhooks(CREDS, 'store-uuid-1');
 
-            // One call per event
             expect(mockFetch).toHaveBeenCalledTimes(ZID_WEBHOOK_EVENTS.length);
+            expect(result.registered).toEqual([...ZID_WEBHOOK_EVENTS]);
+            expect(result.failed).toEqual([]);
+            expect(result.lastAttempt).toEqual(expect.any(String));
 
-            for (const call of mockFetch.mock.calls) {
-                const [url, opts] = call as [string, RequestInit];
-                expect(url).toBe('https://api.zid.sa/v1/webhooks');
-                expect((opts.headers as Record<string, string>)['X-MANAGER-TOKEN']).toBe('access_token_xyz');
-                // Must NOT use Authorization: Bearer
-                expect(opts.headers).not.toHaveProperty('Authorization');
+            for (let i = 0; i < mockFetch.mock.calls.length; i++) {
+                const call = mockFetch.mock.calls[i] as [string, RequestInit];
+                expect(call[0]).toBe('https://api.zid.sa/v1/managers/webhooks');
+                expect(call[1].method).toBe('POST');
+                expectDualHeaders(call, { 'Content-Type': 'application/json' });
+
+                const body = JSON.parse(call[1].body as string);
+                expect(body.original_id).toBe('zid-app-777');
+                expect(body.username).toBe('jawab24');
+                expect(body.password).toBe('test_webhook_secret');
+                expect(ZID_WEBHOOK_EVENTS).toContain(body.event);
+                // target_url carries the routing hints the handler resolves from.
+                expect(body.target_url).toContain('https://jawab24.com/zid/webhooks?');
+                expect(body.target_url).toContain(`e=${encodeURIComponent(body.event)}`);
+                expect(body.target_url).toContain('sid=store-uuid-1');
             }
         });
 
-        it('silently skips 409 (already exists) without logging error', async () => {
-            mockFetch.mockResolvedValue({ ok: false, status: 409, text: async () => 'Conflict' });
+        it('treats 409 (already exists) as registered without logging an error', async () => {
+            mockFetch.mockResolvedValue(jsonResponse({ error: 'Conflict' }, 409));
 
-            await registerWebhooks('token');
+            const result = await registerWebhooks(CREDS, 'store-1');
 
+            expect(result.registered).toEqual([...ZID_WEBHOOK_EVENTS]);
+            expect(result.failed).toEqual([]);
             expect(mockCaptureError).not.toHaveBeenCalled();
         });
 
-        it('captures error for non-409 failures', async () => {
-            mockFetch.mockResolvedValue({ ok: false, status: 500, text: async () => 'Server Error' });
+        it('treats 422 (duplicate/validation-style already-exists) as registered too', async () => {
+            mockFetch.mockResolvedValue(jsonResponse({ error: 'already subscribed' }, 422));
 
-            await registerWebhooks('token');
+            const result = await registerWebhooks(CREDS, 'store-1');
 
+            expect(result.registered).toEqual([...ZID_WEBHOOK_EVENTS]);
+            expect(result.failed).toEqual([]);
+            expect(mockCaptureError).not.toHaveBeenCalled();
+        });
+
+        it('records non-2xx failures with status and captures the error', async () => {
+            mockFetch.mockResolvedValue(jsonResponse({ error: 'boom' }, 500));
+
+            const result = await registerWebhooks(CREDS, 'store-1');
+
+            expect(result.registered).toEqual([]);
+            expect(result.failed).toHaveLength(ZID_WEBHOOK_EVENTS.length);
+            expect(result.failed[0]).toMatchObject({ topic: 'product.create', status: 500 });
             expect(mockCaptureError).toHaveBeenCalled();
         });
 
-        it('continues registering remaining events after a single failure', async () => {
-            // First event fails, rest succeed
+        it('continues registering remaining events after a single rejection', async () => {
             mockFetch
-                .mockResolvedValueOnce({ ok: false, status: 500, text: async () => 'Error' })
-                .mockResolvedValue({ ok: true, text: async () => '' });
+                .mockRejectedValueOnce(new Error('network down'))
+                .mockResolvedValue(jsonResponse({}));
 
-            await registerWebhooks('token');
+            const result = await registerWebhooks(CREDS, 'store-1');
 
-            // Should attempt all events despite the first failure
             expect(mockFetch).toHaveBeenCalledTimes(ZID_WEBHOOK_EVENTS.length);
+            expect(result.failed).toEqual([
+                { topic: 'product.create', error: 'network down' },
+            ]);
+            expect(result.registered).toHaveLength(ZID_WEBHOOK_EVENTS.length - 1);
         });
     });
 
     // ============================================================
-    // fetchStoreInfo
+    // fetchStoreInfo — /v1/managers/account/profile
     // ============================================================
 
-    describe('fetchStoreInfo', () => {
-        it('maps Zid API response to store info shape', async () => {
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
+    describe('fetchStoreInfo [provisional — pending Zid live captures]', () => {
+        it('GETs the manager profile with dual headers and maps the user.store envelope', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                user: {
+                    id: 7,
+                    email: 'owner@zid.sa',
                     store: {
-                        id: 42,
-                        name: 'My Zid Store',
-                        email: 'store@example.com',
+                        id: 99,
+                        title: 'متجر الدمام',
+                        email: 'store@zid.sa',
                         currency: 'SAR',
-                        domain: 'my-store.zid.store',
+                        url: 'https://demo.zid.store',
                     },
-                }),
-            });
+                },
+            }));
 
-            const info = await fetchStoreInfo('access_token');
+            const info = await fetchStoreInfo(CREDS);
+
+            const call = mockFetch.mock.calls[0] as [string, RequestInit];
+            expect(call[0]).toBe('https://api.zid.sa/v1/managers/account/profile');
+            expectDualHeaders(call);
 
             expect(info).toEqual({
-                storeName: 'My Zid Store',
-                storeEmail: 'store@example.com',
+                storeName: 'متجر الدمام',
+                storeEmail: 'store@zid.sa',
                 storeCurrency: 'SAR',
-                storeDomain: 'my-store.zid.store',
-                merchantId: '42', // always string
+                storeDomain: 'demo.zid.store',
+                merchantId: '99',
             });
         });
 
-        it('converts numeric merchant ID to string', async () => {
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    store: { id: 12345, name: 'Store', email: 'e@e.com', currency: 'SAR', domain: 'store.zid.store' },
-                }),
-            });
+        it('tolerates a root-level store envelope, name fallback, and a scheme-less domain field', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                store: {
+                    id: 12345,
+                    name: 'My Zid Store',
+                    currency: 'SAR',
+                    domain: 'my-store.zid.store',
+                },
+            }));
 
-            const info = await fetchStoreInfo('token');
-            expect(typeof info.merchantId).toBe('string');
+            const info = await fetchStoreInfo(CREDS);
+
+            expect(info.storeName).toBe('My Zid Store');
+            expect(info.storeDomain).toBe('my-store.zid.store');
             expect(info.merchantId).toBe('12345');
+            expect(typeof info.merchantId).toBe('string');
         });
 
-        it('uses X-MANAGER-TOKEN header (not Authorization: Bearer)', async () => {
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    store: { id: 1, name: 'S', email: 'e@e.com', currency: 'SAR', domain: 'd.zid.store' },
-                }),
-            });
+        it('extracts the hostname from a URL with a path', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                user: { store: { id: 1, title: 'S', url: 'https://demo.zid.store/ar/home' } },
+            }));
 
-            await fetchStoreInfo('my_manager_token');
+            const info = await fetchStoreInfo(CREDS);
+            expect(info.storeDomain).toBe('demo.zid.store');
+        });
 
-            const [, opts] = mockFetch.mock.calls[0] as [string, RequestInit];
-            const headers = opts.headers as Record<string, string>;
-            expect(headers['X-MANAGER-TOKEN']).toBe('my_manager_token');
-            expect(headers).not.toHaveProperty('Authorization');
+        it('falls back to String(store.id) as storeDomain when no url/domain is present', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                user: { store: { id: 4242, title: 'No URL Store' } },
+            }));
+
+            const info = await fetchStoreInfo(CREDS);
+            expect(info.storeDomain).toBe('4242');
+        });
+
+        it('falls back to the user email when the store has none', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                user: {
+                    email: 'owner@zid.sa',
+                    store: { id: 1, title: 'S', url: 'https://s.zid.store' },
+                },
+            }));
+
+            const info = await fetchStoreInfo(CREDS);
+            expect(info.storeEmail).toBe('owner@zid.sa');
+        });
+
+        it('throws when the response has no store object', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ user: { id: 7 } }));
+
+            await expect(fetchStoreInfo(CREDS)).rejects.toThrow('no store object');
         });
     });
 
     // ============================================================
-    // syncProducts
+    // syncProducts — field mapping (provisional envelope shapes)
     // ============================================================
 
-    describe('syncProducts', () => {
-        it('fetches and maps products, then replaces summary', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore());
-            mockDecrypt.mockReturnValue('plain_token');
-
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    store_products: [
-                        makeZidProduct(),
-                        makeZidProduct({ id: '1002', name: 'Product 2', has_variants: true, options: [
-                            { name: 'Size', values: [{ name: 'S' }, { name: 'M' }] },
-                        ]}),
-                    ],
-                    meta: { current_page: 1, last_page: 1, per_page: 50, total: 2 },
-                }),
-            });
-
+    describe('syncProducts mapping [provisional — pending Zid live captures]', () => {
+        it('fetches /v1/products/ with dual headers + Role: Manager and maps fields', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [
+                    makeZidProduct(),
+                    makeZidProduct({
+                        id: '1002', name: 'Product 2', has_variants: true,
+                        options: [{ name: 'Size', values: [{ name: 'S' }, { name: 'M' }] }],
+                    }),
+                ],
+            }));
             mockReplaceProductsAndRebuildSummary.mockResolvedValue({ productCount: 2 });
 
             const result = await syncProducts('store-1');
+
+            const call = mockFetch.mock.calls[0] as [string, RequestInit];
+            expect(call[0]).toBe('https://api.zid.sa/v1/products/?page_size=100&page=1');
+            expectDualHeaders(call, { 'Role': 'Manager' });
 
             expect(mockReplaceProductsAndRebuildSummary).toHaveBeenCalledWith(
                 'store-1',
@@ -587,11 +556,14 @@ describe('Zid Service', () => {
                     expect.objectContaining({
                         platformProductId: '1001',
                         title: 'Test Product',
+                        handle: 'test-product',
                         status: 'active',
                         priceRange: '150 SAR',
                         currency: 'SAR',
                         totalInventory: 20,
                         hasVariants: false,
+                        productType: 'Electronics',
+                        imageUrl: 'https://cdn.zid.sa/image.jpg',
                     }),
                     expect.objectContaining({
                         platformProductId: '1002',
@@ -603,99 +575,156 @@ describe('Zid Service', () => {
             expect(result).toEqual({ productCount: 2 });
         });
 
-        it('filters out deleted products', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore());
-            mockDecrypt.mockReturnValue('plain_token');
+        it.each(['results', 'store_products', 'products'])(
+            'tolerates the %s envelope key',
+            async (key) => {
+                mockFetch.mockResolvedValueOnce(jsonResponse({ [key]: [makeZidProduct()] }));
 
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    store_products: [
-                        makeZidProduct({ status: 'deleted' }),
-                        makeZidProduct({ id: '2', name: 'Active' }),
-                    ],
-                    meta: { current_page: 1, last_page: 1, per_page: 50, total: 2 },
-                }),
-            });
+                await syncProducts('store-1');
 
-            await syncProducts('store-1');
+                const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, unknown[]];
+                expect(products).toHaveLength(1);
+            },
+        );
 
-            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, unknown[]];
-            expect(products).toHaveLength(1);
-            expect((products[0] as { title: string }).title).toBe('Active');
-        });
-
-        it('maps inactive status to hidden', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore());
-            mockDecrypt.mockReturnValue('plain_token');
-
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    store_products: [makeZidProduct({ status: 'inactive' })],
-                    meta: { current_page: 1, last_page: 1, per_page: 50, total: 1 },
-                }),
-            });
+        it('prefers Arabic for multilingual name/description objects', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({
+                    name: { ar: 'حذاء رياضي', en: 'Sneaker' },
+                    description: { ar: '<p>وصف عربي</p>', en: '<p>English desc</p>' },
+                })],
+            }));
 
             await syncProducts('store-1');
 
-            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, unknown[]];
-            expect((products[0] as { status: string }).status).toBe('hidden');
+            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, Array<{ title: string; description: string }>];
+            expect(products[0].title).toBe('حذاء رياضي');
+            expect(products[0].description).toBe('وصف عربي');
         });
 
+        it('falls back to English when Arabic is absent in a multilingual field', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ name: { en: 'English Only' } })],
+            }));
+
+            await syncProducts('store-1');
+
+            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, Array<{ title: string }>];
+            expect(products[0].title).toBe('English Only');
+        });
+
+        it('prefers sale_price over price for the price range', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ price: 150, sale_price: 99 })],
+            }));
+
+            await syncProducts('store-1');
+
+            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, Array<{ priceRange: string }>];
+            expect(products[0].priceRange).toBe('99 SAR');
+        });
+
+        it('maps statuses: published→active, draft/inactive→hidden, out_of_stock kept', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [
+                    makeZidProduct({ id: 'a', status: 'published' }),
+                    makeZidProduct({ id: 'b', status: 'draft' }),
+                    makeZidProduct({ id: 'c', status: 'inactive' }),
+                    makeZidProduct({ id: 'd', status: 'out_of_stock' }),
+                ],
+            }));
+
+            await syncProducts('store-1');
+
+            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, Array<{ status: string }>];
+            expect(products.map(p => p.status)).toEqual(['active', 'hidden', 'hidden', 'out_of_stock']);
+        });
+
+        it('reads image URLs from the nested image.full_size shape too', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ images: [{ image: { full_size: 'https://cdn.zid.sa/full.jpg' } }] })],
+            }));
+
+            await syncProducts('store-1');
+
+            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, Array<{ imageUrl: string }>];
+            expect(products[0].imageUrl).toBe('https://cdn.zid.sa/full.jpg');
+        });
+    });
+
+    // ============================================================
+    // syncProducts — contract-independent behavior
+    // ============================================================
+
+    describe('syncProducts guards and pagination', () => {
         it('strips HTML from descriptions', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore());
-            mockDecrypt.mockReturnValue('plain_token');
-
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    store_products: [makeZidProduct({ description: '<p>Great <strong>product</strong></p>' })],
-                    meta: { current_page: 1, last_page: 1, per_page: 50, total: 1 },
-                }),
-            });
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ description: '<p>Great <strong>product</strong></p>' })],
+            }));
 
             await syncProducts('store-1');
 
-            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, unknown[]];
-            const desc = (products[0] as { description: string }).description;
-            expect(desc).not.toContain('<');
-            expect(desc).toContain('Great');
-            expect(desc).toContain('product');
+            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, Array<{ description: string }>];
+            expect(products[0].description).not.toContain('<');
+            expect(products[0].description).toContain('Great');
+            expect(products[0].description).toContain('product');
         });
 
-        it('paginates through all pages', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore());
-            mockDecrypt.mockReturnValue('plain_token');
+        it('filters out deleted products', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [
+                    makeZidProduct({ status: 'deleted' }),
+                    makeZidProduct({ id: '2', name: 'Active' }),
+                ],
+            }));
 
-            // Page 1 — 2 more pages
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    store_products: [makeZidProduct({ id: 'p1' })],
-                    meta: { current_page: 1, last_page: 2, per_page: 50, total: 2 },
-                }),
-            });
-            // Page 2 — last page
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    store_products: [makeZidProduct({ id: 'p2', name: 'Page 2 Product' })],
-                    meta: { current_page: 2, last_page: 2, per_page: 50, total: 2 },
-                }),
-            });
+            await syncProducts('store-1');
+
+            const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, Array<{ title: string }>];
+            expect(products).toHaveLength(1);
+            expect(products[0].title).toBe('Active');
+        });
+
+        it('paginates while pages come back full, stopping at the first short page', async () => {
+            const fullPage = Array.from({ length: 100 }, (_, i) => makeZidProduct({ id: `p${i}` }));
+            mockFetch
+                .mockResolvedValueOnce(jsonResponse({ results: fullPage }))
+                .mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct({ id: 'last' })] }));
 
             await syncProducts('store-1');
 
             expect(mockFetch).toHaveBeenCalledTimes(2);
+            expect(mockFetch.mock.calls[0][0]).toContain('page=1');
+            expect(mockFetch.mock.calls[1][0]).toContain('page=2');
             const [, products] = mockReplaceProductsAndRebuildSummary.mock.calls[0] as [string, unknown[]];
-            expect(products).toHaveLength(2);
+            expect(products).toHaveLength(101);
         });
 
-        it('throws if store not found', async () => {
+        it('stops when the envelope says next === null even if the page is full', async () => {
+            const fullPage = Array.from({ length: 100 }, (_, i) => makeZidProduct({ id: `p${i}` }));
+            mockFetch.mockResolvedValueOnce(jsonResponse({ results: fullPage, next: null }));
+
+            await syncProducts('store-1');
+
+            expect(mockFetch).toHaveBeenCalledTimes(1);
+        });
+
+        it('throws "Store not found" when the store row is missing', async () => {
             mockGetStoreById.mockResolvedValue(null);
 
             await expect(syncProducts('no-such-store')).rejects.toThrow('Store not found');
+        });
+
+        it('throws "Store not found" when the store is inactive', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore({ isActive: false, tokenExpiresAt: null }));
+
+            await expect(syncProducts('store-1')).rejects.toThrow('Store not found');
+        });
+
+        it('throws a diagnosable error when the store row lacks the second (Authorization) credential', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore({ authorizationToken: null, authorizationTokenIv: null }));
+
+            await expect(syncProducts('store-1')).rejects.toThrow('no Authorization token');
         });
     });
 
@@ -704,44 +733,34 @@ describe('Zid Service', () => {
     // ============================================================
 
     describe('fullSync', () => {
-        it('updates store info and syncs products', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore());
-
-            // fetchStoreInfo response
+        it('applies store info as a merge patch (with merchantId) and then syncs products', async () => {
             mockFetch
-                .mockResolvedValueOnce({
-                    ok: true,
-                    json: async () => ({
+                // fetchStoreInfo
+                .mockResolvedValueOnce(jsonResponse({
+                    user: {
                         store: {
                             id: 99,
-                            name: 'Updated Store Name',
+                            title: 'Updated Store Name',
                             email: 'updated@zid.sa',
                             currency: 'SAR',
-                            domain: 'my-store.zid.store',
+                            url: 'https://demo.zid.store',
                         },
-                    }),
-                })
-                // syncProducts — products page
-                .mockResolvedValueOnce({
-                    ok: true,
-                    json: async () => ({
-                        store_products: [makeZidProduct()],
-                        meta: { current_page: 1, last_page: 1, per_page: 50, total: 1 },
-                    }),
-                });
+                    },
+                }))
+                // syncProducts page 1
+                .mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct()] }));
 
             await fullSync('store-1');
 
-            // Store info goes through applySyncedStoreInfo — platformData is a merge
-            // PATCH ({ merchantId }), never a whole-column replace (which used to wipe
-            // webhookStatus/tokenHealth).
             expect(mockApplySyncedStoreInfo).toHaveBeenCalledWith(
                 'store-1',
-                expect.objectContaining({ storeName: 'Updated Store Name' }),
+                expect.objectContaining({
+                    storeName: 'Updated Store Name',
+                    storeEmail: 'updated@zid.sa',
+                    storeCurrency: 'SAR',
+                }),
                 { merchantId: '99' },
             );
-
-            // Should have called replaceProductsAndRebuildSummary for product sync
             expect(mockReplaceProductsAndRebuildSummary).toHaveBeenCalled();
         });
 
@@ -753,144 +772,416 @@ describe('Zid Service', () => {
     });
 
     // ============================================================
-    // refreshExpiringTokens
+    // Token refresh (shared refresher wired with the Zid config)
     // ============================================================
 
-    describe('refreshExpiringTokens', () => {
+    describe('refreshAccessToken', () => {
+        beforeEach(() => {
+            vi.useFakeTimers();
+        });
+
+        afterEach(() => {
+            vi.useRealTimers();
+        });
+
+        it('skips refresh if the Redis lock is already held', async () => {
+            mockRedisSet.mockResolvedValueOnce(null); // lock not acquired
+
+            const promise = refreshAccessToken('store-1');
+            await vi.advanceTimersByTimeAsync(2001);
+            await promise;
+
+            expect(mockFetch).not.toHaveBeenCalled();
+            expect(mockUpdateStoreTokens).not.toHaveBeenCalled();
+        });
+
+        it('skips refresh if the token expires more than 24h from now', async () => {
+            mockGetStoreById.mockResolvedValue(
+                makeStore({ tokenExpiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000) }),
+            );
+
+            await refreshAccessToken('store-1');
+
+            expect(mockFetch).not.toHaveBeenCalled();
+        });
+
+        it('refreshes near expiry and passes the rotated Authorization credential through', async () => {
+            mockGetStoreById.mockResolvedValue(
+                makeStore({ tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000) }),
+            );
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                access_token: 'new_manager',
+                refresh_token: 'new_refresh',
+                expires_in: 31536000,
+                Authorization: 'new_auth_jwt',
+            }));
+
+            await refreshAccessToken('store-1');
+
+            const [url, opts] = mockFetch.mock.calls[0] as [string, RequestInit];
+            expect(url).toBe('https://oauth.zid.sa/oauth/token');
+            const body = new URLSearchParams(opts.body as string);
+            expect(body.get('grant_type')).toBe('refresh_token');
+            expect(body.get('refresh_token')).toBe('refresh_plain');
+            expect(body.get('client_id')).toBe('test_zid_client_id');
+
+            expect(mockUpdateStoreTokens).toHaveBeenCalledWith('store-1', expect.objectContaining({
+                accessToken: 'new_manager',
+                refreshToken: 'new_refresh',
+                authorizationToken: 'new_auth_jwt',
+            }));
+        });
+
+        it('leaves authorizationToken undefined when the refresh response omits it', async () => {
+            mockGetStoreById.mockResolvedValue(
+                makeStore({ tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000) }),
+            );
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                access_token: 'new_manager',
+                refresh_token: 'new_refresh',
+                expires_in: 31536000,
+            }));
+
+            await refreshAccessToken('store-1');
+
+            const tokens = mockUpdateStoreTokens.mock.calls[0][1] as { authorizationToken?: string };
+            expect(tokens.authorizationToken).toBeUndefined();
+        });
+
+        it('always releases the Redis lock even on error', async () => {
+            mockGetStoreById.mockResolvedValue(
+                makeStore({ tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000) }),
+            );
+            mockFetch.mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'Service Unavailable' });
+
+            await expect(refreshAccessToken('store-1')).rejects.toThrow('Zid token refresh failed');
+            expect(mockRedisDel).toHaveBeenCalledWith('zid:token_refresh:store-1');
+        });
+    });
+
+    describe('ensureValidToken', () => {
+        it('does not refresh when the token has no expiry set (assumed non-expiring)', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore({ tokenExpiresAt: null }));
+
+            await ensureValidToken('store-1');
+
+            expect(mockFetch).not.toHaveBeenCalled();
+        });
+
+        it('does not refresh when the token expires well in the future', async () => {
+            await ensureValidToken('store-1');
+
+            expect(mockFetch).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('refreshExpiringTokens / getStoresNeedingTokenRefresh', () => {
         it('returns 0 when no stores need refresh', async () => {
-            // db.select mock returns empty array by default
             const count = await refreshExpiringTokens();
             expect(count).toBe(0);
         });
 
-        it('captures errors for failed token refreshes and continues', async () => {
-            const { db } = await import('../../src/db');
-            (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([{ id: 'store-fail' }]),
-                }),
-            });
-
-            // Make the store lookup fail (simulating an error during refresh)
-            mockGetStoreById.mockResolvedValue(null);
+        it('captures errors for failed refreshes and continues', async () => {
+            mockDbWhere.mockResolvedValueOnce([{ id: 'store-fail', platformData: {} }]);
+            mockGetStoreById.mockResolvedValue(null); // refresh throws Store not found
 
             const count = await refreshExpiringTokens();
 
-            // refreshAccessToken will throw for a store with no token data — captureError should be called
             expect(count).toBe(0);
+            expect(mockCaptureError).toHaveBeenCalled();
+        });
+
+        it('getStoresNeedingTokenRefresh filters demo-seeded stores', async () => {
+            mockDbWhere.mockResolvedValueOnce([
+                { id: 'real-store', platformData: {} },
+                { id: 'demo-store', platformData: { demo: true } },
+            ]);
+
+            const stores = await getStoresNeedingTokenRefresh();
+            expect(stores).toEqual([{ id: 'real-store' }]);
         });
     });
 
     // ============================================================
-    // lookupOrder / getShipmentTracking / checkInventory
+    // normalizeZidPhone
     // ============================================================
 
-    describe('lookupOrder', () => {
-        it('returns mapped order info when order is found', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore());
-
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    orders: [{
-                        id: 'zid-order-1',
-                        reference_id: '12345',
-                        status: 'delivered',
-                        total_amount: 300,
-                        currency: 'SAR',
-                        customer_name: 'Ahmed Ali',
-                        customer_phone: '+966512345678',
-                        shipping_city: 'Riyadh',
-                        created_at: '2026-01-15T10:00:00Z',
-                        items: [{ name: 'Widget', quantity: 1, price: 300, currency: 'SAR' }],
-                    }],
-                }),
-            });
-
-            const result = await lookupOrder('store-1', '12345');
-
-            expect(result).not.toBeNull();
-            expect(result?.orderNumber).toBe('12345');
-            expect(result?.customerFirstName).toBe('Ahmed'); // first word of customer_name
-            expect(result?.status).toBe('delivered');
-            expect(result?.totalAmount).toBe('300');
-            expect(result?.currency).toBe('SAR');
-            expect(result?.shippingCity).toBe('Riyadh');
+    describe('normalizeZidPhone', () => {
+        it('prepends + to a full international number without one', () => {
+            expect(normalizeZidPhone('966591555966')).toBe('+966591555966');
         });
 
-        it('returns null when order is not found', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore());
+        it('handles a numeric mobile value', () => {
+            expect(normalizeZidPhone(966591555966)).toBe('+966591555966');
+        });
 
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ orders: [] }),
-            });
+        it('passes through a +-prefixed number unchanged', () => {
+            expect(normalizeZidPhone('+966591555966')).toBe('+966591555966');
+        });
 
-            const result = await lookupOrder('store-1', '99999');
+        it('trims surrounding whitespace', () => {
+            expect(normalizeZidPhone('  966591555966  ')).toBe('+966591555966');
+        });
+
+        it('returns undefined for empty/null/undefined input', () => {
+            expect(normalizeZidPhone('')).toBeUndefined();
+            expect(normalizeZidPhone('   ')).toBeUndefined();
+            expect(normalizeZidPhone(null)).toBeUndefined();
+            expect(normalizeZidPhone(undefined)).toBeUndefined();
+        });
+    });
+
+    // ============================================================
+    // mapZidOrderStatus
+    // ============================================================
+
+    describe('mapZidOrderStatus', () => {
+        it.each([
+            ['new', 'pending'],
+            ['preparing', 'processing'],
+            ['ready', 'processing'],
+            ['indelivery', 'shipped'],
+            ['delivered', 'delivered'],
+            ['canceled', 'cancelled'],
+            ['cancelled', 'cancelled'],
+            ['refunded', 'refunded'],
+        ])('maps %s → %s', (input, expected) => {
+            expect(mapZidOrderStatus(input)).toBe(expected);
+        });
+
+        it('is case-insensitive (webhook docs show camelCase inDelivery)', () => {
+            expect(mapZidOrderStatus('inDelivery')).toBe('shipped');
+            expect(mapZidOrderStatus('NEW')).toBe('pending');
+        });
+
+        it('passes unknown statuses through', () => {
+            expect(mapZidOrderStatus('weird_status')).toBe('weird_status');
+        });
+    });
+
+    // ============================================================
+    // Order/inventory agent tools (client-side scan)
+    // ============================================================
+
+    describe('lookupOrder [provisional — pending Zid live captures]', () => {
+        const order = {
+            id: 9001,
+            code: 'ORD-100',
+            invoice_number: 555,
+            order_status: { code: 'inDelivery', name: 'قيد التوصيل' },
+            order_total: 300.5,
+            order_total_string: '300.50 SAR',
+            currency_code: 'SAR',
+            customer: { id: 5, name: 'Ahmed Ali', mobile: '966591555966' },
+            created_at: '2026-07-01T10:00:00Z',
+            products: [{ name: { ar: 'منتج' }, quantity: 2, price: 150 }],
+        };
+
+        it('scans /v1/managers/store/orders with dual headers and maps a match by code', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [order] }));
+
+            const result = await lookupOrder('store-1', 'ORD-100');
+
+            const call = mockFetch.mock.calls[0] as [string, RequestInit];
+            expect(call[0]).toBe('https://api.zid.sa/v1/managers/store/orders?page=1&per_page=100&payload_type=default');
+            expectDualHeaders(call);
+
+            expect(result).not.toBeNull();
+            expect(result?.orderNumber).toBe('ORD-100'); // code preferred over id
+            expect(result?.customerFirstName).toBe('Ahmed');
+            expect(result?.customerPhone).toBe('+966591555966');
+            expect(result?.status).toBe('shipped'); // inDelivery, case-insensitive
+            expect(result?.totalAmount).toBe('300.50 SAR'); // order_total_string preferred
+            expect(result?.currency).toBe('SAR');
+            expect(result?.items).toEqual([{ name: 'منتج', quantity: 2, price: '150 SAR' }]);
+        });
+
+        it('defaults paymentStatus to "unknown" — NEVER a fabricated "paid"', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [order] }));
+
+            const result = await lookupOrder('store-1', 'ORD-100');
+            expect(result?.paymentStatus).toBe('unknown');
+        });
+
+        it('uses payment_status when the order carries one', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [{ ...order, payment_status: 'paid' }] }));
+
+            const result = await lookupOrder('store-1', 'ORD-100');
+            expect(result?.paymentStatus).toBe('paid');
+        });
+
+        it('matches by internal id and by invoice number, and strips a leading #', async () => {
+            mockFetch.mockResolvedValue(jsonResponse({ orders: [order] }));
+
+            expect((await lookupOrder('store-1', '9001'))?.orderNumber).toBe('ORD-100');
+            expect((await lookupOrder('store-1', '555'))?.orderNumber).toBe('ORD-100');
+            expect((await lookupOrder('store-1', '#ORD-100'))?.orderNumber).toBe('ORD-100');
+        });
+
+        it('falls back to order_total when order_total_string is absent', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [{ ...order, order_total_string: undefined }] }));
+
+            const result = await lookupOrder('store-1', 'ORD-100');
+            expect(result?.totalAmount).toBe('300.5');
+        });
+
+        it('scans subsequent pages when the first full page has no match', async () => {
+            const fullPage = Array.from({ length: 100 }, (_, i) => ({ ...order, id: i, code: `X-${i}`, invoice_number: undefined }));
+            mockFetch
+                .mockResolvedValueOnce(jsonResponse({ orders: fullPage }))
+                .mockResolvedValueOnce(jsonResponse({ orders: [order] }));
+
+            const result = await lookupOrder('store-1', 'ORD-100');
+
+            expect(mockFetch).toHaveBeenCalledTimes(2);
+            expect(mockFetch.mock.calls[1][0]).toContain('page=2');
+            expect(result?.orderNumber).toBe('ORD-100');
+        });
+
+        it('gives up after 3 full pages without a match', async () => {
+            const fullPage = Array.from({ length: 100 }, (_, i) => ({ ...order, id: i, code: `X-${i}`, invoice_number: undefined }));
+            mockFetch.mockResolvedValue(jsonResponse({ orders: fullPage }));
+
+            const result = await lookupOrder('store-1', 'ORD-100');
 
             expect(result).toBeNull();
+            expect(mockFetch).toHaveBeenCalledTimes(3);
+        });
+
+        it('returns null when the order is not found on a short page', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [] }));
+
+            expect(await lookupOrder('store-1', '99999')).toBeNull();
+            expect(mockFetch).toHaveBeenCalledTimes(1);
+        });
+
+        it('returns null when the store cannot be resolved', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore({ isActive: false, tokenExpiresAt: null }));
+
+            expect(await lookupOrder('store-1', 'ORD-100')).toBeNull();
+            expect(mockFetch).not.toHaveBeenCalled();
         });
     });
 
-    describe('getShipmentTracking', () => {
-        it('returns shipment tracking info when order has tracking data', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore());
+    describe('getShipmentTracking [provisional — pending Zid live captures]', () => {
+        it('reads flat tracking fields', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                orders: [{
+                    id: 1, code: 'ORD-7',
+                    order_status: { code: 'indelivery' },
+                    customer: { name: 'Ahmed Ali', mobile: '966591555966' },
+                    tracking_number: 'TRK-ZID-001',
+                    courier_name: 'SMSA',
+                    tracking_url: 'https://track.smsa.com.sa/TRK-ZID-001',
+                }],
+            }));
 
-            const orderBase = {
-                id: 'zid-order-1',
-                reference_id: '12345',
+            const result = await getShipmentTracking('store-1', 'ORD-7');
+
+            expect(result).toMatchObject({
+                orderNumber: 'ORD-7',
+                customerFirstName: 'Ahmed',
+                customerPhone: '+966591555966',
                 status: 'shipped',
-                total_amount: 300,
-                currency: 'SAR',
-                customer_name: 'Ahmed Ali',
-                customer_phone: '+966512345678',
-                shipping_city: 'Jeddah',
-                tracking_number: 'TRK-ZID-001',
-                courier_name: 'SMSA',
-                tracking_url: 'https://track.smsa.com.sa/TRK-ZID-001',
-            };
-
-            // First fetch: search
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ orders: [orderBase] }),
+                trackingNumber: 'TRK-ZID-001',
+                courierName: 'SMSA',
+                trackingUrl: 'https://track.smsa.com.sa/TRK-ZID-001',
             });
-            // Second fetch: order detail
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({ order: orderBase }),
+        });
+
+        it('reads nested shipping.* tracking fields as a fallback', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                orders: [{
+                    id: 2, code: 'ORD-8',
+                    status: 'delivered', // flat status string variant
+                    customer: { name: 'Sara', mobile: '966500000000' },
+                    shipping: { tracking_number: 'TRK-2', courier: 'Aramex', tracking_url: 'https://aramex/TRK-2' },
+                }],
+            }));
+
+            const result = await getShipmentTracking('store-1', 'ORD-8');
+
+            expect(result).toMatchObject({
+                status: 'delivered',
+                trackingNumber: 'TRK-2',
+                courierName: 'Aramex',
+                trackingUrl: 'https://aramex/TRK-2',
             });
+        });
 
-            const result = await getShipmentTracking('store-1', '12345');
-
-            expect(result).not.toBeNull();
-            expect(result?.trackingNumber).toBe('TRK-ZID-001');
-            expect(result?.courierName).toBe('SMSA');
-            expect(result?.trackingUrl).toBe('https://track.smsa.com.sa/TRK-ZID-001');
-            expect(result?.status).toBe('shipped');
+        it('returns null when the order is not found', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ orders: [] }));
+            expect(await getShipmentTracking('store-1', 'nope')).toBeNull();
         });
     });
 
-    describe('checkInventory', () => {
-        it('returns inventory info for a matching product', async () => {
-            mockGetStoreById.mockResolvedValue(makeStore({ storeDomain: 'mystore.zid.sa' }));
+    describe('checkInventory [provisional — pending Zid live captures]', () => {
+        it('matches a product by localized name and returns availability, price, and URL', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({
+                    name: { ar: 'جراب هاتف', en: 'Phone Case' },
+                    quantity: 8,
+                    price: 45,
+                    html_url: 'https://demo.zid.store/products/phone-case',
+                })],
+            }));
 
-            const product = makeZidProduct({ name: 'Phone Case', quantity: 8, price: 45 });
-            mockFetch.mockResolvedValueOnce({
-                ok: true,
-                json: async () => ({
-                    store_products: [product],
-                    meta: { current_page: 1, last_page: 1, per_page: 50, total: 1 },
-                }),
+            // Matching runs against the LOCALIZED (Arabic-preferred) name.
+            const result = await checkInventory('store-1', 'جراب');
+
+            const call = mockFetch.mock.calls[0] as [string, RequestInit];
+            expect(call[0]).toBe('https://api.zid.sa/v1/products/?page_size=100&page=1');
+            expectDualHeaders(call, { 'Role': 'Manager' });
+
+            expect(result).toMatchObject({
+                productName: 'جراب هاتف',
+                available: true,
+                quantity: 8,
+                price: '45 SAR',
+                currency: 'SAR',
+                productUrl: 'https://demo.zid.store/products/phone-case',
             });
+        });
 
-            const result = await checkInventory('store-1', 'Phone Case');
+        it('builds a product URL from the slug and store domain when html_url is absent', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ name: 'Widget', slug: 'widget-1' })],
+            }));
+
+            const result = await checkInventory('store-1', 'Widget');
+            expect(result?.productUrl).toBe('https://demo.zid.store/products/widget-1');
+        });
+
+        it('filters variants by the requested variant text', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({
+                    name: 'Shirt',
+                    quantity: 3,
+                    options: [{ name: 'Size', values: [{ name: 'S' }, { name: 'M' }, { name: 'L' }] }],
+                })],
+            }));
+
+            const result = await checkInventory('store-1', 'Shirt', 'M');
+
+            expect(result?.variants).toEqual([
+                { name: 'Size: M', available: true, quantity: 3 },
+            ]);
+        });
+
+        it('omits price entirely (undefined, not an empty string) when Zid provides none', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({
+                results: [makeZidProduct({ price: undefined, sale_price: undefined })],
+            }));
+
+            const result = await checkInventory('store-1', 'Test Product');
 
             expect(result).not.toBeNull();
-            expect(result?.productName).toBe('Phone Case');
-            expect(result?.available).toBe(true);
-            expect(result?.quantity).toBe(8);
-            expect(result?.price).toBe('45 SAR');
+            expect(result?.price).toBeUndefined();
+        });
+
+        it('returns null when no product matches', async () => {
+            mockFetch.mockResolvedValueOnce(jsonResponse({ results: [makeZidProduct({ name: 'Other' })] }));
+            expect(await checkInventory('store-1', 'nonexistent')).toBeNull();
         });
     });
 });

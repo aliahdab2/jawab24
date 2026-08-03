@@ -99,6 +99,8 @@ import {
     ensureValidToken,
     refreshExpiringTokens,
     getStoresNeedingTokenRefresh,
+    resolveStoreAccessToken,
+    resolveStoreCredentialPair,
 } from '../../src/services/ecommerceTokenRefresh';
 
 interface WhereArg { op: string; conditions: Array<{ op: string }> }
@@ -225,6 +227,53 @@ describe('refreshAccessToken', () => {
             accessToken: 'new-access',
             refreshToken: 'new-refresh',
         }));
+    });
+
+    it('passes the Zid `Authorization` field through to updateStoreTokens when the refresh response carries one', async () => {
+        mockRedisSet.mockResolvedValueOnce('OK');
+        mockGetStoreById.mockResolvedValueOnce({
+            id: 'store-zid',
+            tokenExpiresAt: futureDate(60 * 60 * 1000),
+            refreshToken: 'encrypted-refresh',
+            refreshTokenIv: 'iv123',
+        });
+        mockFetch.mockResolvedValueOnce(makeResponse(200, {
+            access_token: 'new-manager-token',
+            refresh_token: 'new-refresh',
+            expires_in: 31536000,
+            Authorization: 'rotated-authorization-jwt',
+        }));
+        mockUpdateStoreTokens.mockResolvedValueOnce(undefined);
+
+        await refreshAccessToken('store-zid', { ...testConfig, platform: 'zid' });
+
+        expect(mockUpdateStoreTokens).toHaveBeenCalledWith('store-zid', expect.objectContaining({
+            accessToken: 'new-manager-token',
+            refreshToken: 'new-refresh',
+            authorizationToken: 'rotated-authorization-jwt',
+        }));
+    });
+
+    it('leaves authorizationToken undefined when the refresh response omits the field (stored pair not clobbered)', async () => {
+        mockRedisSet.mockResolvedValueOnce('OK');
+        mockGetStoreById.mockResolvedValueOnce({
+            id: 'store-zid',
+            tokenExpiresAt: futureDate(60 * 60 * 1000),
+            refreshToken: 'encrypted-refresh',
+            refreshTokenIv: 'iv123',
+        });
+        mockFetch.mockResolvedValueOnce(makeResponse(200, {
+            access_token: 'new-manager-token',
+            refresh_token: 'new-refresh',
+            expires_in: 31536000,
+        }));
+        mockUpdateStoreTokens.mockResolvedValueOnce(undefined);
+
+        await refreshAccessToken('store-zid', { ...testConfig, platform: 'zid' });
+
+        const tokens = mockUpdateStoreTokens.mock.calls[0][1] as { authorizationToken?: string };
+        // updateStoreTokens only overwrites the stored pair when a value is supplied.
+        expect(tokens.authorizationToken).toBeUndefined();
     });
 
     it('always releases the Redis lock even when refresh fails', async () => {
@@ -361,6 +410,60 @@ describe('ensureValidToken', () => {
     it('throws when store is not found', async () => {
         mockGetStoreById.mockResolvedValueOnce(null);
         await expect(ensureValidToken('missing', testConfig)).rejects.toThrow('Store not found');
+    });
+});
+
+describe('resolveStoreCredentialPair / resolveStoreAccessToken', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockRedisDel.mockResolvedValue(1);
+    });
+
+    const activeStore = (overrides: Record<string, unknown> = {}) => ({
+        id: 'store-1',
+        isActive: true,
+        tokenExpiresAt: null, // no expiry → no refresh attempt
+        accessToken: 'enc-access',
+        accessTokenIv: 'iv-a',
+        ...overrides,
+    });
+
+    it('returns the decrypted pair including the Zid authorizationToken when stored', async () => {
+        // ensureValidToken + the post-refresh re-read both call getStoreById.
+        mockGetStoreById.mockResolvedValue(activeStore({
+            authorizationToken: 'enc-auth',
+            authorizationTokenIv: 'iv-z',
+        }));
+
+        const pair = await resolveStoreCredentialPair('store-1', testConfig);
+
+        // The shared crypto mock decrypts everything to the same plaintext — presence
+        // of BOTH fields is what this asserts, not the plaintext values.
+        expect(pair).toEqual({
+            accessToken: 'decrypted-refresh-token',
+            authorizationToken: 'decrypted-refresh-token',
+        });
+    });
+
+    it('returns authorizationToken: undefined for single-credential (Salla) stores', async () => {
+        mockGetStoreById.mockResolvedValue(activeStore({ authorizationToken: null, authorizationTokenIv: null }));
+
+        const pair = await resolveStoreCredentialPair('store-1', testConfig);
+
+        expect(pair?.accessToken).toBe('decrypted-refresh-token');
+        expect(pair?.authorizationToken).toBeUndefined();
+    });
+
+    it('returns null for an inactive store', async () => {
+        mockGetStoreById.mockResolvedValue(activeStore({ isActive: false }));
+
+        expect(await resolveStoreCredentialPair('store-1', testConfig)).toBeNull();
+    });
+
+    it('resolveStoreAccessToken delegates to the pair resolver', async () => {
+        mockGetStoreById.mockResolvedValue(activeStore());
+
+        expect(await resolveStoreAccessToken('store-1', testConfig)).toBe('decrypted-refresh-token');
     });
 });
 

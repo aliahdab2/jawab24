@@ -6,6 +6,7 @@ import { db } from '../db';
 import { subscriptions, users, plans, stripeWebhookEvents } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { config } from '../config';
+import { isShopifyBilled } from '../config/shopifyBilling';
 import { captureError } from '../utils/sentryHelpers';
 import { isSanctionedGeo } from '../utils/sanctions';
 import { shouldBlockUnknownGeo } from '../middleware/geo';
@@ -17,6 +18,26 @@ import { dispatchStripeEvent } from './paymentWebhookHandlers';
 // Type for authenticated requests
 interface AuthenticatedRequest extends FastifyRequest {
     user?: { userId: string; isAdmin?: boolean };
+}
+
+/**
+ * Shopify-billed accounts must never reach a Stripe surface (D-G): Shopify
+ * forbids off-platform billing for App Store installs, and a second live
+ * subscription would double-bill the merchant. The canceled-mirror exemption
+ * lives inside isShopifyBilled — a merchant who uninstalled the Shopify app is
+ * free to come back through Stripe. Returns true (and sends the 400) when the
+ * caller must stop.
+ */
+async function rejectIfShopifyBilled(userId: string, reply: FastifyReply): Promise<boolean> {
+    const sub = await subscriptionsService.getUserSubscription(userId);
+    if (sub && isShopifyBilled(sub)) {
+        reply.status(400).send({
+            error: 'Billing for this account is managed in Shopify admin',
+            code: 'SHOPIFY_BILLED',
+        });
+        return true;
+    }
+    return false;
 }
 
 export class PaymentController {
@@ -33,6 +54,8 @@ export class PaymentController {
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
+
+            if (await rejectIfShopifyBilled(userId, reply)) return;
 
             // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
 
@@ -197,6 +220,8 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
+            if (await rejectIfShopifyBilled(userId, reply)) return;
+
             // SANCTIONS CHECK
 
             if (request.geo && isSanctionedGeo(request.geo)) {
@@ -319,6 +344,14 @@ export class PaymentController {
                 request.log.warn({ userId, geo: request.geo }, 'Top-up blocked: unknown geo');
                 return reply.status(403).send({ error: 'Unable to process payment at this time', code: 'GEO_VERIFICATION_REQUIRED' });
             }
+
+            // D-G covers EVERY Stripe surface, not just subscriptions: a top-up
+            // is a Stripe charge beside Shopify billing — the exact off-platform
+            // billing Shopify forbids for App Store installs. The hidden CTA is
+            // the friendly layer; this is the enforcement. Runs AFTER the free
+            // in-memory gates (kill-switch, geo) — it is the only check here
+            // that costs a DB read.
+            if (await rejectIfShopifyBilled(userId, reply)) return;
 
             const pack = request.body.pack;
             const packConfig = pack ? config.topup.packs[pack as TopupPack] : undefined;
@@ -503,6 +536,8 @@ export class PaymentController {
 
             // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
 
+            if (await rejectIfShopifyBilled(userId, reply)) return;
+
             // Check if geo is sanctioned
             if (request.geo && isSanctionedGeo(request.geo)) {
                 request.log.warn({
@@ -626,6 +661,11 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
+            // D-G: a shopify row's externalSubscriptionId is an AppSubscription
+            // GID — passing it to stripeService.cancelSubscription is a
+            // guaranteed Stripe error. Cancellation lives in Shopify admin.
+            if (await rejectIfShopifyBilled(userId, reply)) return;
+
             // Get subscription
             const [subscription] = await db
                 .select()
@@ -667,6 +707,11 @@ export class PaymentController {
             if (!userId) {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
+
+            // D-G: the Stripe portal would open against a stale/foreign Stripe
+            // customer for a shopify-billed account. Plan management lives in
+            // Shopify admin.
+            if (await rejectIfShopifyBilled(userId, reply)) return;
 
             // SANCTIONS CHECK: Block billing portal access for sanctioned jurisdictions
 

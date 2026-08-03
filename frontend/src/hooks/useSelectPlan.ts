@@ -50,6 +50,21 @@ export function useSelectPlan({ plans, usage, billingInterval = 'month' }: UseSe
       return;
     }
 
+    // Shopify-billed workspaces manage their plan inside Shopify admin (D-G):
+    // Shopify forbids off-platform billing for App Store installs, so EVERY
+    // Stripe path below (hosted checkout, /checkout, in-place changePlan) is
+    // off-limits — route to the admin deep link instead. The backend enforces
+    // the same rule (code SHOPIFY_BILLED); this is the friendly layer.
+    if (usage?.subscription?.paymentMethod === 'shopify') {
+      const manageUrl = usage.subscription.shopifyManageUrl;
+      if (manageUrl) {
+        await openExternalUrl(manageUrl);
+      } else {
+        toast.info(tPricing('shopifyManagedToast'));
+      }
+      return;
+    }
+
     // On native (Android/iOS), hand off to Stripe-HOSTED checkout.
     //
     // Store policy prohibits in-app purchases via Stripe, so payment always

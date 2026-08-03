@@ -170,6 +170,30 @@ describe('validateEnv', () => {
         await expect(import('../../src/utils/env')).rejects.toThrow('ZID_WEBHOOK_SECRET');
     });
 
+    it('should throw in production when ZID_CLIENT_ID is set but ZID_APP_ID is missing (webhook subscriptions need original_id)', async () => {
+        process.env = {
+            ...prodEnv,
+            ZID_CLIENT_ID: 'zid-client',
+            ZID_WEBHOOK_SECRET: 'z'.repeat(16),
+            ECOMMERCE_TOKEN_ENCRYPTION_KEY: 'c'.repeat(32),
+        };
+
+        await expect(import('../../src/utils/env')).rejects.toThrow('ZID_APP_ID');
+    });
+
+    it('should accept production Zid config when webhook secret AND app id are both set', async () => {
+        process.env = {
+            ...prodEnv,
+            ZID_CLIENT_ID: 'zid-client',
+            ZID_WEBHOOK_SECRET: 'z'.repeat(16),
+            ZID_APP_ID: '4321',
+            ECOMMERCE_TOKEN_ENCRYPTION_KEY: 'c'.repeat(32),
+        };
+
+        const mod = await import('../../src/utils/env');
+        expect(mod.env.ZID_APP_ID).toBe('4321');
+    });
+
     it('should throw in production when Stripe is configured but STRIPE_WEBHOOK_SECRET is missing', async () => {
         process.env = { ...prodEnv, STRIPE_SECRET_KEY: 'sk_live_123' };
 

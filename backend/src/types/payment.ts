@@ -31,6 +31,11 @@ export interface SubscriptionStatus {
     currentPeriodEnd: Date;
     cancelAtPeriodEnd: boolean;
     trialEndsAt?: Date;
+    // Billing-rail data (paymentMethod / shopifyManageUrl) deliberately lives
+    // on GET /subscription/usage ONLY — the one contract the frontend consumes
+    // (getUsageSummary is the choke point for the D-G suppression rules). If
+    // this endpoint ever needs it, mirror that assembled contract; never
+    // expose raw deep-link parts for clients to assemble.
 }
 
 export interface StripeWebhookEvent {

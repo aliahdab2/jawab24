@@ -4,8 +4,10 @@
  * New webhook topics (e.g. Shopify's `fulfillments/update`, added for delivery
  * notifications) are only subscribed at install/claim time. Stores connected
  * before the topic was added never receive it until they re-register. Run this
- * once after deploying a topic change; it is idempotent — Shopify returns 422
- * for an already-registered topic, which registerWebhooks treats as success.
+ * once after deploying a topic change; it is idempotent — Shopify registration
+ * is a GraphQL list-then-upsert (matching subscriptions are skipped, drifted
+ * callback URLs updated in place), and Salla/Zid treat already-registered
+ * topics as success.
  *
  * Usage:
  *   npx ts-node scripts/reregister-webhooks.ts [platform]   # shopify | salla | zid

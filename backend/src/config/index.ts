@@ -209,6 +209,11 @@ export const config = {
         scopes: 'read_products,read_content,read_orders,read_fulfillments,read_inventory',
         hostName: process.env.SHOPIFY_HOST_NAME || '',
         tokenEncryptionKey: process.env.SHOPIFY_TOKEN_ENCRYPTION_KEY || '',
+        // The app's URL handle on the Shopify App Store — the {app_handle} segment of
+        // the merchant-facing plan-management deep link
+        // (https://admin.shopify.com/store/{store}/charges/{app_handle}/pricing_plans).
+        // Known once the listing exists; empty = frontend hides the deep link.
+        appHandle: process.env.SHOPIFY_APP_HANDLE || '',
     },
 
     // Salla App (disabled until credentials are set)
@@ -243,8 +248,15 @@ export const config = {
     zid: {
         clientId: process.env.ZID_CLIENT_ID || '',
         clientSecret: process.env.ZID_CLIENT_SECRET || '',
+        // Zid Partner "Application ID" — the webhook subscription body's original_id
+        // (a per-app identifier distinct from the OAuth client id).
+        appId: process.env.ZID_APP_ID || '',
         hostName: process.env.ZID_HOST_NAME || '',
+        // Basic-auth PASSWORD for webhook deliveries (username is the fixed
+        // ZID_WEBHOOK_BASIC_USER constant) — Zid has no HMAC signature header.
         webhookSecret: process.env.ZID_WEBHOOK_SECRET || '',
+        // Provisional scope names — confirm against the real scope list shown at
+        // Zid Partner app creation before going live (docs never publish them).
         scopes: 'offline_access products.read orders.read webhooks.manage',
     },
 

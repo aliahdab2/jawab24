@@ -1,4 +1,4 @@
-import { normalizeArabic } from '@jawab24/shared';
+import { normalizeArabic, dayOrderIndex, DAY_LABELS_EN, DAY_LABELS_AR } from '@jawab24/shared';
 
 export interface KbChunk {
     type: 'offering' | 'policy' | 'faq' | 'info' | 'hours' | 'location' | 'contact' | 'product';
@@ -234,12 +234,17 @@ export function chunkBusinessProfile(profile: Record<string, unknown>): KbChunk[
     // Hours chunk
     if (profile.hours && typeof profile.hours === 'object') {
         const hoursObj = profile.hours as Record<string, string[]>;
-        const dayNames: Record<string, string> = {
-            mon: 'Monday/الإثنين', tue: 'Tuesday/الثلاثاء', wed: 'Wednesday/الأربعاء',
-            thu: 'Thursday/الخميس', fri: 'Friday/الجمعة', sat: 'Saturday/السبت', sun: 'Sunday/الأحد',
+        // Bilingual label per day; lowercase lookup so long/cased keys resolve
+        // just like they sort. Unknown keys render raw.
+        const labelFor = (day: string): string => {
+            const k = day.trim().toLowerCase();
+            return DAY_LABELS_EN[k] ? `${DAY_LABELS_EN[k]}/${DAY_LABELS_AR[k]}` : day;
         };
+        // Saturday-first (CLDR week order for our markets); unknown keys keep
+        // their insertion order at the end rather than being dropped.
         const lines = Object.entries(hoursObj)
-            .map(([day, slots]) => `${dayNames[day] || day}: ${(slots as string[]).join(', ')}`)
+            .sort(([a], [b]) => dayOrderIndex(a) - dayOrderIndex(b))
+            .map(([day, slots]) => `${labelFor(day)}: ${(slots as string[]).join(', ')}`)
             .join('\n');
         if (lines) {
             chunks.push({

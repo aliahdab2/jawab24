@@ -399,6 +399,45 @@ describe('WorkspaceSettingsService', () => {
             const msg = await service.getAwayMessage(WS_ID, 'en');
             expect(msg).toContain('away');
         });
+
+        // The permanent-off branch (messagesAutoReply=false) passes allowDefault:false —
+        // a merchant who switched DMs off never authored the shipped default and the UI
+        // gates the field behind Business Hours, so it must never speak for them.
+        it('returns null instead of the shipped default when allowDefault is false', async () => {
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                awayMessageMulti: {},
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'en',
+            }));
+
+            expect(await service.getAwayMessage(WS_ID, 'en', { allowDefault: false })).toBeNull();
+        });
+
+        it('still returns merchant-authored text when allowDefault is false', async () => {
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                awayMessageMulti: { ar: 'مغلقون للجرد السنوي' },
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'ar',
+            }));
+
+            expect(await service.getAwayMessage(WS_ID, 'ar', { allowDefault: false }))
+                .toBe('مغلقون للجرد السنوي');
+        });
+
+        // sourceLang is bookkeeping, not copy. Before pickMultilingualText excluded it,
+        // an all-languages-cleared record {ar:'', en:'', sourceLang:'manual'} made the
+        // any-other-language fallback send the literal string "manual" to a customer.
+        it('never leaks the sourceLang bookkeeping key as the away text', async () => {
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                awayMessageMulti: { ar: '', en: '', sourceLang: 'manual' },
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'en',
+            }));
+
+            expect(await service.getAwayMessage(WS_ID, 'en', { allowDefault: false })).toBeNull();
+            // With defaults allowed, it falls through to the shipped default — not "manual".
+            expect(await service.getAwayMessage(WS_ID, 'en')).toContain('away');
+        });
     });
 
     // ── getGreetingMessage ────────────────────────────────────────────────
@@ -419,6 +458,16 @@ describe('WorkspaceSettingsService', () => {
                 greetingMessageMulti: {},
                 autoDetectLanguage: true,
                 defaultReplyLanguage: 'ar',
+            }));
+
+            expect(await service.getGreetingMessage(WS_ID, 'en')).toBeNull();
+        });
+
+        it('never leaks the sourceLang bookkeeping key as the greeting text', async () => {
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                greetingMessageMulti: { ar: '', en: '', sourceLang: 'default' },
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'en',
             }));
 
             expect(await service.getGreetingMessage(WS_ID, 'en')).toBeNull();

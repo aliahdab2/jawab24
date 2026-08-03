@@ -198,6 +198,83 @@ describe('CommentProcessor', () => {
         expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.success']).toBe(1);
     });
 
+    describe('exhausted self-identification strip (8c-bis)', () => {
+        // Mirror of the DM pipeline's 12c-bis test. Check 6 stripped every
+        // sentence (all reveal talk), so the validator returns an EMPTY reply
+        // carrying `self_identification_exhausted` rather than substituting a
+        // canned identity line that answered "who are you?" whatever the
+        // customer asked (prod, Jawab24 page, 2026-08-01).
+        beforeEach(() => {
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: '',
+                replyMethod: 'ai',
+                needsAttention: true,
+                flagReason: 'self_identification_stripped,self_identification_exhausted',
+                aiIntent: 'QUESTION',
+            } as never);
+        });
+
+        it('withholds the reply and flags the comment — never reaches the adapter fallback', async () => {
+            // Ordering is the point: step 9's `getFallbackReply()` would swap in
+            // canned text, which is the exact failure mode this exists to remove.
+            const adapter = createMockAdapter({
+                getFallbackReply: vi.fn().mockReturnValue('Thanks for reaching out!'),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'platform-page-1', 'content-1', 'comment-1', 'موقعكم الالكتروني', 'user-1', 'Alice',
+            );
+
+            expect(result.success).toBe(true);
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(adapter.getFallbackReply).not.toHaveBeenCalled();
+            // Flagged, NOT markAsReplied('') — the public comment is genuinely
+            // unanswered, and the pre-strip text is the automation reveal itself.
+            expect(adapter.flagComment).toHaveBeenCalledWith(
+                'comment-uuid', 'held_self_identification', 'QUESTION',
+            );
+            expect(adapter.markAsReplied).not.toHaveBeenCalled();
+            expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+                'test_workspace_id',
+                'flagged_reply',
+                expect.objectContaining({ reason: 'held_self_identification' }),
+                expect.objectContaining({ commentId: 'comment-uuid' }),
+            );
+            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.held_self_identification']).toBe(1);
+        });
+
+        it('takes precedence over the low-confidence hold — no empty draft for review', async () => {
+            // 8d would store `held_low_confidence` with aiOriginalReply = '',
+            // handing the merchant a review affordance containing nothing.
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+                id: 'settings-uuid',
+                userId: 'user-uuid',
+                aiEnabled: true,
+                commentsAutoReply: true,
+                replyDelay: 0,
+                holdLowConfidence: true,
+            } as never);
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: '',
+                replyMethod: 'ai',
+                needsAttention: true,
+                flagReason: 'self_identification_stripped,self_identification_exhausted,low_confidence',
+                aiIntent: 'QUESTION',
+                confidence: 'low',
+            } as never);
+
+            const adapter = createMockAdapter();
+            await commentProcessor.processComment(
+                adapter, 'platform-page-1', 'content-1', 'comment-1', 'موقعكم الالكتروني', 'user-1', 'Alice',
+            );
+
+            expect(adapter.flagComment).toHaveBeenCalledWith(
+                'comment-uuid', 'held_self_identification', 'QUESTION',
+            );
+            expect(adapter.markAsReplied).not.toHaveBeenCalled();
+        });
+    });
+
     it('should return error when page not found', async () => {
         const adapter = createMockAdapter({
             getPage: vi.fn().mockResolvedValue(null),

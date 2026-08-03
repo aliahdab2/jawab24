@@ -4,6 +4,7 @@ import { Card, Toggle, InputFieldWrapper, CharCounter } from '@/components/ui';
 import { MessageSquareOff } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { getLocaleDirection } from '@/utils/locale';
+import { useMultilingualSettingsField } from '@/hooks/useMultilingualSettingsField';
 import type { SettingsCardProps } from './types';
 
 /**
@@ -20,17 +21,14 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
   const t = useTranslations('settings');
 
   const enabled = settings.limitFallbackEnabled;
-  const currentLang = settings.dashboardLanguage;
-  const value = settings.limitFallbackMessageMulti?.[currentLang] || '';
-  const sourceLang = settings.limitFallbackMessageMulti?.sourceLang;
-  const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+  const field = useMultilingualSettingsField(settings.limitFallbackMessageMulti);
+  const { currentLang, value, isAutoTranslated } = field;
   const displayValue = isAutoTranslated ? '' : value;
   const placeholder = isAutoTranslated && value ? value : t('limitFallbackMessagePlaceholder');
   const maxChars = MAX_TEMPLATE_MESSAGE_LENGTH;
   const charCount = displayValue.length;
 
-  const hasAnyValue = Object.entries(settings.limitFallbackMessageMulti || {})
-    .some(([k, v]) => k !== 'sourceLang' && typeof v === 'string' && v.trim().length > 0);
+  const hasAnyValue = field.hasAnyContent;
 
   return (
     <Card className="border-none shadow-lg shadow-theme-border/50 p-4 landscape:p-3 h-full flex flex-col">
@@ -85,15 +83,7 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
           value={displayValue}
           disabled={!enabled}
           onChange={(e) => {
-            const newValue = e.target.value;
-            setSettings({
-              ...settings,
-              limitFallbackMessageMulti: {
-                ...settings.limitFallbackMessageMulti,
-                [currentLang]: newValue,
-                sourceLang: currentLang,
-              },
-            });
+            setSettings({ ...settings, limitFallbackMessageMulti: field.withValue(e.target.value) });
           }}
         />
       </InputFieldWrapper>

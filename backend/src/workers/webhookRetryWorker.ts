@@ -46,6 +46,8 @@ async function processJob(job: Job<WebhookRetryJobData>): Promise<void> {
         storeDomain: store.storeDomain,
         accessToken: store.accessToken,
         accessTokenIv: store.accessTokenIv,
+        authorizationToken: store.authorizationToken,
+        authorizationTokenIv: store.authorizationTokenIv,
     });
     await saveWebhookStatus(storeId, status);
     if (status.failed.length > 0) {

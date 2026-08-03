@@ -318,16 +318,29 @@ export class WorkspaceSettingsService {
 
     /**
      * Get the away message in the best language for the customer.
+     *
+     * `allowDefault: false` (the messagesAutoReply=false branch) returns only
+     * merchant-authored text — never the shipped DEFAULT_AWAY_MESSAGE. A merchant
+     * who switched DM auto-reply off never wrote, and cannot even edit, that
+     * default (the settings field is gated behind the Business Hours toggle), so
+     * sending it puts words in their mouth — «خارج أوقات العمل» went out on a
+     * pharmacy's page at 09:05 with no business hours configured (2026-08-01).
+     * The default remains correct for the business-hours branch, where the
+     * closure is temporary and the wording is true.
      */
-    async getAwayMessage(workspaceId: string, detectedLanguage?: string): Promise<string | null> {
+    async getAwayMessage(
+        workspaceId: string,
+        detectedLanguage?: string,
+        opts: { allowDefault?: boolean } = {},
+    ): Promise<string | null> {
+        const { allowDefault = true } = opts;
         const settings = await this.getSettings(workspaceId);
         const preferred = this.resolveLanguage(settings, detectedLanguage);
 
-        const multi = settings.awayMessageMulti || {};
-        const primary = multi[preferred];
-        const fallback = Object.values(multi).find(v => v && v !== primary) ?? null;
+        const authored = this.pickMultilingualText(settings.awayMessageMulti, preferred);
+        if (authored) return authored;
 
-        return primary || fallback || DEFAULT_AWAY_MESSAGE[preferred] || DEFAULT_AWAY_MESSAGE['en'];
+        return allowDefault ? DEFAULT_AWAY_MESSAGE[preferred] || DEFAULT_AWAY_MESSAGE['en'] : null;
     }
 
     /**
@@ -337,9 +350,26 @@ export class WorkspaceSettingsService {
         const settings = await this.getSettings(workspaceId);
         const preferred = this.resolveLanguage(settings, detectedLanguage);
 
-        const multi = settings.greetingMessageMulti || {};
-        const primary = multi[preferred];
-        const fallback = Object.values(multi).find(v => v && v !== primary) ?? null;
+        return this.pickMultilingualText(settings.greetingMessageMulti, preferred);
+    }
+
+    /**
+     * Resolve a `*Multi` record to the preferred language's text, falling back to
+     * any other language that has content.
+     *
+     * The record carries a `sourceLang` bookkeeping key ('ar' | 'en' | 'manual' |
+     * 'default') alongside the language entries. It MUST be excluded before the
+     * any-other-language fallback scans values — with every language cleared but
+     * `sourceLang` present, the previous inline `Object.values(multi).find(...)`
+     * would have sent the literal string "manual" to a customer.
+     */
+    private pickMultilingualText(
+        multi: Record<string, string> | null | undefined,
+        preferred: string,
+    ): string | null {
+        const { sourceLang: _sourceLang, ...langs } = multi || {};
+        const primary = langs[preferred];
+        const fallback = Object.values(langs).find(v => v && v !== primary) ?? null;
 
         return primary || fallback || null;
     }
@@ -353,15 +383,7 @@ export class WorkspaceSettingsService {
         const settings = await this.getSettings(workspaceId);
         const preferred = this.resolveLanguage(settings, detectedLanguage);
 
-        const multi = settings.limitFallbackMessageMulti || {};
-        const primary = multi[preferred];
-        // Skip the `sourceLang` metadata key — handleSmartTranslation stores it
-        // alongside language entries, so a naive Object.values() can leak it
-        // (e.g. returning the literal "en" string) when only that key is set.
-        const fallback = Object.entries(multi)
-            .find(([k, v]) => k !== 'sourceLang' && v && v !== primary)?.[1] ?? null;
-
-        return primary || fallback || null;
+        return this.pickMultilingualText(settings.limitFallbackMessageMulti, preferred);
     }
 
     /**

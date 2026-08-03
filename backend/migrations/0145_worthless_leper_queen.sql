@@ -1,1 +1,0 @@
-ALTER TABLE "fact_rows" ADD COLUMN "structured" jsonb;

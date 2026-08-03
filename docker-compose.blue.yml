@@ -53,9 +53,19 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      # Every NEXT_PUBLIC_* ARG the Dockerfile declares MUST be listed here.
+      # Next.js inlines these at BUILD time, so an omitted arg is compiled to
+      # `undefined` and the feature dies silently in the image — it cannot be
+      # repaired by env_file at runtime. `frontend`, `frontend-blue` and
+      # `frontend-green` all tag jawab24-frontend:latest, so the lists must be
+      # identical; pinned by frontend/test/deployBuildArgs.test.ts.
       args:
         - NEXT_PUBLIC_FB_APP_ID=${NEXT_PUBLIC_FB_APP_ID:-}
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://jawab24.com/api}
+        - NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=${NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION:-}
+        - NEXT_PUBLIC_GA_ID=${NEXT_PUBLIC_GA_ID:-}
+        - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
+        - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}
         - NEXT_PUBLIC_WHATSAPP_CONFIG_ID=${NEXT_PUBLIC_WHATSAPP_CONFIG_ID:-}
         - NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY=${NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY:-}
         - NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT=${NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT:-}

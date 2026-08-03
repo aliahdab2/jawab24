@@ -1,6 +1,7 @@
 import { config } from '../config';
 import { t } from './i18n';
 import { escapeHtml } from './htmlUtils';
+import { formatDateTimeShort } from './formatDate';
 
 /**
  * Detect if text is primarily Arabic/RTL script.
@@ -220,7 +221,7 @@ export function subscriptionWelcomeEmailTemplate(params: {
     const signoff = t('subscriptionWelcomeSignoff', lang);
 
     const trialBlock = trialEndsAt
-        ? `<p style="margin:0 0 16px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${t('subscriptionWelcomeTrialNote', lang).replace(/\{trialEnd\}/g, escapeHtml(formatDigestDate(trialEndsAt, lang)))}</p>`
+        ? `<p style="margin:0 0 16px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${t('subscriptionWelcomeTrialNote', lang).replace(/\{trialEnd\}/g, escapeHtml(formatDateTimeShort(trialEndsAt, lang)))}</p>`
         : '';
 
     const html = emailShell({
@@ -238,6 +239,58 @@ export function subscriptionWelcomeEmailTemplate(params: {
                 <a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">${ctaLabel}</a>
               </p>
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${billing}</p>
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+    });
+
+    return { subject, html };
+}
+
+/**
+ * Trial-ending reminder — sent by the daily cron three days before
+ * `subscriptions.trial_ends_at` (see services/trialReminders.ts).
+ *
+ * `trialEndLabel` arrives pre-formatted from the caller because the same label
+ * is also used in the in-app notification body; formatting it once there keeps
+ * the two channels from drifting apart.
+ */
+export function trialEndingEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    name: string;
+    trialEndLabel: string;
+    pricingUrl: string;
+}): { subject: string; html: string } {
+    const { lang, name, trialEndLabel, pricingUrl } = params;
+    const rtl = lang === 'ar';
+    const fontFamily = rtl ? RTL_FONT_STACK : LTR_FONT_STACK;
+    const align = rtl ? 'right' : 'left';
+
+    // Same escaping contract as the welcome email: translations are static,
+    // markup-free strings we control; only the caller-supplied values are escaped.
+    const escName = escapeHtml(name);
+    const escTrialEnd = escapeHtml(trialEndLabel);
+
+    const subject = t('trialEndingSubject', lang, { trialEnd: trialEndLabel });
+    const heading = t('trialEndingHeading', lang);
+    const intro = t('trialEndingIntro', lang)
+        .replace(/\{name\}/g, escName)
+        .replace(/\{trialEnd\}/g, escTrialEnd);
+    const whatHappens = t('trialEndingWhatHappens', lang);
+    const ctaLabel = t('trialEndingCta', lang);
+    const signoff = t('trialEndingSignoff', lang);
+
+    const html = emailShell({
+        lang,
+        dir: rtl ? 'rtl' : 'ltr',
+        bodyFontFamily: fontFamily,
+        title: subject,
+        preheader: intro,
+        bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+              <p style="margin:0 0 16px 0;">${intro}</p>
+              <p style="margin:0 0 24px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${whatHappens}</p>
+              <p style="margin:0 0 24px 0;text-align:center;">
+                <a href="${escapeHtml(pricingUrl)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">${ctaLabel}</a>
+              </p>
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
     });
 
@@ -318,16 +371,6 @@ export interface LeadDigestRow {
 
 const DIGEST_MAX_ROWS = 20;
 
-function formatDigestDate(d: Date, lang: 'ar' | 'en'): string {
-    try {
-        return new Intl.DateTimeFormat(lang === 'ar' ? 'ar' : 'en', {
-            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-        }).format(d);
-    } catch {
-        return d.toISOString().slice(0, 16).replace('T', ' ');
-    }
-}
-
 export function leadDigestEmailTemplate(params: {
     lang: 'ar' | 'en';
     leadCount: number;
@@ -372,7 +415,7 @@ export function leadDigestEmailTemplate(params: {
         const phone = escapeHtml(lead.phone);
         const reason = escapeHtml(lead.summary?.trim() || noSummary);
         const source = escapeHtml(lead.sourceType === 'comment' ? srcCmt : srcMsg);
-        const date = escapeHtml(formatDigestDate(lead.createdAt, lang));
+        const date = escapeHtml(formatDateTimeShort(lead.createdAt, lang));
         return `<tr class="ld-row">
           <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;word-break:break-word;">${mobileLabel(lblName)}${name}</td>
           <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;" dir="ltr">${mobileLabel(lblPhone)}${phone}</td>

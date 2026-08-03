@@ -1,0 +1,1 @@
+ALTER TABLE "fact_rows" ADD COLUMN IF NOT EXISTS "structured" jsonb;

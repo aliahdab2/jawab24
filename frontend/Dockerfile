@@ -33,6 +33,32 @@ ENV NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ONLY=$NEXT_PUBLIC_WHATSAPP_CANARY_ADMIN_ON
 ENV NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT=$NEXT_PUBLIC_WHATSAPP_CONNECT_REDIRECT
 ENV NEXT_PUBLIC_APP_VERSION=$SEMANTIC_VERSION
 
+# Guard: a missing NEXT_PUBLIC_* has NO runtime repair.
+#
+# Next.js inlines these at `next build`, so an arg the caller forgot to pass is
+# constant-folded to `undefined` and the feature dies inside the image —
+# env_file at runtime cannot fix it. On 2026-08-02 the blue/green compose
+# overlays never passed NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, so
+# `getStripePromise()` compiled to `return null`, the PaymentElement could not
+# mount for ANY merchant, and checkout showed an empty payment section — with no
+# runtime error anywhere (NEXT_PUBLIC_SENTRY_DSN was missing from the same list,
+# so the frontend could not even report it).
+#
+# A missing payment key must break the BUILD, never production. Images that
+# genuinely have no key (local smoke builds) pass ALLOW_MISSING_PUBLIC_ENV=1.
+ARG ALLOW_MISSING_PUBLIC_ENV=
+RUN if [ -z "$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY" ] && [ "$ALLOW_MISSING_PUBLIC_ENV" != "1" ]; then \
+        echo "❌ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is empty — checkout would ship dead."; \
+        echo "   Pass it as a build arg (see docker-compose*.yml 'frontend*' services)"; \
+        echo "   and make sure it is set in env/frontend.env on the host."; \
+        echo "   For a build that intentionally has no payments: ALLOW_MISSING_PUBLIC_ENV=1"; \
+        exit 1; \
+    fi; \
+    for v in NEXT_PUBLIC_SENTRY_DSN NEXT_PUBLIC_GA_ID; do \
+        eval "val=\$$v"; \
+        [ -n "$val" ] || echo "⚠️  $v is empty — that surface will be dark in this image."; \
+    done
+
 # Copy source code
 COPY packages/shared ./packages/shared
 COPY frontend ./frontend

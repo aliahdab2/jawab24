@@ -1040,8 +1040,13 @@ class LeadExtractorService {
             // never the JSON structure. A whole-document ::text ILIKE would match
             // field keys and the bilingual label_en/label_ar strings present on
             // every card ("الاسم", "size", …), returning the entire list for common
-            // words. Legacy rows are double-encoded (a jsonb string holding JSON) —
-            // the CASE normalizes both encodings to an object before navigating;
+            // words. Legacy rows can be double-encoded (a jsonb string holding
+            // JSON — drizzle#724). Migration 0148 repaired stored rows, but a
+            // poison column skipped by its WARNING guard or a pre-0148 backup
+            // restore can still hold string rows, so the CASE stays as the
+            // read-side tolerance: it normalizes both encodings to an object
+            // before navigating. Remove it with db/jsonbColumn.ts in the
+            // drizzle-upgrade follow-up once prod verifies clean;
             // values compared via ->> are unescaped, so quotes/backslashes in a
             // value match exactly as shown on the card. Page-scoped over at most a
             // few thousand rows; no trigram index needed.

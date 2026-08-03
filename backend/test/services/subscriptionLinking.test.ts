@@ -10,7 +10,7 @@
  * webhook still returning success. One merchant paid $39 and stayed on his
  * signup trial; only 1 of 66 subscription rows was linked at all.
  */
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type Stripe from 'stripe';
 
 vi.mock('../../src/db', () => ({ db: { select: vi.fn(), update: vi.fn(), insert: vi.fn() } }));
@@ -49,19 +49,7 @@ import { adoptStripeSubscription, reconcileStripeSubscriptions } from '../../src
 import { db } from '../../src/db';
 import { stripeService } from '../../src/services/stripe';
 import { subscriptionsService } from '../../src/services/subscriptions';
-
-type QueryMock = Promise<unknown[]> & {
-    from: Mock; where: Mock; limit: Mock; orderBy: Mock; set: Mock; values: Mock;
-};
-function q(rows: unknown[]): QueryMock {
-    const p = Promise.resolve(rows) as QueryMock;
-    for (const m of ['from', 'where', 'limit', 'orderBy', 'set', 'values'] as const) {
-        p[m] = vi.fn(() => q(rows));
-    }
-    return p;
-}
-
-const mkLog = () => ({ info: vi.fn(), warn: vi.fn() });
+import { q, mkLog } from '../helpers/drizzleQueryMock';
 
 const paidSub = (over: Record<string, unknown> = {}) => ({
     id: 'sub_new',
@@ -252,5 +240,35 @@ describe('reconcileStripeSubscriptions', () => {
 
         expect(stripeService.listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
         expect(stripeService.listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ status: 'trialing' }));
+    });
+});
+
+describe('adoptStripeSubscription — D-H twin (Shopify mirror protection)', () => {
+    it('refuses to overwrite a live shopify-billed row and alerts Sentry', async () => {
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: 'shopify', status: 'active',
+        }]) as never);
+
+        await expect(adoptStripeSubscription(paidSub(), mkLog())).resolves.toBe(false);
+
+        expect(db.update).not.toHaveBeenCalled();
+        expect(db.insert).not.toHaveBeenCalled();
+        expect(mockCaptureError).toHaveBeenCalledWith(
+            expect.any(Error),
+            expect.stringContaining('Shopify mirror'),
+            expect.objectContaining({ fingerprint: ['stripe-adopt-refused-shopify-mirror'] }),
+        );
+    });
+
+    it('still adopts over a canceled shopify row — the merchant came back through Stripe', async () => {
+        const chain = q([]);
+        vi.mocked(db.select).mockReturnValue(q([{
+            id: 'row_1', paymentMethod: 'shopify', status: 'canceled',
+        }]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
+
+        await expect(adoptStripeSubscription(paidSub(), mkLog())).resolves.toBe(true);
+
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ paymentMethod: 'stripe' }));
     });
 });

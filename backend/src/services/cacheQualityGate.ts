@@ -58,9 +58,13 @@ const REJECT_FLAGS: readonly CacheRejectReason[] = [
     // who asks a similar question — the one failure mode worse than one bad reply.
     'reply_not_grounded',
     'language_mismatch',
-    // Check 6 swapped the reply (often to a generic self-id fallback) — caching
-    // that against the customer's actual question would serve the wrong answer
-    // for 30 days (#495 review L2).
+    // Check 6 mutated the reply (stripped the reveal sentence) — caching the
+    // trimmed remainder against the customer's actual question would serve a
+    // partial answer for 30 days (#495 review L2). This flag is ALSO what keeps
+    // an exhausted strip (reply stripped to empty) out of the caches: the save
+    // decision is made here, at generation time, well before the pipeline
+    // decides to withhold — so the hold is not what protects the cache, this
+    // entry is. Removing it would start caching empty replies.
     'self_identification_stripped',
 ];
 

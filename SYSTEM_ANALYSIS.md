@@ -69,11 +69,11 @@ Jawab24 is a **monorepo** with 3 services + 1 shared package:
 - Facebook Graph API (comments + DMs) — Live (App ID: 774211662298446)
 - Instagram Graph API (comments + DMs) — Live (all permissions approved 2026-04-07)
 - WhatsApp Cloud API (DMs) — **LIVE (GA)**: Meta approved the app 2026-07-26; Embedded Signup connect + voice/media + WhatsApp-only cards (no Facebook page; also = multi-number, one card per number w/ own Business Info) + manual inbox replies + read receipts/typing indicators. **Coexistence (D-045)**: at connect time the merchant chooses whether the number stays live on their WhatsApp Business app (Meta's `whatsapp_business_app_onboarding`) or moves to Jawab24; a reconnect always re-uses the stored path. Meta enforces the precondition — a number not registered in the Business app is refused at the phone-number step rather than silently migrated. ⛔ Meta bars businesses AND recipients in Cuba, Iran, North Korea, **Syria** and three sanctioned Ukrainian regions from the WhatsApp Business Platform entirely — Syrian merchants can never connect and Syrian customers can never receive replies; Libya is unrestricted. UI: the Pages screen is now "Channels" (قنوات التواصل). **Plan-gated (Business+)**: `plans.whatsapp_enabled` is true on business/pro/scale, false on starter (trial rides on starter → excluded) — enforced in `controllers/whatsapp.ts` on connect/connectNew/toggle-enable (403 `WHATSAPP_PLAN_REQUIRED`; disconnect/disable never gated, no retroactive disable on downgrade). Non-entitled plans see an upgrade CTA instead of Connect; the pricing/scale/checkout pages list WhatsApp (crossed-out on Starter) via `isWhatsAppMarketable()` (= config env set AND canary flag off). **Readiness-gated (all channels)**: enabling auto-reply on a page with no groundable Business Info is refused with 409 `BUSINESS_INFO_REQUIRED` (`services/businessReadiness.ts`) — a WhatsApp-only card is created empty (no FB page to seed it) and the client used to enable auto-reply straight after connect, putting an ungrounded AI in front of customers; disable is never gated. **Connect from the NATIVE app (v2.0.20, owner-verified 2026-07-31)** mirrors the shipped Facebook page-connect flow exactly, and must keep doing so: the onboarding-path question is asked in-app, `POST /auth/whatsapp/start {nativeApp:true}` mints the dialog URL, and `Browser.open()` takes the tab **straight to facebook.com** — routing it through a jawab24.com page first fails silently on real devices (three variants died: page-side `location.assign` in a Custom Tab and in an intent-opened Chrome tab, and a server 302). The return is the `/auth/app-sync` App Link, delivered as a **page whose script navigates** — a 302 to an App Link is not intercepted by Android. Because the nonce cookie cannot cross the WebView/browser jar boundary, app-minted states are **single-use** instead (`lib/singleUseKey`). Full pattern: AI_INSTRUCTIONS Rule 17b
-- Shopify API (products + policies)
+- Shopify API (products + policies; App Store installs billed via **Shopify App Pricing**, mirrored locally by verify-and-reconcile — D-054, `services/shopifyBilling.ts`)
 - Salla API (products + policies)
 - Zid API (products + policies — Saudi Arabia)
 - OpenAI API (reply generation + embeddings + translation)
-- Stripe API (subscriptions + billing; Embedded Checkout with PaymentElement, monthly + yearly billing intervals, Billing Portal for plan changes)
+- Stripe API (subscriptions + billing for direct jawab24.com customers; Embedded Checkout with PaymentElement, monthly + yearly billing intervals, Billing Portal for plan changes. **Not** the rail for Shopify App Store installs — those are Shopify-billed (D-054) and hard-blocked from every Stripe surface with 400 `SHOPIFY_BILLED`)
 - Vonage SMS API (e-commerce customer notifications only; phone-OTP auth + SMS team invites are retired/disabled — see Authentication Architecture)
 - Resend Email API (transactional emails — waitlist notifications, customer communications)
 
@@ -1124,9 +1124,9 @@ Top Products:
 
 | Platform | Status | OAuth | Token Expiry | Max Products | Webhook hardening |
 |----------|--------|-------|-------------|--------------|-------------------|
-| **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Full (retry incl. THROTTLED, exhaustion flag, manual reregister, frontend recovery UI) |
+| **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Full (retry incl. THROTTLED, exhaustion flag, manual reregister, frontend recovery UI). Billing: App Pricing mirror (D-054) — `syncShopifyBilling` + 6h reconciler; uninstall cancels the local sub |
 | **Salla** | Active | OAuth 2.0 (Custom + **Easy Mode**) | 14 days (auto-refresh, single-use refresh tokens) | REST, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Full (lifted to platform-agnostic in PR #27, 2026-05-07) |
-| **Zid** | ❌ Broken (rebuild pending) | OAuth 2.0 | — | — | ❌ Built against the wrong API contract; never round-tripped a real store. Surfaced as "coming soon" on the (admin-only) integrations page until rebuilt. See `docs/integrations/zid.md`, D-020 |
+| **Zid** | 🔧 Rebuilt — pending live validation (not user-facing) | OAuth 2.0 (dual-token: Bearer + X-Manager-Token) | ~1 year (auto-refresh) | REST, up to `PRODUCT_SAFETY_CAP` (5000) | ✅ Shares the platform-agnostic hardening; deliveries verified via timing-safe Basic auth (Zid sends no HMAC). Rebuilt 2026-08-01 against the docs.zid.sa-verified contract (D-053); still surfaced as "coming soon" until a real dev-store round-trip passes (D-020 gate). See `docs/integrations/zid.md` |
 
 **Salla Easy Mode** (required for the public App Store listing): published apps receive tokens via the server-to-server `app.store.authorize` webhook (the OAuth callback is never hit — Easy Mode drops the app's registered redirect URIs entirely, so the OAuth authorize endpoint 404s for it; proven live 2026-07-18, D-031). `controllers/salla.ts:handleStoreAuthorize` ingests/refreshes tokens idempotently; fresh installs stage a `merchantId`-keyed pending install (`pending_ecommerce_installs.merchant_id`, migration `0123`) that the merchant claims after login via `GET /salla/store/pending` + `POST /salla/store/claim` (landing page `frontend/src/pages/salla/connected.tsx`). The claim is bound by an **owner-email match** (D-031): the store's registered email, fetched live with the pushed token, must equal the logged-in user's (Facebook-verified) email — client-supplied ids never prove ownership. With Easy Mode live, `POST /salla/store/connect` redirects to the public listing (`SALLA_APP_STORE_URL`) instead of the dead OAuth URL. Custom Mode (OAuth redirect) is retained for dev.
 
@@ -1186,7 +1186,7 @@ Products synced from Shopify/Salla
 **المنصات المدعومة:**
 - **Shopify**: نشط، OAuth 2.0، التوكن لا ينتهي أبداً
 - **سلة (Salla)**: نشط، OAuth 2.0، التوكن ينتهي كل 14 يوم (تجديد تلقائي)
-- **زد (Zid)**: ❌ معطّل — بحاجة لإعادة بناء (مبني على تعاقد API خاطئ ولم يُختبر مع متجر حقيقي؛ راجع `docs/integrations/zid.md` وقرار D-020)
+- **زد (Zid)**: 🔧 أُعيد بناؤه وفق التعاقد الموثّق (2026-08-01) — بانتظار التحقق على متجر تجريبي حقيقي قبل الإتاحة للتجار (بوابة قرار D-020؛ راجع `docs/integrations/zid.md` وقرار D-053)
 
 ---
 
@@ -1720,7 +1720,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 
 | # | Gap | Severity | Impact |
 |---|-----|----------|--------|
-| 1 | Zid e-commerce broken (rebuild pending) | High | Adapter/service/controller exist but were built against the wrong Zid API (single auth header, non-existent event names, likely wrong endpoints); a merchant can't connect. Do not present as production-ready. Bug list + rebuild scope: `docs/integrations/zid.md`; ruling D-020 |
+| 1 | Zid rebuilt but unvalidated against a live store | Medium | The 2026-08-01 rebuild (D-053) replaced the broken auth/endpoint/webhook layer with the docs.zid.sa-verified contract, but payload-shape parsers are provisional until a real dev-store round-trip (Partner application fully submitted 2026-08-01 — app id 7367, dev store 3195980, agreement "In Review"; validation unblocks on Zid's approval). Stays "coming soon" / not user-facing until then (D-020 gate). Checklist: `docs/integrations/zid.md` |
 | ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` — **note**: `setInterval` doesn't survive process restart without external scheduler; acceptable for single-instance deploy |
 | ~~3~~ | ~~No voice input for KB~~ | ~~RESOLVED~~ | Voice recording via VoiceRecordButton.tsx — transcribed via GPT-4o-mini-transcribe before KB ingestion |
 | 4 | Single-language KB | Medium | Must mix both languages in one text |
@@ -1936,6 +1936,7 @@ These are tracked per pipeline (facebook_comment, instagram_comment, facebook_me
 | `send_failed` | Generated but failed to send | Error |
 | `skipped_risky` | Offensive/spam detected | Normal |
 | `held_low_confidence` | AI reply held for review | Normal |
+| `held_self_identification` | Check 6 stripped the whole reply — withheld for merchant review (always on) | Watch |
 | `error` | Unhandled error in pipeline | Error |
 
 ### AI Cost Tracking
@@ -2186,6 +2187,7 @@ The `analytics` service computes these from live tables (30-day window):
 | `send_failed` | فشل الإرسال | خطأ |
 | `skipped_risky` | محتوى مسيء/سبام | طبيعي |
 | `held_low_confidence` | محتجز للمراجعة | طبيعي |
+| `held_self_identification` | حُجِب الرد لأن الفحص السادس أزال كل جُمله — بانتظار مراجعة التاجر | مراقبة |
 | `error` | خطأ غير متوقع | خطأ |
 
 ### عتبات التنبيه المقترحة

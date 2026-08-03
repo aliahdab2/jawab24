@@ -491,6 +491,15 @@ function CheckoutPage() {
         return;
       }
 
+      // Shopify-billed workspaces must not reach Stripe (D-G) — the backend
+      // hard-blocks with this code (stale deep link / manual URL). Route the
+      // merchant back to /pricing, where the Shopify-managed banner and the
+      // admin deep link live.
+      if (errorData?.code === 'SHOPIFY_BILLED') {
+        router.replace('/pricing');
+        return;
+      }
+
       captureError(err, 'Checkout error', { tags: { page: 'checkout', action: 'create-session', mode: isTopup ? 'topup' : 'subscription' } });
 
       const axiosCode = (err as { code?: string }).code;

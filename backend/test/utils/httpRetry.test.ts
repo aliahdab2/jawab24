@@ -53,17 +53,57 @@ describe('ecommerceApiGet', () => {
         );
     });
 
-    it('sends custom auth header name (Zid X-MANAGER-TOKEN)', async () => {
+    it('sends Zid dual-header auth: default Authorization Bearer + extraHeaders (X-Manager-Token, Role)', async () => {
+        // Zid's Merchant API needs two credentials at once — the `Authorization`
+        // token via the default auth header, and the access token as X-Manager-Token
+        // (plus Role: Manager on products endpoints) via extraHeaders.
         mockFetch.mockResolvedValueOnce(makeResponse(200, {}));
-        await ecommerceApiGet('https://api.zid.sa/v1/products', {
+        await ecommerceApiGet('https://api.zid.sa/v1/products/?page_size=100&page=1', {
             platform: 'zid',
-            authHeaderName: 'X-MANAGER-TOKEN',
-            authHeaderValue: 'manager-token-xyz',
+            authHeaderValue: 'Bearer zid-authorization-jwt',
+            extraHeaders: {
+                'X-Manager-Token': 'manager-token-xyz',
+                'Role': 'Manager',
+            },
         });
         expect(mockFetch).toHaveBeenCalledWith(
-            'https://api.zid.sa/v1/products',
+            'https://api.zid.sa/v1/products/?page_size=100&page=1',
             expect.objectContaining({
-                headers: expect.objectContaining({ 'X-MANAGER-TOKEN': 'manager-token-xyz' }),
+                headers: expect.objectContaining({
+                    Authorization: 'Bearer zid-authorization-jwt',
+                    'X-Manager-Token': 'manager-token-xyz',
+                    Role: 'Manager',
+                }),
+            }),
+        );
+    });
+
+    it('merges extraHeaders on top of the defaults without dropping Authorization or Accept', async () => {
+        mockFetch.mockResolvedValueOnce(makeResponse(200, {}));
+        await ecommerceApiGet('https://api.example.com/things', {
+            platform: 'zid',
+            authHeaderValue: 'Bearer abc',
+            extraHeaders: { 'X-Custom': 'yes' },
+        });
+        const headers = (mockFetch.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+        expect(headers).toMatchObject({
+            Authorization: 'Bearer abc',
+            Accept: 'application/json',
+            'X-Custom': 'yes',
+        });
+    });
+
+    it('still supports a custom auth header name', async () => {
+        mockFetch.mockResolvedValueOnce(makeResponse(200, {}));
+        await ecommerceApiGet('https://api.example.com/custom', {
+            platform: 'salla',
+            authHeaderName: 'X-Api-Key',
+            authHeaderValue: 'key-123',
+        });
+        expect(mockFetch).toHaveBeenCalledWith(
+            'https://api.example.com/custom',
+            expect.objectContaining({
+                headers: expect.objectContaining({ 'X-Api-Key': 'key-123' }),
             }),
         );
     });

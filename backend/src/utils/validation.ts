@@ -101,7 +101,12 @@ export const BusinessProfileSchema = z.object({
     ).optional(),
     channels: z.object({
         preferred: z.enum(['dm', 'whatsapp', 'phone']).optional(),
-        whatsapp: z.string().max(50).optional(),
+        /** Legacy single string, or an array — any listed number can be on
+         *  WhatsApp independently. Same per-entry bounds as `phones`. */
+        whatsapp: z.union([
+            z.string().max(50),
+            z.array(z.string().min(3).max(40)).max(10),
+        ]).optional(),
     }).optional(),
     language_hint: z.enum(['ar', 'en', 'auto']).optional(),
     /** Stage 2.6 — free-text policy fields, ≤500 chars each. Empty strings

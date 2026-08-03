@@ -26,6 +26,12 @@ type CookieOptions = Parameters<FastifyReply['setCookie']>[2];
 export interface OAuthTokenResponse {
     accessToken: string;
     refreshToken?: string;
+    /**
+     * Zid only: the second credential from Zid's token response (`Authorization` field).
+     * Zid API calls need BOTH — access_token as X-Manager-Token AND this as
+     * `Authorization: Bearer`. Absent for Salla (single-token platforms).
+     */
+    authorizationToken?: string;
     expiresIn: number;
 }
 
@@ -50,10 +56,14 @@ export interface EcommerceControllerAdapter {
     // --- OAuth callback hooks (redirect-based platforms: Salla, Zid) ---
     /** Exchanges the authorization code for tokens. */
     exchangeCodeForToken: (code: string) => Promise<OAuthTokenResponse>;
-    /** Fetches store info (domain, name, currency, merchantId) using the access token. */
-    fetchStoreInfo: (accessToken: string) => Promise<OAuthStoreInfo>;
-    /** Registers the platform's webhooks for the just-connected store. */
-    registerWebhooks: (accessToken: string) => Promise<WebhookRegistrationResult>;
+    /** Fetches store info (domain, name, currency, merchantId) using the exchanged tokens. */
+    fetchStoreInfo: (tokens: OAuthTokenResponse) => Promise<OAuthStoreInfo>;
+    /**
+     * Registers the platform's webhooks for the just-connected store. Receives the full
+     * token response (Zid needs both credentials) and the new store's id (Zid embeds it
+     * in each subscription's target_url for deterministic webhook routing).
+     */
+    registerWebhooks: (tokens: OAuthTokenResponse, storeId: string) => Promise<WebhookRegistrationResult>;
     /** OAuth scopes string, persisted on the pending install. */
     scopes: string;
     /** Cookie name for the pending-install id (claim flow). */
@@ -109,7 +119,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
 
         try {
             const tokens = await adapter.exchangeCodeForToken(code);
-            const storeInfo = await adapter.fetchStoreInfo(tokens.accessToken);
+            const storeInfo = await adapter.fetchStoreInfo(tokens);
             const tokenExpiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
 
             const userId = tryGetUserId(request);
@@ -125,6 +135,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
                     storeDomain: storeInfo.storeDomain,
                     accessToken: tokens.accessToken,
                     refreshToken: tokens.refreshToken,
+                    authorizationToken: tokens.authorizationToken,
                     tokenExpiresAt,
                     shopInfo: {
                         shopName: storeInfo.storeName,
@@ -140,7 +151,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
                 await registerWebhooksWithPersist(
                     store.id,
                     platform,
-                    () => adapter.registerWebhooks(tokens.accessToken),
+                    () => adapter.registerWebhooks(tokens, store.id),
                 );
 
                 enqueueSyncJob(store.id, platform).catch(err => {
@@ -159,6 +170,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
                     storeDomain: storeInfo.storeDomain,
                     accessToken: tokens.accessToken,
                     refreshToken: tokens.refreshToken,
+                    authorizationToken: tokens.authorizationToken,
                     tokenExpiresAt,
                     scopes: adapter.scopes,
                     // Platform-initiated installs may omit state; the claim flow keys off

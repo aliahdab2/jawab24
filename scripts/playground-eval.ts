@@ -2,7 +2,7 @@
 /**
  * Automated Playground Evaluation Script
  *
- * Runs all 254 edge-case tests from docs/playground-edge-cases.md against the
+ * Runs all edge-case tests (defined inline in TEST_CASES below) against the
  * admin playground endpoint and outputs a score report.
  *
  * Prerequisites:
@@ -56,7 +56,7 @@ interface TestCase {
     categoryName: string;
     channel: 'comment' | 'dm';
     message: string;
-    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor';
+    page: 'training' | 'school' | 'electronics' | 'fashion' | 'damascus' | 'clinic' | 'moto' | 'incense' | 'distributor' | 'support';
     postMessage?: string;
     /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
      *  skip) vs page tags (real questions, reply). See category 46 tests. */
@@ -153,6 +153,8 @@ const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
     moto: /المجد|موتوسيكلات|motoshop/i,
     incense: /بيت البخور|incense/i,
     distributor: /رواء|distributor/i,
+    // The vendor's own support page (own-brand Check 6 exemption, Cat 72).
+    support: /jawab\s?24/i,
 };
 
 // This gets populated at runtime with actual UUIDs
@@ -184,8 +186,10 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 395 total (385 previous + 10 native-catalog tests, Cat 62),
-// plus Cat 69 (10 distributor / outlet-directory cases, BAMBO LIBYA prod replay)
+// Test cases — 433 total, defined inline below (docs/playground-edge-cases.md is
+// the historical origin of the early categories, not the source of truth).
+// Latest additions: Cat 70 (purchase-turn price grounding), Cat 71 (lead-answer
+// continuity — الدمشقي prod replay, bare name answering our details request)
 // ---------------------------------------------------------------------------
 
 /**
@@ -3627,6 +3631,7 @@ const TEST_CASES: TestCase[] = [
     { id: 621, category: 57, categoryName: 'Operational Fact From KB', channel: 'comment', message: 'العنوان', page: 'damascus', expected: { replyContainsAny: ['برامكة', 'الحافظ'], flagsAbsent: ['info_not_in_kb'] }, notes: 'Same as 620 via comment channel, definite-article form.' },
     { id: 622, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'وين موقعكم بالضبط', page: 'damascus', expected: { replyContainsAny: ['برامكة', 'الحافظ'], flagsAbsent: ['info_not_in_kb'], replyNotContains: ['تواصل معنا', 'يرجى التواصل'] }, notes: 'Location phrased as a question. Must give the KB address, not redirect to contact.' },
     { id: 623, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'ساعات الدوام', page: 'damascus', expected: { replyContainsAny: ['9', '٩', '8', '٨', 'صباح', 'مساء'], flagsAbsent: ['info_not_in_kb'], replyNotContains: ['00:00', '23:45', 'تواصل معنا', 'يرجى التواصل'] }, notes: 'Hours are in the KB ("9 صباحا الى 8 مساء ماعدا الجمعة"). Must answer from the KB — NOT deflect, and NOT state the Facebook-synced Friday hours 00:00-23:45 (the D-010 failure mode the A/B exposed).' },
+    { id: 749, category: 57, categoryName: 'Operational Fact From KB', channel: 'dm', message: 'ايمت بتفتحوا', page: 'damascus', expected: { replyContainsAny: ['9', '٩', 'صباح', 'الصبح'], replyNotContains: ['من الأحد', 'من الاحد', 'من يوم الأحد', 'من يوم الاحد'], flagsAbsent: ['info_not_in_kb'] }, notes: 'PROD replay (real دمشقي page, 2026-08-01 screenshot): customer asked «ايمت بتفتحوا», bot answered «دوامنا من الأحد للسبت من 9 الصبح لـ 8 المسا، والجمعة مغلق» — factually right, but the week is enumerated in the US Sunday-first convention. KB says «كل ايام الاسبوع … ماعدا يوم الجمعة»; our markets start the week on SATURDAY (CLDR ar-SY firstDay=sat), so any span starting «من الأحد» is wrong here — it either wrongly excludes Saturday or wraps the whole week around the excluded Friday. Correct shapes: mirror the KB («كل أيام الأسبوع … ما عدا الجمعة») or the Saturday-first range («من السبت للخميس»). Was XGAP (authored before it could be executed, on the assumption a prompt demonstration was needed); first execution 2026-08-01 post-#588 + post-cleanup KB: 11/11 clean samples across 5 fresh-cache category runs + 6 direct playground calls — every reply mirrored the KB phrasing. Now a regression pin: if it goes red, the Sunday-first week model is leaking again (prompt-improvement roadmap Phase 2 has the week-convention demonstration as the standing fix candidate).' },
 
     // ===== Category 58: Conversation Health & Lost-Lead Guards =====
     // Derived from real production traffic (generalized to be vertical-neutral). Two failure
@@ -4656,6 +4661,139 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['تواصل', 'نتأكد', 'المشرف', 'الرقم', 'للأسف', 'ما عندي', 'غير متوفر'],
         },
         notes: 'PROD replay (2026-07-26 00:09): promo bundles live only in FB posts. The guard was right to refuse 79; the finding is that the merchant had to answer manually. Pins "never confirm an ungrounded promo".',
+    },
+
+    // ── Category 71: Lead-Answer Continuity ──────────────────────────────────
+    // When the assistant has just asked the customer for their details (name /
+    // number / course), the customer's next short message IS the answer to that
+    // question — not a new topic. Arabic surnames routinely double as common
+    // nouns (الدوخة = dizziness, الخياط = tailor), so a bare full name misread
+    // semantically produces an absurd reply.
+    //
+    // PROD replay (الدمشقي page, 2026-08-01 01:5x): assistant asked «زوديني
+    // باسمك ورقمك ونوع الدورة», customer answered «وئام الدوخة» (her full name,
+    // matching her profile "Weaam Osama"), and the reply was «مرحبا وئام، كيف
+    // فيني أساعدك بخصوص الدوخة؟» — surname read as the symptom "dizziness",
+    // plus a mid-conversation re-greet and a reset to "how can I help?". The
+    // customer had to push through and repeat «بدي سجل تمريض».
+
+    // 71.1 — The exact prod turn. A bare two-word full name right after the
+    // assistant asked for name+number+course must be taken as the name, and the
+    // reply must move on to the REMAINING fields — never reinterpret the
+    // surname as a topic or reset the conversation.
+    {
+        id: 745, category: 71, categoryName: 'Lead-Answer Continuity', channel: 'dm',
+        message: 'وئام الدوخة',
+        page: 'damascus',
+        senderName: 'Weaam Osama',
+        conversationHistory: [
+            { role: 'user', content: 'وين فيني سجل' },
+            { role: 'assistant', content: 'فيك تسجلي عنا بالمركز مباشرة بالبرامكة، سانا فوق مكتبة الحافظ، الطابق الأول. أو زوديني باسمك ورقمك ونوع الدورة اللي مهتمة فيها ونرتب معك.' },
+        ],
+        expected: {
+            // The prod failure: surname الدوخة read as the symptom "dizziness".
+            replyNotContains: ['بخصوص الدوخة', 'عن الدوخة', 'تشعرين', 'تعانين', 'كيف فيني أساعدك', 'كيف أقدر أساعدك', 'كيف بقدر ساعدك'],
+            // Name received → ask for what's still missing (number and/or course).
+            replyContainsAny: ['رقم', 'الدورة', 'دورة'],
+        },
+        notes: 'PROD replay (الدمشقي, 2026-08-01): bare full name answering the assistant\'s own lead question. Surname الدوخة must not become "dizziness", and the reply must request the remaining fields instead of resetting.',
+    },
+
+    // 71.2 — Generalization: surname الخياط ("the tailor") on the same page,
+    // whose KB explicitly has NO sewing course. A semantic misread here would
+    // start talking about خياطة (denying/discussing a sewing course) instead of
+    // accepting the name.
+    {
+        id: 746, category: 71, categoryName: 'Lead-Answer Continuity', channel: 'dm',
+        message: 'عبير الخياط',
+        page: 'damascus',
+        conversationHistory: [
+            { role: 'user', content: 'بدي سجل عندكم' },
+            { role: 'assistant', content: 'أهلاً فيك! زوديني باسمك ورقمك ونوع الدورة اللي مهتمة فيها ومنرتب معك التسجيل.' },
+        ],
+        expected: {
+            // خياطة (the craft) never appears in the surname الخياط — if it shows
+            // up, the model turned the name into a sewing-course topic.
+            replyNotContains: ['خياطة', 'كيف فيني أساعدك', 'كيف أقدر أساعدك'],
+            replyContainsAny: ['رقم', 'الدورة', 'دورة'],
+        },
+        notes: 'Same trap, different noun-surname: الخياط must stay a name. KB says no sewing course exists, so a misread would deny/discuss خياطة instead of continuing lead capture.',
+    },
+
+    // 71.2b — Latin-script bare name on an Arabic thread. Arabs routinely type
+    // their names in Latin letters; the detector reads it as its en@0.5 "Latin
+    // script, recognized nothing" floor. The backend must DEFER the language to
+    // the thread anchor (resolveDmLanguageHint) so the reply stays Arabic.
+    // Regression case for the 2026-08-01 playground/production drift: the
+    // playground asserted the floor as explicit 'en' and replied in English
+    // mid-Arabic-thread — production (generateForMessage) never did. Both paths
+    // now share the helper; this pins the harness-fidelity fix end-to-end.
+    {
+        id: 748, category: 71, categoryName: 'Lead-Answer Continuity', channel: 'dm',
+        message: 'Weaam Aldoukha',
+        page: 'damascus',
+        conversationHistory: [
+            { role: 'user', content: 'وين فيني سجل' },
+            { role: 'assistant', content: 'فيك تسجلي عنا بالمركز مباشرة بالبرامكة، سانا فوق مكتبة الحافظ، الطابق الأول. أو زوديني باسمك ورقمك ونوع الدورة اللي مهتمة فيها ونرتب معك.' },
+        ],
+        expected: {
+            // The reply must continue in ARABIC (thread anchor), asking for the
+            // remaining fields — an English reply means the Latin floor was
+            // asserted as an explicit language again.
+            replyContainsAny: ['رقم', 'الدورة', 'دورة'],
+            replyNotContains: ['Please', 'please', 'Thanks', 'phone number', 'course'],
+        },
+        notes: 'Latin-script bare name mid-Arabic-thread → Arabic continuation. Pins resolveDmLanguageHint being shared by playground and production (drift caught 2026-08-01).',
+    },
+
+    // 71.3 — Recovery turn, replaying the REAL prod history including the bad
+    // assistant reply. The customer pushes through with «بدي سجل تمريض» — the
+    // model must drop the dizziness thread entirely and proceed with nursing
+    // registration (nursing IS in the damascus KB), not circle back to الدوخة.
+    {
+        id: 747, category: 71, categoryName: 'Lead-Answer Continuity', channel: 'dm',
+        message: 'بدي سجل تمريض',
+        page: 'damascus',
+        senderName: 'Weaam Osama',
+        conversationHistory: [
+            { role: 'user', content: 'وين فيني سجل' },
+            { role: 'assistant', content: 'فيك تسجلي عنا بالمركز مباشرة بالبرامكة، سانا فوق مكتبة الحافظ، الطابق الأول. أو زوديني باسمك ورقمك ونوع الدورة اللي مهتمة فيها ونرتب معك.' },
+            { role: 'user', content: 'وئام الدوخة' },
+            { role: 'assistant', content: 'مرحبا وئام، فيكي تخبريني أكتر عن الموضوع أو كيف فيني أساعدك بخصوص الدوخة؟' },
+        ],
+        expected: {
+            replyContainsAny: ['تمريض', 'التمريض'],
+            replyNotContains: ['الدوخة', 'دوار'],
+        },
+        notes: 'PROD replay, turn 3: after the fumbled name turn the customer restates the goal. Reply must engage the nursing course and never revisit الدوخة as a symptom.',
+    },
+
+    // ─── Category 72: Own-Brand Page — Check 6 brand exemption ───
+    // The vendor's own support page ('support' fixture, name "Jawab24"). Pre-fix,
+    // Check 6's brand needle stripped every sentence naming Jawab24/jawab24.com,
+    // so website/app-link answers were swapped for SELF_ID_FALLBACKS identity
+    // lines — the customer asked for the site 3× and was deflected 3× (prod,
+    // 2026-08-01). These replay that conversation end-to-end through the
+    // playground (same validateReply choke point as production).
+    {
+        id: 750, category: 72, categoryName: 'Own-Brand Page', channel: 'dm',
+        message: 'موقعكم الالكتروني؟',
+        page: 'support',
+        expected: {
+            replyContains: ['jawab24.com'],
+            flagsAbsent: ['self_identification_stripped'],
+        },
+        notes: 'PROD replay: the website question on the Jawab24 page must return the URL from the KB, not an identity fallback («معك أحد أعضاء الفريق…»).',
+    },
+    {
+        id: 751, category: 72, categoryName: 'Own-Brand Page', channel: 'dm',
+        message: 'رابط تحميل البرنامج',
+        page: 'support',
+        expected: {
+            replyContainsAny: ['play.google.com', 'jawab24.com'],
+            flagsAbsent: ['self_identification_stripped'],
+        },
+        notes: 'PROD replay («رابط البرنامج»): the app-link question must surface the Play Store or site link — both are in the fixture KB.',
     },
 
 ];

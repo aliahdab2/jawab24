@@ -7,8 +7,10 @@ import { conversationPauseService } from './conversationPause';
 import { conversationsService, type Platform } from './conversations';
 import { ENDPOINT_STATS_CACHE_TTL, messagesStatsCacheKey, withStatsCache, statsEpochKey } from './statsCache';
 
-/** DB connection or transaction — methods accepting this can participate in a transaction. */
-type DbConn = typeof db;
+/** DB connection or transaction — methods accepting this can participate in a transaction.
+ * The tx side is derived from db.transaction's callback parameter rather than spelled out
+ * (drizzle-orm 0.45 made PgTransaction structurally incompatible with the db type — $client). */
+type DbConn = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export interface MessageStats {
     total: number;

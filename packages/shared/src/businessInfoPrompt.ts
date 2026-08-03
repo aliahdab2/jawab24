@@ -36,15 +36,12 @@
 
 import type { BusinessProfile } from './index';
 import type { MerchantProvenanceMap } from './businessProfileMerge';
+import { SHORT_DAY_KEYS, LONG_DAY_KEYS, DAY_LABELS_EN } from './businessHours';
 
-const DAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
-const DAY_SHORT_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
-const DAY_LABELS: Record<string, string> = {
-    monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday',
-    thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday',
-    mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
-    thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday',
-};
+// Saturday-first (CLDR ar-SY/ar-EG week order) — see businessHours.ts.
+const DAY_ORDER = LONG_DAY_KEYS;
+const DAY_SHORT_ORDER = SHORT_DAY_KEYS;
+const DAY_LABELS = DAY_LABELS_EN;
 
 const NOT_PROVIDED = '[NOT_PROVIDED]';
 
@@ -112,11 +109,21 @@ function joinPhones(p: BusinessProfile): string | null {
     return phones.length > 0 ? phones.join(', ') : null;
 }
 
-/** The merchant's WhatsApp contact, if they gave one. Distinct from `phones`:
- *  a number customers can MESSAGE, not necessarily one they can call. */
-function formatWhatsapp(p: BusinessProfile): string | null {
+/** Normalize `channels.whatsapp` (legacy single string OR array) to a clean
+ *  list. THE one reader of the field's dual shape — every consumer (prompt,
+ *  coverage, editor) goes through this so the legacy string never leaks. */
+export function whatsappNumbers(p: BusinessProfile): string[] {
     const wa = p.channels?.whatsapp;
-    return typeof wa === 'string' && wa.trim() !== '' ? wa.trim() : null;
+    const list = Array.isArray(wa) ? wa : typeof wa === 'string' ? [wa] : [];
+    return list.map((n) => n.trim()).filter(Boolean);
+}
+
+/** The merchant's WhatsApp contact(s), if they gave any. Distinct from
+ *  `phones`: numbers customers can MESSAGE, not necessarily ones they can
+ *  call. */
+function formatWhatsapp(p: BusinessProfile): string | null {
+    const numbers = whatsappNumbers(p);
+    return numbers.length > 0 ? numbers.join(', ') : null;
 }
 
 function formatHours(p: BusinessProfile): string | null {
