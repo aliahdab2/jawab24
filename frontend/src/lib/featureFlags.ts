@@ -92,6 +92,12 @@ export function isWhatsAppMarketable(): boolean {
  *  page in production before all merchants get it. */
 const BUSINESS_SURFACE_WORKSPACE_IDS: ReadonlySet<string> = new Set([
   'a0005407-92bf-473e-9368-013f14c57a7d', // Jawab24 founder workspace (prod)
+  // Feras (feras10mgb) — first external merchant (owner ruling 2026-08-04):
+  // both his pages were seeded with fact collections that day, and the lists
+  // editor on /business is the only surface where he can review/refine them
+  // (incl. the literal-translation الوصف rows). Server-side stays
+  // workspace-admin gated; he is the workspace owner.
+  'c54202c9-139e-4b6f-9984-c19d0e8757a4',
 ]);
 
 export function isCatalogVisible(
