@@ -359,7 +359,9 @@ export function CatalogImportSheet({
             <h3 className="text-base font-semibold text-foreground">{t(emptyTitleKey)}</h3>
             <p className="text-sm text-muted-foreground mt-1">{t(emptyHintKey)}</p>
             {postsUnavailableKey && (
-              <p className="alert-warning rounded-xl px-3 py-2 text-xs mt-3 text-start">{t(postsUnavailableKey)}</p>
+              /* role=status: the notice arrives on an async phase change — a
+                 screen reader must hear that the posts weren't read. */
+              <p role="status" className="alert-warning rounded-xl px-3 py-2 text-xs mt-3 text-start">{t(postsUnavailableKey)}</p>
             )}
           </div>
         )}
@@ -380,7 +382,7 @@ export function CatalogImportSheet({
               </p>
             )}
             {postsUnavailableKey && (
-              <p className="alert-warning rounded-xl px-3 py-2 text-xs">{t(postsUnavailableKey)}</p>
+              <p role="status" className="alert-warning rounded-xl px-3 py-2 text-xs">{t(postsUnavailableKey)}</p>
             )}
             {/* The price-completion nudge — the real work of the review step.
                 Posts rarely carry prices (deliberately); a priceless item only
@@ -396,7 +398,11 @@ export function CatalogImportSheet({
               <div className="alert-warning rounded-xl px-3 py-2 text-xs space-y-0.5">
                 {meta.dropped > 0 && <p>{t('import.droppedNote', { count: meta.dropped })}</p>}
                 {meta.overflow > 0 && <p>{t('import.overflowNote', { count: meta.overflow })}</p>}
-                {meta.truncated && <p>{t('import.truncatedNote')}</p>}
+                {/* Scan truncation ≠ paste truncation: the paste copy says "your
+                    list is long, import the rest" — advice a scan can't follow.
+                    The scan copy names what won the budget (replies + newest
+                    posts) and the real fallbacks. */}
+                {meta.truncated && <p>{t(mode === 'scan' ? 'scan.truncatedNote' : 'import.truncatedNote')}</p>}
               </div>
             )}
 

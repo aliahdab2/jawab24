@@ -267,9 +267,11 @@ export class CatalogController {
             throw err;
         }
         if (!result) return reply.status(404).send({ error: 'Page not found' });
-        // Count only scans that reached a paid call (Vision and/or extraction).
-        // Up-to-date no-ops and a graph_error with no replies consumed nothing.
-        if (result.postsScanned > 0 || result.repliesScanned > 0) void incrementDailyCap(capKey);
+        // The service says whether a paid call (Vision and/or extraction)
+        // actually happened — the counts can't: a window of reels/plain links
+        // has postsScanned > 0 yet costs nothing. Up-to-date no-ops, dead Graph
+        // failures, and nothing-extractable windows all stay free.
+        if (result.paidCall) void incrementDailyCap(capKey);
 
         const existing = await catalogService.listCatalogItems(req.workspaceId, request.params.pageId) ?? [];
         const { items, overflow } = capNewProposals(result.items, existing, capacity.remaining);

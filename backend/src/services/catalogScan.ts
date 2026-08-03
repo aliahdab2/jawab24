@@ -73,13 +73,20 @@ export type PostsUnavailableReason = PostsScanBlocker | 'graph_error';
 export interface CatalogScanResult extends CatalogExtractionResult {
     /** Posts consumed by this scan. */
     postsScanned: number;
-    /** Configured Post Reply rows fed to the extractor. */
+    /** Configured Post Reply rows that actually REACHED the extractor — not the
+     *  rows fetched. The two differ when the char cap drops blocks: the count is
+     *  shown to the merchant as «قرأنا … M ردّ بوست», and claiming a reply was
+     *  read after truncation dropped it would be the masking bug in a new coat. */
     repliesScanned: number;
     /** Posts were readable and nothing new existed anywhere — an honest no-op.
      *  NEVER true when the posts could not be read (that's postsUnavailable). */
     upToDate: boolean;
     /** null when the posts were read normally. */
     postsUnavailable: PostsUnavailableReason | null;
+    /** True when this scan reached a paid call (Vision and/or extraction). The
+     *  controller charges the daily cap off THIS, not off the scanned counts —
+     *  a window of reels/plain links has postsScanned > 0 yet costs nothing. */
+    paidCall: boolean;
 }
 
 /** Cap on how much of a post's own text we prepend as context for its reply —
@@ -92,6 +99,19 @@ const POST_CONTEXT_MAX_CHARS = 400;
  *  bounds the DB fetch itself so a page with thousands of posts can't load them
  *  all into memory to use a fraction. */
 const MAX_POST_REPLIES_SCAN = 200;
+
+/** When the newest post block that no longer fits the char cap can still get
+ *  at least this much room, its head is included rather than dropping the block
+ *  whole — a 20k-char price-list post should contribute its first chunk, the
+ *  way the old mid-string slice did. Below this, a fragment adds noise. */
+const MIN_SALVAGE_CHARS = 400;
+
+/** One block of extractor input, with how many configured replies it carries —
+ *  so the reported repliesScanned can count what actually survived the cap. */
+interface ScanBlock {
+    text: string;
+    replyCount: number;
+}
 
 /** One configured Post Reply, either channel. `facebookPostId` lets a reply be
  *  merged into its own post's block when that post is in the scanned window
@@ -179,8 +199,16 @@ export class CatalogScanService {
             if (failed) {
                 // A Graph failure must NEVER masquerade as "up to date" — that
                 // told merchants "nothing new, post something" while their token
-                // was the thing that broke (the fail-soft masking bug).
+                // was the thing that broke (the fail-soft masking bug). The
+                // merchant sees the degraded notice; this makes the SAME event
+                // visible to ops — "how often do scans degrade" must be
+                // answerable server-side before the widen-gate call.
                 postsUnavailable = 'graph_error';
+                captureError(new Error('Catalog page-scan: Graph posts read failed, degrading to replies-only'),
+                    'Catalog page-scan degraded (graph_error)', {
+                        level: 'warning', tags: { service: 'catalog-scan' },
+                        extra: { pageId, replies: replyRows.length },
+                    });
             } else {
                 postsRead = true;
                 // The re-scan bookmark means "skip posts I've already reviewed" —
@@ -206,12 +234,15 @@ export class CatalogScanService {
             postsUnavailable = eligibility.blocker;
         }
 
-        const base = { postsScanned: fresh.length, repliesScanned: replyRows.length, postsUnavailable };
+        const base = { postsScanned: fresh.length, postsUnavailable };
         if (fresh.length === 0 && replyRows.length === 0) {
             // "Up to date" is a claim about the posts — only an ACTUAL read may
             // make it. An unreadable page with no replies never reaches here
             // (thrown above); a graph_error one reports the failure instead.
-            return { items: [], dropped: 0, truncated: false, failed: false, ...base, upToDate: postsRead };
+            return {
+                items: [], dropped: 0, truncated: false, failed: false,
+                ...base, repliesScanned: 0, upToDate: postsRead, paidCall: false,
+            };
         }
 
         // A fresh post whose configured reply is attached becomes ONE complete
@@ -224,10 +255,13 @@ export class CatalogScanService {
         }
         const mergedReplies = new Set<PostReplyRow>();
 
-        // Newest-first (Graph order): the freshest offerings win the image budget
-        // and survive the char cap — old posts are the first to degrade.
+        // Newest-first (Graph order): the freshest offerings win the image budget.
         let imageBudget = MAX_SCAN_IMAGES;
-        const blocks: string[] = [];
+        // Vision dispatches, counted where the budget is spent. Over-counts the
+        // never-costing skips inside readImage (non-CDN URL, failed download) —
+        // acceptable: an over-count charges the cap conservatively, never frees it.
+        let visionCalls = 0;
+        const postBlocks: ScanBlock[] = [];
         for (const post of fresh) {
             const parts: string[] = [];
             if (post.message?.trim()) parts.push(post.message.trim());
@@ -245,6 +279,7 @@ export class CatalogScanService {
                 for (const url of post.imageUrls.slice(0, MAX_IMAGES_PER_POST)) {
                     if (imageBudget <= 0) break;
                     imageBudget -= 1;
+                    visionCalls += 1;
                     const text = await this.readImage(url, ctx.userId, pageId);
                     if (text) parts.push(text);
                 }
@@ -252,29 +287,33 @@ export class CatalogScanService {
 
             if (parts.length === 0) continue;
             const date = post.createdTime ? post.createdTime.slice(0, 10) : 'unknown date';
-            blocks.push(`POST (${date}):\n${parts.join('\n')}`);
+            postBlocks.push({ text: `POST (${date}):\n${parts.join('\n')}`, replyCount: reply && replyText ? 1 : 0 });
         }
 
         // The rest of the configured replies — older FB posts and ALL Instagram
         // rows — as standalone blocks, newest first. Ageless on purpose: the
         // window/bookmark govern the Graph read, not our own DB.
+        const replyBlocks: ScanBlock[] = [];
         for (const row of replyRows) {
             if (mergedReplies.has(row)) continue;
             if (!row.triggerReply?.trim()) continue;
             const date = row.createdTime ? row.createdTime.toISOString().slice(0, 10) : 'unknown date';
             const postText = row.text?.trim();
             const postLine = postText ? `\nPOST: ${postText.slice(0, POST_CONTEXT_MAX_CHARS)}` : '';
-            blocks.push(`POST REPLY (${date}):${postLine}\nREPLY: ${row.triggerReply.trim()}`);
+            replyBlocks.push({ text: `POST REPLY (${date}):${postLine}\nREPLY: ${row.triggerReply.trim()}`, replyCount: 1 });
         }
 
-        if (blocks.length === 0) {
+        if (postBlocks.length === 0 && replyBlocks.length === 0) {
             // Only image-less/empty posts in the window (reels, plain links) and
             // no replies. Nothing was extractable, nothing was lost — safe to bookmark.
             if (postsRead && fresh.length > 0) await this.advanceBookmark(pageId, fresh[0].createdTime);
-            return { items: [], dropped: 0, truncated: false, failed: false, ...base, upToDate: false };
+            return {
+                items: [], dropped: 0, truncated: false, failed: false,
+                ...base, repliesScanned: 0, upToDate: false, paidCall: visionCalls > 0,
+            };
         }
 
-        const combined = blocks.join('\n\n---\n\n').slice(0, MAX_CATALOG_IMPORT_CHARS);
+        const { combined, repliesIncluded, inputTruncated } = this.assembleInput(replyBlocks, postBlocks);
         const vertical = resolveCatalogVertical(page.catalogVertical, page.businessProfile as StoredBusinessProfile);
         const result = await catalogExtractor.extract(combined, {
             userId: ctx.userId,
@@ -287,7 +326,74 @@ export class CatalogScanService {
         // and the same posts are re-proposed instead of silently vanishing.
         if (postsRead && fresh.length > 0 && !result.failed) await this.advanceBookmark(pageId, fresh[0].createdTime);
 
-        return { ...result, ...base, upToDate: false };
+        return {
+            ...result,
+            ...base,
+            repliesScanned: repliesIncluded,
+            upToDate: false,
+            // The extractor's flag covers OUTPUT truncation (finish_reason). The
+            // input cap dropping blocks is the same honesty problem on the way
+            // in — either way the merchant must see "some content didn't fit".
+            truncated: result.truncated || inputTruncated,
+            paidCall: visionCalls > 0 || combined.trim().length > 0,
+        };
+    }
+
+    /**
+     * Assemble the extractor input under MAX_CATALOG_IMPORT_CHARS, whole blocks
+     * only, in value order (D-059): standalone reply blocks FIRST — they carry
+     * the merchant-authored prices the whole merge exists to recover, they are
+     * small, and appending them last let a heavy OCR window silently push every
+     * one of them past the cap on exactly the flagship page shape. Post blocks
+     * follow newest-first, so old posts are still the first to degrade. The one
+     * mid-block slice: the first post block that no longer fits contributes its
+     * head when meaningful room remains (a 20k-char price-list post must not
+     * vanish whole). Reports how many replies actually made it in, and whether
+     * anything was dropped — silent input truncation is what let this bug hide.
+     */
+    private assembleInput(replyBlocks: ScanBlock[], postBlocks: ScanBlock[]): {
+        combined: string; repliesIncluded: number; inputTruncated: boolean;
+    } {
+        const SEP = '\n\n---\n\n';
+        const included: string[] = [];
+        let used = 0;
+        let repliesIncluded = 0;
+        let inputTruncated = false;
+
+        const fits = (text: string) => used + (included.length > 0 ? SEP.length : 0) + text.length <= MAX_CATALOG_IMPORT_CHARS;
+        const push = (text: string) => {
+            used += (included.length > 0 ? SEP.length : 0) + text.length;
+            included.push(text);
+        };
+
+        // Replies: sizes vary (a one-line offer vs a full course sheet), so a
+        // non-fitting one is skipped and later smaller ones still get their shot.
+        for (const block of replyBlocks) {
+            if (!fits(block.text)) {
+                inputTruncated = true;
+                continue;
+            }
+            push(block.text);
+            repliesIncluded += block.replyCount;
+        }
+
+        // Posts: strictly newest-first — once one doesn't fit, everything after
+        // it is older and lower-value, so stop rather than cherry-pick. Salvage
+        // the head of the boundary block when there's meaningful room; its
+        // merged reply is NOT counted as read (the slice may have cut it).
+        for (const block of postBlocks) {
+            if (fits(block.text)) {
+                push(block.text);
+                repliesIncluded += block.replyCount;
+                continue;
+            }
+            inputTruncated = true;
+            const room = MAX_CATALOG_IMPORT_CHARS - used - (included.length > 0 ? SEP.length : 0);
+            if (room >= MIN_SALVAGE_CHARS) push(block.text.slice(0, room));
+            break;
+        }
+
+        return { combined: included.join(SEP), repliesIncluded, inputTruncated };
     }
 
     /** Both channels, each newest-first + capped, then merged and re-capped —

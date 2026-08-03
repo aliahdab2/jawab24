@@ -173,6 +173,7 @@
     "emptyResultHint": "You can import a price list or add items manually instead.",
     "upToDate": "You’re up to date",
     "upToDateHint": "No new posts since the last scan, and no Post Replies configured. Post something new, or add items manually.",
+    "truncatedNote": "Your page has more content than one scan can read — your Post Replies and newest posts came first, so some older content may be missing. You can import a price list or add items manually.",
     "postsUnreadableError": "We couldn’t read your posts from Facebook this time, so only your configured Post Replies were scanned. Try again later to read the posts.",
     "postsUnreadableDisconnected": "This page isn’t connected to Facebook right now, so only your configured Post Replies were scanned. Reconnect it to read its posts.",
     "postsUnreadableNoFacebook": "Only your configured Post Replies were scanned — this page has no Facebook posts.",

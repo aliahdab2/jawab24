@@ -179,7 +179,7 @@ describe('catalogScanService.scanPage', () => {
             userId: 'user-1', pageId: PAGE, vertical: 'vehicles', source: 'page',
         });
         expect(result).toMatchObject({
-            postsScanned: 1, repliesScanned: 0, upToDate: false, postsUnavailable: null, items: okExtraction.items,
+            postsScanned: 1, repliesScanned: 0, upToDate: false, postsUnavailable: null, paidCall: true, items: okExtraction.items,
         });
         expect(state.updates).toHaveLength(1);
         expect(state.updates[0].catalogScanLastPostTime).toEqual(new Date('2026-07-10T10:00:00+0000'));
@@ -192,7 +192,7 @@ describe('catalogScanService.scanPage', () => {
 
         const result = await catalogScanService.scanPage(WS, PAGE, CTX);
 
-        expect(result).toMatchObject({ upToDate: true, postsScanned: 0, repliesScanned: 0, items: [] });
+        expect(result).toMatchObject({ upToDate: true, postsScanned: 0, repliesScanned: 0, paidCall: false, items: [] });
         expect(catalogExtractor.extract).not.toHaveBeenCalled();
         expect(state.updates).toHaveLength(0);
     });
@@ -257,12 +257,14 @@ describe('catalogScanService.scanPage', () => {
         expect(fetched.filter((u) => u.includes('/c-'))).toHaveLength(MAX_SCAN_IMAGES - 2 * MAX_IMAGES_PER_POST);
     });
 
-    it('a window of unreadable posts (reels/links, no text) still advances the bookmark — nothing was lost', async () => {
+    it('a window of unreadable posts (reels/links, no text) still advances the bookmark — nothing was lost, nothing was paid', async () => {
         mockPosts([post({ message: null, imageUrls: [] })]);
 
         const result = await catalogScanService.scanPage(WS, PAGE, CTX);
 
-        expect(result).toMatchObject({ postsScanned: 1, upToDate: false, items: [], failed: false });
+        // paidCall false: no Vision (no images), no extraction (no blocks) — the
+        // controller must NOT charge the daily cap for this scan.
+        expect(result).toMatchObject({ postsScanned: 1, upToDate: false, paidCall: false, items: [], failed: false });
         expect(catalogExtractor.extract).not.toHaveBeenCalled();
         expect(state.updates).toHaveLength(1);
     });
@@ -372,7 +374,7 @@ describe('scanPage — configured Post Replies (the merged source, D-059)', () =
 
         expect(facebookService.getPagePosts).not.toHaveBeenCalled();
         expect(result).toMatchObject({
-            postsScanned: 0, repliesScanned: 1, upToDate: false, postsUnavailable: 'disconnected', items: okExtraction.items,
+            postsScanned: 0, repliesScanned: 1, upToDate: false, postsUnavailable: 'disconnected', paidCall: true, items: okExtraction.items,
         });
         expect(state.updates).toHaveLength(0);
     });
@@ -398,7 +400,7 @@ describe('scanPage — Graph failure honesty (the "up to date" masking regressio
         const result = await catalogScanService.scanPage(WS, PAGE, CTX);
 
         expect(result).toMatchObject({
-            upToDate: false, postsUnavailable: 'graph_error', postsScanned: 0, repliesScanned: 0, items: [], failed: false,
+            upToDate: false, postsUnavailable: 'graph_error', postsScanned: 0, repliesScanned: 0, paidCall: false, items: [], failed: false,
         });
         expect(catalogExtractor.extract).not.toHaveBeenCalled();
         expect(state.updates).toHaveLength(0);
@@ -425,5 +427,58 @@ describe('scanPage — Graph failure honesty (the "up to date" masking regressio
         const result = await catalogScanService.scanPage(WS, PAGE, CTX);
 
         expect(result).toMatchObject({ upToDate: true, postsUnavailable: null });
+    });
+});
+
+describe('scanPage — char-cap honesty (replies must survive the 16k input cap)', () => {
+    // The review finding this suite pins: reply blocks used to be APPENDED to a
+    // silently-sliced 16k string, so a heavy OCR window pushed every standalone
+    // reply — the merchant-authored prices the merge exists to recover — past
+    // the cap, while the UI still claimed «قرأنا … M ردّ بوست». Replies now go
+    // first, dropped input raises `truncated`, and repliesScanned counts only
+    // what actually reached the extractor.
+    it('a giant post window cannot crowd out a standalone reply — the reply leads, the post is head-sliced, truncated is honest', async () => {
+        state.fbReplyRows = [{
+            facebookPostId: 'post-old', // outside the window → standalone block
+            text: 'كورس المكياج المبتدئ',
+            triggerReply: 'الكلفة 25 ألف ل.س',
+            createdTime: new Date('2026-06-01T00:00:00Z'),
+        }];
+        mockPosts([post({ message: 'أسعار الدورات:\n' + 'س'.repeat(20_000) })]);
+
+        const result = await catalogScanService.scanPage(WS, PAGE, CTX);
+
+        const input = extractorInput();
+        expect(input.startsWith('POST REPLY (2026-06-01)')).toBe(true);
+        expect(input).toContain('REPLY: الكلفة 25 ألف ل.س');
+        // The boundary post still contributes its head instead of vanishing whole.
+        expect(input).toContain('POST (2026-07-10):\nأسعار الدورات:');
+        expect(input.length).toBeLessThanOrEqual(16_000);
+        expect(result).toMatchObject({ repliesScanned: 1, truncated: true, paidCall: true });
+    });
+
+    it('a reply too large to ever fit is dropped and NOT counted as read — later smaller replies still get in', async () => {
+        state.fbReplyRows = [
+            // Newest first after the service's own sort: the oversized one leads.
+            { facebookPostId: 'p-big', text: null, triggerReply: 'ع'.repeat(17_000), createdTime: new Date('2026-07-20T00:00:00Z') },
+            { facebookPostId: 'p-small', text: 'كورس الأظافر', triggerReply: 'الكلفة 20 ألف', createdTime: new Date('2026-07-01T00:00:00Z') },
+        ];
+        mockPosts([]);
+
+        const result = await catalogScanService.scanPage(WS, PAGE, CTX);
+
+        const input = extractorInput();
+        expect(input).toContain('REPLY: الكلفة 20 ألف');
+        expect(input).not.toContain('ع'.repeat(100));
+        expect(result).toMatchObject({ repliesScanned: 1, truncated: true });
+    });
+
+    it('nothing dropped → truncated stays false and every reply counts', async () => {
+        state.fbReplyRows = [{ facebookPostId: 'p-old', text: 'كورس', triggerReply: 'الكلفة 25 ألف', createdTime: new Date('2026-06-01T00:00:00Z') }];
+        mockPosts([post()]);
+
+        const result = await catalogScanService.scanPage(WS, PAGE, CTX);
+
+        expect(result).toMatchObject({ repliesScanned: 1, truncated: false });
     });
 });

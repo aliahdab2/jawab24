@@ -96,6 +96,7 @@ describe('Catalog routes — security wiring', () => {
             ['POST', `/pages/${PAGE}/catalog`],
             ['POST', `/pages/${PAGE}/catalog/extract`],
             ['POST', `/pages/${PAGE}/catalog/scan-posts`],
+            ['POST', `/pages/${PAGE}/catalog/scan-post-replies`],
             ['POST', `/pages/${PAGE}/catalog/batch`],
             ['PATCH', `/pages/${PAGE}/catalog/vertical`],
             ['PATCH', `/pages/${PAGE}/catalog/${ITEM}`],
@@ -119,6 +120,7 @@ describe('Catalog routes — security wiring', () => {
             ['POST', `/pages/${PAGE}/catalog`],
             ['POST', `/pages/${PAGE}/catalog/extract`],
             ['POST', `/pages/${PAGE}/catalog/scan-posts`],
+            ['POST', `/pages/${PAGE}/catalog/scan-post-replies`],
             ['POST', `/pages/${PAGE}/catalog/batch`],
             ['PATCH', `/pages/${PAGE}/catalog/vertical`],
             ['PATCH', `/pages/${PAGE}/catalog/${ITEM}`],
@@ -172,7 +174,7 @@ describe('Catalog routes — security wiring', () => {
             vi.mocked(catalogScanService.scanPage).mockResolvedValue({
                 items: [{ name: 'ASUS ROG Strix G18', type: 'product' } as never],
                 dropped: 1, truncated: false, failed: false,
-                postsScanned: 3, repliesScanned: 2, upToDate: false, postsUnavailable: null,
+                postsScanned: 3, repliesScanned: 2, upToDate: false, postsUnavailable: null, paidCall: true,
             });
             const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
             expect(res.statusCode).toBe(200);
@@ -189,7 +191,7 @@ describe('Catalog routes — security wiring', () => {
         it('does NOT count an up-to-date no-op against the daily cap (no paid calls happened)', async () => {
             vi.mocked(catalogScanService.scanPage).mockResolvedValue({
                 items: [], dropped: 0, truncated: false, failed: false,
-                postsScanned: 0, repliesScanned: 0, upToDate: true, postsUnavailable: null,
+                postsScanned: 0, repliesScanned: 0, upToDate: true, postsUnavailable: null, paidCall: false,
             });
             const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
             expect(res.statusCode).toBe(200);
@@ -201,7 +203,7 @@ describe('Catalog routes — security wiring', () => {
             vi.mocked(catalogScanService.scanPage).mockResolvedValue({
                 items: [{ name: 'كورس المكياج', type: 'course' } as never],
                 dropped: 0, truncated: false, failed: false,
-                postsScanned: 0, repliesScanned: 5, upToDate: false, postsUnavailable: 'disconnected',
+                postsScanned: 0, repliesScanned: 5, upToDate: false, postsUnavailable: 'disconnected', paidCall: true,
             });
             const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
             expect(res.statusCode).toBe(200);
@@ -214,13 +216,24 @@ describe('Catalog routes — security wiring', () => {
         it('a Graph failure with nothing else scanned costs nothing — no cap count, honest flag out', async () => {
             vi.mocked(catalogScanService.scanPage).mockResolvedValue({
                 items: [], dropped: 0, truncated: false, failed: false,
-                postsScanned: 0, repliesScanned: 0, upToDate: false, postsUnavailable: 'graph_error',
+                postsScanned: 0, repliesScanned: 0, upToDate: false, postsUnavailable: 'graph_error', paidCall: false,
             });
             const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
             expect(res.statusCode).toBe(200);
             const body = JSON.parse(res.payload);
             expect(body.postsUnavailable).toBe('graph_error');
             expect(body.upToDate).toBe(false);
+            expect(incrementDailyCap).not.toHaveBeenCalled();
+        });
+
+        it('a window of reels/plain links reached NO paid call — postsScanned > 0 yet the cap stays free', async () => {
+            vi.mocked(catalogScanService.scanPage).mockResolvedValue({
+                items: [], dropped: 0, truncated: false, failed: false,
+                postsScanned: 3, repliesScanned: 0, upToDate: false, postsUnavailable: null, paidCall: false,
+            });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.payload).postsScanned).toBe(3);
             expect(incrementDailyCap).not.toHaveBeenCalled();
         });
 
@@ -257,7 +270,7 @@ describe('Catalog routes — security wiring', () => {
                     { name: 'تويوتا كورولا 2019', type: 'vehicle', price: 47000, currency: 'ريال' },  // new — cut
                 ] as never,
                 dropped: 0, truncated: false, failed: false,
-                postsScanned: 3, repliesScanned: 0, upToDate: false, postsUnavailable: null,
+                postsScanned: 3, repliesScanned: 0, upToDate: false, postsUnavailable: null, paidCall: true,
             });
 
             const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-posts` });
@@ -266,6 +279,32 @@ describe('Catalog routes — security wiring', () => {
             const body = JSON.parse(res.payload);
             expect(body.items.map((i: { name: string }) => i.name)).toEqual(['كيا ريو 2018', 'هيونداي النترا 2020']);
             expect(body.overflow).toBe(1);
+        });
+    });
+
+    // COMPAT (D-059): app builds shipped between B0 (#492) and the merge still
+    // carry the reply-scan button, which POSTs to /scan-post-replies. The path
+    // must keep answering — with the unified scan — until no supported app
+    // build ships the button. An old client reads the shared fields and its
+    // `noPostReplies` check reads undefined → falsy → review renders normally.
+    describe('POST /scan-post-replies (deprecated alias for shipped app builds)', () => {
+        beforeEach(() => {
+            vi.mocked(catalogService.getCatalogCapacity).mockResolvedValue({ remaining: 100, pageUserId: 'user-1' });
+        });
+
+        it('answers with the unified page scan instead of 404ing the shipped button', async () => {
+            vi.mocked(catalogScanService.scanPage).mockResolvedValue({
+                items: [{ name: 'كورس المكياج المبتدئ', type: 'course' } as never],
+                dropped: 0, truncated: false, failed: false,
+                postsScanned: 1, repliesScanned: 2, upToDate: false, postsUnavailable: null, paidCall: true,
+            });
+            const res = await app.inject({ method: 'POST', url: `/pages/${PAGE}/catalog/scan-post-replies` });
+            expect(res.statusCode).toBe(200);
+            const body = JSON.parse(res.payload);
+            expect(body.items).toHaveLength(1);
+            expect(body.noPostReplies).toBeUndefined();
+            expect(catalogScanService.scanPage).toHaveBeenCalledWith('ws-1', PAGE, { userId: 'user-1' });
+            expect(incrementDailyCap).toHaveBeenCalledTimes(1);
         });
     });
 

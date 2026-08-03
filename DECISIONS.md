@@ -790,9 +790,13 @@ from the post, price from the reply.
 
 **The rulings:**
 
-1. **One scan, one button** («استخراج منتجاتك من صفحتك»). `scan-post-replies` (endpoint,
-   service method, UI button, `replyScan.*` i18n) is REMOVED, not deprecated. The path
-   `catalog/scan-posts` is kept for shipped app builds.
+1. **One scan, one button** («استخراج منتجاتك من صفحتك»). The `scan-post-replies`
+   service method, UI button, and `replyScan.*` i18n are REMOVED. Both PATHS stay:
+   `catalog/scan-posts` is the scan's endpoint, and `catalog/scan-post-replies` remains a
+   deprecated ALIAS of the same unified scan — app builds shipped between B0 (#492) and
+   this merge (2.0.23 included) bundle the reply-scan button, and removing the route
+   would 404 it on every installed copy. Old clients read the shared response fields and
+   render normally. Drop the alias once no supported app build ships the button.
 2. **Cut images, not posts.** The owner's first instinct (window 25 → 10 posts) was
    redeclined: the Graph call costs the same regardless, the real spend is Vision, and a
    smaller window worsens the unreachable-history gap. Instead a replied post *with its
@@ -804,7 +808,11 @@ from the post, price from the reply.
    the highest-signal slice of old history: exactly the posts the merchant bothered to
    configure a reply for. Re-proposals are absorbed by the review sheet's reconcile
    (D-038); reply price *changes* surface as update conflicts — that is a feature, offers
-   rotate.
+   rotate. **And replies win the input budget** (review finding): standalone reply blocks
+   go FIRST in the 16k extractor input, ahead of post blocks — appended last, a heavy OCR
+   window silently pushed every one of them past the cap on exactly the flagship page
+   shape. Dropped input now raises `truncated`, and `repliesScanned` counts only replies
+   that actually reached the extractor.
 4. **Degradation must be honest.** `getPagePosts` is fail-soft, and the old scan read a
    Graph error's empty page as «كل شيء محدّث» — telling the merchant to go post something
    while their token was the broken thing. The scan now distinguishes: blocked page with

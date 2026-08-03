@@ -211,7 +211,7 @@ describe('CatalogImportSheet', () => {
   describe('scan mode (unified page scan, D-059)', () => {
     function scanResponse(
       items: CatalogItemInput[],
-      meta: Partial<{ postsScanned: number; repliesScanned: number; upToDate: boolean; postsUnavailable: string | null }> = {},
+      meta: Partial<{ postsScanned: number; repliesScanned: number; upToDate: boolean; postsUnavailable: string | null; truncated: boolean }> = {},
     ) {
       return {
         data: {
@@ -237,6 +237,17 @@ describe('CatalogImportSheet', () => {
       scanPage.mockResolvedValue(scanResponse([proposal()], { postsScanned: 3, repliesScanned: 2 }));
       renderSheet({ mode: 'scan' });
       expect(await screen.findByText('Scanned: 3 posts · 2 Post Replies')).toBeInTheDocument();
+    });
+
+    // Input truncation is no longer silent (D-059 review): when the scan
+    // couldn't fit everything, the note must say so in scan terms — the paste
+    // copy ("import the rest") is advice a scan can't follow.
+    it('a truncated scan shows the scan-specific note, not the paste-import one', async () => {
+      scanPage.mockResolvedValue(scanResponse([proposal()], { postsScanned: 5, repliesScanned: 2, truncated: true }));
+      renderSheet({ mode: 'scan' });
+
+      expect(await screen.findByText(/more content than one scan can read/)).toBeInTheDocument();
+      expect(screen.queryByText(/Your list is long/)).not.toBeInTheDocument();
     });
 
     it('shows the up-to-date state when nothing new exists since the last scan', async () => {

@@ -1055,10 +1055,13 @@ mode `dual`) exists only in the workspace store while the legacy columns default
 > with replies still scans replies-only, and a transient Graph failure comes
 > back as `postsUnavailable: 'graph_error'` — NEVER as «up to date» (the
 > fail-soft masking bug); only a page with neither source 409s. The review
-> shows what was read («قرأنا: N منشور · M ردّ بوست»). UI entry:
-> «استخراج منتجاتك من صفحتك» — the previously separate
-> `/catalog/scan-post-replies` endpoint and its «استورد من ردود منشوراتك»
-> button are REMOVED, merged into this scan),
+> shows what was read («قرأنا: N منشور · M ردّ بوست» — counting only what
+> actually reached the extractor: standalone reply blocks lead the 16k
+> input so a heavy OCR window can't silently crowd them out, and dropped
+> input raises `truncated`). UI entry: «استخراج منتجاتك من صفحتك» — the
+> «استورد من ردود منشوراتك» button is REMOVED, merged into this scan;
+> `/catalog/scan-post-replies` remains as a deprecated ALIAS of the same
+> unified scan because app builds ≤2.0.23 still ship that button),
 > **bulk import** (paste a price list / upload a file →
 > extract proposals), and manual add. All paths land in one review sheet
 > shaped as a PRICE-COMPLETION step: merchants deliberately keep prices out
