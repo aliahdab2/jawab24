@@ -33,6 +33,8 @@
   - Events Subscribed:
     - `messages` - incoming DMs to pages/Instagram
     - `messaging_postbacks` - button clicks
+    - `messaging_referrals` - ad / m.me attribution (added 2026-08-04; existing pages need the
+      re-subscribe script — see "Ad referral attribution" below)
     - `feed` - post/comment activity — **active in Live mode** (was blocked in dev mode)
     - `message_deliveries` - delivery confirmation
     - `message_reads` - read receipts
@@ -51,6 +53,31 @@
 - **Rich Product Cards**: When an ecommerce tool returns a product reference (e.g. `check_inventory`), the reply pipeline sends a follow-up Generic Template carousel with the product image, price, and a `View product` button. Payload building (truncation, Meta limits, messaging_type) lives in `backend/src/services/metaMessaging.ts` and is shared by Messenger and Instagram. The card build/lookup lives in `backend/src/services/reply/productCardBuilder.ts`. Card send failures are logged but don't invalidate the text reply already delivered.
 
 - **Business Portfolio Fallback (2026-04-15)**: Facebook's `/me/accounts` returns an empty array for Pages owned by a Meta Business Portfolio, even when the user has "Facebook access with Full control" and all permissions granted. `facebookService.getUserPages` handles this by falling back to `/debug_token` `granular_scopes` discovery and fetching each authorized Page individually. See `backend/src/services/facebook.ts:getUserPages` and tests in `backend/test/services/facebook.test.ts` describe block `getUserPages — Business Portfolio fallback`.
+
+- **Ad referral attribution (Click-to-Messenger / m.me / ig.me, 2026-08-04)**:
+  - Meta delivers a `referral` object in one of three shapes, all consumed by
+    `controllers/webhook.ts` (parser: `backend/src/utils/metaReferral.ts`): a standalone
+    `messaging_referrals` event (`entry[].messaging[].referral` — m.me links and ads into an
+    existing thread), `postback.referral` (Get Started tap from an ad), and `message.referral`
+    (first message from a Click-to-Messenger ad).
+  - Extracted fields: `source` ('ADS' | 'SHORTLINK' | …), `ref` (free-form campaign param),
+    `ad_id`; `ads_context_data` presence is logged but not stored.
+  - Stored on `conversations` (`referral_source`, `referral_ref`, `referral_ad_id`,
+    `referral_at`) — **first-touch wins**: `conversationsService.recordReferral` guards the
+    write with `referral_at IS NULL`, so a later referral never overwrites the first. If the
+    referral arrives before any message, the conversation row is created through the same
+    `findOrCreate` upsert the message path uses.
+  - Leads: `maybeCaptureLead` copies the conversation's `referral_ad_id` (fallback
+    `referral_ref`) into `leads.source_ad_id` (also first-touch — COALESCE on upsert).
+  - Read path: the thread endpoint (`GET /messages/conversation/:senderId`) hydrates a
+    conversation-level `referral` object onto its messages; `leads` payloads carry
+    `sourceAdId`. Capture layer only — **no dashboard UI yet** (no funnel view exists).
+  - Robustness: parsing is fully defensive — malformed/missing referral fields are skipped at
+    debug level and can never break message processing.
+  - ⚠️ Ops: Meta does NOT deliver a webhook field retroactively. Pages subscribed before
+    2026-08-04 must be re-subscribed (`backend/src/scripts/resubscribe-messaging-postbacks.ts`
+    applies the current field list, now including `messaging_referrals`). Instagram delivery
+    additionally depends on the Instagram webhook fields enabled in the Meta App Dashboard.
 
 - **Reply Modes (Comments)**:
   - `public` - reply as a public comment

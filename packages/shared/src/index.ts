@@ -151,6 +151,23 @@ export interface Message {
   /** Store-then-enrich lifecycle for attachment rows: null | 'pending' | 'done' | 'failed'.
    *  See messages table schema + nonTextHandler. */
   enrichmentStatus?: string | null;
+  /**
+   * Conversation-level, first-touch ad / m.me attribution (Meta messaging
+   * referral). Hydrated only on the thread endpoint
+   * (GET /messages/conversation/:senderId) and only when the conversation was
+   * attributed — undefined elsewhere. Same value on every message of a thread:
+   * attribution belongs to the conversation, not the individual message.
+   */
+  referral?: {
+    /** Meta referral source, verbatim: 'ADS' | 'SHORTLINK' | … */
+    source: string | null;
+    /** Free-form `ref` campaign param from the ad / m.me link. */
+    ref: string | null;
+    /** Meta ad id (present when source is ADS). */
+    adId: string | null;
+    /** When the first referral touch landed. */
+    at: string | Date | null;
+  };
 }
 
 // --- Comment Types ---

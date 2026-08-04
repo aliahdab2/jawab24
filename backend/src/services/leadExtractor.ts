@@ -7,6 +7,7 @@ import { config } from '../config';
 import { redis } from '../lib/redis';
 import { publishSSEEvent } from '../lib/eventBus';
 import { messagesService } from './messages';
+import { conversationsService } from './conversations';
 import { notificationService } from './notifications';
 import { logAiUsage } from './aiUsageLog';
 import { getModelForUser } from './aiModelResolver';
@@ -118,6 +119,9 @@ export interface LeadRecord {
     followUpReason: string | null;
     /** When the lead was last flagged for follow-up, or null. */
     followUpAt: Date | null;
+    /** First-touch ad attribution from the conversation (referral_ad_id, falling
+     *  back to referral_ref for m.me/link campaigns), or null. */
+    sourceAdId: string | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -502,6 +506,22 @@ class LeadExtractorService {
                 extractionStatus = 'pending';
             }
 
+            // First-touch ad attribution: if this conversation started from a
+            // Click-to-Messenger ad (or an m.me/ig.me campaign link), stamp the
+            // campaign on the lead. ad_id preferred; ref is the fallback for link
+            // campaigns that carry no ad id. Best-effort — a lookup failure must
+            // never block the capture. Commenters who never DM'd have no
+            // conversation row, so this stays null for pure comment leads.
+            let sourceAdId: string | null = null;
+            try {
+                const conversation = await conversationsService.findByPageAndSender(pageId, senderId);
+                sourceAdId = conversation?.referralAdId ?? conversation?.referralRef ?? null;
+            } catch (referralErr) {
+                this.logger.debug('lead referral lookup failed; capturing without ad attribution', {
+                    err: referralErr, pageId, senderId,
+                });
+            }
+
             const { upserted, isNew } = await this.upsertLead({
                 pageId,
                 sourceId,
@@ -511,6 +531,7 @@ class LeadExtractorService {
                 phone: extractedPhone || rawPhone,
                 extractedData,
                 extractionStatus,
+                sourceAdId,
             });
 
             this.logger.info('[leadExtractor] Lead captured', {
@@ -938,6 +959,8 @@ class LeadExtractorService {
         phone: string;
         extractedData: LeadExtractedData;
         extractionStatus: 'completed' | 'pending';
+        /** First-touch ad attribution from the conversation, or null. */
+        sourceAdId?: string | null;
     }): Promise<{ upserted: LeadRecord; isNew: boolean }> {
         // Check if lead already exists for this sender+page. The card + status are
         // read too so a re-capture MERGES into the existing card (below) instead
@@ -995,6 +1018,7 @@ class LeadExtractorService {
                 status: 'new',
                 extractionStatus: data.extractionStatus,
                 extractionAttempts: data.extractionStatus === 'pending' ? 1 : 0,
+                sourceAdId: data.sourceAdId ?? null,
             })
             .onConflictDoUpdate({
                 target: [leads.senderId, leads.pageId],
@@ -1006,6 +1030,9 @@ class LeadExtractorService {
                     extractedData: mergedData,
                     extractionStatus: mergedStatus,
                     extractionAttempts: sql`${leads.extractionAttempts} + 1`,
+                    // First-touch: keep the campaign that produced the lead; only
+                    // fill in when the existing row has no attribution yet.
+                    sourceAdId: sql`COALESCE(${leads.sourceAdId}, EXCLUDED.source_ad_id)`,
                     // Re-engagement (non-destructive): flag for follow-up ONLY when the
                     // merchant already moved this lead past 'new' (contacted/converted)
                     // — i.e. they handled it and the customer came BACK. A lead still in

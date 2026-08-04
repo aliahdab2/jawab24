@@ -667,7 +667,7 @@ describe('Facebook Service', () => {
                 null,
                 {
                     params: {
-                        subscribed_fields: 'feed,messages,messaging_postbacks',
+                        subscribed_fields: 'feed,messages,messaging_postbacks,messaging_referrals',
                         access_token: 'page_token_abc',
                     },
                 }
@@ -704,12 +704,12 @@ describe('Facebook Service', () => {
             expect(fbAxios.post).toHaveBeenNthCalledWith(1,
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
-                { params: { subscribed_fields: 'feed,messages,messaging_postbacks', access_token: 'page_token' } },
+                { params: { subscribed_fields: 'feed,messages,messaging_postbacks,messaging_referrals', access_token: 'page_token' } },
             );
             expect(fbAxios.post).toHaveBeenNthCalledWith(2,
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
-                { params: { subscribed_fields: 'messages,messaging_postbacks', access_token: 'page_token' } },
+                { params: { subscribed_fields: 'messages,messaging_postbacks,messaging_referrals', access_token: 'page_token' } },
             );
         });
 
