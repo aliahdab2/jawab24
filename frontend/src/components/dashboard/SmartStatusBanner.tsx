@@ -9,6 +9,7 @@ import {
   MessageSquare,
   MessageCircle,
   Clock,
+  Phone,
   X,
 } from 'lucide-react';
 import { Card, ChannelRibbon, PLATFORM_LABEL_KEYS } from '@/components/ui';
@@ -44,9 +45,20 @@ export interface NeedsAttentionItem {
   earliestAt?: string | Date | null;
 }
 
+/** Workspace-wide leads sitting at `new` — rendered as ONE aggregate row, never
+ *  one row per lead: a 19-lead queue would bury the comment/message rows that
+ *  share this banner. */
+export interface LeadsAttentionSummary {
+  count: number;
+  latestName: string | null;
+  latestAt: string | null;
+}
+
 interface SmartStatusBannerProps {
   commentNeedsAction: number;
   messageNeedsAction: number;
+  /** Omit (or pass count 0) to hide the leads row entirely. */
+  leads?: LeadsAttentionSummary;
   items: NeedsAttentionItem[];
   /** Called when an item is clicked (opens inline modal instead of navigating) */
   onItemClick?: (item: NeedsAttentionItem) => void;
@@ -83,6 +95,7 @@ function getReasonTag(
 export function SmartStatusBanner({
   commentNeedsAction,
   messageNeedsAction,
+  leads,
   items,
   onItemClick,
   showChannelBadge = false,
@@ -97,7 +110,8 @@ export function SmartStatusBanner({
   const contentRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState(0);
 
-  const totalCount = commentNeedsAction + messageNeedsAction;
+  const leadsCount = leads?.count ?? 0;
+  const totalCount = commentNeedsAction + messageNeedsAction + leadsCount;
 
   const { dismissed, dismiss: handleDismiss } = useTimedDismiss({
     key: 'smartBannerDismissedAt',
@@ -123,6 +137,9 @@ export function SmartStatusBanner({
 
   // Build breakdown text: "3 comments · 2 messages" (ICU plural-aware)
   const breakdownParts: string[] = [];
+  if (leadsCount > 0) {
+    breakdownParts.push(tDash('smartBanner.leadsCount', { count: leadsCount }));
+  }
   if (commentNeedsAction > 0) {
     breakdownParts.push(tDash('smartBanner.commentsCount', { count: commentNeedsAction }));
   }
@@ -131,9 +148,11 @@ export function SmartStatusBanner({
   }
   const breakdown = breakdownParts.join(' · ');
 
-  // Items to show (max 5)
+  // Items to show (max 5). The leads row is an extra aggregate row on top, so the
+  // item cap is unchanged — leads never crowd out comment/message rows.
   const visibleItems = items.slice(0, 5);
-  const hasMore = totalCount > 5;
+  // `items` only ever carries comments+messages; leads have no per-lead rows here.
+  const hasMore = commentNeedsAction + messageNeedsAction > 5;
 
   // Build "View all" links
   const viewAllLinks: { label: string; href: string }[] = [];
@@ -149,12 +168,12 @@ export function SmartStatusBanner({
       });
     } else if (commentNeedsAction > 0) {
       viewAllLinks.push({
-        label: tDash('smartBanner.viewAllItems', { count: totalCount }),
+        label: tDash('smartBanner.viewAllItems', { count: commentNeedsAction }),
         href: '/comments?filter=needs_action',
       });
     } else {
       viewAllLinks.push({
-        label: tDash('smartBanner.viewAllItems', { count: totalCount }),
+        label: tDash('smartBanner.viewAllItems', { count: messageNeedsAction }),
         href: '/messages?filter=needs_action',
       });
     }
@@ -248,6 +267,38 @@ export function SmartStatusBanner({
           >
             <div ref={contentRef}>
               <div className="border-t border-rose-200/60 dark:border-rose-700/40">
+                {/* Leads: ONE aggregate row, first — a customer who left a phone
+                    number is the highest-intent item in this banner, and there is
+                    no per-lead row to bury the rest. */}
+                {leadsCount > 0 && (
+                  <Link
+                    href="/leads"
+                    className="flex items-start gap-3 py-3 sm:py-3.5 px-4 sm:px-5 hover:bg-rose-100/50 dark:hover:bg-rose-800/30 transition-colors w-full text-start border-b border-rose-100/80 dark:border-rose-700/30"
+                  >
+                    <div className="shrink-0 mt-0.5">
+                      <Phone className="w-4 h-4 text-rose-600 dark:text-rose-400" aria-hidden="true" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm font-semibold truncate">
+                          {tDash('smartBanner.leadsWaiting', { count: leadsCount })}
+                        </span>
+                        {leads?.latestAt && (
+                          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-rose-700/70 dark:text-rose-400/60">
+                            <Clock className="w-3 h-3" aria-hidden="true" />
+                            {formatRelativeTime(leads.latestAt, tTime)}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-rose-800/70 dark:text-rose-300/60 truncate leading-relaxed">
+                        {leads?.latestName
+                          ? tDash('smartBanner.leadsLatest', { name: leads.latestName })
+                          : tDash('smartBanner.leadsHint')}
+                      </p>
+                    </div>
+                  </Link>
+                )}
+
                 {visibleItems.length > 0 ? (
                   <ul className="divide-y divide-rose-100/80 dark:divide-rose-700/30">
                     {visibleItems.map((item) => {
@@ -342,11 +393,14 @@ export function SmartStatusBanner({
                       );
                     })}
                   </ul>
-                ) : (
+                ) : (commentNeedsAction + messageNeedsAction) > 0 ? (
+                  // Counts say there are comment/message items but they haven't
+                  // arrived yet. Gated on that subtotal: a leads-ONLY banner has
+                  // no items to wait for and must not sit on a loading line.
                   <div className="px-4 py-3 text-xs text-rose-700/70 dark:text-rose-400/60">
                     {tc('loading')}
                   </div>
-                )}
+                ) : null}
 
                 {/* View all link(s) */}
                 {viewAllLinks.length > 0 && (

@@ -9,7 +9,6 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader, EmptyState, ConfirmationModal, Input, WhatsAppIcon } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useIsDemoUser } from '@/features/demo/useDemoMode';
-import { useUIStore } from '@/lib/store';
 import { leadsApi, pagesApi, workspaceApi, type Lead, type LeadStatus, type LeadStagesConfig, type LeadCustomFieldDef } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import type { Page } from '@jawab24/shared';
@@ -489,10 +488,12 @@ const LeadsPage: NextPageWithLayout = () => {
   const tc = useTranslations('common');
   const { language } = useLanguage();
   const queryClient = useQueryClient();
-  const resetNewLeads = useUIStore((s) => s.resetNewLeads);
 
-  useEffect(() => { resetNewLeads(); }, [resetNewLeads]);
-
+  // NOTE: visiting this page deliberately does NOT clear the nav badge any more.
+  // The badge counts `new`-status leads on the server, so it clears when the
+  // merchant actually WORKS a lead (status change / delete), not when they glance
+  // at the list. Merely looking used to silence the signal while the whole queue
+  // sat untouched — found live 2026-08-04 (19 unworked leads, no signal anywhere).
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [exporting, setExporting] = useState(false);
@@ -729,6 +730,8 @@ const LeadsPage: NextPageWithLayout = () => {
       }
       invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
       queryClient.invalidateQueries({ queryKey: ['leads-counts', selectedPageId] });
+      // Workspace-wide `new` count behind the nav badge + dashboard attention row.
+      queryClient.invalidateQueries({ queryKey: ['leads-count'] });
     },
     onError: (err, { lead }) => {
       captureError(err, 'Failed to update lead status');
@@ -745,6 +748,8 @@ const LeadsPage: NextPageWithLayout = () => {
       setLeadToDelete(null);
       invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
       queryClient.invalidateQueries({ queryKey: ['leads-counts', selectedPageId] });
+      // Workspace-wide `new` count behind the nav badge + dashboard attention row.
+      queryClient.invalidateQueries({ queryKey: ['leads-count'] });
     },
     onError: (err) => {
       captureError(err, 'Failed to delete lead');

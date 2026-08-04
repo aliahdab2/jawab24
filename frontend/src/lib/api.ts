@@ -1487,6 +1487,13 @@ export const leadsApi = {
   getCount: (pageId: string) =>
     api.get<{ count: number }>('/leads/count', { params: { pageId } }),
 
+  /** Workspace-wide `new` leads summary — drives the dashboard attention row and
+   *  the nav badge. Omits pageId deliberately: the dashboard is workspace-scoped
+   *  (like commentsApi.getStats), so a per-page count would hide the other pages'
+   *  waiting customers. */
+  getNewSummary: () =>
+    api.get<{ count: number; latestName: string | null; latestAt: string | null }>('/leads/count'),
+
   updateStatus: (leadId: string, pageId: string, status: LeadStatus, subStage?: string | null) =>
     api.patch<Lead>(`/leads/${leadId}/status`, { pageId, status, subStage: subStage ?? null }),
 

@@ -1122,6 +1122,39 @@ class LeadExtractorService {
         return value;
     }
 
+    /**
+     * Workspace-wide `new` leads summary — feeds the dashboard attention row
+     * and the nav badge (which must reflect the standing queue, not the
+     * session; a merchant whose leads arrive while the app is closed would
+     * otherwise never see a signal). `latest*` lets the UI show who is
+     * waiting most recently.
+     */
+    async getNewLeadsSummaryForWorkspace(
+        workspaceId: string,
+    ): Promise<{ count: number; latestName: string | null; latestAt: Date | null }> {
+        const newLeadsOfWorkspace = and(
+            eq(pages.workspaceId, workspaceId),
+            eq(leads.status, 'new'),
+        );
+        const [[{ value }], [latest]] = await Promise.all([
+            db.select({ value: count() })
+                .from(leads)
+                .innerJoin(pages, eq(pages.id, leads.pageId))
+                .where(newLeadsOfWorkspace),
+            db.select({ senderName: leads.senderName, createdAt: leads.createdAt })
+                .from(leads)
+                .innerJoin(pages, eq(pages.id, leads.pageId))
+                .where(newLeadsOfWorkspace)
+                .orderBy(desc(leads.createdAt))
+                .limit(1),
+        ]);
+        return {
+            count: value,
+            latestName: latest?.senderName ?? null,
+            latestAt: latest?.createdAt ?? null,
+        };
+    }
+
     async updateLeadStatus(
         leadId: string,
         pageId: string,

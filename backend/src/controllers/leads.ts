@@ -202,17 +202,25 @@ export class LeadsController {
         return reply.status(204).send();
     }
 
-    /** GET /leads/count?pageId=&status= */
+    /**
+     * GET /leads/count?pageId=
+     * With pageId: that page's `new` count (legacy per-page shape).
+     * Without: workspace-wide summary { count, latestName, latestAt } — feeds
+     * the dashboard attention row + the nav badge.
+     */
     async getCount(
         request: FastifyRequest<{
-            Querystring: { pageId: string; status?: string };
+            Querystring: { pageId?: string; status?: string };
         }>,
         reply: FastifyReply,
     ) {
         const req = request as ResolvedWorkspaceRequest;
         const { pageId } = request.query;
 
-        if (!pageId) return reply.status(400).send({ error: 'pageId is required' });
+        if (!pageId) {
+            const summary = await leadExtractorService.getNewLeadsSummaryForWorkspace(req.workspaceId);
+            return reply.send(summary);
+        }
 
         const page = await pagesService.getPage(req.workspaceId, pageId);
         if (!page) return reply.status(404).send({ error: 'Page not found' });

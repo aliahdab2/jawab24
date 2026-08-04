@@ -181,4 +181,99 @@ describe('SmartStatusBanner', () => {
     const dismissButton = screen.getByRole('button', { name: /dismiss/i });
     expect(dismissButton).toBeInTheDocument();
   });
+
+  // The leads row: a workspace-wide queue of customers who left a phone number.
+  // Regression origin (2026-08-04): a paying merchant had 19 unworked leads and
+  // NOTHING on the dashboard mentioned them.
+  describe('leads row', () => {
+    const renderWithLeads = (
+      leads: { count: number; latestName: string | null; latestAt: string | null },
+      items: NeedsAttentionItem[] = [],
+      counts?: { comments?: number; messages?: number },
+    ) =>
+      render(
+        <SmartStatusBanner
+          commentNeedsAction={counts?.comments ?? items.filter(i => i.type === 'comment').length}
+          messageNeedsAction={counts?.messages ?? items.filter(i => i.type === 'message').length}
+          leads={leads}
+          items={items}
+        />,
+      );
+
+    it('shows the banner for leads ALONE (no comments or messages)', () => {
+      renderWithLeads({ count: 19, latestName: 'Feras', latestAt: '2026-08-04T13:22:00Z' });
+      expect(screen.getByRole('button', { name: /19 items need your attention/i })).toBeInTheDocument();
+    });
+
+    it('counts leads into the header total alongside comments and messages', () => {
+      renderWithLeads(
+        { count: 19, latestName: null, latestAt: null },
+        [makeMessageItem(), makeCommentItem()],
+      );
+      expect(screen.getByRole('button', { name: /21 items need your attention/i })).toBeInTheDocument();
+    });
+
+    it('renders ONE aggregate row linking to /leads, never one row per lead', () => {
+      renderWithLeads({ count: 19, latestName: 'Feras', latestAt: '2026-08-04T13:22:00Z' });
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+
+      const leadLinks = screen.getAllByRole('link').filter(a => a.getAttribute('href') === '/leads');
+      expect(leadLinks).toHaveLength(1);
+      expect(screen.getByText(/19 customers left their number and are waiting/i)).toBeInTheDocument();
+    });
+
+    it('names the most recent waiting lead when available', () => {
+      renderWithLeads({ count: 3, latestName: 'عبدالخالق عامر', latestAt: '2026-08-04T13:22:00Z' });
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+      expect(screen.getByText(/عبدالخالق عامر/)).toBeInTheDocument();
+    });
+
+    it('falls back to a generic hint when the latest name is unknown', () => {
+      renderWithLeads({ count: 3, latestName: null, latestAt: null });
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+      expect(screen.getByText(/open to contact them/i)).toBeInTheDocument();
+    });
+
+    // A leads-only banner has no comment/message items to wait for, so the
+    // loading line must not appear (it would never resolve).
+    it('does not show the loading line when only leads are present', () => {
+      renderWithLeads({ count: 5, latestName: null, latestAt: null });
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+      expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+    });
+
+    it('still shows the loading line when comment/message counts exist but items have not arrived', () => {
+      renderWithLeads({ count: 5, latestName: null, latestAt: null }, [], { comments: 2 });
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    });
+
+    it('hides the leads row when the count is zero', () => {
+      renderWithLeads({ count: 0, latestName: null, latestAt: null }, [makeMessageItem()]);
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+      expect(screen.queryByText(/left their number/i)).not.toBeInTheDocument();
+      expect(screen.getAllByRole('link').filter(a => a.getAttribute('href') === '/leads')).toHaveLength(0);
+    });
+
+    it('renders nothing at all when leads are omitted and nothing needs action', () => {
+      const { container } = render(
+        <SmartStatusBanner commentNeedsAction={0} messageNeedsAction={0} items={[]} />,
+      );
+      expect(container).toBeEmptyDOMElement();
+    });
+
+    // "View all" belongs to the comment/message list, so its count must exclude
+    // leads — otherwise a 19-lead queue would advertise "View all 21 comments".
+    it('excludes leads from the comment/message "view all" count', () => {
+      renderWithLeads(
+        { count: 19, latestName: null, latestAt: null },
+        Array.from({ length: 6 }, (_, i) => makeCommentItem({ id: `c${i}` })),
+      );
+      fireEvent.click(screen.getByRole('button', { name: /need.*attention/i }));
+      // Comments-only → the generic "View all N items" label, counting the 6
+      // comments and NOT the 19 leads (which have their own row and link).
+      expect(screen.getByText(/View all 6 items/i)).toBeInTheDocument();
+      expect(screen.queryByText(/View all 25/i)).not.toBeInTheDocument();
+    });
+  });
 });

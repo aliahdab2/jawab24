@@ -2,8 +2,14 @@
  * Daily lead digest email service.
  *
  * Runs once per day (via cron). Aggregates unsent leads per **workspace**
- * (not per user). When a workspace accumulates ≥ DIGEST_THRESHOLD unsent
- * leads, the digest fans out to all workspace owners + admins who:
+ * (not per user). A workspace's digest fires when EITHER trigger is met:
+ *   - volume:  ≥ DIGEST_THRESHOLD unsent leads, or
+ *   - age:     the oldest unsent lead is ≥ DIGEST_MAX_AGE_HOURS old.
+ * The volume trigger alone starved low-volume merchants (found live
+ * 2026-08-04: a paying merchant at ~1 lead/day was emailed exactly once —
+ * the day his first 10 accumulated — then never again while 9 more piled
+ * up; a lead is time-sensitive, so the age trigger caps the wait).
+ * When it fires, the digest fans out to all workspace owners + admins who:
  *   1. have an email on file
  *   2. logged in within ENGAGEMENT_WINDOW_DAYS (protects sender reputation)
  *   3. have not muted the digest (`workspace_members.lead_digest_muted_at` IS NULL)
@@ -39,6 +45,10 @@ import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
 
 export const DIGEST_THRESHOLD = 10;
+// Age flush: send even below threshold once the oldest unsent lead has waited
+// this long. 48h keeps the daily cron's worst case at "two mornings", without
+// mailing a merchant every single day for a one-lead trickle.
+export const DIGEST_MAX_AGE_HOURS = 48;
 export const ENGAGEMENT_WINDOW_DAYS = 30;
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
 const RECIPIENT_ROLES = ['owner', 'admin'] as const;
@@ -177,9 +187,19 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
 
     for (const [workspaceId, bucket] of byWorkspace) {
         result.processed++;
-        if (bucket.leadIds.length < DIGEST_THRESHOLD) {
+        // Volume OR age: below-threshold batches still flush once their oldest
+        // lead has waited DIGEST_MAX_AGE_HOURS (leads are time-sensitive; the
+        // threshold alone silenced low-volume merchants for ~10 days at a time).
+        // Seeded with Infinity rather than element 0 so an empty bucket needs no
+        // non-null assertion: it yields Infinity, i.e. "nothing old enough".
+        const oldestMs = bucket.digestLeads.reduce(
+            (min, l) => Math.min(min, l.createdAt.getTime()),
+            Infinity,
+        );
+        const ageFlush = oldestMs <= Date.now() - DIGEST_MAX_AGE_HOURS * 60 * 60 * 1000;
+        if (bucket.leadIds.length < DIGEST_THRESHOLD && !ageFlush) {
             result.skipped++;
-            continue; // below threshold — let leads accumulate, don't stamp, no audit
+            continue; // below both triggers — let leads accumulate, don't stamp, no audit
         }
 
         try {

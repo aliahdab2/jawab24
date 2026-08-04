@@ -267,6 +267,34 @@ test.describe('Dashboard Page', () => {
     await expect(expandButton).toHaveAttribute('aria-expanded', 'false');
   });
 
+  // Leads row in the attention banner. Origin (2026-08-04): a paying merchant had
+  // 19 unworked leads and the dashboard mentioned them nowhere — the section was
+  // reachable only from the nav, so he never opened it.
+  test('should surface waiting leads in the attention banner and count them in the total', async ({ page }) => {
+    await page.route('**/api/leads/count**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ count: 19, latestName: 'Feras', latestAt: new Date().toISOString() }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // 3 comments + 1 message + 19 leads
+    await expect(page.getByText(/23.*items need your attention/i)).toBeVisible({ timeout: 15000 });
+
+    // The leads row appears in the expanded list and links to /leads
+    await page.getByRole('button', { name: /items need your attention/i }).click();
+    // href$= matches both "/leads" and the locale-prefixed "/en/leads" Next emits.
+    const leadsLink = page.locator('a[href$="/leads"]').filter({ hasText: /waiting/i });
+    await expect(leadsLink).toHaveCount(1);
+    await expect(leadsLink).toContainText('Feras');
+  });
+
   test('should hide banner when no items need action', async ({ page }) => {
     // Override stats to have needsAttention = 0 for both comments and messages
     await page.route('**/api/comments/stats**', async (route) => {

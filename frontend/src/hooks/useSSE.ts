@@ -97,7 +97,6 @@ export function useSSE(): void {
     const setSSEStatus = useUIStore((s) => s.setSSEStatus);
     const incrementUnreadComments = useUIStore((s) => s.incrementUnreadComments);
     const incrementUnreadMessages = useUIStore((s) => s.incrementUnreadMessages);
-    const incrementNewLeads = useUIStore((s) => s.incrementNewLeads);
 
     const esRef = useRef<EventSource | null>(null);
     const retryCountRef = useRef(0);
@@ -301,11 +300,12 @@ export function useSSE(): void {
         es.addEventListener('lead:captured', (e) => {
             try {
                 const event: SSEEvent<'lead:captured'> = JSON.parse(e.data);
+                // The badge is server-derived (useNewLeadsSummary reads this same
+                // ['leads-count'] key), so invalidating IS the badge update —
+                // there is no session counter to bump. Only the instant toast
+                // honors the alerts toggle.
                 invalidateListAndStats({ listKey: ['leads'], statsKey: ['leads-count'], pageRoute: '/leads' });
                 if (!isOnPage('/leads')) {
-                    // Badge stays (passive counter, like the bell row the backend keeps
-                    // when muted); only the instant toast honors the alerts toggle.
-                    incrementNewLeads();
                     if (leadAlertsEnabledRef.current) {
                         showToast(
                             t('newLead', { name: event.data.senderName || event.data.phone }),
@@ -359,7 +359,6 @@ export function useSSE(): void {
         setSSEStatus,
         incrementUnreadComments,
         incrementUnreadMessages,
-        incrementNewLeads,
         isOnPage,
         showToast,
         t,

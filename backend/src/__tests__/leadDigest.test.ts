@@ -2,6 +2,7 @@
  * Tests: daily lead digest service.
  * Verifies:
  *   - per-workspace threshold + grouping
+ *   - age flush: below-threshold batches send once the oldest lead is stale
  *   - workspace-owner subscription gate
  *   - per-recipient gates: muted, no email, abandoned
  *   - fan-out: every owner+admin gets one email
@@ -96,16 +97,18 @@ vi.mock('../config', () => ({
     },
 }));
 
-import { runDailyLeadDigest, DIGEST_THRESHOLD, ENGAGEMENT_WINDOW_DAYS } from '../services/leadDigest';
+import { runDailyLeadDigest, DIGEST_THRESHOLD, DIGEST_MAX_AGE_HOURS, ENGAGEMENT_WINDOW_DAYS } from '../services/leadDigest';
 import { db } from '../db';
 
-function makeLeadRow(workspaceId: string, i: number, overrides: Partial<{ phone: string; name: string; source: string; kb: string | null }> = {}) {
+function makeLeadRow(workspaceId: string, i: number, overrides: Partial<{ phone: string; name: string; source: string; kb: string | null; createdAt: Date }> = {}) {
     return {
         leadId: `lead-${workspaceId}-${i}`,
         leadName: overrides.name ?? `Customer ${i}`,
         leadPhone: overrides.phone ?? `+9665550${String(i).padStart(4, '0')}`,
         leadSource: overrides.source ?? 'message',
-        leadCreatedAt: new Date(2026, 3, 1, 10, i),
+        // Fresh by default (minutes ago, distinct per index): below-threshold
+        // tests must not trip the age flush by accident.
+        leadCreatedAt: overrides.createdAt ?? new Date(Date.now() - i * 60_000),
         pageKb: overrides.kb ?? 'We sell electronics and gadgets.',
         workspaceId,
     };
@@ -135,7 +138,7 @@ describe('runDailyLeadDigest', () => {
         (db as unknown as { __resetSelectIndex: () => void }).__resetSelectIndex();
     });
 
-    it('does not send or stamp when workspace is below threshold', async () => {
+    it('does not send or stamp when workspace is below threshold and all leads are fresh', async () => {
         joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD - 1 }, (_, i) => makeLeadRow('ws-1', i));
 
         const result = await runDailyLeadDigest();
@@ -145,6 +148,48 @@ describe('runDailyLeadDigest', () => {
         expect(insertValuesMock).not.toHaveBeenCalled();
         expect(result.skipped).toBe(1);
         expect(result.sent).toBe(0);
+    });
+
+    it('age flush: sends below threshold once the oldest unsent lead exceeds DIGEST_MAX_AGE_HOURS', async () => {
+        const stale = new Date(Date.now() - (DIGEST_MAX_AGE_HOURS + 1) * 60 * 60 * 1000);
+        joinQueryRows.value = [makeLeadRow('ws-1', 0, { createdAt: stale })];
+        ownerSubQueue.value = [ownerSubActive];
+        recipientsQueue.value = [[ownerRecipient]];
+
+        const result = await runDailyLeadDigest();
+
+        expect(emailSendMock).toHaveBeenCalledTimes(1);
+        expect(updateSetMock).toHaveBeenCalled(); // stamped
+        expect(result.sent).toBe(1);
+        expect(result.skipped).toBe(0);
+    });
+
+    it('age flush keys on the OLDEST lead even when newer leads exist', async () => {
+        const stale = new Date(Date.now() - (DIGEST_MAX_AGE_HOURS + 1) * 60 * 60 * 1000);
+        joinQueryRows.value = [
+            makeLeadRow('ws-1', 0), // fresh
+            makeLeadRow('ws-1', 1, { createdAt: stale }),
+            makeLeadRow('ws-1', 2), // fresh
+        ];
+        ownerSubQueue.value = [ownerSubActive];
+        recipientsQueue.value = [[ownerRecipient]];
+
+        const result = await runDailyLeadDigest();
+
+        expect(emailSendMock).toHaveBeenCalledTimes(1);
+        expect(result.sent).toBe(1);
+        // The whole batch rides the flush: all three stamped together.
+        expect(updateWhereMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('age flush does NOT fire for a lead younger than the max age', async () => {
+        const nearlyStale = new Date(Date.now() - (DIGEST_MAX_AGE_HOURS - 1) * 60 * 60 * 1000);
+        joinQueryRows.value = [makeLeadRow('ws-1', 0, { createdAt: nearlyStale })];
+
+        const result = await runDailyLeadDigest();
+
+        expect(emailSendMock).not.toHaveBeenCalled();
+        expect(result.skipped).toBe(1);
     });
 
     it('fans out to owner + admins when all gates pass', async () => {

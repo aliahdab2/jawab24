@@ -2585,8 +2585,26 @@ OpenAI gpt-4.1-mini — extracts { phone, summary, fields[] }
         ↓
 DB upsert — ON CONFLICT (senderId, pageId) DO UPDATE (no duplicates)
         ↓
-SSE lead:captured → frontend badge + toast
+SSE lead:captured → invalidates ['leads-count'] → badge refetches + toast
 ```
+
+**Visibility of the standing queue (Aug 2026).** Three surfaces, all fed by the
+workspace-wide `new` count (`GET /leads/count` with **no** `pageId` →
+`{ count, latestName, latestAt }`):
+1. **Dashboard attention banner** — `SmartStatusBanner` renders ONE aggregate leads
+   row (never one row per lead) above the comment/message rows, and adds the count
+   to the banner total.
+2. **Nav badge** (sidebar + mobile "More") — reads the server count via
+   `useNewLeadsSummary`, so it survives an app restart. It clears when a lead's
+   **status changes**, not when the merchant merely visits `/leads`.
+3. **Digest email** — fires on volume (≥ `DIGEST_THRESHOLD`) **OR** age (oldest
+   unsent lead ≥ `DIGEST_MAX_AGE_HOURS`, 48h).
+
+Why all three: before Aug 2026 the badge was a session counter that reset to 0 on
+every app load and only ever incremented from a live SSE event, and the digest was
+volume-only. A paying merchant at ~1 lead/day was therefore emailed exactly once
+ever, saw a zero badge over 19 unworked leads, and the dashboard never mentioned
+leads at all.
 
 ### DB Schema
 
@@ -2608,7 +2626,7 @@ The three main statuses are fixed (the system depends on `new` for counters/dige
 
 ### Frontend
 
-`/leads` page — page selector, status filter tabs (All/New/Contacted/Converted), dynamic table columns from `extractedData.fields`, CSV export (incl. sub-stage + custom-field columns), real-time SSE updates via `lead:captured` event, new-leads badge in sidebar. Detail panel ordered by merchant workflow: AI intent summary + extracted details first, then contact actions, status + sub-stage picker, custom data fields. "Customize leads" opens `StageCustomizerModal`.
+`/leads` page — page selector, status filter tabs (All/New/Contacted/Converted), dynamic table columns from `extractedData.fields`, CSV export (incl. sub-stage + custom-field columns), real-time SSE updates via `lead:captured` event, server-backed new-leads badge in sidebar (see "Visibility of the standing queue" above — visiting the page no longer clears it). Detail panel ordered by merchant workflow: AI intent summary + extracted details first, then contact actions, status + sub-stage picker, custom data fields. "Customize leads" opens `StageCustomizerModal`.
 
 **Search is server-side (July 2026):** `GET /leads?search=` matches senderName, phone, and the extracted data's **summary + field values only** (never JSON keys or the bilingual labels — a whole-document text match would return every lead for common words like "الاسم"/"size"). Legacy double-encoded rows (jsonb strings) are normalized to objects in SQL before navigating; wildcards are escaped via `escapeLike`. Previously search filtered only the client-loaded rows, so any lead beyond the first page (50) was unfindable by name — the 2026-07-02 "Jawab24 didn't catch the lead" complaint was partly this.
 

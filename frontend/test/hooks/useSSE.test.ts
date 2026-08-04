@@ -23,7 +23,6 @@ let mockIsAuthenticated = true;
 const mockSetSSEStatus = vi.fn();
 const mockIncrementUnreadComments = vi.fn();
 const mockIncrementUnreadMessages = vi.fn();
-const mockIncrementNewLeads = vi.fn();
 
 vi.mock('@/lib/store', () => ({
     useAuthStore: (selector: (s: { isAuthenticated: boolean }) => unknown) =>
@@ -32,13 +31,11 @@ vi.mock('@/lib/store', () => ({
         setSSEStatus: typeof mockSetSSEStatus;
         incrementUnreadComments: typeof mockIncrementUnreadComments;
         incrementUnreadMessages: typeof mockIncrementUnreadMessages;
-        incrementNewLeads: typeof mockIncrementNewLeads;
     }) => unknown) =>
         selector({
             setSSEStatus: mockSetSSEStatus,
             incrementUnreadComments: mockIncrementUnreadComments,
             incrementUnreadMessages: mockIncrementUnreadMessages,
-            incrementNewLeads: mockIncrementNewLeads,
         }),
 }));
 
@@ -464,7 +461,7 @@ describe('useSSE', () => {
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['leads'] });
     });
 
-    it('lead:captured NOT on /leads → only invalidates count, shows toast, increments unread', async () => {
+    it('lead:captured NOT on /leads → invalidates the count (which IS the badge) and shows toast', async () => {
         mockPathname = '/dashboard';
         const { unmount: u } = await mountSSE();
         unmount = u;
@@ -478,14 +475,15 @@ describe('useSSE', () => {
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['leads-count'] });
         expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['leads'] });
-        expect(mockIncrementNewLeads).toHaveBeenCalledTimes(1);
         expect(mockToast).toHaveBeenCalledTimes(1);
     });
 
     // Regression (2026-07-19): «تنبيهات العملاء المحتملين الجدد» off still toasted —
     // the backend gated only the push. The toggle must silence the instant toast
-    // while keeping data freshness (count invalidation) and the passive badge.
-    it('lead:captured with alerts muted → no toast, but badge and count invalidation stay', async () => {
+    // while keeping data freshness and the passive badge. Since 2026-08-04 the
+    // badge reads the server count via the ['leads-count'] query, so invalidating
+    // that key IS the badge update — there is no session counter to assert on.
+    it('lead:captured with alerts muted → no toast, but the badge/count invalidation stays', async () => {
         mockLeadAlertsEnabled = false;
         mockPathname = '/dashboard';
         const { unmount: u } = await mountSSE();
@@ -499,7 +497,6 @@ describe('useSSE', () => {
         flushDebounce();
 
         expect(mockToast).not.toHaveBeenCalled();
-        expect(mockIncrementNewLeads).toHaveBeenCalledTimes(1);
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['leads-count'] });
     });
 
