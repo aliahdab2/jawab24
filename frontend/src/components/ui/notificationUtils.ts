@@ -1,5 +1,6 @@
 import {
     Bell, MessageCircle, AlertTriangle, CreditCard, CheckCircle, Unplug, BookOpen, Mail, Clock, UserPlus,
+    CalendarClock,
     type LucideIcon,
 } from 'lucide-react';
 import { isIOSNative } from '@/lib/capacitor';
@@ -99,6 +100,7 @@ export const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
     kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
     provider_failover:     { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     new_lead:              { icon: UserPlus,      iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'notif-ring-emerald' },
+    post_reply_orphaned:   { icon: CalendarClock, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
 };
 
 export const DEFAULT_STYLE: NotificationStyle = {
@@ -175,6 +177,10 @@ export function resolveNotificationRoute(
         case 'page_disconnected':
         case 'kb_gap':
             return '/pages';
+        // The scheduled post published under a different id, so the trigger is orphaned.
+        // Land the merchant where Post Replies are configured — re-arming is the fix.
+        case 'post_reply_orphaned':
+            return '/comments';
         default:
             return null;
     }
