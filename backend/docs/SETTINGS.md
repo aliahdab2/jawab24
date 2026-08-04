@@ -107,7 +107,7 @@ enabled and are silently suppressed otherwise — they never reach the AI.
 | `commentEscalationMinutes` / `messageEscalationMinutes` | `escalation.ts` cron | Unanswered-thread thresholds (defaults 60 / 30) before Needs Attention escalation. |
 | `handoffPauseDurationMinutes` | gate 3 | How long a manual reply pauses the AI on that thread. |
 | `holdLowConfidence` | gate 6 | Park low-confidence replies for review. See lead-capture defect above. |
-| `brandVoiceNotes` / `brandVoiceNotesMulti` | prompt builder | The persona — injected verbatim into the system prompt. Ships as a `[...]` placeholder template; unedited = generic replies. |
+| `brandVoiceNotes` / `brandVoiceNotesMulti` | prompt builder | The persona — injected verbatim into the system prompt. Ships as a `[...]` placeholder template; unedited = generic replies. **Per-page override:** `pages.brand_voice_notes_multi` (same `{lang, sourceLang}` shape, edited on `/business`, `PUT /pages/:id`) — when it has any non-empty variant it REPLACES this persona entirely for that page; empty/absent = inherit. Precedence lives in ONE choke point, `resolveBrandVoiceNotes` (`reply/contextEnricher.ts`), shared by production, warm-reply-cache and the playground/test-reply path — brand voice is a reply-cache key segment (`bv:`), so all three must resolve identically. No cache bump on change: the changed value changes the key by construction. |
 | `replyStyle` | `ai.ts` context + reply-cache key | Sent to the ai-worker and part of the semantic cache key. Prompt-side use marked `[future]` in `pages.ts` — verify before building on it. |
 | `dashboardLanguage` | frontend | UI locale only — never reply language. |
 | `defaultReplyLanguage` + `supportedLanguages` + `autoDetectLanguage` | language resolution | Template/reply language pick (`resolveLanguage`). |
@@ -123,6 +123,9 @@ enabled and are silently suppressed otherwise — they never reach the AI.
    away message they cannot see or edit (field gated behind Business Hours).
 4. **Page-off comments are not stored** — absence of rows IS the evidence, not a gap.
 5. **Settings are per-user** — for multi-page merchants resolve settings once, then reason
-   per page (only `pages.auto_reply_enabled` varies per page).
+   per page. Per-page variation: `pages.auto_reply_enabled`, and the brand-voice persona
+   when `pages.brand_voice_notes_multi` is set (it replaces the user-level persona for
+   that page — added after a workspace hosting two unrelated pages leaked one page's
+   persona into the other's replies).
 6. **`timezone` default is `Asia/Riyadh`** — a Libyan/Egyptian merchant who never touched
    it runs business hours 1–2h off.

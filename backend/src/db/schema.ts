@@ -244,6 +244,17 @@ export const pages = pgTable('pages', {
     // Business profile — structured data from Facebook sync
     businessProfile: jsonb('business_profile').default({}),
     businessProfileUpdatedAt: timestamp('business_profile_updated_at'),
+    // Page-level brand-voice (persona) override. Same `{lang → text, sourceLang}`
+    // shape as settings.brand_voice_notes_multi. When ANY language variant has
+    // non-whitespace content, it REPLACES the user/workspace-level persona for
+    // this page's replies (resolveBrandVoiceNotes in reply/contextEnricher.ts);
+    // otherwise resolution falls through to the user-level rule unchanged.
+    // Exists because settings are per-user (Trap 5 in docs/SETTINGS.md): a
+    // workspace hosting two unrelated pages leaked one page's persona into the
+    // other page's replies. No cache bump needed on write — brand voice is a
+    // reply-cache key segment (`bv:` in ai.ts), so a changed value can never
+    // hit a stale entry by construction.
+    brandVoiceNotesMulti: jsonb('brand_voice_notes_multi').$type<Record<string, string>>().default({}),
     // Catalog vertical (business type shaping catalog defaults). NULL = derive
     // from the FB page category (business_profile.suggestions.category) via
     // verticalFromFbCategory; a stored value is a merchant override and wins.

@@ -5,7 +5,7 @@ import type { PresentFields } from './catalogKbMatch';
 import { matchStructuredFieldLinesInKb } from './catalogKbMatch';
 
 // --- Validation schemas (single source of truth across backend + frontend) ---
-export { UpdateSettingsSchema, type UpdateSettingsInput } from './schemas/settings';
+export { UpdateSettingsSchema, BrandVoiceNotesMultiSchema, type UpdateSettingsInput } from './schemas/settings';
 
 // --- Flag Reason Translations ---
 export { default as flagReasonEn } from './i18n/en/flagReason.json';
@@ -413,6 +413,13 @@ export interface Page {
   // Business profile
   businessProfile?: BusinessProfile;
   businessProfileUpdatedAt?: string | Date | null;
+  /**
+   * Page-level brand-voice (persona) override — `{ [lang]: text, sourceLang }`,
+   * same shape as settings.brandVoiceNotesMulti. When any language variant has
+   * content it replaces the account-level persona for THIS page's replies;
+   * empty/absent = inherit the account-level persona.
+   */
+  brandVoiceNotesMulti?: Record<string, string> | null;
   // Per-page overrides of the workspace lead config. null/absent = inherit the
   // workspace's settings.leadStages / settings.leadFields. Set = full replacement
   // for this page (see resolveEffectiveLeadStages / resolveEffectiveLeadFields).

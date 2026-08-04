@@ -15,7 +15,7 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
 import { BusinessProfileSchema, validateSchema } from '../utils/validation';
-import { canonicalizeHoursWeek, removeKbLines } from '@jawab24/shared';
+import { canonicalizeHoursWeek, removeKbLines, BrandVoiceNotesMultiSchema } from '@jawab24/shared';
 import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
@@ -172,6 +172,18 @@ export class PagesController {
                     }
                     bp.hours = canon.value;
                 }
+            }
+
+            // Validate the page-level brand-voice override if present. The shared
+            // schema (also used by PUT /api/settings) rejects any non-string value
+            // — including a non-string `sourceLang` — and caps every language
+            // variant at MAX_BRAND_VOICE_LENGTH.
+            if (request.body.brandVoiceNotesMulti !== undefined) {
+                const bvValidation = validateSchema(BrandVoiceNotesMultiSchema, request.body.brandVoiceNotesMulti);
+                if (!bvValidation.success) {
+                    return reply.status(400).send({ error: 'Invalid brand voice notes', errors: bvValidation.errors });
+                }
+                request.body.brandVoiceNotesMulti = bvValidation.data;
             }
 
             const page = await pagesService.updatePage(req.workspaceId, id, request.body);

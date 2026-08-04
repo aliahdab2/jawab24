@@ -6,7 +6,7 @@
  * gets undefined — the prompt stays byte-identical (Phase B inertness).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { enrichPageContext } from '../../src/services/reply/contextEnricher';
+import { enrichPageContext, resolveBrandVoiceNotes } from '../../src/services/reply/contextEnricher';
 
 vi.mock('../../src/services/ecommerce', () => ({
     getStoreContextForAI: vi.fn(),
@@ -168,5 +168,47 @@ describe('enrichPageContext — fact-collections branch', () => {
 
         expect(factCollectionsService.buildFactCollectionsContext).not.toHaveBeenCalled();
         expect(ctx.factCollectionsBlock).toBeUndefined();
+    });
+});
+
+/**
+ * Brand voice is a reply-cache key segment (`bv:` in ai.ts), so the production
+ * path (enrichPageContext) and the warm-cache/playground direct call MUST
+ * resolve it identically — a divergence warms keys production never reads.
+ * Pinned by asserting the production output equals the exact call shape
+ * scripts/warm-reply-cache.ts uses: resolveBrandVoiceNotes(ownerSettings,
+ * message, page.brandVoiceNotesMulti).
+ */
+describe('enrichPageContext — brand voice (page override, warm-cache parity)', () => {
+    beforeEach(() => {
+        vi.mocked(catalogService.buildCatalogPromptBlock).mockResolvedValue(undefined);
+        vi.mocked(factCollectionsService.buildFactCollectionsContext).mockResolvedValue({ block: undefined, gated: false });
+    });
+
+    const userSettings = {
+        brandVoiceNotesMulti: { ar: 'شخصية الحساب', en: 'Account persona' },
+        supportedLanguages: ['ar', 'en'],
+    };
+
+    it('production and warm-cache resolve identically WITH a page override', async () => {
+        const pageMulti = { ar: 'شخصية الصفحة', sourceLang: 'ar' };
+        const message = 'كم السعر؟';
+
+        const ctx = await enrichPageContext(
+            { id: PAGE_ID, brandVoiceNotesMulti: pageMulti },
+            userSettings, message, undefined,
+        );
+
+        expect(ctx.brandVoiceNotes).toBe('شخصية الصفحة');
+        expect(ctx.brandVoiceNotes).toBe(resolveBrandVoiceNotes(userSettings, message, pageMulti));
+    });
+
+    it('production and warm-cache resolve identically WITHOUT a page override', async () => {
+        const message = 'كم السعر؟';
+
+        const ctx = await enrichPageContext({ id: PAGE_ID }, userSettings, message, undefined);
+
+        expect(ctx.brandVoiceNotes).toBe('شخصية الحساب');
+        expect(ctx.brandVoiceNotes).toBe(resolveBrandVoiceNotes(userSettings, message, undefined));
     });
 });

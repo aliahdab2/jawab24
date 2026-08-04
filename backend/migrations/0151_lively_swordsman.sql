@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ADD COLUMN IF NOT EXISTS "brand_voice_notes_multi" jsonb DEFAULT '{}'::jsonb;

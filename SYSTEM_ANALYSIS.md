@@ -915,7 +915,7 @@ This ensures pipeline metrics and downstream guards still function even without 
 | **aiModel** | string | gpt-4.1-mini | AI model selection (locked to DEFAULT_AI_MODEL) |
 | **dualReplyNudgeMulti** | JSONB | {} | `{ar: "...", en: "..."}` - translated nudge messages |
 | **dualReplyNudgeVariations** | JSONB | {} | `{ar: [...], en: [...]}` - anti-spam nudge variations per language |
-| **brandVoiceNotesMulti** | JSONB | {} | `{ar: "...", en: "..."}` - translated brand voice notes |
+| **brandVoiceNotesMulti** | JSONB | {} | `{ar: "...", en: "..."}` - translated brand voice notes. ⚠️ Per-USER — every page in the workspace inherits it unless `pages.brand_voice_notes_multi` (same shape) overrides it: when the page-level map has any non-empty variant it REPLACES this persona entirely for that page (`resolveBrandVoiceNotes` in `reply/contextEnricher.ts`). Editable per page on `/business` |
 
 ### Notification Channels
 

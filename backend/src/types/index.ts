@@ -151,6 +151,15 @@ export interface UpdatePageDTO {
     autoReplyEnabled?: boolean;
     knowledgeBase?: string;
     businessProfile?: import('../utils/validation').BusinessProfileInput;
+    /**
+     * Page-level brand-voice override — `{ [lang]: text, sourceLang }`, same
+     * shape as settings.brandVoiceNotesMulti. Validated in the controller with
+     * BrandVoiceNotesMultiSchema (every value a string, each variant capped at
+     * MAX_BRAND_VOICE_LENGTH). Full-replace semantics: the stored map is
+     * swapped for this one. Send `{}` (or all-empty variants) to clear the
+     * override and fall back to the account-level persona.
+     */
+    brandVoiceNotesMulti?: Record<string, string>;
 }
 
 /**

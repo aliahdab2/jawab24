@@ -3,6 +3,18 @@ import { MAX_TEMPLATE_MESSAGE_LENGTH, MAX_BRAND_VOICE_LENGTH } from '../constant
 import { isValidTimezone } from '../timezone';
 
 /**
+ * One multilingual brand-voice map: `{ [lang]: text, sourceLang }`. Every value
+ * (including the `sourceLang` metadata entry) must be a string, and every
+ * variant is capped at MAX_BRAND_VOICE_LENGTH. Shared by the user-level field
+ * (`PUT /api/settings` → settings.brand_voice_notes_multi) and the page-level
+ * override (`PUT /api/pages/:id` → pages.brand_voice_notes_multi) so the two
+ * writers can never drift in what shape they accept.
+ */
+export const BrandVoiceNotesMultiSchema = z.record(
+    z.string().max(MAX_BRAND_VOICE_LENGTH, `Brand voice notes must be ${MAX_BRAND_VOICE_LENGTH} characters or fewer`),
+);
+
+/**
  * Single source of truth for the `PUT /api/settings` payload shape.
  *
  * Consumed by:
@@ -70,7 +82,7 @@ export const UpdateSettingsSchema = z.object({
         .string()
         .max(MAX_BRAND_VOICE_LENGTH, `Brand voice notes must be ${MAX_BRAND_VOICE_LENGTH} characters or fewer`)
         .optional(),
-    brandVoiceNotesMulti: z.record(z.string().max(MAX_BRAND_VOICE_LENGTH)).optional(),
+    brandVoiceNotesMulti: BrandVoiceNotesMultiSchema.optional(),
     holdLowConfidence: z.boolean().optional(),
     onboardingCompletedAt: z.string().datetime().nullable().optional(),
 }).strict();
