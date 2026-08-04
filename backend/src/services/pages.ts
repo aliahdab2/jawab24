@@ -533,10 +533,17 @@ export class PagesService {
      * system prompt for a future reply. Concretely, today that is:
      *
      *   - business_profile (address / phones / hours / about / policies)   [Stage 2.6]
-     *   - settings.brandVoiceNotes / brandVoiceNotesMulti                  [future]
      *   - settings.replyStyle                                              [future]
      *   - settings.awayMessage / greetingMessage                           [future]
      *   - pages.knowledge_base (raw KB text) — already handled by updatePage
+     *
+     * Brand voice (settings.brandVoiceNotesMulti AND the per-page
+     * pages.brand_voice_notes_multi override) deliberately does NOT go through
+     * here: the resolved notes are their own cache-key segment (`bv:` in
+     * ai.ts:buildCacheKey, `brandVoiceHash` filter in the semantic cache), so a
+     * changed persona produces different keys by construction and can never be
+     * served a stale entry. Bumping kbActiveVersion for it would only retire
+     * every unrelated cached reply for the page (Rule 17.1).
      *
      * If you add a new field that gets prompt-injected (not tool-fetched), wire
      * its writer through this function or your edits won't reach customers

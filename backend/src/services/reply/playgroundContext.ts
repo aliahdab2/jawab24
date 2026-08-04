@@ -4,6 +4,7 @@ import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../ecommerce';
 import { catalogService } from '../catalog';
 import { factCollectionsService } from '../factCollections';
 import { composeFactMatchText } from '../factCollectionsMatcher';
+import { resolveBrandVoiceNotes } from './contextEnricher';
 import { captureError } from '../../utils/sentryHelpers';
 import { pickNudgeVariation } from './nudge';
 import { detectLanguageCode } from '../../utils/language';
@@ -27,6 +28,9 @@ export interface PlaygroundPageData {
     ecommerceStoreId?: string | null;
     /** Stage 2.6: needed to build the structured BUSINESS_INFO prompt block. */
     businessProfile?: unknown;
+    /** Page-level brand-voice override — resolved via resolveBrandVoiceNotes
+     *  when the caller doesn't pass an explicit `brandVoiceNotes`. */
+    brandVoiceNotesMulti?: unknown;
 }
 
 interface PlaygroundContextOptions {
@@ -72,9 +76,11 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
     let nudgeText: string | null = null;
     let defaultReplyLanguage: string | undefined;
+    let ownerSupportedLanguages: unknown;
     if (page.userId) {
         try {
             const ownerSettings = await settingsService.getSettings(page.userId);
+            ownerSupportedLanguages = ownerSettings.supportedLanguages;
             commentReplyMode = ownerSettings.commentReplyMode || 'public';
             if (commentReplyMode === 'dual') {
                 const qLang = detectLanguageCode(question);
@@ -152,6 +158,19 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
     const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance);
 
+    // 2c. Brand voice. An explicit caller value wins unchanged: the admin
+    //     playground / eval pin personas per case, and warm-reply-cache passes
+    //     the fully production-resolved value. Otherwise the PAGE-level
+    //     override is resolved through the SAME choke point as production
+    //     (Rule 19.2), so a page that overrides its persona is tested and
+    //     evaluated with the persona its customers actually get. The
+    //     user-settings half is deliberately empty here: this path has never
+    //     injected the account-level persona implicitly, and silently starting
+    //     to would shift every existing eval baseline.
+    const resolvedBrandVoiceNotes = brandVoiceNotes !== undefined
+        ? brandVoiceNotes
+        : resolveBrandVoiceNotes({ supportedLanguages: ownerSupportedLanguages }, question, page.brandVoiceNotesMulti);
+
     // 3. When comment mode is dual or private, use DM channel for detailed reply
     const effectiveChannel: 'comment' | 'dm' = (channel === 'comment' && (commentReplyMode === 'dual' || commentReplyMode === 'private'))
         ? 'dm'
@@ -184,7 +203,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         senderName: channel === 'dm' ? senderName : undefined,
         minutesSinceLastMessage: channel === 'dm' ? minutesSinceLastMessage : undefined,
         replyStyle,
-        brandVoiceNotes,
+        brandVoiceNotes: resolvedBrandVoiceNotes,
         businessInfoBlock,
         customerContext,
         model,

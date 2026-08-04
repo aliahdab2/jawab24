@@ -13,6 +13,7 @@ import { BusinessFactRows } from '@/components/business/BusinessFactRows';
 import { BusinessListsSection } from '@/components/business/BusinessListsSection';
 import { BusinessFactSheet, type EditableFactKey } from '@/components/business/BusinessFactSheet';
 import { BusinessHoursSheet } from '@/components/business/BusinessHoursSheet';
+import { PageBrandVoiceCard } from '@/components/business/PageBrandVoiceCard';
 import { KnowledgeBasePanel } from '@/components/knowledge-base/KnowledgeBasePanel';
 import { api, pagesApi, catalogApi, type CatalogVerticalInfo } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -419,6 +420,12 @@ function BusinessPageInner() {
               </div>
             )}
           </section>
+
+          {/* 5 — Per-page brand voice (persona) override. Last on purpose:
+              most pages inherit the account persona and never touch this. */}
+          <div className="order-5">
+            <PageBrandVoiceCard page={selectedPage} />
+          </div>
         </div>
       )}
       </div>

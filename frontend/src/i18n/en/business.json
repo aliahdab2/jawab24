@@ -115,6 +115,14 @@
     "title": "Additional information",
     "hint": "For anything the fields above don't cover: FAQs, special details, whatever else Jawab should know."
   },
+  "brandVoice": {
+    "title": "Brand voice for this page",
+    "hint": "Replaces your account-level reply persona for this page only — useful when this page needs a different name, tone, or dialect.",
+    "placeholder": "Describe this page's assistant — its name, tone, and goal. Leave empty to keep using your account-level persona.",
+    "overrideActive": "This page uses its own persona",
+    "inherits": "This page uses your account-level persona",
+    "save": "Save"
+  },
   "noPage": "Connect a page to set up your business information.",
   "noConnectedPage": "No connected pages right now",
   "noConnectedPageHint": "You have pages that lost their connection and need reconnecting. Reconnect them to manage their business info here.",

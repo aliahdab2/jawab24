@@ -5,6 +5,7 @@ import { factCollectionsService } from '../factCollections';
 import { captureError } from '../../utils/sentryHelpers';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { detectLanguageCode } from '../../utils/language';
+import { coerceMultiLang } from '../multiLangTranslation';
 import {
     formatBusinessInfoPrompt,
     unwrapBusinessProfile,
@@ -179,8 +180,10 @@ export async function enrichPageContext(
     const { merchant, merchantProvenance } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
     const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null, merchantProvenance);
 
-    // 4. Language-appropriate brand voice notes
-    const brandVoiceNotes = resolveBrandVoiceNotes(userSettings, messageText);
+    // 4. Language-appropriate brand voice notes — the page-level override
+    //    (pages.brand_voice_notes_multi) beats the user/workspace-level persona
+    //    when it carries content; see resolveBrandVoiceNotes.
+    const brandVoiceNotes = resolveBrandVoiceNotes(userSettings, messageText, page.brandVoiceNotesMulti);
 
     return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock, factCollectionsBlock, factCollectionsGated };
 }
@@ -189,9 +192,24 @@ export async function enrichPageContext(
  * Pick the brand-voice notes matching the customer message's language.
  *
  * Single source of truth for the selection rule — used by enrichPageContext
- * (production replies) AND scripts/warm-reply-cache.ts (post-deploy cache
- * warming). Brand voice is a cache-key segment (`bv:`), so the warm path must
- * resolve it exactly like production or warmed entries land under unread keys.
+ * (production replies), scripts/warm-reply-cache.ts (post-deploy cache
+ * warming) AND buildPlaygroundContext (playground / test-reply / eval).
+ * Brand voice is a cache-key segment (`bv:`), so the warm path must resolve
+ * it exactly like production or warmed entries land under unread keys.
+ *
+ * Precedence:
+ *   1. PAGE-level override (`pages.brand_voice_notes_multi`) — when it has at
+ *      least one non-`sourceLang` key with non-whitespace content, it replaces
+ *      the user-level persona ENTIRELY for this page (no blending: an active
+ *      override that resolves to nothing for this language yields undefined,
+ *      mirroring how a written user-level multi blocks the legacy column).
+ *      Exists because settings are per-user: a workspace hosting two unrelated
+ *      pages leaked one page's persona into the other page's replies.
+ *   2. USER/workspace-level: multi[lang] → first supported language with a
+ *      value → legacy text column (only if the multi was never written).
+ *
+ * A page multi that is absent, `{}`, `sourceLang`-only, or all-empty falls
+ * through — resolution is then byte-identical to the pre-override rule.
  */
 export function resolveBrandVoiceNotes(
     userSettings: {
@@ -200,10 +218,25 @@ export function resolveBrandVoiceNotes(
         supportedLanguages?: unknown;
     },
     messageText: string,
+    pageBrandVoiceNotesMulti?: Record<string, string> | unknown,
 ): string | undefined {
-    const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
     const lang = detectLanguageCode(messageText);
     const supportedLangs = (userSettings.supportedLanguages as string[] | undefined) || ['ar', 'en'];
+
+    // Page-level override. coerceMultiLang guards the double-encoded-jsonb trap
+    // (same reason settings reads coerce). Activation requires real content —
+    // `sourceLang` is metadata, and a cleared editor leaves `{ar:'', sourceLang}`
+    // which must fall through to the account persona, not silence it.
+    const pageMulti = coerceMultiLang(pageBrandVoiceNotesMulti);
+    const pageHasContent = Object.entries(pageMulti)
+        .some(([k, v]) => k !== 'sourceLang' && typeof v === 'string' && v.trim() !== '');
+    if (pageHasContent) {
+        return pageMulti[lang]
+            || supportedLangs.map(l => pageMulti[l]).find(Boolean)
+            || undefined;
+    }
+
+    const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
     // Only fall back to the legacy brandVoiceNotes text column if brandVoiceNotesMulti has
     // never been written (i.e. it has no keys). Once the user has used the new UI, the multi
     // column is authoritative — falling back to the old column would resurrect cleared values.

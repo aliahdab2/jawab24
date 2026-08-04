@@ -117,6 +117,7 @@ async function loadPages(pageIds: string[]): Promise<Map<string, PageWarmContext
             kbActiveVersion: pages.kbActiveVersion,
             ecommerceStoreId: pages.ecommerceStoreId,
             businessProfile: pages.businessProfile,
+            brandVoiceNotesMulti: pages.brandVoiceNotesMulti,
             facebookPageId: pages.facebookPageId,
         })
         .from(pages)
@@ -197,7 +198,11 @@ async function run() {
                     messageTags: candidate.messageTags ?? undefined,
                     ourFacebookPageId: ctx.page.facebookPageId ?? undefined,
                     replyStyle: ctx.ownerSettings.replyStyle,
-                    brandVoiceNotes: resolveBrandVoiceNotes(ctx.ownerSettings, candidate.message),
+                    // Same choke point + same inputs as production's
+                    // enrichPageContext: owner settings, the message, AND the
+                    // page-level override — bv: is a cache-key segment, so any
+                    // divergence here warms keys production never reads.
+                    brandVoiceNotes: resolveBrandVoiceNotes(ctx.ownerSettings, candidate.message, ctx.page.brandVoiceNotesMulti),
                 });
                 // Tag the usage rows so warm cost is queryable and never blends
                 // into prod reply pipelines (REPLY_PIPELINES excludes cache_warm).

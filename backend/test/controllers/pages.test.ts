@@ -58,6 +58,7 @@ vi.mock('../../src/services/businessReadiness', async (importOriginal) => ({
 }));
 
 // Import after mocks
+import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import { pagesController } from '../../src/controllers/pages';
 import { pagesService } from '../../src/services/pages';
 import { subscriptionsService } from '../../src/services/subscriptions';
@@ -219,6 +220,70 @@ describe('Pages Controller', () => {
                 expect.objectContaining({ error: 'Invalid business hours', day: 'funday', code: 'invalid_day_key' }),
             );
             expect(pagesService.updatePage).not.toHaveBeenCalled();
+        });
+
+        // ---- brandVoiceNotesMulti (page-level persona override) ----
+        it('accepts a valid brandVoiceNotesMulti and passes it through to the service', async () => {
+            const updated = { id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok' };
+            vi.mocked(pagesService.updatePage).mockResolvedValue(updated as any);
+            mockRequest.params = { id: 'page-1' };
+            const multi = { ar: 'شخصية الصفحة', en: 'Page persona', sourceLang: 'ar' };
+            mockRequest.body = { brandVoiceNotesMulti: multi };
+
+            await pagesController.update(mockRequest as any, mockReply as FastifyReply);
+
+            expect(pagesService.updatePage).toHaveBeenCalledWith(
+                'test_workspace_id', 'page-1',
+                expect.objectContaining({ brandVoiceNotesMulti: multi }),
+            );
+            expect(mockReply.status).not.toHaveBeenCalledWith(400);
+        });
+
+        it('rejects a brandVoiceNotesMulti variant over MAX_BRAND_VOICE_LENGTH with 400', async () => {
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { brandVoiceNotesMulti: { ar: 'ب'.repeat(MAX_BRAND_VOICE_LENGTH + 1) } };
+
+            await pagesController.update(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(
+                expect.objectContaining({ error: 'Invalid brand voice notes' }),
+            );
+            expect(pagesService.updatePage).not.toHaveBeenCalled();
+        });
+
+        it('rejects a non-string value (including a non-string sourceLang) with 400', async () => {
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { brandVoiceNotesMulti: { ar: 'شخصية', sourceLang: 42 } };
+
+            await pagesController.update(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(pagesService.updatePage).not.toHaveBeenCalled();
+        });
+
+        it('rejects a non-object brandVoiceNotesMulti (array / string) with 400', async () => {
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { brandVoiceNotesMulti: ['شخصية'] };
+
+            await pagesController.update(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(pagesService.updatePage).not.toHaveBeenCalled();
+        });
+
+        it('accepts an empty {} (clears the override → account persona applies again)', async () => {
+            vi.mocked(pagesService.updatePage).mockResolvedValue({ id: 'page-1', facebookPageId: 'fb-1', accessToken: 'tok' } as any);
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { brandVoiceNotesMulti: {} };
+
+            await pagesController.update(mockRequest as any, mockReply as FastifyReply);
+
+            expect(pagesService.updatePage).toHaveBeenCalledWith(
+                'test_workspace_id', 'page-1',
+                expect.objectContaining({ brandVoiceNotesMulti: {} }),
+            );
+            expect(mockReply.status).not.toHaveBeenCalledWith(400);
         });
     });
 

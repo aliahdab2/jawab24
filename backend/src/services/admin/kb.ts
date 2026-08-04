@@ -251,6 +251,7 @@ class AdminKbService {
                 kbActiveVersion: pages.kbActiveVersion,
                 ecommerceStoreId: pages.ecommerceStoreId,
                 businessProfile: pages.businessProfile,
+                brandVoiceNotesMulti: pages.brandVoiceNotesMulti,
             })
             .from(pages)
             .where(eq(pages.id, pageId))

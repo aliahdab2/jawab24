@@ -97,3 +97,49 @@ describe('resolveBrandVoiceNotes (extracted from enrichPageContext — parity wi
         expect(resolveBrandVoiceNotes({}, 'hello')).toBeUndefined();
     });
 });
+
+describe('resolveBrandVoiceNotes — page-level override (pages.brand_voice_notes_multi)', () => {
+    const userSettings = {
+        brandVoiceNotesMulti: { ar: 'شخصية الحساب', en: 'Account persona' },
+        brandVoiceNotes: 'legacy voice',
+        supportedLanguages: ['ar', 'en'],
+    };
+
+    it('page multi wins over the user-level persona', () => {
+        const pageMulti = { ar: 'شخصية الصفحة', en: 'Page persona' };
+        expect(resolveBrandVoiceNotes(userSettings, 'كم السعر؟', pageMulti)).toBe('شخصية الصفحة');
+        expect(resolveBrandVoiceNotes(userSettings, 'How much?', pageMulti)).toBe('Page persona');
+    });
+
+    it('language pick within the page multi mirrors the user-level rule (supported-language fallback)', () => {
+        // Only EN authored on the page → an Arabic message still gets the page
+        // persona via the supported-languages fallback, same as the user rule.
+        expect(resolveBrandVoiceNotes(userSettings, 'كم السعر؟', { en: 'Page persona' })).toBe('Page persona');
+        // Active override that resolves to nothing for any supported language →
+        // undefined, NOT the user-level persona (mirrors how a written user
+        // multi blocks the legacy column — no blending across levels).
+        expect(resolveBrandVoiceNotes(userSettings, 'hello', { fr: 'voix de page' })).toBeUndefined();
+    });
+
+    it('absent / empty page multi falls through to the user-level rule', () => {
+        expect(resolveBrandVoiceNotes(userSettings, 'كم السعر؟')).toBe('شخصية الحساب');
+        expect(resolveBrandVoiceNotes(userSettings, 'كم السعر؟', undefined)).toBe('شخصية الحساب');
+        expect(resolveBrandVoiceNotes(userSettings, 'كم السعر؟', {})).toBe('شخصية الحساب');
+    });
+
+    it('sourceLang-only page multi falls through (metadata is not content)', () => {
+        expect(resolveBrandVoiceNotes(userSettings, 'كم السعر؟', { sourceLang: 'ar' })).toBe('شخصية الحساب');
+    });
+
+    it('a cleared page override (empty variants) falls through instead of silencing the account persona', () => {
+        expect(resolveBrandVoiceNotes(userSettings, 'كم السعر؟', { ar: '', en: '  ', sourceLang: 'ar' })).toBe('شخصية الحساب');
+    });
+
+    it('an active page override still applies when the user has no persona at all', () => {
+        expect(resolveBrandVoiceNotes({}, 'كم السعر؟', { ar: 'شخصية الصفحة' })).toBe('شخصية الصفحة');
+    });
+
+    it('coerces a double-encoded (stringified) page multi like settings reads do', () => {
+        expect(resolveBrandVoiceNotes(userSettings, 'كم السعر؟', JSON.stringify({ ar: 'شخصية الصفحة' }))).toBe('شخصية الصفحة');
+    });
+});
