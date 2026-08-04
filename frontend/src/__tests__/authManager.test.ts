@@ -11,13 +11,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import axios, { type AxiosResponse, AxiosError } from 'axios';
-
-/** Shape captured when spying on interceptors.response.use */
-type ResponseInterceptorCapture = {
-  onFulfilled?: ((value: AxiosResponse) => AxiosResponse | Promise<AxiosResponse>) | null;
-  onRejected?: ((error: unknown) => unknown) | null;
-};
+import type { AxiosResponse } from 'axios';
+import { createMockAxios, axiosErrorWith } from './testUtils/mockAxios';
 
 // Mock the store module before importing authManager
 vi.mock('../lib/store', () => ({
@@ -320,57 +315,57 @@ describe('AuthManager', () => {
   // ============================================================================
   describe('refreshToken', () => {
     it('should return true when refresh succeeds with success: true', async () => {
-      const mockAxiosInstance = axios.create();
-      mockAxiosInstance.post = vi.fn().mockResolvedValue({ 
-        data: { success: true, token: 'new-token' } 
+      const mockAxios = createMockAxios();
+      mockAxios.post.mockResolvedValue({
+        data: { success: true, token: 'new-token' }
       });
-      
-      const result = await authManager.refreshToken(mockAxiosInstance);
-      
+
+      const result = await authManager.refreshToken(mockAxios.instance);
+
       expect(result).toBe(true);
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/auth/refresh');
+      expect(mockAxios.post).toHaveBeenCalledWith('/auth/refresh');
     });
 
     it('should return false when refresh succeeds but success is false', async () => {
-      const mockAxiosInstance = axios.create();
-      mockAxiosInstance.post = vi.fn().mockResolvedValue({ 
-        data: { success: false } 
+      const mockAxios = createMockAxios();
+      mockAxios.post.mockResolvedValue({
+        data: { success: false }
       });
-      
-      const result = await authManager.refreshToken(mockAxiosInstance);
-      
+
+      const result = await authManager.refreshToken(mockAxios.instance);
+
       expect(result).toBe(false);
     });
 
     it('should return false when refresh succeeds but data is missing', async () => {
-      const mockAxiosInstance = axios.create();
-      mockAxiosInstance.post = vi.fn().mockResolvedValue({ 
-        data: null 
+      const mockAxios = createMockAxios();
+      mockAxios.post.mockResolvedValue({
+        data: null
       });
-      
-      const result = await authManager.refreshToken(mockAxiosInstance);
-      
+
+      const result = await authManager.refreshToken(mockAxios.instance);
+
       expect(result).toBe(false);
     });
 
     it('should return false when refresh request fails', async () => {
-      const mockAxiosInstance = axios.create();
-      mockAxiosInstance.post = vi.fn().mockRejectedValue(new Error('Network error'));
-      
-      const result = await authManager.refreshToken(mockAxiosInstance);
-      
+      const mockAxios = createMockAxios();
+      mockAxios.post.mockRejectedValue(new Error('Network error'));
+
+      const result = await authManager.refreshToken(mockAxios.instance);
+
       expect(result).toBe(false);
     });
 
     it('should return false when refresh returns 401', async () => {
-      const mockAxiosInstance = axios.create();
-      mockAxiosInstance.post = vi.fn().mockRejectedValue({
+      const mockAxios = createMockAxios();
+      mockAxios.post.mockRejectedValue({
         response: { status: 401 },
         message: 'Unauthorized',
       });
-      
-      const result = await authManager.refreshToken(mockAxiosInstance);
-      
+
+      const result = await authManager.refreshToken(mockAxios.instance);
+
       expect(result).toBe(false);
     });
   });
@@ -380,144 +375,78 @@ describe('AuthManager', () => {
   // ============================================================================
   describe('setupAuthInterceptor', () => {
     it('should attach response interceptor to axios instance', () => {
-      const mockAxiosInstance = axios.create();
-      const interceptorSpy = vi.spyOn(mockAxiosInstance.interceptors.response, 'use');
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      expect(interceptorSpy).toHaveBeenCalled();
+      const mockAxios = createMockAxios();
+
+      authManager.setupAuthInterceptor(mockAxios.instance);
+
+      expect(mockAxios.use).toHaveBeenCalled();
     });
 
     it('should pass through successful responses unchanged', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
-      
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled) => {
-          responseInterceptor = { onFulfilled };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      const mockResponse = { data: { test: true }, status: 200 };
-      const result = responseInterceptor.onFulfilled(mockResponse);
-      
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
+
+      const mockResponse = { data: { test: true }, status: 200 } as AxiosResponse;
+      const result = mockAxios.response.onFulfilled(mockResponse);
+
       expect(result).toBe(mockResponse);
     });
 
     it('should reject non-401 errors without attempting refresh', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      const error500 = {
-        response: { status: 500 },
-        config: { url: '/api/test' },
-      } as unknown as AxiosError;
+      const error500 = axiosErrorWith(500, { url: '/api/test' });
       
       const refreshSpy = vi.spyOn(authManager, 'refreshToken');
       
-      await expect(responseInterceptor.onRejected(error500)).rejects.toBeDefined();
+      await expect(mockAxios.response.onRejected(error500)).rejects.toBeDefined();
       expect(refreshSpy).not.toHaveBeenCalled();
     });
 
     it('should reject 403 errors without attempting refresh', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      const error403 = {
-        response: { status: 403 },
-        config: { url: '/api/test' },
-      } as unknown as AxiosError;
+      const error403 = axiosErrorWith(403, { url: '/api/test' });
       
       const refreshSpy = vi.spyOn(authManager, 'refreshToken');
       
-      await expect(responseInterceptor.onRejected(error403)).rejects.toBeDefined();
+      await expect(mockAxios.response.onRejected(error403)).rejects.toBeDefined();
       expect(refreshSpy).not.toHaveBeenCalled();
     });
 
     it('should reject errors without response object', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
-      
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
       const networkError = {
         message: 'Network Error',
         config: { url: '/api/test' },
-      } as unknown as AxiosError;
+        };
       
-      await expect(responseInterceptor.onRejected(networkError)).rejects.toBeDefined();
+      await expect(mockAxios.response.onRejected(networkError)).rejects.toBeDefined();
     });
 
     it('should reject errors without config', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
+      const error401NoConfig = { response: { status: 401 } };
       
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      const error401NoConfig = {
-        response: { status: 401 },
-      } as unknown as AxiosError;
-      
-      await expect(responseInterceptor.onRejected(error401NoConfig)).rejects.toBeDefined();
+      await expect(mockAxios.response.onRejected(error401NoConfig)).rejects.toBeDefined();
     });
 
     it('should prevent retry loops by checking _retry flag', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
-      
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
       // Error with _retry already set
-      const error401Retry = {
-        response: { status: 401 },
-        config: { url: '/api/test', _retry: true },
-      } as unknown as AxiosError;
+      const error401Retry = axiosErrorWith(401, { url: '/api/test', _retry: true });
       
       const refreshSpy = vi.spyOn(authManager, 'refreshToken');
       
-      await expect(responseInterceptor.onRejected(error401Retry)).rejects.toBeDefined();
+      await expect(mockAxios.response.onRejected(error401Retry)).rejects.toBeDefined();
       expect(refreshSpy).not.toHaveBeenCalled();
     });
   });
@@ -536,27 +465,15 @@ describe('AuthManager', () => {
 
     authEndpoints.forEach(endpoint => {
       it(`should skip 401 handling for ${endpoint}`, async () => {
-        const mockAxiosInstance = axios.create();
-        let responseInterceptor: ResponseInterceptorCapture;
+        const mockAxios = createMockAxios();
+        authManager.setupAuthInterceptor(mockAxios.instance);
         
-        vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-          (onFulfilled, onRejected) => {
-            responseInterceptor = { onFulfilled, onRejected };
-            return 0;
-          }
-        );
-        
-        authManager.setupAuthInterceptor(mockAxiosInstance);
-        
-        const error401 = {
-          response: { status: 401 },
-          config: { url: endpoint },
-        } as unknown as AxiosError;
+        const error401 = axiosErrorWith(401, { url: endpoint });
         
         const logoutSpy = vi.spyOn(authManager, 'logout');
         const refreshSpy = vi.spyOn(authManager, 'refreshToken');
         
-        await expect(responseInterceptor.onRejected(error401)).rejects.toBeDefined();
+        await expect(mockAxios.response.onRejected(error401)).rejects.toBeDefined();
         
         expect(refreshSpy).not.toHaveBeenCalled();
         expect(logoutSpy).not.toHaveBeenCalled();
@@ -569,26 +486,14 @@ describe('AuthManager', () => {
   // ============================================================================
   describe('Browser Reopen with Expired Token (Regression Test)', () => {
     it('should gracefully logout when both access and refresh tokens are expired', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
-      
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
       // Mock expired access token (401 on /auth/me)
-      const error401 = {
-        response: { status: 401 },
-        config: { url: '/auth/me', _retry: false },
-      } as unknown as AxiosError;
+      const error401 = axiosErrorWith(401, { url: '/auth/me', _retry: false });
       
       // Mock refreshToken to fail (expired refresh token)
-      mockAxiosInstance.post = vi.fn().mockRejectedValue({
+      mockAxios.post.mockRejectedValue({
         response: { status: 401 },
         message: 'Refresh token expired',
       });
@@ -596,7 +501,7 @@ describe('AuthManager', () => {
       const logoutSpy = vi.spyOn(authManager, 'logout');
       
       try {
-        await responseInterceptor.onRejected(error401);
+        await mockAxios.response.onRejected(error401);
       } catch {
         // Expected to throw after failed refresh
       }
@@ -608,29 +513,17 @@ describe('AuthManager', () => {
     });
 
     it('should clear localStorage before redirecting', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      const error401 = {
-        response: { status: 401 },
-        config: { url: '/auth/me', _retry: false },
-      } as unknown as AxiosError;
+      const error401 = axiosErrorWith(401, { url: '/auth/me', _retry: false });
 
-      mockAxiosInstance.post = vi.fn().mockRejectedValue({
+      mockAxios.post.mockRejectedValue({
         response: { status: 401 },
       });
 
       try {
-        await responseInterceptor.onRejected(error401);
+        await mockAxios.response.onRejected(error401);
       } catch {
         // Expected
       }
@@ -640,31 +533,19 @@ describe('AuthManager', () => {
     });
 
     it('should not hang when refresh fails (no infinite Promise)', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      const error401 = {
-        response: { status: 401 },
-        config: { url: '/api/test', _retry: false },
-      } as unknown as AxiosError;
+      const error401 = axiosErrorWith(401, { url: '/api/test', _retry: false });
 
-      mockAxiosInstance.post = vi.fn().mockRejectedValue(new Error('Refresh failed'));
+      mockAxios.post.mockRejectedValue(new Error('Refresh failed'));
 
       // This should complete (not hang) within a reasonable time
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Test timed out - possible hang')), 1000)
       );
       
-      const testPromise = responseInterceptor.onRejected(error401).catch(() => 'completed');
+      const testPromise = mockAxios.response.onRejected(error401).catch(() => 'completed');
       
       const result = await Promise.race([testPromise, timeoutPromise]);
       expect(result).toBe('completed');
@@ -676,20 +557,11 @@ describe('AuthManager', () => {
   // ============================================================================
   describe('Request Queuing (Concurrent 401 Handling)', () => {
     it('should queue requests while refreshing', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
-      
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
       let refreshCallCount = 0;
-      mockAxiosInstance.post = vi.fn().mockImplementation((url) => {
+      mockAxios.post.mockImplementation((url) => {
         if (url === '/auth/refresh') {
           refreshCallCount++;
           return Promise.resolve({ data: { success: true } });
@@ -697,18 +569,12 @@ describe('AuthManager', () => {
         return Promise.resolve({ data: {} });
       });
       
-      const error401_1 = {
-        response: { status: 401 },
-        config: { url: '/api/endpoint1', _retry: false },
-      } as unknown as AxiosError;
+      const error401_1 = axiosErrorWith(401, { url: '/api/endpoint1', _retry: false });
 
-      const error401_2 = {
-        response: { status: 401 },
-        config: { url: '/api/endpoint2', _retry: false },
-      } as unknown as AxiosError;
+      const error401_2 = axiosErrorWith(401, { url: '/api/endpoint2', _retry: false });
 
-      const promise1 = responseInterceptor.onRejected(error401_1).catch(() => {});
-      const promise2 = responseInterceptor.onRejected(error401_2).catch(() => {});
+      const promise1 = mockAxios.response.onRejected(error401_1).catch(() => {});
+      const promise2 = mockAxios.response.onRejected(error401_2).catch(() => {});
 
       await Promise.all([promise1, promise2]);
 
@@ -717,35 +583,20 @@ describe('AuthManager', () => {
     });
 
     it('should reject all queued requests when refresh fails', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      mockAxiosInstance.post = vi.fn().mockRejectedValue({
+      mockAxios.post.mockRejectedValue({
         response: { status: 401 },
       });
       
-      const error401_1 = {
-        response: { status: 401 },
-        config: { url: '/api/endpoint1', _retry: false },
-      } as unknown as AxiosError;
+      const error401_1 = axiosErrorWith(401, { url: '/api/endpoint1', _retry: false });
 
-      const error401_2 = {
-        response: { status: 401 },
-        config: { url: '/api/endpoint2', _retry: false },
-      } as unknown as AxiosError;
+      const error401_2 = axiosErrorWith(401, { url: '/api/endpoint2', _retry: false });
 
       let rejectedCount = 0;
-      const promise1 = responseInterceptor.onRejected(error401_1).catch(() => { rejectedCount++; });
-      const promise2 = responseInterceptor.onRejected(error401_2).catch(() => { rejectedCount++; });
+      const promise1 = mockAxios.response.onRejected(error401_1).catch(() => { rejectedCount++; });
+      const promise2 = mockAxios.response.onRejected(error401_2).catch(() => { rejectedCount++; });
 
       await Promise.all([promise1, promise2]);
 
@@ -753,59 +604,35 @@ describe('AuthManager', () => {
     });
 
     it('should reset isRefreshing flag after refresh completes', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
-      
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
       let refreshCallCount = 0;
-      mockAxiosInstance.post = vi.fn().mockImplementation(() => {
+      mockAxios.post.mockImplementation(() => {
         refreshCallCount++;
         return Promise.resolve({ data: { success: true } });
       });
       
       // First 401
-      const error401_1 = {
-        response: { status: 401 },
-        config: { url: '/api/test1', _retry: false },
-      } as unknown as AxiosError;
+      const error401_1 = axiosErrorWith(401, { url: '/api/test1', _retry: false });
 
-      await responseInterceptor.onRejected(error401_1).catch(() => {});
+      await mockAxios.response.onRejected(error401_1).catch(() => {});
 
       // Second 401 (after first completed)
-      const error401_2 = {
-        response: { status: 401 },
-        config: { url: '/api/test2', _retry: false },
-      } as unknown as AxiosError;
+      const error401_2 = axiosErrorWith(401, { url: '/api/test2', _retry: false });
       
-      await responseInterceptor.onRejected(error401_2).catch(() => {});
+      await mockAxios.response.onRejected(error401_2).catch(() => {});
       
       // Should have refreshed twice (once per 401, sequentially)
       expect(refreshCallCount).toBe(2);
     });
 
     it('should reset isRefreshing flag even when refresh throws', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
-      
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
       let callCount = 0;
-      mockAxiosInstance.post = vi.fn().mockImplementation(() => {
+      mockAxios.post.mockImplementation(() => {
         callCount++;
         if (callCount === 1) {
           throw new Error('Refresh error');
@@ -813,16 +640,13 @@ describe('AuthManager', () => {
         return Promise.resolve({ data: { success: true } });
       });
       
-      const error401 = {
-        response: { status: 401 },
-        config: { url: '/api/test', _retry: false },
-      } as unknown as AxiosError;
+      const error401 = axiosErrorWith(401, { url: '/api/test', _retry: false });
 
       // First should fail
-      await responseInterceptor.onRejected({ ...error401, config: { ...error401.config, _retry: false } }).catch(() => {});
+      await mockAxios.response.onRejected({ ...error401, config: { ...error401.config, _retry: false } }).catch(() => {});
 
       // Second should work (isRefreshing was reset)
-      await responseInterceptor.onRejected({ ...error401, config: { ...error401.config, _retry: false } }).catch(() => {});
+      await mockAxios.response.onRejected({ ...error401, config: { ...error401.config, _retry: false } }).catch(() => {});
 
       expect(callCount).toBe(2);
     });
@@ -833,65 +657,95 @@ describe('AuthManager', () => {
   // ============================================================================
   describe('Refresh Success with Request Retry', () => {
     it('should call refresh endpoint when 401 is received', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
+      mockAxios.post.mockResolvedValue({ data: { success: true } });
       
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      const postMock = vi.fn().mockResolvedValue({ data: { success: true } });
-      mockAxiosInstance.post = postMock;
-      
-      const error401 = {
-        response: { status: 401 },
-        config: { url: '/api/test', _retry: false },
-      } as unknown as AxiosError;
+      const error401 = axiosErrorWith(401, { url: '/api/test', _retry: false });
 
       try {
-        await responseInterceptor.onRejected(error401);
+        await mockAxios.response.onRejected(error401);
       } catch {
         // May throw depending on mock setup
       }
 
       // Verify refresh was called
-      expect(postMock).toHaveBeenCalledWith('/auth/refresh');
+      expect(mockAxios.post).toHaveBeenCalledWith('/auth/refresh');
     });
 
     it('should mark original request as _retry before retrying', async () => {
-      const mockAxiosInstance = axios.create();
-      let responseInterceptor: ResponseInterceptorCapture;
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
       
-      vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
-        (onFulfilled, onRejected) => {
-          responseInterceptor = { onFulfilled, onRejected };
-          return 0;
-        }
-      );
-      
-      authManager.setupAuthInterceptor(mockAxiosInstance);
-      
-      mockAxiosInstance.post = vi.fn().mockResolvedValue({ data: { success: true } });
+      mockAxios.post.mockResolvedValue({ data: { success: true } });
       
       const originalConfig = { url: '/api/test', _retry: false };
-      const error401 = {
-        response: { status: 401 },
-        config: originalConfig,
-      } as unknown as AxiosError;
+      const error401 = axiosErrorWith(401, originalConfig);
       
       try {
-        await responseInterceptor.onRejected(error401);
+        await mockAxios.response.onRejected(error401);
       } catch {
         // Expected
       }
       
       // The config should have been marked as retry
       expect(originalConfig._retry).toBe(true);
+    });
+
+    it('should re-issue the original request through the same instance after a successful refresh', async () => {
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
+
+      mockAxios.post.mockResolvedValue({ data: { success: true } });
+      const error401 = axiosErrorWith(401, { url: '/api/messages', _retry: false });
+
+      await mockAxios.response.onRejected(error401);
+
+      // The retry is what the caller is waiting on — assert it actually happened,
+      // and with the original request, not a copy. Nothing else in this file
+      // covered it, which is why a live retry could sit here issuing real HTTP.
+      expect(mockAxios.retry).toHaveBeenCalledTimes(1);
+      expect(mockAxios.retry).toHaveBeenCalledWith(error401.config);
+    });
+  });
+
+  // ============================================================================
+  // 403 WORKSPACE_ACCESS_DENIED (STALE WORKSPACE SELF-HEAL)
+  // ============================================================================
+  describe('403 WORKSPACE_ACCESS_DENIED', () => {
+    it('should clear the stale workspace, drop the header, and retry once', async () => {
+      const { useAuthStore } = await import('../lib/store');
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
+
+      const error403 = axiosErrorWith(
+        403,
+        { url: '/api/pages', headers: { 'X-Workspace-Id': 'stale-id' } as never },
+        { code: 'WORKSPACE_ACCESS_DENIED' },
+      );
+
+      await mockAxios.response.onRejected(error403);
+
+      expect(useAuthStore.setState).toHaveBeenCalledWith({ activeWorkspaceId: null });
+      // The stale header must be gone so the backend can auto-resolve the workspace
+      expect(error403.config.headers['X-Workspace-Id']).toBeUndefined();
+      expect(mockAxios.retry).toHaveBeenCalledWith(error403.config);
+      expect(error403.config._retry).toBe(true);
+    });
+
+    it('should not retry a WORKSPACE_ACCESS_DENIED that was already retried', async () => {
+      const mockAxios = createMockAxios();
+      authManager.setupAuthInterceptor(mockAxios.instance);
+
+      const error403 = axiosErrorWith(
+        403,
+        { url: '/api/pages', _retry: true },
+        { code: 'WORKSPACE_ACCESS_DENIED' },
+      );
+
+      await expect(mockAxios.response.onRejected(error403)).rejects.toBeDefined();
+      expect(mockAxios.retry).not.toHaveBeenCalled();
     });
   });
 });

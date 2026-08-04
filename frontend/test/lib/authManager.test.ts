@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { AxiosInstance, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import type { AxiosInstance, AxiosError, AxiosResponse } from 'axios';
+import { createMockAxios } from '@/__tests__/testUtils/mockAxios';
 
 // Mock Sentry
 vi.mock('@sentry/nextjs', () => ({
@@ -183,16 +184,24 @@ describe('AuthManager', () => {
                 },
             }));
 
+            // Spy on the href *setter* — `value: { href: '/' }` would record an
+            // assignment as a plain property write and prove nothing, which is why
+            // this test asserted nothing at all until 2026-08-04.
             const hrefSetter = vi.fn();
             Object.defineProperty(window, 'location', {
-                value: { href: '/', pathname: '/dashboard' },
+                value: {
+                    get href() { return '/'; },
+                    set href(next: string) { hrefSetter(next); },
+                    pathname: '/dashboard',
+                },
                 writable: true,
                 configurable: true,
             });
 
             await AuthManagerModule.authManager.logout({ redirect: false });
 
-            // Should not have changed location
+            // redirect:false must never navigate
+            expect(hrefSetter).not.toHaveBeenCalled();
         });
     });
 
@@ -373,35 +382,30 @@ describe('AuthManager', () => {
         });
 
         it('should refresh token and retry original request on 401', async () => {
-            const mockUse = vi.fn();
-            const retryResponse = { status: 200, data: { ok: true } };
+            const retryResponse = { status: 200, data: { ok: true } } as AxiosResponse;
 
-            // Mock the axios instance — post('/auth/refresh') succeeds,
-            // then calling the instance as a function (retry) succeeds
-            const mockAxiosInstance = vi.fn().mockResolvedValue(retryResponse);
-            (mockAxiosInstance as any).interceptors = {
-                response: { use: mockUse },
-            };
-            (mockAxiosInstance as any).post = vi.fn().mockResolvedValue({
-                data: { success: true },
-            });
+            // post('/auth/refresh') succeeds, then calling the instance as a
+            // function (the retry) succeeds. Never a real axios instance: the
+            // retry would issue a live request — see testUtils/mockAxios.
+            const mockAxios = createMockAxios();
+            mockAxios.post.mockResolvedValue({ data: { success: true } });
+            mockAxios.retry.mockResolvedValue(retryResponse);
 
-            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance as unknown as AxiosInstance);
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxios.instance);
 
-            const errorHandler = mockUse.mock.calls[0][1];
             const error = {
                 config: { url: '/some-endpoint' },
                 response: { status: 401 },
             } as unknown as AxiosError;
 
-            const result = await errorHandler(error);
+            const result = await mockAxios.response.onRejected(error);
 
             // Should have retried the original request
             expect(result).toBe(retryResponse);
             // Config should be marked as _retry
             expect(error.config).toHaveProperty('_retry', true);
             // refreshToken should have been called
-            expect((mockAxiosInstance as any).post).toHaveBeenCalledWith('/auth/refresh');
+            expect(mockAxios.post).toHaveBeenCalledWith('/auth/refresh');
         });
 
         // Transient auth-bridge pages (/auth/app-sync, /auth/sync) navigate away
@@ -456,23 +460,21 @@ describe('AuthManager', () => {
             });
 
             try {
-                const mockUse = vi.fn();
-                const retryResponse = { status: 200, data: { ok: true } };
-                const mockAxiosInstance = vi.fn().mockResolvedValue(retryResponse);
-                (mockAxiosInstance as any).interceptors = { response: { use: mockUse } };
-                (mockAxiosInstance as any).post = vi.fn().mockResolvedValue({ data: { success: true } });
+                const retryResponse = { status: 200, data: { ok: true } } as AxiosResponse;
+                const mockAxios = createMockAxios();
+                mockAxios.post.mockResolvedValue({ data: { success: true } });
+                mockAxios.retry.mockResolvedValue(retryResponse);
 
-                AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance as unknown as AxiosInstance);
+                AuthManagerModule.authManager.setupAuthInterceptor(mockAxios.instance);
 
-                const errorHandler = mockUse.mock.calls[0][1];
                 const error = {
                     config: { url: '/sse/events' },
                     response: { status: 401 },
                 } as unknown as AxiosError;
 
-                const result = await errorHandler(error);
+                const result = await mockAxios.response.onRejected(error);
                 expect(result).toBe(retryResponse);
-                expect((mockAxiosInstance as any).post).toHaveBeenCalledWith('/auth/refresh');
+                expect(mockAxios.post).toHaveBeenCalledWith('/auth/refresh');
             } finally {
                 Object.defineProperty(window, 'location', {
                     value: originalLocation,
