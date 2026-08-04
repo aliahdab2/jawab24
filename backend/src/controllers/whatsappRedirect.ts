@@ -25,6 +25,7 @@ import { cookiesService } from '../services/cookies';
 import { workspaceService } from '../services/workspace';
 import { escapeHtml } from '../utils/htmlUtils';
 import { t } from '../utils/i18n';
+import { isUniqueViolation } from '../utils/dbErrors';
 
 /**
  * WhatsApp connect via FULL-PAGE redirect Embedded Signup.
@@ -612,7 +613,8 @@ export class WhatsAppRedirectController {
             );
             return home({ whatsappConnected: '1', waPageId: pageId });
         } catch (error) {
-            if ((error as { code?: string })?.code === '23505') {
+            // NOT a bare `.code` read — drizzle wraps the driver error (see utils/dbErrors).
+            if (isUniqueViolation(error)) {
                 return fail('WHATSAPP_NUMBER_TAKEN');
             }
             request.log.error(error, '[WhatsApp redirect] callback failed');

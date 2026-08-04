@@ -4,6 +4,7 @@ import { eq, desc, sql, and } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
 import { detectLanguageCode } from '../utils/language';
 import { ENDPOINT_STATS_CACHE_TTL, commentsStatsCacheKey, withStatsCache, statsEpochKey } from './statsCache';
+import { isUniqueViolation } from '../utils/dbErrors';
 
 export interface CommentStats {
     total: number;
@@ -455,8 +456,9 @@ export class CommentsService {
             });
             return { comment: newComment, isNew: true };
         } catch (err) {
-            // 23505: lost the race; the winning row is now visible.
-            if ((err as { code?: string } | null)?.code === '23505') {
+            // Unique violation: lost the race; the winning row is now visible.
+            // NOT a bare `.code` read — drizzle wraps the driver error (see utils/dbErrors).
+            if (isUniqueViolation(err)) {
                 const winner = await this.getCommentByFacebookId(facebookCommentId);
                 if (winner) {
                     return { comment: winner, isNew: false };
