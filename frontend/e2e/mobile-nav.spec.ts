@@ -50,7 +50,6 @@ function setupAuth(
     workspaceRole?: 'owner' | 'admin' | 'member';
     unreadComments?: number;
     unreadMessages?: number;
-    newLeads?: number;
   } = {},
 ) {
   const {
@@ -58,13 +57,12 @@ function setupAuth(
     workspaceRole = 'owner',
     unreadComments = 0,
     unreadMessages = 0,
-    newLeads = 0,
   } = options;
 
   const mergedUser = { ...BASE_USER, ...user };
 
   return page.addInitScript(
-    ({ mergedUser, workspaceRole, unreadComments, unreadMessages, newLeads }) => {
+    ({ mergedUser, workspaceRole, unreadComments, unreadMessages }) => {
       // Stub EventSource so useSSE never connects.
       // Without this, SSE status transitions (connecting→error→reconnecting)
       // re-render DashboardLayout on every retry, detaching nav buttons
@@ -88,17 +86,28 @@ function setupAuth(
       localStorage.setItem('ui-storage', JSON.stringify({
         state: {
           sidebarOpen: true, language: 'en', _hasHydrated: false,
-          isOnboardingVisible: false, unreadComments, unreadMessages, newLeads,
+          isOnboardingVisible: false, unreadComments, unreadMessages,
         },
         version: 0,
       }));
       localStorage.setItem('jawab24_onboarding_complete', 'true');
     },
-    { mergedUser, workspaceRole, unreadComments, unreadMessages, newLeads },
+    { mergedUser, workspaceRole, unreadComments, unreadMessages },
   );
 }
 
-function mockAPIs(page: import('@playwright/test').Page) {
+/**
+ * @param newLeads workspace-wide `new` lead count served by GET /leads/count.
+ *   The "More" badge is SERVER-derived (useNewLeadsSummary) since 2026-08-04 —
+ *   seeding the UI store no longer drives it, because the session counter it
+ *   used to read was deleted. Drive it from the API or the badge stays empty.
+ * @param leadsCountBody raw override for that response, to exercise a body that
+ *   is NOT the summary shape.
+ */
+function mockAPIs(
+  page: import('@playwright/test').Page,
+  { newLeads = 0, leadsCountBody }: { newLeads?: number; leadsCountBody?: unknown } = {},
+) {
   return page.route('**/api/**', async (route) => {
     const url = route.request().url();
     const method = route.request().method();
@@ -114,6 +123,16 @@ function mockAPIs(page: import('@playwright/test').Page) {
     }
     if (url.includes('/subscription/usage')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+    }
+    // MUST precede the generic /leads branch — '/leads/count' contains '/leads',
+    // and the list shape ({data,meta}) has no `count`, so falling through here
+    // leaves the badge with nothing to render.
+    if (url.includes('/leads/count')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(leadsCountBody ?? { count: newLeads, latestName: null, latestAt: null }),
+      });
     }
     if (url.includes('/leads')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [], meta: { total: 0, page: 1, limit: 20 } }) });
@@ -304,8 +323,8 @@ test.describe('Mobile Navigation', () => {
   });
 
   test('newLeads badge appears on "More" tab with brand color', async ({ page }) => {
-    await setupAuth(page, { newLeads: 3 });
-    await mockAPIs(page);
+    await setupAuth(page);
+    await mockAPIs(page, { newLeads: 3 });
     await gotoWithMobileNav(page);
 
     const moreBtn = mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true });
@@ -315,12 +334,24 @@ test.describe('Mobile Navigation', () => {
   });
 
   test('newLeads badge is absent when count is zero', async ({ page }) => {
-    await setupAuth(page, { newLeads: 0 });
-    await mockAPIs(page);
+    await setupAuth(page);
+    await mockAPIs(page, { newLeads: 0 });
     await gotoWithMobileNav(page);
 
     const moreBtn = mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true });
     await expect(moreBtn.locator('span').filter({ hasText: /^\d+$/ })).not.toBeVisible();
+  });
+
+  // The badge is server-derived: a 200 that is NOT the summary shape (an older
+  // backend, a proxy, a route mock that matched the list endpoint) must render
+  // NOTHING — never an empty pill, and never a stale number.
+  test('newLeads badge renders nothing when the count endpoint returns a wrong shape', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, { leadsCountBody: { data: [], meta: { total: 0 } } });
+    await gotoWithMobileNav(page);
+
+    const moreBtn = mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true });
+    await expect(moreBtn.locator('span.bg-brand-500')).toHaveCount(0);
   });
 
   /* ------------------------------------------------------------------ */

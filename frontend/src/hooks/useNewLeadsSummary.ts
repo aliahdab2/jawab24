@@ -13,6 +13,34 @@ export interface NewLeadsSummary {
 const EMPTY: NewLeadsSummary = { count: 0, latestName: null, latestAt: null };
 
 /**
+ * Coerce whatever the endpoint actually returned into the declared shape.
+ *
+ * The `useQuery<NewLeadsSummary>` type parameter is a compile-time claim, not a
+ * runtime guarantee — a 200 carrying a different body (an older/newer backend, a
+ * proxy, a test mock) yields `count: undefined` while TypeScript still believes
+ * it is a `number`. That is not theoretical: `UnreadBadge` used to guard with
+ * `count <= 0`, and `undefined <= 0` is `false`, so an undefined count fell
+ * straight through and rendered an EMPTY badge pill in the sidebar — on every
+ * authenticated page, since the sidebar is part of the shared layout.
+ *
+ * Normalizing here keeps that guarantee in ONE place instead of asking every
+ * consumer to re-check it. (The badge's own guard was also tightened to
+ * `!(count > 0)`, so the two are belt and braces rather than one or the other.)
+ */
+function normalize(data: unknown): NewLeadsSummary {
+  if (!data || typeof data !== 'object') return EMPTY;
+  const raw = data as Partial<Record<keyof NewLeadsSummary, unknown>>;
+  const count = typeof raw.count === 'number' && Number.isFinite(raw.count)
+    ? Math.max(0, Math.trunc(raw.count))
+    : 0;
+  return {
+    count,
+    latestName: typeof raw.latestName === 'string' ? raw.latestName : null,
+    latestAt: typeof raw.latestAt === 'string' ? raw.latestAt : null,
+  };
+}
+
+/**
  * The workspace's standing queue of leads nobody has worked yet.
  *
  * Read from the SERVER, not from the session counter in the UI store. The store's
@@ -34,7 +62,7 @@ export function useNewLeadsSummary(): NewLeadsSummary {
 
   const { data } = useQuery<NewLeadsSummary>({
     queryKey: ['leads-count'],
-    queryFn: () => leadsApi.getNewSummary().then((r) => r.data),
+    queryFn: () => leadsApi.getNewSummary().then((r) => normalize(r.data)),
     enabled: hasHydrated && isAuthenticated,
     staleTime: 60_000,
     retry: false,

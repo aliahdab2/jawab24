@@ -54,6 +54,45 @@ export function t(key: MessageKey, lang: string, vars?: Record<string, string>):
 }
 
 /**
+ * Base keys that have plural variants: every key written as `<base>_other`.
+ * Derived from en.json, so `tPlural` can only be called with a base that really
+ * has variants — a typo is a compile error, exactly like `t`.
+ */
+export type PluralBaseKey = { [K in MessageKey]: K extends `${infer B}_other` ? B : never }[MessageKey];
+
+/**
+ * Plural-aware lookup, CLDR categories via the built-in `Intl.PluralRules`.
+ *
+ * `t()` only substitutes `{placeholders}`, so a message like "You have {count}
+ * new leads" is frozen in the plural form its author happened to write. That was
+ * invisible while the lead digest could only fire at ≥ 10 leads; the age trigger
+ * made count=1 reachable and the first email a low-volume merchant ever receives
+ * read "You have 1 new leads on Jawab24" (and «لديك 1 عميل محتمل جديد» in Arabic,
+ * where the number should not be spelled at all for one or two).
+ *
+ * Keys are `<base>_<category>` where category ∈ zero|one|two|few|many|other, the
+ * same six the frontend's ICU strings use. `Intl.PluralRules` selects only
+ * `one`/`other` for English, so its other four variants are unreachable and hold
+ * the `other` text — they exist because `ar satisfies typeof en` demands both
+ * locales carry an identical key set, which is what stops a locale from silently
+ * missing a message. Any category with no key falls back to `_other`.
+ */
+export function tPlural(
+    base: PluralBaseKey,
+    count: number,
+    lang: string,
+    vars?: Record<string, string>,
+): string {
+    const locale = (Object.prototype.hasOwnProperty.call(messages, lang) ? lang : 'en') as Locale;
+    const category = new Intl.PluralRules(locale).select(count);
+    const specific = `${base}_${category}` as MessageKey;
+    const key: MessageKey = Object.prototype.hasOwnProperty.call(messages[locale], specific)
+        ? specific
+        : (`${base}_other` as MessageKey);
+    return t(key, locale, { count: String(count), ...vars });
+}
+
+/**
  * Default locale for merchant-facing surfaces when no preference is stored —
  * matches the `settings.dashboard_language` column default.
  */

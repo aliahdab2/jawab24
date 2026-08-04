@@ -49,7 +49,6 @@ function setupAuth(
     workspaces?: { id: string; name: string; role?: 'owner' | 'admin' | 'member' }[];
     unreadComments?: number;
     unreadMessages?: number;
-    newLeads?: number;
   } = {},
 ) {
   const {
@@ -58,14 +57,13 @@ function setupAuth(
     workspaces = [{ id: 'ws1', name: 'My Workspace' }],
     unreadComments = 0,
     unreadMessages = 0,
-    newLeads = 0,
   } = options;
 
   const mergedUser = { ...BASE_USER, ...user };
   const activeWorkspaceId = workspaces[0]?.id ?? null;
 
   return page.addInitScript(
-    ({ mergedUser, sidebarOpen, workspaces, activeWorkspaceId, unreadComments, unreadMessages, newLeads }) => {
+    ({ mergedUser, sidebarOpen, workspaces, activeWorkspaceId, unreadComments, unreadMessages }) => {
       localStorage.setItem('auth-storage', JSON.stringify({
         state: {
           user: mergedUser, token: 'mock-token', fbToken: 'mock-fb',
@@ -76,21 +74,38 @@ function setupAuth(
       localStorage.setItem('ui-storage', JSON.stringify({
         state: {
           sidebarOpen, language: 'en', _hasHydrated: false,
-          isOnboardingVisible: false, unreadComments, unreadMessages, newLeads,
+          isOnboardingVisible: false, unreadComments, unreadMessages,
         },
         version: 0,
       }));
       localStorage.setItem('jawab24_onboarding_complete', 'true');
     },
-    { mergedUser, sidebarOpen, workspaces, activeWorkspaceId, unreadComments, unreadMessages, newLeads },
+    { mergedUser, sidebarOpen, workspaces, activeWorkspaceId, unreadComments, unreadMessages },
   );
 }
 
-function mockAPIs(page: import('@playwright/test').Page, user = BASE_USER) {
+/**
+ * @param newLeads workspace-wide `new` lead count served by GET /leads/count —
+ *   the sidebar Leads badge reads it from the server (useNewLeadsSummary), not
+ *   from the UI store. Without this branch the request falls through to the `{}`
+ *   catch-all and the badge has no count to render.
+ */
+function mockAPIs(
+  page: import('@playwright/test').Page,
+  user = BASE_USER,
+  { newLeads = 0 }: { newLeads?: number } = {},
+) {
   return page.route('**/api/**', async (route) => {
     const url = route.request().url();
     const method = route.request().method();
 
+    if (url.includes('/leads/count')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ count: newLeads, latestName: null, latestAt: null }),
+      });
+    }
     if (url.includes('/auth/profile')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(user) });
     }
@@ -215,6 +230,29 @@ test.describe('Sidebar', () => {
     await gotoWithSidebar(page);
 
     await expect(page.locator('aside').getByText('12')).toBeVisible({ timeout: 5000 });
+  });
+
+  // The leads badge is the STANDING queue read from the server, not a session
+  // counter — a merchant whose leads arrived while the app was closed used to
+  // see zero over a real backlog (2026-08-04: 19 unworked leads, no signal).
+  // Nothing is seeded into the UI store here on purpose: if the badge ever goes
+  // back to reading local state, this test fails.
+  test('should show the server-derived new-leads badge on the leads link', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, BASE_USER, { newLeads: 19 });
+    await gotoWithSidebar(page);
+
+    const badge = page.locator('aside').getByText('19', { exact: true });
+    await expect(badge).toBeVisible({ timeout: 5000 });
+    await expect(badge).toHaveClass(/bg-brand-500/);
+  });
+
+  test('should not render a leads badge when the server count is zero', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, BASE_USER, { newLeads: 0 });
+    await gotoWithSidebar(page);
+
+    await expect(page.locator('aside').locator('span.bg-brand-500')).toHaveCount(0);
   });
 
   /* ------------------------------------------------------------------ */

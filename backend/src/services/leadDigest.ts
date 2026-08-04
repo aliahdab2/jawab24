@@ -1,10 +1,14 @@
 /**
  * Daily lead digest email service.
  *
- * Runs once per day (via cron). Aggregates unsent leads per **workspace**
- * (not per user). A workspace's digest fires when EITHER trigger is met:
- *   - volume:  ≥ DIGEST_THRESHOLD unsent leads, or
- *   - age:     the oldest unsent lead is ≥ DIGEST_MAX_AGE_HOURS old.
+ * Runs once per day (via cron). Aggregates per **workspace** (not per user) the
+ * leads that are still WAITING for contact — `status = 'new'` and not yet
+ * digested. That is the same set the nav badge and the dashboard attention row
+ * count, so all three surfaces always agree on "how many are waiting".
+ *
+ * A workspace's digest fires when EITHER trigger is met:
+ *   - volume:  ≥ DIGEST_THRESHOLD waiting leads, or
+ *   - age:     the oldest waiting lead is ≥ DIGEST_MAX_AGE_HOURS old.
  * The volume trigger alone starved low-volume merchants (found live
  * 2026-08-04: a paying merchant at ~1 lead/day was emailed exactly once —
  * the day his first 10 accumulated — then never again while 9 more piled
@@ -27,6 +31,7 @@
  * recipient per workspace fan-out).
  */
 import { inArray, isNull, and, eq } from 'drizzle-orm';
+import type { LeadStatus } from '@jawab24/shared';
 import { db } from '../db';
 import {
     leads,
@@ -45,6 +50,10 @@ import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
 
 export const DIGEST_THRESHOLD = 10;
+// The digest reports leads that are still WAITING for contact — the same set the
+// nav badge and the dashboard attention row count. Anything the merchant already
+// worked (contacted / converted) is not news and must never be emailed as "new".
+export const DIGESTIBLE_LEAD_STATUS: LeadStatus = 'new';
 // Age flush: send even below threshold once the oldest unsent lead has waited
 // this long. 48h keeps the daily cron's worst case at "two mornings", without
 // mailing a merchant every single day for a one-lead trickle.
@@ -143,7 +152,22 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
     const startedAt = Date.now();
     logger.info('[LeadDigest] Starting daily digest run');
 
-    // Pull unsent leads + their owning page's workspace.
+    // Pull leads that are STILL WAITING for contact (`new`) and not yet digested,
+    // plus their owning page's workspace.
+    //
+    // The `status = 'new'` filter is what makes this email agree with the badge
+    // and the dashboard attention row, which both count `new` leads. Without it
+    // the digest counted every un-stamped lead regardless of status: harmless
+    // while DIGEST_THRESHOLD kept low-volume workspaces silent, but the age
+    // trigger below reaches them now, so a merchant who contacted and converted
+    // his one lead on day one would be emailed "you have 1 new lead" on day two
+    // while the dashboard correctly showed zero waiting.
+    //
+    // Consequence by design: a lead worked before it was ever digested keeps
+    // `digest_emailed_at IS NULL` forever. That is correct — it never needed a
+    // digest — and if the merchant moves it back to `new` it becomes eligible
+    // again, which is the behavior a merchant would expect from that action.
+    //
     // Pages without a workspace_id (legacy data) are skipped — they have no
     // recipients to fan out to.
     const rows = await db
@@ -159,7 +183,10 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
         })
         .from(leads)
         .innerJoin(pages, eq(pages.id, leads.pageId))
-        .where(isNull(leads.digestEmailedAt));
+        .where(and(
+            isNull(leads.digestEmailedAt),
+            eq(leads.status, DIGESTIBLE_LEAD_STATUS),
+        ));
 
     const byWorkspace = new Map<string, {
         leadIds: string[];

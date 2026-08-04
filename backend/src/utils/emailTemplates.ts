@@ -1,5 +1,5 @@
 import { config } from '../config';
-import { t } from './i18n';
+import { t, tPlural } from './i18n';
 import { escapeHtml } from './htmlUtils';
 import { formatDateTimeShort } from './formatDate';
 
@@ -452,10 +452,11 @@ export function leadDigestEmailTemplate(params: {
         ? "'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
         : "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
 
-    const countStr = String(params.leadCount);
-    const subject = t('leadDigestSubject', lang, { count: countStr });
+    // Plural-aware: the digest can now fire on a single waiting lead (age flush),
+    // so "1 new leads" / «لديك 1 عميل» is reachable copy, not a hypothetical.
+    const subject = tPlural('leadDigestSubject', params.leadCount, lang);
     const heading = t('leadDigestHeading', lang);
-    const intro = t('leadDigestIntro', lang, { count: countStr });
+    const intro = tPlural('leadDigestIntro', params.leadCount, lang);
     const cta = t('leadDigestCta', lang);
     const thName = t('leadDigestTableName', lang);
     const thPhone = t('leadDigestTablePhone', lang);

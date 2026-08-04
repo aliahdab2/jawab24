@@ -325,7 +325,12 @@ describe('runDailyLeadDigest', () => {
 
         await runDailyLeadDigest();
 
-        expect(emailSendMock.mock.calls[0][0].subject).toMatch(/محتمل/);
+        // Assert the LANGUAGE, not a copy substring: the previous form matched
+        // «محتمل» from the old wording, so a copy edit broke a test about
+        // language selection. Arabic script + no English words is the invariant.
+        const subject: string = emailSendMock.mock.calls[0][0].subject;
+        expect(subject).toMatch(/[؀-ۿ]/);
+        expect(subject).not.toMatch(/You have/);
     });
 
     it('processes two workspaces independently — one sent, one below threshold', async () => {

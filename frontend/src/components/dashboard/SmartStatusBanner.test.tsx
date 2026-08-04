@@ -219,7 +219,11 @@ describe('SmartStatusBanner', () => {
 
       const leadLinks = screen.getAllByRole('link').filter(a => a.getAttribute('href') === '/leads');
       expect(leadLinks).toHaveLength(1);
-      expect(screen.getByText(/19 customers left their number and are waiting/i)).toBeInTheDocument();
+      // Matches `smartBanner.leadsWaiting` as SHIPPED. The mobile-truncation fix
+      // shortened this copy ("…left their number and are waiting" → "…waiting for
+      // contact") and this assertion was left on the old wording, so the suite was
+      // red on the branch. Keep the two in step.
+      expect(screen.getByText(/19 customers waiting for contact/i)).toBeInTheDocument();
     });
 
     it('names the most recent waiting lead when available', () => {
