@@ -201,42 +201,59 @@ describe('Circuit Breaker — Concurrent Outage Simulation', () => {
     // Criterion 3: Queue backlog / latency does not spike abnormally
     // ------------------------------------------------------------------
     it('maintains flat latency after circuit opens (no cascading backlog)', async () => {
-        // Phase 1: Trip the circuit with THRESHOLD failures
+        // Phase 1: Trip the circuit with THRESHOLD failures. slowFail(50) matters:
+        // 50 ms is the latency a request would pay if the open circuit failed to
+        // short-circuit it, which is what the absolute bounds below key off.
         for (let i = 0; i < THRESHOLD; i++) {
             await cb.execute(slowFail(50)).catch(() => {});
         }
         expect(await cb.getState()).toBe('open');
 
-        // Phase 2: Simulate 3 waves of concurrent traffic hitting the open circuit
+        // Phase 2: Simulate 3 growing waves of concurrent traffic hitting the
+        // open circuit. If latency grew with queue depth (a cascading backlog),
+        // the later, larger waves would show it.
         const waveSizes = [30, 50, 80];
-        const waveLatencies: number[][] = [];
-
+        const waves = [];
         for (const size of waveSizes) {
-            const wave = await Promise.all(
+            waves.push(await Promise.all(
                 Array.from({ length: size }, () =>
                     timed(() => cb.execute(() => Promise.resolve('nope'))),
                 ),
-            );
-            waveLatencies.push(wave.map(r => r.ms));
+            ));
         }
 
-        // Median latency of each wave should be similar (flat, not growing)
-        const medians = waveLatencies.map(latencies => {
-            const s = [...latencies].sort((a, b) => a - b);
+        // Every request must have been short-circuited — the circuit staying
+        // open IS the mechanism that prevents a backlog. (The function passed
+        // to execute resolves, so a silently-closed circuit would "succeed"
+        // here and previously went undetected.)
+        for (const wave of waves) {
+            for (const r of wave) {
+                expect(r.error).toBeInstanceOf(CircuitOpenError);
+            }
+        }
+
+        // Flatness is asserted in ABSOLUTE terms, per wave. A cascading backlog
+        // means requests actually wait — on the 50 ms failing calls, or on each
+        // other — so a wave's median climbs toward/past slowFail's 50 ms. A
+        // healthy fail-fast median is sub-millisecond; 25 ms is generous
+        // headroom for coverage instrumentation and CPU contention.
+        //
+        // Deliberately NOT a ratio between waves: dividing one sub-ms median by
+        // another amplifies scheduler noise unboundedly (a single 2 ms stall in
+        // one wave is a 400x ratio while every latency is still trivially
+        // healthy). That assertion flaked at 5x, 60x, and 100x thresholds
+        // before being replaced — do not reintroduce it.
+        const medians = waves.map(wave => {
+            const s = wave.map(r => r.ms).sort((a, b) => a - b);
             return s[Math.floor(s.length / 2)];
         });
+        for (const median of medians) {
+            expect(median).toBeLessThan(25);
+        }
 
-        // The ratio between the largest and smallest median should be < 100x
-        // (proves latency stays flat, not growing with queue depth).
-        // In-memory ops run in sub-ms; OS scheduling jitter alone can produce
-        // 5-60x variation depending on system load (e.g. full test suite in parallel).
-        // A real cascading backlog is 200x+, so 100x gives enough headroom while
-        // still catching real regressions without flaking under CPU pressure.
-        const ratio = Math.max(...medians) / Math.max(Math.min(...medians), 0.001);
-        expect(ratio).toBeLessThan(100);
-
-        // No individual request should exceed 50 ms
-        const allLatencies = waveLatencies.flat();
+        // No individual request should exceed 50 ms — nobody waited out a
+        // real ai-worker call.
+        const allLatencies = waves.flat().map(r => r.ms);
         expect(Math.max(...allLatencies)).toBeLessThan(50);
     });
 
