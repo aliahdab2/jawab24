@@ -5,7 +5,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Sidebar, getNavigationGroups, resolveNavKey } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useWorkspaceRole, useWorkspacesRefresh } from '@/hooks';
+import { useWorkspaceRole, useWorkspacesRefresh, useNewLeadsSummary } from '@/hooks';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui';
@@ -81,7 +81,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const isOnboardingVisible = useUIStore((s) => s.isOnboardingVisible);
   const unreadComments = useUIStore((s) => s.unreadComments);
   const unreadMessages = useUIStore((s) => s.unreadMessages);
-  const newLeads = useUIStore((s) => s.newLeads);
+  // Server-backed standing queue (see Sidebar / useNewLeadsSummary): the bottom
+  // nav's "More" badge must survive an app restart, which the session counter
+  // did not.
+  const { count: newLeads } = useNewLeadsSummary();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
   const isEmbedded = useIsEmbedded();

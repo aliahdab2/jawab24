@@ -13,7 +13,7 @@ export default async function leadsRoutes(fastify: FastifyInstance) {
     }, leadsController.getLeads.bind(leadsController));
 
     fastify.get('/leads/count', {
-        schema: { tags: ['Leads'], summary: 'Get new leads count for a page', security: auth },
+        schema: { tags: ['Leads'], summary: 'Get new leads count — per page (pageId) or workspace-wide summary (no pageId)', security: auth },
     }, leadsController.getCount.bind(leadsController));
 
     fastify.get('/leads/export', {

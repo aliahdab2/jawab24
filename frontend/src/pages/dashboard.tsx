@@ -41,7 +41,7 @@ import type { NextPageWithLayout } from './_app';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useConversationActions, useLoadConversation, usePostReplySetup } from '@/hooks';
-import { useWorkspaceRole, useSubscriptionUsage } from '@/hooks';
+import { useWorkspaceRole, useSubscriptionUsage, useNewLeadsSummary } from '@/hooks';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { deriveSetupState } from '@/utils/setupChecklist';
 import { SETUP_CHECKLIST_DISMISS_KEY, SETUP_CHECKLIST_DISMISS_MS } from '@/components/dashboard/SetupChecklistCard';
@@ -190,6 +190,10 @@ const DashboardPage: NextPageWithLayout = () => {
 
   // --- React Query hooks (cached, auto-refetched via SSE invalidation) ---
 
+  // Workspace-wide, like every other figure on this page (commentsApi.getStats
+  // takes no pageId) — a 2-page merchant must see both pages' waiting customers.
+  const newLeadsSummary = useNewLeadsSummary();
+
   const { data: commentStats, isError: commentStatsError } = useQuery({
     queryKey: ['comments-stats'],
     queryFn: async () => {
@@ -336,6 +340,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const refetchAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
     queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['leads-count'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-recent-comments'] });
     queryClient.invalidateQueries({ queryKey: ['pages'] });
     queryClient.invalidateQueries({ queryKey: ['subscription-usage'] });
@@ -610,6 +615,7 @@ const DashboardPage: NextPageWithLayout = () => {
       <SmartStatusBanner
         commentNeedsAction={statsData.commentsNeedsAction}
         messageNeedsAction={statsData.messagesNeedsAction}
+        leads={newLeadsSummary}
         items={needsAttentionItems}
         onItemClick={handleAttentionItemClick}
         showChannelBadge={showChannelBadge}

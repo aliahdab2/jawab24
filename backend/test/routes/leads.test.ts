@@ -14,6 +14,7 @@ vi.mock('../../src/services/leadExtractor', () => ({
         updateLeadCustomFields: vi.fn(),
         deleteLead: vi.fn(),
         getNewLeadsCount: vi.fn(),
+        getNewLeadsSummaryForWorkspace: vi.fn(),
     },
 }));
 
@@ -250,9 +251,34 @@ describe('Leads Routes', () => {
             expect(JSON.parse(res.body)).toEqual({ count: 5 });
         });
 
-        it('returns 400 when pageId is missing', async () => {
+        // No pageId = the workspace-wide summary the dashboard/nav badge needs.
+        // The dashboard is workspace-scoped (commentsApi.getStats takes no
+        // pageId), so a per-page count could never drive it: a 2-page merchant
+        // would see one page's queue and miss the other's.
+        it('returns the workspace-wide summary when pageId is omitted', async () => {
+            const latestAt = new Date('2026-08-04T13:22:00Z');
+            vi.mocked(leadExtractorService.getNewLeadsSummaryForWorkspace).mockResolvedValue({
+                count: 19, latestName: 'عبدالخالق عامر', latestAt,
+            });
+
             const res = await app.inject({ method: 'GET', url: '/leads/count' });
-            expect(res.statusCode).toBe(400);
+
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.body)).toEqual({
+                count: 19, latestName: 'عبدالخالق عامر', latestAt: latestAt.toISOString(),
+            });
+            // Must NOT fall back to the per-page path.
+            expect(leadExtractorService.getNewLeadsCount).not.toHaveBeenCalled();
+        });
+
+        it('workspace summary is scoped to the caller workspace', async () => {
+            vi.mocked(leadExtractorService.getNewLeadsSummaryForWorkspace).mockResolvedValue({
+                count: 0, latestName: null, latestAt: null,
+            });
+
+            await app.inject({ method: 'GET', url: '/leads/count' });
+
+            expect(leadExtractorService.getNewLeadsSummaryForWorkspace).toHaveBeenCalledWith('workspace_1');
         });
     });
 

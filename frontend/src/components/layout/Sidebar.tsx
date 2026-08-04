@@ -20,7 +20,7 @@ import {
   Check
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useWorkspaceRole } from '@/hooks';
+import { useWorkspaceRole, useNewLeadsSummary } from '@/hooks';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -341,7 +341,10 @@ export const Sidebar = memo(function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const unreadComments = useUIStore((s) => s.unreadComments);
   const unreadMessages = useUIStore((s) => s.unreadMessages);
-  const newLeads = useUIStore((s) => s.newLeads);
+  // Server-backed, workspace-wide standing queue — NOT the session counter
+  // (useUIStore.newLeads), which resets to 0 on every app load and so showed
+  // nothing over a real backlog. See useNewLeadsSummary.
+  const { count: newLeads } = useNewLeadsSummary();
   const sseStatus = useUIStore((s) => s.sseStatus);
   const tNav = useTranslations('nav');
   const tSidebar = useTranslations('sidebar');

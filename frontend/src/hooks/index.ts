@@ -25,6 +25,7 @@ export { useConversationActions } from './useConversationActions';
 export { useMobileMessages } from './useMobileMessages';
 export { useWorkspaceRole } from './useWorkspaceRole';
 export { useWorkspacesRefresh } from './useWorkspacesRefresh';
+export { useNewLeadsSummary, type NewLeadsSummary } from './useNewLeadsSummary';
 export { useOwnerGate } from './useOwnerGate';
 export { useHintDisplay } from './useHintDisplay';
 export { useTextareaAutoResize } from './useTextareaAutoResize';
