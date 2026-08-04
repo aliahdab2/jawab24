@@ -1,0 +1,1 @@
+ALTER TABLE "posts" ADD COLUMN "scheduled_publish_time" timestamp;

@@ -15,7 +15,7 @@ import {
   POST_REPLY_BUTTON_TEXT_MAX,
   normalizeHttpUrl,
 } from '@jawab24/shared';
-import { MessageSquare, MessageCircle, ArrowUpRight, ChevronDown, ImagePlus, Lock, X } from 'lucide-react';
+import { MessageSquare, MessageCircle, ArrowUpRight, CalendarClock, ChevronDown, ImagePlus, Lock, X } from 'lucide-react';
 import Link from 'next/link';
 import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover, Toggle, Input, WhatsAppIcon } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
@@ -25,6 +25,8 @@ import { captureError } from '@/lib/sentryHelpers';
 import { useCommentReplyMode, useDualReplyNudge, useTriggerImagesEnabled } from '@/hooks/useCommentReplyMode';
 import { fileToBase64 } from '@/utils/fileToBase64';
 import { buildWhatsAppUrl, extractWhatsAppNumber, normalizeInternationalPhone } from '@/lib/whatsapp';
+import { useLanguage } from '@/i18n/hooks';
+import { formatScheduledTime } from '@/utils/dateUtils';
 
 type TriggerMode = 'keyword' | 'all';
 
@@ -60,6 +62,12 @@ interface PostTriggerModalProps {
   triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
+  /** True when the post is still scheduled on Facebook: the trigger saves normally and
+   *  simply waits for the post to go live. Drives the notice so "saved" doesn't read as
+   *  "already replying" — independent of whether Graph gave us a publish time. */
+  isScheduled?: boolean;
+  /** The pending post's publish time, when Graph reported one. Copy only. */
+  scheduledPublishTime?: string | null;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -77,12 +85,15 @@ export function PostTriggerModal({
   triggerButtonUrl: initialButtonUrl,
   triggerImageUrl: initialImageUrl,
   likeComment: initialLikeComment,
+  isScheduled,
+  scheduledPublishTime,
   isOpen,
   onClose,
   onSaved,
 }: PostTriggerModalProps) {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
+  const { dateLocale } = useLanguage();
   const deliveryMode = useCommentReplyMode();
   const dualNudge = useDualReplyNudge();
   const imagesEnabled = useTriggerImagesEnabled();
@@ -415,6 +426,22 @@ export function PostTriggerModal({
       footer={footer}
     >
       <div className="flex flex-col gap-4">
+        {/* The post isn't live yet: saving arms the trigger now and it starts working the
+            moment Facebook publishes the post — say so, or "saved" reads as "replying".
+            Shown whenever the post is pending, with or without a known publish time. */}
+        {isScheduled && (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg alert-warning text-sm leading-relaxed" role="note">
+            <CalendarClock className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+            <span>
+              {scheduledPublishTime
+                ? t('postTriggerScheduledNotice', {
+                    time: formatScheduledTime(scheduledPublishTime, dateLocale),
+                  })
+                : t('postTriggerScheduledNoticeNoTime')}
+            </span>
+          </div>
+        )}
+
         {postMessage && <PostContextCard postMessage={postMessage} clampLines={3} />}
 
         {/* Trigger mode: match keywords vs reply to any comment. */}

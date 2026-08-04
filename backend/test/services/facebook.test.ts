@@ -15,6 +15,7 @@ vi.mock('../../src/lib/fbAxios', () => ({
 }));
 vi.mock('@sentry/node', () => ({
     addBreadcrumb: vi.fn(),
+    captureMessage: vi.fn(),
 }));
 vi.mock('../../src/utils/tracing', () => ({
     tracedExternalCall: (_service: string, _method: string, fn: () => unknown) => fn(),
@@ -818,6 +819,99 @@ describe('Facebook Service', () => {
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
             await expect(service.getLongLivedToken('invalid_token')).rejects.toThrow('Facebook API error');
+        });
+    });
+
+    describe('getScheduledPosts', () => {
+        it('reads the scheduled_posts edge and converts the UNIX publish time to ISO', async () => {
+            vi.mocked(fbAxios.get).mockResolvedValue({
+                data: {
+                    data: [
+                        // Graph types scheduled_publish_time as a float in SECONDS.
+                        { id: 'fb_1', message: 'launch', full_picture: 'https://cdn/p.jpg', scheduled_publish_time: 1786000800 },
+                        { id: 'fb_2', scheduled_publish_time: '1786004400' },
+                    ],
+                },
+            });
+
+            const result = await service.getScheduledPosts('page_123', 'page_token');
+
+            expect(result.failed).toBe(false);
+            expect(result.truncated).toBe(false);
+            expect(result.posts).toEqual([
+                { id: 'fb_1', message: 'launch', imageUrl: 'https://cdn/p.jpg', scheduledPublishTime: new Date(1786000800 * 1000).toISOString() },
+                // A numeric string still converts; only non-finite values mean "no schedule".
+                { id: 'fb_2', message: null, imageUrl: null, scheduledPublishTime: new Date(1786004400 * 1000).toISOString() },
+            ]);
+            expect(fbAxios.get).toHaveBeenCalledWith(
+                'https://graph.facebook.com/v18.0/page_123/scheduled_posts',
+                expect.objectContaining({
+                    params: expect.objectContaining({ fields: 'id,message,full_picture,scheduled_publish_time', access_token: 'page_token' }),
+                }),
+            );
+        });
+
+        it('marks the read as failed rather than reporting "no scheduled posts"', async () => {
+            // Conflating a Graph error with an empty edge is the mistake getPagePosts'
+            // `failed` flag exists to prevent — a caller must be able to tell them apart.
+            vi.mocked(fbAxios.get).mockRejectedValue({ isAxiosError: true, response: { data: { error: { message: 'nope' } } } });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+
+            const result = await service.getScheduledPosts('page_123', 'page_token');
+
+            expect(result).toEqual({ posts: [], failed: true, truncated: false });
+        });
+
+        it('reports truncated when the edge fills the limit, rather than capping silently', async () => {
+            vi.mocked(fbAxios.get).mockResolvedValue({
+                data: { data: [{ id: 'fb_1' }, { id: 'fb_2' }] },
+            });
+
+            const result = await service.getScheduledPosts('page_123', 'page_token', { limit: 2 });
+
+            expect(result.truncated).toBe(true);
+        });
+    });
+
+    describe('getPostSchedule', () => {
+        it('reports a scheduled post as unpublished with its ISO publish time', async () => {
+            vi.mocked(fbAxios.get).mockResolvedValue({
+                data: { is_published: false, scheduled_publish_time: 1786000800 },
+            });
+
+            await expect(service.getPostSchedule('fb_1', 'page_token')).resolves.toEqual({
+                isPublished: false,
+                scheduledPublishTime: new Date(1786000800 * 1000).toISOString(),
+            });
+        });
+
+        it('treats a missing is_published as published (Graph omits it for normal posts)', async () => {
+            vi.mocked(fbAxios.get).mockResolvedValue({ data: {} });
+
+            await expect(service.getPostSchedule('fb_1', 'page_token')).resolves.toEqual({
+                isPublished: true,
+                scheduledPublishTime: null,
+            });
+        });
+
+        it('returns null when Graph cannot answer, so callers can treat it as unknown', async () => {
+            vi.mocked(fbAxios.get).mockRejectedValue({ isAxiosError: true, response: { data: { error: { message: 'gone' } } } });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+
+            await expect(service.getPostSchedule('fb_1', 'page_token')).resolves.toBeNull();
+        });
+
+        it('encodes the post id so a caller-supplied value cannot steer the Graph path', async () => {
+            // The id arrives from a request body (POST /posts/ensure). Raw interpolation
+            // would let it address a different node/edge on the page's token.
+            vi.mocked(fbAxios.get).mockResolvedValue({ data: {} });
+
+            await service.getPostSchedule('me/accounts', 'page_token');
+
+            expect(fbAxios.get).toHaveBeenCalledWith(
+                'https://graph.facebook.com/v18.0/me%2Faccounts',
+                expect.anything(),
+            );
         });
     });
 });

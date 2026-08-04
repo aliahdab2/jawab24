@@ -175,5 +175,10 @@
   "postPickerError": "تعذّر تحميل منشوراتك. حاول مرة أخرى.",
   "postPickerRetry": "إعادة المحاولة",
   "postPickerLoadMore": "عرض المزيد",
-  "postPickerCommentCount": "{count, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}}"
+  "postPickerCommentCount": "{count, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}}",
+  "postPickerScheduledFor": "مجدول للنشر في {time}",
+  "postPickerScheduledUnknownTime": "لم يُنشر بعد",
+  "postPickerPartial": "تعذّر تحميل بعض المنشورات. أعد التحديث أو تحقّق من اتصال الصفحة.",
+  "postTriggerScheduledNotice": "لم يُنشر هذا المنشور بعد — سيُنشر في {time}. يُحفظ ردّك الآن ويبدأ العمل لحظة نشر المنشور.",
+  "postTriggerScheduledNoticeNoTime": "لم يُنشر هذا المنشور بعد. يُحفظ ردّك الآن ويبدأ العمل لحظة نشر المنشور."
 }

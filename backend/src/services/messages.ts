@@ -6,6 +6,7 @@ import { Message } from '@jawab24/shared';
 import { conversationPauseService } from './conversationPause';
 import { conversationsService, type Platform } from './conversations';
 import { ENDPOINT_STATS_CACHE_TTL, messagesStatsCacheKey, withStatsCache, statsEpochKey } from './statsCache';
+import { isUniqueViolation } from '../utils/dbErrors';
 
 /** DB connection or transaction — methods accepting this can participate in a transaction.
  * The tx side is derived from db.transaction's callback parameter rather than spelled out
@@ -286,7 +287,8 @@ export class MessagesService {
             // 23505 = unique_violation. Lost the race against a concurrent
             // webhook delivery of the same platform_message_id; the winner's
             // row is now visible — refetch and treat as already-seen.
-            if ((err as { code?: string } | null)?.code === '23505') {
+            // NOT a bare `.code` read — drizzle wraps the driver error (see utils/dbErrors).
+            if (isUniqueViolation(err)) {
                 const winner = await db.query.messages.findFirst({
                     where: eq(messages.platformMessageId, platformMessageId),
                 });

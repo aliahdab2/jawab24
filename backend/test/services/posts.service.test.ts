@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { postsService } from '../../src/services/posts';
+import {
+    postsService,
+    PostNotOwnedError,
+    SCHEDULED_MARKER_GRACE_MS,
+    SCHEDULED_MARKER_RECHECK_MAX,
+    staleMarkerCutoff,
+} from '../../src/services/posts';
 import { db } from '../../src/db';
 
 vi.mock('../../src/db', () => ({
@@ -15,6 +21,8 @@ vi.mock('../../src/services/facebook', () => ({
     facebookService: {
         getPostContent: vi.fn(),
         getPagePosts: vi.fn(),
+        getScheduledPosts: vi.fn(),
+        getPostSchedule: vi.fn(),
     },
 }));
 
@@ -39,11 +47,35 @@ vi.mock('../../src/config', () => ({
 
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 
+vi.mock('../../src/services/notifications', () => ({
+    notificationService: { sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined) },
+}));
+
 // Import after mocking
 const { facebookService } = await import('../../src/services/facebook');
 const { instagramService } = await import('../../src/services/instagram');
 const { imageStorage } = await import('../../src/services/imageStorage');
 const { captureError } = await import('../../src/utils/sentryHelpers');
+const { notificationService } = await import('../../src/services/notifications');
+
+/** Column names referenced anywhere in a drizzle WHERE clause. Walks `queryChunks`
+ *  rather than serializing (drizzle's column objects point back at their table, so
+ *  JSON.stringify hits a cycle) — lets a test assert that a query is page-scoped. */
+function columnsIn(clause: unknown): string[] {
+    const names: string[] = [];
+    const seen = new Set<unknown>();
+    (function walk(node: unknown) {
+        if (!node || typeof node !== 'object' || seen.has(node)) return;
+        seen.add(node);
+        const rec = node as Record<string, unknown>;
+        if (typeof rec.name === 'string' && 'table' in rec) names.push(rec.name);
+        for (const value of [rec.queryChunks, rec.left, rec.right, rec.value]) {
+            if (Array.isArray(value)) value.forEach(walk);
+            else walk(value);
+        }
+    })(clause);
+    return names;
+}
 
 /** A db.select() chain that resolves at `.from().innerJoin().where()` to `rows`. */
 function selectInnerJoinWhere(rows: unknown) {
@@ -141,6 +173,10 @@ const samplePost = {
 describe('PostsService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // Default: nothing scheduled. Tests about scheduling override these; every other
+        // test exercises a Graph that reports no pending posts and no schedule.
+        vi.mocked(facebookService.getScheduledPosts).mockResolvedValue({ posts: [], failed: false, truncated: false });
+        vi.mocked(facebookService.getPostSchedule).mockResolvedValue({ isPublished: true, scheduledPublishTime: null });
     });
 
     describe('createPost', () => {
@@ -213,10 +249,12 @@ describe('PostsService', () => {
     });
 
     describe('getPostByFacebookId', () => {
-        it('should return post by Facebook ID', async () => {
+        // `pageId` is a REQUIRED argument: facebook_post_id is globally unique, so an
+        // unscoped lookup on a caller-influenced path returns another workspace's row.
+        it('should return post by Facebook ID within the page', async () => {
             vi.mocked(db.select).mockReturnValue(mockSelectChain([samplePost]) as any);
 
-            const result = await postsService.getPostByFacebookId('fb-post-1');
+            const result = await postsService.getPostByFacebookId('fb-post-1', 'page-1');
 
             expect(result).toEqual(samplePost);
         });
@@ -224,7 +262,7 @@ describe('PostsService', () => {
         it('should return null when not found', async () => {
             vi.mocked(db.select).mockReturnValue(mockSelectChain([]) as any);
 
-            const result = await postsService.getPostByFacebookId('missing');
+            const result = await postsService.getPostByFacebookId('missing', 'page-1');
 
             expect(result).toBeNull();
         });
@@ -325,6 +363,83 @@ describe('PostsService', () => {
             expect(db.update).toHaveBeenCalled();
             expect(result.message).toBe('Fetched');
         });
+
+        it('recovers the winning row when a concurrent insert for the same page wins the race', async () => {
+            // The shape drizzle ACTUALLY throws: the SQLSTATE is on `.cause`, not on the
+            // error itself. A flat `{ code: '23505' }` is a fiction that passed against the
+            // old `err.code` check while production never entered the branch at all.
+            const uniqueViolation = Object.assign(new Error('Failed query: insert into "posts"'), {
+                cause: Object.assign(new Error('duplicate key'), { name: 'PostgresError', code: '23505' }),
+            });
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([]) as any)            // scoped lookup: miss
+                .mockReturnValueOnce(mockSelectChain([samplePost]) as any); // re-select after 23505: same-page row won
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({ returning: vi.fn().mockRejectedValue(uniqueViolation) }),
+            } as any);
+
+            const result = await postsService.findOrCreateFromWebhook('page-1', 'fb-post-1', 'text');
+
+            expect(result).toEqual(samplePost);
+            expect(captureError).not.toHaveBeenCalled();
+        });
+
+        it('adopts an UNOWNED row (page_id NULL) instead of stranding every comment on it', async () => {
+            // posts.page_id is nullable and was only ever required by DTO convention, so
+            // legacy/manual rows can have none. They belong to no workspace — rejecting
+            // them would make this function throw on the per-comment path forever, losing
+            // every comment on that post.
+            // The shape drizzle ACTUALLY throws: the SQLSTATE is on `.cause`, not on the
+            // error itself. A flat `{ code: '23505' }` is a fiction that passed against the
+            // old `err.code` check while production never entered the branch at all.
+            const uniqueViolation = Object.assign(new Error('Failed query: insert into "posts"'), {
+                cause: Object.assign(new Error('duplicate key'), { name: 'PostgresError', code: '23505' }),
+            });
+            const orphanRow = { ...samplePost, pageId: null };
+            const adopted = { ...samplePost, pageId: 'page-1' };
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([]) as any)           // scoped lookup: miss
+                .mockReturnValueOnce(mockSelectChain([]) as any)           // scoped re-select after 23505: miss
+                .mockReturnValueOnce(mockSelectChain([orphanRow]) as any); // unscoped probe: unowned row
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({ returning: vi.fn().mockRejectedValue(uniqueViolation) }),
+            } as any);
+            vi.mocked(db.update).mockReturnValue(mockUpdateChain(adopted) as any);
+
+            const result = await postsService.findOrCreateFromWebhook('page-1', 'fb-post-1', 'text');
+
+            expect(result).toEqual(adopted);
+            expect(captureError).not.toHaveBeenCalled();
+        });
+
+        it('throws PostNotOwnedError when the row is OWNED by another page (cross-tenant probe)', async () => {
+            // facebook_post_id is globally unique: a page-scoped miss + 23505 + scoped
+            // re-miss + a conflicting row with a different page_id can only mean the row is
+            // another page's — must NOT be returned.
+            // The shape drizzle ACTUALLY throws: the SQLSTATE is on `.cause`, not on the
+            // error itself. A flat `{ code: '23505' }` is a fiction that passed against the
+            // old `err.code` check while production never entered the branch at all.
+            const uniqueViolation = Object.assign(new Error('Failed query: insert into "posts"'), {
+                cause: Object.assign(new Error('duplicate key'), { name: 'PostgresError', code: '23505' }),
+            });
+            const foreignRow = { ...samplePost, pageId: 'page-someone-else' };
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([]) as any)            // scoped lookup: miss
+                .mockReturnValueOnce(mockSelectChain([]) as any)            // scoped re-select: still miss
+                .mockReturnValueOnce(mockSelectChain([foreignRow]) as any); // unscoped probe: owned elsewhere
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({ returning: vi.fn().mockRejectedValue(uniqueViolation) }),
+            } as any);
+
+            await expect(postsService.findOrCreateFromWebhook('page-1', 'fb-post-foreign', 'text'))
+                .rejects.toBeInstanceOf(PostNotOwnedError);
+            expect(captureError).toHaveBeenCalledWith(uniqueViolation, expect.any(String), expect.objectContaining({
+                fingerprint: ['post-ensure-foreign-post'],
+                tags: { pageId: 'page-1' },
+            }));
+            // The row was never adopted — no page_id was rewritten on someone else's post.
+            expect(db.update).not.toHaveBeenCalled();
+        });
     });
 
     describe('findOrCreateInstagramMedia', () => {
@@ -361,7 +476,7 @@ describe('PostsService', () => {
             const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
 
             // samplePost mock omits like_comment; ensureContent defaults it to false (matches the DB NOT NULL DEFAULT).
-            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerExcludeKeyword: null, triggerImageUrl: 'https://cdn/x.jpg', likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null });
+            expect(result).toEqual({ id: 'post-1', triggerKeyword: 'سعر', triggerReply: 'تفضل', triggerType: 'keyword', triggerExcludeKeyword: null, triggerImageUrl: 'https://cdn/x.jpg', likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null, scheduledPublishTime: null });
         });
 
         it('routes instagram through findOrCreateInstagramMedia (image URL null when absent)', async () => {
@@ -369,7 +484,52 @@ describe('PostsService', () => {
 
             const result = await postsService.ensureContent(page, 'instagram', 'ig-media-1');
 
-            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null });
+            expect(result).toEqual({ id: 'ig-row-1', triggerKeyword: null, triggerReply: 'DM', triggerType: 'all', triggerExcludeKeyword: null, triggerImageUrl: null, likeComment: false, triggerButtonLabel: null, triggerButtonUrl: null, scheduledPublishTime: null });
+            // No Instagram scheduled-media edge exists — never probe Graph for one.
+            expect(facebookService.getPostSchedule).not.toHaveBeenCalled();
+        });
+
+        it('records the scheduled publish time from Graph when arming a not-yet-live post', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([{ ...samplePost, scheduledPublishTime: null }]) as any);
+            const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+            vi.mocked(db.update).mockReturnValue({ set: setSpy } as any);
+            vi.mocked(facebookService.getPostSchedule).mockResolvedValue({
+                isPublished: false,
+                scheduledPublishTime: '2026-08-10T09:00:00.000Z',
+            });
+
+            const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
+
+            expect(result.scheduledPublishTime).toBe('2026-08-10T09:00:00.000Z');
+            expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+                scheduledPublishTime: new Date('2026-08-10T09:00:00.000Z'),
+            }));
+        });
+
+        it('clears a stale marker when Graph reports the post already published', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([
+                { ...samplePost, scheduledPublishTime: new Date('2026-08-01T09:00:00.000Z') },
+            ]) as any);
+            const setSpy = vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+            vi.mocked(db.update).mockReturnValue({ set: setSpy } as any);
+            vi.mocked(facebookService.getPostSchedule).mockResolvedValue({ isPublished: true, scheduledPublishTime: null });
+
+            const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
+
+            expect(result.scheduledPublishTime).toBeNull();
+            expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({ scheduledPublishTime: null }));
+        });
+
+        it('keeps the stored marker when Graph cannot answer — unknown must not read as published', async () => {
+            // A token blip clearing the marker would silently disarm the id-drift tripwire.
+            const stored = new Date('2026-08-10T09:00:00.000Z');
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([{ ...samplePost, scheduledPublishTime: stored }]) as any);
+            vi.mocked(facebookService.getPostSchedule).mockResolvedValue(null);
+
+            const result = await postsService.ensureContent(page, 'facebook', 'fb-post-1');
+
+            expect(result.scheduledPublishTime).toBe(stored.toISOString());
+            expect(db.update).not.toHaveBeenCalled();
         });
     });
 
@@ -392,10 +552,90 @@ describe('PostsService', () => {
             const result = await postsService.listPublishedPosts(page, { source: 'facebook' });
 
             expect(result.nextCursor).toBe('CUR');
+            expect(result.partial).toBe(false);
             expect(result.posts).toEqual([
-                { platformPostId: 'fb_A', source: 'facebook', message: 'armed post', imageUrl: 'img', createdTime: '2026-07-01', commentsCount: 3, hasTrigger: true, triggerType: 'all' },
-                { platformPostId: 'fb_B', source: 'facebook', message: 'plain post', imageUrl: null, createdTime: '2026-06-01', commentsCount: 0, hasTrigger: false, triggerType: null },
+                { platformPostId: 'fb_A', source: 'facebook', message: 'armed post', imageUrl: 'img', createdTime: '2026-07-01', commentsCount: 3, hasTrigger: true, triggerType: 'all', scheduledPublishTime: null, isScheduled: false },
+                { platformPostId: 'fb_B', source: 'facebook', message: 'plain post', imageUrl: null, createdTime: '2026-06-01', commentsCount: 0, hasTrigger: false, triggerType: null, scheduledPublishTime: null, isScheduled: false },
             ]);
+        });
+
+        it('does NOT read the scheduled edge unless the client opts in', async () => {
+            // A shipped mobile bundle that predates scheduled posts must keep getting the
+            // list it knows how to render — it would show one as published with no date.
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({ posts: [], nextCursor: null } as any);
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            await postsService.listPublishedPosts(page, { source: 'facebook' });
+
+            expect(facebookService.getScheduledPosts).not.toHaveBeenCalled();
+        });
+
+        it('puts scheduled posts first, soonest-first, with no publish date or comment count', async () => {
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({
+                posts: [{ id: 'fb_live', message: 'published', imageUrl: null, createdTime: '2026-07-01', commentsCount: 2 }],
+                nextCursor: null,
+            } as any);
+            // Graph's order on the scheduled edge is unspecified — hand it back-to-front.
+            vi.mocked(facebookService.getScheduledPosts).mockResolvedValue({
+                posts: [
+                    { id: 'fb_later', message: 'next week', imageUrl: null, scheduledPublishTime: '2026-08-20T09:00:00.000Z' },
+                    { id: 'fb_soon', message: 'tomorrow', imageUrl: 'img', scheduledPublishTime: '2026-08-05T09:00:00.000Z' },
+                ],
+                failed: false,
+                truncated: false,
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ fbId: 'fb_soon', triggerType: 'keyword' }]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'facebook', includeScheduled: true });
+
+            expect(result.posts.map(p => p.platformPostId)).toEqual(['fb_soon', 'fb_later', 'fb_live']);
+            expect(result.posts[0]).toEqual({
+                platformPostId: 'fb_soon', source: 'facebook', message: 'tomorrow', imageUrl: 'img',
+                createdTime: null, commentsCount: null,
+                hasTrigger: true, triggerType: 'keyword',
+                scheduledPublishTime: '2026-08-05T09:00:00.000Z',
+                isScheduled: true,
+            });
+        });
+
+        it('drops a scheduled twin of a post that is already in the published page', async () => {
+            // At the publish boundary Graph can return the post on both edges; listing it
+            // twice would render one post twice under a single React key.
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({
+                posts: [{ id: 'fb_both', message: 'just went live', imageUrl: null, createdTime: '2026-08-04', commentsCount: 0 }],
+                nextCursor: null,
+            } as any);
+            vi.mocked(facebookService.getScheduledPosts).mockResolvedValue({
+                posts: [{ id: 'fb_both', message: 'just went live', imageUrl: null, scheduledPublishTime: '2026-08-04T09:00:00.000Z' }],
+                failed: false,
+                truncated: false,
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'facebook', includeScheduled: true });
+
+            // Exactly once, and as the PUBLISHED copy (it is live — the truthful state).
+            expect(result.posts).toHaveLength(1);
+            expect(result.posts[0]).toMatchObject({ platformPostId: 'fb_both', scheduledPublishTime: null, createdTime: '2026-08-04', isScheduled: false });
+        });
+
+        it('does not re-fetch scheduled posts on "load more" pages', async () => {
+            // They are a bounded set pinned to the top; refetching would duplicate them
+            // on every page and needs a second cursor to page independently.
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({ posts: [], nextCursor: null } as any);
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            await postsService.listPublishedPosts(page, { source: 'facebook', after: 'CURSOR', includeScheduled: true });
+
+            expect(facebookService.getScheduledPosts).not.toHaveBeenCalled();
         });
 
         it('maps instagram media (thumbnail preferred) and merges trigger state', async () => {
@@ -415,14 +655,249 @@ describe('PostsService', () => {
                 platformPostId: 'ig_A', source: 'instagram', message: 'reel',
                 imageUrl: 'poster.jpg', createdTime: '2026-07-02', commentsCount: 5,
                 hasTrigger: false, triggerType: null,
+                // Explicit on BOTH sources, so the field means the same thing everywhere.
+                scheduledPublishTime: null, isScheduled: false,
             });
+        });
+
+        it('marks the list partial when the scheduled read FAILED, instead of showing none', async () => {
+            // The picker degrades a failed Graph read to "no scheduled posts". Without this
+            // flag a broken token is indistinguishable from "I have nothing scheduled" —
+            // which is exactly the conflation getScheduledPosts' `failed` exists to prevent.
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({ posts: [], nextCursor: null } as any);
+            vi.mocked(facebookService.getScheduledPosts).mockResolvedValue({ posts: [], failed: true, truncated: false });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'facebook', includeScheduled: true });
+
+            expect(result.partial).toBe(true);
+        });
+
+        it('marks the list partial when the scheduled edge was TRUNCATED', async () => {
+            // A merchant silently unable to arm their 26th pending post is the same defect
+            // in a quieter form — no silent caps.
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({ posts: [], nextCursor: null } as any);
+            vi.mocked(facebookService.getScheduledPosts).mockResolvedValue({
+                posts: [{ id: 'fb_s', message: null, imageUrl: null, scheduledPublishTime: '2026-08-05T09:00:00.000Z' }],
+                failed: false,
+                truncated: true,
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'facebook', includeScheduled: true });
+
+            expect(result.partial).toBe(true);
+        });
+
+        it('still lists a pending post Graph gave no publish time for, as pending', async () => {
+            // Inferring "published" from a missing timestamp would render it as live with
+            // no date and no notice — the exact misreading this feature exists to prevent.
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({
+                posts: [{ id: 'fb_live', message: 'live', imageUrl: null, createdTime: '2026-07-01', commentsCount: 0 }],
+                nextCursor: null,
+            } as any);
+            vi.mocked(facebookService.getScheduledPosts).mockResolvedValue({
+                posts: [
+                    { id: 'fb_no_time', message: 'no time', imageUrl: null, scheduledPublishTime: null },
+                    { id: 'fb_timed', message: 'timed', imageUrl: null, scheduledPublishTime: '2026-08-05T09:00:00.000Z' },
+                ],
+                failed: false,
+                truncated: false,
+            });
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+            } as any);
+
+            const result = await postsService.listPublishedPosts(page, { source: 'facebook', includeScheduled: true });
+
+            // Timed first (it can be ordered), then the unknown one, then the published page.
+            expect(result.posts.map(p => p.platformPostId)).toEqual(['fb_timed', 'fb_no_time', 'fb_live']);
+            expect(result.posts[1]).toMatchObject({ isScheduled: true, scheduledPublishTime: null });
+        });
+
+        it('scopes the trigger-state lookup to the page', async () => {
+            // Same shape as the cross-tenant read the ensure path closed: facebook_post_id
+            // is globally unique, so this must not be a bare inArray on it.
+            vi.mocked(facebookService.getPagePosts).mockResolvedValue({
+                posts: [{ id: 'fb_A', message: 'p', imageUrl: null, createdTime: '2026-07-01', commentsCount: 0 }],
+                nextCursor: null,
+            } as any);
+            const whereSpy = vi.fn().mockResolvedValue([]);
+            vi.mocked(db.select).mockReturnValue({ from: vi.fn().mockReturnValue({ where: whereSpy }) } as any);
+
+            await postsService.listPublishedPosts(page, { source: 'facebook' });
+
+            expect(columnsIn(whereSpy.mock.calls[0][0])).toContain('page_id');
         });
 
         it('returns an empty page when the requested source is not connected', async () => {
             const fbOnly = { id: 'page-1', facebookPageId: 'fb1', instagramAccountId: null, accessToken: 'tok' };
             const result = await postsService.listPublishedPosts(fbOnly, { source: 'instagram' });
-            expect(result).toEqual({ posts: [], nextCursor: null });
+            expect(result).toEqual({ posts: [], nextCursor: null, partial: false });
             expect(instagramService.getMedia).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('staleMarkerCutoff', () => {
+        // The grace window used to live only inside a SQL predicate, which meant every
+        // test of it asserted against a mock it had stipulated itself. Pure function =
+        // the boundary is actually checked.
+        it('is exactly one grace window behind the given time', () => {
+            const now = new Date('2026-08-04T12:00:00.000Z');
+            expect(staleMarkerCutoff(now).toISOString()).toBe('2026-08-04T11:30:00.000Z');
+            expect(now.getTime() - staleMarkerCutoff(now).getTime()).toBe(SCHEDULED_MARKER_GRACE_MS);
+        });
+    });
+
+    describe('onPostPublished', () => {
+        /** `db.update().set().where()` (+ `.returning()` on the first clear) and the
+         *  overdue-marker SELECT. The SELECT returns whatever rows the test supplies —
+         *  the service re-applies the grace cutoff in memory, so a row inside the window
+         *  is filtered by real logic here, not by a stipulated empty array. */
+        function mockPublishChains(clearedRows: unknown[], overdueRows: unknown[]) {
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue(clearedRows),
+                        then: (resolve: (v: unknown) => unknown) => Promise.resolve(undefined).then(resolve),
+                    }),
+                }),
+            } as any);
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(overdueRows) }),
+            } as any);
+        }
+
+        /** An armed row whose marker is `minutesPast` minutes beyond the grace window. */
+        function overdueRow(id: string, fbId: string, minutesPastGrace: number) {
+            return {
+                id,
+                fbId,
+                scheduledPublishTime: new Date(Date.now() - SCHEDULED_MARKER_GRACE_MS - minutesPastGrace * 60_000),
+            };
+        }
+
+        it('clears the marker for the post that went live', async () => {
+            mockPublishChains([{ id: 'post-1' }], []);
+
+            const result = await postsService.onPostPublished('page-1', 'fb_scheduled');
+
+            expect(result).toEqual({ cleared: true, orphanedPostIds: [], healedPostIds: [], uncheckedPostIds: [] });
+            expect(captureError).not.toHaveBeenCalled();
+        });
+
+        it('reports drift only after Graph CONFIRMS the armed post is still pending', async () => {
+            // The scheduled post published under a NEW id: its own row keeps an overdue
+            // marker, and Graph still reports it unpublished — the trigger is orphaned.
+            mockPublishChains([], [overdueRow('post-9', 'fb_armed_old', 10)]);
+            vi.mocked(facebookService.getPostSchedule).mockResolvedValue({
+                isPublished: false,
+                scheduledPublishTime: '2026-08-01T09:00:00.000Z',
+            });
+
+            const result = await postsService.onPostPublished('page-1', 'fb_fresh', {
+                accessToken: 'tok', workspaceId: 'ws-1', pageName: 'Test Page',
+            });
+
+            expect(result.orphanedPostIds).toEqual(['fb_armed_old']);
+            expect(captureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                'Post Reply armed on a scheduled post may be orphaned',
+                expect.objectContaining({
+                    level: 'warning',
+                    // Per page: one global fingerprint would collapse every merchant's
+                    // drift into a single Sentry issue.
+                    fingerprint: ['post-reply-scheduled-id-drift', 'page-1'],
+                    tags: { pageId: 'page-1' },
+                    extra: expect.objectContaining({ publishedPostId: 'fb_fresh', orphanedPostIds: ['fb_armed_old'] }),
+                }),
+            );
+            // The merchant is the only one who can re-arm the post, so Sentry is not enough.
+            expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+                'ws-1', 'post_reply_orphaned', { pageName: 'Test Page' },
+                expect.objectContaining({ orphanedPostIds: ['fb_armed_old'] }),
+            );
+        });
+
+        it('heals a marker whose publish webhook we simply missed, and stays quiet', async () => {
+            // The far likelier cause of an overdue marker: the post DID publish under its
+            // own id and our clear-webhook never arrived. Alarming on this would make the
+            // tripwire fire on every later publish, forever, with no way to clear it.
+            mockPublishChains([], [overdueRow('post-9', 'fb_armed_old', 90)]);
+            vi.mocked(facebookService.getPostSchedule).mockResolvedValue({
+                isPublished: true, scheduledPublishTime: null,
+            });
+
+            const result = await postsService.onPostPublished('page-1', 'fb_fresh', { accessToken: 'tok', workspaceId: 'ws-1' });
+
+            expect(result.healedPostIds).toEqual(['fb_armed_old']);
+            expect(result.orphanedPostIds).toEqual([]);
+            expect(captureError).not.toHaveBeenCalled();
+            expect(notificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
+        });
+
+        it('stays quiet when Graph cannot answer — unknown is not proof of drift', async () => {
+            mockPublishChains([], [overdueRow('post-9', 'fb_armed_old', 30)]);
+            vi.mocked(facebookService.getPostSchedule).mockResolvedValue(null);
+
+            const result = await postsService.onPostPublished('page-1', 'fb_fresh', { accessToken: 'tok', workspaceId: 'ws-1' });
+
+            expect(result).toMatchObject({ orphanedPostIds: [], healedPostIds: [] });
+            expect(captureError).not.toHaveBeenCalled();
+        });
+
+        it('never reports the post that just published as its own orphan', async () => {
+            mockPublishChains([{ id: 'post-1' }], [overdueRow('post-1', 'fb_fresh', 45)]);
+
+            const result = await postsService.onPostPublished('page-1', 'fb_fresh', { accessToken: 'tok' });
+
+            expect(result.orphanedPostIds).toEqual([]);
+            expect(facebookService.getPostSchedule).not.toHaveBeenCalled();
+        });
+
+        it('ignores a marker still INSIDE the grace window (real cutoff, not a stubbed empty set)', async () => {
+            // The SQL bound would normally exclude this row; the in-memory re-check means
+            // the grace logic is exercised even with a mocked database.
+            const withinGrace = {
+                id: 'post-9',
+                fbId: 'fb_armed_old',
+                scheduledPublishTime: new Date(Date.now() - SCHEDULED_MARKER_GRACE_MS / 2),
+            };
+            mockPublishChains([], [withinGrace]);
+
+            const result = await postsService.onPostPublished('page-1', 'fb_fresh', { accessToken: 'tok' });
+
+            expect(result.orphanedPostIds).toEqual([]);
+            expect(facebookService.getPostSchedule).not.toHaveBeenCalled();
+            expect(captureError).not.toHaveBeenCalled();
+        });
+
+        it('caps the Graph re-checks and reports the remainder as unchecked, never as fine', async () => {
+            const rows = Array.from({ length: SCHEDULED_MARKER_RECHECK_MAX + 2 }, (_, i) =>
+                overdueRow(`post-${i}`, `fb_old_${i}`, 60),
+            );
+            mockPublishChains([], rows);
+            vi.mocked(facebookService.getPostSchedule).mockResolvedValue({ isPublished: true, scheduledPublishTime: null });
+
+            const result = await postsService.onPostPublished('page-1', 'fb_fresh', { accessToken: 'tok' });
+
+            expect(facebookService.getPostSchedule).toHaveBeenCalledTimes(SCHEDULED_MARKER_RECHECK_MAX);
+            expect(result.uncheckedPostIds).toEqual(['fb_old_5', 'fb_old_6']);
+        });
+
+        it('checks nothing without a token, rather than alarming on unverified markers', async () => {
+            mockPublishChains([], [overdueRow('post-9', 'fb_armed_old', 60)]);
+
+            const result = await postsService.onPostPublished('page-1', 'fb_fresh');
+
+            expect(facebookService.getPostSchedule).not.toHaveBeenCalled();
+            expect(result.orphanedPostIds).toEqual([]);
+            expect(result.uncheckedPostIds).toEqual(['fb_armed_old']);
+            expect(captureError).not.toHaveBeenCalled();
         });
     });
 

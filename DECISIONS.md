@@ -827,3 +827,57 @@ from the post, price from the reply.
 **Still open, deliberately:** older posts beyond the newest-25 window remain unreachable
 by scan (paste import is the fallback); videos/reels are not read; every scan re-runs the
 reply extraction (bounded by the 10/day cap — revisit only if cost data says so).
+
+---
+
+## D-060 · A scheduled post's trigger is armed on trust, verified by Graph, and its failure is told to the MERCHANT — not just to Sentry
+
+**Date:** 2026-08-04 · **Context:** PR #631 (arm a Post Reply before the post goes live)
+
+Facebook owns the post id and does not guarantee a scheduled post publishes under the id
+we armed. That cannot be prevented from our side, so the feature ships with detection —
+but a review of the first cut showed detection alone is not enough, and the shape of the
+detection matters more than its existence.
+
+1. **The scheduled edge is an OPT-IN, not a widened default.** `GET
+   /pages/:id/published-posts` gains `includeScheduled=1` rather than simply returning
+   pending posts to everyone. The mobile app ships its own frontend bundle
+   (`android/app/src/main/assets/public`), Play users sit on older versions indefinitely,
+   and an old bundle renders a pending post as a published one with no date — letting a
+   merchant arm it with no notice that it isn't live. Widening a list response is not
+   backwards compatible when the client is a shipped binary.
+2. **An overdue marker is not evidence of drift.** The likelier cause is a publish webhook
+   we never received (page momentarily disconnected, Meta exhausting its retries). The
+   first cut alarmed on the marker alone, which meant one missed webhook would fire the
+   alarm on every subsequent publish on that page, forever, with nothing able to clear it.
+   Overdue markers are now re-checked against Graph (bounded, `SCHEDULED_MARKER_RECHECK_MAX`):
+   published → heal the marker and stay silent; unknown → stay silent; still pending past
+   its own time → *that* is drift.
+3. **Pending-ness is which EDGE the post came from, not whether a timestamp is present.**
+   `isScheduled` is carried explicitly. Graph can return a pending post with no
+   `scheduled_publish_time`, and inferring "published" from the absent field renders it as
+   live with no date and no warning — the exact misreading the feature exists to prevent.
+4. **The alarm goes to the person who can act.** Sentry reaches us; only the merchant can
+   re-arm the post, and an orphaned trigger is indistinguishable from a working one in
+   their UI. Drift now also sends the `post_reply_orphaned` notification. Sentry
+   fingerprints are per-page — one global fingerprint collapses every merchant into a
+   single issue, so muting one merchant's drift hides all of them.
+5. **A knowingly incomplete list must say so.** A failed Graph read degrades to an empty
+   edge, which reads as "you have no scheduled posts"; a full edge reads as "that's all of
+   them". Both now set `partial` on the response and the picker states it. Same principle
+   as D-059.4 — degradation must be honest.
+
+**Also settled here (Critical review finding):** `findOrCreateFromWebhook` is on the
+per-comment reply path, so widening it to throw was an outage vector. A conflicting row
+with `page_id IS NULL` belongs to no workspace and is now ADOPTED rather than rejected —
+`posts.page_id` is nullable and was only ever required by DTO convention, so rejecting it
+would have thrown on every comment for that post, forever. A row genuinely owned by
+another page still throws `PostNotOwnedError`, which `commentProcessor` now handles
+explicitly (counted as `content_not_owned`, captured with its own fingerprint) instead of
+letting the comment vanish through the generic catch.
+
+**Still open, deliberately:** whether Facebook fires `item=post, verb=add` when a
+*scheduled* post publishes is unverified against a live page. The Graph re-check makes a
+missed webhook self-healing rather than a permanent false alarm, so the feature is safe
+either way — but the live run is still owed before the drift alarm's rate can be trusted
+as a signal.

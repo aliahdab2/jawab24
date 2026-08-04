@@ -46,7 +46,8 @@
     "page_disconnected": "disconnected pages",
     "kb_gap": "knowledge gaps",
     "skipped_reply": "skipped replies",
-    "new_lead": "new leads"
+    "new_lead": "new leads",
+    "post_reply_orphaned": "scheduled Post Replies needing re-arming"
   },
   "expand": "Expand group",
   "collapse": "Collapse group"

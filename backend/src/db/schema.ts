@@ -388,6 +388,13 @@ export const posts = pgTable('posts', {
      *  instagram_media has no counterpart column (button-template support unverified on IG). */
     triggerButtonLabel: text('trigger_button_label'),
     triggerButtonUrl: text('trigger_button_url'),
+    /** Set when the merchant armed a Post Reply on a still-SCHEDULED FB post via the
+     *  picker; cleared by the publish webhook (item=post, verb=add) once the same
+     *  post_id goes live. A value still set past its own time while a foreign post_id
+     *  publishes on the page is the tripwire for "scheduled post changed id at publish" —
+     *  but only after Graph confirms the post is still pending, because the likelier
+     *  cause is a publish webhook we never received. See postsService.onPostPublished. */
+    scheduledPublishTime: timestamp('scheduled_publish_time'),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),

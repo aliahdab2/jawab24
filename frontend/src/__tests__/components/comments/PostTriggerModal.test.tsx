@@ -495,3 +495,33 @@ describe('PostTriggerModal — WhatsApp button kind', () => {
         expect(container.querySelector('#trigger-button-url')).toBeNull();
     });
 });
+
+// Arming a Post Reply on a post Facebook hasn't published yet is a supported flow: the
+// trigger is saved now and starts working at publish. The modal must SAY that, or "saved"
+// reads as "already replying" and the merchant thinks the feature is broken when the
+// (unpublished) post gets no comments.
+describe('PostTriggerModal — scheduled post notice', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        settingsGetMock.mockResolvedValue({ data: { commentReplyMode: 'private' } });
+    });
+
+    it('explains that the reply waits for the post to go live', async () => {
+        renderModal({ isScheduled: true, scheduledPublishTime: '2026-08-20T09:00:00.000Z' });
+        expect(await screen.findByText(/starts working the moment the post is published/)).toBeInTheDocument();
+    });
+
+    it('still explains it when Graph gave no publish time', async () => {
+        // Keying the notice off the timestamp would silently drop it here, and the merchant
+        // would read "saved" as "already replying" on a post that is not even live.
+        renderModal({ isScheduled: true, scheduledPublishTime: null });
+        expect(await screen.findByText(/starts working the moment the post is published/)).toBeInTheDocument();
+    });
+
+    it('shows no notice for an already-published post', async () => {
+        renderModal({ isScheduled: false, scheduledPublishTime: null });
+        // Wait for the body to settle so this isn't a vacuous pass on an empty render.
+        expect(await screen.findByText('What the commenter receives')).toBeInTheDocument();
+        expect(screen.queryByText(/starts working the moment the post is published/)).toBeNull();
+    });
+});

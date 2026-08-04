@@ -12,6 +12,7 @@ import { businessInfoGate } from '../services/businessReadiness';
 import { pageGateError } from '../utils/pageGateResponse';
 import { serializePage } from './pages';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
+import { pgErrorCode } from '../utils/dbErrors';
 
 /** Meta error code: two-step-verification PIN mismatch on /register. */
 const META_PIN_MISMATCH = 133005;
@@ -70,7 +71,8 @@ export async function hasWhatsAppPlanAccess(workspaceOwnerId: string): Promise<b
 
 /** True when a DB write lost the race to the whatsapp_phone_number_id unique index. */
 function isDuplicateNumberError(error: unknown): boolean {
-    return (error as { code?: string })?.code === PG_UNIQUE_VIOLATION;
+    // NOT a bare `.code` read — drizzle wraps the driver error (see utils/dbErrors).
+    return pgErrorCode(error) === PG_UNIQUE_VIOLATION;
 }
 
 function metaErrorCode(error: unknown): number | undefined {

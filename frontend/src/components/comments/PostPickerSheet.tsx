@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
-import { AlignLeft, ImageOff, Loader2 } from 'lucide-react';
+import { AlignLeft, CalendarClock, ImageOff, Loader2 } from 'lucide-react';
 import type { Page, PublishedPost, PublishedPostsResponse } from '@jawab24/shared';
 import { Modal, Button, Select, FacebookIcon, InstagramIcon } from '@/components/ui';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { postsApi } from '@/lib/api';
 import { isPageAutoReplyEnabled } from '@/utils/page';
 import { useLanguage } from '@/i18n/hooks';
-import { formatMessageTime } from '@/utils/dateUtils';
+import { formatMessageTime, formatScheduledTime } from '@/utils/dateUtils';
 
 type Source = 'facebook' | 'instagram';
 
@@ -24,6 +24,15 @@ export interface PickedPost {
   source: Source;
   platformPostId: string;
   postMessage: string | null;
+  /** True when the merchant picked a post from the scheduled edge — i.e. not live yet.
+   *  Independent of `scheduledPublishTime` because Graph can report a pending post with
+   *  no time, and "no time" must not read as "already published". */
+  isScheduled?: boolean;
+  /** ISO publish time when the merchant picked a still-scheduled post; null otherwise.
+   *  Carried so the trigger modal can say the reply will wait for the post to go live
+   *  without a second round-trip. The server re-reads it from Graph regardless — this
+   *  value is for copy, never for persistence. */
+  scheduledPublishTime?: string | null;
 }
 
 interface PostPickerSheetProps {
@@ -85,7 +94,13 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
     enabled: isOpen && !!pageId,
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
-      const { data } = await postsApi.getPublishedPosts(pageId, { source: effectiveSource, after: pageParam });
+      const { data } = await postsApi.getPublishedPosts(pageId, {
+        source: effectiveSource,
+        after: pageParam,
+        // This build renders scheduled posts, so it opts in. The flag exists for older
+        // shipped app bundles that don't — see the server-side comment on the param.
+        includeScheduled: true,
+      });
       return data as PublishedPostsResponse;
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
@@ -95,6 +110,11 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
     () => query.data?.pages.flatMap((p) => p.posts) ?? [],
     [query.data],
   );
+
+  // A Graph read failed, or the scheduled edge hit its ceiling: the list is knowingly
+  // incomplete. Say so — a token problem silently rendering as "you have no posts" is
+  // how a merchant concludes the feature is broken.
+  const isPartial = query.data?.pages.some((p) => p.partial) ?? false;
 
   function handleSelectPage(id: string) {
     setPageId(id);
@@ -179,7 +199,12 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
             </Button>
           </div>
         ) : posts.length === 0 ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">{t('postPickerEmpty')}</div>
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            <p>{t('postPickerEmpty')}</p>
+            {/* An empty list that is also incomplete is the dangerous case: without this
+                a failed Graph read is indistinguishable from "this page has no posts". */}
+            {isPartial && <p className="mt-2">{t('postPickerPartial')}</p>}
+          </div>
         ) : (
           <ul className="flex flex-col gap-2">
             {posts.map((post) => (
@@ -191,6 +216,8 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
                     source: post.source,
                     platformPostId: post.platformPostId,
                     postMessage: post.message,
+                    isScheduled: !!post.isScheduled,
+                    scheduledPublishTime: post.scheduledPublishTime ?? null,
                   })}
                   className="w-full flex items-center gap-3 rounded-xl border border-theme-border p-2.5 text-start hover:bg-muted/60 transition-colors"
                 >
@@ -200,9 +227,28 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
                       {post.message?.trim() || t('postPickerNoText')}
                     </span>
                     <span className="mt-1 flex items-center gap-2 text-[11px] text-subtle">
-                      {post.createdTime && <span>{formatMessageTime(post.createdTime, dateLocale)}</span>}
-                      {post.commentsCount != null && post.commentsCount > 0 && (
-                        <span>{t('postPickerCommentCount', { count: post.commentsCount })}</span>
+                      {/* A scheduled post has no publish date or comments yet, so it shows
+                          when it WILL go live instead of the published post's metadata.
+                          Keyed off `isScheduled` (which edge it came from), NOT off the
+                          timestamp: Graph can hand back a pending post with no
+                          scheduled_publish_time, and that must still read as "not live"
+                          rather than silently rendering as a published post. */}
+                      {post.isScheduled ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded status-warning font-medium">
+                          <CalendarClock className="w-3 h-3" aria-hidden="true" />
+                          {post.scheduledPublishTime
+                            ? t('postPickerScheduledFor', {
+                                time: formatScheduledTime(post.scheduledPublishTime, dateLocale),
+                              })
+                            : t('postPickerScheduledUnknownTime')}
+                        </span>
+                      ) : (
+                        <>
+                          {post.createdTime && <span>{formatMessageTime(post.createdTime, dateLocale)}</span>}
+                          {post.commentsCount != null && post.commentsCount > 0 && (
+                            <span>{t('postPickerCommentCount', { count: post.commentsCount })}</span>
+                          )}
+                        </>
                       )}
                     </span>
                   </span>
@@ -220,6 +266,12 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Non-empty but incomplete — a Graph read failed, or there are more pending posts
+            than the scheduled edge returns. Never let a capped list read as the whole list. */}
+        {isPartial && posts.length > 0 && (
+          <p className="text-xs text-muted-foreground text-center" role="status">{t('postPickerPartial')}</p>
         )}
 
         {query.hasNextPage && (
