@@ -881,3 +881,35 @@ letting the comment vanish through the generic catch.
 missed webhook self-healing rather than a permanent false alarm, so the feature is safe
 either way — but the live run is still owed before the drift alarm's rate can be trusted
 as a signal.
+
+## D-061 · A trial ends when the trial ends: no inherited grace, and the merchant is told proactively
+
+**Date:** 2026-08-04 · **Context:** live merchant (43ed5bdc, «مزة جبل 86 نيوووز») kept
+replying 4 days after the free month; 760 AI replies + 16 template replies leaked
+
+The trial expiry chain was: `trial_ends_at` passes → `getUserSubscription` lazily flips
+`trialing → past_due` → the `past_due` branch of `checkSubscriptionStatus` grants
+`current_period_end + 3 days` grace. The grace exists for an external processor's
+payment-retry cycle (declined card, bank flag). A trial has no payment to retry — but the
+flip landed it in the same bucket, so **every** expiring trial structurally got ~4 free
+days (`trial_ends_at` → `current_period_end` ≈ 1 day, then + 3 days grace).
+
+1. **Grace is for retries, and only retries.** `checkSubscriptionStatus` now hard-stops a
+   trial-origin subscription (`payment_method IS NULL`, `trial_ends_at` set, status
+   `trialing` or `past_due`) at `trial_ends_at`. Externally-billed `past_due`
+   (Stripe/Shopify) keeps the 3-day grace — including a converted trial whose renewal
+   later bounces (`payment_method = 'stripe'` even when `trial_ends_at` is set).
+2. **The block must be told, not discovered.** `auto_reply_paused_billing` is reactive —
+   it fires on the next inbound customer message, so a merchant nobody writes to is never
+   told. The daily cron now runs a second sweep (`runTrialEndedNotices`): once
+   `trial_ends_at` passes, the merchant gets a one-time `trial_ended` in-app notification
+   + bilingual "last try" email (deep link `/pricing`), stamped in
+   `subscriptions.trial_ended_notified_at` (migration 0152).
+3. **No backfill, same ruling as the reminder (2026-07-31).** The sweep's lookback is
+   bounded (`ENDED_LOOKBACK_DAYS = 3`), so the ~30 long-expired `trialing` rows are never
+   emailed retroactively — they hard-stop silently under (1), and anything expiring from
+   now on is noticed within one daily run.
+4. **Top-ups stay honored where they always were.** `canUseAiReplies` still falls through
+   to top-up balance after a status block; the auto-reply gate (`canAutoReply`) never
+   consulted top-ups for any expired state, and this change keeps that boundary unchanged
+   for trials rather than widening it.

@@ -1,9 +1,12 @@
 /**
- * Tests: trial-ending reminder service.
+ * Tests: trial lifecycle notices (ENDING reminder + ENDED "last try").
  * Verifies:
  *   - both channels fire for a due trial, then the subscription is stamped
  *   - the stamp is what makes a re-run a no-op (query filters on it)
- *   - no-backfill invariant: the window is strictly in the FUTURE (gt now)
+ *   - no-backfill invariant, per sweep: the reminder window is strictly in the
+ *     FUTURE (gt now); the ended sweep looks back at most ENDED_LOOKBACK_DAYS
+ *   - the ended sweep only targets un-converted trials (status trialing or
+ *     past_due, payment_method IS NULL)
  *   - a failed in-app notification leaves the row un-stamped (retry tomorrow)
  *   - a failed email still stamps (best-effort second channel)
  *   - missing email → in-app only, still stamped
@@ -20,6 +23,8 @@ const {
     sendNotificationMock,
     gtSpy,
     lteSpy,
+    inArraySpy,
+    isNullSpy,
 } = vi.hoisted(() => ({
     selectRows: { value: [] as unknown[] },
     updateSetMock: vi.fn(),
@@ -28,6 +33,8 @@ const {
     sendNotificationMock: vi.fn(),
     gtSpy: vi.fn(),
     lteSpy: vi.fn(),
+    inArraySpy: vi.fn(),
+    isNullSpy: vi.fn(),
 }));
 
 vi.mock('../db', () => {
@@ -60,6 +67,8 @@ vi.mock('drizzle-orm', async (importOriginal) => {
         ...actual,
         gt: (...args: Parameters<typeof actual.gt>) => { gtSpy(...args); return actual.gt(...args); },
         lte: (...args: Parameters<typeof actual.lte>) => { lteSpy(...args); return actual.lte(...args); },
+        inArray: (...args: Parameters<typeof actual.inArray>) => { inArraySpy(...args); return actual.inArray(...args); },
+        isNull: (...args: Parameters<typeof actual.isNull>) => { isNullSpy(...args); return actual.isNull(...args); },
     };
 });
 
@@ -92,7 +101,9 @@ vi.mock('../config', () => ({
 
 import {
     runTrialEndingReminders,
+    runTrialEndedNotices,
     REMINDER_LEAD_DAYS,
+    ENDED_LOOKBACK_DAYS,
     buildTrialEndingBodies,
 } from '../services/trialReminders';
 import { formatDateLong } from '../utils/formatDate';
@@ -226,6 +237,91 @@ describe('runTrialEndingReminders', () => {
 
         expect(result).toEqual({ due: 2, notified: 1, emailed: 1, errors: 1 });
         expect(updateWhereMock).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('runTrialEndedNotices', () => {
+    it('notifies in-app, emails, and stamps trialEndedNotifiedAt', async () => {
+        selectRows.value = [makeRow({ trialEndsAt: new Date(Date.now() - DAY_MS) })];
+
+        const result = await runTrialEndedNotices();
+
+        expect(result).toEqual({ due: 1, notified: 1, emailed: 1, errors: 0 });
+        expect(sendNotificationMock).toHaveBeenCalledWith('user-1', expect.objectContaining({
+            type: 'trial_ended',
+        }));
+        expect(emailSendMock).toHaveBeenCalledWith(expect.objectContaining({
+            to: 'merchant@example.com',
+            type: 'trial_ended',
+            userId: 'user-1',
+        }));
+        // Stamps the ENDED column, not the ENDING one — the two sweeps must
+        // never consume each other's idempotency marker.
+        expect(updateSetMock).toHaveBeenCalledWith({ trialEndedNotifiedAt: expect.any(Date) });
+        expect(updateWhereMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('bounds the sweep to ENDED_LOOKBACK_DAYS — the no-backfill guard', async () => {
+        const before = Date.now();
+        await runTrialEndedNotices();
+        const after = Date.now();
+
+        // lte(trial_ends_at, now): only trials that have actually ended.
+        const [lteColumn, lteValue] = lteSpy.mock.calls[0] as [unknown, Date];
+        expect(lteColumn).toBe(subscriptions.trialEndsAt);
+        expect(lteValue.getTime()).toBeGreaterThanOrEqual(before);
+        expect(lteValue.getTime()).toBeLessThanOrEqual(after);
+
+        // gt(trial_ends_at, now - lookback): a long-expired trial (the ~30
+        // silent rows of 2026-07-31) is never noticed retroactively.
+        const [gtColumn, gtValue] = gtSpy.mock.calls[0] as [unknown, Date];
+        expect(gtColumn).toBe(subscriptions.trialEndsAt);
+        expect(lteValue.getTime() - gtValue.getTime()).toBe(ENDED_LOOKBACK_DAYS * DAY_MS);
+    });
+
+    it('targets only un-converted trials: trialing/past_due with no payment method', async () => {
+        await runTrialEndedNotices();
+
+        expect(inArraySpy).toHaveBeenCalledWith(subscriptions.status, ['trialing', 'past_due']);
+        const isNullColumns = isNullSpy.mock.calls.map(c => c[0]);
+        expect(isNullColumns).toContain(subscriptions.paymentMethod);
+        expect(isNullColumns).toContain(subscriptions.trialEndedNotifiedAt);
+    });
+
+    it('does not stamp when the in-app notification fails, so tomorrow retries', async () => {
+        selectRows.value = [makeRow({ trialEndsAt: new Date(Date.now() - DAY_MS) })];
+        sendNotificationMock.mockRejectedValue(new Error('fcm down'));
+
+        const result = await runTrialEndedNotices();
+
+        expect(result).toEqual({ due: 1, notified: 0, emailed: 0, errors: 1 });
+        expect(emailSendMock).not.toHaveBeenCalled();
+        expect(updateWhereMock).not.toHaveBeenCalled();
+    });
+
+    it('still stamps when only the email fails — the merchant was told in-app', async () => {
+        selectRows.value = [makeRow({ trialEndsAt: new Date(Date.now() - DAY_MS) })];
+        emailSendMock.mockResolvedValue({ success: false, error: 'resend 500' });
+
+        const result = await runTrialEndedNotices();
+
+        expect(result).toEqual({ due: 1, notified: 1, emailed: 0, errors: 0 });
+        expect(updateWhereMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses the dashboard language for copy and the pricing link, defaulting to Arabic', async () => {
+        selectRows.value = [
+            makeRow({ subscriptionId: 'sub-en', userId: 'user-en', dashboardLanguage: 'en', trialEndsAt: new Date(Date.now() - DAY_MS) }),
+            makeRow({ subscriptionId: 'sub-ar', userId: 'user-ar', dashboardLanguage: null, trialEndsAt: new Date(Date.now() - DAY_MS) }),
+        ];
+
+        await runTrialEndedNotices();
+
+        const [enSend, arSend] = emailSendMock.mock.calls.map(c => c[0]);
+        expect(enSend.html).toContain('https://jawab24.com/en/pricing');
+        expect(enSend.subject).toMatch(/trial has ended/i);
+        expect(arSend.html).toContain('https://jawab24.com/ar/pricing');
+        expect(arSend.html).toContain('dir="rtl"');
     });
 });
 

@@ -130,6 +130,7 @@ CREATE TABLE notification_preferences (
 | New Lead | Lead captured (customer shared a phone) — first time per sender only | Push (gated by per-user `newLeadAlertsEnabled`) + In-App | ✅ live |
 | Subscription Expiring | 3 days before expiry (cron) | Push + In-App | ❌ **NOT IMPLEMENTED** |
 | Trial Ending | 3 days before `trial_ends_at` (daily cron) | Push + In-App + **Email** | ✅ live — `services/trialReminders.ts` |
+| Trial Ended ("last try") | after `trial_ends_at` passes (daily cron, ≤ `ENDED_LOOKBACK_DAYS` back) | Push + In-App + **Email** | ✅ live — `services/trialReminders.ts` (`runTrialEndedNotices`) |
 
 > ✅ **Trial Ending shipped 2026-07-31.** `runTrialEndingReminders()` runs once a day (registered
 > in `index.ts` beside the lead digest, first run 7 min after boot). It selects `trialing`
@@ -159,6 +160,16 @@ CREATE TABLE notification_preferences (
 > preceding 14 days** — silent churn. Those 30 were deliberately NOT warned retroactively.
 >
 > `services/trialReminders.ts` is now the shape to copy for `subscription_expiring`.
+>
+> ✅ **Trial Ended shipped 2026-08-04** (same file, `runTrialEndedNotices`, second daily sweep
+> staggered 2 min behind the reminder). The "last try" conversion touch: once `trial_ends_at`
+> has passed and the reply gate has closed — expired no-payment-method trials now hard-stop at
+> `trial_ends_at` with no grace — it sends the `trial_ended` in-app notification + bilingual
+> email and stamps `subscriptions.trial_ended_notified_at` (migration 0152). It exists because
+> `auto_reply_paused_billing` is reactive (fires on the next inbound message), so a merchant
+> nobody writes to was never told their replies stopped. Same idempotency and channel semantics
+> as the reminder; its no-backfill guard is the `ENDED_LOOKBACK_DAYS` (3-day) lookback bound —
+> long-expired trials are never noticed retroactively, however long the job was down.
 >
 > ⚠️ Do **not** conflate this with `auto_reply_disabled_reason = 'trial_block'`, which is the
 > per-channel anti-abuse ledger applied at *connect* time and has nothing to do with a

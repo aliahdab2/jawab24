@@ -298,6 +298,54 @@ export function trialEndingEmailTemplate(params: {
 }
 
 /**
+ * Trial-ended notice — the "last try" conversion email, sent by the same daily
+ * cron once `trial_ends_at` has passed and the reply gate has closed (see
+ * services/trialReminders.ts, runTrialEndedNotices).
+ *
+ * No date parameter on purpose: the fact that matters is that replies have
+ * already stopped, not when the boundary was crossed.
+ */
+export function trialEndedEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    name: string;
+    pricingUrl: string;
+}): { subject: string; html: string } {
+    const { lang, name, pricingUrl } = params;
+    const rtl = lang === 'ar';
+    const fontFamily = rtl ? RTL_FONT_STACK : LTR_FONT_STACK;
+    const align = rtl ? 'right' : 'left';
+
+    // Same escaping contract as the trial-ending email: translations are static,
+    // markup-free strings we control; only the caller-supplied name is escaped.
+    const escName = escapeHtml(name);
+
+    const subject = t('trialEndedSubject', lang);
+    const heading = t('trialEndedHeading', lang);
+    const intro = t('trialEndedIntro', lang).replace(/\{name\}/g, escName);
+    const whatRemains = t('trialEndedWhatRemains', lang);
+    const ctaLabel = t('trialEndedCta', lang);
+    const signoff = t('trialEndedSignoff', lang);
+
+    const html = emailShell({
+        lang,
+        dir: rtl ? 'rtl' : 'ltr',
+        bodyFontFamily: fontFamily,
+        title: subject,
+        preheader: intro,
+        bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+        bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+              <p style="margin:0 0 16px 0;">${intro}</p>
+              <p style="margin:0 0 24px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${whatRemains}</p>
+              <p style="margin:0 0 24px 0;text-align:center;">
+                <a href="${escapeHtml(pricingUrl)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">${ctaLabel}</a>
+              </p>
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
+    });
+
+    return { subject, html };
+}
+
+/**
  * Team invite email — sent when an owner/admin invites someone by email.
  *
  * Bilingual by design: the recipient may not have an account yet, so their
