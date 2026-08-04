@@ -259,6 +259,14 @@ export const pages = pgTable('pages', {
     // distinguishable from an empty {} / [] override.
     leadStages: jsonb('lead_stages').$type<LeadStagesConfig>(),
     leadFields: jsonb('lead_fields').$type<LeadCustomFieldDef[]>(),
+    // Messenger Profile (organic-entry greeting + ice breakers): merchant config
+    // + last Graph sync status ({ config, lastSyncedAt, lastError }). NULL =
+    // never configured — page connect applies the فصحى default and persists it
+    // here. Written by services/messengerProfile.ts (sync status) and
+    // updatePage (merchant edits); read by the webhook postback handler to
+    // resolve a tapped ice breaker's question text. Facebook Messenger only —
+    // Instagram is a different API surface and is NOT covered.
+    messengerProfile: jsonb('messenger_profile').$type<import('@jawab24/shared').StoredMessengerProfile>(),
     // Defensive auto-pause: when Facebook persistently rejects our reply sends
     // (Page restricted, unpublished, permission lost mid-flight), we bump the
     // counter on every page-level failure (our_fault / unknown buckets), reset

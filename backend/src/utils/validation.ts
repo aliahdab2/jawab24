@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
     CATALOG_VERTICALS, MAX_CATALOG_IMPORT_CHARS, MAX_CATALOG_ITEM_ATTRIBUTES, MAX_CATALOG_ITEMS_PER_PAGE,
+    MESSENGER_GREETING_MAX, MESSENGER_ICE_BREAKERS_MAX, MESSENGER_ICE_BREAKER_QUESTION_MAX,
 } from '@jawab24/shared';
 import type { CatalogVertical } from '@jawab24/shared';
 
@@ -121,6 +122,37 @@ export const BusinessProfileSchema = z.object({
 }).passthrough(); // Allow extra fields from Facebook API without breaking
 
 export type BusinessProfileInput = z.infer<typeof BusinessProfileSchema>;
+
+// ==========================================
+// Messenger Profile (organic-entry greeting + ice breakers)
+// ==========================================
+/**
+ * Merchant config for PUT /pages/:id `messengerProfile`. Limits from
+ * `@jawab24/shared` — greeting ≤ 160 (Meta's documented cap), ≤ 4 ice breakers
+ * (Meta's documented cap), question ≤ 80 (our cap; Meta documents none).
+ * `.strict()` everywhere: this body is forwarded to the Graph API, so unknown
+ * keys are rejected rather than silently carried along.
+ *
+ * When enabled, at least one greeting language OR one non-empty ice breaker is
+ * required — an all-empty enabled config is a client bug, not "delete my
+ * profile" (that's `enabled: false`).
+ */
+export const MessengerProfileConfigSchema = z.object({
+    enabled: z.boolean(),
+    greeting: z.object({
+        ar: z.string().trim().max(MESSENGER_GREETING_MAX).optional(),
+        en: z.string().trim().max(MESSENGER_GREETING_MAX).optional(),
+    }).strict(),
+    iceBreakers: z.array(
+        z.string().trim().max(MESSENGER_ICE_BREAKER_QUESTION_MAX),
+    ).max(MESSENGER_ICE_BREAKERS_MAX),
+}).strict().refine(
+    cfg => !cfg.enabled
+        || !!cfg.greeting.ar?.trim()
+        || !!cfg.greeting.en?.trim()
+        || cfg.iceBreakers.some(q => q.trim().length > 0),
+    { message: 'An enabled Messenger profile needs a greeting or at least one ice breaker' },
+);
 
 // ==========================================
 // Native catalog (merchant-authored offerings)

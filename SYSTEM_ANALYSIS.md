@@ -338,6 +338,32 @@ after a `PROMPT_VERSION` bump it rebuilds the hot set in minutes instead of the
 ~week of organic warm-up. Comments on public-mode pages only (DM and dual/private
 keys are name-bucketed and can't be warmed). Kill-switch: `WARM_REPLY_CACHE_DISABLED=1`.
 
+### Messenger welcome screen (Messenger Profile API) — shipped 2026-08-04
+
+Someone opening a page's Messenger thread ORGANICALLY (m.me link, the page's
+"Message" button — as opposed to a click-to-Messenger ad) used to land on a
+completely empty screen. Now every connected Facebook page gets a **greeting**
+(locale-aware: `default`+`ar_AR` from the Arabic text, `en_US` from the English)
+and up to 4 **ice breakers** (tappable suggested questions) via
+`POST /{page-id}/messenger_profile`:
+
+- **Applied automatically** on page connect/reconnect (`syncFromFacebook`,
+  fire-and-forget — a Graph failure never fails the connect; status lands in
+  `pages.messenger_profile.lastError`). Default config is generic فصحى with the
+  page name interpolated server-side (`{{page_name}}` is NOT a documented Meta
+  template string — only `{{user_first_name/last_name/full_name}}` are).
+- **Merchant-editable** per page: `/pages` card → "Messenger welcome" →
+  `MessengerProfileModal` → `PUT /pages/:id { messengerProfile }` (`null` body
+  = reset to default). Stored in `pages.messenger_profile` (jsonb).
+- **Ice-breaker taps arrive as `postback` webhook events, NOT text messages.**
+  `webhook.ts#processPostback` routes payload `ib:<index>` into the NORMAL
+  message pipeline (`processMessage`) with the stored question text — same
+  storage, typing indicator, and reply enqueue as a typed message. Unknown
+  postback payloads are ignored at debug level.
+- **Backfill for pre-existing pages**: `backend/src/scripts/backfill-messenger-profiles.ts`
+  (dry-run by default, `--apply` to run).
+- **Instagram: NOT covered** — different API surface, deliberately out of scope.
+
 ## عربي
 
 ### الرحلة الكاملة: من رسالة العميل إلى إرسال الرد
@@ -414,6 +440,12 @@ keys are name-bucketed and can't be warmed). Kill-switch: `WARM_REPLY_CACHE_DISA
 - تعليم الرسالة كمُرد عليها في قاعدة البيانات
 - تخزين الرسالة الصادرة
 - إشعار التاجر إذا تم التعليم
+
+**شاشة الترحيب في ماسنجر (أُطلقت 2026-08-04):** عند فتح محادثة الصفحة من رابط
+m.me أو زر «مراسلة»، تظهر رسالة ترحيب وأسئلة مقترحة (حتى 4) تُضبط تلقائيًا عند
+ربط الصفحة وتُعدَّل من بطاقة الصفحة في `/pages`. الضغط على سؤال مقترح يصل
+كحدث `postback` (وليس رسالة نصية) ويُحوَّل إلى خط معالجة الرسائل الاعتيادي
+فيرد عليه الرد الذكي فورًا. لا يشمل ذلك إنستغرام (واجهة API مختلفة).
 
 ---
 
