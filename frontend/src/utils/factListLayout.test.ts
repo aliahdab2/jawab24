@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel } from './factListLayout';
+import { sectionizeGroup, rowDisplayAttributes, collectionAttributeLabels, discoverFaceLabel, buildEntityUnit, sessionValueKind, sectionKeyGroups, sectionPartitionLabel, unitHasSchedules } from './factListLayout';
 import { groupFactCollections } from './factListGrouping';
 import type { FactCollectionWithRows, FactRowDto } from '@/lib/api';
 
@@ -358,5 +358,30 @@ describe('sectionPartitionLabel', () => {
       row('ج', { attributes: [{ label: 'اللون', value: 'أحمر' }] }),
     ]);
     expect(sectionPartitionLabel(constant)).toBeNull();
+  });
+});
+
+describe('unitHasSchedules', () => {
+  // The predicate copy keys off: «delete this item AND ITS DATES» and the
+  // date-expiry rule must never be shown for an item that has no date rows
+  // (owner catch, 2026-08-04 — a plain price row promised both).
+  const priceRow = row('حفاضات بامبو رقم 1', { price: '38.00', currency: 'د.ل' });
+  const datedRow = row('دورة التصوير', { startsAt: '2026-09-01' });
+
+  it('is false for a plain priced row, even when the page HAS a dated list', () => {
+    const prices = coll('أسعار حفاضات بامبو', null, [priceRow]);
+    const slots = coll('مواعيد الدورات', null, [datedRow]);
+    const [group] = groupFactCollections([prices, slots]).filter((g) => g.rows.some((r) => r.row.id === priceRow.id));
+    const unit = buildEntityUnit(group, [prices, slots], null, { collection: prices, row: priceRow } as never);
+    // The sheet COULD hold dates (a dated list exists) — but this item has none.
+    expect(unit.sessionCollection).not.toBeNull();
+    expect(unitHasSchedules(unit)).toBe(false);
+  });
+
+  it('is true once the entity actually carries a schedule row', () => {
+    const slots = coll('مواعيد الدورات', null, [datedRow]);
+    const [group] = groupFactCollections([slots]);
+    const unit = buildEntityUnit(group, [slots], null, { collection: slots, row: datedRow } as never);
+    expect(unitHasSchedules(unit)).toBe(true);
   });
 });

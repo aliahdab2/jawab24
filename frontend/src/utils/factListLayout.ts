@@ -289,6 +289,19 @@ export interface FactEntityUnit {
   sessionCollection: FactCollectionWithRows | null;
 }
 
+/**
+ * Does this entity ACTUALLY carry schedule rows right now?
+ *
+ * Distinct from `!!unit.sessionCollection`, which asks whether the entity COULD
+ * carry them (the page has a dated list at all). Copy tied to real consequences
+ * — «delete this item AND ITS DATES», the date-expiry rule — must key off this
+ * one, or it promises mechanics an item doesn't have (owner catch, 2026-08-04:
+ * a plain price row offered «حذف هذا العنصر ومواعيده»).
+ */
+export function unitHasSchedules(unit: FactEntityUnit): boolean {
+  return unit.sessions.length > 0;
+}
+
 const rowFaceValue = (row: FactRowDto, faceLabel: string | null): string | null => {
   if (!faceLabel) return null;
   return row.attributes?.find((a) => norm(a.label) === norm(faceLabel))?.value ?? null;

@@ -13,6 +13,9 @@ interface BusinessReadinessCardProps {
   page: Page;
   /** Catalog item count; undefined while loading. */
   productsCount: number | undefined;
+  /** LIVE fact-collection rows on this page (undefined while loading) — the
+   *  second product source the readiness must not contradict. */
+  factRowsCount: number | undefined;
   onTryReply: () => void;
   /**
    * Tap an uncovered chip to fix it on the spot. Without this the merchant has
@@ -79,26 +82,28 @@ function ReadinessRing({ percent }: { percent: number }) {
  * per-field rules, the fact rows badge themselves from, so the ring and the
  * badges below it can never disagree about a field.
  */
-export function BusinessReadinessCard({ page, productsCount, onTryReply, onFixChip }: BusinessReadinessCardProps) {
+export function BusinessReadinessCard({ page, productsCount, factRowsCount, onTryReply, onFixChip }: BusinessReadinessCardProps) {
   const t = useTranslations('business');
   const locale = useLocale();
 
   const { covered, score } = useMemo(
-    () => computeReadiness(page, productsCount),
-    [page, productsCount],
+    () => computeReadiness(page, productsCount, factRowsCount),
+    [page, productsCount, factRowsCount],
   );
   /** No score until the catalog count lands. One flag, so the ring and the chips
    *  can never announce different busy states for the same wait. */
   const loading = score === null;
 
   /** Chip label per scored area. For `products` this is a COUNT readout («لا
-   *  منتجات بعد» / «٣ منتجات»), which is what a chip should show. */
+   *  منتجات بعد» / «٣ منتجات»), which is what a chip should show. A page whose
+   *  products live in the G1b lists instead says so — never «لا منتجات بعد»
+   *  above 245 list rows. */
   const labelFor = useCallback((key: ReadinessAreaKey): string => {
     if (key !== 'products') return t(`readiness.${key}Chip`);
-    return page.ecommerceStoreId
-      ? t('readiness.productsChipStore')
-      : t('readiness.productsChip', { count: productsCount ?? 0 });
-  }, [t, page.ecommerceStoreId, productsCount]);
+    if (page.ecommerceStoreId) return t('readiness.productsChipStore');
+    if ((productsCount ?? 0) === 0 && (factRowsCount ?? 0) > 0) return t('readiness.productsChipLists');
+    return t('readiness.productsChip', { count: productsCount ?? 0 });
+  }, [t, page.ecommerceStoreId, productsCount, factRowsCount]);
 
   /**
    * The area's NAME, for the gap sentence. Identical to the chip label wherever

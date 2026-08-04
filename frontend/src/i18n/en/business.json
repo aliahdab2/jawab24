@@ -11,6 +11,7 @@
     "deliveryChip": "Delivery",
     "paymentChip": "Payment",
     "productsChipStore": "Products — from your store",
+    "productsChipLists": "Your products — in your lists",
     "productsArea": "Products",
     "percentLabel": "Your assistant is {percent}% ready",
     "coveredOf": "{covered} of {total}",
@@ -164,6 +165,7 @@
     "addSession": "Add another date",
     "removeSession": "Remove this date",
     "deleteEntity": "Delete this item and its dates",
+    "deleteEntityPlain": "Delete this item",
     "deleteEntityConfirm": "Confirm full deletion",
     "tierGap": "No announced dates yet in “{list}”",
     "sectionGeneral": "General",
@@ -197,6 +199,10 @@
     "addItem": "Add item",
     "completenessHint": "This controls how Jawab answers when a customer asks about something that is not in this list.",
     "listSeparator": " — ",
-    "missingKeyGroup": "No {label}"
+    "missingKeyGroup": "No {label}",
+    "listTabsLabel": "Switch between lists",
+    "searchPlaceholder": "Search this list — by name or area…",
+    "searchCount": "Showing {shown, plural, one {# row} other {# rows}} of {total}",
+    "searchNoResults": "No matches — try another word."
   }
 }

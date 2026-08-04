@@ -77,19 +77,28 @@ describe('computeFactCoverage — connected store', () => {
     expect(storeAnswered.payment).toBe(true);
   });
 
+  it('counts LIVE fact-list rows as products — the readiness card must never say «no products» above 245 list rows', () => {
+    expect(computeReadiness(pageWith({}), 0, 245).covered.products).toBe(true);
+    expect(computeReadiness(pageWith({}), 0, 0).covered.products).toBe(false);
+  });
+
   it('counts a store link as covering products, which cannot be typed on such a page', () => {
-    expect(computeReadiness(pageWith({}, { ecommerceStoreId: 's1' } as Partial<Page>), 0).covered.products)
+    expect(computeReadiness(pageWith({}, { ecommerceStoreId: 's1' } as Partial<Page>), 0, 0).covered.products)
       .toBe(true);
   });
 });
 
 describe('computeReadiness — score', () => {
   it('is withheld until the catalog count lands', () => {
-    expect(computeReadiness(pageWith({ hours: FILLED_HOURS }), undefined).score).toBeNull();
+    expect(computeReadiness(pageWith({ hours: FILLED_HOURS }), undefined, 0).score).toBeNull();
+  });
+
+  it('is withheld until the fact-lists count lands — scoring from the catalog alone branded a lists-only page 0%', () => {
+    expect(computeReadiness(pageWith({ hours: FILLED_HOURS }), 0, undefined).score).toBeNull();
   });
 
   it('scores only READINESS_AREAS — a website is not a gap that fails a customer', () => {
-    const { score } = computeReadiness(pageWith({ website: 'x.com', phones: ['0912'] }), 0);
+    const { score } = computeReadiness(pageWith({ website: 'x.com', phones: ['0912'] }), 0, 0);
     expect(score).toEqual({
       covered: 0,
       total: READINESS_AREAS.length,
@@ -101,7 +110,8 @@ describe('computeReadiness — score', () => {
   it('floors the percentage so only a complete profile reads 100%', () => {
     const { score } = computeReadiness(
       pageWith({ hours: FILLED_HOURS, address: 'دمشق', policies: { shipping: 'مجاني', payment: 'نقداً' } }),
-      0, // no products → 4 of 5
+      0, // no catalog products…
+      0, // …and no list rows → 4 of 5
     );
     expect(score?.percent).toBe(80);
     expect(score?.missing).toEqual(['products']);
@@ -110,7 +120,7 @@ describe('computeReadiness — score', () => {
   it('reads 100% and reports no gaps once every area is covered', () => {
     const { score } = computeReadiness(
       pageWith({ hours: FILLED_HOURS, address: 'دمشق', policies: { shipping: 'مجاني', payment: 'نقداً' } }),
-      3,
+      3, 0,
     );
     expect(score).toEqual({ covered: 5, total: 5, percent: 100, missing: [] });
   });
