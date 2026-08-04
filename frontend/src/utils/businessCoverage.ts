@@ -181,7 +181,12 @@ export function computeFactCoverage(page: Page): BusinessFactCoverage {
  *   "40% ready" and jump to 60% a tick later, and a NUMBER that corrects itself
  *   reads as a wrong number (a chip flipping is merely noise).
  */
-export function computeReadiness(page: Page, productsCount: number | undefined): BusinessReadiness {
+export function computeReadiness(
+  page: Page,
+  productsCount: number | undefined,
+  /** LIVE fact-collection rows (G1b lists). undefined = still loading. */
+  factRowsCount: number | undefined,
+): BusinessReadiness {
   const { values, covered: factCovered, storeAnswered } = computeFactCoverage(page);
 
   const covered: Record<CoverageKey, boolean> = {
@@ -191,10 +196,18 @@ export function computeReadiness(page: Page, productsCount: number | undefined):
     // API rejects manual writes with 409 PAGE_HAS_STORE) — so the link itself is
     // what covers products here. Unlike policies there is no server-side proof
     // flag for the product summary; if one is ever added, key this on it too.
-    products: !!page.ecommerceStoreId || (productsCount ?? 0) > 0,
+    //
+    // Fact-collection rows count too: a page whose products live in the G1b
+    // lists (BAMBO: 245 rows) was greeted with «جاهز بنسبة 0٪ — لا منتجات بعد»
+    // right above them — the readiness card contradicting the page it sits on
+    // (owner catch, 2026-08-04). The card asks what Jawab CAN ANSWER, and it
+    // answers from the lists (renderer D-050) exactly as it does from the catalog.
+    products: !!page.ecommerceStoreId || (productsCount ?? 0) > 0 || (factRowsCount ?? 0) > 0,
   };
 
-  const score = productsCount === undefined ? null : (() => {
+  // No score until BOTH product sources have landed — scoring from the catalog
+  // count alone briefly branded a lists-only page «0%» on every load.
+  const score = productsCount === undefined || factRowsCount === undefined ? null : (() => {
     const missing = READINESS_AREAS.filter((area) => !covered[area]);
     const coveredCount = READINESS_AREAS.length - missing.length;
     return {

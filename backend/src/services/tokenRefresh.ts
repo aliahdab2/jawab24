@@ -7,6 +7,7 @@ import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 import { withRetry } from '../utils/retry';
 import { isTokenRevoked, FacebookApiError } from '../utils/fbGraphErrors';
+import { isDemoPlatformId } from '../utils/demo';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
 
@@ -50,7 +51,7 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
     let invalid = 0;
 
     // Find active pages that haven't been verified recently
-    const stalePages = await db
+    const stalePages = (await db
         .select({
             id: pages.id,
             facebookPageId: pages.facebookPageId,
@@ -69,7 +70,14 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
                     lt(pages.tokenLastVerifiedAt, staleThreshold),
                 ),
             )
-        );
+        ))
+        // Demo pages carry fake tokens BY DESIGN (`demo_page_*`, see
+        // utils/demo.ts) — validating them against the real Graph API burns
+        // calls and "disconnects" the whole demo fleet on every sweep, which
+        // the /business connected-pages filter then hides. Same shared
+        // predicate as every other keep-demo-off-Graph guard, so the two
+        // conventions cannot drift.
+        .filter((page) => !isDemoPlatformId(page.facebookPageId));
 
     if (stalePages.length === 0) {
         logger.info('[TokenHealth] All tokens recently verified');

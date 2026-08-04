@@ -6,11 +6,12 @@ import { BusinessReadinessCard } from './BusinessReadinessCard';
 import { businessPage as pageWith } from '@/utils/__tests__/businessPageFixture';
 
 
-function renderCard(page: Page, productsCount: number | undefined = 0) {
+function renderCard(page: Page, productsCount: number | undefined = 0, factRowsCount: number | undefined = 0) {
   return render(
     <BusinessReadinessCard
       page={page}
       productsCount={productsCount}
+      factRowsCount={factRowsCount}
       onTryReply={vi.fn()}
       onFixChip={vi.fn()}
     />,
@@ -160,6 +161,7 @@ describe('BusinessReadinessCard while the catalog count is still loading', () =>
       <BusinessReadinessCard
         page={pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] } })}
         productsCount={undefined}
+        factRowsCount={0}
         onTryReply={vi.fn()}
         onFixChip={vi.fn()}
       />,
@@ -167,5 +169,31 @@ describe('BusinessReadinessCard while the catalog count is still loading', () =>
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     expect(screen.queryByText(/% ready/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Add /)).not.toBeInTheDocument();
+  });
+});
+
+describe('BusinessReadinessCard on a lists-shaped page (products live in fact lists, catalog empty)', () => {
+  it('counts the lists as products and says so — never «no products yet» above 245 rows', () => {
+    // The BAMBO contradiction (owner catch, 2026-08-04): 0 catalog items but
+    // 245 live list rows greeted the merchant with "0% ready — no products yet".
+    renderCard(pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] } }), 0, 245);
+
+    expect(screen.getByText('Your products — in your lists')).toBeInTheDocument();
+    expect(screen.queryByText('No products yet')).not.toBeInTheDocument();
+    // hours + products → 2 of 5.
+    expect(screen.getByText('2 of 5')).toBeInTheDocument();
+  });
+
+  it('withholds the score until the lists count lands, same as the catalog count', () => {
+    render(
+      <BusinessReadinessCard
+        page={pageWith({})}
+        productsCount={0}
+        factRowsCount={undefined}
+        onTryReply={vi.fn()}
+        onFixChip={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 });

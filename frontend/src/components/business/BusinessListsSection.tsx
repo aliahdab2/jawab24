@@ -3,7 +3,7 @@ import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { isRowLive, MAX_ROWS_PER_COLLECTION } from '@jawab24/shared';
+import { isRowLive, MAX_ROWS_PER_COLLECTION, normalizeArabic } from '@jawab24/shared';
 import { factCollectionsApi, type FactCollectionWithRows, type FactRowDto, type FactEntitySaveBody } from '@/lib/api';
 import { captureError, getBackendErrorCode, getStatusCode } from '@/lib/sentryHelpers';
 import { formatCatalogPrice } from '@/utils/priceFormat';
@@ -72,6 +72,15 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
   // the toggle only adds the scan-across-levels affordance he asked for.
   const [collapsedSessions, setCollapsedSessions] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
+  /** Directory-layout pages only: which list's tab is open. The entity-card
+   *  layout (aggregates) is exempt BY DESIGN — it merges lists per entity
+   *  («كل دورة ومعها كل معلوماتها», the owner's ruling), and tabs-by-list
+   *  would tear that entity apart again. null → the first list. */
+  const [activeListId, setActiveListId] = useState<string | null>(null);
+  /** In-list live search — the 213-row directory is unusable without one.
+   *  One shared value is safe: at most one searchable card is on screen
+   *  (tabs show one list; single-list pages have one card). */
+  const [listSearch, setListSearch] = useState('');
 
   const collections = useMemo(() => data ?? [], [data]);
   const groups = useMemo(() => groupFactCollections(collections), [collections]);
@@ -514,11 +523,47 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
         </div>
       )}
 
+      {/* Directory layout with SEVERAL lists → one list at a time behind
+          wrapping pill-tabs. Stacked, a 213-row directory buried the price
+          lists 4-6 screens down (owner report, 2026-08-04 — BAMBO). Pills
+          (not underline tabs) so long Arabic labels WRAP on a phone instead
+          of truncating or side-scrolling. Single-list pages get no bar, and
+          the entity-card layout is exempt (see activeListId). */}
+      {!aggregates && collections.length > 1 && (
+        <div role="group" aria-label={t('lists.listTabsLabel')} className="mt-4 flex flex-wrap gap-1.5">
+          {collections.map((collection) => {
+            const selected = collection.id === (collections.some((c) => c.id === activeListId) ? activeListId : collections[0]?.id);
+            const liveCount = collection.rows.filter((row) => isRowLive(row, today)).length;
+            return (
+              <button
+                key={collection.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => { setActiveListId(collection.id); setListSearch(''); }}
+                className={`min-h-[36px] inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/30 ${
+                  selected
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-card text-foreground/80 border-theme-border hover:bg-surface-100'
+                }`}
+              >
+                <span dir="auto" className="break-words text-start">{collection.label}</span>
+                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${selected ? 'bg-white/20' : 'bg-muted text-muted-foreground'}`}>
+                  {liveCount}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* One card per entity — the name appears exactly once; inside, one
           labelled section per list so a price and a session can't be
           confused. Section titles are the merchant's own list labels. */}
       <div className="mt-4 space-y-3">
-        {!aggregates && collections.map((collection) => {
+        {!aggregates && collections
+          .filter((collection) => collections.length <= 1
+            || collection.id === (collections.some((c) => c.id === activeListId) ? activeListId : collections[0]?.id))
+          .map((collection) => {
           const syntheticGroup: FactListGroup = {
             key: collection.id,
             title: collection.label,
@@ -526,8 +571,21 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           };
           const [section] = sectionizeGroup(syntheticGroup, [collection]);
           if (!section) return null;
-          const live = section.rows.filter((r) => !isExpired(r.row));
-          const expiredRows = section.rows.filter((r) => isExpired(r.row));
+          // Live in-list search (name, any attribute, either script's digits,
+          // hamza/taa-marbuta folded — the data itself spells «صيدليه زناته»).
+          // Only lists long enough to be un-scannable get the box.
+          const searchable = section.rows.length >= 20;
+          const query = searchable ? listSearch.trim() : '';
+          const fold = (s: string) => normalizeArabic(s, { normalizeTaaMarbuta: true }).toLowerCase();
+          const foldedQuery = fold(query);
+          const rowMatches = (row: FactRowDto) => {
+            if (!foldedQuery) return true;
+            if (fold(row.name).includes(foldedQuery)) return true;
+            return (row.attributes ?? []).some((a) => fold(a.value).includes(foldedQuery) || fold(a.label).includes(foldedQuery));
+          };
+          const allLive = section.rows.filter((r) => !isExpired(r.row));
+          const live = allLive.filter((r) => rowMatches(r.row));
+          const expiredRows = section.rows.filter((r) => isExpired(r.row) && rowMatches(r.row));
           const expanded = !!showExpired[collection.id];
           return (
             // NO overflow-hidden on this card — it would trap the sticky area
@@ -552,6 +610,31 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                   </div>
                 )}
               </div>
+              {searchable && (
+                <div className="px-4 py-2.5 border-b border-theme-border/60">
+                  {/* dir=auto resolves from the VALUE, and an empty value falls
+                      back to LTR — which left-aligned the Arabic placeholder on
+                      an RTL page (owner catch, 2026-08-04). Empty → inherit the
+                      page direction; typed → auto, so a Latin query («Detox»)
+                      still lays out naturally. */}
+                  <input
+                    type="search"
+                    dir={listSearch ? 'auto' : undefined}
+                    value={listSearch}
+                    onChange={(e) => setListSearch(e.target.value)}
+                    placeholder={t('lists.searchPlaceholder')}
+                    aria-label={t('lists.searchPlaceholder')}
+                    className="input w-full !py-2 text-sm"
+                  />
+                  {query && (
+                    <p className="mt-1.5 text-xs text-muted-foreground" aria-live="polite">
+                      {live.length === 0 && expiredRows.length === 0
+                        ? t('lists.searchNoResults')
+                        : t('lists.searchCount', { shown: live.length, total: allLive.length })}
+                    </p>
+                  )}
+                </div>
+              )}
               {(() => {
                 // Grouped by the list's KEY value (the merchant's search axis —
                 // «which pharmacies are in area X» — and the same axis the

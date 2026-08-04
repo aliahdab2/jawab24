@@ -14,11 +14,12 @@ import { BusinessListsSection } from '@/components/business/BusinessListsSection
 import { BusinessFactSheet, type EditableFactKey } from '@/components/business/BusinessFactSheet';
 import { BusinessHoursSheet } from '@/components/business/BusinessHoursSheet';
 import { KnowledgeBasePanel } from '@/components/knowledge-base/KnowledgeBasePanel';
-import { api, pagesApi, catalogApi, type CatalogVerticalInfo } from '@/lib/api';
+import { api, pagesApi, catalogApi, factCollectionsApi, type CatalogVerticalInfo, type FactCollectionWithRows } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { todayISODate } from '@/utils/dateUtils';
 import { KbCleanupSheet } from '@/components/catalog/KbCleanupSheet';
 import {
-  unwrapBusinessProfile, whatsappNumbers, hasFieldLinesToClean,
+  unwrapBusinessProfile, whatsappNumbers, hasFieldLinesToClean, isRowLive,
   type BusinessProfile, type StoredBusinessProfile,
 } from '@jawab24/shared';
 import { toast } from 'sonner';
@@ -126,6 +127,22 @@ function BusinessPageInner() {
     enabled: !!selectedPageId && !hasStore,
   });
   const productsCount = selectedPageId ? catalogData?.data?.length : 0;
+
+  // Same queryKey as BusinessListsSection below — one fetch feeds both the
+  // readiness products signal and the lists editor. Products can live in the
+  // G1b lists instead of the catalog (BAMBO: 245 rows), and the readiness card
+  // must never say «لا منتجات بعد» above them.
+  const { data: factCollections } = useQuery<FactCollectionWithRows[]>({
+    queryKey: ['fact-collections', selectedPageId],
+    queryFn: () => factCollectionsApi.list(selectedPageId).then((r) => r.data.data),
+    enabled: !!selectedPageId,
+  });
+  const factRowsCount = useMemo(() => {
+    if (!selectedPageId) return 0;
+    if (!factCollections) return undefined;
+    const today = todayISODate();
+    return factCollections.reduce((n, c) => n + c.rows.filter((r) => isRowLive(r, today)).length, 0);
+  }, [selectedPageId, factCollections]);
 
   // KB editor state (inline panel) — same shared save hook as /pages; the
   // pages query is invalidated so readiness chips/fact rows refresh on save.
@@ -333,6 +350,7 @@ function BusinessPageInner() {
             <BusinessReadinessCard
               page={selectedPage}
               productsCount={productsCount}
+              factRowsCount={factRowsCount}
               onTryReply={() => setTestReplyOpen(true)}
               onFixChip={handleFixChip}
             />

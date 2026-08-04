@@ -11,6 +11,7 @@
     "deliveryChip": "التوصيل",
     "paymentChip": "الدفع",
     "productsChipStore": "منتجاتك — من متجرك",
+    "productsChipLists": "منتجاتك — في قوائم النشاط",
     "productsArea": "المنتجات",
     "percentLabel": "مساعدك جاهز بنسبة {percent}%",
     "coveredOf": "{covered} من {total}",
@@ -164,6 +165,7 @@
     "addSession": "إضافة موعد آخر",
     "removeSession": "إزالة هذا الموعد",
     "deleteEntity": "حذف هذا العنصر ومواعيده",
+    "deleteEntityPlain": "حذف هذا العنصر",
     "deleteEntityConfirm": "تأكيد الحذف الكامل",
     "tierGap": "لا مواعيد معلنة بعد في «{list}»",
     "sectionGeneral": "معلومات عامة",
@@ -197,6 +199,10 @@
     "addItem": "إضافة عنصر",
     "completenessHint": "يتحكم هذا في ردّ جواب عندما يسأل الزبون عن شيء غير موجود في هذه القائمة.",
     "listSeparator": " — ",
-    "missingKeyGroup": "بدون {label}"
+    "missingKeyGroup": "بدون {label}",
+    "listTabsLabel": "التبديل بين القوائم",
+    "searchPlaceholder": "ابحث في هذه القائمة — بالاسم أو المنطقة…",
+    "searchCount": "يعرض {shown, plural, zero {لا صفوف} one {صفًا واحدًا} two {صفين} few {# صفوف} many {# صفًا} other {# صف}} من أصل {total}",
+    "searchNoResults": "لا نتائج مطابقة — جرّب كلمة أخرى."
   }
 }

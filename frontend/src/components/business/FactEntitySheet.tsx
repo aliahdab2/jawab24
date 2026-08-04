@@ -12,7 +12,7 @@ import {
 } from '@/utils/factScheduleFields';
 import { useLanguage } from '@/i18n/hooks';
 import type { FactCollectionWithRows, FactEntitySaveBody } from '@/lib/api';
-import { collectionAttributeLabels, sessionValueKind, type FactEntityUnit } from '@/utils/factListLayout';
+import { collectionAttributeLabels, sessionValueKind, unitHasSchedules, type FactEntityUnit } from '@/utils/factListLayout';
 
 interface SessionDraft {
   /** undefined = a new session authored in this sheet. */
@@ -348,6 +348,15 @@ export function FactEntitySheet({
     onSave(body);
   };
 
+  /** The list this row lives in — see the SidePanel title below. */
+  const headerTitle = baseCollection?.label ?? sessionCollection?.label ?? t('lists.editItem');
+  /** Does this entity carry schedule rows? One named answer, so every piece of
+   *  copy that promises date behaviour asks the same question (shared predicate
+   *  in factListLayout — see its doc for why this differs from
+   *  `sessionCollection`, which asks whether dates are POSSIBLE here). */
+  const hasSchedules = unitHasSchedules(unit);
+  const deleteLabel = t(hasSchedules ? 'lists.deleteEntity' : 'lists.deleteEntityPlain');
+
   const deleteEntity = () => {
     const body: FactEntitySaveBody = { upserts: [], deletes: [] };
     if (baseRow && baseCollection) body.deletes.push({ collectionId: baseCollection.id, rowId: baseRow.id });
@@ -440,9 +449,24 @@ export function FactEntitySheet({
     <SidePanel
       isOpen
       onClose={onClose}
-      title={t('lists.editItem')}
-      subtitle={unit.title}
-      headerExtra={<InfoPopover label={t('lists.sessions')}>{t('lists.rowDateHint')}</InfoPopover>}
+      // The header names WHERE the merchant is (the list), not WHAT they are
+      // doing: they tapped a row and its card opened, so «تعديل العنصر» in
+      // 18px bold restated the obvious and pushed the real context — which
+      // list this row belongs to — into 12px muted (owner catch, 2026-08-04).
+      // The item's own name is the borderless title inside the form, so it is
+      // never lost. Falls back to the generic label only when no collection
+      // reached us (defensive: every open path passes one today).
+      title={headerTitle}
+      // …and never echoes it: on a directory list the unit IS the collection,
+      // so the old subtitle repeated the new title verbatim.
+      subtitle={unit.title === headerTitle ? undefined : unit.title}
+      // The date rule («جواب stops quoting a dated row…») explains a mechanic
+      // this item doesn't have when it carries no schedule rows — and the same
+      // hint already sits inside each date card, where it applies (owner catch,
+      // 2026-08-04). Header hint only when the sheet can actually hold dates.
+      headerExtra={sessionCollection
+        ? <InfoPopover label={t('lists.sessions')}>{t('lists.rowDateHint')}</InfoPopover>
+        : undefined}
     >
       <div className="p-4 sm:p-5 space-y-6 pb-28">
         {/* ————— Notion model (round 9): a borderless TITLE, then thin
@@ -818,9 +842,11 @@ export function FactEntitySheet({
         {/* Destructive action lives at the END of the form, spatially far from
             Save (round-6 expert point 5: delete beside the primary action is
             dangerous). Two-step confirm as before. */}
-        {(baseRow || unit.sessions.length > 0) && (
-          <section aria-label={t('lists.deleteEntity')} className="danger-zone rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-            <span className="text-sm danger-zone-text">{t('lists.deleteEntity')}</span>
+        {/* «ومواعيده» only when schedule rows actually ride along — on a plain
+            price row it claimed dates that don't exist (owner catch, 2026-08-04). */}
+        {(baseRow || hasSchedules) && (
+          <section aria-label={deleteLabel} className="danger-zone rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-sm danger-zone-text">{deleteLabel}</span>
             {confirmingDelete ? (
               <Button variant="danger" size="sm" onClick={deleteEntity} loading={saving}>
                 {t('lists.deleteEntityConfirm')}
