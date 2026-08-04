@@ -388,6 +388,12 @@ export const posts = pgTable('posts', {
      *  instagram_media has no counterpart column (button-template support unverified on IG). */
     triggerButtonLabel: text('trigger_button_label'),
     triggerButtonUrl: text('trigger_button_url'),
+    /** Set when the merchant armed a Post Reply on a still-SCHEDULED FB post via the
+     *  picker; cleared by the publish webhook (item=post, verb=add) once the same
+     *  post_id goes live. A stale non-null value while a foreign post_id publishes on
+     *  the page is the tripwire for "scheduled post changed id at publish" — see
+     *  webhook.ts checkScheduledArmedPublish. */
+    scheduledPublishTime: timestamp('scheduled_publish_time'),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),

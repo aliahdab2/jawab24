@@ -190,6 +190,7 @@ export interface UpdatePostDTO {
     autoReplyEnabled?: boolean;
     triggerKeyword?: string | null;
     triggerReply?: string | null;
+    scheduledPublishTime?: Date | null;
 }
 
 // Comment Types
