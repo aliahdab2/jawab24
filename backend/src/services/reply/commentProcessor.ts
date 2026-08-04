@@ -824,6 +824,7 @@ export class CommentProcessor {
                     storePolicies: generatorContext.storePolicies,
                     productCatalog: generatorContext.productCatalog,
                     factCollectionsBlock: generatorContext.factCollectionsBlock,
+                    businessInfoBlock: generatorContext.businessInfoBlock,
                 }),
             });
             // Keep the debounce slot only if the reply actually went out.

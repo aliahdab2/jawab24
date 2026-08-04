@@ -130,12 +130,36 @@ describe('buildGroundingSource', () => {
             storePolicies: 'POLICY TEXT',
             productCatalog: 'CATALOG TEXT',
             factCollectionsBlock: 'LISTS TEXT',
+            businessInfoBlock: 'BUSINESS INFO TEXT',
         });
         expect(out).toContain('KB TEXT');
         expect(out).toContain('POST TEXT');
         expect(out).toContain('POLICY TEXT');
         expect(out).toContain('CATALOG TEXT');
         expect(out).toContain('LISTS TEXT');
+        expect(out).toContain('BUSINESS INFO TEXT');
+    });
+
+    // The regression this test exists for (prod, 2026-08-04): a merchant moved his
+    // address OUT of the KB free text and into the confirmed address field. The
+    // field reaches the model through its own block, never through knowledgeBase —
+    // so the verifier stopped seeing it and flagged his own address as invented on
+    // 17 of his next 66 replies. Any reply quoting a confirmed field must be
+    // grounded by that field alone, with no KB text present at all.
+    it('includes the business-info block, so a reply quoting a confirmed field is grounded', () => {
+        // The failing shape exactly: the address lives ONLY in the confirmed field,
+        // and the KB prose no longer mentions it.
+        const businessInfoBlock = [
+            'معلومات النشاط التجاري المؤكدة:',
+            'العنوان: برامكة، فوق مكتبة الحافظ، الطابق الأول — جنب الهجرة والجوازات وجامع الرازي، دمشق',
+            'ساعات العمل: من السبت إلى الخميس 09:00 - 17:00',
+        ].join('\n');
+        const knowledgeBase = 'دورات تدريبية متنوعة. '.repeat(20);
+        expect(knowledgeBase).not.toContain('جامع الرازي');
+
+        const out = buildGroundingSource({ knowledgeBase, businessInfoBlock });
+        expect(out).toContain('جامع الرازي');
+        expect(shouldVerifyGrounding(base({ kb: out }))).toBe(true);
     });
 
     // G1a: the <business_lists> block is exactly where the pages this verifier

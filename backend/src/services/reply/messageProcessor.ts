@@ -1049,7 +1049,7 @@ export class MessageProcessor {
             //     assistant-side filter also drops the just-stored outgoing
             //     reply, which did not exist when the generator read history.
             {
-                const groundingKb = buildGroundingSource({ knowledgeBase, postMessage: originPostMessage, storePolicies, productCatalog, factCollectionsBlock });
+                const groundingKb = buildGroundingSource({ knowledgeBase, postMessage: originPostMessage, storePolicies, productCatalog, factCollectionsBlock, businessInfoBlock });
                 if (shouldVerifyGrounding({ pageId: page.id, replyMethod, intent: aiIntent, reply: replyText ?? '', kb: groundingKb })) {
                     const sentReply = replyText ?? '';
                     messagesService.getConversationHistory(page.id, senderId, 12)
