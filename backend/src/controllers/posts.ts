@@ -1,6 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { POST_REPLY_IMAGE_MAX_BYTES, POST_REPLY_IMAGE_MIME_TYPES, POST_REPLY_BUTTON_TEXT_MAX } from '@jawab24/shared';
-import { postsService, type TriggerImageInput } from '../services/posts';
+import { postsService, PostNotOwnedError, type TriggerImageInput } from '../services/posts';
 import { pagesService } from '../services/pages';
 import { validatePostReplyRuleInput } from '../services/reply/postReplyRule';
 import { imageStorage } from '../services/imageStorage';
@@ -129,6 +129,11 @@ export class PostsController {
             );
             return reply.send(content);
         } catch (error) {
+            // The post id resolved to another page's row — same response as an
+            // unknown post; don't confirm the id exists elsewhere.
+            if (error instanceof PostNotOwnedError) {
+                return reply.status(404).send({ error: 'Post not found' });
+            }
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to prepare post' });
         }

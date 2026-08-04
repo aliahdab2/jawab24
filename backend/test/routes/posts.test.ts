@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify from 'fastify';
 import postsRoutes from '../../src/routes/posts';
-import { postsService } from '../../src/services/posts';
+import { postsService, PostNotOwnedError } from '../../src/services/posts';
 import { pagesService } from '../../src/services/pages';
 
 // Mock services
@@ -547,6 +547,22 @@ describe('Posts Routes', () => {
                 payload: { pageId: 'p1', source: 'facebook', platformPostId: 'x' },
             });
             expect(res.statusCode).toBe(404);
+        });
+
+        it('returns 404 (not 500) when the post id belongs to another workspace', async () => {
+            // Cross-tenant probe: same response as an unknown post — never confirm
+            // that the id exists under someone else's workspace.
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'p1', facebookPageId: 'fb1', instagramAccountId: null, accessToken: 'tok' } as any);
+            vi.mocked(postsService.ensureContent).mockRejectedValue(new PostNotOwnedError('fb_foreign'));
+
+            const res = await app.inject({
+                method: 'POST',
+                url: '/posts/ensure',
+                payload: { pageId: 'p1', source: 'facebook', platformPostId: 'fb_foreign' },
+            });
+
+            expect(res.statusCode).toBe(404);
+            expect(JSON.parse(res.payload).error).toBe('Post not found');
         });
     });
 });

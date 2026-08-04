@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { postsService } from '../../src/services/posts';
+import { postsService, PostNotOwnedError } from '../../src/services/posts';
 import { db } from '../../src/db';
 
 vi.mock('../../src/db', () => ({
@@ -324,6 +324,39 @@ describe('PostsService', () => {
             expect(facebookService.getPostContent).toHaveBeenCalled();
             expect(db.update).toHaveBeenCalled();
             expect(result.message).toBe('Fetched');
+        });
+
+        it('recovers the winning row when a concurrent insert for the same page wins the race', async () => {
+            const uniqueViolation = Object.assign(new Error('duplicate key'), { code: '23505' });
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([]) as any)            // scoped lookup: miss
+                .mockReturnValueOnce(mockSelectChain([samplePost]) as any); // re-select after 23505: same-page row won
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({ returning: vi.fn().mockRejectedValue(uniqueViolation) }),
+            } as any);
+
+            const result = await postsService.findOrCreateFromWebhook('page-1', 'fb-post-1', 'text');
+
+            expect(result).toEqual(samplePost);
+            expect(captureError).not.toHaveBeenCalled();
+        });
+
+        it('throws PostNotOwnedError when the post id belongs to another page (cross-tenant probe)', async () => {
+            // facebook_post_id is globally unique: a page-scoped miss + 23505 + scoped
+            // re-miss can only mean the row is another page's — must NOT be returned.
+            const uniqueViolation = Object.assign(new Error('duplicate key'), { code: '23505' });
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([]) as any)  // scoped lookup: miss
+                .mockReturnValueOnce(mockSelectChain([]) as any); // re-select scoped: still miss → foreign row
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({ returning: vi.fn().mockRejectedValue(uniqueViolation) }),
+            } as any);
+
+            await expect(postsService.findOrCreateFromWebhook('page-1', 'fb-post-foreign', 'text'))
+                .rejects.toBeInstanceOf(PostNotOwnedError);
+            expect(captureError).toHaveBeenCalledWith(uniqueViolation, expect.any(String), expect.objectContaining({
+                fingerprint: ['post-ensure-foreign-post'],
+            }));
         });
     });
 

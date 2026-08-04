@@ -57,6 +57,19 @@ function extForMime(mime: string): string {
  *  "Load more" fetches the next page via the platform Graph cursor. */
 export const PICKER_PAGE_SIZE = 5;
 
+/**
+ * The ensure/webhook find-or-create resolved to a post that belongs to a different
+ * page. `posts.facebook_post_id` is globally unique and `pages.facebook_page_id` is
+ * unique too, so a page-scoped miss followed by a unique-violation on insert can only
+ * mean the post id belongs to another page — i.e. another workspace's post.
+ */
+export class PostNotOwnedError extends Error {
+    constructor(facebookPostId: string) {
+        super(`Post ${facebookPostId} belongs to a different page`);
+        this.name = 'PostNotOwnedError';
+    }
+}
+
 type PickerPage = {
     id: string;
     facebookPageId: string | null;
@@ -146,14 +159,20 @@ export class PostsService {
     }
 
     /**
-     * Get post by Facebook Post ID
+     * Get post by Facebook Post ID. Pass `pageId` (internal UUID) to scope the lookup
+     * to that page — required on any caller-influenced path (ensure endpoint), where an
+     * unscoped hit on the globally-unique column would leak another workspace's row.
      */
-    async getPostByFacebookId(facebookPostId: string) {
+    async getPostByFacebookId(facebookPostId: string, pageId?: string) {
         const result = await db
             .select()
             .from(posts)
-            .where(eq(posts.facebookPostId, facebookPostId));
-        
+            .where(
+                pageId
+                    ? and(eq(posts.facebookPostId, facebookPostId), eq(posts.pageId, pageId))
+                    : eq(posts.facebookPostId, facebookPostId),
+            );
+
         return result[0] || null;
     }
 
@@ -380,8 +399,8 @@ export class PostsService {
      * Automatically fetches post content from Facebook if not provided
      */
     async findOrCreateFromWebhook(pageId: string, facebookPostId: string, message?: string, pageAccessToken?: string) {
-        const existing = await this.getPostByFacebookId(facebookPostId);
-        
+        const existing = await this.getPostByFacebookId(facebookPostId, pageId);
+
         if (existing) {
             // If we have the post but no message, try to fetch it
             if (!existing.message && pageAccessToken) {
@@ -401,11 +420,28 @@ export class PostsService {
             postMessage = await facebookService.getPostContent(facebookPostId, pageAccessToken) || undefined;
         }
 
-        return this.createPost({
-            pageId,
-            facebookPostId,
-            message: postMessage,
-        });
+        try {
+            return await this.createPost({
+                pageId,
+                facebookPostId,
+                message: postMessage,
+            });
+        } catch (err) {
+            // 23505 after a page-scoped miss: either we lost a race against a concurrent
+            // insert for the SAME page (re-select finds it), or the row belongs to a
+            // different page — the caller supplied another workspace's post id.
+            if ((err as { code?: string } | null)?.code === '23505') {
+                const winner = await this.getPostByFacebookId(facebookPostId, pageId);
+                if (winner) return winner;
+                captureError(err, 'Post ensure hit a foreign post id', {
+                    level: 'warning',
+                    fingerprint: ['post-ensure-foreign-post'],
+                    extra: { pageId, facebookPostId },
+                });
+                throw new PostNotOwnedError(facebookPostId);
+            }
+            throw err;
+        }
     }
 
     /**
