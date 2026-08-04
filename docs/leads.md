@@ -21,6 +21,22 @@ Product surface: `/leads` page (list + detail card with call/WhatsApp buttons,
 status pipeline, custom fields, CSV export, server-side search), SSE toast +
 push notification on capture, daily digest email.
 
+**Visibility of the standing queue (Aug 2026).** Three surfaces read ONE number —
+the workspace-wide count of leads at `status = 'new'`, from `GET /leads/count`
+with no `pageId` (`{ count, latestName, latestAt }`):
+
+| Surface | Notes |
+|---|---|
+| Nav badge (sidebar + mobile "More") | `useNewLeadsSummary`. Server-derived, so it survives an app restart, and it clears when a lead's **status changes** — not when the merchant merely visits `/leads` |
+| Dashboard attention banner | ONE aggregate leads row, never one row per lead, plus the count in the banner total |
+| Daily digest email | Volume **or** age — see [lead-digest-email.md](lead-digest-email.md) |
+
+Why all three: before Aug 2026 the badge was a **session counter** that started at
+0 on every app load and only ever incremented from a live `lead:captured` SSE
+event, visiting `/leads` reset it without working a single lead, and the dashboard
+never mentioned leads at all. A paying merchant sat on 19 unworked leads with
+every surface showing nothing (2026-08-04).
+
 ## Data model (`leads` table, `backend/src/db/schema.ts`)
 
 | Column | Notes |

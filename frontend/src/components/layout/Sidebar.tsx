@@ -198,7 +198,10 @@ export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boo
 /* ------------------------------------------------------------------ */
 
 function UnreadBadge({ count, sidebarOpen, color = 'red' }: { count: number; sidebarOpen: boolean; color?: 'red' | 'brand' }) {
-  if (count <= 0) return null;
+  // Positive assertion, not `count <= 0`: NaN/undefined slipping through a typed
+  // boundary compares false to every `<=`, so the old guard let a non-number fall
+  // through and render an EMPTY pill. Render only on a real positive count.
+  if (!(count > 0)) return null;
   const bg = color === 'brand' ? 'bg-brand-500' : 'bg-red-500';
   return (
     <span className={clsx(

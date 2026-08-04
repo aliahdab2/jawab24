@@ -1,27 +1,42 @@
 # Lead Digest Email
 
-Daily email that notifies workspace owners when their leads accumulate past a threshold. Designed to stay well within Resend's free tier (100 emails/day) while protecting sender reputation and respecting the account lifecycle (churned / abandoned users).
+Daily email that tells workspace owners which customers are still **waiting for contact**. Designed to stay within Resend's free tier (100 emails/day) while protecting sender reputation and respecting the account lifecycle (churned / abandoned users).
+
+## Which leads it reports
+
+**`status = 'new'` and `digest_emailed_at IS NULL`** — the same set the nav badge and the dashboard attention row count, so all three surfaces always agree on "how many are waiting".
+
+A lead the merchant already worked (`contacted` / `converted`) is never reported and never stamped, so it keeps `digest_emailed_at = NULL` indefinitely — correct, since it never needed a digest, and moving it back to `new` makes it eligible again.
+
+> Before Aug 2026 the query had no status filter. That was invisible while the volume trigger kept low-volume workspaces silent; the age trigger below reaches them, so without the filter a merchant who contacted and converted his one lead on day one would be emailed "you have 1 new lead" on day two while the dashboard correctly showed zero waiting.
 
 ## Behavior at a glance
 
 - Runs once per day (cron via `setInterval`, registered in [`backend/src/index.ts`](../backend/src/index.ts))
 - A user receives **at most one email per day**
-- A user receives an email only when **all** of the following are true:
-  1. They have **≥ 10 non-emailed leads** (`DIGEST_THRESHOLD`)
-  2. They have an **email** on file (`users.email`)
-  3. They have an **active or trialing subscription** (`subscriptions.status ∈ {active, trialing}`)
-  4. They have **logged in within 30 days** (`users.last_seen_at`, `ENGAGEMENT_WINDOW_DAYS`)
+- The workspace's digest fires when **either** trigger is met:
+  1. **Volume** — **≥ 10 waiting leads** (`DIGEST_THRESHOLD`), or
+  2. **Age** — the **oldest** waiting lead is **≥ 48 h** old (`DIGEST_MAX_AGE_HOURS`)
+- …and the recipient additionally passes **all** of:
+  1. An **email** on file (`users.email`)
+  2. An **active or trialing subscription** on the workspace owner (`subscriptions.status ∈ {active, trialing}`)
+  3. **Logged in within 30 days** (`users.last_seen_at`, `ENGAGEMENT_WINDOW_DAYS`)
+  4. Has **not muted** the digest (`workspace_members.lead_digest_muted_at IS NULL`)
 - Email language is picked by **detecting the language of the user's pages' knowledge bases** (`ar` or `en`, defaulting to `en`)
+- Subject and intro are **plural-aware** (`tPlural`, CLDR categories via `Intl.PluralRules`) — the age trigger makes counts of 1 and 2 reachable, where "1 customers" / «1 عميل» would be wrong in both languages
 - Every send attempt — including skips — is persisted in `lead_digest_sends` for observability
 
 ## Why the gates exist
 
 | Gate | Reason |
 |---|---|
-| ≥10 threshold | Quota hygiene. Resend free tier = 100 emails/day; this caps daily volume naturally |
+| ≥10 volume trigger | Batches a busy workspace into one email instead of a daily trickle |
+| 48 h age trigger | A lead is time-sensitive. The volume trigger **alone** starved low-volume merchants: found live 2026-08-04, a paying merchant at ~1 lead/day was emailed exactly once ever — the day his first 10 accumulated — while 9 more piled up unworked. The age trigger caps the wait at "two mornings" |
 | Active subscription | Churned users shouldn't receive feature-related email |
 | 30-day engagement | Protects sender reputation. Mailbox providers (Gmail, Outlook) track domain-level engagement — sending to abandoned inboxes hurts deliverability for **all** users |
 | Stamp-on-skip | Operational hygiene: abandoned/churned users' leads are stamped anyway so the daily query doesn't re-process them forever |
+
+> **Send-volume note.** The ≥10 threshold used to be the de-facto cap on daily volume. It is not any more: with the age trigger, *any* workspace holding one waiting lead older than 48 h emails every owner + admin. The practical ceiling is now roughly `active workspaces with a waiting lead × recipients ÷ 2 days`. At current scale that is far below Resend's 100/day, but the threshold is no longer what keeps it there — watch `lead_digest_sends` as workspace count grows.
 
 ## Data model
 
@@ -90,8 +105,9 @@ Cron interval: **24h** (`setInterval` in `backend/src/index.ts`). First run dela
 | Successful send | Leads stamped; audit row written (`sent`) |
 | Email send fails | Leads **not** stamped (so next day's run retries); audit row written (`failed`) |
 | User fails a terminal gate (no email / subscription / engagement) | Leads stamped (so we don't re-process them forever); audit row written (`skipped_*`) |
-| User below threshold | No write at all; leads roll over to next day |
-| Cron runs twice same day | Second run no-ops — threshold is now zero because all leads were stamped |
+| Workspace below **both** triggers (< 10 waiting leads AND oldest < 48 h) | No write at all; leads roll over to next day |
+| Merchant works a lead before it is digested | Never reported, never stamped — it leaves the waiting set instead |
+| Cron runs twice same day | Second run no-ops — the waiting set is now empty because all reported leads were stamped |
 
 ## Best practices applied
 
@@ -139,17 +155,18 @@ In development (`NODE_ENV=development`), `emailService.send()` logs instead of h
 
 ## Quota math
 
-Worst case: every active+engaged user hits the threshold every day → 1 email/user/day.
+Worst case: every active+engaged recipient's workspace fires every day → 1 email/recipient/day. Note this is per **recipient** (owner + admins), not per workspace.
 
 - Resend free tier: 100 emails/day, 3,000/month
-- Headroom: ~100 active engaged merchants per day, ~3,000/month
+- Headroom: ~100 active engaged recipients per day, ~3,000/month
 - Thanks to the engagement gate, abandoned users don't eat into this budget
+- Since Aug 2026 the ≥10 threshold is **no longer** what bounds this — the 48 h age trigger reaches every workspace with a single waiting lead (see the send-volume note above). The realistic steady state is one email per waiting workspace every other day; re-check against `lead_digest_sends` as the workspace count grows
 
 ## Tests
 
-9 unit tests in [`backend/src/__tests__/leadDigest.test.ts`](../backend/src/__tests__/leadDigest.test.ts):
+Unit tests in [`backend/src/__tests__/leadDigest.test.ts`](../backend/src/__tests__/leadDigest.test.ts) — `db` is mocked, so these cover trigger logic, gates and stamping:
 
-1. Below threshold → no send, no stamp, no audit
+1. Below **both** triggers → no send, no stamp, no audit
 2. All gates pass → sends, stamps, writes `sent` audit row with Resend ID
 3. No email → stamps, writes `skipped_no_email`
 4. Canceled subscription → stamps, writes `skipped_no_subscription`
@@ -158,3 +175,8 @@ Worst case: every active+engaged user hits the threshold every day → 1 email/u
 7. Email send fails → does **not** stamp, writes `failed` with error message
 8. Arabic KB → email subject in Arabic
 9. Two users, one above/one below threshold → processed independently
+10. Age flush: below threshold but oldest ≥ `DIGEST_MAX_AGE_HOURS` → sends; keyed on the **oldest** lead; just under the threshold age → does not send
+
+Plural agreement in [`backend/src/__tests__/leadDigestPlurals.test.ts`](../backend/src/__tests__/leadDigestPlurals.test.ts) — English singular at 1, Arabic one/two unnumbered, few/many/other by CLDR category.
+
+**Which leads are selected** is proven against real Postgres in [`backend/test/integration/leadDigestScope.test.ts`](../backend/test/integration/leadDigestScope.test.ts) — the unit suite mocks `db` and hands the service a fixed row set, so it can never verify the SQL predicate. The integration suite covers contacted/converted leads being excluded, a mixed queue reporting and stamping only the waiting ones, and an already-digested lead never re-sending.
