@@ -26,7 +26,8 @@ import {
   AlertTriangle,
   LinkIcon,
   Unlink,
-  FlaskConical
+  FlaskConical,
+  MessageCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
@@ -36,6 +37,7 @@ import dynamic from 'next/dynamic';
 
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
+const MessengerProfileModal = dynamic(() => import('@/components/pages/MessengerProfileModal').then(m => ({ default: m.MessengerProfileModal })), { ssr: false });
 import { ChannelPickerModal } from '@/components/pages/ChannelPickerModal';
 import { WhatsAppPathModal } from '@/components/pages/WhatsAppPathModal';
 import { isWhatsAppVisible, isWhatsAppRedirectConnect } from '@/lib/featureFlags';
@@ -83,6 +85,8 @@ const PagesPage: NextPageWithLayout = () => {
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
   const [testSmartReplyPage, setTestSmartReplyPage] = useState<Page | null>(null);
+  // Page whose Messenger welcome (greeting + ice breakers) editor is open (null = none)
+  const [messengerProfilePage, setMessengerProfilePage] = useState<Page | null>(null);
   // Page ID currently running the WhatsApp Embedded Signup popup (null = none)
   const [connectingWhatsApp, setConnectingWhatsApp] = useState<string | null>(null);
   // Target of the pending onboarding-path question — a page ID, or 'new' for a
@@ -1367,6 +1371,30 @@ const PagesPage: NextPageWithLayout = () => {
                 </button>
               </div>
 
+              {/* Messenger welcome (greeting + ice breakers) — Facebook pages only:
+                  the Messenger Profile API has no WhatsApp/Instagram equivalent */}
+              {!isWhatsAppOnly && (
+                <div className="px-6 landscape:px-4 pb-4 landscape:pb-3">
+                  <button
+                    onClick={() => setMessengerProfilePage(page)}
+                    className="group w-full p-3 landscape:p-2.5 rounded-xl border border-theme-border bg-card hover:bg-brand-50/10 dark:hover:bg-brand-900/10 transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400 transition-colors">
+                          <MessageCircle className="w-5 h-5" />
+                        </div>
+                        <div className="text-start">
+                          <p className="text-sm font-bold text-foreground/70">{t('messengerProfileCardTitle')}</p>
+                          <p className="text-xs font-medium text-muted-foreground mt-0.5">{t('messengerProfileCardSubtitle')}</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-icon-muted rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </button>
+                </div>
+              )}
+
               {/* Status Footer */}
               <div className="px-6 py-4 bg-background/50 border-t border-theme-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1443,6 +1471,20 @@ const PagesPage: NextPageWithLayout = () => {
           page={testSmartReplyPage}
           initialQuestion={testReplyPrefillSample ? tOnboarding('trySampleQuestion') : undefined}
           onClose={() => { setTestSmartReplyPage(null); setTestReplyPrefillSample(false); }}
+        />
+      )}
+
+      {/* Messenger welcome editor (greeting + ice breakers) */}
+      {messengerProfilePage && (
+        <MessengerProfileModal
+          page={messengerProfilePage}
+          isOpen
+          canEdit={canEdit}
+          onClose={() => setMessengerProfilePage(null)}
+          onSaved={(updated) => {
+            setPages(prev => prev.map(p => (p.id === updated.id ? { ...p, ...updated } : p)));
+            setMessengerProfilePage(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+          }}
         />
       )}
 

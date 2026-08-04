@@ -9,7 +9,7 @@ import { postsService } from '../services/posts';
 import { facebookService } from '../services/facebook';
 import * as typingIndicator from '../services/reply/typingIndicator';
 import { acquireMutex } from '../lib/redisMutex';
-import { parseReadMorePayload } from '@jawab24/shared';
+import { parseReadMorePayload, parseIceBreakerPayload } from '@jawab24/shared';
 import { authService } from '../services/auth';
 import { auditLog } from '../services/auditLog';
 import { purgeCustomerData } from '../services/gdprCustomerDeletion';
@@ -347,8 +347,9 @@ export class WebhookController {
                             }, 'facebook', this.log());
                         }
                     } else if (messageEvent.postback) {
-                        // Button tap (Post Reply «Read more») — deliver the full text in-chat.
-                        await this.processPostback(page, messageEvent);
+                        // Button tap — Post Reply «Read more» or an ice-breaker
+                        // question. Routed by payload; unknown payloads ignored.
+                        await this.processPostback(pageId, page, messageEvent);
                     }
                 }
             }
@@ -441,19 +442,94 @@ export class WebhookController {
     }
 
     /**
+     * Route a messaging `postback` event by payload. Two payloads are ours:
+     *   - `pr_more:<source>:<postId>` — Post Reply «Read more» button tap
+     *   - `ib:<index>` — Messenger Profile ice-breaker question tap
+     * Anything else (a legacy button, another Meta surface) is safely ignored
+     * at debug level. Never throws — a webhook that 500s gets redelivered.
+     */
+    private async processPostback(
+        pageId: string,
+        page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>,
+        event: MessagingEvent,
+    ) {
+        if (!page) return;
+        const payload = event.postback?.payload;
+
+        const readMore = parseReadMorePayload(payload);
+        if (readMore) {
+            return this.processReadMorePostback(page, event, readMore);
+        }
+
+        const iceBreaker = parseIceBreakerPayload(payload);
+        if (iceBreaker) {
+            return this.processIceBreakerPostback(pageId, page, event, iceBreaker.index);
+        }
+
+        this.log().debug('Ignoring postback with unknown payload', {
+            pageId,
+            payloadPrefix: typeof payload === 'string' ? payload.slice(0, 24) : null,
+        });
+    }
+
+    /**
+     * An ice-breaker tap is a QUESTION, not a delivery receipt: convert it into
+     * the normal message pipeline as if the customer had typed the question.
+     *
+     * The stored config (`pages.messenger_profile`) is the authoritative source
+     * for the question text — the payload carries only the index — with the
+     * postback `title` (Meta's echo of the question) as fallback for the window
+     * between a config edit and the customer's tap on the old question.
+     *
+     * The synthetic event flows through `processMessage` — the SAME entry point
+     * as a typed text message — so storage, created_time stamping, the typing
+     * indicator, and reply enqueueing all behave identically (one canonical
+     * path, no fork). Postback events carry no `message.mid`, so a synthetic
+     * platform id is derived from psid + timestamp + index: Meta redeliveries
+     * repeat the same timestamp, making the id stable across retries and
+     * letting `findOrCreateFromWebhook` dedupe exactly like a redelivered text.
+     */
+    private async processIceBreakerPostback(
+        pageId: string,
+        page: NonNullable<Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>>,
+        event: MessagingEvent,
+        index: number,
+    ) {
+        const psid = event.sender?.id;
+        if (!psid) return;
+
+        const configured = page.messengerProfile?.config?.iceBreakers?.[index]?.trim();
+        const question = configured || event.postback?.title?.trim();
+        if (!question) {
+            this.log().debug('Ice-breaker postback with no resolvable question — ignoring', {
+                pageId, index, hasStoredConfig: !!page.messengerProfile?.config,
+            });
+            return;
+        }
+
+        const mid = event.postback?.mid
+            ?? `ib_${psid}_${event.timestamp ?? 'no-ts'}_${index}`;
+
+        await this.processMessage(pageId, {
+            sender: event.sender,
+            timestamp: event.timestamp,
+            message: { mid, text: question },
+        }, page);
+    }
+
+    /**
      * Process a Post Reply «Read more» button tap. The tap opened Meta's 24h messaging window,
      * so we deliver the FULL reply text as a follow-up DM (the card only showed a teaser). The
      * image is NOT re-sent — it is already in the card and tappable to full size there.
      * Everything is best-effort and must never throw — a webhook that 500s gets redelivered by Meta.
      */
-    private async processPostback(
-        page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>,
+    private async processReadMorePostback(
+        page: NonNullable<Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>>,
         event: MessagingEvent,
+        parsed: NonNullable<ReturnType<typeof parseReadMorePayload>>,
     ) {
-        if (!page) return;
         const psid = event.sender?.id;
-        const parsed = parseReadMorePayload(event.postback?.payload);
-        if (!psid || !parsed) return; // not our button / malformed payload
+        if (!psid) return;
         if (!page.workspaceId) return; // legacy orphan page — nothing to attribute the DM to
 
         // Dedupe rapid double-taps / Meta redeliveries of the same tap.
@@ -480,7 +556,7 @@ export class WebhookController {
             // via the tap metric below instead.
             redis.incr('metrics:postreply:readmore_tap').catch(() => { /* metrics never block */ });
         } catch (err) {
-            captureError(err, 'processPostback failed', {
+            captureError(err, 'processReadMorePostback failed', {
                 tags: { component: 'webhook-postback' },
                 extra: { pageId: page.id, postId: parsed.postId },
             });

@@ -14,7 +14,7 @@ import { sanitizeLeadStages, sanitizeLeadFields } from './leadConfigSanitizers';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
-import { BusinessProfileSchema, validateSchema } from '../utils/validation';
+import { BusinessProfileSchema, MessengerProfileConfigSchema, validateSchema } from '../utils/validation';
 import { canonicalizeHoursWeek, removeKbLines } from '@jawab24/shared';
 import { pageGateError } from '../utils/pageGateResponse';
 import { replyGenerator } from '../services/reply/generator';
@@ -172,6 +172,16 @@ export class PagesController {
                     }
                     bp.hours = canon.value;
                 }
+            }
+
+            // Validate messengerProfile if present. `null` is a valid value —
+            // it means "reset to the generic default" (rebuilt in the service).
+            if (request.body.messengerProfile !== undefined && request.body.messengerProfile !== null) {
+                const validation = validateSchema(MessengerProfileConfigSchema, request.body.messengerProfile);
+                if (!validation.success) {
+                    return reply.status(400).send({ error: 'Invalid Messenger profile', errors: validation.errors });
+                }
+                request.body.messengerProfile = validation.data;
             }
 
             const page = await pagesService.updatePage(req.workspaceId, id, request.body);

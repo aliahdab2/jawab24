@@ -21,6 +21,12 @@ import { STATS_CACHE_TTL, pagesStatsCacheKey } from './statsCache';
 // other stats-cache invalidation helpers.
 export { invalidateWorkspaceStatsCache } from './statsCache';
 import { maybeEncryptToken, safeDecryptToken } from './facebookCrypto';
+import {
+    buildDefaultMessengerProfileConfig,
+    syncMessengerProfileOnConnect,
+    syncMessengerProfileAfterUpdate,
+} from './messengerProfile';
+import type { MessengerProfileConfig, StoredMessengerProfile } from '@jawab24/shared';
 import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { PgVectorStore } from './kb/pgvector-store';
@@ -605,6 +611,35 @@ export class PagesService {
             setData.kbUpdatedAt = new Date();
         }
 
+        // Messenger Profile: the DTO carries a bare config (null = reset to the
+        // generic default, rebuilt from the page name server-side so the فصحى
+        // default strings live in exactly one place). Wrap it into the stored
+        // { config, lastSyncedAt, lastError } shape, preserving the previous
+        // sync status — the fire-and-forget Graph sync below refreshes it.
+        let messengerConfigToSync: MessengerProfileConfig | undefined;
+        if (data.messengerProfile !== undefined) {
+            const [existingRow] = await db
+                .select({ name: pages.name, messengerProfile: pages.messengerProfile })
+                .from(pages)
+                .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+                .limit(1);
+            if (existingRow) {
+                const config = data.messengerProfile
+                    ?? buildDefaultMessengerProfileConfig(existingRow.name);
+                messengerConfigToSync = config;
+                const stored: StoredMessengerProfile = {
+                    config,
+                    lastSyncedAt: existingRow.messengerProfile?.lastSyncedAt ?? null,
+                    lastError: existingRow.messengerProfile?.lastError ?? null,
+                };
+                setData.messengerProfile = stored;
+            } else {
+                // Page not in this workspace — the UPDATE below matches nothing;
+                // don't let the raw DTO config leak into the set clause.
+                delete setData.messengerProfile;
+            }
+        }
+
         // business_profile is prompt-injected, so cache invalidation must be
         // active (bumping kbActiveVersion). See invalidatePageCaches docstring.
         //
@@ -664,6 +699,18 @@ export class PagesService {
             // so they stay in sync with the KB the merchant just typed instead of
             // going stale. Flag-gated (off|shadow|on), fire-and-forget, off the reply path.
             void this.maybeExtractOperationalFacts(pageId, updatedPage.userId, kbText);
+        }
+
+        // Push the saved Messenger Profile config to Meta (fire-and-forget —
+        // the row is already updated; a Graph failure lands in lastError, not
+        // in this response). Only for a connected Facebook page: '' is the
+        // revoked-token sentinel, and WhatsApp-only cards have no FB page.
+        if (messengerConfigToSync && updatedPage?.facebookPageId
+            && updatedPage.accessToken && updatedPage.accessToken !== '') {
+            const token = safeDecryptToken(updatedPage.accessToken, { entity: 'page', id: updatedPage.id });
+            if (token) {
+                syncMessengerProfileAfterUpdate(updatedPage, token, messengerConfigToSync);
+            }
         }
 
         return updatedPage;
@@ -1066,6 +1113,9 @@ export class PagesService {
 
                 // Subscribe page to webhook events (idempotent — safe to re-subscribe)
                 await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
+                // Messenger greeting + ice breakers for organic thread opens.
+                // Fire-and-forget: a profile failure must never fail the connect.
+                syncMessengerProfileOnConnect(updated, fbPage.access_token, logger);
             } else {
                 // Check if this page exists in another workspace (transferred admin access)
                 const globalResults = await db
@@ -1167,6 +1217,8 @@ export class PagesService {
                     });
 
                     await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
+                    // Fire-and-forget — see the existingPage branch above.
+                    syncMessengerProfileOnConnect(claimed, fbPage.access_token, logger);
                 } else if (globalExisting) {
                     // Page is active under another workspace — skip to avoid stealing it.
                     logger.info(`[Pages] Page "${fbPage.name}" (${fbPage.id}) is already connected in workspace ${globalExisting.workspaceId} — skipping`);
@@ -1257,6 +1309,8 @@ export class PagesService {
 
                     // Subscribe new page to webhook events (even if disabled, so webhooks work when enabled later)
                     await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
+                    // Fire-and-forget — see the existingPage branch above.
+                    syncMessengerProfileOnConnect(created, fbPage.access_token, logger);
                 }
 
                 if (shouldAutoEnable) {

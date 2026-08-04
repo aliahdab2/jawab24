@@ -90,6 +90,29 @@ since 2026-08-02.
 "Get Started" / «بدء الاستخدام» openers are system phrases: they fire the greeting when
 enabled and are silently suppressed otherwise — they never reach the AI.
 
+## Messenger welcome screen (per-page, Meta-rendered — NOT an auto-message)
+
+`pages.messenger_profile` (jsonb, per page — not in `UserSettings`) holds
+`{ config: { enabled, greeting: { ar?, en? }, iceBreakers[] }, lastSyncedAt, lastError }`.
+Synced to Meta's Messenger Profile API (`POST/DELETE /{page-id}/messenger_profile`) by
+`services/messengerProfile.ts`; unlike everything in the matrix above, **Meta renders it**
+on the empty organic thread (m.me / "Message" button) — we send nothing at that moment.
+
+- Set fire-and-forget on connect/reconnect (`syncFromFacebook`); default = generic فصحى
+  greeting with the page name interpolated + 3 ice breakers (`ما الأسعار؟` / `كيف أطلب؟` /
+  `ما مواعيد العمل؟`). A stored `enabled: false` is respected on reconnect — never resurrected.
+- Merchant edits via `PUT /pages/:id { messengerProfile }` (Zod: greeting ≤160, ≤4 questions
+  ≤80 chars; `null` = reset to default). Editor: `/pages` card → «الترحيب في ماسنجر».
+- **An ice-breaker tap arrives as a `messaging_postbacks` webhook (payload `ib:<index>`), not
+  a text message.** `webhook.ts#processPostback` feeds the stored question into the normal
+  message pipeline, so the reply obeys the SAME gate chain above (auto-reply toggles, hours,
+  quota). Distinct from the Post Reply «Read more» postback (`pr_more:*`), which is a
+  delivery receipt and never enters the pipeline.
+- The **Greeting Message** in the matrix above (first *message* we send) is unrelated to this
+  Meta-rendered welcome-screen greeting — don't conflate them.
+- Backfill for pages connected before 2026-08-04: `scripts/backfill-messenger-profiles.ts`
+  (dry-run by default, `--apply` to run). Instagram is NOT covered (different API surface).
+
 ## Field reference (`UserSettings`, `backend/src/types/settings.ts`)
 
 | Field | Used by | Semantics |

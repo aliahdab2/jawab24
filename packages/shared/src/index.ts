@@ -359,6 +359,41 @@ export function hasFieldLinesToClean(
   return matchStructuredFieldLinesInKb(kbText, presentFieldsFromProfile(stored)).length > 0;
 }
 
+// --- Messenger Profile (organic-entry greeting + ice breakers) ---
+
+/**
+ * Merchant-editable Messenger Profile config for a Facebook page. Shown to
+ * customers who open the Messenger thread ORGANICALLY (m.me link, page
+ * "Message" button) — the greeting renders on the empty welcome screen and the
+ * ice breakers are tappable suggested questions. Facebook Messenger only;
+ * Instagram has a different API surface and is deliberately NOT covered.
+ */
+export interface MessengerProfileConfig {
+  /** false = fields are removed from the page's Messenger profile. */
+  enabled: boolean;
+  /**
+   * Greeting text per language. 'ar' fills the `default` + `ar_AR` locales,
+   * 'en' fills `en_US`. When only one is set, it becomes the `default` locale
+   * (Meta requires one). ≤ MESSENGER_GREETING_MAX chars each.
+   */
+  greeting: { ar?: string; en?: string };
+  /**
+   * Up to MESSENGER_ICE_BREAKERS_MAX suggested questions (default locale).
+   * The postback payload is derived from the position (`ib:<index>`), so
+   * order matters — see ICE_BREAKER_PAYLOAD_PREFIX.
+   */
+  iceBreakers: string[];
+}
+
+/** What `pages.messenger_profile` (jsonb) stores: config + last sync status. */
+export interface StoredMessengerProfile {
+  config: MessengerProfileConfig;
+  /** ISO timestamp of the last successful Graph API sync. */
+  lastSyncedAt?: string | null;
+  /** Message of the last failed sync; null/absent after a success. */
+  lastError?: string | null;
+}
+
 // --- Page Types ---
 export interface PageReplyBreakdown {
   ai: number;
@@ -418,6 +453,9 @@ export interface Page {
   // for this page (see resolveEffectiveLeadStages / resolveEffectiveLeadFields).
   leadStages?: LeadStagesConfig | null;
   leadFields?: LeadCustomFieldDef[] | null;
+  // Messenger Profile (organic-entry greeting + ice breakers). null/absent =
+  // never configured (connect applies the default config server-side).
+  messengerProfile?: StoredMessengerProfile | null;
   // Connection status (true if Facebook access token is valid)
   isConnected?: boolean;
   // True when a WhatsApp business token is stored (Embedded Signup completed)
@@ -918,6 +956,12 @@ export {
     READ_MORE_PAYLOAD_PREFIX,
     buildReadMorePayload,
     parseReadMorePayload,
+    MESSENGER_GREETING_MAX,
+    MESSENGER_ICE_BREAKERS_MAX,
+    MESSENGER_ICE_BREAKER_QUESTION_MAX,
+    ICE_BREAKER_PAYLOAD_PREFIX,
+    buildIceBreakerPayload,
+    parseIceBreakerPayload,
 } from './constants';
 
 // --- Phase 6.5 P1 diagnostic counters ---

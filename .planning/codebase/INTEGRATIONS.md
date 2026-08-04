@@ -32,7 +32,10 @@
   - Signature Key: `FACEBOOK_WEBHOOK_VERIFY_TOKEN` + `FACEBOOK_APP_SECRET`
   - Events Subscribed:
     - `messages` - incoming DMs to pages/Instagram
-    - `messaging_postbacks` - button clicks
+    - `messaging_postbacks` - button clicks. Two payloads are ours (`controllers/webhook.ts#processPostback`):
+      `pr_more:<source>:<postId>` (Post Reply «Read more» — delivers the full trigger text as a DM) and
+      `ib:<index>` (Messenger Profile ice-breaker tap — converted into the NORMAL message pipeline with the
+      stored question text, exactly as if the customer had typed it). Unknown payloads ignored at debug level.
     - `feed` - post/comment activity — **active in Live mode** (was blocked in dev mode)
     - `message_deliveries` - delivery confirmation
     - `message_reads` - read receipts
@@ -43,6 +46,11 @@
   - `/{page-id}?fields=id,name,access_token,category,about,phone,single_line_address,hours,website` - fetch individual page data in the fallback path (the `tasks` field is NOT requestable here — only on `/me/accounts`)
   - `/me/instagram_accounts` - list connected Instagram accounts
   - `/me/messages` with `recipient.comment_id` - send private reply to a comment (DM linked to the comment)
+  - `/{page-id}/messenger_profile` (POST/DELETE) - set/remove the organic-entry `greeting` (locale-aware,
+    ≤160 chars) and `ice_breakers` (≤4 questions, `default` locale required). Applied fire-and-forget on
+    page connect/reconnect and on merchant edits (`services/messengerProfile.ts`); config + last sync
+    status live in `pages.messenger_profile` (jsonb). **Facebook Messenger only — Instagram's ice-breaker
+    API is a different surface and is NOT integrated.**
   - `/me/messages` with `recipient.id` - send DM to a user (requires prior conversation)
   - `/me/messages` with `message.attachment` (Generic Template) - send product card carousel as follow-up to text reply
   - `/{comment_id}/comments` - post a public reply to a comment

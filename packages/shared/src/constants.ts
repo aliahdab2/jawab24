@@ -66,6 +66,52 @@ export function parseReadMorePayload(
 }
 
 /**
+ * Messenger Profile (organic-entry greeting + ice breakers) limits — the SINGLE
+ * source of truth for the backend Zod validator (`utils/validation.ts`), the
+ * payload builder (`services/messengerProfile.ts`), and the frontend editor
+ * (`MessengerProfileModal.tsx`).
+ *
+ * - Greeting ≤ 160 chars: Meta's documented `greeting.text` cap
+ *   (developers.facebook.com/docs/messenger-platform/reference/messenger-profile-api/greeting).
+ * - Ice breakers ≤ 4: Meta's documented cap ("A maximum of 4 questions can be
+ *   set via the Ice Breaker API").
+ * - Question ≤ 80 chars: OUR cap. Meta documents no per-question char limit;
+ *   80 matches Meta's generic-template title cap (POST_REPLY_CARD_CAPTION_MAX)
+ *   and keeps questions renderable without truncation.
+ */
+export const MESSENGER_GREETING_MAX = 160;
+export const MESSENGER_ICE_BREAKERS_MAX = 4;
+export const MESSENGER_ICE_BREAKER_QUESTION_MAX = 80;
+
+/**
+ * Postback payload for an ice-breaker tap — `ib:<index>` where <index> is the
+ * question's position in the page's configured list. Mirrors the Read-more
+ * convention above: carry only a reference and look the question text up from
+ * `pages.messenger_profile` at tap time (Meta caps payloads at 1000 chars, and
+ * the stored config is always current). The tap arrives as a `postback`
+ * webhook event, NOT a text message — `webhook.ts#processPostback` converts it
+ * into the normal message pipeline.
+ */
+export const ICE_BREAKER_PAYLOAD_PREFIX = 'ib';
+
+export function buildIceBreakerPayload(index: number): string {
+    return `${ICE_BREAKER_PAYLOAD_PREFIX}:${index}`;
+}
+
+export function parseIceBreakerPayload(
+    payload: string | null | undefined,
+): { index: number } | null {
+    if (!payload) return null;
+    const parts = payload.split(':');
+    if (parts.length !== 2 || parts[0] !== ICE_BREAKER_PAYLOAD_PREFIX) return null;
+    // Digits only — Number('') is 0 and Number('0x1') is 1, both must not parse.
+    if (!/^\d+$/.test(parts[1])) return null;
+    const index = Number(parts[1]);
+    if (index >= MESSENGER_ICE_BREAKERS_MAX) return null;
+    return { index };
+}
+
+/**
  * Max length for the Reply Personality / brand-voice note. Unlike the template
  * messages above, this is NOT sent to customers — it's injected into the AI
  * system prompt. This single value is the source of truth for BOTH the editor

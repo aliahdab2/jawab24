@@ -151,6 +151,12 @@ export interface UpdatePageDTO {
     autoReplyEnabled?: boolean;
     knowledgeBase?: string;
     businessProfile?: import('../utils/validation').BusinessProfileInput;
+    /**
+     * Messenger Profile (organic-entry greeting + ice breakers).
+     * A config = full replacement; `null` = reset to the generic default
+     * (rebuilt server-side from the page name); absent = unchanged.
+     */
+    messengerProfile?: import('@jawab24/shared').MessengerProfileConfig | null;
 }
 
 /**
