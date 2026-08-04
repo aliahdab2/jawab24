@@ -57,6 +57,12 @@ function extForMime(mime: string): string {
  *  "Load more" fetches the next page via the platform Graph cursor. */
 export const PICKER_PAGE_SIZE = 5;
 
+/** How long after its scheduled time an arming marker may legitimately survive before the
+ *  publish tripwire treats it as an id change. Covers the normal gap between Facebook
+ *  publishing the post and the feed webhook reaching us (plus retries), so a slow webhook
+ *  never masquerades as a drifted post id. */
+export const SCHEDULED_MARKER_GRACE_MS = 30 * 60 * 1000;
+
 /**
  * The ensure/webhook find-or-create resolved to a post that belongs to a different
  * page. `posts.facebook_post_id` is globally unique and `pages.facebook_page_id` is
@@ -474,9 +480,10 @@ export class PostsService {
         page: PickerPage,
         source: 'facebook' | 'instagram',
         platformPostId: string,
-    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerExcludeKeyword: string | null; triggerImageUrl: string | null; likeComment: boolean; triggerButtonLabel: string | null; triggerButtonUrl: string | null }> {
+    ): Promise<{ id: string; triggerKeyword: string | null; triggerReply: string | null; triggerType: 'keyword' | 'all'; triggerExcludeKeyword: string | null; triggerImageUrl: string | null; likeComment: boolean; triggerButtonLabel: string | null; triggerButtonUrl: string | null; scheduledPublishTime: string | null }> {
         if (source === 'facebook') {
             const post = await this.findOrCreateFromWebhook(page.id, platformPostId, undefined, page.accessToken);
+            const scheduledPublishTime = await this.syncScheduleMarker(post, page.accessToken);
             return {
                 id: post.id,
                 triggerKeyword: post.triggerKeyword ?? null,
@@ -487,6 +494,7 @@ export class PostsService {
                 likeComment: post.likeComment ?? false,
                 triggerButtonLabel: post.triggerButtonLabel ?? null,
                 triggerButtonUrl: post.triggerButtonUrl ?? null,
+                scheduledPublishTime: scheduledPublishTime?.toISOString() ?? null,
             };
         }
         const media = await this.findOrCreateInstagramMedia(page.id, platformPostId);
@@ -501,7 +509,94 @@ export class PostsService {
             // IG has no button columns (button-template support unverified on IG).
             triggerButtonLabel: null,
             triggerButtonUrl: null,
+            // The Instagram Graph API exposes no scheduled-media edge, so IG media is
+            // always already published by the time the picker can show it.
+            scheduledPublishTime: null,
         };
+    }
+
+    /**
+     * Reconcile `posts.scheduled_publish_time` with what Graph says about the post, and
+     * return the reconciled value. Called on the picker's arm path only — the merchant
+     * chose the post, so one extra Graph read is cheap; the per-comment webhook path must
+     * NOT pay for it (see findOrCreateFromWebhook, which stays a pure find-or-create).
+     *
+     * The schedule is read from Graph, never from the request body: the client tells us
+     * WHICH post was tapped, and the platform tells us whether that post is still pending.
+     * Graph declining to answer (`null`) means unknown — we keep whatever is stored rather
+     * than guessing "published", because a wrong clear would disarm the tripwire.
+     */
+    private async syncScheduleMarker(
+        post: { id: string; facebookPostId: string; scheduledPublishTime: Date | null },
+        accessToken?: string | null,
+    ): Promise<Date | null> {
+        if (!accessToken) return post.scheduledPublishTime;
+
+        const state = await facebookService.getPostSchedule(post.facebookPostId, accessToken);
+        if (!state) return post.scheduledPublishTime;
+
+        const desired = state.isPublished || !state.scheduledPublishTime
+            ? null
+            : new Date(state.scheduledPublishTime);
+
+        if ((desired?.getTime() ?? null) === (post.scheduledPublishTime?.getTime() ?? null)) {
+            return post.scheduledPublishTime;
+        }
+
+        await db.update(posts)
+            .set({ scheduledPublishTime: desired, updatedAt: new Date() })
+            .where(eq(posts.id, post.id));
+        return desired;
+    }
+
+    /**
+     * A post went live on the page (feed webhook, item=post verb=add). Clears the arming
+     * marker for that post id and returns the ids of any OTHER posts on the same page that
+     * are still armed with a marker whose time has already passed — the tripwire for
+     * "a scheduled post published under a DIFFERENT id", which silently orphans the Post
+     * Reply the merchant configured.
+     *
+     * Detection, not prevention: Facebook owns the post id, so we cannot make the id
+     * stable. What we CAN do is refuse to let the failure be silent — an orphaned trigger
+     * looks exactly like a working one in the UI, so without this the merchant only finds
+     * out when customers get no reply.
+     */
+    async onPostPublished(pageId: string, facebookPostId: string): Promise<{ cleared: boolean; orphanedPostIds: string[] }> {
+        const [cleared] = await db.update(posts)
+            .set({ scheduledPublishTime: null, updatedAt: new Date() })
+            .where(and(
+                eq(posts.pageId, pageId),
+                eq(posts.facebookPostId, facebookPostId),
+                isNotNull(posts.scheduledPublishTime),
+            ))
+            .returning({ id: posts.id });
+
+        // Grace window: a marker whose time only just passed is the normal race between
+        // "Facebook started publishing" and "our webhook landed", not an id change.
+        const staleBefore = new Date(Date.now() - SCHEDULED_MARKER_GRACE_MS);
+        const orphans = await db.select({ id: posts.id, fbId: posts.facebookPostId })
+            .from(posts)
+            .where(and(
+                eq(posts.pageId, pageId),
+                isNotNull(posts.triggerReply),
+                isNotNull(posts.scheduledPublishTime),
+                sql`${posts.scheduledPublishTime} < ${staleBefore}`,
+            ));
+
+        const orphanedPostIds = orphans.filter(o => o.fbId !== facebookPostId).map(o => o.fbId);
+        if (orphanedPostIds.length > 0) {
+            captureError(
+                new Error('Armed scheduled post never published under its own id'),
+                'Post Reply armed on a scheduled post may be orphaned',
+                {
+                    level: 'warning',
+                    fingerprint: ['post-reply-scheduled-id-drift'],
+                    extra: { pageId, publishedPostId: facebookPostId, orphanedPostIds },
+                },
+            );
+        }
+
+        return { cleared: !!cleared, orphanedPostIds };
     }
 
     /** Map platform post ids → their stored trigger type, but ONLY for rows that
@@ -543,22 +638,57 @@ export class PostsService {
 
         if (opts.source === 'facebook') {
             if (!page.facebookPageId) return { posts: [], nextCursor: null };
-            const { posts: raw, nextCursor } = await facebookService.getPagePosts(
-                page.facebookPageId, page.accessToken, { limit, after: opts.after },
+            // Scheduled posts only belong on the FIRST page: they are a small, bounded set
+            // that lives at the top of the list, and mixing a second Graph edge into
+            // "load more" would need a second cursor to page independently. Fetched in
+            // parallel with the published page — two independent Graph reads.
+            const [published, scheduled] = await Promise.all([
+                facebookService.getPagePosts(page.facebookPageId, page.accessToken, { limit, after: opts.after }),
+                opts.after
+                    ? Promise.resolve({ posts: [], failed: false })
+                    : facebookService.getScheduledPosts(page.facebookPageId, page.accessToken),
+            ]);
+            // At the publish boundary Graph can briefly return the same post on BOTH edges.
+            // The published copy is the truthful one (it's live), so drop the scheduled
+            // twin — otherwise the picker renders one post twice under one React key.
+            const publishedIds = new Set(published.posts.map(p => p.id));
+            const pending = scheduled.posts.filter(p => !publishedIds.has(p.id));
+
+            const triggers = await this.facebookTriggerMap(
+                [...pending.map(p => p.id), ...published.posts.map(p => p.id)],
             );
-            const triggers = await this.facebookTriggerMap(raw.map(p => p.id));
             return {
-                posts: raw.map(p => ({
-                    platformPostId: p.id,
-                    source: 'facebook' as const,
-                    message: p.message,
-                    imageUrl: p.imageUrl,
-                    createdTime: p.createdTime,
-                    commentsCount: p.commentsCount,
-                    hasTrigger: triggers.has(p.id),
-                    triggerType: triggers.get(p.id) ?? null,
-                })),
-                nextCursor,
+                posts: [
+                    // Soonest-first: the next post to go live is the one the merchant is
+                    // most likely arming. Graph's own order on this edge is unspecified.
+                    ...[...pending]
+                        .sort((a, b) => (a.scheduledPublishTime ?? '').localeCompare(b.scheduledPublishTime ?? ''))
+                        .map(p => ({
+                            platformPostId: p.id,
+                            source: 'facebook' as const,
+                            message: p.message,
+                            imageUrl: p.imageUrl,
+                            // A scheduled post is not published, so it has no publish date
+                            // and can carry no comments — null, never a fabricated 0/now.
+                            createdTime: null,
+                            commentsCount: null,
+                            hasTrigger: triggers.has(p.id),
+                            triggerType: triggers.get(p.id) ?? null,
+                            scheduledPublishTime: p.scheduledPublishTime,
+                        })),
+                    ...published.posts.map(p => ({
+                        platformPostId: p.id,
+                        source: 'facebook' as const,
+                        message: p.message,
+                        imageUrl: p.imageUrl,
+                        createdTime: p.createdTime,
+                        commentsCount: p.commentsCount,
+                        hasTrigger: triggers.has(p.id),
+                        triggerType: triggers.get(p.id) ?? null,
+                        scheduledPublishTime: null,
+                    })),
+                ],
+                nextCursor: published.nextCursor,
             };
         }
 

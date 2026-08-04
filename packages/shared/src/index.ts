@@ -578,9 +578,14 @@ export function verticalFromFbCategory(category: string | null | undefined): Cat
 }
 
 // --- Post Reply picker ---
-/** A published FB post / IG media surfaced in the Post Reply picker, merged with
- *  its stored trigger state. `platformPostId` is the Graph object id (used to
- *  find-or-create the internal row via POST /posts/ensure before configuring). */
+/** A post surfaced in the Post Reply picker, merged with its stored trigger state.
+ *  `platformPostId` is the Graph object id (used to find-or-create the internal row
+ *  via POST /posts/ensure before configuring).
+ *
+ *  Despite the name (kept because `GET /pages/:id/published-posts` is shipped API the
+ *  mobile app calls), the list ALSO carries a Facebook page's still-scheduled posts:
+ *  `scheduledPublishTime` set = not live yet, and `createdTime`/`commentsCount` are
+ *  null for those (a scheduled post has no publish date and can have no comments). */
 export interface PublishedPost {
   platformPostId: string;
   source: 'facebook' | 'instagram';
@@ -590,6 +595,9 @@ export interface PublishedPost {
   commentsCount: number | null;
   hasTrigger: boolean;
   triggerType?: 'keyword' | 'all' | null;
+  /** ISO time this post is scheduled to publish; null for already-published posts.
+   *  Facebook-only — the Instagram Graph API exposes no scheduled-media edge. */
+  scheduledPublishTime?: string | null;
 }
 
 export interface PublishedPostsResponse {

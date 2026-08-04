@@ -2,14 +2,14 @@ import { useMemo, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
-import { AlignLeft, ImageOff, Loader2 } from 'lucide-react';
+import { AlignLeft, CalendarClock, ImageOff, Loader2 } from 'lucide-react';
 import type { Page, PublishedPost, PublishedPostsResponse } from '@jawab24/shared';
 import { Modal, Button, Select, FacebookIcon, InstagramIcon } from '@/components/ui';
 import { PostReplyIcon, postReplyIconClass } from '@/utils/postReply';
 import { postsApi } from '@/lib/api';
 import { isPageAutoReplyEnabled } from '@/utils/page';
 import { useLanguage } from '@/i18n/hooks';
-import { formatMessageTime } from '@/utils/dateUtils';
+import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 
 type Source = 'facebook' | 'instagram';
 
@@ -24,6 +24,11 @@ export interface PickedPost {
   source: Source;
   platformPostId: string;
   postMessage: string | null;
+  /** ISO publish time when the merchant picked a still-scheduled post; null otherwise.
+   *  Carried so the trigger modal can say the reply will wait for the post to go live
+   *  without a second round-trip. The server re-reads it from Graph regardless — this
+   *  value is for copy, never for persistence. */
+  scheduledPublishTime?: string | null;
 }
 
 interface PostPickerSheetProps {
@@ -191,6 +196,7 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
                     source: post.source,
                     platformPostId: post.platformPostId,
                     postMessage: post.message,
+                    scheduledPublishTime: post.scheduledPublishTime ?? null,
                   })}
                   className="w-full flex items-center gap-3 rounded-xl border border-theme-border p-2.5 text-start hover:bg-muted/60 transition-colors"
                 >
@@ -200,9 +206,22 @@ export function PostPickerSheet({ pages, isOpen, onClose, onPick }: PostPickerSh
                       {post.message?.trim() || t('postPickerNoText')}
                     </span>
                     <span className="mt-1 flex items-center gap-2 text-[11px] text-subtle">
-                      {post.createdTime && <span>{formatMessageTime(post.createdTime, dateLocale)}</span>}
-                      {post.commentsCount != null && post.commentsCount > 0 && (
-                        <span>{t('postPickerCommentCount', { count: post.commentsCount })}</span>
+                      {/* A scheduled post has no publish date or comments yet, so it shows
+                          when it WILL go live instead of the published post's metadata. */}
+                      {post.scheduledPublishTime ? (
+                        <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-medium">
+                          <CalendarClock className="w-3 h-3" aria-hidden="true" />
+                          {t('postPickerScheduledFor', {
+                            time: formatFullTime(post.scheduledPublishTime, dateLocale),
+                          })}
+                        </span>
+                      ) : (
+                        <>
+                          {post.createdTime && <span>{formatMessageTime(post.createdTime, dateLocale)}</span>}
+                          {post.commentsCount != null && post.commentsCount > 0 && (
+                            <span>{t('postPickerCommentCount', { count: post.commentsCount })}</span>
+                          )}
+                        </>
                       )}
                     </span>
                   </span>

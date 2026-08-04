@@ -28,6 +28,7 @@ const {
     mockRedisSet,
     mockRedisIncr,
     mockGetPost,
+    mockOnPostPublished,
     mockSendTypingIndicator,
     mockSendMetaImageAttachment,
     mockAcquireMutex,
@@ -45,6 +46,7 @@ const {
     mockRedisSet: vi.fn().mockResolvedValue('OK'),
     mockRedisIncr: vi.fn().mockResolvedValue(1),
     mockGetPost: vi.fn().mockResolvedValue({ id: 'post-1', triggerReply: 'a'.repeat(200), triggerImageUrl: 'https://cdn/x.jpg' }),
+    mockOnPostPublished: vi.fn().mockResolvedValue({ cleared: false, orphanedPostIds: [] }),
     mockSendTypingIndicator: vi.fn().mockResolvedValue(undefined),
     mockSendMetaImageAttachment: vi.fn().mockResolvedValue('img-mid'),
     mockAcquireMutex: vi.fn().mockResolvedValue('lock-token'),
@@ -67,7 +69,7 @@ vi.mock('../../src/lib/redis', () => ({
 }));
 
 vi.mock('../../src/services/posts', () => ({
-    postsService: { getPost: mockGetPost },
+    postsService: { getPost: mockGetPost, onPostPublished: mockOnPostPublished },
 }));
 
 vi.mock('../../src/services/metaMessaging', () => ({
@@ -387,6 +389,46 @@ describe('Webhook Controller', () => {
             });
 
             expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+            // A publish retires the scheduled-post arming marker (and trips the id-drift
+            // alarm) — keyed by the INTERNAL page id, not the Facebook page id.
+            expect(mockOnPostPublished).toHaveBeenCalledWith('internal-page-123', 'post_123');
+        });
+
+        it('survives a failing marker reconcile without dropping the webhook', async () => {
+            // The marker is diagnostic; losing it must never cost the rest of the batch.
+            mockOnPostPublished.mockRejectedValueOnce(new Error('db down'));
+            const webhookPayload = {
+                object: 'page',
+                entry: [
+                    {
+                        id: 'page_123',
+                        time: Date.now(),
+                        changes: [
+                            { field: 'feed', value: { item: 'post', verb: 'add', post_id: 'post_boom' } },
+                            {
+                                field: 'feed',
+                                value: {
+                                    item: 'comment', verb: 'add', comment_id: 'comment_after',
+                                    post_id: 'post_123', message: 'still processed',
+                                    from: { id: 'user_123', name: 'John Doe' },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+            expect(mockEnqueueComment).toHaveBeenCalledWith(expect.objectContaining({ commentId: 'comment_after' }));
         });
 
         it('should ignore comment edit events', async () => {

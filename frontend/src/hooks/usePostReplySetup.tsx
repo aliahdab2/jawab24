@@ -30,6 +30,10 @@ interface PostReplyTarget {
   buttonUrl: string | null;
   imageUrl: string | null;
   likeComment: boolean;
+  /** ISO time the post is scheduled to publish, when the merchant is arming a post that
+   *  is not live yet. Server-verified (the ensure response), so the modal can say the
+   *  reply is waiting for the post rather than implying it's already active. */
+  scheduledPublishTime: string | null;
 }
 
 /** Trigger state as the posts API returns it (`ensurePost` / `getById`). One shape,
@@ -44,6 +48,8 @@ interface ApiTriggerState {
   triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
+  /** Only the ensure path (picker) returns this; `getById` omits it, hence optional. */
+  scheduledPublishTime?: string | null;
 }
 
 /** Normalize API trigger state into the modal-facing target fields (single place
@@ -105,6 +111,9 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         postId: content.id,
         source: picked.source,
         postMessage: picked.postMessage,
+        // The server re-read the schedule from Graph during ensure; prefer its answer over
+        // what the picker listing showed, which may be minutes stale.
+        scheduledPublishTime: content.scheduledPublishTime ?? picked.scheduledPublishTime ?? null,
         ...toTriggerFields(content),
       });
     } catch (err) {
@@ -127,6 +136,9 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         postId: comment.postId,
         source: comment.source ?? 'facebook',
         postMessage: comment.postMessage,
+        // Normally null on this path — a comment implies the post is live — but a stale
+        // marker (publish webhook missed) would show here rather than being hidden.
+        scheduledPublishTime: post.scheduledPublishTime ?? null,
         ...toTriggerFields(post),
       });
       return true;
@@ -173,6 +185,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
           triggerButtonUrl={target.buttonUrl}
           triggerImageUrl={target.imageUrl}
           likeComment={target.likeComment}
+          scheduledPublishTime={target.scheduledPublishTime}
           isOpen
           onClose={close}
           onSaved={onSaved}

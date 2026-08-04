@@ -16,7 +16,9 @@ export function todayISODate(): string {
     return new Date().toLocaleDateString('en-CA');
 }
 
-/** Format a date as absolute time (PPp). Used for title/tooltip. */
+/** Format a date as absolute time (PPp). Used for title/tooltip, and for any FUTURE
+ *  timestamp shown to the merchant (a scheduled post's publish time) where a relative
+ *  string would hide the date being scheduled against. */
 export function formatFullTime(
     dateValue: string | Date | null | undefined,
     dateLocale?: Locale,
@@ -32,6 +34,10 @@ export function formatFullTime(
 /**
  * Format a date as relative time (<24 h) or absolute time (≥24 h).
  * Used for bubble timestamps in message/comment modals.
+ *
+ * PAST timestamps only. `Date.now() - d` is negative for anything upcoming, so every
+ * future date falls into the "recent" branch and renders as a vague "in 16 days" —
+ * use `formatFullTime` for scheduled/future times (e.g. a post's publish time).
  */
 export function formatMessageTime(
     dateValue: string | Date | null | undefined,

@@ -317,7 +317,7 @@ export class WebhookController {
             // Handle feed changes (comments, posts)
             if (entry.changes) {
                 for (const change of entry.changes) {
-                    await this.processChange(pageId, change);
+                    await this.processChange(pageId, change, page);
                 }
             }
 
@@ -490,7 +490,11 @@ export class WebhookController {
     /**
      * Process a single change event
      */
-    private async processChange(pageId: string, change: WebhookChange) {
+    private async processChange(
+        pageId: string,
+        change: WebhookChange,
+        page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>,
+    ) {
         this.log().info('Processing change', {
             field: change.field,
             item: change.value.item,
@@ -511,9 +515,42 @@ export class WebhookController {
             await this.processNewComment(pageId, value);
         } else if (value.item === 'post' && value.verb === 'add') {
             this.log().info('New post detected', { postId: value.post_id });
-            // Posts are handled when comments come in
+            // Post rows themselves are still created lazily when comments come in; the only
+            // work owed here is retiring the scheduled-post arming marker (and tripping the
+            // id-drift alarm) for a post that just went live.
+            await this.clearScheduledArmedMarker(page, value.post_id);
         } else {
             this.log().info('Skipping feed change', { item: value.item, verb: value.verb, pageId });
+        }
+    }
+
+    /**
+     * A post went live: retire the scheduled-post arming marker for it, and surface the
+     * id-drift tripwire if another armed scheduled post is overdue (see
+     * `postsService.onPostPublished`). Never throws — a marker we failed to clear must not
+     * cost us the rest of the webhook batch, and the marker is diagnostic, not a gate.
+     */
+    private async clearScheduledArmedMarker(
+        page: NonNullable<Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>>,
+        facebookPostId?: string,
+    ) {
+        if (!facebookPostId) return;
+        try {
+            const { cleared, orphanedPostIds } = await postsService.onPostPublished(page.id, facebookPostId);
+            if (cleared || orphanedPostIds.length > 0) {
+                this.log().info('Scheduled Post Reply marker reconciled on publish', {
+                    pageId: page.id,
+                    facebookPostId,
+                    cleared,
+                    orphanedCount: orphanedPostIds.length,
+                });
+            }
+        } catch (err) {
+            captureError(err, 'Failed to reconcile scheduled Post Reply marker', {
+                level: 'warning',
+                tags: { component: 'webhook-post-published' },
+                extra: { pageId: page.id, facebookPostId },
+            });
         }
     }
 

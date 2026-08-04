@@ -64,6 +64,13 @@
   - Matching uses `matchesKeyword()` from `@jawab24/shared` with Arabic normalization
   - Sub-comments (`parent_id` set) skip the trigger path
 
+- **Arming a Post Reply on a SCHEDULED post (Facebook only)**:
+  - The picker lists a page's pending posts from `GET /{page-id}/scheduled_posts` (`facebookService.getScheduledPosts`, fields `id,message,full_picture,scheduled_publish_time`) alongside the published `/posts` page, so a trigger can be configured before the post goes live. Scheduled items sort soonest-first at the top and carry `createdTime`/`commentsCount` as null; they are fetched only on the first picker page (a `nextCursor` "load more" pages the published edge only)
+  - `scheduled_publish_time` is a UNIX timestamp in SECONDS (Graph types it `float`); the service converts to ISO at the boundary
+  - On arm, `postsService.ensureContent` verifies the state server-side via `GET /{post-id}?fields=is_published,scheduled_publish_time` (`facebookService.getPostSchedule`) and records `posts.scheduled_publish_time`. The client is never trusted for this; Graph failing to answer means "unknown" and leaves the stored marker untouched (clearing it would disarm the tripwire below)
+  - The feed webhook (`item=post`, `verb=add`) clears the marker for the published post id via `postsService.onPostPublished`. Instagram has no scheduled-media edge, so this is FB-only
+  - **Known platform limitation (detection, not prevention)**: Facebook owns the post id, and a scheduled post is not guaranteed to publish under the id the picker armed. A marker still set `SCHEDULED_MARKER_GRACE_MS` (30 min) past its time when a *different* post publishes on that page raises a Sentry warning (`post-reply-scheduled-id-drift`) naming the orphaned post ids — an orphaned trigger is indistinguishable from a working one in the UI, so the alarm is the only signal
+
 - **Shared Post Handling (Messages)**:
   - When a customer DMs a shared post with no text → smart nudge acknowledging the post
   - When a customer DMs a shared post + text → post content fetched via Graph API and prepended to message for AI context

@@ -15,7 +15,7 @@ import {
   POST_REPLY_BUTTON_TEXT_MAX,
   normalizeHttpUrl,
 } from '@jawab24/shared';
-import { MessageSquare, MessageCircle, ArrowUpRight, ChevronDown, ImagePlus, Lock, X } from 'lucide-react';
+import { MessageSquare, MessageCircle, ArrowUpRight, CalendarClock, ChevronDown, ImagePlus, Lock, X } from 'lucide-react';
 import Link from 'next/link';
 import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal, InfoPopover, Toggle, Input, WhatsAppIcon } from '@/components/ui';
 import { PostContextCard } from './PostContextCard';
@@ -25,6 +25,8 @@ import { captureError } from '@/lib/sentryHelpers';
 import { useCommentReplyMode, useDualReplyNudge, useTriggerImagesEnabled } from '@/hooks/useCommentReplyMode';
 import { fileToBase64 } from '@/utils/fileToBase64';
 import { buildWhatsAppUrl, extractWhatsAppNumber, normalizeInternationalPhone } from '@/lib/whatsapp';
+import { useLanguage } from '@/i18n/hooks';
+import { formatFullTime } from '@/utils/dateUtils';
 
 type TriggerMode = 'keyword' | 'all';
 
@@ -60,6 +62,10 @@ interface PostTriggerModalProps {
   triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
+  /** Set when the post is still scheduled on Facebook: the trigger saves normally and
+   *  simply waits for the post to go live. Shown as a notice so "saved" doesn't read as
+   *  "already replying". */
+  scheduledPublishTime?: string | null;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -77,12 +83,14 @@ export function PostTriggerModal({
   triggerButtonUrl: initialButtonUrl,
   triggerImageUrl: initialImageUrl,
   likeComment: initialLikeComment,
+  scheduledPublishTime,
   isOpen,
   onClose,
   onSaved,
 }: PostTriggerModalProps) {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
+  const { dateLocale } = useLanguage();
   const deliveryMode = useCommentReplyMode();
   const dualNudge = useDualReplyNudge();
   const imagesEnabled = useTriggerImagesEnabled();
@@ -415,6 +423,19 @@ export function PostTriggerModal({
       footer={footer}
     >
       <div className="flex flex-col gap-4">
+        {/* The post isn't live yet: saving arms the trigger now and it starts working the
+            moment Facebook publishes the post — say so, or "saved" reads as "replying". */}
+        {scheduledPublishTime && (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg alert-warning text-sm leading-relaxed" role="note">
+            <CalendarClock className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
+            <span>
+              {t('postTriggerScheduledNotice', {
+                time: formatFullTime(scheduledPublishTime, dateLocale),
+              })}
+            </span>
+          </div>
+        )}
+
         {postMessage && <PostContextCard postMessage={postMessage} clampLines={3} />}
 
         {/* Trigger mode: match keywords vs reply to any comment. */}
