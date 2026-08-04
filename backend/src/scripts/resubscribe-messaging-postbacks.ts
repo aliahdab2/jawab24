@@ -1,7 +1,11 @@
-// One-shot ops script: re-subscribe every connected Facebook page to webhooks so the
-// `messaging_postbacks` field is added. Meta does NOT retroactively send postbacks to pages
-// that were subscribed before we added the field, so the Post Reply «Read more» button is
-// inert on existing pages until this runs. Idempotent — re-subscribing is safe.
+// One-shot ops script: re-subscribe every connected Facebook page to webhooks so newly
+// added fields take effect. Meta does NOT retroactively deliver a field to pages that
+// were subscribed before we added it. Runs the same subscribePageToWebhooks the connect
+// path uses, so it always applies the CURRENT field list. Idempotent — re-subscribing is
+// safe. History of fields that required a run:
+//   - `messaging_postbacks` (Post Reply «Read more» button — inert until re-subscribed)
+//   - `messaging_referrals` (ad / m.me attribution, 2026-08-04 — ad conversations look
+//     organic on pages subscribed before this field was added)
 //
 // Run (prod): compile + `node dist/scripts/resubscribe-messaging-postbacks.js`, or via the
 // same prod-script mechanism used for other backfills. Reads/decrypts tokens locally; only

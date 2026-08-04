@@ -2597,6 +2597,9 @@ SSE lead:captured → frontend badge + toast
 - `sub_stage` varchar(64) — id of a merchant-defined sub-stage (see Customization below); nullable
 - `custom_fields` JSONB — merchant-entered values keyed by field-definition id
 - `source_type`: `message` or `comment`
+- `source_ad_id` — first-touch ad attribution copied from the conversation at capture time
+  (`conversations.referral_ad_id`, fallback `referral_ref`); null for organic leads. See
+  "Ad referral attribution" below.
 
 ### Merchant Customization (June 2026)
 
@@ -2615,6 +2618,24 @@ The three main statuses are fixed (the system depends on `new` for counters/dige
 ### Rate Limiting
 
 Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per workspace, TTL 86400s. Prevents runaway OpenAI costs on high-traffic pages. Follow-up re-extraction has its own budget: `leads:reextraction:{workspaceId}:{YYYY-MM-DD}`, 150/day, plus a `lead:reextract:{leadId}` 180s cooldown.
+
+### Ad Referral Attribution (2026-08-04 — capture layer only)
+
+Click-to-Messenger ads and m.me/ig.me campaign links are attributed at the conversation
+level. The webhook consumes all three Meta referral shapes (standalone `messaging_referrals`
+event, `postback.referral`, `message.referral` — parser `backend/src/utils/metaReferral.ts`)
+and stamps `conversations.referral_source` / `referral_ref` / `referral_ad_id` / `referral_at`
+**first-touch only** (`referral_at IS NULL` guard in `conversationsService.recordReferral`; a
+referral arriving before any message creates the conversation row through the same
+`findOrCreate` upsert the message path uses). Lead capture copies the attribution into
+`leads.source_ad_id` (ad id, fallback ref — also first-touch). Read path: the thread endpoint
+(`GET /messages/conversation/:senderId`) hydrates a conversation-level `referral` object;
+leads payloads carry `sourceAdId`. ❌ NO dashboard UI / funnel view exists yet — this is the
+capture layer that makes ad → conversation → lead attribution answerable at all (before it,
+Meta reported "conversations started = 0" while the DB held the real conversations, because
+no referral data was captured). Ops: pages subscribed before 2026-08-04 need the re-subscribe
+script (`backend/src/scripts/resubscribe-messaging-postbacks.ts`) to start receiving
+`messaging_referrals`.
 
 ---
 

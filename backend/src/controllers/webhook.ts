@@ -23,6 +23,8 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { redis } from '../lib/redis';
+import { conversationsService, type Platform } from '../services/conversations';
+import { extractEventReferral } from '../utils/metaReferral';
 
 /**
  * Verify Facebook/Instagram webhook signature using X-Hub-Signature-256 header.
@@ -65,13 +67,21 @@ interface MessagingEvent {
             type: 'audio' | 'image' | 'video' | 'file' | 'fallback' | 'post' | 'ig_post' | 'reel' | 'ig_reel' | 'sticker';
             payload?: { url?: string; title?: string; id?: string };
         }>;
+        /** Ad attribution on the first message from a Click-to-Messenger ad.
+         *  Untrusted — parsed defensively by utils/metaReferral.ts. */
+        referral?: unknown;
     };
     /** Button tap (e.g. the Post Reply «Read more» button). No `message`; carries the payload. */
     postback?: {
         title?: string;
         payload?: string;
         mid?: string;
+        /** Ad / m.me attribution on a Get Started tap. Untrusted — see utils/metaReferral.ts. */
+        referral?: unknown;
     };
+    /** Standalone `messaging_referrals` event (m.me link / ad tap into an existing
+     *  thread) — no `message`, no `postback`. Untrusted — see utils/metaReferral.ts. */
+    referral?: unknown;
 }
 
 interface WebhookEntry {
@@ -326,6 +336,11 @@ export class WebhookController {
                 for (const messageEvent of entry.messaging) {
                     // Skip echo events (bot's own messages reflected back)
                     if (messageEvent.message?.is_echo) continue;
+                    // Ad / m.me attribution (any of the three referral shapes) —
+                    // recorded before the message branches so a standalone
+                    // messaging_referrals event (no message, no postback) is
+                    // captured too. Never throws; never blocks message processing.
+                    await this.captureReferral(page.id, messageEvent, 'facebook');
                     // Handle text messages through the normal pipeline
                     if (messageEvent.message && messageEvent.message.text) {
                         // Check for attached shared post/reel (text + post combo)
@@ -488,6 +503,61 @@ export class WebhookController {
     }
 
     /**
+     * First-touch ad / m.me referral attribution.
+     *
+     * Meta delivers a referral in one of three shapes — a standalone
+     * `messaging_referrals` event, `postback.referral` (Get Started tap from an
+     * ad), or `message.referral` (first message from a Click-to-Messenger ad).
+     * All three are recorded on the conversation row via
+     * conversationsService.recordReferral, which creates the row through the
+     * same findOrCreate upsert the message path uses when the referral arrives
+     * before any message.
+     *
+     * Attribution is strictly best-effort: malformed/missing referral fields are
+     * skipped silently and any failure logs at debug — this must NEVER break or
+     * delay message processing.
+     */
+    private async captureReferral(
+        internalPageId: string,
+        event: MessagingEvent,
+        platform: Platform,
+    ): Promise<void> {
+        try {
+            const senderId = event.sender?.id;
+            if (!senderId) return;
+            const referral = extractEventReferral(event);
+            if (!referral) return;
+            // Prefer Meta's event timestamp (epoch millis) as the touch time —
+            // webhooks can arrive late or be redelivered.
+            const at = typeof event.timestamp === 'number' && Number.isFinite(event.timestamp) && event.timestamp > 0
+                ? new Date(event.timestamp)
+                : new Date();
+            const recorded = await conversationsService.recordReferral(internalPageId, senderId, platform, {
+                source: referral.source,
+                ref: referral.ref,
+                adId: referral.adId,
+                at,
+            });
+            if (recorded) {
+                this.log().info('Referral attribution recorded', {
+                    pageId: internalPageId,
+                    senderId,
+                    source: referral.source,
+                    adId: referral.adId,
+                    hasAdContext: referral.hasAdContext,
+                });
+            }
+        } catch (error) {
+            // Attribution is a bonus signal — a failure here must never surface
+            // as an error or interrupt the webhook processing loop.
+            this.log().debug('Failed to record referral attribution', {
+                pageId: internalPageId,
+                error: String(error),
+            });
+        }
+    }
+
+    /**
      * Process a single change event
      */
     private async processChange(pageId: string, change: WebhookChange) {
@@ -592,6 +662,10 @@ export class WebhookController {
                 for (const messageEvent of entry.messaging) {
                     // Skip echo events (bot's own messages reflected back)
                     if (messageEvent.message?.is_echo) continue;
+                    // Ad / ig.me attribution — same three shapes as Messenger
+                    // (Click-to-Direct ads, ig.me links). Best-effort, never throws.
+                    // `page` can be null here (unknown IG account) — nothing to attribute then.
+                    if (page) await this.captureReferral(page.id, messageEvent, 'instagram');
                     if (messageEvent.message && messageEvent.message.text) {
                         // Check for attached shared post/reel (text + post combo)
                         const postAtt = messageEvent.message.attachments?.find(

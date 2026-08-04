@@ -708,12 +708,16 @@ export class FacebookService {
                     params: {
                         // messaging_postbacks: the Post Reply «Read more» button tap. Without it Meta
                         // never delivers the postback, so existing pages must be re-subscribed.
-                        subscribed_fields: 'feed,messages,messaging_postbacks',
+                        // messaging_referrals: ad / m.me attribution (Click-to-Messenger). Meta requires
+                        // this subscription for standalone referral events AND for message.referral to
+                        // ride on CTM-ad messages — without it every ad conversation looks organic.
+                        // Existing pages must be re-subscribed to start receiving it.
+                        subscribed_fields: 'feed,messages,messaging_postbacks,messaging_referrals',
                         access_token: pageAccessToken,
                     },
                 }),
             );
-            this.logger.info('[Facebook] Page subscribed to webhooks (feed+messages+postbacks)', { pageId });
+            this.logger.info('[Facebook] Page subscribed to webhooks (feed+messages+postbacks+referrals)', { pageId });
             return true;
         } catch (error) {
             // feed requires pages_manage_metadata — fall back to messages-only if missing
@@ -724,12 +728,12 @@ export class FacebookService {
                     await traced('subscribePageToWebhooks.messagesOnly', () =>
                         fbAxios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
                             params: {
-                                subscribed_fields: 'messages,messaging_postbacks',
+                                subscribed_fields: 'messages,messaging_postbacks,messaging_referrals',
                                 access_token: pageAccessToken,
                             },
                         }),
                     );
-                    this.logger.info('[Facebook] Page subscribed to webhooks (messages+postbacks only)', { pageId });
+                    this.logger.info('[Facebook] Page subscribed to webhooks (messages+postbacks+referrals only)', { pageId });
                     return true;
                 } catch (retryError) {
                     if (axios.isAxiosError(retryError)) {

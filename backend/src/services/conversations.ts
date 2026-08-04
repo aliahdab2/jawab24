@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { conversations } from '../db/schema';
 
@@ -11,8 +11,24 @@ export interface Conversation {
     platform: Platform;
     senderName: string | null;
     originContentId: string | null;
+    referralSource: string | null;
+    referralRef: string | null;
+    referralAdId: string | null;
+    referralAt: Date | null;
     createdAt: Date | null;
     updatedAt: Date | null;
+}
+
+/** Normalized Meta referral, ready to stamp on a conversation (see utils/metaReferral.ts). */
+export interface ReferralAttribution {
+    /** Meta referral source, stored verbatim: 'ADS' | 'SHORTLINK' | 'CUSTOMER_CHAT_PLUGIN' | … */
+    source: string | null;
+    /** Free-form `ref` param from the ad / m.me link (campaign tag). */
+    ref: string | null;
+    /** Meta ad id (present when source is ADS). */
+    adId: string | null;
+    /** When the referral touch happened (Meta event timestamp, falls back to receipt time). */
+    at: Date;
 }
 
 function mapRow(row: typeof conversations.$inferSelect): Conversation {
@@ -23,6 +39,10 @@ function mapRow(row: typeof conversations.$inferSelect): Conversation {
         platform: row.platform as Platform,
         senderName: row.senderName ?? null,
         originContentId: row.originContentId ?? null,
+        referralSource: row.referralSource ?? null,
+        referralRef: row.referralRef ?? null,
+        referralAdId: row.referralAdId ?? null,
+        referralAt: row.referralAt ?? null,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
     };
@@ -79,6 +99,45 @@ export class ConversationsService {
             })
             .returning();
         return mapRow(row);
+    }
+
+    /**
+     * Record ad / m.me referral attribution on a conversation — FIRST-TOUCH ONLY.
+     *
+     * Reuses findOrCreate (the same upsert the message path uses) so a referral
+     * that arrives before any message still creates the canonical conversation
+     * row, then stamps the referral columns with a guarded UPDATE:
+     * `referral_at IS NULL` is the atomic first-touch sentinel, so a later
+     * referral (retargeting ad, second campaign click) can never overwrite the
+     * first — even under concurrent webhook deliveries, since the guard and the
+     * write are one statement.
+     *
+     * Returns true when this call recorded the attribution, false when the
+     * conversation was already attributed.
+     */
+    async recordReferral(
+        pageId: string,
+        senderId: string,
+        platform: Platform,
+        referral: ReferralAttribution,
+    ): Promise<boolean> {
+        await this.findOrCreate(pageId, senderId, platform);
+        const updated = await db
+            .update(conversations)
+            .set({
+                referralSource: referral.source,
+                referralRef: referral.ref,
+                referralAdId: referral.adId,
+                referralAt: referral.at,
+                updatedAt: new Date(),
+            })
+            .where(and(
+                eq(conversations.pageId, pageId),
+                eq(conversations.senderId, senderId),
+                isNull(conversations.referralAt),
+            ))
+            .returning({ id: conversations.id });
+        return updated.length > 0;
     }
 
     /**

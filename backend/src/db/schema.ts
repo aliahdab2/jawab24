@@ -619,6 +619,18 @@ export const conversations = pgTable('conversations', {
     // never overwritten. Lets messageProcessor inherit the originating post context for
     // follow-up DMs — otherwise AI classifies short follow-ups as SPAM_OR_IRRELEVANT.
     originContentId: uuid('origin_content_id'),
+    // ── Ad / m.me referral attribution (FIRST-TOUCH — never overwritten) ──
+    // Captured from Meta messaging webhooks in all three documented shapes:
+    // standalone `messaging_referrals`, `postback.referral` (Get Started tap from
+    // an ad), and `message.referral` (message sent from a Click-to-Messenger ad).
+    // Written by conversationsService.recordReferral, guarded by
+    // `referral_at IS NULL` so a later referral (retargeting, second campaign)
+    // can never replace the first touch. referral_at doubles as the
+    // "already attributed" sentinel — it is always set when any referral lands.
+    referralSource: text('referral_source'), // Meta enum stored verbatim: 'ADS' | 'SHORTLINK' | 'CUSTOMER_CHAT_PLUGIN' | …
+    referralRef: text('referral_ref'),       // free-form `ref` param from the ad / m.me link (campaign tag)
+    referralAdId: text('referral_ad_id'),    // Meta ad id (present when source is ADS)
+    referralAt: timestamp('referral_at', { withTimezone: true }), // when the first referral touch landed (Meta event time)
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
@@ -1503,6 +1515,11 @@ export const leads = pgTable('leads', {
     needsFollowUp: boolean('needs_follow_up').notNull().default(false),
     followUpReason: varchar('follow_up_reason', { length: 40 }), // 'reshared_contact' | 'returned_intent'
     followUpAt: timestamp('follow_up_at'),
+    // First-touch ad attribution copied from the conversation at capture time:
+    // conversations.referral_ad_id, falling back to referral_ref for m.me/link
+    // campaigns that carry no ad id. Set once (COALESCE on upsert) — a lead keeps
+    // the campaign that produced it even if the customer later returns via ads.
+    sourceAdId: text('source_ad_id'),
     // Set when this lead has been included in a daily digest email to the owner (null = not yet emailed)
     digestEmailedAt: timestamp('digest_emailed_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),

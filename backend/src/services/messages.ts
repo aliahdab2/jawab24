@@ -186,6 +186,12 @@ export class MessagesService {
             .select({
                 msg: messages,
                 convSenderName: conversations.senderName,
+                // Conversation-level ad / m.me attribution — surfaced on the thread
+                // payload so the dashboard can read it (capture layer only; no UI yet).
+                convReferralSource: conversations.referralSource,
+                convReferralRef: conversations.referralRef,
+                convReferralAdId: conversations.referralAdId,
+                convReferralAt: conversations.referralAt,
             })
             .from(messages)
             .leftJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -196,7 +202,14 @@ export class MessagesService {
             .orderBy(sql`COALESCE(${messages.createdTime}, ${messages.createdAt}) DESC, ${messages.createdAt} DESC`)
             .limit(limit);
 
-        return rows.map(r => this.mapJoinedToMessage(r.msg, r.convSenderName));
+        return rows.map(r => this.mapJoinedToMessage(
+            r.msg,
+            r.convSenderName,
+            // referral_at is the "attributed" sentinel — no referral without it.
+            r.convReferralAt
+                ? { source: r.convReferralSource, ref: r.convReferralRef, adId: r.convReferralAdId, at: r.convReferralAt }
+                : undefined,
+        ));
     }
 
     /**
@@ -1007,9 +1020,18 @@ export class MessagesService {
     /**
      * Map a row that already carries a joined conversations.sender_name, preferring
      * that value (canonical source) and falling back to the denormalized message column.
+     *
+     * `referral` (optional) is the conversation-level first-touch ad attribution —
+     * attached only when the caller joined it (thread endpoint) and the
+     * conversation is attributed.
      */
-    private mapJoinedToMessage(record: typeof messages.$inferSelect, convSenderName: string | null): Message {
-        return this.mapToMessage({ ...record, senderName: convSenderName ?? record.senderName });
+    private mapJoinedToMessage(
+        record: typeof messages.$inferSelect,
+        convSenderName: string | null,
+        referral?: NonNullable<Message['referral']>,
+    ): Message {
+        const mapped = this.mapToMessage({ ...record, senderName: convSenderName ?? record.senderName });
+        return referral ? { ...mapped, referral } : mapped;
     }
 
     private mapToMessage(record: typeof messages.$inferSelect): Message {
