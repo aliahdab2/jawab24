@@ -19,19 +19,23 @@
  * Scope, deliberately narrow (owner's ruling, 2026-07-31):
  *   - ONE reminder, REMINDER_LEAD_DAYS before expiry. No second/last-day nudge.
  *   - No backfill. Trials that already expired are never warned retroactively —
- *     the query's `trial_ends_at > now` bound is what enforces that, so widening
- *     the window later must not drop it.
+ *     the reminder query's `trial_ends_at > now` bound is what enforces that
+ *     (and the ended sweep's ENDED_LOOKBACK_DAYS bound is its mirror), so
+ *     widening either window later must not drop them.
  *
- * Idempotency: `subscriptions.trial_ending_notified_at` is stamped once the
- * in-app notification has landed, and the query skips stamped rows. The daily
- * cadence over a 3-day window would otherwise warn the same merchant three
- * times.
+ * Idempotency: each sweep stamps its own column (`trial_ending_notified_at` /
+ * `trial_ended_notified_at`) once the in-app notification has landed, and its
+ * query skips stamped rows. The daily cadence would otherwise notify the same
+ * merchant repeatedly.
  */
 import { and, eq, gt, inArray, isNull, lte } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 import { db } from '../db';
 import { subscriptions, users, settings } from '../db/schema';
 import { emailService } from './email';
+import type { EmailType } from './email';
 import { notificationService, NOTIFICATION_TEMPLATES } from './notifications';
+import type { NotificationPayload } from './notifications';
 import { trialEndingEmailTemplate, trialEndedEmailTemplate } from '../utils/emailTemplates';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
@@ -56,14 +60,163 @@ let logger: Logger = noopLogger;
 export function setTrialRemindersLogger(l: Logger): void { logger = l; }
 
 export interface TrialReminderResult {
-    /** Subscriptions inside the reminder window that had not been warned yet. */
+    /** Subscriptions inside the sweep's window that had not been notified yet. */
     due: number;
     /** In-app notifications successfully created. */
     notified: number;
-    /** Reminder emails successfully sent (≤ notified; email is best-effort). */
+    /** Emails successfully sent (≤ notified; email is best-effort). */
     emailed: number;
     /** Subscriptions left un-stamped because the in-app notification failed. */
     errors: number;
+}
+
+/** The projection both sweeps select — one merchant-facing trial row. */
+interface LifecycleNoticeRow {
+    subscriptionId: string;
+    userId: string;
+    trialEndsAt: Date | null;
+    email: string | null;
+    name: string | null;
+    dashboardLanguage: string | null;
+}
+
+/**
+ * Everything that differs between the two sweeps. Keeping the delivery loop in
+ * ONE place (runLifecycleNoticeSweep) is deliberate: the retry semantics —
+ * in-app failure leaves the row un-stamped for tomorrow, email is best-effort —
+ * are the part that must never diverge between sweeps, the way a fix applied to
+ * one hand-copied loop and not the other would. `subscription_expiring` (still
+ * missing, see docs/notifications-roadmap.md) should become a third config.
+ */
+interface LifecycleNoticeConfig {
+    /** Log-line prefix, e.g. '[TrialReminders]'. */
+    label: string;
+    /** Sentry `cron` tag. */
+    cronTag: string;
+    /** Human prefix for Sentry messages, e.g. 'Trial-ending'. */
+    noticeName: string;
+    emailType: EmailType;
+    /** Extra fields for the start-of-run log line. */
+    startMeta: Record<string, unknown>;
+    fetchDue(now: Date): Promise<LifecycleNoticeRow[]>;
+    /** Bell/push payload for a row, or null to skip the row entirely. */
+    composeNotification(row: LifecycleNoticeRow): NotificationPayload | null;
+    /** Email content; only called when the row has an email address. */
+    composeEmail(row: LifecycleNoticeRow, lang: 'ar' | 'en', name: string): { subject: string; html: string };
+    /** The sweep's own idempotency stamp — sweeps must never share one. */
+    stamp(): Partial<typeof subscriptions.$inferInsert>;
+}
+
+/** Shared SELECT for both sweeps — only the WHERE differs per config. */
+function selectDueRows(where: SQL | undefined): Promise<LifecycleNoticeRow[]> {
+    return db
+        .select({
+            subscriptionId: subscriptions.id,
+            userId: subscriptions.userId,
+            trialEndsAt: subscriptions.trialEndsAt,
+            email: users.email,
+            name: users.name,
+            dashboardLanguage: settings.dashboardLanguage,
+        })
+        .from(subscriptions)
+        .innerJoin(users, eq(users.id, subscriptions.userId))
+        .leftJoin(settings, eq(settings.userId, subscriptions.userId))
+        .where(where);
+}
+
+function pricingUrl(lang: 'ar' | 'en'): string {
+    return `${config.frontendUrl}/${lang}/pricing`;
+}
+
+/**
+ * The delivery loop both sweeps share.
+ *
+ * Per row: in-app notification first — a failure is the only retryable case
+ * (the row stays un-stamped, so tomorrow's run tries again). Email second and
+ * best-effort by design: the merchant has already been told in-app, and
+ * retrying the email tomorrow would re-send the bell row too, so a failed send
+ * is captured, not retried. The stamp lands last.
+ */
+async function runLifecycleNoticeSweep(cfg: LifecycleNoticeConfig): Promise<TrialReminderResult> {
+    const startedAt = Date.now();
+    const now = new Date();
+
+    logger.info(`${cfg.label} Starting run`, cfg.startMeta);
+
+    const rows = await cfg.fetchDue(now);
+    const result: TrialReminderResult = { due: rows.length, notified: 0, emailed: 0, errors: 0 };
+
+    for (const row of rows) {
+        const notification = cfg.composeNotification(row);
+        if (!notification) continue;
+
+        const lang = resolveLocale(row.dashboardLanguage);
+
+        try {
+            await notificationService.sendNotification(row.userId, notification);
+            result.notified++;
+        } catch (err) {
+            result.errors++;
+            logger.error(`${cfg.label} In-app notification failed`, {
+                subscriptionId: row.subscriptionId,
+                userId: row.userId,
+                error: String(err),
+            });
+            captureError(err, `${cfg.noticeName} notification failed`, {
+                tags: { cron: cfg.cronTag },
+                level: 'error',
+                extra: { subscriptionId: row.subscriptionId, userId: row.userId },
+            });
+            continue;
+        }
+
+        if (row.email) {
+            const { subject, html } = cfg.composeEmail(row, lang, row.name || row.email.split('@')[0]);
+
+            const send = await emailService.send({
+                to: row.email,
+                subject,
+                html,
+                type: cfg.emailType,
+                userId: row.userId,
+            });
+
+            if (send.success) {
+                result.emailed++;
+            } else {
+                logger.error(`${cfg.label} Email failed`, {
+                    subscriptionId: row.subscriptionId,
+                    userId: row.userId,
+                    error: send.error,
+                });
+                captureError(
+                    new Error(`${cfg.noticeName} email failed: ${send.error ?? 'unknown'}`),
+                    `${cfg.noticeName} email failed`,
+                    {
+                        tags: { cron: cfg.cronTag },
+                        level: 'warning',
+                        extra: { subscriptionId: row.subscriptionId, userId: row.userId, resendError: send.error },
+                    },
+                );
+            }
+        }
+
+        await db
+            .update(subscriptions)
+            .set(cfg.stamp())
+            .where(eq(subscriptions.id, row.subscriptionId));
+
+        logger.info(`${cfg.label} Notified merchant`, {
+            subscriptionId: row.subscriptionId,
+            userId: row.userId,
+            trialEndsAt: row.trialEndsAt?.toISOString(),
+            lang,
+            emailed: Boolean(row.email),
+        });
+    }
+
+    logger.info(`${cfg.label} Run complete`, { ...result, durationMs: Date.now() - startedAt });
+    return result;
 }
 
 /**
@@ -88,127 +241,43 @@ export function buildTrialEndingBodies(trialEndsAt: Date): Record<string, string
 }
 
 /**
- * Run the daily trial-ending reminder job.
+ * Run the daily trial-ending reminder sweep.
  *
- * Idempotent: each subscription is stamped after its in-app notification lands,
- * so a re-run (restart, manual invocation) is a no-op for anyone already warned.
+ * Idempotent via `trial_ending_notified_at`; the `gt(now)` bound is the
+ * no-backfill guarantee — an already-expired trial can never enter the result
+ * set, however wide the window becomes.
  */
-export async function runTrialEndingReminders(): Promise<TrialReminderResult> {
-    const startedAt = Date.now();
-    const now = new Date();
-    const windowEnd = new Date(now.getTime() + REMINDER_LEAD_DAYS * DAY_MS);
-
-    logger.info('[TrialReminders] Starting run', { leadDays: REMINDER_LEAD_DAYS });
-
-    const rows = await db
-        .select({
-            subscriptionId: subscriptions.id,
-            userId: subscriptions.userId,
-            trialEndsAt: subscriptions.trialEndsAt,
-            email: users.email,
-            name: users.name,
-            dashboardLanguage: settings.dashboardLanguage,
-        })
-        .from(subscriptions)
-        .innerJoin(users, eq(users.id, subscriptions.userId))
-        .leftJoin(settings, eq(settings.userId, subscriptions.userId))
-        .where(and(
+export function runTrialEndingReminders(): Promise<TrialReminderResult> {
+    return runLifecycleNoticeSweep({
+        label: '[TrialReminders]',
+        cronTag: 'trial_reminders',
+        noticeName: 'Trial-ending',
+        emailType: 'trial_ending',
+        startMeta: { leadDays: REMINDER_LEAD_DAYS },
+        fetchDue: (now) => selectDueRows(and(
             eq(subscriptions.status, 'trialing'),
             isNull(subscriptions.trialEndingNotifiedAt),
-            // `gt(now)` is the no-backfill guarantee: an already-expired trial is
-            // never in the result set, however wide the window becomes.
             gt(subscriptions.trialEndsAt, now),
-            lte(subscriptions.trialEndsAt, windowEnd),
-        ));
-
-    const result: TrialReminderResult = { due: rows.length, notified: 0, emailed: 0, errors: 0 };
-
-    for (const row of rows) {
-        // Narrowed by the query, but the column is nullable in the schema.
-        if (!row.trialEndsAt) continue;
-
-        const lang = resolveLocale(row.dashboardLanguage);
-        const trialEndLabel = formatDateLong(row.trialEndsAt, lang);
-
-        try {
-            await notificationService.sendNotification(row.userId, {
+            lte(subscriptions.trialEndsAt, new Date(now.getTime() + REMINDER_LEAD_DAYS * DAY_MS)),
+        )),
+        // Narrowed by the query, but the column is nullable in the schema —
+        // a null date row is skipped rather than notified with broken copy.
+        composeNotification: (row) => row.trialEndsAt
+            ? {
                 type: 'trial_ending',
                 titles: NOTIFICATION_TEMPLATES.trial_ending.titles,
                 bodies: buildTrialEndingBodies(row.trialEndsAt),
-            });
-            result.notified++;
-        } catch (err) {
-            // Not stamped — the merchant has been told nothing, so tomorrow's run
-            // must try again. This is the only retryable failure in the job.
-            result.errors++;
-            logger.error('[TrialReminders] In-app notification failed', {
-                subscriptionId: row.subscriptionId,
-                userId: row.userId,
-                error: String(err),
-            });
-            captureError(err, 'Trial-ending notification failed', {
-                tags: { cron: 'trial_reminders' },
-                level: 'error',
-                extra: { subscriptionId: row.subscriptionId, userId: row.userId },
-            });
-            continue;
-        }
-
-        // Email is the second channel, and best-effort by design: the merchant has
-        // already been warned in-app, and retrying the email tomorrow would mean
-        // re-sending the bell row too. A failure is captured, not retried.
-        if (row.email) {
-            const { subject, html } = trialEndingEmailTemplate({
-                lang,
-                name: row.name || row.email.split('@')[0],
-                trialEndLabel,
-                pricingUrl: `${config.frontendUrl}/${lang}/pricing`,
-            });
-
-            const send = await emailService.send({
-                to: row.email,
-                subject,
-                html,
-                type: 'trial_ending',
-                userId: row.userId,
-            });
-
-            if (send.success) {
-                result.emailed++;
-            } else {
-                logger.error('[TrialReminders] Reminder email failed', {
-                    subscriptionId: row.subscriptionId,
-                    userId: row.userId,
-                    error: send.error,
-                });
-                captureError(
-                    new Error(`Trial-ending email failed: ${send.error ?? 'unknown'}`),
-                    'Trial-ending email failed',
-                    {
-                        tags: { cron: 'trial_reminders' },
-                        level: 'warning',
-                        extra: { subscriptionId: row.subscriptionId, userId: row.userId, resendError: send.error },
-                    },
-                );
             }
-        }
-
-        await db
-            .update(subscriptions)
-            .set({ trialEndingNotifiedAt: new Date() })
-            .where(eq(subscriptions.id, row.subscriptionId));
-
-        logger.info('[TrialReminders] Warned merchant', {
-            subscriptionId: row.subscriptionId,
-            userId: row.userId,
-            trialEndsAt: row.trialEndsAt.toISOString(),
+            : null,
+        composeEmail: (row, lang, name) => trialEndingEmailTemplate({
             lang,
-            emailed: Boolean(row.email),
-        });
-    }
-
-    logger.info('[TrialReminders] Run complete', { ...result, durationMs: Date.now() - startedAt });
-    return result;
+            name,
+            // Non-null: composeNotification already skipped null-date rows.
+            trialEndLabel: formatDateLong(row.trialEndsAt as Date, lang),
+            pricingUrl: pricingUrl(lang),
+        }),
+        stamp: () => ({ trialEndingNotifiedAt: new Date() }),
+    });
 }
 
 /**
@@ -228,115 +297,33 @@ export async function runTrialEndingReminders(): Promise<TrialReminderResult> {
  *   - payment_method IS NULL: converted subscriptions (stripe/shopify/manual)
  *     are not trials anymore, whatever their trial_ends_at says.
  *   - the ENDED_LOOKBACK_DAYS bound is the no-backfill guard (see its doc).
- *
- * Channel semantics match runTrialEndingReminders: in-app first (a failure
- * leaves the row un-stamped for tomorrow), email best-effort after.
  */
-export async function runTrialEndedNotices(): Promise<TrialReminderResult> {
-    const startedAt = Date.now();
-    const now = new Date();
-    const lookbackStart = new Date(now.getTime() - ENDED_LOOKBACK_DAYS * DAY_MS);
-
-    logger.info('[TrialEnded] Starting run', { lookbackDays: ENDED_LOOKBACK_DAYS });
-
-    const rows = await db
-        .select({
-            subscriptionId: subscriptions.id,
-            userId: subscriptions.userId,
-            trialEndsAt: subscriptions.trialEndsAt,
-            email: users.email,
-            name: users.name,
-            dashboardLanguage: settings.dashboardLanguage,
-        })
-        .from(subscriptions)
-        .innerJoin(users, eq(users.id, subscriptions.userId))
-        .leftJoin(settings, eq(settings.userId, subscriptions.userId))
-        .where(and(
+export function runTrialEndedNotices(): Promise<TrialReminderResult> {
+    return runLifecycleNoticeSweep({
+        label: '[TrialEnded]',
+        cronTag: 'trial_ended_notices',
+        noticeName: 'Trial-ended',
+        emailType: 'trial_ended',
+        startMeta: { lookbackDays: ENDED_LOOKBACK_DAYS },
+        fetchDue: (now) => selectDueRows(and(
             inArray(subscriptions.status, ['trialing', 'past_due']),
             isNull(subscriptions.paymentMethod),
             isNull(subscriptions.trialEndedNotifiedAt),
             lte(subscriptions.trialEndsAt, now),
-            gt(subscriptions.trialEndsAt, lookbackStart),
-        ));
-
-    const result: TrialReminderResult = { due: rows.length, notified: 0, emailed: 0, errors: 0 };
-
-    for (const row of rows) {
-        const lang = resolveLocale(row.dashboardLanguage);
-
-        try {
-            // The template is variable-free, so the persisted bodies can be used
-            // as-is — no per-locale formatting pass like buildTrialEndingBodies.
-            await notificationService.sendNotification(row.userId, {
-                type: 'trial_ended',
-                titles: NOTIFICATION_TEMPLATES.trial_ended.titles,
-                bodies: NOTIFICATION_TEMPLATES.trial_ended.bodies,
-            });
-            result.notified++;
-        } catch (err) {
-            result.errors++;
-            logger.error('[TrialEnded] In-app notification failed', {
-                subscriptionId: row.subscriptionId,
-                userId: row.userId,
-                error: String(err),
-            });
-            captureError(err, 'Trial-ended notification failed', {
-                tags: { cron: 'trial_ended_notices' },
-                level: 'error',
-                extra: { subscriptionId: row.subscriptionId, userId: row.userId },
-            });
-            continue;
-        }
-
-        if (row.email) {
-            const { subject, html } = trialEndedEmailTemplate({
-                lang,
-                name: row.name || row.email.split('@')[0],
-                pricingUrl: `${config.frontendUrl}/${lang}/pricing`,
-            });
-
-            const send = await emailService.send({
-                to: row.email,
-                subject,
-                html,
-                type: 'trial_ended',
-                userId: row.userId,
-            });
-
-            if (send.success) {
-                result.emailed++;
-            } else {
-                logger.error('[TrialEnded] Last-try email failed', {
-                    subscriptionId: row.subscriptionId,
-                    userId: row.userId,
-                    error: send.error,
-                });
-                captureError(
-                    new Error(`Trial-ended email failed: ${send.error ?? 'unknown'}`),
-                    'Trial-ended email failed',
-                    {
-                        tags: { cron: 'trial_ended_notices' },
-                        level: 'warning',
-                        extra: { subscriptionId: row.subscriptionId, userId: row.userId, resendError: send.error },
-                    },
-                );
-            }
-        }
-
-        await db
-            .update(subscriptions)
-            .set({ trialEndedNotifiedAt: new Date() })
-            .where(eq(subscriptions.id, row.subscriptionId));
-
-        logger.info('[TrialEnded] Notified merchant', {
-            subscriptionId: row.subscriptionId,
-            userId: row.userId,
-            trialEndsAt: row.trialEndsAt?.toISOString(),
+            gt(subscriptions.trialEndsAt, new Date(now.getTime() - ENDED_LOOKBACK_DAYS * DAY_MS)),
+        )),
+        // Variable-free template: the persisted bodies are used as-is — no
+        // per-locale formatting pass like buildTrialEndingBodies.
+        composeNotification: () => ({
+            type: 'trial_ended',
+            titles: NOTIFICATION_TEMPLATES.trial_ended.titles,
+            bodies: NOTIFICATION_TEMPLATES.trial_ended.bodies,
+        }),
+        composeEmail: (_row, lang, name) => trialEndedEmailTemplate({
             lang,
-            emailed: Boolean(row.email),
-        });
-    }
-
-    logger.info('[TrialEnded] Run complete', { ...result, durationMs: Date.now() - startedAt });
-    return result;
+            name,
+            pricingUrl: pricingUrl(lang),
+        }),
+        stamp: () => ({ trialEndedNotifiedAt: new Date() }),
+    });
 }

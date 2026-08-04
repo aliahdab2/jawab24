@@ -37,6 +37,43 @@ function rtlPresentation(text: string): { rtl: boolean; dir: 'ltr' | 'rtl'; lang
 }
 
 /**
+ * Locale-driven counterpart of `rtlPresentation` — the same presentation
+ * attributes for templates that receive the merchant's language explicitly
+ * (subscription welcome, trial lifecycle) instead of sniffing the content.
+ */
+function langPresentation(lang: 'ar' | 'en'): { rtl: boolean; dir: 'ltr' | 'rtl'; align: 'left' | 'right'; fontFamily: string } {
+    const rtl = lang === 'ar';
+    return {
+        rtl,
+        dir: rtl ? 'rtl' : 'ltr',
+        align: rtl ? 'right' : 'left',
+        fontFamily: rtl ? RTL_FONT_STACK : LTR_FONT_STACK,
+    };
+}
+
+/** The standard body-`<td>` attributes shared by the text-first templates. */
+function standardBodyCell(align: string, fontFamily: string): string {
+    return ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`;
+}
+
+/**
+ * Primary CTA button block. The URL is HTML-escaped here; the label is the
+ * caller's responsibility (usually a static i18n string, escaped only when it
+ * carries untrusted input).
+ */
+function ctaButton(url: string, label: string, opts: { margin?: string; paddingX?: number } = {}): string {
+    const { margin = '0 0 24px 0', paddingX = 24 } = opts;
+    return `<p style="margin:${margin};text-align:center;">
+                <a href="${escapeHtml(url)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px ${paddingX}px;border-radius:8px;font-weight:600;font-size:15px;">${label}</a>
+              </p>`;
+}
+
+/** Teal highlight callout — the "good to know" box used by lifecycle emails. */
+function tealCallout(rtl: boolean, html: string, marginBottom: 16 | 24 = 24): string {
+    return `<p style="margin:0 0 ${marginBottom}px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${html}</p>`;
+}
+
+/**
  * Shared branded email shell — the markup every transactional email has in
  * common: the document scaffold, a teal brand header, the centered 600/720px
  * card, and a footer. The parts that genuinely differ per email are passed in:
@@ -137,7 +174,7 @@ export function waitlistEmailTemplate(params: {
         bodyFontFamily: fontFamily,
         title: params.subject,
         preheader: escapeHtml(params.body.slice(0, 150)),
-        bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
         bodyHtml: htmlBody,
         footerHtml: `<p style="margin:0 0 8px 0;">${escapeHtml(brandName)} &mdash; jawab24.com</p>
               <p style="margin:0;">
@@ -176,7 +213,7 @@ export function accountNoticeEmailTemplate(params: {
         // Array.from → slice by code point, so a 150-char cut can't split an
         // emoji surrogate pair into a replacement character.
         preheader: escapeHtml(Array.from(params.body).slice(0, 150).join('')),
-        bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
         bodyHtml,
     });
     return { subject: params.subject, html };
@@ -195,12 +232,7 @@ export function subscriptionWelcomeEmailTemplate(params: {
     trialEndsAt?: Date | null;
 }): { subject: string; html: string } {
     const { lang, name, planName, dashboardUrl, trialEndsAt } = params;
-    const rtl = lang === 'ar';
-    const dir = rtl ? 'rtl' : 'ltr';
-    const align = rtl ? 'right' : 'left';
-    const fontFamily = rtl
-        ? "'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
-        : "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+    const { rtl, dir, align, fontFamily } = langPresentation(lang);
 
     // i18n strings come from JSON we control. User-provided values (name,
     // planName, trial date) are HTML-escaped before substitution so they're
@@ -221,7 +253,7 @@ export function subscriptionWelcomeEmailTemplate(params: {
     const signoff = t('subscriptionWelcomeSignoff', lang);
 
     const trialBlock = trialEndsAt
-        ? `<p style="margin:0 0 16px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${t('subscriptionWelcomeTrialNote', lang).replace(/\{trialEnd\}/g, escapeHtml(formatDateTimeShort(trialEndsAt, lang)))}</p>`
+        ? tealCallout(rtl, t('subscriptionWelcomeTrialNote', lang).replace(/\{trialEnd\}/g, escapeHtml(formatDateTimeShort(trialEndsAt, lang))), 16)
         : '';
 
     const html = emailShell({
@@ -230,14 +262,12 @@ export function subscriptionWelcomeEmailTemplate(params: {
         bodyFontFamily: fontFamily,
         title: subject,
         preheader: intro,
-        bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
         bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
               <p style="margin:0 0 16px 0;">${intro}</p>
               ${trialBlock}
               <p style="margin:0 0 24px 0;">${nextSteps}</p>
-              <p style="margin:0 0 24px 0;text-align:center;">
-                <a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">${ctaLabel}</a>
-              </p>
+              ${ctaButton(dashboardUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${billing}</p>
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
     });
@@ -260,9 +290,7 @@ export function trialEndingEmailTemplate(params: {
     pricingUrl: string;
 }): { subject: string; html: string } {
     const { lang, name, trialEndLabel, pricingUrl } = params;
-    const rtl = lang === 'ar';
-    const fontFamily = rtl ? RTL_FONT_STACK : LTR_FONT_STACK;
-    const align = rtl ? 'right' : 'left';
+    const { rtl, dir, align, fontFamily } = langPresentation(lang);
 
     // Same escaping contract as the welcome email: translations are static,
     // markup-free strings we control; only the caller-supplied values are escaped.
@@ -280,17 +308,15 @@ export function trialEndingEmailTemplate(params: {
 
     const html = emailShell({
         lang,
-        dir: rtl ? 'rtl' : 'ltr',
+        dir,
         bodyFontFamily: fontFamily,
         title: subject,
         preheader: intro,
-        bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
         bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
               <p style="margin:0 0 16px 0;">${intro}</p>
-              <p style="margin:0 0 24px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${whatHappens}</p>
-              <p style="margin:0 0 24px 0;text-align:center;">
-                <a href="${escapeHtml(pricingUrl)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">${ctaLabel}</a>
-              </p>
+              ${tealCallout(rtl, whatHappens)}
+              ${ctaButton(pricingUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
     });
 
@@ -311,9 +337,7 @@ export function trialEndedEmailTemplate(params: {
     pricingUrl: string;
 }): { subject: string; html: string } {
     const { lang, name, pricingUrl } = params;
-    const rtl = lang === 'ar';
-    const fontFamily = rtl ? RTL_FONT_STACK : LTR_FONT_STACK;
-    const align = rtl ? 'right' : 'left';
+    const { rtl, dir, align, fontFamily } = langPresentation(lang);
 
     // Same escaping contract as the trial-ending email: translations are static,
     // markup-free strings we control; only the caller-supplied name is escaped.
@@ -328,17 +352,15 @@ export function trialEndedEmailTemplate(params: {
 
     const html = emailShell({
         lang,
-        dir: rtl ? 'rtl' : 'ltr',
+        dir,
         bodyFontFamily: fontFamily,
         title: subject,
         preheader: intro,
-        bodyCellAttrs: ` dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};"`,
+        bodyCellAttrs: standardBodyCell(align, fontFamily),
         bodyHtml: `<h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
               <p style="margin:0 0 16px 0;">${intro}</p>
-              <p style="margin:0 0 24px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${whatRemains}</p>
-              <p style="margin:0 0 24px 0;text-align:center;">
-                <a href="${escapeHtml(pricingUrl)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">${ctaLabel}</a>
-              </p>
+              ${tealCallout(rtl, whatRemains)}
+              ${ctaButton(pricingUrl, ctaLabel)}
               <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>`,
     });
 
@@ -359,7 +381,6 @@ export function inviteEmailTemplate(params: {
 }): { subject: string; html: string } {
     const { workspaceName, inviteUrl } = params;
     const escWorkspace = escapeHtml(workspaceName);
-    const escUrl = escapeHtml(inviteUrl);
     const arFont = "'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
     const enFont = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
 
@@ -393,9 +414,7 @@ export function inviteEmailTemplate(params: {
         bodyHtml: `${block('ar')}
               <hr style="border:none;border-top:1px solid #e4e4e7;margin:24px 0;">
               ${block('en')}
-              <p style="margin:28px 0 0 0;text-align:center;">
-                <a href="${escUrl}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600;font-size:15px;">${ctaLabel}</a>
-              </p>
+              ${ctaButton(inviteUrl, ctaLabel, { margin: '28px 0 0 0', paddingX: 28 })}
               <p style="margin:20px 0 0 0;color:#a1a1aa;font-size:12px;line-height:1.5;text-align:center;">
                 ${t('inviteEmailIgnore', 'ar')}<br>${t('inviteEmailIgnore', 'en')}
               </p>`,
@@ -520,9 +539,7 @@ export function leadDigestEmailTemplate(params: {
                 <tbody>${tableRows}</tbody>
               </table>
               ${andMore}
-              <p style="margin:28px 0 0 0;text-align:center;">
-                <a href="${params.dashboardUrl}" style="display:inline-block;background-color:#0d9488;color:#ffffff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">${escapeHtml(cta)}</a>
-              </p>`,
+              ${ctaButton(params.dashboardUrl, escapeHtml(cta), { margin: '28px 0 0 0', paddingX: 28 })}`,
         }),
     };
 }
