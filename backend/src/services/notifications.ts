@@ -84,6 +84,10 @@ export type NotificationType =
     | 'page_trial_used'
     | 'subscription_renewed'
     | 'trial_ending'
+    // The trial actually expired and the reply gate has closed — the "last try"
+    // conversion touch. Separate from auto_reply_paused_billing (reactive, fires
+    // only when a customer writes in) so it reaches merchants nobody messages.
+    | 'trial_ended'
     | 'flagged_reply'
     | 'skipped_reply'
     | 'new_comment'
@@ -213,6 +217,16 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'Your Jawab24 free trial ends on {trialEnd}. Subscribe now so your replies keep running.',
             ar: 'تنتهي فترتك التجريبية المجانية في Jawab24 بتاريخ {trialEnd}. اشترك الآن لتستمر ردودك دون انقطاع.',
+        },
+    },
+    // Fired by services/trialReminders.ts once trial_ends_at has passed and the
+    // gate has stopped replies. Deliberately variable-free: no date to format
+    // per-locale, no count to pluralize (the {days} trap documented above).
+    trial_ended: {
+        titles: { en: 'Your free trial has ended', ar: 'انتهت فترتك التجريبية' },
+        bodies: {
+            en: 'Your Jawab24 free trial has ended and automatic replies are paused. Subscribe to resume replying to your customers.',
+            ar: 'انتهت فترتك التجريبية المجانية في Jawab24 وتوقفت الردود التلقائية. اشترك الآن لاستئناف الرد على عملائك.',
         },
     },
     flagged_reply: {

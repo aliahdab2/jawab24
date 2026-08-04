@@ -112,6 +112,81 @@ describe('checkSubscriptionStatus — manual subscription expiry', () => {
     });
 });
 
+describe('checkSubscriptionStatus — expired trials do not inherit the past_due grace', () => {
+    // The 2026-08-04 leak: an expired trial is lazily flipped trialing → past_due
+    // by getUserSubscription, and the past_due branch granted currentPeriodEnd +
+    // 3 days of grace. The grace exists to cover a payment processor's retry
+    // cycle; a trial has no payment to retry. One merchant sent 760 free AI
+    // replies through that window.
+    it('blocks a lazily-flipped expired trial even inside the old grace window', () => {
+        const result = subscriptionsService.checkSubscriptionStatus(
+            sub({
+                status: 'past_due',
+                paymentMethod: null,
+                trialEndsAt: new Date(NOW.getTime() - 2 * DAY_MS),
+                // Period end yesterday → old behavior allowed until +3 days grace.
+                currentPeriodEnd: new Date(NOW.getTime() - 1 * DAY_MS),
+            }),
+        );
+
+        expect(result.allowed).toBe(false);
+        expect(result.code).toBe('subscription_inactive');
+    });
+
+    it('blocks an expired trial still in trialing status (flip not yet run)', () => {
+        const result = subscriptionsService.checkSubscriptionStatus(
+            sub({
+                status: 'trialing',
+                paymentMethod: null,
+                trialEndsAt: new Date(NOW.getTime() - 1 * DAY_MS),
+            }),
+        );
+
+        expect(result.allowed).toBe(false);
+        expect(result.code).toBe('subscription_inactive');
+    });
+
+    it('serves a trial that is still running', () => {
+        const result = subscriptionsService.checkSubscriptionStatus(
+            sub({
+                status: 'trialing',
+                paymentMethod: null,
+                trialEndsAt: new Date(NOW.getTime() + 5 * DAY_MS),
+            }),
+        );
+
+        expect(result.allowed).toBe(true);
+    });
+
+    it('keeps the 3-day grace for a stripe past_due (card retry in flight)', () => {
+        const result = subscriptionsService.checkSubscriptionStatus(
+            sub({
+                status: 'past_due',
+                paymentMethod: 'stripe',
+                currentPeriodEnd: new Date(NOW.getTime() - 1 * DAY_MS),
+            }),
+        );
+
+        expect(result.allowed).toBe(true);
+    });
+
+    it('keeps the grace for a CONVERTED trial that later failed payment (trialEndsAt set, stripe)', () => {
+        // subscriptionLinking preserves trial_ends_at from Stripe; a paying
+        // customer whose renewal bounced must get the retry grace, not the
+        // trial hard-stop.
+        const result = subscriptionsService.checkSubscriptionStatus(
+            sub({
+                status: 'past_due',
+                paymentMethod: 'stripe',
+                trialEndsAt: new Date(NOW.getTime() - 20 * DAY_MS),
+                currentPeriodEnd: new Date(NOW.getTime() - 1 * DAY_MS),
+            }),
+        );
+
+        expect(result.allowed).toBe(true);
+    });
+});
+
 describe('canUseAiReplies — manual sliver does not hand out a free refill', () => {
     afterEach(() => vi.restoreAllMocks());
 

@@ -62,7 +62,7 @@ const CHANNEL_AWARE_TYPES = new Set<string>(['flagged_reply', 'skipped_reply']);
  * pinAccountHealthFirst surfaces the unread ones at the top of "All".
  */
 export const ACCOUNT_HEALTH_TYPES = new Set<string>([
-    'payment_failed', 'subscription_expiring', 'trial_ending', 'subscription_renewed',
+    'payment_failed', 'subscription_expiring', 'trial_ending', 'trial_ended', 'subscription_renewed',
     'refund_processed', 'ai_usage_warning_80', 'ai_usage_limit_reached', 'ai_usage_on_topup',
     'ai_usage_topup_low',
     'auto_reply_paused_billing', 'page_disconnected', 'page_trial_used', 'kb_gap', 'provider_failover',
@@ -94,6 +94,7 @@ export const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
     payment_failed:        { icon: CreditCard,    iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     subscription_expiring: { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
     trial_ending:          { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
+    trial_ended:           { icon: Clock,         iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'notif-ring-emerald' },
     page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600 dark:text-slate-400',     bgColor: 'bg-slate-100 dark:bg-slate-900/30',    ringColor: 'notif-ring-slate' },
     page_trial_used:       { icon: CreditCard,    iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
@@ -171,6 +172,7 @@ export function resolveNotificationRoute(
         case 'subscription_expiring':
         case 'subscription_renewed':
         case 'trial_ending':
+        case 'trial_ended':
         case 'page_trial_used':
             // App Store Guideline 3.1.1: iOS reader-app — no taps lead to /pricing.
             return isIOSNative() ? '/dashboard' : '/pricing';

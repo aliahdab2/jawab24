@@ -60,7 +60,7 @@ import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { startWhatsAppTokenHealthCron, stopWhatsAppTokenHealthCron, setWhatsAppTokenHealthLogger } from "./services/whatsappTokenHealth";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
-import { setTrialRemindersLogger, runTrialEndingReminders } from "./services/trialReminders";
+import { setTrialRemindersLogger, runTrialEndingReminders, runTrialEndedNotices } from "./services/trialReminders";
 import { scheduleRecurringJob } from "./lib/scheduledJob";
 import { captureError } from "./utils/sentryHelpers";
 import { smsService } from "./services/sms";
@@ -395,6 +395,20 @@ const start = async () => {
       // Staggered 2 min behind the lead digest so the two daily jobs don't share a tick
       initialDelayMs: 7 * 60 * 1000,
       run: runTrialEndingReminders,
+      logError: logJobError,
+    });
+
+    // Trial-ended "last try" cron — once per day, tells merchants whose trial
+    // just expired that replies have stopped (in-app + email). Proactive
+    // counterpart of the reactive auto_reply_paused_billing notification,
+    // which only fires when a customer writes in.
+    scheduleRecurringJob({
+      label: '[TrialEnded]',
+      tag: 'trial_ended_notices',
+      intervalMs: DAILY_MS,
+      // Staggered 2 min behind the ending-reminder sweep, same reasoning
+      initialDelayMs: 9 * 60 * 1000,
+      run: runTrialEndedNotices,
       logError: logJobError,
     });
 

@@ -836,6 +836,11 @@ export const subscriptions = pgTable('subscriptions', {
     // same trial. NULL = not yet warned. Written only after the in-app
     // notification lands; see the service for the retry semantics.
     trialEndingNotifiedAt: timestamp('trial_ending_notified_at'),
+    // Stamped by the trial-ended notice (same daily cron, second sweep) once the
+    // merchant has been told the trial expired and replies stopped — the "last
+    // try" conversion touch. NULL = not yet notified. Same retry semantics as
+    // trial_ending_notified_at: written only after the in-app notification lands.
+    trialEndedNotifiedAt: timestamp('trial_ended_notified_at'),
 
     // Billing period
     currentPeriodStart: timestamp('current_period_start').defaultNow(),
