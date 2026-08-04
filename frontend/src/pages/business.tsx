@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Store, ChevronDown } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageHeader, EmptyState, Select, Skeleton } from '@/components/ui';
+import { Button, PageHeader, EmptyState, Select, Skeleton } from '@/components/ui';
 import { CatalogManager } from '@/components/catalog/CatalogManager';
 import { BusinessReadinessCard, type FixableChipKey } from '@/components/business/BusinessReadinessCard';
 import { BusinessFactRows } from '@/components/business/BusinessFactRows';
@@ -77,7 +77,11 @@ function BusinessPageInner() {
   const { pageId, updatePageId, validPages, syncFromUrl } = usePageFilter(pages, {
     // Shared with the legacy /catalog page so redirects land on the same page.
     storageKey: 'catalogPageId',
-    validateAgainst: 'all',
+    // Connected pages only (owner ruling 2026-08-04): a disconnected page
+    // receives no messages, so its business info answers nobody — showing it
+    // here just clutters the selector with dead pages. It reappears the
+    // moment it's reconnected on /pages.
+    validateAgainst: 'connected',
   });
 
   useEffect(() => {
@@ -301,7 +305,23 @@ function BusinessPageInner() {
           {[0, 1].map((i) => <Skeleton key={i} className="h-40 rounded-2xl" />)}
         </div>
       ) : validPages.length === 0 || !selectedPage ? (
-        <EmptyState icon={Store} title={t('noPage')} />
+        // Absence needs a reason: «connect a page» is wrong advice for a
+        // merchant whose pages exist but all lost their connection — say
+        // that, and point at the one place that fixes it (/pages).
+        pages.length > 0 ? (
+          <EmptyState
+            icon={Store}
+            title={t('noConnectedPage')}
+            description={t('noConnectedPageHint')}
+            action={
+              <Link href="/pages">
+                <Button variant="primary">{t('goToPages')}</Button>
+              </Link>
+            }
+          />
+        ) : (
+          <EmptyState icon={Store} title={t('noPage')} />
+        )
       ) : (
         // Mobile reorders facts ABOVE products: with a 27-item catalog the fact
         // rows sat 4–6 screens down on a 390px viewport, burying the gaps that

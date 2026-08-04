@@ -13,10 +13,16 @@ interface UsePageFilterOptions {
    *   - 'auto-reply' (default): only pages with autoReplyEnabled || instagramAutoReplyEnabled.
    *     Used by /comments and /messages — those surfaces only show traffic from
    *     active pages.
-   *   - 'all': any connected page. Used by /leads — leads exist on every page,
-   *     not only auto-reply-enabled ones.
+   *   - 'all': every page, connected or not. Used by /leads — leads already
+   *     collected exist (and stay reachable) even after a page disconnects.
+   *   - 'connected': only pages whose primary channel credential is currently
+   *     valid (`isConnected !== false` — absent means connected, the flag's
+   *     convention across the app). Used by /business: a disconnected page
+   *     receives no messages, so configuring its business info is dead work,
+   *     and a 10-page selector where 8 are dead reads as clutter (owner
+   *     report, 2026-08-04).
    */
-  validateAgainst?: 'auto-reply' | 'all';
+  validateAgainst?: 'auto-reply' | 'all' | 'connected';
 }
 
 /**
@@ -43,6 +49,7 @@ export function usePageFilter(pages: Page[], options: UsePageFilterOptions = {})
   const validPages = useMemo(() => {
     if (!Array.isArray(pages)) return [];
     if (validateAgainst === 'all') return pages;
+    if (validateAgainst === 'connected') return pages.filter((p) => p.isConnected !== false);
     return pages.filter(isPageAutoReplyEnabled);
   }, [pages, validateAgainst]);
 

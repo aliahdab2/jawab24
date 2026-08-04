@@ -44,6 +44,32 @@ describe('usePageFilter', () => {
     expect(result.current.validPages.map((p) => p.id)).toEqual(['p1', 'p2']);
   });
 
+  it("validateAgainst 'connected' hides disconnected pages and keeps flag-less ones (absent = connected)", () => {
+    const pages = [
+      page('live', { autoReply: true }),                       // no flag → connected by convention
+      { ...page('dead'), isConnected: false } as Page,          // needs reconnect → hidden
+      { ...page('wa'), isConnected: true } as Page,             // WhatsApp-only with a live token
+    ];
+    const { result } = renderHook(() =>
+      usePageFilter(pages, { storageKey: STORAGE_KEY, validateAgainst: 'connected' }),
+    );
+    expect(result.current.validPages.map((p) => p.id)).toEqual(['live', 'wa']);
+  });
+
+  // /business (owner ruling 2026-08-04): a selection stored before the page
+  // disconnected must not survive into a surface that no longer offers it.
+  it("clears a stored id whose page has since disconnected (validateAgainst 'connected')", () => {
+    localStorage.setItem(STORAGE_KEY, 'dead');
+    const { result } = renderHook(() =>
+      usePageFilter([{ ...page('dead'), isConnected: false } as Page], {
+        storageKey: STORAGE_KEY,
+        validateAgainst: 'connected',
+      }),
+    );
+    expect(result.current.pageId).toBe('');
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
   // Regression for the reported /leads bug: a page connected but with auto-reply
   // OFF (e.g. blocked by the one-trial-per-channel rule) must stay a valid
   // selection under 'all', so the merchant's existing leads still load.
