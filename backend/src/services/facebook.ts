@@ -47,6 +47,11 @@ function collectAttachmentImages(attachments: unknown): string[] {
     return [...urls];
 }
 
+/** Ceiling on the scheduled-posts edge read. Pending posts are a bounded set pinned to
+ *  the top of the picker with no cursor of its own, so this is the hard limit on how many
+ *  a merchant can arm ahead of time — `truncated` reports when it bites. */
+export const SCHEDULED_POSTS_MAX = 25;
+
 /** Graph returns `scheduled_publish_time` as a UNIX timestamp in SECONDS (typed `float`),
  *  while everything we hand to callers is an ISO string. Anything non-finite — absent,
  *  null, a string Graph didn't parse — is "no schedule", never epoch 0. */
@@ -512,12 +517,16 @@ export class FacebookService {
     /**
      * Get post content from Facebook
      * Fetches the message/text content of a post
+     *
+     * `postId` is encoded: this is reachable with a caller-supplied id via
+     * POST /posts/ensure → findOrCreateFromWebhook, and a raw path segment would let
+     * that id point the read at a different Graph node/edge.
      */
     async getPostContent(postId: string, pageAccessToken: string): Promise<string | null> {
         try {
             this.logger.debug('[Facebook] Fetching post content', { postId });
             const response = await traced('getPostContent', () =>
-                fbAxios.get(`${FACEBOOK_GRAPH_API}/${postId}`, {
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/${encodeURIComponent(postId)}`, {
                     params: {
                         fields: 'message,story,created_time',
                         access_token: pageAccessToken,
@@ -611,7 +620,9 @@ export class FacebookService {
      * `scheduled_publish_time` is a UNIX timestamp (Graph types it `float`); we hand
      * callers an ISO string so it crosses the API like every other timestamp we return.
      * Fail-soft with `failed: true` for the same reason as `getPagePosts` — a caller must
-     * be able to tell "no scheduled posts" from "Graph errored", never conflate them.
+     * be able to tell "no scheduled posts" from "Graph errored", never conflate them —
+     * and `truncated: true` when the edge filled the limit, because a merchant silently
+     * unable to arm their 26th pending post is the same defect in a quieter form.
      *
      * Requires the same Page token; the edge additionally needs one of
      * pages_read_engagement / pages_read_user_content / pages_manage_metadata (error 283),
@@ -621,13 +632,14 @@ export class FacebookService {
         pageId: string,
         pageAccessToken: string,
         opts?: { limit?: number },
-    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; scheduledPublishTime: string | null }>; failed: boolean }> {
+    ): Promise<{ posts: Array<{ id: string; message: string | null; imageUrl: string | null; scheduledPublishTime: string | null }>; failed: boolean; truncated: boolean }> {
+        const limit = opts?.limit ?? SCHEDULED_POSTS_MAX;
         try {
             const response = await traced('getScheduledPosts', () =>
-                fbAxios.get(`${FACEBOOK_GRAPH_API}/${pageId}/scheduled_posts`, {
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/${encodeURIComponent(pageId)}/scheduled_posts`, {
                     params: {
                         fields: 'id,message,full_picture,scheduled_publish_time',
-                        limit: opts?.limit ?? 10,
+                        limit,
                         access_token: pageAccessToken,
                     },
                 }),
@@ -639,15 +651,21 @@ export class FacebookService {
                 imageUrl: (p.full_picture as string) || null,
                 scheduledPublishTime: unixToIso(p.scheduled_publish_time),
             }));
-            return { posts, failed: false };
+            return { posts, failed: false, truncated: data.length >= limit };
         } catch (error) {
-            if (axios.isAxiosError(error)) {
-                this.logger.error('[Facebook] Error listing scheduled posts', {
-                    pageId,
-                    error: error.response?.data?.error?.message || error.message,
-                });
-            }
-            return { posts: [], failed: true };
+            const detail = axios.isAxiosError(error)
+                ? error.response?.data?.error?.message || error.message
+                : String(error);
+            this.logger.error('[Facebook] Error listing scheduled posts', { pageId, error: detail });
+            // Sentry too: the caller degrades to "no scheduled posts", so without this a
+            // broken permission on this edge is invisible on BOTH sides — the merchant
+            // sees an empty list and we see nothing at all.
+            Sentry.captureMessage('Failed to list scheduled posts', {
+                level: 'warning',
+                fingerprint: ['fb-scheduled-posts-read-failed', pageId],
+                extra: { pageId, error: detail },
+            });
+            return { posts: [], failed: true, truncated: false };
         }
     }
 
@@ -656,9 +674,9 @@ export class FacebookService {
      * arming marker. The picker tells us WHICH post the merchant tapped; whether that
      * post is scheduled is a fact we take from Graph, never from the client.
      *
-     * Returns `null` when Graph could not answer (token blip, permissions), which callers
-     * must treat as "unknown" and NOT as "published" — arming still proceeds, we simply
-     * don't claim to know the schedule.
+     * Returns `null` when Graph could not answer (token blip, permissions, post deleted),
+     * which callers must treat as "unknown" and NOT as "published" — arming still proceeds,
+     * we simply don't claim to know the schedule.
      */
     async getPostSchedule(
         postId: string,
@@ -666,7 +684,10 @@ export class FacebookService {
     ): Promise<{ isPublished: boolean; scheduledPublishTime: string | null } | null> {
         try {
             const response = await traced('getPostSchedule', () =>
-                fbAxios.get(`${FACEBOOK_GRAPH_API}/${postId}`, {
+                // Encoded: `postId` reaches here from a request body (POST /posts/ensure),
+                // and a raw path segment would let it steer the call at another Graph
+                // node/edge on the page's token. Same guard as likeComment above.
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/${encodeURIComponent(postId)}`, {
                     params: {
                         fields: 'is_published,scheduled_publish_time',
                         access_token: pageAccessToken,

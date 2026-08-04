@@ -15,6 +15,7 @@ vi.mock('../../src/lib/fbAxios', () => ({
 }));
 vi.mock('@sentry/node', () => ({
     addBreadcrumb: vi.fn(),
+    captureMessage: vi.fn(),
 }));
 vi.mock('../../src/utils/tracing', () => ({
     tracedExternalCall: (_service: string, _method: string, fn: () => unknown) => fn(),
@@ -836,6 +837,7 @@ describe('Facebook Service', () => {
             const result = await service.getScheduledPosts('page_123', 'page_token');
 
             expect(result.failed).toBe(false);
+            expect(result.truncated).toBe(false);
             expect(result.posts).toEqual([
                 { id: 'fb_1', message: 'launch', imageUrl: 'https://cdn/p.jpg', scheduledPublishTime: new Date(1786000800 * 1000).toISOString() },
                 // A numeric string still converts; only non-finite values mean "no schedule".
@@ -857,7 +859,17 @@ describe('Facebook Service', () => {
 
             const result = await service.getScheduledPosts('page_123', 'page_token');
 
-            expect(result).toEqual({ posts: [], failed: true });
+            expect(result).toEqual({ posts: [], failed: true, truncated: false });
+        });
+
+        it('reports truncated when the edge fills the limit, rather than capping silently', async () => {
+            vi.mocked(fbAxios.get).mockResolvedValue({
+                data: { data: [{ id: 'fb_1' }, { id: 'fb_2' }] },
+            });
+
+            const result = await service.getScheduledPosts('page_123', 'page_token', { limit: 2 });
+
+            expect(result.truncated).toBe(true);
         });
     });
 
@@ -887,6 +899,19 @@ describe('Facebook Service', () => {
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
             await expect(service.getPostSchedule('fb_1', 'page_token')).resolves.toBeNull();
+        });
+
+        it('encodes the post id so a caller-supplied value cannot steer the Graph path', async () => {
+            // The id arrives from a request body (POST /posts/ensure). Raw interpolation
+            // would let it address a different node/edge on the page's token.
+            vi.mocked(fbAxios.get).mockResolvedValue({ data: {} });
+
+            await service.getPostSchedule('me/accounts', 'page_token');
+
+            expect(fbAxios.get).toHaveBeenCalledWith(
+                'https://graph.facebook.com/v18.0/me%2Faccounts',
+                expect.anything(),
+            );
         });
     });
 });

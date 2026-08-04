@@ -26,7 +26,7 @@ import { useCommentReplyMode, useDualReplyNudge, useTriggerImagesEnabled } from 
 import { fileToBase64 } from '@/utils/fileToBase64';
 import { buildWhatsAppUrl, extractWhatsAppNumber, normalizeInternationalPhone } from '@/lib/whatsapp';
 import { useLanguage } from '@/i18n/hooks';
-import { formatFullTime } from '@/utils/dateUtils';
+import { formatScheduledTime } from '@/utils/dateUtils';
 
 type TriggerMode = 'keyword' | 'all';
 
@@ -62,9 +62,11 @@ interface PostTriggerModalProps {
   triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
-  /** Set when the post is still scheduled on Facebook: the trigger saves normally and
-   *  simply waits for the post to go live. Shown as a notice so "saved" doesn't read as
-   *  "already replying". */
+  /** True when the post is still scheduled on Facebook: the trigger saves normally and
+   *  simply waits for the post to go live. Drives the notice so "saved" doesn't read as
+   *  "already replying" — independent of whether Graph gave us a publish time. */
+  isScheduled?: boolean;
+  /** The pending post's publish time, when Graph reported one. Copy only. */
   scheduledPublishTime?: string | null;
   isOpen: boolean;
   onClose: () => void;
@@ -83,6 +85,7 @@ export function PostTriggerModal({
   triggerButtonUrl: initialButtonUrl,
   triggerImageUrl: initialImageUrl,
   likeComment: initialLikeComment,
+  isScheduled,
   scheduledPublishTime,
   isOpen,
   onClose,
@@ -424,14 +427,17 @@ export function PostTriggerModal({
     >
       <div className="flex flex-col gap-4">
         {/* The post isn't live yet: saving arms the trigger now and it starts working the
-            moment Facebook publishes the post — say so, or "saved" reads as "replying". */}
-        {scheduledPublishTime && (
+            moment Facebook publishes the post — say so, or "saved" reads as "replying".
+            Shown whenever the post is pending, with or without a known publish time. */}
+        {isScheduled && (
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg alert-warning text-sm leading-relaxed" role="note">
             <CalendarClock className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true" />
             <span>
-              {t('postTriggerScheduledNotice', {
-                time: formatFullTime(scheduledPublishTime, dateLocale),
-              })}
+              {scheduledPublishTime
+                ? t('postTriggerScheduledNotice', {
+                    time: formatScheduledTime(scheduledPublishTime, dateLocale),
+                  })
+                : t('postTriggerScheduledNoticeNoTime')}
             </span>
           </div>
         )}

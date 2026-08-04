@@ -316,8 +316,16 @@ export class WebhookController {
 
             // Handle feed changes (comments, posts)
             if (entry.changes) {
+                const publishedPostIds: string[] = [];
                 for (const change of entry.changes) {
-                    await this.processChange(pageId, change, page);
+                    const publishedPostId = await this.processChange(pageId, change);
+                    if (publishedPostId) publishedPostIds.push(publishedPostId);
+                }
+                // Scheduled-marker reconciliation runs AFTER every comment in the batch is
+                // enqueued. It is diagnostic work that now makes bounded Graph reads, and
+                // no customer's reply should queue behind it.
+                for (const publishedPostId of publishedPostIds) {
+                    await this.reconcileScheduledArmedMarker(page, publishedPostId);
                 }
             }
 
@@ -490,11 +498,7 @@ export class WebhookController {
     /**
      * Process a single change event
      */
-    private async processChange(
-        pageId: string,
-        change: WebhookChange,
-        page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>,
-    ) {
+    private async processChange(pageId: string, change: WebhookChange): Promise<string | undefined> {
         this.log().info('Processing change', {
             field: change.field,
             item: change.value.item,
@@ -515,34 +519,44 @@ export class WebhookController {
             await this.processNewComment(pageId, value);
         } else if (value.item === 'post' && value.verb === 'add') {
             this.log().info('New post detected', { postId: value.post_id });
-            // Post rows themselves are still created lazily when comments come in; the only
-            // work owed here is retiring the scheduled-post arming marker (and tripping the
-            // id-drift alarm) for a post that just went live.
-            await this.clearScheduledArmedMarker(page, value.post_id);
+            // Post rows themselves are still created lazily when comments come in. The only
+            // work owed here is retiring the scheduled-post arming marker for a post that
+            // just went live — returned rather than done inline, so the caller can run it
+            // after this batch's comments are enqueued (see processWebhookAsync).
+            return value.post_id;
         } else {
             this.log().info('Skipping feed change', { item: value.item, verb: value.verb, pageId });
         }
     }
 
     /**
-     * A post went live: retire the scheduled-post arming marker for it, and surface the
-     * id-drift tripwire if another armed scheduled post is overdue (see
-     * `postsService.onPostPublished`). Never throws — a marker we failed to clear must not
-     * cost us the rest of the webhook batch, and the marker is diagnostic, not a gate.
+     * A post went live: retire the scheduled-post arming marker for it, heal markers whose
+     * own publish webhook we missed, and surface the id-drift tripwire for a post Graph
+     * still reports as pending past its time (see `postsService.onPostPublished`).
+     *
+     * Never throws — a marker we failed to reconcile must not cost us the rest of the
+     * webhook batch, and the marker is diagnostic, not a gate.
      */
-    private async clearScheduledArmedMarker(
+    private async reconcileScheduledArmedMarker(
         page: NonNullable<Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>>,
-        facebookPostId?: string,
+        facebookPostId: string,
     ) {
-        if (!facebookPostId) return;
         try {
-            const { cleared, orphanedPostIds } = await postsService.onPostPublished(page.id, facebookPostId);
-            if (cleared || orphanedPostIds.length > 0) {
+            const { cleared, orphanedPostIds, healedPostIds } = await postsService.onPostPublished(
+                page.id,
+                facebookPostId,
+                // The token lets the service ask Graph whether an overdue marker is really
+                // drift or just a webhook we never got; the workspace lets it tell the
+                // merchant, who is the only one who can re-arm the post.
+                { accessToken: page.accessToken, workspaceId: page.workspaceId, pageName: page.name },
+            );
+            if (cleared || orphanedPostIds.length > 0 || healedPostIds.length > 0) {
                 this.log().info('Scheduled Post Reply marker reconciled on publish', {
                     pageId: page.id,
                     facebookPostId,
                     cleared,
                     orphanedCount: orphanedPostIds.length,
+                    healedCount: healedPostIds.length,
                 });
             }
         } catch (err) {

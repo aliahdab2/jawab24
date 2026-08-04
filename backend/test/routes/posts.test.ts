@@ -499,7 +499,7 @@ describe('Posts Routes', () => {
             const res = await app.inject({ method: 'GET', url: '/pages/p1/published-posts?source=instagram' });
 
             expect(res.statusCode).toBe(200);
-            expect(JSON.parse(res.payload)).toEqual({ posts: [], nextCursor: null });
+            expect(JSON.parse(res.payload)).toEqual({ posts: [], nextCursor: null, partial: false });
             expect(postsService.listPublishedPosts).not.toHaveBeenCalled();
         });
     });

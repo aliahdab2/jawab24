@@ -583,9 +583,12 @@ export function verticalFromFbCategory(category: string | null | undefined): Cat
  *  via POST /posts/ensure before configuring).
  *
  *  Despite the name (kept because `GET /pages/:id/published-posts` is shipped API the
- *  mobile app calls), the list ALSO carries a Facebook page's still-scheduled posts:
- *  `scheduledPublishTime` set = not live yet, and `createdTime`/`commentsCount` are
- *  null for those (a scheduled post has no publish date and can have no comments). */
+ *  mobile app calls), the list can ALSO carry a Facebook page's still-scheduled posts —
+ *  but only when the client opts in with `includeScheduled` (see
+ *  `PublishedPostsQuery`), because a shipped app build that predates this field renders
+ *  a scheduled post as a published one with no date. `scheduledPublishTime` set = not
+ *  live yet, and `createdTime`/`commentsCount` are null for those (a scheduled post has
+ *  no publish date and can have no comments). */
 export interface PublishedPost {
   platformPostId: string;
   source: 'facebook' | 'instagram';
@@ -595,7 +598,13 @@ export interface PublishedPost {
   commentsCount: number | null;
   hasTrigger: boolean;
   triggerType?: 'keyword' | 'all' | null;
-  /** ISO time this post is scheduled to publish; null for already-published posts.
+  /** True when this came from the scheduled edge, i.e. the post is not live yet. This —
+   *  not `scheduledPublishTime` — is what makes a post pending: Graph can return a
+   *  scheduled post with no `scheduled_publish_time`, and inferring "published" from the
+   *  missing timestamp would render it as live with no date and no warning. */
+  isScheduled?: boolean;
+  /** ISO time this post is scheduled to publish; null for already-published posts (and
+   *  for the rare pending post Graph reports without a time — check `isScheduled`).
    *  Facebook-only — the Instagram Graph API exposes no scheduled-media edge. */
   scheduledPublishTime?: string | null;
 }
@@ -603,6 +612,21 @@ export interface PublishedPost {
 export interface PublishedPostsResponse {
   posts: PublishedPost[];
   nextCursor: string | null;
+  /** True when the list is knowingly incomplete — a Graph read failed, or the
+   *  scheduled edge hit its ceiling. The picker must SAY so: degrading a failed read
+   *  to a silent empty list is how a token problem gets read as "I have no posts". */
+  partial?: boolean;
+}
+
+/** A Graph object id as it crosses our API (`platformPostId`, `contentId`).
+ *
+ *  Real ids are numeric or `{pageId}_{postId}`; this check is deliberately wider than
+ *  that (ids are Meta's to change) and only rejects what could not be one: empty,
+ *  over-long, or carrying a character that would let the value steer a URL — `/`, `?`,
+ *  `#`, `%`, whitespace. Service call sites still `encodeURIComponent` the id; this is
+ *  the cheap boundary check that turns junk into a 400 instead of a wasted Graph call. */
+export function isPlausiblePlatformPostId(value: string): boolean {
+  return /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 }
 
 // --- Instagram Types ---

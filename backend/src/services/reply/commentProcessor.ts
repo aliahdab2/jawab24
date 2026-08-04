@@ -32,6 +32,8 @@ import {
     needsImmediateAttention,
     AiRefusalError,
 } from '../../utils/fbGraphErrors';
+import { PostNotOwnedError } from '../postErrors';
+import { captureError } from '../../utils/sentryHelpers';
 
 /**
  * Unified Comment Processor
@@ -169,7 +171,29 @@ export class CommentProcessor {
             const isCommentsEnabled = workspaceSettingsService.isAutoReplyEnabledFromSettings(userSettings, 'comments');
 
             // 3. Find or create content entity (post/media)
-            const content = await adapter.findOrCreateContent(page.id, contentId, page.accessToken);
+            let content: Awaited<ReturnType<typeof adapter.findOrCreateContent>>;
+            try {
+                content = await adapter.findOrCreateContent(page.id, contentId, page.accessToken);
+            } catch (contentError) {
+                // The post id resolves to a row owned by ANOTHER page. `posts.facebook_post_id`
+                // is globally unique, so we can neither adopt the row nor insert our own —
+                // this comment cannot be ingested at all. Deterministic: retrying produces
+                // the same failure, so no rethrow. Handled explicitly instead of falling
+                // through the generic catch, because a comment disappearing with only a
+                // generic "Error processing comment" line is how the 2026-05-14 silent-drop
+                // incident stayed invisible.
+                if (contentError instanceof PostNotOwnedError) {
+                    pipelineMetrics.record(pipeline, 'content_not_owned');
+                    captureError(contentError, 'Comment dropped: post id belongs to another page', {
+                        level: 'error',
+                        fingerprint: ['comment-content-not-owned'],
+                        tags: { pageId: page.id, platform },
+                        extra: { pageId: page.id, contentId, platformCommentId },
+                    });
+                    return { success: false, commentId: platformCommentId, error: 'Post belongs to another page' };
+                }
+                throw contentError;
+            }
             if (!content.autoReplyEnabled) {
                 pipelineMetrics.record(pipeline, 'post_disabled');
                 // Store comment even if content is disabled (preserves Instagram behavior)

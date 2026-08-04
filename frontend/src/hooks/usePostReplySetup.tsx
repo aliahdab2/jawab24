@@ -30,9 +30,11 @@ interface PostReplyTarget {
   buttonUrl: string | null;
   imageUrl: string | null;
   likeComment: boolean;
-  /** ISO time the post is scheduled to publish, when the merchant is arming a post that
-   *  is not live yet. Server-verified (the ensure response), so the modal can say the
-   *  reply is waiting for the post rather than implying it's already active. */
+  /** True when the post is not live yet, so the modal can say the reply is waiting for
+   *  the post rather than implying it's already active. Server-verified on the ensure
+   *  path; on the comment path it reflects a marker the publish webhook never cleared. */
+  isScheduled: boolean;
+  /** ISO publish time when one is known. Copy only — never sent back. */
   scheduledPublishTime: string | null;
 }
 
@@ -48,7 +50,9 @@ interface ApiTriggerState {
   triggerButtonUrl?: string | null;
   triggerImageUrl?: string | null;
   likeComment?: boolean;
-  /** Only the ensure path (picker) returns this; `getById` omits it, hence optional. */
+  /** Both paths return this: `ensurePost` computes it from Graph, and `getById` returns
+   *  the whole `posts` row, so a marker the publish webhook never cleared shows up here
+   *  too. Optional only because the field is nullable. */
   scheduledPublishTime?: string | null;
 }
 
@@ -111,6 +115,10 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         postId: content.id,
         source: picked.source,
         postMessage: picked.postMessage,
+        // Pending state comes from the LISTING (which Graph edge the post came from) OR
+        // the ensure re-read; either saying "not live" is enough. The two disagree
+        // legitimately at the publish boundary, and the notice is the safe answer there.
+        isScheduled: !!picked.isScheduled || !!content.scheduledPublishTime,
         // The server re-read the schedule from Graph during ensure; prefer its answer over
         // what the picker listing showed, which may be minutes stale.
         scheduledPublishTime: content.scheduledPublishTime ?? picked.scheduledPublishTime ?? null,
@@ -136,8 +144,9 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
         postId: comment.postId,
         source: comment.source ?? 'facebook',
         postMessage: comment.postMessage,
-        // Normally null on this path — a comment implies the post is live — but a stale
-        // marker (publish webhook missed) would show here rather than being hidden.
+        // Normally null on this path — a comment implies the post is live — but a marker
+        // the publish webhook never cleared surfaces here rather than being hidden.
+        isScheduled: !!post.scheduledPublishTime,
         scheduledPublishTime: post.scheduledPublishTime ?? null,
         ...toTriggerFields(post),
       });
@@ -185,6 +194,7 @@ export function usePostReplySetup(pages: Page[] = []): PostReplySetup {
           triggerButtonUrl={target.buttonUrl}
           triggerImageUrl={target.imageUrl}
           likeComment={target.likeComment}
+          isScheduled={target.isScheduled}
           scheduledPublishTime={target.scheduledPublishTime}
           isOpen
           onClose={close}

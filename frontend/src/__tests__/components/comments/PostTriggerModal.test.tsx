@@ -507,12 +507,19 @@ describe('PostTriggerModal — scheduled post notice', () => {
     });
 
     it('explains that the reply waits for the post to go live', async () => {
-        renderModal({ scheduledPublishTime: '2026-08-20T09:00:00.000Z' });
+        renderModal({ isScheduled: true, scheduledPublishTime: '2026-08-20T09:00:00.000Z' });
+        expect(await screen.findByText(/starts working the moment the post is published/)).toBeInTheDocument();
+    });
+
+    it('still explains it when Graph gave no publish time', async () => {
+        // Keying the notice off the timestamp would silently drop it here, and the merchant
+        // would read "saved" as "already replying" on a post that is not even live.
+        renderModal({ isScheduled: true, scheduledPublishTime: null });
         expect(await screen.findByText(/starts working the moment the post is published/)).toBeInTheDocument();
     });
 
     it('shows no notice for an already-published post', async () => {
-        renderModal({ scheduledPublishTime: null });
+        renderModal({ isScheduled: false, scheduledPublishTime: null });
         // Wait for the body to settle so this isn't a vacuous pass on an empty render.
         expect(await screen.findByText('What the commenter receives')).toBeInTheDocument();
         expect(screen.queryByText(/starts working the moment the post is published/)).toBeNull();

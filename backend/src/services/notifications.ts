@@ -110,7 +110,12 @@ export type NotificationType =
     // The daily image-reading cap is the one limit a merchant can hit without
     // any signal at all: past it we simply stop reading customer photos. The
     // merchant must be told — their CUSTOMERS never are (see nonTextHandler).
-    | 'image_limit_reached';
+    | 'image_limit_reached'
+    // A Post Reply armed on a scheduled post whose post never went live under the id we
+    // armed. Facebook owns the id, so we can only detect it — and an orphaned trigger is
+    // indistinguishable from a working one in the UI, so the merchant is the one who has
+    // to be told. See postsService.onPostPublished.
+    | 'post_reply_orphaned';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -272,6 +277,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'Jawab has read {limit} customer photos today, the most your plan allows. Photos sent for the rest of the day are not read, and appear in your inbox for you to answer. Upgrade to read more each day.',
             ar: 'قرأ جواب {limit} صورة من العملاء اليوم، وهو أقصى ما تسمح به باقتك. الصور الواردة بقية اليوم لن تُقرأ، وستظهر في صندوق الرسائل لديك للرد عليها. يمكنك الترقية لقراءة عدد أكبر يومياً.',
+        },
+    },
+    post_reply_orphaned: {
+        titles: { en: 'A scheduled Post Reply needs re-arming', ar: 'ردّ منشور مجدول يحتاج إعادة تفعيل' },
+        bodies: {
+            en: 'A post you scheduled on \'{pageName}\' went live under a different post, so the Post Reply you set up is not attached to it. Open the post and set the reply up again.',
+            ar: 'نُشر منشور جدولته على \'{pageName}\' بمعرّف مختلف، لذا لم يبقَ ردّ المنشور الذي أعددته مرتبطاً به. افتح المنشور وأعد إعداد الردّ.',
         },
     },
     ai_usage_on_topup: {

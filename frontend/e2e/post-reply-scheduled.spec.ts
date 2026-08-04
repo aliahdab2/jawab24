@@ -32,6 +32,7 @@ const PUBLISHED_POSTS = {
       commentsCount: null,
       hasTrigger: false,
       triggerType: null,
+      isScheduled: true,
       scheduledPublishTime: SCHEDULED_ISO,
     },
     {
@@ -43,10 +44,12 @@ const PUBLISHED_POSTS = {
       commentsCount: 12,
       hasTrigger: true,
       triggerType: 'keyword',
+      isScheduled: false,
       scheduledPublishTime: null,
     },
   ],
   nextCursor: null,
+  partial: false,
 };
 
 /** POST /posts/ensure — the server re-read the schedule from Graph on arm; this response
@@ -112,9 +115,12 @@ test.describe('Post Reply on a scheduled post', () => {
       await expect(scheduledRow).toBeVisible();
 
       // An ABSOLUTE date+time, never a relative "in 16 days" — formatMessageTime treats
-      // every future date as "recent", which is why this path uses formatFullTime.
+      // every future date as "recent", which is why this path uses formatScheduledTime.
+      // That also carries the UTC offset, so the merchant can reconcile it with what
+      // Facebook's composer showed them.
       const scheduledLabel = locale === 'en' ? /Scheduled for/ : /مجدول للنشر/;
       await expect(page.getByText(scheduledLabel)).toContainText('2026');
+      await expect(page.getByText(scheduledLabel)).toContainText('GMT');
 
       // The pending post sorts ABOVE the published one, and only the published one shows
       // a publish date + comment count.

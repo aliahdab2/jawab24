@@ -32,6 +32,27 @@ export function formatFullTime(
 }
 
 /**
+ * Format a FUTURE instant the merchant is scheduling against, with its UTC offset.
+ *
+ * The offset is not decoration: a scheduled post's publish time is an absolute instant
+ * from Graph, rendered in the browser's timezone. A merchant whose device sits in a
+ * different zone than the one they scheduled in would otherwise read a time that
+ * silently disagrees with what Facebook's composer showed them, with nothing on screen
+ * to explain the difference.
+ */
+export function formatScheduledTime(
+    dateValue: string | Date | null | undefined,
+    dateLocale?: Locale,
+): string {
+    if (!dateValue) return '-';
+    try {
+        return format(new Date(dateValue), 'PPp (OOOO)', { locale: dateLocale });
+    } catch {
+        return String(dateValue);
+    }
+}
+
+/**
  * Format a date as relative time (<24 h) or absolute time (≥24 h).
  * Used for bubble timestamps in message/comment modals.
  *

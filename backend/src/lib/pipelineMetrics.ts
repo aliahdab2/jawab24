@@ -35,6 +35,10 @@ export type Outcome =
     | 'send_failed'
     | 'post_disabled'
     | 'media_disabled'
+    // The post id resolves to a row owned by another page, so no content row can be
+    // created for it and the comment cannot be ingested. Deterministic, never retried —
+    // counted so a silent drop shows up as a number instead of only a log line.
+    | 'content_not_owned'
     | 'skipped_risky'
     | 'skipped_spam'
     | 'held_low_confidence'

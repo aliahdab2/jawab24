@@ -46,7 +46,7 @@ const {
     mockRedisSet: vi.fn().mockResolvedValue('OK'),
     mockRedisIncr: vi.fn().mockResolvedValue(1),
     mockGetPost: vi.fn().mockResolvedValue({ id: 'post-1', triggerReply: 'a'.repeat(200), triggerImageUrl: 'https://cdn/x.jpg' }),
-    mockOnPostPublished: vi.fn().mockResolvedValue({ cleared: false, orphanedPostIds: [] }),
+    mockOnPostPublished: vi.fn().mockResolvedValue({ cleared: false, orphanedPostIds: [], healedPostIds: [], uncheckedPostIds: [] }),
     mockSendTypingIndicator: vi.fn().mockResolvedValue(undefined),
     mockSendMetaImageAttachment: vi.fn().mockResolvedValue('img-mid'),
     mockAcquireMutex: vi.fn().mockResolvedValue('lock-token'),
@@ -389,10 +389,55 @@ describe('Webhook Controller', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            await new Promise(resolve => setTimeout(resolve, 50));
-            // A publish retires the scheduled-post arming marker (and trips the id-drift
-            // alarm) — keyed by the INTERNAL page id, not the Facebook page id.
-            expect(mockOnPostPublished).toHaveBeenCalledWith('internal-page-123', 'post_123');
+            // The handler answers Meta before processing, so the assertion has to wait for
+            // the async batch — vi.waitFor, never a fixed sleep, which passes or flakes
+            // depending on how loaded the machine is.
+            await vi.waitFor(() => expect(mockOnPostPublished).toHaveBeenCalledTimes(1));
+            // A publish reconciles the scheduled-post arming marker — keyed by the INTERNAL
+            // page id, not the Facebook page id — and is handed the page token + workspace
+            // so the service can re-check Graph and tell the merchant.
+            expect(mockOnPostPublished).toHaveBeenCalledWith(
+                'internal-page-123',
+                'post_123',
+                expect.objectContaining({ accessToken: 'token-abc', workspaceId: 'ws-1', pageName: 'Test Page' }),
+            );
+        });
+
+        it('enqueues the batch BEFORE reconciling the marker', async () => {
+            // Reconciliation makes bounded Graph reads. It is diagnostic work, so it runs
+            // after every comment in the batch is enqueued — a customer's reply must never
+            // queue behind it, even though both happen after the 200.
+            const webhookPayload = {
+                object: 'page',
+                entry: [
+                    {
+                        id: 'page_123',
+                        time: Date.now(),
+                        changes: [
+                            { field: 'feed', value: { item: 'post', verb: 'add', post_id: 'post_first' } },
+                            {
+                                field: 'feed',
+                                value: {
+                                    item: 'comment', verb: 'add', comment_id: 'comment_second',
+                                    post_id: 'post_123', message: 'reply to me',
+                                    from: { id: 'user_123', name: 'John Doe' },
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            await vi.waitFor(() => expect(mockOnPostPublished).toHaveBeenCalledTimes(1));
+            expect(mockEnqueueComment.mock.invocationCallOrder[0])
+                .toBeLessThan(mockOnPostPublished.mock.invocationCallOrder[0]);
         });
 
         it('survives a failing marker reconcile without dropping the webhook', async () => {
@@ -427,8 +472,9 @@ describe('Webhook Controller', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            await new Promise(resolve => setTimeout(resolve, 50));
-            expect(mockEnqueueComment).toHaveBeenCalledWith(expect.objectContaining({ commentId: 'comment_after' }));
+            await vi.waitFor(() =>
+                expect(mockEnqueueComment).toHaveBeenCalledWith(expect.objectContaining({ commentId: 'comment_after' })),
+            );
         });
 
         it('should ignore comment edit events', async () => {

@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { POST_REPLY_IMAGE_MAX_BYTES, POST_REPLY_IMAGE_MIME_TYPES, POST_REPLY_BUTTON_TEXT_MAX } from '@jawab24/shared';
+import { POST_REPLY_IMAGE_MAX_BYTES, POST_REPLY_IMAGE_MIME_TYPES, POST_REPLY_BUTTON_TEXT_MAX, isPlausiblePlatformPostId } from '@jawab24/shared';
 import { postsService, PostNotOwnedError, type TriggerImageInput } from '../services/posts';
 import { pagesService } from '../services/pages';
 import { validatePostReplyRuleInput } from '../services/reply/postReplyRule';
@@ -60,10 +60,15 @@ export class PostsController {
      * List the page's recent published posts for the Post Reply picker, merged with
      * their stored trigger state. Per-platform (a page with both FB + IG shows a
      * source toggle in the picker). Newest first; `after` pages via the Graph cursor.
-     * GET /pages/:pageId/published-posts?source=facebook|instagram&after=<cursor>
+     * GET /pages/:pageId/published-posts?source=facebook|instagram&after=<cursor>&includeScheduled=1
+     *
+     * `includeScheduled=1` adds the Facebook page's still-pending posts at the top. It is
+     * OPT-IN because the mobile app ships its own frontend bundle: an app build that
+     * predates the field would render a scheduled post as a published one with no date,
+     * and let the merchant arm it with no notice that the post isn't live yet.
      */
     async getPublishedPosts(
-        request: FastifyRequest<{ Params: { pageId: string }; Querystring: { source?: string; after?: string } }>,
+        request: FastifyRequest<{ Params: { pageId: string }; Querystring: { source?: string; after?: string; includeScheduled?: string } }>,
         reply: FastifyReply,
     ) {
         const req = request as WorkspaceRequest;
@@ -85,11 +90,12 @@ export class PostsController {
             // Requested platform not connected, or no usable token → empty page, not an
             // error (the picker simply shows nothing for that source).
             const hasSource = source === 'facebook' ? !!page.facebookPageId : !!page.instagramAccountId;
-            if (!hasSource || !page.accessToken) return reply.send({ posts: [], nextCursor: null });
+            if (!hasSource || !page.accessToken) return reply.send({ posts: [], nextCursor: null, partial: false });
 
+            const includeScheduled = request.query.includeScheduled === '1' || request.query.includeScheduled === 'true';
             const result = await postsService.listPublishedPosts(
                 { id: page.id, facebookPageId: page.facebookPageId, instagramAccountId: page.instagramAccountId, accessToken: page.accessToken },
-                { source, after: request.query.after },
+                { source, after: request.query.after, includeScheduled },
             );
             return reply.send(result);
         } catch (error) {
@@ -117,6 +123,12 @@ export class PostsController {
         }
         if (!pageId || !platformPostId?.trim()) {
             return reply.status(400).send({ error: 'pageId and platformPostId are required' });
+        }
+        // Reject at the boundary rather than spending a Graph call on it. The id reaches
+        // Graph URL paths (getPostSchedule / getPostContent, both encoded there too), so
+        // anything that could steer a path has no business getting that far.
+        if (!isPlausiblePlatformPostId(platformPostId.trim())) {
+            return reply.status(400).send({ error: 'platformPostId is not a valid post id' });
         }
 
         try {

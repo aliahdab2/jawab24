@@ -360,9 +360,19 @@ export const postsApi = {
   }),
   // Post Reply picker: recent published posts for a page (per platform) + their
   // trigger state, paginated via the platform Graph cursor.
-  getPublishedPosts: (pageId: string, opts?: { source?: 'facebook' | 'instagram'; after?: string }) =>
+  // `includeScheduled` opts into the page's still-pending Facebook posts. The server
+  // requires the opt-in because this frontend ships inside the mobile app: an older app
+  // build has no scheduled-post rendering and would show one as published with no date.
+  getPublishedPosts: (
+    pageId: string,
+    opts?: { source?: 'facebook' | 'instagram'; after?: string; includeScheduled?: boolean },
+  ) =>
     api.get(`/pages/${pageId}/published-posts`, {
-      params: { ...(opts?.source ? { source: opts.source } : {}), ...(opts?.after ? { after: opts.after } : {}) },
+      params: {
+        ...(opts?.source ? { source: opts.source } : {}),
+        ...(opts?.after ? { after: opts.after } : {}),
+        ...(opts?.includeScheduled ? { includeScheduled: '1' } : {}),
+      },
     }),
   // Find-or-create the internal row for a picked published post so its trigger can be
   // configured — lets a merchant arm a post before its first comment arrives.

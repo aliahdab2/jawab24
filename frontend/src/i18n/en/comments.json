@@ -177,5 +177,8 @@
   "postPickerLoadMore": "Show more",
   "postPickerCommentCount": "{count, plural, one {# comment} other {# comments}}",
   "postPickerScheduledFor": "Scheduled for {time}",
-  "postTriggerScheduledNotice": "This post hasn't been published yet — it goes live on {time}. Your reply is saved now and starts working the moment the post is published."
+  "postPickerScheduledUnknownTime": "Not published yet",
+  "postPickerPartial": "Some posts couldn't be loaded. Pull to refresh, or check the page connection.",
+  "postTriggerScheduledNotice": "This post hasn't been published yet — it goes live on {time}. Your reply is saved now and starts working the moment the post is published.",
+  "postTriggerScheduledNoticeNoTime": "This post hasn't been published yet. Your reply is saved now and starts working the moment the post is published."
 }

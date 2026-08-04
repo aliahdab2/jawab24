@@ -11,7 +11,10 @@ import { publishSSEEvent } from '../../src/lib/eventBus';
 import { acquireReplyLock } from '../../src/lib/replyLock';
 import type { CommentPlatformAdapter, PlatformPage, ContentEntity, StoredComment, CommentReplyContext, SendCommentResult } from '../../src/interfaces';
 import { DmSendError } from '../../src/utils/fbGraphErrors';
+import { PostNotOwnedError } from '../../src/services/postErrors';
+import { captureError } from '../../src/utils/sentryHelpers';
 
+vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
 vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
 vi.mock('../../src/services/pages', () => ({
@@ -406,6 +409,34 @@ describe('CommentProcessor', () => {
         expect(result.error).toBe('Auto-reply disabled for this content');
         // Should still store the comment
         expect(storeComment).toHaveBeenCalledWith('c-id', 'test_workspace_id', 'comment-1', 'Hello!', 'from-1', 'Bob', undefined);
+    });
+
+    it('handles PostNotOwnedError explicitly instead of dropping the comment through the generic catch', async () => {
+        // findOrCreateFromWebhook can throw this — the post id resolves to another page's
+        // row, so no content row can exist and the comment cannot be ingested at all.
+        // Deterministic (no retry), but it MUST be counted and captured: a comment
+        // vanishing behind a generic "Error processing comment" line is how the
+        // 2026-05-14 silent-drop incident stayed invisible for weeks.
+        const storeComment = vi.fn();
+        const adapter = createMockAdapter({
+            findOrCreateContent: vi.fn().mockRejectedValue(new PostNotOwnedError('fb_foreign')),
+            storeComment,
+        });
+
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'fb_foreign', 'comment-1', 'Hello!',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Post belongs to another page');
+        expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.content_not_owned']).toBe(1);
+        expect(captureError).toHaveBeenCalledWith(
+            expect.any(PostNotOwnedError),
+            'Comment dropped: post id belongs to another page',
+            expect.objectContaining({ fingerprint: ['comment-content-not-owned'] }),
+        );
+        // No content row exists, so there is nothing to attach the comment to.
+        expect(storeComment).not.toHaveBeenCalled();
     });
 
     it('should return error when comments auto-reply disabled in settings', async () => {
