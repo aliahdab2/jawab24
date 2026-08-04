@@ -1146,6 +1146,24 @@ export const subscriptionsService = {
             }
         }
 
+        // A trial-origin subscription (organic signup — no payment method on file)
+        // is entitled strictly until trial_ends_at. It must NOT inherit the
+        // past_due grace window below: that grace covers an external processor's
+        // payment-retry cycle (declined card, bank flag), and a trial has no
+        // payment to retry. Matched on the raw status pair, not just 'trialing',
+        // because getUserSubscription lazily flips an expired trial to 'past_due'
+        // — the flip used to hand every expiring trial ~4 extra days of free
+        // service (trial_ends_at → current_period_end ≈ 1 day, + 3 days grace);
+        // one merchant sent 760 free AI replies through that window (2026-08-04).
+        if (
+            !subscription.paymentMethod &&
+            subscription.trialEndsAt &&
+            (subscription.status === 'trialing' || subscription.status === 'past_due') &&
+            new Date(subscription.trialEndsAt) < new Date()
+        ) {
+            return { allowed: false, reason: 'Trial has expired. Please upgrade to continue.', code: 'subscription_inactive' };
+        }
+
         if (subscription.status === 'past_due') {
             // 3 days covers Stripe's first payment-retry window (declined card, bank flag)
             // without giving abusers a week of free service every month. Matches Shopify.
