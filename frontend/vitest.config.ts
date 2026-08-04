@@ -6,6 +6,19 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    // jsdom's default document origin is http://localhost:3000 — the port a Next
+    // dev server owns on a developer machine (see AI_INSTRUCTIONS Rule 18.5).
+    // Any test that lets a relative-URL request through resolves it against this
+    // origin and really issues it, so the suite's outcome depended on whether a
+    // dev server happened to be running: nothing listening → instant
+    // ECONNREFUSED and green; dev server listening → the request is accepted and
+    // never answered, and the test burns the full 20s timeout (five reds in
+    // `test:coverage`, 2026-08-04). Pin an origin nothing binds, so a stray
+    // request always fails fast instead of hanging on someone else's server.
+    // Host stays `localhost`: production code branches on
+    // `window.location.hostname === 'localhost'` (login.tsx, pages.tsx,
+    // auth/callback.tsx) to pick the dev OAuth origin.
+    environmentOptions: { jsdom: { url: 'http://localhost:59999/' } },
     globals: true,
     setupFiles: ['./test/setup.ts'],
     include: ['test/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],

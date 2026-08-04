@@ -54,6 +54,24 @@ This document describes the testing architecture, frameworks, and patterns used 
 - Mocks browser APIs (`matchMedia`, `IntersectionObserver`, etc.)
 - Suppresses expected jsdom noise (network errors, navigation warnings)
 
+**No unit test may talk to the network — two rules, both learned the hard way:**
+
+1. **Never hand production code a real `axios.create()`.** Mocking `.post` is not
+   enough: interceptors also call the instance *as a function* to retry a request
+   (`axiosInstance(originalRequest)`), and that call stays live. Use the shared
+   callable double instead — `createMockAxios()` from
+   `frontend/src/__tests__/testUtils/mockAxios.ts`, which exposes `instance`,
+   `post`, `retry`, `use` and the captured `response.onFulfilled/onRejected`.
+   Use `axios-mock-adapter` (as `axiosRetry.test.ts` does) only when a test
+   genuinely needs real axios behaviour end to end.
+2. **The jsdom origin is pinned to `http://localhost:59999`** in
+   `frontend/vitest.config.ts`. jsdom's default is `localhost:3000` — the port a
+   Next dev server owns locally — so a stray relative-URL request used to be
+   answered by whatever was running, and the suite's result depended on it: green
+   when nothing listened (instant ECONNREFUSED), 20s-timeout reds when a dev
+   server did. Keep the host `localhost`; production code branches on
+   `hostname === 'localhost'` for dev OAuth origins.
+
 ```typescript
 // Loads real English translations for accurate UI text verification
 const enModules = import.meta.glob('../src/i18n/en/*.json', { eager: true });
