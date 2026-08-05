@@ -25,8 +25,10 @@ interface BusinessReadinessCardProps {
   onFixChip: (key: FixableChipKey) => void;
 }
 
-/** Chips that map to a fact the merchant can fill. `products` is not one. */
-export type FixableChipKey = 'hours' | 'address' | 'delivery' | 'payment';
+/** Chips the merchant can act on. The four facts open their editor;
+ *  `products` scrolls to the products section (owner catch 2026-08-05: it was
+ *  the one amber chip styled like the tappable four that ignored the tap). */
+export type FixableChipKey = 'hours' | 'address' | 'delivery' | 'payment' | 'products';
 
 interface Chip {
   key: ReadinessAreaKey;
@@ -125,7 +127,7 @@ export function BusinessReadinessCard({ page, productsCount, factRowsCount, onTr
     key,
     label: labelFor(key),
     covered: covered[key],
-    ...(key === 'products' ? {} : { fixKey: key }),
+    fixKey: key,
   }));
 
   // Intl.ListFormat renders the locale's own conjunction — never a hand-built

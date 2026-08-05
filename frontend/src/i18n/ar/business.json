@@ -13,7 +13,7 @@
     "productsChipStore": "منتجاتك — من متجرك",
     "productsChipLists": "منتجاتك — في قوائم النشاط",
     "productsArea": "المنتجات",
-    "percentLabel": "مساعدك جاهز بنسبة {percent}%",
+    "percentLabel": "جواب جاهز بنسبة {percent}%",
     "coveredOf": "{covered} من {total}",
     "completeAll": "أضف {items} ليصبح جاهزًا بالكامل.",
     "allCovered": "يستطيع «جواب» الإجابة عن كل هذه لعملائك."
@@ -202,6 +202,7 @@
     "missingKeyGroup": "بدون {label}",
     "listTabsLabel": "التبديل بين القوائم",
     "searchPlaceholder": "ابحث في هذه القائمة — بالاسم أو المنطقة…",
+    "searchAllPlaceholder": "ابحث في القوائم — بالاسم أو التفاصيل…",
     "searchCount": "يعرض {shown, plural, zero {لا صفوف} one {صفًا واحدًا} two {صفين} few {# صفوف} many {# صفًا} other {# صف}} من أصل {total}",
     "searchNoResults": "لا نتائج مطابقة — جرّب كلمة أخرى."
   }

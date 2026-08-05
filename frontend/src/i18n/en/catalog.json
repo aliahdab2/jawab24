@@ -7,9 +7,7 @@
   "addItem": "Add item",
   "editItem": "Edit item",
   "empty": {
-    "title": "Add what you sell",
-    "body": "Your posts already show what you sell — and the prices often live in the Post Replies you set up on them. Let Jawab collect your products from them, then complete the prices, and it answers your customers with the exact details.",
-    "bodyNoScan": "Add what you sell with its prices, and Jawab answers your customers with the exact details.",
+    "body": "Paste your price list as it is — text, a file, or a photo — and Jawab turns it into items you review before adding.",
     "cta": "Add manually",
     "or": "or:"
   },

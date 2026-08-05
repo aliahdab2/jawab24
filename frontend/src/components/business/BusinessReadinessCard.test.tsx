@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import type { Page } from '@jawab24/shared';
 import { BusinessReadinessCard } from './BusinessReadinessCard';
@@ -26,7 +26,7 @@ describe('BusinessReadinessCard progress', () => {
       address: 'جرمانا، الشارع العام',
     }));
 
-    expect(screen.getByText('Your assistant is 40% ready')).toBeInTheDocument();
+    expect(screen.getByText('Jawab is 40% ready')).toBeInTheDocument();
     expect(screen.getByText('2 of 5')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
   });
@@ -73,7 +73,7 @@ describe('BusinessReadinessCard progress', () => {
       policies: { shipping: 'توصيل داخل دمشق', payment: 'نقداً عند الاستلام' },
     }), 3);
 
-    expect(screen.getByText('Your assistant is 100% ready')).toBeInTheDocument();
+    expect(screen.getByText('Jawab is 100% ready')).toBeInTheDocument();
     expect(screen.getByText('Jawab can answer all of these for your customers.')).toBeInTheDocument();
     expect(screen.queryByText(/^Add /)).not.toBeInTheDocument();
   });
@@ -86,7 +86,7 @@ describe('BusinessReadinessCard progress', () => {
       policies: { shipping: 'توصيل داخل دمشق', payment: 'نقداً' },
     }), 0);
 
-    expect(screen.getByText('Your assistant is 80% ready')).toBeInTheDocument();
+    expect(screen.getByText('Jawab is 80% ready')).toBeInTheDocument();
   });
 
   it('counts a connected store as covering delivery, payment and products', () => {
@@ -96,7 +96,7 @@ describe('BusinessReadinessCard progress', () => {
       storeAnswersPolicies: true,
     } as Page;
     renderCard(page, 0);
-    expect(screen.getByText('Your assistant is 100% ready')).toBeInTheDocument();
+    expect(screen.getByText('Jawab is 100% ready')).toBeInTheDocument();
   });
 
   /**
@@ -114,7 +114,7 @@ describe('BusinessReadinessCard progress', () => {
     } as Page;
     renderCard(page, 0);
     // products (store-linked) + hours + address = 3 of 5.
-    expect(screen.getByText('Your assistant is 60% ready')).toBeInTheDocument();
+    expect(screen.getByText('Jawab is 60% ready')).toBeInTheDocument();
     expect(screen.getByText('3 of 5')).toBeInTheDocument();
   });
 
@@ -122,7 +122,38 @@ describe('BusinessReadinessCard progress', () => {
   // DISPLAYS it, so scoring it as a gap would contradict the value on screen.
   it('counts a city-only address as covered', () => {
     renderCard(pageWith({ city: 'دمشق' }));
-    expect(screen.getByText('Your assistant is 20% ready')).toBeInTheDocument();
+    expect(screen.getByText('Jawab is 20% ready')).toBeInTheDocument();
+  });
+});
+
+describe('BusinessReadinessCard chips', () => {
+  it('the products chip is tappable when uncovered — it was the one amber chip that ignored the tap', () => {
+    const onFixChip = vi.fn();
+    render(
+      <BusinessReadinessCard
+        page={pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] } })}
+        productsCount={0}
+        factRowsCount={0}
+        onTryReply={vi.fn()}
+        onFixChip={onFixChip}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /products/i }));
+    expect(onFixChip).toHaveBeenCalledWith('products');
+  });
+
+  it('covered chips stay inert — nothing to fix, so nothing pretends to be tappable', () => {
+    render(
+      <BusinessReadinessCard
+        page={pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] } })}
+        productsCount={3}
+        factRowsCount={0}
+        onTryReply={vi.fn()}
+        onFixChip={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /products/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Working hours/ })).not.toBeInTheDocument();
   });
 });
 
@@ -135,8 +166,8 @@ describe('BusinessReadinessCard ring', () => {
 
     // The ring is aria-hidden; the number must survive without it.
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
-    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-label', 'Your assistant is 40% ready');
-    expect(screen.getByText('Your assistant is 40% ready')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-label', 'Jawab is 40% ready');
+    expect(screen.getByText('Jawab is 40% ready')).toBeInTheDocument();
   });
 
   it('sweeps the arc in proportion to the percentage', () => {

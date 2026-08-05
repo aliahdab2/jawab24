@@ -86,6 +86,12 @@ function renderSection() {
   );
 }
 
+/** Entity cards start COLLAPSED (owner ruling 2026-08-05) — the header row is
+ *  the toggle. Open one by its entity title before asserting card content. */
+async function openCard(title: string) {
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(title) }));
+}
+
 describe('BusinessListsSection', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -113,6 +119,7 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     expect(await screen.findAllByText('دورة ICDL')).toHaveLength(1);
+    await openCard('دورة ICDL');
     // The session row is NESTED under the price row inside the same card:
     // it lives in the indented (border-inline-start) list, in the same card div.
     const sessionZone = screen.getByText('الأحد والثلاثاء').closest('div.rounded-xl.bg-muted\\/40');
@@ -125,7 +132,7 @@ describe('BusinessListsSection', () => {
   it('renders every value WITH its label, price without raw column form, and no bare ISO dates', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     renderSection();
-    await screen.findByText('دورة ICDL');
+    await openCard('دورة ICDL');
     // label: value pairs
     expect(screen.getByText('ملاحظة:')).toBeInTheDocument();
     expect(screen.getByText(/8 جلسات/)).toBeInTheDocument();
@@ -141,7 +148,7 @@ describe('BusinessListsSection', () => {
   it('drops the key value from row display — the card title already names the entity', async () => {
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
     renderSection();
-    await screen.findByText('دورة ICDL');
+    await openCard('دورة ICDL');
     const slotRow = screen.getByText('الأحد والثلاثاء').closest('li');
     expect(slotRow?.textContent).not.toContain('ICDL');
   });
@@ -151,6 +158,7 @@ describe('BusinessListsSection', () => {
     renderSection();
 
     expect(await screen.findAllByText('دورة المكياج')).toHaveLength(1);
+    await openCard('دورة المكياج');
     expect(screen.queryByText('السبت')).toBeNull();
 
     fireEvent.click(screen.getByText('1 expired row'));
@@ -162,7 +170,7 @@ describe('BusinessListsSection', () => {
     slots.rows[1] = { ...slots.rows[1], startsAt: past, endsAt: future };
     vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [priceCollection(), slots] } } as any);
     renderSection();
-    await screen.findByText('دورة ICDL');
+    await openCard('دورة المكياج');
     // Still behind the expired toggle despite the future endsAt.
     expect(screen.queryByText('السبت')).toBeNull();
     expect(screen.getByText('1 expired row')).toBeInTheDocument();
@@ -183,6 +191,7 @@ describe('BusinessListsSection', () => {
     vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
     renderSection();
 
+    await openCard('دورة ICDL');
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
 
     // Notion model: fields are collapsed property rows — the price row shows
@@ -221,6 +230,7 @@ describe('BusinessListsSection', () => {
     vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
     renderSection();
 
+    await openCard('دورة ICDL');
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
     fireEvent.click(screen.getAllByRole('button', { name: /الأيام/ })[0]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Wednesday' })[0]);
@@ -245,6 +255,7 @@ describe('BusinessListsSection', () => {
     vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
     renderSection();
 
+    await openCard('دورة ICDL');
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
     fireEvent.click(screen.getAllByRole('button', { name: /الأيام/ })[0]);
     fireEvent.click(screen.getAllByRole('button', { name: 'Type it manually' })[0]);
@@ -278,6 +289,7 @@ describe('BusinessListsSection', () => {
     vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
     renderSection();
 
+    await openCard('دورة ICDL');
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
 
     // Recognition over recall: «12-1» populated the pickers (12:00 → 13:00),
@@ -308,7 +320,8 @@ describe('BusinessListsSection', () => {
     ));
 
     // Reopen and actually EDIT the end time through the consistent picker:
-    // the stored string regenerates to the merchant's compact form.
+    // the stored string regenerates to the merchant's compact form. The card
+    // itself is still open — openCard here would toggle it shut.
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
     fireEvent.click(screen.getAllByRole('button', { name: /الساعة/ })[0]);
     fireEvent.click(screen.getAllByLabelText('To')[0]);
@@ -354,6 +367,7 @@ describe('BusinessListsSection', () => {
     vi.mocked(factCollectionsApi.saveEntity).mockResolvedValue({ data: { data: { upserted: [], deletedIds: [] } } } as any);
     renderSection();
 
+    await openCard('دورة ICDL');
     fireEvent.click((await screen.findByText(/8 جلسات/)).closest('button') as HTMLElement);
     fireEvent.click(screen.getAllByRole('button', { name: /Start date/ })[0]);
     expect(screen.getAllByLabelText('End date (optional)')[0]).toHaveValue('');
@@ -375,7 +389,7 @@ describe('BusinessListsSection', () => {
     vi.mocked(factCollectionsApi.addRow).mockResolvedValue({ data: { data: {} } } as any);
     renderSection();
 
-    await screen.findByText('دورة ICDL');
+    await openCard('دورة ICDL');
     fireEvent.click(screen.getAllByText('Add item')[0]);
 
     expect(screen.getByLabelText('Name')).toHaveValue('دورة ICDL');
@@ -453,7 +467,7 @@ describe('BusinessListsSection', () => {
     vi.mocked(factCollectionsApi.addRow).mockResolvedValue({ data: { data: {} } } as any);
     renderSection();
 
-    await screen.findByText('دورة ICDL');
+    await openCard('دورة ICDL');
     fireEvent.click(screen.getAllByText('Add item')[0]);
     fireEvent.click(screen.getByText('Add a field'));
 
@@ -474,5 +488,68 @@ describe('BusinessListsSection', () => {
         attributes: expect.arrayContaining([{ label: 'الوصف', value: 'محاسبة عملية' }]),
       }),
     ));
+  });
+
+  describe('collapsed entity cards (owner ruling 2026-08-05)', () => {
+    it('starts every card collapsed to one line that still answers «بقديش؟», and opens on tap', async () => {
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: bothCollections() } } as any);
+      renderSection();
+
+      await screen.findByText('دورة ICDL');
+      // Inner content stays out of the DOM while collapsed…
+      expect(screen.queryByText(/8 جلسات/)).toBeNull();
+      expect(screen.queryByText('الأحد والثلاثاء')).toBeNull();
+      // …but the price does not: the collapsed line carries it, so closing a
+      // card never hides the answer customers ask most.
+      expect(screen.getByRole('button', { name: /دورة ICDL/ }).textContent).toMatch(/35,000/);
+      // Two cards → no search box (it earns its place at 8).
+      expect(screen.queryByLabelText(en.lists.searchAllPlaceholder)).toBeNull();
+
+      await openCard('دورة ICDL');
+      expect(screen.getByText(/8 جلسات/)).toBeInTheDocument();
+      expect(screen.getByText('الأحد والثلاثاء')).toBeInTheDocument();
+    });
+
+    /** 8+ cards: the pilot page holds 40 — reaching one specific course must
+     *  not be a scroll hunt. A hit renders OPEN: the merchant searched to see
+     *  it, not to be handed another closed door. */
+    it('offers search from 8 cards up, filters across cards, and opens the hits', async () => {
+      const names = ['الريزن', 'الفوتوشوب', 'الإكسل', 'التمريض', 'المكياج', 'الحلاقة', 'الخياطة', 'الطبخ'];
+      const prices: FactCollectionWithRows = {
+        ...priceCollection(),
+        id: 'coll-many',
+        rowCount: names.length,
+        rows: names.map((n, i) => ({
+          id: `p-${i}`, name: `دورة ${n}`, price: `${(i + 1) * 10000}.00`, currency: 'ل.س',
+          attributes: null, startsAt: null, endsAt: null, isAvailable: true,
+        })),
+      };
+      // One slot shares an entity with the price list, so the layout aggregates.
+      const slots = slotCollection({
+        rows: [{
+          id: 'slot-resin', name: 'دورة الريزن', price: null, currency: null,
+          attributes: [{ label: 'الدورة', value: 'الريزن' }],
+          startsAt: future, endsAt: future, isAvailable: true,
+        }],
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [prices, slots] } } as any);
+      renderSection();
+
+      await screen.findByText('دورة الفوتوشوب');
+      const box = screen.getByLabelText(en.lists.searchAllPlaceholder);
+      fireEvent.change(box, { target: { value: 'الريزن' } });
+
+      // Only the hit remains — and it is OPEN without a tap (its add-item
+      // footer is on screen), with the shown/total count announced.
+      expect(screen.queryByText('دورة الفوتوشوب')).toBeNull();
+      expect(screen.getAllByText('دورة الريزن').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Add item').length).toBeGreaterThan(0);
+      expect(screen.getByText(/Showing 1 row of 8/)).toBeInTheDocument();
+
+      // Folding matches the data's own spelling («صيدليه» era rule): a taa
+      // marbuta / hamza variant still hits.
+      fireEvent.change(box, { target: { value: 'الاكسل' } });
+      expect(screen.getByText('دورة الإكسل')).toBeInTheDocument();
+    });
   });
 });

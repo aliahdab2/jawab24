@@ -77,8 +77,14 @@ export function BusinessHoursSheet({ initialHours, saving, saveError = null, onS
       : DAY_KEYS.find((d) => initial[d].kind !== 'closed') ?? null,
   );
 
-  const setDay = (day: DayKey, next: WeekState[DayKey]) =>
+  /** Has the merchant edited anything this session? First-fill Save gates on
+   *  it — see `dirty` below. */
+  const [touched, setTouched] = useState(false);
+
+  const setDay = (day: DayKey, next: WeekState[DayKey]) => {
+    setTouched(true);
     setWeek((prev) => ({ ...prev, [day]: next }));
+  };
 
   const toggleDay = (day: DayKey, open: boolean) => {
     setDay(day, open ? { kind: 'ranges', ranges: [{ ...DEFAULT_RANGE }] } : { kind: 'closed' });
@@ -87,15 +93,18 @@ export function BusinessHoursSheet({ initialHours, saving, saveError = null, onS
     setExpanded(open ? day : (prev) => (prev === day ? null : prev));
   };
 
-  const setRange = (day: DayKey, index: number, field: 'from' | 'to', value: string) =>
+  const setRange = (day: DayKey, index: number, field: 'from' | 'to', value: string) => {
+    setTouched(true);
     setWeek((prev) => {
       const state = prev[day];
       if (state.kind !== 'ranges') return prev;
       const ranges = state.ranges.map((r, i) => (i === index ? { ...r, [field]: value } : r));
       return { ...prev, [day]: { kind: 'ranges', ranges } };
     });
+  };
 
-  const addPeriod = (day: DayKey) =>
+  const addPeriod = (day: DayKey) => {
+    setTouched(true);
     setWeek((prev) => {
       const state = prev[day];
       if (state.kind !== 'ranges') return prev;
@@ -104,14 +113,17 @@ export function BusinessHoursSheet({ initialHours, saving, saveError = null, onS
       const ranges = [...state.ranges, nextPeriodDefault(state.ranges)];
       return { ...prev, [day]: { kind: 'ranges', ranges } };
     });
+  };
 
-  const removePeriod = (day: DayKey, index: number) =>
+  const removePeriod = (day: DayKey, index: number) => {
+    setTouched(true);
     setWeek((prev) => {
       const state = prev[day];
       if (state.kind !== 'ranges') return prev;
       const ranges = state.ranges.filter((_, i) => i !== index);
       return { ...prev, [day]: ranges.length ? { kind: 'ranges', ranges } : { kind: 'closed' } };
     });
+  };
 
   /** Turn a preserved "all day" into editable times without losing the day. */
   const setSpecificTimes = (day: DayKey) =>
@@ -122,6 +134,7 @@ export function BusinessHoursSheet({ initialHours, saving, saveError = null, onS
 
   const applyToAll = () => {
     if (!sourceDay) return;
+    setTouched(true);
     const source = week[sourceDay];
     const copy = (): WeekState[DayKey] =>
       source.kind === 'ranges'
@@ -147,16 +160,18 @@ export function BusinessHoursSheet({ initialHours, saving, saveError = null, onS
   const initialSerialized = useMemo(() => JSON.stringify(serializeWeek(initial)), [initial]);
   const changed = JSON.stringify(serialized) !== initialSerialized;
 
-  // Two gates from one diff, and they differ on purpose:
-  //  - SAVE also opens for a first-time merchant (`!hasStoredHours`): nothing
-  //    is stored yet, so one-tap-saving the seeded default week is a real
-  //    save, not a no-op. The sheet opened with a live Save on pages with
-  //    existing hours — the only editor in the section not gated on a change.
+  // Two gates, and they differ on purpose:
+  //  - SAVE on a first fill opens only after the merchant TOUCHES the editor
+  //    (`touched`): the sheet used to open with a live Save over the seeded
+  //    default week, so one blind tap earned a green «مكتمل» for hours nobody
+  //    reviewed — and wrong stored hours are worse than one extra tap (owner
+  //    ruling 2026-08-05, reversing the earlier one-tap convenience). An edit
+  //    that returns to the seed still counts: touching IS the review.
   //  - The CLOSE GUARD uses `changed` alone: on first open the editor equals
   //    its seed, and warning «لديك تغييرات غير محفوظة» with zero edits made
   //    is false — it trains merchants to dismiss the warning.
   const hasStoredHours = !!initialHours && Object.keys(initialHours).length > 0;
-  const dirty = !hasStoredHours || changed;
+  const dirty = hasStoredHours ? changed : (changed || touched);
 
   // Typed-but-unsaved edits never vanish on a stray tap.
   const [confirmClose, setConfirmClose] = useState(false);

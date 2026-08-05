@@ -26,7 +26,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
 import { isCatalogVisible } from '@/lib/featureFlags';
 import { consumeCatalogImportDraft } from '@/lib/catalogImportDraft';
-import { isStorePolicyKey } from '@/utils/businessCoverage';
+import { isStorePolicyKey, shouldShowProductsSection } from '@/utils/businessCoverage';
 import { usePageFilter } from '@/hooks/usePageFilter';
 import { useSaveKnowledgeBase } from '@/hooks/useSaveKnowledgeBase';
 import { makeGetStaticProps } from '@/i18n/getMessages';
@@ -37,6 +37,9 @@ const TestSmartReplyModal = dynamic(
   () => import('@/components/test-smart-reply/TestSmartReplyModal').then((m) => ({ default: m.TestSmartReplyModal })),
   { ssr: false },
 );
+
+/** Anchor for the readiness card's products chip (scrollIntoView target). */
+const PRODUCTS_SECTION_ID = 'business-products-section';
 
 /**
  * «نشاطك التجاري» — the unified business surface (B1): readiness summary →
@@ -121,7 +124,7 @@ function BusinessPageInner() {
 
   // Same queryKey as CatalogManager below — one fetch feeds both the readiness
   // chip count and the manager list.
-  const { data: catalogData } = useQuery<{ data: CatalogItem[]; vertical: CatalogVerticalInfo }>({
+  const { data: catalogData, isError: catalogError } = useQuery<{ data: CatalogItem[]; vertical: CatalogVerticalInfo }>({
     queryKey: ['catalog', selectedPageId],
     queryFn: () => catalogApi.list(selectedPageId).then((r) => r.data),
     enabled: !!selectedPageId && !hasStore,
@@ -143,6 +146,17 @@ function BusinessPageInner() {
     const today = todayISODate();
     return factCollections.reduce((n, c) => n + c.rows.filter((r) => isRowLive(r, today)).length, 0);
   }, [selectedPageId, factCollections]);
+
+  // One home for products (owner ruling 2026-08-05): when the lists carry them,
+  // the catalog section — and its contradicting «أضف ما تبيعه» pitch — hides.
+  // The rule and its carve-outs live in `shouldShowProductsSection`.
+  const showProductsSection = shouldShowProductsSection({
+    hasStore,
+    catalogError,
+    importRequested: importRequest?.pageId === selectedPageId,
+    productsCount,
+    factRowsCount,
+  });
 
   // KB editor state (inline panel) — same shared save hook as /pages; the
   // pages query is invalidated so readiness chips/fact rows refresh on save.
@@ -278,9 +292,14 @@ function BusinessPageInner() {
   const saveHours = (hours: Record<string, string[]> | undefined) =>
     saveProfile((patch) => { patch.hours = hours; return patch; }, () => setEditingHours(false));
 
-  /** Readiness chip → the matching editor. */
+  /** Readiness chip → the matching editor. `products` scrolls to the catalog
+   *  section instead: it has no single-field sheet, and whenever its chip is
+   *  amber the section is guaranteed rendered (an uncovered products area
+   *  means no store, no list rows and an empty catalog — exactly the case
+   *  `shouldShowProductsSection` keeps visible). */
   const handleFixChip = (key: FixableChipKey) => {
     if (key === 'hours') setEditingHours(true);
+    else if (key === 'products') document.getElementById(PRODUCTS_SECTION_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     else setEditingFact(key);
   };
 
@@ -337,7 +356,18 @@ function BusinessPageInner() {
             }
           />
         ) : (
-          <EmptyState icon={Store} title={t('noPage')} />
+          // Instruction WITH its affordance: «اربط صفحة…» with no button was a
+          // dead end — the one page that fixes it is /pages, same as the
+          // lost-connection state above.
+          <EmptyState
+            icon={Store}
+            title={t('noPage')}
+            action={
+              <Link href="/pages">
+                <Button variant="primary">{t('goToPages')}</Button>
+              </Link>
+            }
+          />
         )
       ) : (
         // Mobile reorders facts ABOVE products: with a 27-item catalog the fact
@@ -357,12 +387,20 @@ function BusinessPageInner() {
           </div>
 
           {/* 2 — Products & services (catalog) */}
+          {showProductsSection && (
           <section
+            id={PRODUCTS_SECTION_ID}
             aria-label={t('products.title')}
             className="order-3 md:order-2 rounded-2xl border border-theme-border bg-card p-4 sm:p-5"
           >
-            <h2 className="text-base sm:text-lg font-semibold text-foreground">{t('products.title')}</h2>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 mb-3">{t('products.hint')}</p>
+            {/* «اضغط على السعر لتعديله» is an instruction about rendered prices —
+                over an empty catalog (or a store box with no tappable prices) it
+                contradicts what's on screen, so it earns its place only when
+                price rows actually render below it. */}
+            <h2 className={`text-base sm:text-lg font-semibold text-foreground ${!hasStore && (productsCount ?? 0) > 0 ? '' : 'mb-3'}`}>{t('products.title')}</h2>
+            {!hasStore && (productsCount ?? 0) > 0 && (
+              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 mb-3">{t('products.hint')}</p>
+            )}
             {hasStore ? (
               // Store-linked page: products sync from Salla/Zid/Shopify and the
               // catalog API rejects manual writes (409 PAGE_HAS_STORE) — so no
@@ -385,6 +423,7 @@ function BusinessPageInner() {
               />
             )}
           </section>
+          )}
 
           {/* 3 — Structured facts */}
           <div className="order-2 md:order-3">
