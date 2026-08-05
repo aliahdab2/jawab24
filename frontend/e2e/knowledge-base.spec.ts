@@ -184,9 +184,17 @@ test.describe('Knowledge Base Modal', () => {
     const kbButton = page.getByRole('button', { name: t('pages.addBusinessInfo') });
     await kbButton.click();
 
-    // Should show section labels from KB content
-    await expect(page.getByText(t('kb.section.productsLabel')).first()).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText(t('kb.section.notesLabel')).first()).toBeVisible();
+    // Should show section labels from KB content.
+    // `exact` matters: getByText(string) is a case-insensitive SUBSTRING match, and
+    // the panel's own description ("Tell Jawab about your business — …") contains
+    // the products label ("About your business") since it was renamed in #638. The
+    // loose locator resolved to that paragraph, which carries `landscape:hidden`
+    // and is therefore hidden at Playwright's landscape viewport — so `.first()`
+    // picked a hidden element and the assertion failed on copy alone. The labels
+    // are each rendered as a <p> whose whole text is the label, so exact matching
+    // pins the intended element.
+    await expect(page.getByText(t('kb.section.productsLabel'), { exact: true }).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(t('kb.section.notesLabel'), { exact: true }).first()).toBeVisible();
   });
 
   test('should toggle raw text mode', async ({ page }) => {
