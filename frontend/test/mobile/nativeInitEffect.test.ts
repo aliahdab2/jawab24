@@ -61,7 +61,23 @@ describe('_app.tsx native init effect', () => {
     expect(effectBody).not.toMatch(/\b(let|const|var)\s+navDepth\b/);
     expect(effectBody).toContain('navDepthRef.current');
     // Declared at component scope, as a ref.
-    expect(source).toMatch(/const navDepthRef = useRef\(0\)/);
+    expect(source).toMatch(/const navDepthRef = useRef\(createNavDepthTracker\(\)\)/);
+  });
+
+  it('marks history pops so the depth can actually decrease', () => {
+    // Next emits routeChangeComplete for backward navigation too. Without
+    // beforePopState the back handler's decrement is cancelled by the increment
+    // from the navigation it triggered, and the depth never falls.
+    expect(effectBody).toContain('beforePopState');
+    expect(effectBody).toContain('markPop()');
+    // The handler must not also decrement — that is the double-count.
+    expect(effectBody).not.toMatch(/navDepthRef\.current\s*=/);
+    expect(effectBody).not.toMatch(/navTracker\.depth\(\)\s*-\s*1/);
+  });
+
+  it('clears a pending pop mark when a navigation fails', () => {
+    expect(effectBody).toContain("'routeChangeError'");
+    expect(effectBody).toContain('abort()');
   });
 
   it('reads the router through the ref, so the live router is always in hand', () => {

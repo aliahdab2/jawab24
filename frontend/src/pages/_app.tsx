@@ -18,7 +18,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { dismissTopModal } from '@/hooks/useModalBackHandler';
-import { resolveBackAction } from '@/lib/nativeBackButton';
+import { resolveBackAction, createNavDepthTracker } from '@/lib/nativeBackButton';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { PushDeniedBanner } from '@/components/ui/PushDeniedBanner';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -67,7 +67,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   // In-app navigation depth for the Android back button. Must outlive the native
   // init effect: a function-local counter is reset to 0 by any re-run of that
   // effect, which makes back exit the app from every screen.
-  const navDepthRef = useRef(0);
+  const navDepthRef = useRef(createNavDepthTracker());
 
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
@@ -224,10 +224,22 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
       // Handle hardware back button (Android) - Industry Standard
       // Priority: close open modal/overlay first, then navigate back, then exit.
-      // The decision itself lives in @/lib/nativeBackButton so it is testable.
-      const onRouteChangeComplete = () => { navDepthRef.current++; };
+      // The decision and the depth arithmetic live in @/lib/nativeBackButton so
+      // they are testable. beforePopState marks backward navigation: Next emits
+      // routeChangeComplete for pops as well, so without it a back press is
+      // counted as a forward one and the depth never decreases.
+      const navTracker = navDepthRef.current;
+      routerRef.current.beforePopState(() => { navTracker.markPop(); return true; });
+      listenersRef.current.push(() => routerRef.current.beforePopState(() => true));
+
+      const onRouteChangeComplete = () => { navTracker.settle(); };
+      const onRouteChangeError = () => { navTracker.abort(); };
       routerRef.current.events.on('routeChangeComplete', onRouteChangeComplete);
-      listenersRef.current.push(() => routerRef.current.events.off('routeChangeComplete', onRouteChangeComplete));
+      routerRef.current.events.on('routeChangeError', onRouteChangeError);
+      listenersRef.current.push(() => {
+        routerRef.current.events.off('routeChangeComplete', onRouteChangeComplete);
+        routerRef.current.events.off('routeChangeError', onRouteChangeError);
+      });
 
       const backListener = await App.addListener('backButton', () => {
         // 1. Dismiss topmost open modal/overlay first (Android user expectation)
@@ -236,11 +248,12 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         const router = routerRef.current;
 
         // 2. Exit on a root screen, or when no in-app navigation has happened
-        if (resolveBackAction(router.pathname, navDepthRef.current) === 'exit') {
+        if (resolveBackAction(router.pathname, navTracker.depth()) === 'exit') {
           App.exitApp();
         } else {
-          // 3. Navigate back within the app
-          navDepthRef.current = Math.max(0, navDepthRef.current - 1);
+          // 3. Navigate back within the app. The depth is decremented by the
+          //    popstate this triggers, not here — decrementing here as well
+          //    double-counts and leaves the depth unchanged.
           router.back();
         }
       });
