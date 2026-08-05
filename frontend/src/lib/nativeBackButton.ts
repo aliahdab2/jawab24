@@ -31,3 +31,55 @@ export function resolveBackAction(pathname: string, navDepth: number): BackActio
   if (navDepth <= 0) return 'exit';
   return 'back';
 }
+
+/**
+ * Tracks how many in-app navigations are still available to unwind.
+ *
+ * The subtlety that makes this a state machine rather than a counter: Next fires
+ * `routeChangeComplete` for BACKWARD navigation too — `onPopState` calls
+ * `change()`, which emits it (next/dist/shared/lib/router/router.js). So
+ * incrementing on every completed navigation counts a back press as a forward
+ * one, and the decrement the back handler performs is undone a moment later by
+ * the navigation it triggered. The counter then never decreases.
+ *
+ * `beforePopState` fires first for any history pop and marks the next completion
+ * as backward. Because it is driven by the history event rather than by our own
+ * handler, it also covers the in-app back buttons that call `router.back()`
+ * directly (useUrlSelectedResource, messages.tsx, 404.tsx) and Android's back
+ * gesture — none of which pass through the Capacitor listener.
+ *
+ * Known imprecision, deliberately left: `router.replace()` emits
+ * `routeChangeComplete` without adding a history entry, so it counts as +1. The
+ * error is in the safe direction — the app over-estimates what it can unwind, so
+ * back navigates when it might have exited, and never exits when the user
+ * expected to go back.
+ */
+export interface NavDepthTracker {
+  /** Navigations still available to unwind. */
+  depth(): number;
+  /** A history pop has started — the next completion is backward. */
+  markPop(): void;
+  /** A navigation completed (routeChangeComplete). */
+  settle(): void;
+  /** A navigation failed (routeChangeError) — clear any pending pop mark. */
+  abort(): void;
+}
+
+export function createNavDepthTracker(): NavDepthTracker {
+  let depth = 0;
+  let popping = false;
+
+  return {
+    depth: () => depth,
+    markPop: () => { popping = true; },
+    settle: () => {
+      if (popping) {
+        popping = false;
+        depth = Math.max(0, depth - 1);
+        return;
+      }
+      depth++;
+    },
+    abort: () => { popping = false; },
+  };
+}
