@@ -5,10 +5,10 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Sidebar, getNavigationGroups, resolveNavKey } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useWorkspaceRole, useWorkspacesRefresh, useNewLeadsSummary } from '@/hooks';
+import { useWorkspaceRole, useWorkspacesRefresh, useNavBadgeCounts, aggregateNavBadge, type NavBadge } from '@/hooks';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui';
+import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton, NavCountBadge } from '@/components/ui';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { DemoBanner } from '@/features/demo';
@@ -79,12 +79,9 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   useWorkspacesRefresh();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isOnboardingVisible = useUIStore((s) => s.isOnboardingVisible);
-  const unreadComments = useUIStore((s) => s.unreadComments);
-  const unreadMessages = useUIStore((s) => s.unreadMessages);
-  // Server-backed standing queue (see Sidebar / useNewLeadsSummary): the bottom
-  // nav's "More" badge must survive an app restart, which the session counter
-  // did not.
-  const { count: newLeads } = useNewLeadsSummary();
+  // Counts keyed by href — the same map the sidebar and the More overlay read,
+  // so the bottom nav can't badge a destination the overlay renders bare.
+  const badgeCounts = useNavBadgeCounts();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
   const isEmbedded = useIsEmbedded();
@@ -99,6 +96,14 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
       .filter((href) => !BOTTOM_NAV_PATHS.includes(href)),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- workspaceIdList is a fresh array each render; join() keeps the memo stable
     [isAdmin, canManageTeam, user, workspaceIdList.join(',')],
+  );
+
+  // "More" stands in for every destination hidden behind it, so its badge is the
+  // roll-up of theirs — derived from the same paths the overlay renders, which is
+  // what keeps the number on the button and the badges inside it in agreement.
+  const moreBadge = useMemo(
+    () => aggregateNavBadge(badgeCounts, moreOverlayPaths, (total) => tNav('badgeItems', { count: total })),
+    [badgeCounts, moreOverlayPaths, tNav],
   );
 
   // ESC key to close modals (logout confirmation takes priority)
@@ -318,22 +323,21 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 icon={<MessageSquare className="w-7 h-7" />}
                 label={tNav('comments')}
                 active={router.pathname === '/comments'}
-                badge={unreadComments}
+                badge={badgeCounts['/comments']}
               />
               <MobileNavButton
                 onClick={() => router.push('/messages')}
                 icon={<MessageCircle className="w-7 h-7" />}
                 label={tNav('messages')}
                 active={router.pathname === '/messages'}
-                badge={unreadMessages}
+                badge={badgeCounts['/messages']}
               />
               <MobileNavButton
                 onClick={() => setMobileMenuOpen(true)}
                 icon={<MoreHorizontal className="w-7 h-7" />}
                 label={tNav('more') || 'More'}
                 active={mobileMenuOpen || moreOverlayPaths.includes(router.pathname)}
-                badge={newLeads}
-                badgeColor="brand"
+                badge={moreBadge}
               />
             </nav>
           </>
@@ -392,13 +396,12 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 }
 
 // Mobile nav button component
-function MobileNavButton({ onClick, icon, label, active, badge, badgeColor = 'red' }: {
+function MobileNavButton({ onClick, icon, label, active, badge }: {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
-  badge?: number;
-  badgeColor?: 'red' | 'brand';
+  badge?: NavBadge | null;
 }) {
   return (
     <button
@@ -410,18 +413,13 @@ function MobileNavButton({ onClick, icon, label, active, badge, badgeColor = 're
         active ? "text-brand-600 scale-100 opacity-100" : "text-surface-500 scale-100 opacity-40 group-hover:opacity-60"
       )}>
         {icon}
-        {badge != null && badge > 0 && (
-          <span aria-hidden="true" className={clsx(
-            "absolute -top-1.5 -end-2.5 flex items-center justify-center w-4 h-4 text-white text-[9px] font-bold rounded-full",
-            badgeColor === 'brand' ? 'bg-brand-500' : 'bg-red-500'
-          )}>
-            {badge > 99 ? '99+' : badge}
-          </span>
-        )}
+        {badge && <NavCountBadge {...badge} className="absolute -top-1.5 -end-2.5 w-4 h-4 text-[9px]" />}
       </div>
-      {/* Hide labels in landscape to save vertical space */}
+      {/* Hide labels in landscape to save vertical space — sr-only, not hidden:
+          the icon is decorative, so `display:none` here left every tab with NO
+          accessible name at all in landscape. */}
       <span className={clsx(
-        "text-[11px] tracking-wide transition-all leading-tight max-lg:landscape:hidden",
+        "text-[11px] tracking-wide transition-all leading-tight max-lg:landscape:sr-only",
         active ? "font-semibold text-brand-600 opacity-100" : "font-medium text-surface-500 opacity-50"
       )}>{label}</span>
       {active && (
@@ -479,6 +477,10 @@ function MobileMenuOverlay({
     router.replace(router.asPath);
   };
 
+  // Same map the bottom nav reads: the "More" button's badge is a roll-up of
+  // these, so whatever made it light up must be findable on a tile in here.
+  const badgeCounts = useNavBadgeCounts();
+
   const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam, showCatalog: isCatalogVisible(overlayUser, (workspaces ?? []).map((w) => w.id)) });
   const menuItems = [
     ...navigationGroups
@@ -490,11 +492,12 @@ function MobileMenuOverlay({
         path: item.href,
         icon: item.icon,
         label: resolveNavKey(item.key, tNav, tPricing, isAdmin),
+        badge: badgeCounts[item.href] ?? null,
       })),
     // Admin dashboard — mobile entry only for allow-listed operator accounts
     // (desktop sidebar shows it for all admins). Page still enforces isAdmin.
     ...(isAdmin && isMobileAdminEmail(user?.email)
-      ? [{ path: '/admin/customers', icon: Shield, label: tAdmin('title') }]
+      ? [{ path: '/admin/customers', icon: Shield, label: tAdmin('title'), badge: null }]
       : []),
   ];
 
@@ -635,6 +638,8 @@ function MobileMenuOverlay({
                   <span className="font-medium text-sm text-surface-800 whitespace-nowrap">
                     {item.label}
                   </span>
+                  {/* Row layout: the pill trails the label, as in the expanded sidebar */}
+                  {item.badge && <NavCountBadge {...item.badge} className="min-w-[20px] h-5 px-1.5 text-[10px]" />}
                 </button>
               ))}
             </div>
@@ -653,8 +658,10 @@ function MobileMenuOverlay({
                     router.pathname === item.path && "border-brand-200 bg-brand-50/50"
                   )}
                 >
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 flex items-center justify-center mb-1.5 text-brand-600">
+                  <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/50 flex items-center justify-center mb-1.5 text-brand-600">
                     <item.icon className="w-6 h-6" />
+                    {/* Grid layout: corner badge on the icon, matching the bottom nav */}
+                    {item.badge && <NavCountBadge {...item.badge} className="absolute -top-1.5 -end-1.5 min-w-[18px] h-[18px] px-1 text-[10px]" />}
                   </div>
                   <span className="font-bold text-xs text-foreground text-center line-clamp-2">
                     {item.label}

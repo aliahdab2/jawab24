@@ -1,6 +1,7 @@
 export { Button } from './Button';
 export { Card } from './Card';
 export { Badge } from './Badge';
+export { NavCountBadge } from './NavCountBadge';
 export { FilterButtons, CommentsFilterButtons, MessagesFilterButtons } from './FilterButtons';
 export { Input } from './Input';
 export { Select } from './Select';
