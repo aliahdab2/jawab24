@@ -544,12 +544,41 @@ describe('BusinessListsSection', () => {
       expect(screen.queryByText('دورة الفوتوشوب')).toBeNull();
       expect(screen.getAllByText('دورة الريزن').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Add item').length).toBeGreaterThan(0);
-      expect(screen.getByText(/Showing 1 row of 8/)).toBeInTheDocument();
+      // Counts CARDS, so it must not borrow the directory's row wording.
+      expect(screen.getByText(/Showing 1 item of 8/)).toBeInTheDocument();
 
       // Folding matches the data's own spelling («صيدليه» era rule): a taa
       // marbuta / hamza variant still hits.
       fireEvent.change(box, { target: { value: 'الاكسل' } });
       expect(screen.getByText('دورة الإكسل')).toBeInTheDocument();
+    });
+
+    /** A min–max span is only honest inside ONE currency. The demo's ICDL card
+     *  held a 10.00-USD online tier beside its 35,000-ل.س course, and a naive
+     *  span rendered «10–35,000 ل.س» — laundering the dollar figure into lira,
+     *  the same failure family as the bundle-unit price bug. The majority
+     *  currency's span, alone. */
+    it('spans the MAJORITY currency only — a foreign tier is never laundered into it', async () => {
+      const row = (id: string, price: string, currency: string) => ({
+        id, name: 'دورة ICDL', price, currency,
+        attributes: null, startsAt: null, endsAt: null, isAvailable: true,
+      });
+      const prices = priceCollection({
+        rowCount: 3,
+        rows: [
+          row('p-hall', '35000.00', 'ل.س قديمة'),
+          row('p-eve', '40000.00', 'ل.س قديمة'),
+          row('p-online', '10.00', 'USD'),
+        ],
+      });
+      vi.mocked(factCollectionsApi.list).mockResolvedValue({ data: { data: [prices, slotCollection()] } } as any);
+      renderSection();
+
+      const header = await screen.findByRole('button', { name: /دورة ICDL/ });
+      expect(header.textContent).toContain('35,000–40,000 ل.س قديمة');
+      // The dollar tier is neither an endpoint of the lira span nor relabelled.
+      expect(header.textContent).not.toContain('10–');
+      expect(header.textContent).not.toContain('10 ل.س');
     });
   });
 });

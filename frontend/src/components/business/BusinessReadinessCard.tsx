@@ -123,11 +123,17 @@ export function BusinessReadinessCard({ page, productsCount, factRowsCount, onTr
     [t, labelFor],
   );
 
+  // The four facts open a sheet that is always mounted; `products` instead
+  // SCROLLS to the catalog section — which `shouldShowProductsSection` holds
+  // back until both counts land. While `loading`, `covered.products` is false
+  // (both counts read as 0) so the chip is amber, but its scroll target does
+  // not exist yet: leaving it tappable there is the very dead tap this chip
+  // was made tappable to remove. It arms with the rest of the card.
   const chips: Chip[] = READINESS_AREAS.map((key) => ({
     key,
     label: labelFor(key),
     covered: covered[key],
-    fixKey: key,
+    ...(key === 'products' && loading ? {} : { fixKey: key }),
   }));
 
   // Intl.ListFormat renders the locale's own conjunction — never a hand-built

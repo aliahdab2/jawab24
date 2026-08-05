@@ -142,6 +142,26 @@ describe('BusinessReadinessCard chips', () => {
     expect(onFixChip).toHaveBeenCalledWith('products');
   });
 
+  /** The products chip scrolls to the catalog section, and that section stays
+   *  unmounted until both counts land. Arming the chip while they are undefined
+   *  gave it an amber, tappable look over a target that does not exist — the
+   *  dead tap this chip was made tappable to remove. */
+  it('holds the products chip inert while the counts are still loading — its scroll target is not mounted yet', () => {
+    const onFixChip = vi.fn();
+    render(
+      <BusinessReadinessCard
+        page={pageWith({ hours: { sat: [{ from: '09:00', to: '19:00' }] } })}
+        productsCount={undefined}
+        factRowsCount={undefined}
+        onTryReply={vi.fn()}
+        onFixChip={onFixChip}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /products/i })).not.toBeInTheDocument();
+    // The four fact chips open an always-mounted sheet, so they stay armed.
+    expect(screen.getByRole('button', { name: /Delivery/i })).toBeInTheDocument();
+  });
+
   it('covered chips stay inert — nothing to fix, so nothing pretends to be tappable', () => {
     render(
       <BusinessReadinessCard

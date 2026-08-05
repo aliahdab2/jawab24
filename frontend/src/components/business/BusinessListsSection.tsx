@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock } from 'lucide-react';
@@ -91,6 +91,8 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
    * and inside the open card the sessions still start expanded.
    */
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  /** Prefix for the cards' `aria-controls` IDREFs — see `panelId` below. */
+  const cardsIdBase = useId();
 
   const collections = useMemo(() => data ?? [], [data]);
   const groups = useMemo(() => groupFactCollections(collections), [collections]);
@@ -767,7 +769,12 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
           // cards; without a box, reaching one specific course is a scroll
           // hunt even with collapsed rows.
           const fold = (s: string) => normalizeArabic(s, { normalizeTaaMarbuta: true }).toLowerCase();
-          const query = fold(listSearch.trim());
+          // `searchable` gates the QUERY itself, not just the box — same rule as
+          // the directory search above. Below the threshold the box is gone, so a
+          // value left over from a larger list would filter nothing yet still
+          // force every card open, with nothing on screen to clear it.
+          const searchable = groups.length >= 8;
+          const query = searchable ? fold(listSearch.trim()) : '';
           const groupMatches = (group: FactListGroup) => {
             if (!query) return true;
             if (fold(group.title).includes(query)) return true;
@@ -775,7 +782,6 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
               fold(row.name).includes(query)
               || (row.attributes ?? []).some((a) => fold(a.value).includes(query) || fold(a.label).includes(query)));
           };
-          const searchable = groups.length >= 8;
           const visibleGroups = searchable ? groups.filter(groupMatches) : groups;
           return (
             <>
@@ -795,14 +801,20 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                   />
                   {query && (
                     <p className="mt-1.5 text-xs text-muted-foreground" aria-live="polite">
+                      {/* Its own key: this box counts entity CARDS, and the
+                          directory's `searchCount` says «صفوف»/rows — reusing it
+                          reported «صفًا واحدًا من أصل 8» for one course. */}
                       {visibleGroups.length === 0
                         ? t('lists.searchNoResults')
-                        : t('lists.searchCount', { shown: visibleGroups.length, total: groups.length })}
+                        : t('lists.searchCountCards', { shown: visibleGroups.length, total: groups.length })}
                     </p>
                   )}
                 </div>
               )}
-              {visibleGroups.map((group) => {
+              {visibleGroups.map((group, groupIndex) => {
+          // IDREF for aria-controls. `group.key` is the normalized entity name
+          // (Arabic, with spaces) — never a valid HTML id, so index off useId.
+          const panelId = `${cardsIdBase}-panel-${groupIndex}`;
           const sections = sectionizeGroup(group, collections);
           const expiredCount = group.rows.filter((r) => isExpired(r.row)).length;
           const expanded = !!showExpired[group.key];
@@ -866,35 +878,47 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
               {/* The whole header is the toggle — one line per entity while
                   closed (name · price span · dates badge), the full card on
                   tap. The badge and summary stay visible either way, so
-                  closing a card never hides the answer to «بقديش؟». */}
-              <button
-                type="button"
-                onClick={() => setOpenCards((prev) => ({ ...prev, [group.key]: !open }))}
-                aria-expanded={open}
-                className={`w-full flex items-center gap-2 px-4 py-3 bg-muted/30 text-start hover:bg-muted/50 transition-colors ${open ? 'border-b border-theme-border' : ''}`}
-              >
-                {/* Name, price and badge WRAP as a unit; only the chevron is
-                    pinned. With all four in one flex row, a long course name on
-                    a 412px phone was squeezed to a one-character column («دور/
-                    ة/الح…») by the price span beside it. */}
-                <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <h3 className="text-[15px] font-bold text-foreground min-w-0 max-w-full break-words" dir="auto">{group.title}</h3>
-                  {priceSummary && (
-                    <span className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums" dir="auto">
-                      {priceSummary}
-                    </span>
-                  )}
-                  {datesBadge}
-                </span>
-                <ChevronDown
-                  className={`w-4 h-4 flex-shrink-0 text-icon-muted transition-transform ${open ? 'rotate-180' : ''}`}
-                  aria-hidden="true"
-                />
-              </button>
+                  closing a card never hides the answer to «بقديش؟».
+
+                  The HEADING WRAPS THE BUTTON (WAI-ARIA APG accordion). The
+                  reverse — an <h3> inside the <button> — is invalid HTML: a
+                  button takes phrasing content only, and nesting flow content
+                  in it costs the entity its heading semantics. */}
+              <h3>
+                <button
+                  type="button"
+                  onClick={() => setOpenCards((prev) => ({ ...prev, [group.key]: !open }))}
+                  aria-expanded={open}
+                  // The panel is unmounted while collapsed, so the IDREF only
+                  // resolves when open — a dangling aria-controls is worse than
+                  // none (AT announces a target that isn't there).
+                  aria-controls={open ? panelId : undefined}
+                  className={`w-full flex items-center gap-2 px-4 py-3 bg-muted/30 text-start hover:bg-muted/50 transition-colors ${open ? 'border-b border-theme-border' : ''}`}
+                >
+                  {/* Name, price and badge WRAP as a unit; only the chevron is
+                      pinned. With all four in one flex row, a long course name on
+                      a 412px phone was squeezed to a one-character column («دور/
+                      ة/الح…») by the price span beside it. */}
+                  <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="text-[15px] font-bold text-foreground min-w-0 max-w-full break-words" dir="auto">{group.title}</span>
+                    {priceSummary && (
+                      <span className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums" dir="auto">
+                        {priceSummary}
+                      </span>
+                    )}
+                    {datesBadge}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 flex-shrink-0 text-icon-muted transition-transform ${open ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              </h3>
+              {open && (<div id={panelId}>
               {/* Tier blocks — each price line with ITS dates directly under
                   it (owner: «كل دورة ومعها كل معلوماتها»). Same matching as
                   the entity form, so what you see is what the form edits. */}
-              {open && (() => {
+              {(() => {
                 const sectionOf = (collectionId: string) =>
                   sections.find((sec) => sec.collection.id === collectionId);
                 const { blocks, orphans } = buildTierBlocks(group, collections, faceLabel);
@@ -984,7 +1008,6 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                 );
               })()}
 
-              {open && (
                 <div className="flex items-center gap-1.5 flex-wrap px-4 py-2 border-t border-theme-border">
                   {/* Progressive disclosure: one quiet «+» per card; the
                       per-list choices appear only while adding. With a single
@@ -1017,7 +1040,7 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                     </button>
                   )}
                 </div>
-              )}
+              </div>)}
             </div>
           );
               })}

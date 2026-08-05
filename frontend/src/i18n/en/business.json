@@ -204,6 +204,7 @@
     "searchPlaceholder": "Search this list — by name or area…",
     "searchAllPlaceholder": "Search your lists — by name or details…",
     "searchCount": "Showing {shown, plural, one {# row} other {# rows}} of {total}",
+    "searchCountCards": "Showing {shown, plural, one {# item} other {# items}} of {total}",
     "searchNoResults": "No matches — try another word."
   }
 }

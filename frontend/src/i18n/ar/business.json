@@ -204,6 +204,7 @@
     "searchPlaceholder": "ابحث في هذه القائمة — بالاسم أو المنطقة…",
     "searchAllPlaceholder": "ابحث في القوائم — بالاسم أو التفاصيل…",
     "searchCount": "يعرض {shown, plural, zero {لا صفوف} one {صفًا واحدًا} two {صفين} few {# صفوف} many {# صفًا} other {# صف}} من أصل {total}",
+    "searchCountCards": "يعرض {shown, plural, zero {لا عناصر} one {عنصرًا واحدًا} two {عنصرين} few {# عناصر} many {# عنصرًا} other {# عنصر}} من أصل {total}",
     "searchNoResults": "لا نتائج مطابقة — جرّب كلمة أخرى."
   }
 }
