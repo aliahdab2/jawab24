@@ -52,6 +52,8 @@ export interface LeadsAttentionSummary {
   count: number;
   latestName: string | null;
   latestAt: string | null;
+  /** Arrival of the OLDEST waiting lead — the queue's urgency (see the row). */
+  oldestAt?: string | null;
 }
 
 interface SmartStatusBannerProps {
@@ -283,10 +285,19 @@ export function SmartStatusBanner({
                         <span className="text-sm font-semibold truncate">
                           {tDash('smartBanner.leadsWaiting', { count: leadsCount })}
                         </span>
-                        {leads?.latestAt && (
+                        {/* The OLDEST wait, not the newest arrival: the point of
+                            this row is "someone has been waiting too long", and a
+                            19-lead queue whose newest arrived a minute ago would
+                            otherwise read "1 minute ago". Same `waitingSince`
+                            label the comment/message rows use for `earliestAt`.
+                            Falls back to latestAt so a cached response from
+                            before oldestAt existed still renders something. */}
+                        {(leads?.oldestAt ?? leads?.latestAt) && (
                           <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-rose-700/70 dark:text-rose-400/60">
                             <Clock className="w-3 h-3" aria-hidden="true" />
-                            {formatRelativeTime(leads.latestAt, tTime)}
+                            {tDash('smartBanner.waitingSince', {
+                              time: formatRelativeTime((leads.oldestAt ?? leads.latestAt) as string, tTime),
+                            })}
                           </span>
                         )}
                       </div>

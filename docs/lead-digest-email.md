@@ -36,7 +36,9 @@ A lead the merchant already worked (`contacted` / `converted`) is never reported
 | 30-day engagement | Protects sender reputation. Mailbox providers (Gmail, Outlook) track domain-level engagement — sending to abandoned inboxes hurts deliverability for **all** users |
 | Stamp-on-skip | Operational hygiene: abandoned/churned users' leads are stamped anyway so the daily query doesn't re-process them forever |
 
-> **Send-volume note.** The ≥10 threshold used to be the de-facto cap on daily volume. It is not any more: with the age trigger, *any* workspace holding one waiting lead older than 48 h emails every owner + admin. The practical ceiling is now roughly `active workspaces with a waiting lead × recipients ÷ 2 days`. At current scale that is far below Resend's 100/day, but the threshold is no longer what keeps it there — watch `lead_digest_sends` as workspace count grows.
+> **Send-volume note.** The ≥10 threshold used to be the de-facto cap on daily volume. It is not any more: with the age trigger, *any* workspace holding one waiting lead older than 48 h emails every owner + admin. The practical ceiling is now roughly `active workspaces with a waiting lead × recipients ÷ 2 days`. At current scale that is far below Resend's 100/day, but the threshold is no longer what keeps it there.
+>
+> This is measured, not guessed: `runDailyLeadDigest` returns **`ageFlushed`** — workspaces that fired on age alone, i.e. the ones the volume threshold would have suppressed. That count *is* the added volume, and it is surfaced by `POST /admin/lead-digest/run` alongside a per-workspace `[LeadDigest] Age flush` log line carrying `waitingLeads` and `oldestAgeHours`.
 
 ## Data model
 
