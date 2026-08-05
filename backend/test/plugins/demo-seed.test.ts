@@ -14,19 +14,30 @@ vi.mock('../../src/db', () => ({
 }));
 
 import { db } from '../../src/db';
-import { seedDemoData, DEMO_PAGES, DEMO_DISTRIBUTOR_COLLECTIONS, renderDemoDamascusLists } from '../../src/plugins/demo/seedData';
+import {
+    seedDemoData,
+    DEMO_PAGES,
+    DEMO_DISTRIBUTOR_COLLECTIONS,
+    renderDemoDamascusLists,
+    resolveDamascusFixtureShape,
+    effectiveDemoPageSeed,
+} from '../../src/plugins/demo/seedData';
 import {
     DAMASCUS_COURSE_PRICES,
     DAMASCUS_ONLINE_COURSES,
-    DAMASCUS_ONLINE_KEY,
+    DAMASCUS_CURRICULUM_LABEL,
+    DAMASCUS_CURRICULUM_KEY,
     DAMASCUS_SCHEDULES_LABEL,
     DAMASCUS_SCHEDULES_KEY,
     DAMASCUS_SCHEDULE_SLOTS,
+    damascusCollectionInputs,
+    damascusCurriculumRowInputs,
     damascusPriceRowInputs,
     damascusScheduleRowInputs,
     resolveSlotDates,
 } from '../../src/plugins/demo/damascusLists';
-import { EDUCATION_TEMPLATE } from '@jawab24/shared';
+import { DAMASCUS_DIRECTIVES, deriveSeparatedDamascusKb } from '../../src/plugins/demo/damascusSeparated';
+import { EDUCATION_TEMPLATE, matchDirective, normalizeDirectives } from '@jawab24/shared';
 
 // Helper to build a chainable select mock
 function mockSelectChain(result: any[]) {
@@ -340,43 +351,163 @@ describe('damascus fact-collections fixture (schedules slice, D-052)', () => {
 });
 
 // The education template (packages/shared/verticalTemplates.ts) claims to BE the
-// shape measured on this fixture. Neither imports the other's collection labels
-// at runtime — the template must stand alone as data — so this pin is the only
-// thing keeping them from drifting apart.
+// shape measured on this fixture's SEPARATED arm. Neither imports the other's
+// labels at runtime — the template must stand alone as data — so this pin is the
+// only thing keeping them from drifting apart.
 describe('education template ↔ damascus fixture (anti-drift pin)', () => {
-    it('the template\'s three collections are exactly the fixture\'s, in order', () => {
-        expect(EDUCATION_TEMPLATE.collections.map(c => ({ label: c.label, keyAttr: c.keyAttr }))).toEqual([
-            { label: DAMASCUS_COURSE_PRICES.label, keyAttr: null },
-            { label: DAMASCUS_SCHEDULES_LABEL, keyAttr: DAMASCUS_SCHEDULES_KEY },
-            { label: DAMASCUS_ONLINE_COURSES.label, keyAttr: DAMASCUS_ONLINE_KEY },
-        ]);
+    const TODAY = '2026-07-31';
+    const separated = damascusCollectionInputs(TODAY, { shape: 'separated' });
+
+    it('the template\'s collections are exactly the separated arm\'s, in order', () => {
+        expect(EDUCATION_TEMPLATE.collections.map(c => ({ label: c.label, keyAttr: c.keyAttr })))
+            .toEqual(separated.map(c => ({ label: c.label, keyAttr: c.keyAttr })));
     });
 
     it('every attribute label the fixture writes is one the template proposes', () => {
         const proposed = new Map(EDUCATION_TEMPLATE.collections.map(c => [c.label, new Set(c.attributeLabels)]));
-        const TODAY = '2026-07-31';
-        for (const row of damascusScheduleRowInputs(TODAY)) {
-            for (const a of row.attributes) {
-                expect(proposed.get(DAMASCUS_SCHEDULES_LABEL)!.has(a.label),
-                    `slot attribute «${a.label}» is not in the template`).toBe(true);
-            }
-        }
-        for (const row of damascusPriceRowInputs(DAMASCUS_COURSE_PRICES)) {
-            for (const a of row.attributes ?? []) {
-                expect(proposed.get(DAMASCUS_COURSE_PRICES.label)!.has(a.label),
-                    `price attribute «${a.label}» is not in the template`).toBe(true);
+        for (const c of separated) {
+            for (const row of c.rows) {
+                for (const a of row.attributes ?? []) {
+                    expect(proposed.get(c.label)?.has(a.label),
+                        `«${a.label}» on «${c.label}» is not in the template`).toBe(true);
+                }
             }
         }
     });
 
     it('self-expiry in the template matches where the fixture actually dates rows', () => {
-        const TODAY = '2026-07-31';
-        const datedSlots = damascusScheduleRowInputs(TODAY).some(r => r.startsAt !== null);
-        const datedPrices = damascusPriceRowInputs(DAMASCUS_COURSE_PRICES)
-            .some(r => (r as { startsAt?: string | null }).startsAt);
-        expect(datedSlots).toBe(true);
-        expect(datedPrices).toBe(false);
-        expect(EDUCATION_TEMPLATE.collections.find(c => c.label === DAMASCUS_SCHEDULES_LABEL)!.selfExpiring).toBe(true);
-        expect(EDUCATION_TEMPLATE.collections.find(c => c.label === DAMASCUS_COURSE_PRICES.label)!.selfExpiring).toBe(false);
+        for (const c of separated) {
+            const fixtureDates = c.rows.some(r => r.startsAt != null);
+            const tplExpiring = EDUCATION_TEMPLATE.collections.find(t => t.label === c.label)!.selfExpiring;
+            expect(tplExpiring, `selfExpiring mismatch on «${c.label}»`).toBe(fixtureDates);
+        }
+    });
+});
+
+/**
+ * Arm B1 — the four data kinds separated. Every assertion here is one an
+ * accidental edit would otherwise break silently, in a fixture whose whole
+ * purpose is to be a trustworthy measuring stick.
+ */
+describe('damascus fixture — separated arm (B1)', () => {
+    const TODAY = '2026-07-31';
+
+    it('defaults to the CURRENT shape, so arm A and shipped behaviour are untouched', () => {
+        expect(resolveDamascusFixtureShape()).toBe('current');
+        expect(renderDemoDamascusLists(TODAY)).toBe(renderDemoDamascusLists(TODAY, { shape: 'current' }));
+        // The page's seeded prose is byte-identical to the shipped KB.
+        const damascus = DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_damascus')!;
+        expect(effectiveDemoPageSeed(damascus).knowledgeBase).toBe(damascus.suggestedKnowledgeBase);
+        expect(effectiveDemoPageSeed(damascus).businessProfile).toBeUndefined();
+    });
+
+    it('adds the محاور collection ONLY in the separated arm', () => {
+        expect(damascusCollectionInputs(TODAY).map(c => c.label)).not.toContain(DAMASCUS_CURRICULUM_LABEL);
+        const sep = damascusCollectionInputs(TODAY, { shape: 'separated' });
+        expect(sep.map(c => c.label)).toContain(DAMASCUS_CURRICULUM_LABEL);
+        // Keyed, so an unlisted course hits the enumerated coverage boundary
+        // instead of an invented syllabus — the reason it's a collection at all.
+        expect(sep.find(c => c.label === DAMASCUS_CURRICULUM_LABEL)!.keyAttr).toBe(DAMASCUS_CURRICULUM_KEY);
+    });
+
+    it('keeps every row authorable through the merchant-facing write path', () => {
+        // CatalogAttributesInput caps a value at 100 chars and a name at 200.
+        // A fixture that exceeds them seeds a state no merchant could type —
+        // measuring a shape production cannot reach (Rule 19.2).
+        for (const c of damascusCollectionInputs(TODAY, { shape: 'separated' })) {
+            for (const row of c.rows) {
+                expect(row.name.length, `row name too long: ${row.name}`).toBeLessThanOrEqual(200);
+                for (const a of row.attributes ?? []) {
+                    expect(a.label.length, `label too long: ${a.label}`).toBeLessThanOrEqual(30);
+                    expect(a.value.length, `value too long on «${row.name}»: ${a.value}`).toBeLessThanOrEqual(100);
+                    expect(a.value.includes('\n'), `newline in attribute on «${row.name}»`).toBe(false);
+                }
+            }
+        }
+    });
+
+    it('gives every محور row its «الدورة» key, and covers exactly the three courses', () => {
+        const rows = damascusCurriculumRowInputs();
+        for (const r of rows) {
+            const key = r.attributes.find(a => a.label === DAMASCUS_CURRICULUM_KEY);
+            expect(key?.value.trim().length, `محور missing key: ${r.name}`).toBeGreaterThan(0);
+        }
+        const courses = new Set(rows.map(r => r.attributes[0].value));
+        expect([...courses].sort()).toEqual(['اللاش ليفتينغ', 'العناية بالبشرة', 'إدارة الجودة'].sort());
+    });
+
+    it('moves the محاور and the guitar tools OUT of the prose', () => {
+        const kb = deriveSeparatedDamascusKb();
+        expect(kb).not.toContain('انواع الميزوثيرابي');       // skin-care curriculum → rows
+        expect(kb).not.toContain('اختيار احجام السيليكون');   // lash curriculum → rows
+        expect(kb).not.toContain('رواد الجودة');              // quality curriculum → rows
+        expect(kb).not.toContain('لا يتوفر لدينا غيتارات');   // entity fact → row attribute
+        // …and leaves a list-anchored line where each block stood: deleting prose
+        // that carries an answer's SHAPE produces a BORROWED wrong answer, not
+        // silence (measured 2026-08-05 — «12 جلسة» from the solar row).
+        expect(kb).toContain('محاور دورة العناية بالبشرة مفصّلة في قائمة أسعار الدورات.');
+    });
+
+    it('moves the routing Q&As into directives, keeping the certificate one in prose', () => {
+        const kb = deriveSeparatedDamascusKb();
+        expect(kb).not.toContain('وبتعلمو تحليلات جوا بالمخبر');
+        expect(kb).not.toContain('هل يوجد تدريب بالمشافي');
+        expect(kb).not.toContain('هل يمكن التحويل من دورة إلى أخرى');
+        // «الشهادة من وين بتطلع» keeps its prose routing: a «شهادة» trigger would
+        // swallow the certificate-FEE questions the prose answers itself.
+        expect(kb).toContain('Q: الشهادة من وين بتطلع');
+        expect(kb).toContain('شهادة دولية 250');
+    });
+
+    it('⛔ leaves the GENERAL RULES in prose, verbatim — the fourth data kind', () => {
+        // «معظم الدورات ٨ ساعات تدريبية … ساعة واحدة في اليوم» is a LEGITIMATE
+        // source for an entity answer (8h ÷ 1/day = 8 sessions — the owner's
+        // correction, 2026-08-05). No arm may remove these and no check may deny
+        // them; removing one produced a BORROWED wrong answer in the isolation arm.
+        const kb = deriveSeparatedDamascusKb();
+        expect(kb).toContain('معظم الدورات ٨ ساعات تدريبية');
+        expect(kb).toContain('ساعة واحدة في اليوم');
+        expect(kb).toContain('مدة كل مستوى من الكورسات بشكل عام شهر');
+        expect(kb).toContain('كافة الاعمار مقبولة');
+        expect(kb).toContain('الدروس تقام في المعهد');
+    });
+
+    it('keeps page-level facts in prose — never forced onto entities', () => {
+        const kb = deriveSeparatedDamascusKb();
+        // The laptop Q&A names NO course, so it is a page fact. Turning it into
+        // an entity attribute is the attribute-boundary trap that killed three
+        // designs (⛔ never ask "does this entity have this attribute?").
+        expect(kb).toContain('يتوفر لدينا كمبيوترات محمولة');
+        expect(kb).toContain('برامكة سانا');
+        expect(kb).toContain('كل 100 ليرة قديمة تساوي 1 ليرة جديدة');
+        expect(kb).toContain('لا يوجد لدينا دورة ادارة أعمال');   // #501 anchor survives
+    });
+
+    it('seeds the merchant\'s ORDERS where contextEnricher reads them', () => {
+        const damascus = DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_damascus')!;
+        process.env.DEMO_DAMASCUS_FIXTURE = 'separated';
+        try {
+            const seed = effectiveDemoPageSeed(damascus);
+            expect(seed.knowledgeBase).toBe(deriveSeparatedDamascusKb());
+            const merchant = (seed.businessProfile as { merchant?: { directives?: unknown } })?.merchant;
+            // contextEnricher reads businessProfile.merchant.directives and runs
+            // them through normalizeDirectives — which must keep all of them.
+            expect(normalizeDirectives(merchant?.directives)).toEqual(DAMASCUS_DIRECTIVES);
+        } finally {
+            delete process.env.DEMO_DAMASCUS_FIXTURE;
+        }
+    });
+
+    it('routes the measured defect questions to a directive, and answerable ones NOT', () => {
+        // The prod defect (2026-08-04): «وبتعلمو تحليلات جوا بالمخبر؟» got an
+        // invented curriculum where his own text said to route to the phone.
+        expect(matchDirective('وبتعلمو تحليلات جوا بالمخبر ؟', DAMASCUS_DIRECTIVES)).not.toBeNull();
+        expect(matchDirective('وفي تعليم لسحب الدم؟', DAMASCUS_DIRECTIVES)).not.toBeNull();
+        expect(matchDirective('هل يمكن التحويل من دورة إلى أخرى', DAMASCUS_DIRECTIVES)).not.toBeNull();
+        // …and the ANSWERABLE lab-course questions must NOT be routed away: the
+        // course has a price row, so a «مخبر» trigger would be a silent false
+        // positive — worse than a miss in a keyword router.
+        expect(matchDirective('قديش سعر دورة العمل المخبري؟', DAMASCUS_DIRECTIVES)).toBeNull();
+        expect(matchDirective('كم جلسة دورة العمل المخبري؟', DAMASCUS_DIRECTIVES)).toBeNull();
     });
 });

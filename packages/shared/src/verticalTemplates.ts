@@ -20,10 +20,11 @@
  * the merchant actually confirmed (collections, page fields, directives).
  *
  * The first template (education/معهد) is derived from a real migrated
- * merchant — الفريق الدمشقي — whose three-collection split and directive set
- * are production-measured (fabrication ≈19% → ≈7%, 2026-08-04/05). The demo
- * fixture mirrors this template; `backend/test/plugins/demo-seed.test.ts` pins
- * the two against each other so they cannot drift apart.
+ * merchant — الفريق الدمشقي — whose collection split and directive set are
+ * production-measured (fabrication ≈19% → ≈7%, 2026-08-04/05). It describes the
+ * SEPARATED shape (the arm-B1 target), which the demo fixture builds under
+ * DEMO_DAMASCUS_FIXTURE=separated; `backend/test/plugins/demo-seed.test.ts`
+ * pins the two against each other so they cannot drift apart.
  */
 import type { CatalogVertical } from './index';
 
@@ -95,7 +96,7 @@ export const EDUCATION_TEMPLATE: VerticalTemplate = {
         {
             label: 'أسعار الدورات',
             keyAttr: null,
-            attributeLabels: ['المستوى', 'ملاحظة', 'المحاور', 'الأدوات'],
+            attributeLabels: ['المستوى', 'ملاحظة', 'الأدوات'],
             selfExpiring: false,
         },
         {
@@ -106,6 +107,18 @@ export const EDUCATION_TEMPLATE: VerticalTemplate = {
         },
         {
             label: 'الدورات الأونلاين المتوفرة',
+            keyAttr: 'الدورة',
+            attributeLabels: ['الدورة'],
+            selfExpiring: false,
+        },
+        {
+            // ONE محور per row, keyed by the course — NOT one long attribute.
+            // A row attribute is capped at 100 chars on the merchant-facing
+            // write path, so a curriculum blob would be a shape the merchant
+            // could never author; and as rows it earns the enumerated coverage
+            // boundary, so «شو محاور دورة X؟» for an unlisted course degrades to
+            // an honest "not registered" instead of an invented syllabus.
+            label: 'محاور الدورات',
             keyAttr: 'الدورة',
             attributeLabels: ['الدورة'],
             selfExpiring: false,

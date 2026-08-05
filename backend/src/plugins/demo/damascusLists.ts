@@ -130,6 +130,98 @@ export const DAMASCUS_COURSE_PRICES: { label: string; rows: PriceRowFixture[] } 
 
 export const DAMASCUS_ONLINE_KEY = 'الدورة';
 
+/**
+ * Arm-B1 enrichment (plan §5 item 5): entity facts that lived in the KB prose,
+ * verbatim, keyed by the price row's exact name. Applied only when the seeder
+ * runs with DEMO_DAMASCUS_FIXTURE=separated — the shipped 'current' shape never
+ * sees these, so arm A stays byte-identical.
+ *
+ * Only SHORT single-line facts belong here. A row attribute is capped at 100
+ * chars by `CatalogAttributesInput` (backend/src/utils/validation.ts), which is
+ * the merchant-facing write path: a fixture that exceeded it would seed a state
+ * no merchant could ever author in the real editor — a measuring stick that
+ * doesn't match production (Rule 19.2). Long lists get their own collection
+ * instead; see DAMASCUS_CURRICULUM below.
+ */
+export const DAMASCUS_ENRICHED_PRICE_ATTRS: Record<string, { label: string; value: string }[]> = {
+    'دورة الغيتار': [{
+        label: 'الأدوات',
+        value: 'لا يتوفر لدينا غيتارات , الطالب يحضر غيتاره الخاص',
+    }],
+};
+
+export const DAMASCUS_CURRICULUM_LABEL = 'محاور الدورات';
+export const DAMASCUS_CURRICULUM_KEY = 'الدورة';
+
+/**
+ * Arm-B1 collection #4 — the محاور, ONE PER ROW, keyed by the course.
+ *
+ * WHY A COLLECTION AND NOT A LONG ATTRIBUTE (supersedes the plan's §4 decision 7)
+ * -----------------------------------------------------------------------------
+ * The plan proposed carrying a curriculum as one multi-line «المحاور» attribute
+ * with a special renderer shape. Normalizing it into rows is strictly better on
+ * four counts, and needs no new code at all:
+ *   1. It fits the write path as-is (100-char attribute cap, above) — the
+ *      merchant can author this in the shipped editor; a blob he cannot type is
+ *      a fixture that measures a state production can't reach.
+ *   2. No renderer change: a multi-line value would have broken row rendering
+ *      (the price lands after the last curriculum line, and the continuation
+ *      lines read as new rows).
+ *   3. It EARNS the coverage statement. Keyed by «الدورة», an unmatched course
+ *      renders the enumerated boundary — «هذه القائمة تغطي «الدورة» التالية
+ *      فقط: …» — so «شو محاور دورة الغيتار؟» degrades to an honest "not
+ *      registered" instead of an invented syllabus. That is the same L1
+ *      mechanism measured at 28%→0 on the distributor, now applied to the
+ *      curriculum defect class the battery asks about («شو محتوى الدورة؟»).
+ *   4. Gated mode already shows only the matched course's rows.
+ * The prose keeps a list-anchored line where each block stood
+ * (damascusSeparated.ts) — relocation, never deletion (the عين زارة lesson:
+ * prose that carries an answer's SHAPE produces a BORROWED wrong answer when
+ * simply deleted).
+ */
+export const DAMASCUS_CURRICULUM: { label: string; rows: { course: string; topic: string }[] } = {
+    label: DAMASCUS_CURRICULUM_LABEL,
+    rows: [
+        // محاور دورة العناية بالبشرة (his prose, verbatim, one line per محور)
+        { course: 'العناية بالبشرة', topic: 'انواع البشرة' },
+        { course: 'العناية بالبشرة', topic: 'انواع الماسكات' },
+        { course: 'العناية بالبشرة', topic: 'استخدام البخار' },
+        { course: 'العناية بالبشرة', topic: 'تنظيف البشرة العميق' },
+        { course: 'العناية بالبشرة', topic: 'حب الشباب' },
+        { course: 'العناية بالبشرة', topic: 'الديرمابن وعلاج البشرة' },
+        { course: 'العناية بالبشرة', topic: 'انواع الميزوثيرابي' },
+        { course: 'العناية بالبشرة', topic: 'الروتين اليومي للعناية بالبشرة' },
+        { course: 'العناية بالبشرة', topic: 'تطبيق عملي' },
+        // محاور دورة رفع الرموش و الحواجب (النظري/العملي kept as his own grouping)
+        { course: 'اللاش ليفتينغ', topic: 'النظري: مقدمة عن رفع الرموش والحواجب' },
+        { course: 'اللاش ليفتينغ', topic: 'النظري: فهم دورة نمو الرموش الطبيعية' },
+        { course: 'اللاش ليفتينغ', topic: 'النظري: معرفة المواد والادوات اللازمة لرفع الرموش وتثبيتها' },
+        { course: 'اللاش ليفتينغ', topic: 'العملي: تحضير الرموش قبل البدء بالعمل' },
+        { course: 'اللاش ليفتينغ', topic: 'العملي: تقنيات تطبيق مواد الرفع والتثبيت' },
+        { course: 'اللاش ليفتينغ', topic: 'العملي: اختيار احجام السيليكون' },
+        { course: 'اللاش ليفتينغ', topic: 'العملي: ازالة الرموش والتعامل مع المشكلات في حال حدوث اي خطأ' },
+        // محاور دورة إدارة الجودة
+        { course: 'إدارة الجودة', topic: 'مفهوم الجودة وإدارة الجودة' },
+        { course: 'إدارة الجودة', topic: 'رواد الجودة' },
+        { course: 'إدارة الجودة', topic: 'مفاهيم أساسية ضبط وتأكيد الجودة وإدارة الجودة الشاملة' },
+        { course: 'إدارة الجودة', topic: 'ادوات الجودة' },
+        { course: 'إدارة الجودة', topic: 'مقاييس الجودة' },
+        { course: 'إدارة الجودة', topic: 'تكاليف الجودة' },
+    ],
+};
+
+/** Curriculum rows in `createCollection` shape — undated and unpriced: a محور
+ *  is neither a cohort nor a purchasable line. */
+export function damascusCurriculumRowInputs(): Array<{
+    name: string;
+    attributes: { label: string; value: string }[];
+}> {
+    return DAMASCUS_CURRICULUM.rows.map(r => ({
+        name: r.topic,
+        attributes: [{ label: DAMASCUS_CURRICULUM_KEY, value: r.course }],
+    }));
+}
+
 export const DAMASCUS_ONLINE_COURSES: {
     label: string;
     rows: (PriceRowFixture & { course: string })[];
@@ -277,19 +369,31 @@ function slotRowAttributes(s: DamascusSlotFixture): { label: string; value: stri
 
 /** Row inputs in the shape `factCollectionsService.createCollection` takes —
  *  shared by the seeder and the offline renderer so the DB rows and the
- *  scripts' grounding text can never drift apart. */
-export function damascusPriceRowInputs(fixture: { rows: PriceRowFixture[] }): Array<{
+ *  scripts' grounding text can never drift apart.
+ *
+ *  `enriched` is the arm-B1 opt-in: it appends DAMASCUS_ENRICHED_PRICE_ATTRS to
+ *  the rows whose entity facts moved out of the prose. Off by default, so the
+ *  shipped fixture (arm A) is untouched and every existing caller keeps its
+ *  exact bytes. */
+export function damascusPriceRowInputs(
+    fixture: { rows: PriceRowFixture[] },
+    opts?: { enriched?: boolean },
+): Array<{
     name: string;
     attributes: { label: string; value: string }[] | null;
     price: string;
     currency: string;
 }> {
-    return fixture.rows.map(r => ({
-        name: r.name,
-        attributes: priceRowAttributes(r),
-        price: r.price,
-        currency: r.currency ?? DAMASCUS_OLD_SYP,
-    }));
+    return fixture.rows.map(r => {
+        const base = priceRowAttributes(r);
+        const extra = opts?.enriched ? DAMASCUS_ENRICHED_PRICE_ATTRS[r.name] : undefined;
+        return {
+            name: r.name,
+            attributes: extra ? [...(base ?? []), ...extra] : base,
+            price: r.price,
+            currency: r.currency ?? DAMASCUS_OLD_SYP,
+        };
+    });
 }
 
 export function damascusScheduleRowInputs(todayIso: string): Array<{
@@ -305,6 +409,62 @@ export function damascusScheduleRowInputs(todayIso: string): Array<{
     }));
 }
 
+/** A row in any of this fixture's collections — the superset of the three row
+ *  shapes (priced, dated, bare), all fields optional so one type serves the
+ *  seeder, the renderer and the tests. */
+export interface DamascusRowInput {
+    name: string;
+    attributes?: { label: string; value: string }[] | null;
+    price?: string;
+    currency?: string;
+    startsAt?: string | null;
+    endsAt?: string | null;
+}
+
+export interface DamascusCollectionInput {
+    label: string;
+    keyAttr: string | null;
+    rows: DamascusRowInput[];
+}
+
+/** Which shape of the fixture to build. 'current' is what ships and what arm A
+ *  measures — byte-identical to the pre-B1 fixture. 'separated' is arm B1: the
+ *  four data kinds pulled apart (entity facts → rows incl. the محاور
+ *  collection, page facts → prose, ORDERS → directives, GENERAL RULES → left in
+ *  prose untouched). */
+export type DamascusFixtureShape = 'current' | 'separated';
+
+export interface DamascusFixtureOpts {
+    shape?: DamascusFixtureShape;
+    /** A/B instrument only: build the schedules collection UN-KEYED (no course
+     *  index, every live row always shown) so an un-keyed arm's grounding
+     *  matches what its generator actually saw. The shipped default is keyed. */
+    schedulesUnkeyed?: boolean;
+}
+
+/**
+ * THE definition of this fixture's collections — read by the seeder (writes DB
+ * rows), by the offline renderer (builds the harnesses' grounding text), and by
+ * the fixture tests. It exists because those first two used to list the
+ * collections separately: two lists to keep in step, and the drift would be
+ * invisible (the battery would judge replies against a collection set the
+ * generator never saw — the exact failure renderDemoDamascusLists warns about).
+ */
+export function damascusCollectionInputs(
+    todayIso: string,
+    opts?: DamascusFixtureOpts,
+): DamascusCollectionInput[] {
+    const separated = opts?.shape === 'separated';
+    return [
+        { label: DAMASCUS_COURSE_PRICES.label, keyAttr: null, rows: damascusPriceRowInputs(DAMASCUS_COURSE_PRICES, { enriched: separated }) },
+        { label: DAMASCUS_SCHEDULES_LABEL, keyAttr: opts?.schedulesUnkeyed ? null : DAMASCUS_SCHEDULES_KEY, rows: damascusScheduleRowInputs(todayIso) },
+        { label: DAMASCUS_ONLINE_COURSES.label, keyAttr: DAMASCUS_ONLINE_KEY, rows: damascusPriceRowInputs(DAMASCUS_ONLINE_COURSES) },
+        ...(separated
+            ? [{ label: DAMASCUS_CURRICULUM_LABEL, keyAttr: DAMASCUS_CURRICULUM_KEY, rows: damascusCurriculumRowInputs() }]
+            : []),
+    ];
+}
+
 /**
  * The damascus page's <business_lists> text for offline harnesses
  * (grounding-audit / probe batteries) — same contract as
@@ -314,22 +474,9 @@ export function damascusScheduleRowInputs(todayIso: string): Array<{
  */
 export function renderDemoDamascusLists(
     todayIso: string,
-    opts?: {
-        /** A/B instrument only: render the schedules collection UN-KEYED (no
-         *  course index, every live row always shown) so an un-keyed arm's
-         *  grounding matches what its generator actually saw. The shipped
-         *  default is keyed — see the collection note above. */
-        schedulesUnkeyed?: boolean;
-    },
+    opts?: DamascusFixtureOpts,
 ): string {
-    const toPromptRow = (r: {
-        name: string;
-        attributes?: { label: string; value: string }[] | null;
-        price?: string | null;
-        currency?: string | null;
-        startsAt?: string | null;
-        endsAt?: string | null;
-    }): FactRowForPrompt => ({
+    const toPromptRow = (r: DamascusRowInput): FactRowForPrompt => ({
         name: r.name,
         attributes: r.attributes ?? null,
         price: r.price ?? null,
@@ -339,23 +486,11 @@ export function renderDemoDamascusLists(
         isAvailable: true,
     });
 
-    const blocks = [
-        renderFactCollectionBlock(
-            // isComplete stays null — the fixture never claims completeness (D-038).
-            { label: DAMASCUS_COURSE_PRICES.label, keyAttr: null, isComplete: null },
-            damascusPriceRowInputs(DAMASCUS_COURSE_PRICES).map(toPromptRow),
-            todayIso,
-        ),
-        renderFactCollectionBlock(
-            { label: DAMASCUS_SCHEDULES_LABEL, keyAttr: opts?.schedulesUnkeyed ? null : DAMASCUS_SCHEDULES_KEY, isComplete: null },
-            damascusScheduleRowInputs(todayIso).map(toPromptRow),
-            todayIso,
-        ),
-        renderFactCollectionBlock(
-            { label: DAMASCUS_ONLINE_COURSES.label, keyAttr: DAMASCUS_ONLINE_KEY, isComplete: null },
-            damascusPriceRowInputs(DAMASCUS_ONLINE_COURSES).map(toPromptRow),
-            todayIso,
-        ),
-    ];
+    const blocks = damascusCollectionInputs(todayIso, opts).map(c => renderFactCollectionBlock(
+        // isComplete stays null — the fixture never claims completeness (D-038).
+        { label: c.label, keyAttr: c.keyAttr, isComplete: null },
+        c.rows.map(toPromptRow),
+        todayIso,
+    ));
     return blocks.filter((b): b is string => !!b).join('\n\n');
 }

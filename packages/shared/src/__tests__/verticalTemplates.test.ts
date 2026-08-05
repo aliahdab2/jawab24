@@ -66,9 +66,25 @@ describe('vertical templates — internal consistency', () => {
 });
 
 describe('education (معهد) template — the shape measured on الفريق الدمشقي', () => {
-    it('proposes the load-bearing three-collection split', () => {
+    it('proposes the load-bearing collection split', () => {
         const labels = EDUCATION_TEMPLATE.collections.map(c => c.label);
-        expect(labels).toEqual(['أسعار الدورات', 'مواعيد الدورات المعلنة', 'الدورات الأونلاين المتوفرة']);
+        expect(labels).toEqual([
+            'أسعار الدورات',
+            'مواعيد الدورات المعلنة',
+            'الدورات الأونلاين المتوفرة',
+            'محاور الدورات',
+        ]);
+    });
+
+    it('puts the curriculum in its OWN keyed collection, not a long attribute', () => {
+        // A row attribute is capped at 100 chars on the merchant-facing write
+        // path, so a curriculum blob would be unauthorable; as keyed rows it also
+        // earns the enumerated coverage boundary for «شو محاور دورة X؟».
+        const curriculum = EDUCATION_TEMPLATE.collections.find(c => c.label === 'محاور الدورات');
+        expect(curriculum?.keyAttr).toBe(EDUCATION_TEMPLATE.entityNoun);
+        for (const c of EDUCATION_TEMPLATE.collections) {
+            expect(c.attributeLabels).not.toContain('المحاور');
+        }
     });
 
     it('only the announced-slots collection self-expires', () => {
