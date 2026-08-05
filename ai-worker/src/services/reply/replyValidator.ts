@@ -361,6 +361,37 @@ export function flagDirectiveIgnored(
     return !signal.some(w => normalizedReply.includes(w));
 }
 
+/** The enforcement lever for Check 1e. OFF by default — the shipped behaviour is
+ *  detection only, and arm B3 of the battery is what earns the change. Same
+ *  posture as `FACT_LIST_MODE`: a rollback switch, not a per-merchant knob. */
+export function directiveEnforcementEnabled(): boolean {
+    return process.env.DIRECTIVE_ENFORCEMENT?.trim().toLowerCase() === 'on';
+}
+
+/**
+ * Enforcement half of Check 1e — send the merchant's OWN words instead of the
+ * model's, when his standing order covered the question and the reply ignored it.
+ *
+ * WHY THIS IS SAFE IN THE ONE WAY THAT MATTERS
+ * --------------------------------------------
+ * The substituted text is 100% merchant-authored, so enforcement can neither
+ * invent a fact nor deny one — the two failures every other design in this
+ * effort died on. Its ONLY failure mode is routing an ANSWERABLE question to the
+ * phone, and that is bounded by the trigger scope, which the merchant writes and
+ * which is pinned narrow by tests (never «مخبر», which would swallow the priced
+ * lab course).
+ *
+ * Separate from the flag on purpose: detection and enforcement are different
+ * arms, so the battery can measure "how often was an order ignored" apart from
+ * "what happens when we override it".
+ */
+export function enforceDirective(
+    customerText: string,
+    directives: MerchantDirective[] | undefined,
+): string | null {
+    return matchDirective(customerText, directives ?? [])?.response ?? null;
+}
+
 /** Check 2 — public comments should be brief. True when a comment exceeds 50 words. */
 export function isCommentTooLong(reply: string, channel: 'comment' | 'dm'): boolean {
     if (channel !== 'comment' || !reply) {
@@ -568,9 +599,19 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // Check 1e: a standing merchant instruction covered this question and the reply
     // delivered none of it. Runs outside the price/date block — it needs the customer's
     // message, not the KB, and must still fire when skipPriceCheck is set.
+    let enforcedReply: string | null = null;
     if (reply && flagDirectiveIgnored(reply, request.comment || '', request.context?.directives)
         && !flags.includes('directive_ignored')) {
         flags.push('directive_ignored');
+        // Enforcement is opt-in (arm B3). The substitution is the merchant's own
+        // text, so it can neither invent nor deny a fact; every swap is flagged,
+        // because Check 6 taught us that a silent rewrite hides for months (#236).
+        if (directiveEnforcementEnabled()) {
+            enforcedReply = enforceDirective(request.comment || '', request.context?.directives);
+            if (enforcedReply && !flags.includes('directive_enforced')) {
+                flags.push('directive_enforced');
+            }
+        }
     }
 
     // Check 2: Comment too long — public comments should be brief.
@@ -656,9 +697,12 @@ export function validateReply(parsed: ParsedReply, request: GenerateRequest, opt
     // AI vocabulary; lexically-decisive tokens strip regardless. Every swap is
     // recorded as a flag — Check 6 must never mutate a reply silently again
     // (the silence is how #236 hid for months).
+    // An enforced directive replaces the model's answer BEFORE the self-ID strip,
+    // so the merchant's own text goes through exactly the same final checks as any
+    // other reply rather than bypassing them.
     const selfReported = flags.includes('self_identified_as_automation');
     const { reply: finalReply, stripped } = stripSelfIdentification(
-        reply, selfReported,
+        enforcedReply ?? reply, selfReported,
         isOwnBrandPage(request.context?.pageName),
     );
     if (stripped && !flags.includes('self_identification_stripped')) {

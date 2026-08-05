@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
     flagHallucinatedPrice,
     flagDateNotInSource,
     flagStaleDate,
     flagDirectiveIgnored,
+    directiveEnforcementEnabled,
+    enforceDirective,
     isCommentTooLong,
     stripSelfIdentification,
     isOwnBrandPage,
@@ -121,6 +123,60 @@ describe('flagDirectiveIgnored (Check 1e)', () => {
         const out = validateReply(parsed, req(QUESTION, { directives: [LAB] }));
         expect(out.flags).toContain('directive_ignored');
         expect(out.reply).toBe(invented);
+    });
+});
+
+describe('directive ENFORCEMENT (Check 1e, arm B3 — opt-in)', () => {
+    const LAB = { keywords: 'مخبر, تحاليل, سحب الدم', response: 'لهذا السؤال يرجى التواصل على أرقامنا.' };
+    const QUESTION = 'وبتعلمو تحليلات جوا بالمخبر ؟';
+    const invented = 'الدورة تشمل استخدام الأدوات المختبرية وطرق التحليل.';
+    const parsedInvented = () => ({ reply: invented, confidence: 'high', flags: [] } as unknown as ParsedReply);
+
+    afterEach(() => { delete process.env.DIRECTIVE_ENFORCEMENT; });
+
+    it('is OFF by default — the shipped behaviour stays detection-only', () => {
+        expect(directiveEnforcementEnabled()).toBe(false);
+        const out = validateReply(parsedInvented(), req(QUESTION, { directives: [LAB] }));
+        expect(out.reply).toBe(invented);
+        expect(out.flags).not.toContain('directive_enforced');
+    });
+
+    it('substitutes the merchant\'s OWN words when enabled, and flags the swap', () => {
+        process.env.DIRECTIVE_ENFORCEMENT = 'on';
+        const out = validateReply(parsedInvented(), req(QUESTION, { directives: [LAB] }));
+        expect(out.reply).toBe(LAB.response);
+        expect(out.flags).toContain('directive_ignored');
+        // Never a silent rewrite — that is how #236 hid for months.
+        expect(out.flags).toContain('directive_enforced');
+    });
+
+    it('leaves a COMPLIANT reply alone even when enabled', () => {
+        process.env.DIRECTIVE_ENFORCEMENT = 'on';
+        const compliant = 'يرجى التواصل معنا على أرقامنا وسنجيبك.';
+        const out = validateReply(
+            { reply: compliant, confidence: 'high', flags: [] } as unknown as ParsedReply,
+            req(QUESTION, { directives: [LAB] }),
+        );
+        expect(out.reply).toBe(compliant);
+        expect(out.flags).not.toContain('directive_enforced');
+    });
+
+    it('never fires on a question no directive covers — enforcement cannot deny a fact', () => {
+        process.env.DIRECTIVE_ENFORCEMENT = 'on';
+        const answer = 'دورة المكياج مدتها شهر.';
+        const out = validateReply(
+            { reply: answer, confidence: 'high', flags: [] } as unknown as ParsedReply,
+            req('كم مدة دورة المكياج؟', { directives: [LAB] }),
+        );
+        expect(out.reply).toBe(answer);
+        expect(out.flags).not.toContain('directive_enforced');
+    });
+
+    it('enforceDirective returns the merchant text, never invented text', () => {
+        expect(enforceDirective(QUESTION, [LAB])).toBe(LAB.response);
+        expect(enforceDirective('كم مدة دورة المكياج؟', [LAB])).toBeNull();
+        expect(enforceDirective(QUESTION, [])).toBeNull();
+        expect(enforceDirective(QUESTION, undefined)).toBeNull();
     });
 });
 

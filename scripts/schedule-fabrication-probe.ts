@@ -59,10 +59,13 @@ import { DEMO_PAGES } from '../backend/src/plugins/demo/seedData';
 // baseline checkout whose seedData predates the slice.
 import { renderDemoDamascusLists } from '../backend/src/plugins/demo/damascusLists';
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
-const RUNS = parseInt(process.env.RUNS || '4', 10);
-const CONCURRENCY = parseInt(process.env.CONCURRENCY || '3', 10);
+// Transport (fetch/retry/pool/types) is shared with every other battery — see
+// scripts/lib/probeHarness.ts. Only the experiment lives in this file.
+import {
+    ADMIN_TOKEN, RUNS, CONCURRENCY, mapPool, resolveDemoPageId, askPlayground,
+    unwrapPlayground, type Turn, type DatasetRow,
+} from './lib/probeHarness';
+
 const ARM = process.env.ARM === 'baseline' ? 'baseline' : 'slice';
 // UNKEYED=1: the A/B arm where the schedules collection was flipped un-keyed in
 // the DB (UPDATE fact_collections SET key_attr = NULL …) — the grounding render
@@ -80,8 +83,6 @@ if (!ADMIN_TOKEN && !RESCAN) {
     console.error('ADMIN_TOKEN required (JWT from POST /auth/demo)');
     process.exit(1);
 }
-
-interface Turn { q: string | null; a: string | null }
 
 interface Probe {
     id: string;
@@ -186,30 +187,6 @@ const PROBES: Probe[] = [
     },
 ];
 
-interface PlaygroundResponse {
-    success?: boolean;
-    data?: { reply: string | null; intent: string | null; flags: string[]; needsAttention: boolean };
-    reply?: string | null;
-    intent?: string | null;
-    flags?: string[];
-    needsAttention?: boolean;
-}
-
-interface DatasetRow {
-    id: string;
-    page_name: string | null;
-    page_replies_30d: number;
-    kb_source: 'exact' | 'reconstructed';
-    kb: string;
-    question: string;
-    reply: string;
-    intent: string | null;
-    flag_reason: string | null;
-    needs_attention: boolean | null;
-    created_at: string;
-    history: Turn[] | null;
-}
-
 /**
  * Deterministic stale-date judge — now `classifyDateTokens` from @jawab24/shared.
  *
@@ -228,63 +205,10 @@ interface DatasetRow {
  * dates (31/2) instead of rolling them into the next month.
  */
 
-async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-    const out: R[] = new Array(items.length);
-    let next = 0;
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-        for (;;) {
-            const i = next++;
-            if (i >= items.length) return;
-            out[i] = await fn(items[i], i);
-        }
-    }));
-    return out;
-}
-
-async function resolveDamascusPageId(): Promise<string> {
-    const res = await fetch(`${BASE_URL}/admin/pages`, { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } });
-    if (!res.ok) throw new Error(`GET /admin/pages failed: HTTP ${res.status}`);
-    const json = await res.json() as { success: boolean; data: { id: string; name: string }[] };
-    const wanted = DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_damascus')!.name;
-    const page = json.data?.find(p => p.name === wanted);
-    if (!page) throw new Error(`Demo page "${wanted}" not found — seed demo data first (POST /auth/demo)`);
-    return page.id;
-}
-
-async function ask(pageId: string, probe: Probe): Promise<PlaygroundResponse | null> {
-    const body: Record<string, unknown> = {
-        pageId,
-        question: probe.question,
-        channel: 'dm',
-        source: 'eval',
-    };
-    if (probe.history) {
-        body.conversationHistory = probe.history.flatMap(t => [
-            ...(t.q ? [{ role: 'user', content: t.q }] : []),
-            ...(t.a ? [{ role: 'assistant', content: t.a }] : []),
-        ]);
-    }
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await fetch(`${BASE_URL}/admin/ai/playground`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ADMIN_TOKEN}` },
-            body: JSON.stringify(body),
-        });
-        if (res.ok) return await res.json() as PlaygroundResponse;
-        // 429/5xx are transient at this concurrency; a hard failure would be
-        // silently counted as "no fabrication" and flatter the result.
-        if (![429, 500, 502, 503, 504].includes(res.status)) {
-            console.error(`[${probe.id}] HTTP ${res.status}: ${await res.text()}`);
-            return null;
-        }
-        await new Promise(r => setTimeout(r, [2000, 8000, 20000][attempt]));
-    }
-    console.error(`[${probe.id}] gave up after retries`);
-    return null;
-}
-
 async function main(): Promise<void> {
-    const pageId = await resolveDamascusPageId();
+    const pageId = await resolveDemoPageId(
+        DEMO_PAGES.find(p => p.facebookPageId === 'demo_page_damascus')!.name,
+    );
     const todayIso = new Date().toISOString().slice(0, 10);
     // Exactly what buildGroundingSource assembles for this page in production —
     // per ARM: the baseline seed created no collections, so its judging source
@@ -299,10 +223,8 @@ async function main(): Promise<void> {
     console.error(`Probing ${PROBES.length} probes × ${RUNS} runs = ${jobs.length} replies (page ${pageId.slice(0, 8)}…)`);
 
     const rows = await mapPool(jobs, CONCURRENCY, async ({ probe, run }) => {
-        const resp = await ask(pageId, probe);
-        const reply = resp?.data?.reply ?? resp?.reply ?? null;
+        const { reply, intent, flags, needsAttention } = unwrapPlayground(await askPlayground(pageId, probe));
         if (!reply) return null;
-        const flags = resp?.data?.flags ?? resp?.flags ?? [];
         const row: DatasetRow = {
             id: `${probe.id}#${run + 1}`,
             page_name: `probe:${probe.kind}`,
@@ -311,9 +233,9 @@ async function main(): Promise<void> {
             kb,
             question: probe.question,
             reply,
-            intent: resp?.data?.intent ?? resp?.intent ?? null,
+            intent,
             flag_reason: flags.length ? flags.join(',') : null,
-            needs_attention: resp?.data?.needsAttention ?? resp?.needsAttention ?? null,
+            needs_attention: needsAttention,
             created_at: new Date().toISOString(),
             history: probe.history ?? null,
         };
