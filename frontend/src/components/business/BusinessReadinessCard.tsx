@@ -25,8 +25,10 @@ interface BusinessReadinessCardProps {
   onFixChip: (key: FixableChipKey) => void;
 }
 
-/** Chips that map to a fact the merchant can fill. `products` is not one. */
-export type FixableChipKey = 'hours' | 'address' | 'delivery' | 'payment';
+/** Chips the merchant can act on. The four facts open their editor;
+ *  `products` scrolls to the products section (owner catch 2026-08-05: it was
+ *  the one amber chip styled like the tappable four that ignored the tap). */
+export type FixableChipKey = 'hours' | 'address' | 'delivery' | 'payment' | 'products';
 
 interface Chip {
   key: ReadinessAreaKey;
@@ -121,11 +123,17 @@ export function BusinessReadinessCard({ page, productsCount, factRowsCount, onTr
     [t, labelFor],
   );
 
+  // The four facts open a sheet that is always mounted; `products` instead
+  // SCROLLS to the catalog section — which `shouldShowProductsSection` holds
+  // back until both counts land. While `loading`, `covered.products` is false
+  // (both counts read as 0) so the chip is amber, but its scroll target does
+  // not exist yet: leaving it tappable there is the very dead tap this chip
+  // was made tappable to remove. It arms with the rest of the card.
   const chips: Chip[] = READINESS_AREAS.map((key) => ({
     key,
     label: labelFor(key),
     covered: covered[key],
-    ...(key === 'products' ? {} : { fixKey: key }),
+    ...(key === 'products' && loading ? {} : { fixKey: key }),
   }));
 
   // Intl.ListFormat renders the locale's own conjunction — never a hand-built

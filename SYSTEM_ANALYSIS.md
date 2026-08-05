@@ -1063,7 +1063,15 @@ mode `dual`) exists only in the workspace store while the legacy columns default
 > `/catalog/scan-post-replies` remains as a deprecated ALIAS of the same
 > unified scan because app builds ≤2.0.23 still ship that button),
 > **bulk import** (paste a price list / upload a file →
-> extract proposals), and manual add. All paths land in one review sheet
+> extract proposals), and manual add. Entry PRIORITY flipped 2026-08-05
+> (owner ruling: the scan under-delivers — prices deliberately live off-post,
+> while a pasted list came back 56/56 priced in the الدمشقي replay): the
+> empty state leads with the paste import; the scan is a footnote link. The
+> whole «المنتجات والخدمات» section HIDES when the page's products live in
+> the fact lists (BAMBO: 245 rows — its «أضف ما تبيعه» pitch contradicted
+> the readiness card right above it); rule + carve-outs in
+> `shouldShowProductsSection` (frontend/src/utils/businessCoverage.ts).
+> All paths land in one review sheet
 > shaped as a PRICE-COMPLETION step: merchants deliberately keep prices out
 > of public posts (comment-bait), so proposals arrive priceless and the
 > sheet asks for private prices (only ever sent inside replies — the pitch).

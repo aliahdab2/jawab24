@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ListChecks, CalendarClock, Pencil, ChevronDown, CalendarDays, Clock } from 'lucide-react';
@@ -78,9 +78,21 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
    *  would tear that entity apart again. null → the first list. */
   const [activeListId, setActiveListId] = useState<string | null>(null);
   /** In-list live search — the 213-row directory is unusable without one.
-   *  One shared value is safe: at most one searchable card is on screen
-   *  (tabs show one list; single-list pages have one card). */
+   *  One shared value is safe: at most one search box is on screen (tabs show
+   *  one list; single-list pages have one card; the entity layout has one box
+   *  over all cards). */
   const [listSearch, setListSearch] = useState('');
+  /**
+   * Entity cards start COLLAPSED to one line — name, price summary, dates
+   * badge (owner ruling 2026-08-05: 40 fully-expanded course cards made the
+   * pilot page ~16 screens; a price edit meant ~12 screens of scrolling).
+   * This refines, not reverses, the earlier «كل دورة ومعها كل معلوماتها»
+   * ruling: everything about the entity is still together — behind ONE tap,
+   * and inside the open card the sessions still start expanded.
+   */
+  const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  /** Prefix for the cards' `aria-controls` IDREFs — see `panelId` below. */
+  const cardsIdBase = useId();
 
   const collections = useMemo(() => data ?? [], [data]);
   const groups = useMemo(() => groupFactCollections(collections), [collections]);
@@ -750,39 +762,159 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
             </div>
           );
         })}
-        {aggregates && groups.map((group) => {
+        {aggregates && (() => {
+          // Live search over ALL entity cards — same folding as the directory
+          // search (either script's digits, hamza/taa-marbuta), matching the
+          // entity name and any row name/attribute. The pilot page holds 40
+          // cards; without a box, reaching one specific course is a scroll
+          // hunt even with collapsed rows.
+          const fold = (s: string) => normalizeArabic(s, { normalizeTaaMarbuta: true }).toLowerCase();
+          // `searchable` gates the QUERY itself, not just the box — same rule as
+          // the directory search above. Below the threshold the box is gone, so a
+          // value left over from a larger list would filter nothing yet still
+          // force every card open, with nothing on screen to clear it.
+          const searchable = groups.length >= 8;
+          const query = searchable ? fold(listSearch.trim()) : '';
+          const groupMatches = (group: FactListGroup) => {
+            if (!query) return true;
+            if (fold(group.title).includes(query)) return true;
+            return group.rows.some(({ row }) =>
+              fold(row.name).includes(query)
+              || (row.attributes ?? []).some((a) => fold(a.value).includes(query) || fold(a.label).includes(query)));
+          };
+          const visibleGroups = searchable ? groups.filter(groupMatches) : groups;
+          return (
+            <>
+              {searchable && (
+                <div>
+                  {/* Same dir rule as the directory box: empty → inherit the
+                      page direction (an empty value's dir=auto falls back to
+                      LTR and left-aligns the Arabic placeholder). */}
+                  <input
+                    type="search"
+                    dir={listSearch ? 'auto' : undefined}
+                    value={listSearch}
+                    onChange={(e) => setListSearch(e.target.value)}
+                    placeholder={t('lists.searchAllPlaceholder')}
+                    aria-label={t('lists.searchAllPlaceholder')}
+                    className="input w-full !py-2 text-sm"
+                  />
+                  {query && (
+                    <p className="mt-1.5 text-xs text-muted-foreground" aria-live="polite">
+                      {/* Its own key: this box counts entity CARDS, and the
+                          directory's `searchCount` says «صفوف»/rows — reusing it
+                          reported «صفًا واحدًا من أصل 8» for one course. */}
+                      {visibleGroups.length === 0
+                        ? t('lists.searchNoResults')
+                        : t('lists.searchCountCards', { shown: visibleGroups.length, total: groups.length })}
+                    </p>
+                  )}
+                </div>
+              )}
+              {visibleGroups.map((group, groupIndex) => {
+          // IDREF for aria-controls. `group.key` is the normalized entity name
+          // (Arabic, with spaces) — never a valid HTML id, so index off useId.
+          const panelId = `${cardsIdBase}-panel-${groupIndex}`;
           const sections = sectionizeGroup(group, collections);
           const expiredCount = group.rows.filter((r) => isExpired(r.row)).length;
           const expanded = !!showExpired[group.key];
+          // A search hit renders OPEN: the merchant searched to see the item's
+          // details, not to be handed another closed door.
+          const open = query ? true : !!openCards[group.key];
+          /** Collapsed-row price summary from the live base rows: one price, or
+           *  the min–max span when tiers differ. Display only.
+           *
+           *  A span is only honest within ONE currency: the demo's ICDL group
+           *  holds 35,000 ل.س beside a 10.00-USD online tier, and «10–35,000
+           *  ل.س» would launder the dollar into lira (same failure family as
+           *  the bundle-unit price bug). Mixed currencies → the majority
+           *  currency's span alone. */
+          const priceSummary = (() => {
+            const priced = group.rows
+              .filter((r) => !isExpired(r.row) && r.row.price)
+              .map((r) => ({ raw: r.row.price as string, num: Number(r.row.price), currency: r.row.currency ?? '' }));
+            if (priced.length === 0) return null;
+            const byCurrency = new Map<string, number[]>();
+            for (const p of priced) {
+              if (!Number.isFinite(p.num)) continue;
+              byCurrency.set(p.currency, [...(byCurrency.get(p.currency) ?? []), p.num]);
+            }
+            // Every price non-numeric («حسب الطلب») → show the first as-is.
+            if (byCurrency.size === 0) return displayPrice(priced[0].raw);
+            const [currency, nums] = [...byCurrency.entries()]
+              .sort((a, b) => b[1].length - a[1].length)[0];
+            const min = Math.min(...nums);
+            const max = Math.max(...nums);
+            const span = min === max
+              ? min.toLocaleString(intlLocale)
+              : `${min.toLocaleString(intlLocale)}–${max.toLocaleString(intlLocale)}`;
+            return currency ? `${span} ${currency}` : span;
+          })();
+          const datesBadge = collections.some(isDatedCollection) && (() => {
+            // «قادمة» is a promise — only rows with a REAL future start
+            // date earn it (round-8: wrong counts destroy trust).
+            // Undated announced sessions get their own neutral badge
+            // instead of inflating the upcoming number.
+            const live = group.rows.filter((r) =>
+              isDatedCollection(r.collection) && !isExpired(r.row));
+            const scheduled = live.filter((r) => !!r.row.startsAt).length;
+            const unscheduled = live.length - scheduled;
+            return scheduled > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400 whitespace-nowrap">
+                {t('lists.upcomingCount', { count: scheduled })}
+              </span>
+            ) : unscheduled > 0 ? (
+              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
+                {t('lists.announcedCount', { count: unscheduled })}
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
+                {t('lists.noSessions')}
+              </span>
+            );
+          })();
           return (
             <div key={group.key} className="rounded-xl border border-theme-border overflow-hidden">
-              <div className="flex items-center justify-between gap-2 flex-wrap px-4 pt-3 pb-2 border-b border-theme-border bg-muted/30">
-                <h3 className="text-[15px] font-bold text-foreground" dir="auto">{group.title}</h3>
-                {collections.some(isDatedCollection) && (() => {
-                  // «قادمة» is a promise — only rows with a REAL future start
-                  // date earn it (round-8: wrong counts destroy trust).
-                  // Undated announced sessions get their own neutral badge
-                  // instead of inflating the upcoming number.
-                  const live = group.rows.filter((r) =>
-                    isDatedCollection(r.collection) && !isExpired(r.row));
-                  const scheduled = live.filter((r) => !!r.row.startsAt).length;
-                  const unscheduled = live.length - scheduled;
-                  return scheduled > 0 ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400">
-                      {t('lists.upcomingCount', { count: scheduled })}
-                    </span>
-                  ) : unscheduled > 0 ? (
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                      {t('lists.announcedCount', { count: unscheduled })}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-                      {t('lists.noSessions')}
-                    </span>
-                  );
-                })()}
-              </div>
+              {/* The whole header is the toggle — one line per entity while
+                  closed (name · price span · dates badge), the full card on
+                  tap. The badge and summary stay visible either way, so
+                  closing a card never hides the answer to «بقديش؟».
 
+                  The HEADING WRAPS THE BUTTON (WAI-ARIA APG accordion). The
+                  reverse — an <h3> inside the <button> — is invalid HTML: a
+                  button takes phrasing content only, and nesting flow content
+                  in it costs the entity its heading semantics. */}
+              <h3>
+                <button
+                  type="button"
+                  onClick={() => setOpenCards((prev) => ({ ...prev, [group.key]: !open }))}
+                  aria-expanded={open}
+                  // The panel is unmounted while collapsed, so the IDREF only
+                  // resolves when open — a dangling aria-controls is worse than
+                  // none (AT announces a target that isn't there).
+                  aria-controls={open ? panelId : undefined}
+                  className={`w-full flex items-center gap-2 px-4 py-3 bg-muted/30 text-start hover:bg-muted/50 transition-colors ${open ? 'border-b border-theme-border' : ''}`}
+                >
+                  {/* Name, price and badge WRAP as a unit; only the chevron is
+                      pinned. With all four in one flex row, a long course name on
+                      a 412px phone was squeezed to a one-character column («دور/
+                      ة/الح…») by the price span beside it. */}
+                  <span className="flex-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="text-[15px] font-bold text-foreground min-w-0 max-w-full break-words" dir="auto">{group.title}</span>
+                    {priceSummary && (
+                      <span className="text-sm font-semibold text-foreground whitespace-nowrap tabular-nums" dir="auto">
+                        {priceSummary}
+                      </span>
+                    )}
+                    {datesBadge}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 flex-shrink-0 text-icon-muted transition-transform ${open ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              </h3>
+              {open && (<div id={panelId}>
               {/* Tier blocks — each price line with ITS dates directly under
                   it (owner: «كل دورة ومعها كل معلوماتها»). Same matching as
                   the entity form, so what you see is what the form edits. */}
@@ -876,41 +1008,45 @@ export function BusinessListsSection({ pageId }: BusinessListsSectionProps) {
                 );
               })()}
 
-              <div className="flex items-center gap-1.5 flex-wrap px-4 py-2 border-t border-theme-border">
-                {/* Progressive disclosure: one quiet «+» per card; the
-                    per-list choices appear only while adding. With a single
-                    list there is nothing to choose — go straight to the sheet. */}
-                {(() => {
-                  const base = collections.find((c) => !isDatedCollection(c)) ?? collections[0];
-                  const label = faceLabel
-                    ? t('lists.addNamed', { thing: faceLabel })
-                    : t('lists.addItem');
-                  return (
+                <div className="flex items-center gap-1.5 flex-wrap px-4 py-2 border-t border-theme-border">
+                  {/* Progressive disclosure: one quiet «+» per card; the
+                      per-list choices appear only while adding. With a single
+                      list there is nothing to choose — go straight to the sheet. */}
+                  {(() => {
+                    const base = collections.find((c) => !isDatedCollection(c)) ?? collections[0];
+                    const label = faceLabel
+                      ? t('lists.addNamed', { thing: faceLabel })
+                      : t('lists.addItem');
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => addFromGroup(group, base)}
+                        className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-2.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                      >
+                        <Plus className="w-3 h-3" aria-hidden="true" />
+                        {label}
+                      </button>
+                    );
+                  })()}
+                  {expiredCount > 0 && (
                     <button
                       type="button"
-                      onClick={() => addFromGroup(group, base)}
-                      className="min-h-[32px] inline-flex items-center gap-1 rounded-full border border-dashed border-theme-border px-2.5 text-xs font-semibold text-brand-600 hover:text-brand-700 hover:bg-surface-100"
+                      onClick={() => setShowExpired((prev) => ({ ...prev, [group.key]: !expanded }))}
+                      aria-expanded={expanded}
+                      className="ms-auto min-h-[32px] inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                     >
-                      <Plus className="w-3 h-3" aria-hidden="true" />
-                      {label}
+                      <CalendarClock className="w-3.5 h-3.5" aria-hidden="true" />
+                      {t('lists.expiredToggle', { count: expiredCount })}
                     </button>
-                  );
-                })()}
-                {expiredCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowExpired((prev) => ({ ...prev, [group.key]: !expanded }))}
-                    aria-expanded={expanded}
-                    className="ms-auto min-h-[32px] inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    <CalendarClock className="w-3.5 h-3.5" aria-hidden="true" />
-                    {t('lists.expiredToggle', { count: expiredCount })}
-                  </button>
-                )}
-              </div>
+                  )}
+                </div>
+              </div>)}
             </div>
           );
-        })}
+              })}
+            </>
+          );
+        })()}
       </div>
 
       {entityEditing && (

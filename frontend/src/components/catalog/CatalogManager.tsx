@@ -248,51 +248,41 @@ export function CatalogManager({ pageId, page, importRequested, importInitialTex
   return (
     <div>
       {items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border p-6 sm:p-8 text-center">
-          {/* Standard empty-state anatomy: the mental model + ONE primary action.
-              No mocked-up "example" row — a fake listing with a real-looking
-              price read as live data (to merchants and to a prior UX review),
-              and the scan flow shows the real row shape during review anyway. */}
-          <h3 className="text-base font-semibold text-foreground">{t('empty.title')}</h3>
-          {/* The default body pitches the page scan; don't promise it on a page
-              with nothing scannable (no readable posts AND no Post Reply). */}
-          <p className="text-sm text-muted-foreground mt-1 mb-5 max-w-md mx-auto">
-            {t(canScan ? 'empty.body' : 'empty.bodyNoScan')}
-          </p>
-          {/* ONE decision. Normally that's the scan; on a page with nothing to
-              scan it's the paste import, so the empty state still leads with
-              something that works instead of a button that always fails. */}
-          {canScan ? (
-            <Button variant="primary" onClick={() => setSheetMode('scan')}>
-              <ScanSearch className="w-4 h-4 me-1.5" aria-hidden="true" />
-              {t('scan.cta')}
-            </Button>
-          ) : (
+        <div>
+          {/* Compact empty state: one line of mental model + ONE primary action.
+              The big dashed hero («أضف ما تبيعه» + a scan pitch) is gone — the
+              owner ruled the section «اخدة مكان كبير» and the posts scan
+              «مو كتير ناجح» (2026-08-05): merchants keep prices OUT of posts
+              (comment-bait), so the scan proposes name-only items while a
+              pasted price list comes back complete — 56/56 priced rows in the
+              الدمشقي replay. Paste leads; the scan survives as a footnote. */}
+          <p className="text-sm text-muted-foreground mb-3">{t('empty.body')}</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <Button variant="primary" onClick={() => setSheetMode('paste')}>
               <ClipboardPaste className="w-4 h-4 me-1.5" aria-hidden="true" />
               {t('import.cta')}
             </Button>
-          )}
-          <div className="flex flex-wrap items-center justify-center gap-1 mt-3 text-sm text-muted-foreground">
-            <span>{t('empty.or')}</span>
-            {canScan && (
-              <>
-                <button type="button" onClick={() => setSheetMode('paste')} className="underline underline-offset-2 hover:text-foreground transition-colors">
-                  {t('import.cta')}
-                </button>
-                <span aria-hidden="true">·</span>
-              </>
-            )}
-            <button type="button" onClick={openAdd} className="underline underline-offset-2 hover:text-foreground transition-colors">
-              {t('empty.cta')}
-            </button>
+            <div className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+              <span>{t('empty.or')}</span>
+              {canScan && (
+                <>
+                  <button type="button" onClick={() => setSheetMode('scan')} className="underline underline-offset-2 hover:text-foreground transition-colors">
+                    {t('scan.cta')}
+                  </button>
+                  <span aria-hidden="true">·</span>
+                </>
+              )}
+              <button type="button" onClick={openAdd} className="underline underline-offset-2 hover:text-foreground transition-colors">
+                {t('empty.cta')}
+              </button>
+            </div>
           </div>
           {/* Absence needs a reason, or the merchant reads it as a missing
               feature. Names the page and the one thing that would unlock it. */}
           {scanBlockedReason && (
             <p className="text-xs text-muted-foreground mt-3">{scanBlockedReason}</p>
           )}
-          {verticalControl && <div className="mt-5 flex justify-center">{verticalControl}</div>}
+          {verticalControl && <div className="mt-4">{verticalControl}</div>}
         </div>
       ) : (
         <>

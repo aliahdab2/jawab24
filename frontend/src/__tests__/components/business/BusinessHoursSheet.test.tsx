@@ -231,10 +231,16 @@ describe('BusinessHoursSheet — Save is gated on a change', () => {
     expect(saveButton()).toBeDisabled();
   });
 
-  // The baseline is what is STORED, not the seeded editor state — a
-  // first-time merchant must be able to one-tap-save the default week.
-  it('keeps Save live for first-time setup', () => {
+  // First-fill Save waits for a TOUCH (owner ruling 2026-08-05, reversing the
+  // earlier one-tap convenience): a live Save over the seeded default week let
+  // one blind tap earn a green «مكتمل» for hours nobody reviewed. Any edit —
+  // even one that returns to the seed — counts: touching IS the review.
+  it('first-time setup opens with Save disarmed until the merchant touches the week', () => {
     renderSheet(undefined);
+    expect(saveButton()).toBeDisabled();
+    // Toggle Friday on… and off again: back to the seeded week, but reviewed.
+    fireEvent.click(screen.getByRole('switch', { name: /^Fri/ }));
+    fireEvent.click(screen.getByRole('switch', { name: /^Fri/ }));
     expect(saveButton()).toBeEnabled();
   });
 
